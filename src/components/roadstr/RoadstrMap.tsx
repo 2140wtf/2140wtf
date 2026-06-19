@@ -112,6 +112,7 @@ export function RoadstrMap({
   const onMapClickRef = useRef(onMapClick);
   const onBoundsChangeRef = useRef(onBoundsChange);
   const reportsRef = useRef<RoadstrReport[]>(reports);
+  const prevThemeRef = useRef(theme);
 
   useEffect(() => { reportsRef.current = reports; }, [reports]);
 
@@ -153,8 +154,7 @@ export function RoadstrMap({
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    const resizeTimer = setTimeout(() => map.invalidateSize(), 400);
-    const resizeTimer2 = setTimeout(() => map.invalidateSize(), 800);
+    const resizeTimer = setTimeout(() => map.invalidateSize(), 100);
 
     const resizeObs = new ResizeObserver(() => map.invalidateSize());
     resizeObs.observe(containerRef.current);
@@ -200,7 +200,6 @@ export function RoadstrMap({
       if (moveTimeout) clearTimeout(moveTimeout);
       if (initialTimeout) clearTimeout(initialTimeout);
       if (resizeTimer) clearTimeout(resizeTimer);
-      if (resizeTimer2) clearTimeout(resizeTimer2);
       resizeObs.disconnect();
       if (reportBoundsHandler) map.off('moveend zoomend', reportBoundsHandler);
       map.off('zoomend', updateRadii);
@@ -215,16 +214,20 @@ export function RoadstrMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !tileLayerRef.current) return;
+    const tileLayer = tileLayerRef.current;
+    if (!map || !tileLayer) return;
+    if (prevThemeRef.current === theme) return;
+    prevThemeRef.current = theme;
+
     const tileUrl = theme === 'light'
       ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    tileLayerRef.current.setUrl(tileUrl);
-    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light';
+    tileLayer.setUrl(tileUrl);
+    tileLayer.options.className = theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light';
     const container = map.getContainer();
     container.classList.remove('leaflet-bright-dark', 'leaflet-light');
     container.classList.add(theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light');
-    tileLayerRef.current.redraw();
+    tileLayer.redraw();
   }, [theme]);
 
   const handleReset = useCallback(() => {
