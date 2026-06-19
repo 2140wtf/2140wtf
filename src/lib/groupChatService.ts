@@ -196,27 +196,33 @@ export class GroupChatService {
     this.userPrivkey = userPrivkey;
     this.defaultRelays = defaultRelays.filter((r) => /^wss?:\/\//.test(r));
 
-    this.loadStatePromise = this.loadStateAsync();
+    this.loadStateMetadata();
+    this.loadStatePromise = this.loadSecretsAsync();
+  }
+
+  private loadStateMetadata(): void {
+    migrateLegacyGroupStorage(this.userPubkey);
+    const groups = loadGroups(this.userPubkey);
+    for (const g of groups) {
+      this.groups.set(g.nostrGroupId, g);
+      this.messages.set(g.nostrGroupId, loadMessages(this.userPubkey, g.nostrGroupId));
+    }
   }
 
   private async ensureLoaded(): Promise<void> {
     return this.loadStatePromise;
   }
 
-  private async loadStateAsync(): Promise<void> {
-    migrateLegacyGroupStorage(this.userPubkey);
-    const groups = loadGroups(this.userPubkey);
-    for (const g of groups) {
-      this.groups.set(g.nostrGroupId, g);
-      this.messages.set(g.nostrGroupId, loadMessages(this.userPubkey, g.nostrGroupId));
-      const legacySecrets = extractLegacyGroupSecrets(g as StoredGroup & Partial<StoredGroupSecrets>);
-      const secrets = (await loadGroupSecrets(this.userPubkey, g.nostrGroupId)) ?? legacySecrets;
+  private async loadSecretsAsync(): Promise<void> {
+    for (const [groupId, group] of this.groups) {
+      const legacySecrets = extractLegacyGroupSecrets(group as StoredGroup & Partial<StoredGroupSecrets>);
+      const secrets = (await loadGroupSecrets(this.userPubkey, groupId)) ?? legacySecrets;
       if (secrets) {
-        this.groupStates.set(g.nostrGroupId, secrets);
+        this.groupStates.set(groupId, secrets);
         if (legacySecrets) {
           // Migrate legacy inline secrets to secure storage and strip from metadata.
-          await saveGroupSecrets(this.userPubkey, g.nostrGroupId, legacySecrets);
-          saveGroup(this.userPubkey, g);
+          await saveGroupSecrets(this.userPubkey, groupId, legacySecrets);
+          saveGroup(this.userPubkey, group);
         }
       }
     }
@@ -332,6 +338,7 @@ export class GroupChatService {
     description?: string,
     relays?: string[],
   ): Promise<GroupOperationResult<GroupChatGroup>> {
+    await this.ensureLoaded();
     const trimmedName = name.trim().slice(0, MAX_GROUP_NAME_LENGTH);
     if (!trimmedName) {
       return { success: false, error: 'Group name is required' };
