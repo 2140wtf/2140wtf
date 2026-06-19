@@ -228,9 +228,9 @@ function useApplyBackground(theme: Theme, customTheme: ThemeConfig | undefined, 
 function useApplyFavicon() {
   useEffect(() => {
     const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (link && !link.href.endsWith('/logo.png')) {
+    if (link && !link.href.endsWith('/logo.jpg')) {
       link.type = 'image/jpeg';
-      link.href = '/logo.png';
+      link.href = '/logo.jpg';
     }
   }, []);
 }
