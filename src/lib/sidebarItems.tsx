@@ -134,7 +134,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
   { id: "prediction-markets", label: "Prediction Markets", path: "/prediction-markets", icon: BarChart3 },
-  { id: "pets", label: "2140 Pets", path: "/pets", icon: Cat },
+  { id: "pets", label: "2140.wtf Pets", path: "/pets", icon: Cat },
   { id: "market", label: "Store", path: "/market", icon: ShoppingBag },
   {
     id: "btcmap",

@@ -301,7 +301,7 @@ export function PetsSocialActions({ event, source = DEFAULT_SOURCE, onInteractio
               : 'text-muted-foreground hover:text-pink-500 hover:bg-pink-500/10',
             className,
           )}
-          title="Interact with 2140 Pets"
+          title="Interact with 2140.wtf Pets"
           onClick={(e) => e.stopPropagation()}
         >
           <HandHeart className="size-[18px] sm:size-5" />

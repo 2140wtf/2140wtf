@@ -31,7 +31,7 @@ export const ROOM_META: Record<PetsRoomId, PetsRoomMeta> = {
   kitchen: {
     id: 'kitchen',
     label: 'Kitchen',
-    description: 'Feed your 2140 Pets',
+    description: 'Feed your 2140.wtf Pets',
     icon: Refrigerator,
   },
   care: {

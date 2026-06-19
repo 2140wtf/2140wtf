@@ -115,8 +115,8 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     id: 'pets',
-    label: '2140 Pets',
-    description: 'Your 2140 Pets companion, quick actions, and daily bounties',
+    label: '2140.wtf Pets',
+    description: 'Your 2140.wtf Pets companion, quick actions, and daily bounties',
     icon: Cat,
     defaultHeight: 360,
     minHeight: 250,

@@ -1,7 +1,7 @@
 /**
- * 2140 Pets Tag Schema - Canonical Reference
+ * 2140.wtf Pets Tag Schema - Canonical Reference
  * 
- * This file defines the single source of truth for all 2140 Pets tags used in Kind 31124
+ * This file defines the single source of truth for all 2140.wtf Pets tags used in Kind 31124
  * (Pets State) events. It documents which tags exist, their purpose, when they're
  * used, and how they should be handled during stage transitions.
  * 
@@ -83,7 +83,7 @@ export interface PetsTagSchema {
 /**
  * Complete canonical schema for all valid Pets tags.
  * 
- * This is the SINGLE SOURCE OF TRUTH for 2140 Pets tag definitions.
+ * This is the SINGLE SOURCE OF TRUTH for 2140.wtf Pets tag definitions.
  * All stage transitions, migrations, and validations should reference this schema.
  */
 export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
@@ -92,7 +92,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'd',
-    description: 'Unique identifier for the 2140 Pet (addressable event d-tag)',
+    description: 'Unique identifier for the 2140.wtf Pet (addressable event d-tag)',
     category: 'system',
     required: true,
     stages: ['egg', 'baby', 'adult'],
@@ -119,7 +119,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'name',
-    description: 'Display name for the 2140 Pet',
+    description: 'Display name for the 2140.wtf Pet',
     category: 'identity',
     required: true,
     stages: ['egg', 'baby', 'adult'],
@@ -142,7 +142,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'generation',
-    description: 'Generation number in the 2140 Pet lineage',
+    description: 'Generation number in the 2140.wtf Pet lineage',
     category: 'identity',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -151,7 +151,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     regenerable: false,
     format: 'positive integer',
     defaultValue: '1',
-    notes: 'Starts at 1 for adopted 2140 Pets. Increments for bred offspring.',
+    notes: 'Starts at 1 for adopted 2140.wtf Pets. Increments for bred offspring.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -159,7 +159,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'base_color',
-    description: 'Primary/base color for the 2140 Pet',
+    description: 'Primary/base color for the 2140.wtf Pet',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -171,7 +171,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'secondary_color',
-    description: 'Secondary/accent color for the 2140 Pet',
+    description: 'Secondary/accent color for the 2140.wtf Pet',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -183,7 +183,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'eye_color',
-    description: 'Eye color for the 2140 Pet',
+    description: 'Eye color for the 2140.wtf Pet',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -536,7 +536,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'social',
-    description: 'Whether external users can interact with this 2140 Pet via kind 1124 events',
+    description: 'Whether external users can interact with this 2140.wtf Pet via kind 1124 events',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -549,7 +549,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'breeding_ready',
-    description: 'Whether the 2140 Pet is eligible for breeding',
+    description: 'Whether the 2140.wtf Pet is eligible for breeding',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -589,7 +589,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Theme identifier string (e.g., "divine")',
-    notes: 'Used for special themed 2140 Pets. Persists across stages.',
+    notes: 'Used for special themed 2140.wtf Pets. Persists across stages.',
   },
   {
     tag: 'crossover_app',
@@ -601,7 +601,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Application identifier string (e.g., "divine")',
-    notes: 'Indicates the 2140 Pet originated from or has features from another app.',
+    notes: 'Indicates the 2140.wtf Pet originated from or has features from another app.',
   },
   {
     tag: 'archetype',
@@ -688,7 +688,7 @@ export const DEPRECATED_TAG_SCHEMA: readonly DeprecatedTagSchema[] = [
   },
   {
     tag: 'fees',
-    reason: 'Fee tracking removed from 2140 Pets events',
+    reason: 'Fee tracking removed from 2140.wtf Pets events',
     replacedBy: undefined,
     deprecatedSince: 'v1.0',
   },
@@ -814,7 +814,7 @@ const RECOVERABLE_SYSTEM_TAGS: Record<string, string> = {
 
 /**
  * Tags that should NEVER be invented if they don't exist.
- * Per spec: Do NOT invent personality/trait/adult_type for existing 2140 Pets.
+ * Per spec: Do NOT invent personality/trait/adult_type for existing 2140.wtf Pets.
  */
 const NEVER_INVENT_TAGS = new Set([
   // Personality tags - generated at creation only
@@ -1154,7 +1154,7 @@ export function generateSchemaDocumentation(): string {
     'state', 'task', 'progression', 'social', 'evolution', 'extension',
   ] as TagCategory[];
   
-  let doc = '# 2140 Pets Tag Schema\n\n';
+  let doc = '# 2140.wtf Pets Tag Schema\n\n';
   
   for (const category of categories) {
     const tags = getTagsByCategory(category);
