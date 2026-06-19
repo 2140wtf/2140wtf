@@ -1,6 +1,7 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface HostedPollCubeProps {
@@ -14,7 +15,7 @@ interface HostedPollCubeProps {
  * cube-design event and loading its embed URL in an iframe.
  */
 export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps) {
-  const { data: embedUrl, isLoading } = useHostedCubeEmbed(pollId);
+  const { data: embedUrl, isLoading, isError, refetch } = useHostedCubeEmbed(pollId);
 
   if (isLoading) {
     return (
@@ -30,16 +31,24 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
     );
   }
 
-  if (!embedUrl) {
+  if (isError || !embedUrl) {
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center rounded-xl border border-border bg-muted/30 p-6 text-center',
+          'flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-muted/30 p-6 text-center',
           className,
         )}
         style={{ minHeight: 320 }}
       >
-        <p className="text-sm text-muted-foreground">No hosted cube found for this poll.</p>
+        <p className="text-sm text-muted-foreground">
+          {isError ? 'Could not load hosted cube.' : 'No hosted cube found for this poll.'}
+        </p>
+        {isError && (
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()}>
+            <RefreshCw className="size-3.5" />
+            Try again
+          </Button>
+        )}
       </div>
     );
   }
