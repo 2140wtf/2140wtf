@@ -1,4 +1,8 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import { LayoutGrid, LayoutList, Plus, Search } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AudioNavigationGuard } from "@/components/AudioNavigationGuard";
 import { BackButtonHandler } from "@/components/BackButtonHandler";
@@ -6,7 +10,6 @@ import { DeepLinkHandler } from "@/components/DeepLinkHandler";
 import { HighlightSelectionButton } from "@/components/HighlightSelectionButton";
 import { MinimizedAudioBar } from "@/components/MinimizedAudioBar";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
-import { BlobbiActionsProvider } from "@/blobbi/companion/interaction/BlobbiActionsProvider";
 import { sidebarItemIcon } from "@/lib/sidebarItems";
 import { Toaster } from "./components/ui/toaster";
 import { MainLayout } from "./components/MainLayout";
@@ -20,9 +23,6 @@ import { getExtraKindDef } from "./lib/extraKinds";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
-// Lazy-loaded companion layer (~450K code-split)
-const BlobbiCompanionLayer = lazy(() => import("@/blobbi/companion").then(m => ({ default: m.BlobbiCompanionLayer })));
-
 // Lazy-loaded compose modal (pulls in emoji-mart ~620K)
 const ReplyComposeModal = lazy(() => import("@/components/ReplyComposeModal").then(m => ({ default: m.ReplyComposeModal })));
 
@@ -34,15 +34,15 @@ const HomePage = lazy(() => import("./pages/HomePage").then(m => ({ default: m.H
 
 // All other pages: code-split via React.lazy
 const AdvancedSettingsPage = lazy(() => import("./pages/AdvancedSettingsPage").then(m => ({ default: m.AdvancedSettingsPage })));
-const AIChatPage = lazy(() => import("./pages/AIChatPage").then(m => ({ default: m.AIChatPage })));
+
 const ArchivePage = lazy(() => import("./pages/ArchivePage").then(m => ({ default: m.ArchivePage })));
+const ArtFeedPage = lazy(() => import("./pages/ArtFeedPage").then(m => ({ default: m.ArtFeedPage })));
 const ArticleEditorPage = lazy(() => import("./pages/ArticleEditorPage").then(m => ({ default: m.ArticleEditorPage })));
 const BadgesPage = lazy(() => import("./pages/BadgesPage").then(m => ({ default: m.BadgesPage })));
-const BlobbiPage = lazy(() => import("./pages/BlobbiPage").then(m => ({ default: m.BlobbiPage })));
-const BlueskyPage = lazy(() => import("./pages/BlueskyPage").then(m => ({ default: m.BlueskyPage })));
 const BookmarksPage = lazy(() => import("./pages/BookmarksPage").then(m => ({ default: m.BookmarksPage })));
 const BooksPage = lazy(() => import("./pages/BooksPage").then(m => ({ default: m.BooksPage })));
 const ChangelogPage = lazy(() => import("./pages/ChangelogPage").then(m => ({ default: m.ChangelogPage })));
+const AboutPage = lazy(() => import("./pages/AboutPage").then(m => ({ default: m.AboutPage })));
 const ClientFeedPage = lazy(() => import("./pages/ClientFeedPage").then(m => ({ default: m.ClientFeedPage })));
 const ContentPage = lazy(() => import("./pages/ContentPage").then(m => ({ default: m.ContentPage })));
 const ContentSettingsPage = lazy(() => import("./pages/ContentSettingsPage").then(m => ({ default: m.ContentSettingsPage })));
@@ -54,9 +54,6 @@ const GeotagPage = lazy(() => import("./pages/GeotagPage").then(m => ({ default:
 const HashtagPage = lazy(() => import("./pages/HashtagPage").then(m => ({ default: m.HashtagPage })));
 const HelpPage = lazy(() => import("./pages/HelpPage").then(m => ({ default: m.HelpPage })));
 const KindFeedPage = lazy(() => import("./pages/KindFeedPage").then(m => ({ default: m.KindFeedPage })));
-const LetterComposePage = lazy(() => import("./pages/LetterComposePage").then(m => ({ default: m.LetterComposePage })));
-const LetterPreferencesPage = lazy(() => import("./pages/LetterPreferencesPage").then(m => ({ default: m.LetterPreferencesPage })));
-const LettersPage = lazy(() => import("./pages/LettersPage").then(m => ({ default: m.LettersPage })));
 const MagicSettingsPage = lazy(() => import("./pages/MagicSettingsPage").then(m => ({ default: m.MagicSettingsPage })));
 const MusicPage = lazy(() => import("./pages/MusicPage").then(m => ({ default: m.MusicPage })));
 const NetworkSettingsPage = lazy(() => import("./pages/NetworkSettingsPage").then(m => ({ default: m.NetworkSettingsPage })));
@@ -72,24 +69,26 @@ const SearchPage = lazy(() => import("./pages/SearchPage").then(m => ({ default:
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then(m => ({ default: m.SettingsPage })));
 const SharePage = lazy(() => import("./pages/SharePage").then(m => ({ default: m.SharePage })));
 const ThemesPage = lazy(() => import("./pages/ThemesPage").then(m => ({ default: m.ThemesPage })));
-const TreasuresPage = lazy(() => import("./pages/TreasuresPage").then(m => ({ default: m.TreasuresPage })));
 const TrendsPage = lazy(() => import("./pages/TrendsPage").then(m => ({ default: m.TrendsPage })));
 const UserListsPage = lazy(() => import("./pages/UserListsPage").then(m => ({ default: m.UserListsPage })));
 const VideosFeedPage = lazy(() => import("./pages/VideosFeedPage").then(m => ({ default: m.VideosFeedPage })));
-const VinesFeedPage = lazy(() => import("./pages/VinesFeedPage").then(m => ({ default: m.VinesFeedPage })));
 const WalletPage = lazy(() => import("./pages/WalletPage").then(m => ({ default: m.WalletPage })));
 const WalletSettingsPage = lazy(() => import("./pages/WalletSettingsPage").then(m => ({ default: m.WalletSettingsPage })));
+const BtcMapPage = lazy(() => import("./pages/BtcMapPage").then(m => ({ default: m.BtcMapPage })));
+const RoadstrPage = lazy(() => import("./pages/RoadstrPage").then(m => ({ default: m.RoadstrPage })));
+const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default: m.MarketPage })));
+const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
+const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
+const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const WebxdcFeedPage = lazy(() => import("./pages/WebxdcFeedPage").then(m => ({ default: m.WebxdcFeedPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
-const WorldPage = lazy(() => import("./pages/WorldPage").then(m => ({ default: m.WorldPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
+const GroupChatPage = lazy(() => import("./pages/GroupChatPage").then(m => ({ default: m.GroupChatPage })));
 const RemoteLoginSuccessPage = lazy(() => import("./pages/RemoteLoginSuccessPage").then(m => ({ default: m.RemoteLoginSuccessPage })));
 
 const pollsDef = getExtraKindDef("polls")!;
-const colorsDef = getExtraKindDef("colors")!;
 const packsDef = getExtraKindDef("packs")!;
 const articlesDef = getExtraKindDef("articles")!;
-const decksDef = getExtraKindDef("decks")!;
 const emojisDef = getExtraKindDef("emojis")!;
 const developmentDef = getExtraKindDef("development")!;
 const highlightsDef = getExtraKindDef("highlights")!;
@@ -97,13 +96,73 @@ const highlightsDef = getExtraKindDef("highlights")!;
 /** Polls feed page with a FAB that opens the compose modal (poll mode via + menu). */
 function PollsFeedPage() {
   const [composeOpen, setComposeOpen] = useState(false);
+  const [grid, setGrid] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
+
+  const pollKinds = useMemo(() => {
+    if (pollFilter === 'zap') return [6969];
+    if (pollFilter === 'regular') return [1068];
+    return [pollsDef.kind, ...(pollsDef.extraFeedKinds ?? [])];
+  }, [pollFilter]);
+
   return (
     <>
       <KindFeedPage
-        kind={pollsDef.kind}
+        kind={pollKinds}
         title={pollsDef.label}
         icon={sidebarItemIcon("polls", "size-5")}
+        grid={grid}
+        searchQuery={searchQuery}
+        showLoadMoreButton
         onFabClick={() => setComposeOpen(true)}
+        headerActions={
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <ToggleGroup
+              type="single"
+              value={pollFilter}
+              onValueChange={(v) => {
+                if (v) setPollFilter(v as 'all' | 'zap' | 'regular');
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <ToggleGroupItem value="all" aria-label="All polls">All</ToggleGroupItem>
+              <ToggleGroupItem value="zap" aria-label="Zap to vote polls">Zap to vote</ToggleGroupItem>
+              <ToggleGroupItem value="regular" aria-label="Regular polls">Regular poll</ToggleGroupItem>
+            </ToggleGroup>
+            <div className="relative hidden sm:block">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search polls…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 w-32 lg:w-48 pl-8 text-xs rounded-full"
+              />
+            </div>
+            <ToggleGroup
+              type="single"
+              value={grid ? 'grid' : 'list'}
+              onValueChange={(v) => {
+                if (v) setGrid(v === 'grid');
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <ToggleGroupItem value="list" aria-label="List view">
+                <LayoutList className="size-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="grid" aria-label="2-column grid">
+                <LayoutGrid className="size-4" />
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
+              <Plus className="size-4" />
+              Create poll
+            </Button>
+          </div>
+        }
       />
       {composeOpen && (
         <Suspense fallback={null}>
@@ -154,11 +213,7 @@ export function AppRouter() {
         <BackButtonHandler />
         <ScrollToTop />
         <HighlightSelectionButton />
-        <BlobbiActionsProvider>
-          <Suspense fallback={null}>
-            <BlobbiCompanionLayer />
-          </Suspense>
-          <Routes>
+        <Routes>
           {/* Auto-follow deep link: fullscreen immersive (no sidebars/nav) */}
           <Route path="/follow/:npub" element={<FollowPage />} />
 
@@ -198,21 +253,9 @@ export function AppRouter() {
               path="/streams"
               element={<Navigate to="/videos" replace />}
             />
-            <Route path="/vines" element={<VinesFeedPage />} />
             <Route path="/music" element={<MusicPage />} />
             <Route path="/podcasts" element={<PodcastsFeedPage />} />
             <Route path="/polls" element={<PollsFeedPage />} />
-            <Route path="/treasures" element={<TreasuresPage />} />
-            <Route
-              path="/colors"
-              element={
-                <KindFeedPage
-                  kind={colorsDef.kind}
-                  title={colorsDef.label}
-                  icon={sidebarItemIcon("colors", "size-5")}
-                />
-              }
-            />
             <Route
               path="/packs"
               element={
@@ -223,7 +266,9 @@ export function AppRouter() {
                 />
               }
             />
-            <Route path="/webxdc" element={<WebxdcFeedPage />} />
+            <Route path="/mini-apps" element={<WebxdcFeedPage />} />
+            <Route path="/webxdc" element={<Navigate to="/mini-apps" replace />} />
+            <Route path="/art" element={<ArtFeedPage />} />
             <Route path="/articles/new" element={<ArticleEditorPage />} />
             <Route path="/articles/edit/:naddr" element={<ArticleEditorPage />} />
             <Route
@@ -248,16 +293,6 @@ export function AppRouter() {
                 />
               }
             />
-            <Route
-              path="/decks"
-              element={
-                <KindFeedPage
-                  kind={decksDef.kind}
-                  title={decksDef.label}
-                  icon={sidebarItemIcon("decks", "size-5")}
-                />
-              }
-            />
             <Route path="/emojis" element={<EmojiFeedPage />} />
             <Route
               path="/development"
@@ -275,22 +310,25 @@ export function AppRouter() {
             />
             <Route path="/themes" element={<ThemesPage />} />
             <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/btcmap" element={<BtcMapPage />} />
+            <Route path="/roadstr" element={<RoadstrPage />} />
+            <Route path="/market" element={<MarketPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/messages/:npub" element={<MessageThreadPage />} />
+            <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
-            <Route path="/ai-chat" element={<AIChatPage />} />
-            <Route path="/blobbi" element={<BlobbiPage />} />
-            <Route path="/world" element={<WorldPage />} />
+            <Route path="/groups" element={<GroupChatPage />} />
+
+            <Route path="/pets" element={<Navigate to="/" replace />} />
             <Route path="/badges" element={<BadgesPage />} />
             <Route path="/books" element={<BooksPage />} />
             <Route path="/archive" element={<ArchivePage />} />
-            <Route path="/bluesky" element={<BlueskyPage />} />
             <Route path="/wikipedia" element={<WikipediaPage />} />
-            <Route path="/letters" element={<LettersPage />} />
-            <Route path="/letters/compose" element={<LetterComposePage />} />
-            <Route path="/settings/letters" element={<LetterPreferencesPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/safety" element={<CSAEPolicyPage />} />
             <Route path="/changelog" element={<ChangelogPage />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="/r/*" element={<RelayPage />} />
             <Route
               path="/settings/lists"
@@ -310,7 +348,6 @@ export function AppRouter() {
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
-        </BlobbiActionsProvider>
       </BrowserRouter>
     </AudioPlayerProvider>
   );
