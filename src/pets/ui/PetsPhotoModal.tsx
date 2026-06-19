@@ -114,7 +114,7 @@ export function PetsPhotoModal({
         tags: [['imeta', ...imetaFields]],
       });
 
-      toast({ title: 'Posted!', description: 'Your Pets photo has been shared.' });
+      toast({ title: 'Posted!', description: 'Your 2140 Pet photo has been shared.' });
       onOpenChange(false);
     } catch (error) {
       console.error('[PetsPhoto] Failed to share:', error);

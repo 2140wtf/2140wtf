@@ -78,7 +78,7 @@ export function usePetsActions(): PetsActionsContextValue {
       }
       return {
         success: false,
-        error: 'No companion selected. Please select a Pets as your companion first.',
+        error: 'No companion selected. Please select a 2140 Pet as your companion first.',
       };
     }
     
