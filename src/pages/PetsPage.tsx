@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ArrowLeftRight } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
 import { TabButton } from '@/components/TabButton';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -2045,6 +2046,14 @@ function PetsDashboard({
       {/* ─── Room View (always visible behind drawer) ─── */}
       <PetsRoomShell
         roomId={currentRoom}
+        headerSlot={
+          <PetsSwapButton
+            companions={companions}
+            selectedD={selectedD}
+            currentCompanionD={profile?.currentCompanion}
+            onSelect={onSelectPets}
+          />
+        }
         onChangeRoom={(room) => {
           if (isSleeping) {
             toast({ title: 'Zzz...', description: `${companion.name} is sleeping. Wake up first!` });
@@ -3616,6 +3625,75 @@ function PetsSelectorPage({ companions, onSelect, isLoading, onAdopt, currentCom
 }
 
 
+
+// ─── Pets Swap Button ─────────────────────────────────────────────────────────
+
+interface PetsSwapButtonProps {
+  companions: PetsCompanion[];
+  selectedD: string;
+  currentCompanionD?: string;
+  onSelect: (d: string) => void;
+}
+
+function PetsSwapButton({ companions, selectedD, currentCompanionD, onSelect }: PetsSwapButtonProps) {
+  const [open, setOpen] = useState(false);
+  if (companions.length < 2) return null;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="flex items-center gap-1.5 rounded-full bg-background/70 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+          aria-label="Switch 2140 PET"
+        >
+          <ArrowLeftRight className="size-3.5" />
+          <span>Swap</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="bottom" align="center" className="w-auto p-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-muted-foreground">Switch 2140 PET</p>
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+            className="size-5 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+        <div className="flex items-center gap-3 overflow-x-auto max-w-[16rem] sm:max-w-xs px-1 py-1 scrollbar-thin">
+          {companions.map((c) => {
+            const isSelected = c.d === selectedD;
+            const isCompanion = c.d === currentCompanionD;
+            return (
+              <button
+                key={c.d}
+                onClick={() => { onSelect(c.d); setOpen(false); }}
+                disabled={isSelected}
+                className={cn(
+                  'flex-shrink-0 flex flex-col items-center gap-1 transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 active:scale-95',
+                  isSelected && 'opacity-50 pointer-events-none',
+                )}
+                aria-label={`Switch to ${c.name}`}
+              >
+                <div className="relative">
+                  <PetsStageVisual companion={c} size="sm" />
+                  {isCompanion && (
+                    <div className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-background ring-1 ring-background flex items-center justify-center">
+                      <Footprints className="size-2.5 text-emerald-500" />
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground max-w-[3.5rem] truncate">
+                  {c.stage === 'egg' ? 'Egg' : c.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ─── Dashboard Loading State ──────────────────────────────────────────────────
 

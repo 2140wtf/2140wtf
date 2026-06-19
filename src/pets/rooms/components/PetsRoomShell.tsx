@@ -85,6 +85,8 @@ interface PetsRoomShellProps {
   editorSlot?: React.ReactNode;
   /** Optional editor trigger rendered top-left corner of the room. */
   editorSlotLeft?: React.ReactNode;
+  /** Optional slot rendered inside the centered room header pill. */
+  headerSlot?: React.ReactNode;
   /**
    * Optional editor overlay — rendered as a direct child of the shell so
    * `absolute inset-0` covers only the room area, not sidebars.
@@ -160,6 +162,7 @@ export function PetsRoomShell({
   roomLayout,
   editorSlot,
   editorSlotLeft,
+  headerSlot,
   editorOverlay,
   roomOverlay,
   shovelDragRef,
@@ -452,6 +455,11 @@ export function PetsRoomShell({
                 />
               ))}
             </div>
+            {headerSlot && (
+              <div className="mt-1">
+                {headerSlot}
+              </div>
+            )}
           </div>
           {/* Stats HUD row */}
           {statusHud && (
