@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Mail } from 'lucide-react';
@@ -22,15 +22,7 @@ export function MessagesPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { conversations, isLoading } = useDmInbox();
-  const { markAllConversationsRead, getCursor } = useDmReadCursors();
-  const initialMarkReadDone = useRef(false);
-
-  useEffect(() => {
-    if (!isLoading && conversations.length > 0 && !initialMarkReadDone.current) {
-      initialMarkReadDone.current = true;
-      markAllConversationsRead(conversations);
-    }
-  }, [isLoading, conversations, markAllConversationsRead]);
+  const { getCursor } = useDmReadCursors();
 
   useSeoMeta({
     title: `Messages | ${config.appName}`,
