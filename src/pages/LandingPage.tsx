@@ -104,21 +104,6 @@ export function LandingPage() {
               Explore the feed <ArrowRight className="size-4" />
             </Link>
           </div>
-
-          <div className="mt-14 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--2140-border)] bg-[var(--2140-surface)] p-5">
-              <div className="mb-1 font-[family-name:var(--font-mono)] text-[1.75rem] font-bold text-[var(--2140-bitcoin)]">∞</div>
-              <div className="text-[0.8125rem] text-[var(--2140-muted)]">notes relayed</div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[var(--2140-border)] bg-[var(--2140-surface)] p-5">
-              <div className="mb-1 font-[family-name:var(--font-mono)] text-[1.75rem] font-bold text-[var(--2140-bitcoin)]">21</div>
-              <div className="text-[0.8125rem] text-[var(--2140-muted)]">million sats per bitcoin</div>
-            </div>
-            <div className="rounded-[var(--radius-lg)] border border-[var(--2140-border)] bg-[var(--2140-surface)] p-5">
-              <div className="mb-1 font-[family-name:var(--font-mono)] text-[1.75rem] font-bold text-[var(--2140-bitcoin)]">2140</div>
-              <div className="text-[0.8125rem] text-[var(--2140-muted)]">the year Bitcoin wins</div>
-            </div>
-          </div>
         </div>
       </section>
 
