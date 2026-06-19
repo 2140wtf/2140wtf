@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { nip19 } from 'nostr-tools';
 import { Crown, UserMinus, Shield, Ban, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,6 +51,17 @@ export function GroupMemberPanel({
   const [invitePubkey, setInvitePubkey] = useState('');
   const [isInviting, setIsInviting] = useState(false);
 
+  const isValidInvite = useMemo(() => {
+    const value = invitePubkey.trim();
+    if (!value) return false;
+    if (/^[0-9a-fA-F]{64}$/.test(value)) return true;
+    try {
+      return nip19.decode(value).type === 'npub';
+    } catch {
+      return false;
+    }
+  }, [invitePubkey]);
+
   if (!group) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground text-sm p-4">
@@ -59,7 +71,7 @@ export function GroupMemberPanel({
   }
 
   const handleInvite = async () => {
-    if (!invitePubkey.trim() || isInviting) return;
+    if (!isValidInvite || isInviting) return;
     setIsInviting(true);
     try {
       await onAddMember(invitePubkey.trim());
@@ -92,7 +104,7 @@ export function GroupMemberPanel({
               size="icon"
               className="size-8 shrink-0"
               aria-label="Invite member"
-              disabled={isInviting || !invitePubkey.trim()}
+              disabled={isInviting || !isValidInvite}
               onClick={() => void handleInvite()}
             >
               <UserPlus className="size-3.5" />
@@ -125,7 +137,7 @@ export function GroupMemberPanel({
                   </span>
                 )}
                 {isAdmin && !isSelf && (
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+                  <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
                     {member.role !== 'admin' && (
                       <Button
                         size="icon"

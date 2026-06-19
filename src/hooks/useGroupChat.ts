@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useNostrLogin } from '@nostrify/react/login';
-import { nip19 } from 'nostr-tools';
+import { nip19, getPublicKey } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
@@ -21,8 +21,9 @@ import {
 } from '@/lib/groupChatService';
 import { KIND_GROUP } from '@/lib/nip104Protocol';
 
-function extractPrivateKey(logins: unknown[]): Uint8Array | null {
-  if (!Array.isArray(logins)) return null;
+function extractPrivateKey(logins: unknown[], userPubkey?: string): Uint8Array | null {
+  if (!Array.isArray(logins) || !userPubkey) return null;
+  const targetPubkey = userPubkey.toLowerCase();
   for (const login of logins) {
     const l = login as { type?: string; data?: { nsec?: string } } | undefined;
     if (!l || l.type !== 'nsec' || !l.data?.nsec) continue;
@@ -30,7 +31,11 @@ function extractPrivateKey(logins: unknown[]): Uint8Array | null {
     try {
       const decoded = nip19.decode(l.data.nsec);
       if (decoded.type === 'nsec') {
-        return decoded.data as Uint8Array;
+        const privkey = decoded.data as Uint8Array;
+        const pubkey = getPublicKey(privkey).toLowerCase();
+        if (pubkey === targetPubkey) {
+          return privkey;
+        }
       }
     } catch {
       // ignore
@@ -50,6 +55,7 @@ export interface UseGroupChatReturn {
   canUseGroupChat: boolean;
   requiresNsec: boolean;
   selectGroup: (groupId: string | null) => void;
+  getMessagesForGroup: (groupId: string) => GroupChatMessage[];
   createGroup: (name: string, description?: string) => Promise<GroupOperationResult<GroupChatGroup>>;
   sendMessage: (content: string) => Promise<GroupOperationResult<GroupChatMessage>>;
   addMember: (pubkey: string) => Promise<GroupOperationResult>;
@@ -67,15 +73,28 @@ export function useGroupChat(): UseGroupChatReturn {
   const { logins } = useNostrLogin();
   const { config } = useAppContext();
 
-  const privateKey = useMemo(() => extractPrivateKey(logins as unknown[]), [logins]);
+  const privateKey = useMemo(
+    () => extractPrivateKey(logins as unknown[], user?.pubkey),
+    [logins, user?.pubkey],
+  );
   const relays = useMemo(
     () => config.relayMetadata?.relays?.map((r) => r.url).filter(Boolean) ?? [],
     [config.relayMetadata],
   );
 
-  const service = useMemo(() => {
-    if (!user || !privateKey) return null;
-    return new GroupChatService(user.pubkey, privateKey, relays);
+  const [service, setService] = useState<GroupChatService | null>(null);
+  useEffect(() => {
+    if (!user || !privateKey) {
+      setService(null);
+      return;
+    }
+    try {
+      setService(new GroupChatService(user.pubkey, privateKey, relays));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initialize group chat';
+      console.error('[useGroupChat] Service construction failed:', message);
+      setService(null);
+    }
   }, [user, privateKey, relays]);
 
   const [groups, setGroups] = useState<GroupChatGroup[]>([]);
@@ -92,7 +111,11 @@ export function useGroupChat(): UseGroupChatReturn {
   }, [groups]);
 
   const groupKeys = useMemo(
-    () => groups.map((g) => `${g.nostrGroupId}:${g.epoch}`).join(','),
+    () =>
+      groups
+        .map((g) => g.nostrGroupId)
+        .sort()
+        .join(','),
     [groups],
   );
 
@@ -130,6 +153,11 @@ export function useGroupChat(): UseGroupChatReturn {
     setError(null);
   }, []);
 
+  const getMessagesForGroup = useCallback(
+    (groupId: string) => service?.getMessages(groupId) ?? [],
+    [service],
+  );
+
   // Subscribe to kind 1059 gift wraps for Welcome events.
   useEffect(() => {
     if (!service || !user) return;
@@ -138,6 +166,25 @@ export function useGroupChat(): UseGroupChatReturn {
     let alive = true;
 
     (async () => {
+      try {
+        const historical = await nostr.query(
+          [{ kinds: [1059], '#p': [user.pubkey], limit: 100 }],
+          { signal: ac.signal },
+        );
+        for (const event of historical) {
+          if (!alive) break;
+          const result = await service.joinFromWelcome(event);
+          if (result.success) {
+            refreshFromService();
+            if (result.data) {
+              setSelectedGroupId(result.data.nostrGroupId);
+            }
+          }
+        }
+      } catch {
+        // Abort expected.
+      }
+
       try {
         const now = Math.floor(Date.now() / 1000);
         for await (const msg of nostr.req(
@@ -181,6 +228,7 @@ export function useGroupChat(): UseGroupChatReturn {
         const filters = groupsRef.current.map((g) => ({
           kinds: [KIND_GROUP],
           '#h': [g.nostrGroupId],
+          limit: 200,
         }));
 
         const initial = await nostr.query(filters, { signal: ac.signal });
@@ -457,6 +505,7 @@ export function useGroupChat(): UseGroupChatReturn {
     canUseGroupChat,
     requiresNsec,
     selectGroup,
+    getMessagesForGroup,
     createGroup,
     sendMessage,
     addMember,

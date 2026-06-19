@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -29,12 +29,33 @@ function MessageAvatar({ pubkey }: { pubkey: string }) {
   );
 }
 
+const SCROLL_NEAR_BOTTOM_THRESHOLD = 120;
+
 export function GroupMessageList({ group, messages, currentUserPubkey }: GroupMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+
+  const checkNearBottom = () => {
+    const el = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!(el instanceof HTMLElement)) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsNearBottom(distanceFromBottom < SCROLL_NEAR_BOTTOM_THRESHOLD);
+  };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (!(viewport instanceof HTMLElement)) return;
+    const listener = () => checkNearBottom();
+    viewport.addEventListener('scroll', listener);
+    return () => viewport.removeEventListener('scroll', listener);
+  }, []);
+
+  useEffect(() => {
+    if (isNearBottom && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isNearBottom]);
 
   if (!group) {
     return (
@@ -45,7 +66,7 @@ export function GroupMessageList({ group, messages, currentUserPubkey }: GroupMe
   }
 
   return (
-    <ScrollArea className="flex-1 p-4">
+    <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
       {messages.length === 0 ? (
         <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
           No messages yet. Say something!

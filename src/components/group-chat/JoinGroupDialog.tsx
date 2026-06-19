@@ -28,10 +28,21 @@ export function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogP
 
     let event: NostrEvent;
     try {
-      const parsed = JSON.parse(rawEvent.trim()) as unknown;
+      const trimmed = rawEvent.trim();
+      if (trimmed.length > 512 * 1024) throw new Error('Event JSON is too large');
+      const parsed = JSON.parse(trimmed) as unknown;
       if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid JSON');
       event = parsed as NostrEvent;
-      if (typeof event.kind !== 'number' || typeof event.content !== 'string') {
+      if (
+        typeof event.id !== 'string' ||
+        typeof event.pubkey !== 'string' ||
+        typeof event.sig !== 'string' ||
+        typeof event.kind !== 'number' ||
+        typeof event.content !== 'string' ||
+        typeof event.created_at !== 'number' ||
+        !Array.isArray(event.tags) ||
+        !event.tags.every((t) => Array.isArray(t) && t.every((x) => typeof x === 'string'))
+      ) {
         throw new Error('Invalid event shape');
       }
     } catch (err) {
