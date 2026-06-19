@@ -31,8 +31,7 @@ import type { BodyEffectsSpec } from './lib/bodyEffects';
 import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
-import { getSpeciesPortraitSrc, getBaoImageSrc } from '@/pets/core/lib/pet-categories';
-import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
+import { resolveAdultForm } from '@/pets/adult-pets';
 
 export interface PetsAdultVisualProps {
   /** The Pets data */
@@ -86,14 +85,16 @@ export function PetsAdultVisual({
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
 
-  // PNG-based adults (2140 Pets species portraits / ₿AO collectible cards) bypass
-  // the SVG pipeline and render their asset image directly.
-  const pngSrc =
-    pets.breedCategory === '2140-pets' && pets.breedAsset
-      ? getSpeciesPortraitSrc(pets.breedAsset as AdultForm)
-      : pets.breedCategory === 'bao' && pets.breedAsset
-        ? getBaoImageSrc(pets.breedAsset)
-        : undefined;
+  // ── State + form classes for species-specific CSS animations ───────────────
+
+  const formClass =
+    pets.breedCategory === 'bao' && pets.breedAsset
+      ? `pets-bao-${pets.breedAsset}`
+      : `pets-form-${resolveAdultForm(pets)}`;
+
+  const stateClass = isSleeping
+    ? 'pets-state-sleeping'
+    : `pets-state-${effectiveReaction === 'swaying' ? 'listening' : effectiveReaction}`;
 
   // ── Eye hooks ──────────────────────────────────────────────────────────────
 
@@ -122,6 +123,8 @@ export function PetsAdultVisual({
       ref={containerRef}
       className={cn(
         'relative flex items-center justify-center',
+        formClass,
+        stateClass,
         // No opacity change for sleeping — sleeping is a recipe overlay, not a visual dim
         !isCompanion && (effectiveReaction === 'listening' ||
           effectiveReaction === 'swaying' ||
@@ -131,23 +134,15 @@ export function PetsAdultVisual({
         className,
       )}
     >
-      {pngSrc ? (
-        <img
-          src={pngSrc}
-          alt={pets.name}
-          className="size-full object-contain"
-        />
-      ) : (
-        <PetsAdultSvgRenderer
-          pets={pets}
-          isSleeping={isSleeping}
-          recipe={recipe}
-          recipeLabel={recipeLabel}
-          emotion={emotion}
-          bodyEffects={bodyEffects}
-          className="size-full"
-        />
-      )}
+      <PetsAdultSvgRenderer
+        pets={pets}
+        isSleeping={isSleeping}
+        recipe={recipe}
+        recipeLabel={recipeLabel}
+        emotion={emotion}
+        bodyEffects={bodyEffects}
+        className="size-full"
+      />
     </div>
   );
 }
