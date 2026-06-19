@@ -33,7 +33,6 @@ The following planned items were **not** implemented and are deferred:
 - IndexedDB persistence of decrypted messages (`useNip17Inbox` keeps state in React only).
 - A separate `useNip17Thread` hook (`MessageThreadPage` filters `useNip17Inbox` output by participant).
 - A settings UI for editing the user's kind 10050 DM relay list.
-- DM notifications / unread badge.
 
 ---
 
@@ -47,7 +46,7 @@ The following planned items were **not** implemented and are deferred:
 - [x] DM inbox (`/messages`) lists conversations with last-message preview and unread state.
 - [x] DM thread view shows message bubbles, timestamps, and reply context.
 - [x] A "Message" button on profiles opens a DM thread.
-- [ ] DM notifications surface new messages. *Deferred out of Phase 0; see §11.*
+- [x] DM notifications surface new messages.
 - [x] DM relay preferences (kind 10050) are supported with NIP-65 fallback.
 - [x] `npm run test` passes after all changes.
 
@@ -455,7 +454,7 @@ If Phase 0 needs to be reverted:
 - [x] `/messages` inbox renders conversation list.
 - [x] `/messages/:npub` thread renders messages and supports reply.
 - [x] Profile "Message" button works.
-- [ ] DM notifications work. *Deferred out of Phase 0; see §11.*
+- [x] DM notifications work.
 - [x] DM relay preferences (kind 10050) supported with fallback.
 - [x] NIP.md updated.
 - [x] CHANGELOG.md updated.
@@ -474,7 +473,7 @@ If Phase 0 needs to be reverted:
 | 6 | Add `useDmRelays` + relay targeting | ✅ Done | kind 10050 with NIP-65 read-relay fallback. |
 | 7 | Build `MessagesPage` + `MessageThreadPage` | ✅ Done | Routes `/messages` and `/messages/:npub`. |
 | 8 | Add profile "Message" buttons | ✅ Done | Opens DM thread for foreign profiles. |
-| 9 | DM notifications integration | ⏸️ Deferred | Out of scope for Phase 0; see §11. |
+| 9 | DM notifications integration | ✅ Done | Unread dot on Messages sidebar + unread DM section on Notifications page. |
 | 10 | End-to-end testing + bug fixes | ✅ Done | `npm run test` passes. |
 | 11 | NIP.md + CHANGELOG + final `npm run test` | ✅ Done | |
 
@@ -492,7 +491,6 @@ If Phase 0 needs to be reverted:
 
 ## 11. Remaining Work for Phase 1 / Future Phases
 
-- **DM notifications:** Add an unread indicator on the Messages sidebar item and/or surface new NIP-17 messages in the Notifications page. This was intentionally left out of Phase 0.
 - **Group DMs:** Multi-recipient threads.
 - **P2P trade request composer:** Link DMs to trade offers (Phase 1).
 - **NIP-59 private offers:** Phase 2.
