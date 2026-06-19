@@ -30,7 +30,7 @@ This plan covers the first phase of the P2P Trades project. Before P2P Trades ca
 - [x] A "Message" button on profiles opens a DM thread.
 - [ ] DM notifications surface new messages.
 - [x] DM relay preferences (kind 10050) are supported with NIP-65 fallback.
-- [ ] `npm run test` passes after all changes.
+- [x] `npm run test` passes after all changes.
 
 ### Non-Goals
 
