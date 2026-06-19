@@ -463,6 +463,10 @@ export class GroupChatService {
   }
 
   async addMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
+    return this.withGroupLock(groupId, () => this.addMemberLocked(groupId, pubkeyInput));
+  }
+
+  private async addMemberLocked(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -514,6 +518,7 @@ export class GroupChatService {
     });
 
     const events: NostrEvent[] = [];
+    let failedCount = 0;
     for (const target of group.members) {
       if (target === this.userPubkey) continue;
       try {
@@ -535,13 +540,14 @@ export class GroupChatService {
         const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
         events.push(giftWrap);
       } catch (err) {
+        failedCount++;
         console.error(`Failed to wrap add-member Welcome for ${target.slice(0, 8)}...`, err);
       }
     }
 
     this.persistGroup(group);
 
-    return { success: true, events };
+    return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
 
   async removeMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
