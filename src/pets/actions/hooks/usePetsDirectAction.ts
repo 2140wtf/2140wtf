@@ -231,7 +231,7 @@ export function usePetsDirectAction({
       const xpText = formatXPGain(xpGained);
       toast({
         title: `${actionMeta.label} complete!`,
-        description: `Your 2140 Pet's happiness increased by ${happinessChange}! ${xpText}`,
+        description: `Your 2140.wtf Pet's happiness increased by ${happinessChange}! ${xpText}`,
       });
 
       // Track daily mission progress

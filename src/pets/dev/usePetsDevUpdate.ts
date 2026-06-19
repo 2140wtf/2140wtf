@@ -196,14 +196,14 @@ export function usePetsDevUpdate({
         : `Updated: ${changedFields.join(', ')}`;
 
       toast({
-        title: '2140 Pets state updated (DEV)',
+        title: '2140.wtf Pets state updated (DEV)',
         description,
       });
     },
     onError: (error: Error) => {
       console.error('[DevUpdate] Failed:', error);
       toast({
-        title: 'Failed to update 2140 Pets',
+        title: 'Failed to update 2140.wtf Pets',
         description: error.message,
         variant: 'destructive',
       });
