@@ -54,6 +54,8 @@ export interface PetsStageVisualProps {
   tourVisualState?: EggTourVisualState;
   /** Callback when the egg is clicked during an interactive tour step */
   onTourEggClick?: () => void;
+  /** Generic click callback for egg taps (passed through to EggGraphic) */
+  onEggClick?: () => void;
   className?: string;
 }
 
@@ -80,6 +82,7 @@ export function PetsStageVisual({
   bodyEffects,
   tourVisualState,
   onTourEggClick,
+  onEggClick,
   className,
 }: PetsStageVisualProps) {
   const { stage } = companion;
@@ -117,6 +120,7 @@ export function PetsStageVisual({
           statusEffects={eggStatusEffects}
           tourVisualState={tourVisualState}
           onTourEggClick={onTourEggClick}
+          onClick={onEggClick}
           className="size-full"
         />
         <FloatingMusicNotes active={showMusicNotes} />

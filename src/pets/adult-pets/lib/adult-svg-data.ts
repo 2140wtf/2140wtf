@@ -2787,368 +2787,234 @@ const STARRI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
 </svg>`;
 
 const GLITCHFOX_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Glitch aura -->
-  <g opacity="0.35">
-    <rect x="30" y="60" width="140" height="80" rx="4" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1" stroke-dasharray="8 6">
-      <animate attributeName="stroke-dashoffset" from="0" to="28" dur="1.2s" repeatCount="indefinite"/>
-    </rect>
-    <rect x="25" y="55" width="150" height="90" rx="6" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="0.5" opacity="0.6"/>
+  <!-- Soft glow behind -->
+  <circle cx="100" cy="125" r="75" fill="url(#glitchfoxGlow)" opacity="0.35" />
+
+  <!-- Floating cyan data oval -->
+  <g opacity="0.9">
+    <ellipse cx="82" cy="58" rx="16" ry="22" fill="url(#glitchfoxCyan)" />
+    <line x1="74" y1="54" x2="90" y2="54" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
+    <line x1="74" y1="60" x2="90" y2="60" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
+    <line x1="74" y1="66" x2="90" y2="66" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
   </g>
 
-  <!-- Tail -->
-  <path d="M 70 145 L 55 165 L 75 160 L 65 180 L 90 155" fill="url(#glitchfoxTail)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
-
-  <!-- Body -->
-  <path d="M 85 145 L 115 145 L 110 115 L 90 115 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxMagenta)" stroke-width="1.5"/>
-
-  <!-- Head -->
-  <path d="M 70 110 L 100 75 L 130 110 L 115 125 L 85 125 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxCyan)" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Floating magenta diamond -->
+  <path d="M 125 42 L 139 56 L 125 70 L 111 56 Z" fill="url(#glitchfoxMagenta)" opacity="0.85" />
 
   <!-- Ears -->
-  <path d="M 75 85 L 55 45 L 92 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
-  <path d="M 125 85 L 145 45 L 108 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M 72 118 L 48 68 L 92 108 Z" fill="url(#glitchfoxEar)" />
+  <path d="M 128 118 L 152 68 L 108 108 Z" fill="url(#glitchfoxEar)" />
+
+  <!-- Body diamond -->
+  <path d="M 100 85 L 132 130 L 100 175 L 68 130 Z" fill="url(#glitchfoxBody)" />
 
   <!-- Eyes -->
-  <g>
-    <polygon points="82,102 95,98 95,110 82,108" fill="url(#glitchfoxEye)"/>
-    <polygon points="118,102 105,98 105,110 118,108" fill="url(#glitchfoxEye)"/>
-    <!-- Pupils -->
-    <rect x="86" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
-    <rect x="109" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
-  </g>
+  <circle cx="88" cy="128" r="6" fill="#ffffff" />
+  <circle cx="112" cy="128" r="6" fill="#ffffff" />
+  <circle cx="89" cy="128" r="2.8" fill="#0f172a" data-pets-skip="true" />
+  <circle cx="111" cy="128" r="2.8" fill="#0f172a" data-pets-skip="true" />
+  <circle cx="90" cy="126" r="1.2" fill="#ffffff" data-pets-skip="true" />
+  <circle cx="113" cy="126" r="1.2" fill="#ffffff" data-pets-skip="true" />
 
-  <!-- Snout / mouth -->
-  <path d="M 92 118 L 100 124 L 108 118" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Mouth -->
+  <path d="M 95 143 Q 100 148 105 143" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
 
-  <!-- Circuit traces -->
-  <path d="M 88 135 L 88 142 M 100 135 L 100 142 M 112 135 L 112 142" stroke="url(#glitchfoxCyan)" stroke-width="1" opacity="0.8"/>
-  <circle cx="88" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
-    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="100" cy="142" r="1.5" fill="url(#glitchfoxMagenta)">
-    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="112" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
-    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
-  </circle>
-
-  <!-- Glitch shards -->
-  <rect x="132" y="95" width="12" height="3" fill="url(#glitchfoxCyan)" opacity="0.7"/>
-  <rect x="55" y="105" width="10" height="2" fill="url(#glitchfoxMagenta)" opacity="0.6"/>
-
-  <!-- Gradient definitions -->
   <defs>
     <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#374151"/>
-      <stop offset="50%" stop-color="#1f2937"/>
-      <stop offset="100%" stop-color="#030712"/>
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#0891b2" />
     </radialGradient>
-    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#374151"/>
-      <stop offset="100%" stop-color="#111827"/>
+    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e879f9" />
+      <stop offset="100%" stop-color="#c026d3" />
     </linearGradient>
-    <linearGradient id="glitchfoxTail" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4b5563"/>
-      <stop offset="100%" stop-color="#1f2937"/>
-    </linearGradient>
-    <radialGradient id="glitchfoxEye" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#0891b2"/>
+    <radialGradient id="glitchfoxGlow" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
     </radialGradient>
-    <radialGradient id="glitchfoxPupil" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#f0abfc"/>
-      <stop offset="100%" stop-color="#c026d3"/>
-    </radialGradient>
-    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#06b6d4" />
     </linearGradient>
-    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#e879f9"/>
-      <stop offset="100%" stop-color="#c026d3"/>
+    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0abfc" />
+      <stop offset="100%" stop-color="#c026d3" />
     </linearGradient>
   </defs>
 </svg>`;
 
 const GLITCHFOX_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Glitch aura -->
-  <g opacity="0.2">
-    <rect x="30" y="60" width="140" height="80" rx="4" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1" stroke-dasharray="8 6">
-      <animate attributeName="stroke-dashoffset" from="0" to="28" dur="2.4s" repeatCount="indefinite"/>
-    </rect>
+  <g opacity="0.75">
+    <circle cx="100" cy="125" r="75" fill="url(#glitchfoxGlow)" opacity="0.25" />
+    <path d="M 72 118 L 48 68 L 92 108 Z" fill="url(#glitchfoxEar)" />
+    <path d="M 128 118 L 152 68 L 108 108 Z" fill="url(#glitchfoxEar)" />
+    <path d="M 100 85 L 132 130 L 100 175 L 68 130 Z" fill="url(#glitchfoxBody)" />
+    <path d="M 82 128 Q 88 132 94 128" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+    <path d="M 106 128 Q 112 132 118 128" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+    <path d="M 95 143 Q 100 148 105 143" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
   </g>
-
-  <!-- Tail -->
-  <path d="M 70 145 L 55 165 L 75 160 L 65 180 L 90 155" fill="url(#glitchfoxTail)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
-
-  <!-- Body -->
-  <path d="M 85 145 L 115 145 L 110 115 L 90 115 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxMagenta)" stroke-width="1.5"/>
-
-  <!-- Head -->
-  <path d="M 70 110 L 100 75 L 130 110 L 115 125 L 85 125 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxCyan)" stroke-width="2" stroke-linejoin="round"/>
-
-  <!-- Ears -->
-  <path d="M 75 85 L 55 45 L 92 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
-  <path d="M 125 85 L 145 45 L 108 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
-
-  <!-- Sleeping eyes -->
-  <path d="M 82 106 Q 88 110 95 106" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M 105 106 Q 112 110 118 106" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linecap="round"/>
-
-  <!-- Snout / mouth -->
-  <path d="M 92 118 L 100 124 L 108 118" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- Sleep zzz -->
-  <text x="135" y="75" fill="url(#glitchfoxCyan)" font-family="monospace" font-size="10" opacity="0.7">Z</text>
-  <text x="145" y="62" fill="url(#glitchfoxMagenta)" font-family="monospace" font-size="8" opacity="0.5">z</text>
-
-  <!-- Gradient definitions -->
+  <text x="135" y="70" fill="url(#glitchfoxCyan)" font-family="monospace" font-size="10" opacity="0.6">Z</text>
+  <text x="145" y="57" fill="url(#glitchfoxMagenta)" font-family="monospace" font-size="8" opacity="0.4">z</text>
   <defs>
     <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#374151"/>
-      <stop offset="50%" stop-color="#1f2937"/>
-      <stop offset="100%" stop-color="#030712"/>
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#0891b2" />
     </radialGradient>
-    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#374151"/>
-      <stop offset="100%" stop-color="#111827"/>
+    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e879f9" />
+      <stop offset="100%" stop-color="#c026d3" />
     </linearGradient>
-    <linearGradient id="glitchfoxTail" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4b5563"/>
-      <stop offset="100%" stop-color="#1f2937"/>
+    <radialGradient id="glitchfoxGlow" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#06b6d4" />
     </linearGradient>
-    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
-    </linearGradient>
-    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#e879f9"/>
-      <stop offset="100%" stop-color="#c026d3"/>
+    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0abfc" />
+      <stop offset="100%" stop-color="#c026d3" />
     </linearGradient>
   </defs>
 </svg>`;
 
 const BIOMECHMOTH_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Wings back -->
-  <g opacity="0.9">
-    <path d="M 100 110 C 70 70 30 60 25 100 C 30 140 70 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
-    <path d="M 100 110 C 130 70 170 60 175 100 C 170 140 130 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
-    <path d="M 100 110 C 60 85 40 90 30 100 M 100 110 C 60 115 45 110 35 105 M 100 110 C 65 125 50 120 40 115" stroke="url(#biomechmothAmber)" stroke-width="0.6" fill="none" opacity="0.6"/>
-    <path d="M 100 110 C 140 85 160 90 170 100 M 100 110 C 140 115 155 110 165 105 M 100 110 C 135 125 150 120 160 115" stroke="url(#biomechmothAmber)" stroke-width="0.6" fill="none" opacity="0.6"/>
+  <!-- Wings -->
+  <g opacity="0.95">
+    <path d="M 100 100 C 65 55 15 50 10 100 C 15 150 65 140 100 115" fill="url(#biomechmothWing)" />
+    <path d="M 100 100 C 135 55 185 50 190 100 C 185 150 135 140 100 115" fill="url(#biomechmothWing)" />
+    <circle cx="45" cy="95" r="1.5" fill="#ffffff" opacity="0.4" data-pets-skip="true" />
+    <circle cx="155" cy="95" r="1.5" fill="#ffffff" opacity="0.4" data-pets-skip="true" />
+    <circle cx="35" cy="110" r="1" fill="#ffffff" opacity="0.3" data-pets-skip="true" />
+    <circle cx="165" cy="110" r="1" fill="#ffffff" opacity="0.3" data-pets-skip="true" />
   </g>
 
-  <!-- Body -->
-  <ellipse cx="100" cy="115" rx="18" ry="28" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
-
-  <!-- Head -->
-  <circle cx="100" cy="82" r="14" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
-
   <!-- Antennae -->
-  <path d="M 92 72 Q 80 50 70 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M 108 72 Q 120 50 130 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
-  <circle cx="70" cy="45" r="2.5" fill="url(#biomechmothAmber)">
-    <animate attributeName="opacity" values="0.4;1;0.4" dur="1.2s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="130" cy="45" r="2.5" fill="url(#biomechmothAmber)">
-    <animate attributeName="opacity" values="1;0.4;1" dur="1.2s" repeatCount="indefinite"/>
-  </circle>
+  <path d="M 90 90 Q 75 55 65 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M 110 90 Q 125 55 135 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
+  <circle cx="65" cy="50" r="3" fill="url(#biomechmothTip)" />
+  <circle cx="135" cy="50" r="3" fill="url(#biomechmothTip)" />
+
+  <!-- Body -->
+  <ellipse cx="100" cy="120" rx="22" ry="38" fill="url(#biomechmothBody)" />
+  <circle cx="100" cy="80" r="16" fill="url(#biomechmothBody)" />
 
   <!-- Eyes -->
-  <circle cx="92" cy="80" r="4" fill="url(#biomechmothEye)"/>
-  <circle cx="108" cy="80" r="4" fill="url(#biomechmothEye)"/>
-  <circle cx="92" cy="80" r="2" fill="url(#biomechmothPupil)"/>
-  <circle cx="108" cy="80" r="2" fill="url(#biomechmothPupil)"/>
+  <circle cx="92" cy="78" r="4" fill="#22d3ee" />
+  <circle cx="108" cy="78" r="4" fill="#22d3ee" />
+
+  <!-- Body lines -->
+  <line x1="96" y1="100" x2="96" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+  <line x1="104" y1="100" x2="104" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
 
   <!-- Mouth -->
-  <path d="M 96 90 Q 100 93 104 90" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+  <path d="M 96 92 Q 100 95 104 92" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
 
-  <!-- Circuit details -->
-  <line x1="92" y1="105" x2="108" y2="105" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
-  <line x1="94" y1="115" x2="106" y2="115" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
-  <line x1="96" y1="125" x2="104" y2="125" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
-  <circle cx="92" cy="105" r="1.5" fill="url(#biomechmothAmber)"/>
-  <circle cx="108" cy="105" r="1.5" fill="url(#biomechmothAmber)"/>
-  <circle cx="100" cy="115" r="1.5" fill="url(#biomechmothAmber)"/>
-
-  <!-- Glow particles -->
-  <circle cx="60" cy="60" r="1" fill="url(#biomechmothAmber)" opacity="0.6">
-    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="140" cy="60" r="1" fill="url(#biomechmothAmber)" opacity="0.6">
-    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite"/>
-  </circle>
-
-  <!-- Gradient definitions -->
   <defs>
     <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#475569"/>
-      <stop offset="50%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#020617"/>
+      <stop offset="0%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#64748b" />
     </radialGradient>
     <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#334155"/>
-      <stop offset="70%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#0f172a"/>
+      <stop offset="0%" stop-color="#f472b6" />
+      <stop offset="70%" stop-color="#db2777" />
+      <stop offset="100%" stop-color="#9d174d" />
     </radialGradient>
-    <radialGradient id="biomechmothEye" cx="0.3" cy="0.3">
-      <stop offset="0%" stop-color="#fde047"/>
-      <stop offset="100%" stop-color="#eab308"/>
+    <radialGradient id="biomechmothTip" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#06b6d4" />
     </radialGradient>
-    <radialGradient id="biomechmothPupil" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#f97316"/>
-      <stop offset="100%" stop-color="#c2410c"/>
-    </radialGradient>
-    <linearGradient id="biomechmothAmber" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#fbbf24"/>
-      <stop offset="100%" stop-color="#d97706"/>
-    </linearGradient>
   </defs>
 </svg>`;
 
 const BIOMECHMOTH_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Wings back -->
-  <g opacity="0.85">
-    <path d="M 100 110 C 70 70 30 60 25 100 C 30 140 70 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
-    <path d="M 100 110 C 130 70 170 60 175 100 C 170 140 130 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+  <g opacity="0.8">
+    <path d="M 100 100 C 65 55 15 50 10 100 C 15 150 65 140 100 115" fill="url(#biomechmothWing)" />
+    <path d="M 100 100 C 135 55 185 50 190 100 C 185 150 135 140 100 115" fill="url(#biomechmothWing)" />
+    <path d="M 90 90 Q 75 55 65 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
+    <path d="M 110 90 Q 125 55 135 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
+    <circle cx="65" cy="50" r="2.5" fill="url(#biomechmothTip)" opacity="0.5" />
+    <circle cx="135" cy="50" r="2.5" fill="url(#biomechmothTip)" opacity="0.5" />
+    <ellipse cx="100" cy="120" rx="22" ry="38" fill="url(#biomechmothBody)" />
+    <circle cx="100" cy="80" r="16" fill="url(#biomechmothBody)" />
+    <path d="M 88 78 Q 92 81 96 78" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
+    <path d="M 104 78 Q 108 81 112 78" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
+    <line x1="96" y1="100" x2="96" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+    <line x1="104" y1="100" x2="104" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
+    <path d="M 96 92 Q 100 95 104 92" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
   </g>
-
-  <!-- Body -->
-  <ellipse cx="100" cy="115" rx="18" ry="28" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
-
-  <!-- Head -->
-  <circle cx="100" cy="82" r="14" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
-
-  <!-- Antennae -->
-  <path d="M 92 72 Q 80 50 70 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
-  <path d="M 108 72 Q 120 50 130 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
-  <circle cx="70" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
-  <circle cx="130" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
-
-  <!-- Sleeping eyes -->
-  <path d="M 88 82 Q 92 85 96 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
-  <path d="M 104 82 Q 108 85 112 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
-
-  <!-- Mouth -->
-  <path d="M 96 90 Q 100 93 104 90" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
-
-  <!-- Sleep zzz -->
-  <text x="130" y="55" fill="url(#biomechmothAmber)" font-family="monospace" font-size="10" opacity="0.5">Z</text>
-  <text x="140" y="42" fill="url(#biomechmothAmber)" font-family="monospace" font-size="8" opacity="0.35">z</text>
-
-  <!-- Gradient definitions -->
+  <text x="130" y="55" fill="#22d3ee" font-family="monospace" font-size="10" opacity="0.5">Z</text>
+  <text x="140" y="42" fill="#22d3ee" font-family="monospace" font-size="8" opacity="0.35">z</text>
   <defs>
     <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#475569"/>
-      <stop offset="50%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#020617"/>
+      <stop offset="0%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#64748b" />
     </radialGradient>
     <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#334155"/>
-      <stop offset="70%" stop-color="#1e293b"/>
-      <stop offset="100%" stop-color="#0f172a"/>
+      <stop offset="0%" stop-color="#f472b6" />
+      <stop offset="70%" stop-color="#db2777" />
+      <stop offset="100%" stop-color="#9d174d" />
     </radialGradient>
-    <linearGradient id="biomechmothAmber" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#fbbf24"/>
-      <stop offset="100%" stop-color="#d97706"/>
-    </linearGradient>
+    <radialGradient id="biomechmothTip" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </radialGradient>
   </defs>
 </svg>`;
 
 const LIQUIDBLOB_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Outer glow blob -->
-  <path d="M 100 55 C 135 55 155 80 155 110 C 155 145 130 165 100 165 C 65 165 45 140 45 110 C 45 75 70 55 100 55 Z" fill="url(#liquidblobBody)" stroke="url(#liquidblobCyan)" stroke-width="2" opacity="0.95"/>
+  <!-- Glow -->
+  <circle cx="100" cy="110" r="70" fill="url(#liquidblobGlow)" opacity="0.5" />
 
-  <!-- Inner liquid core -->
-  <path d="M 100 70 C 125 70 140 88 140 110 C 140 135 120 150 100 150 C 75 150 60 132 60 110 C 60 85 80 70 100 70 Z" fill="url(#liquidblobCore)" opacity="0.85"/>
+  <!-- Body -->
+  <circle cx="100" cy="110" r="55" fill="url(#liquidblobBody)" />
 
-  <!-- Floating bubbles -->
-  <circle cx="80" cy="100" r="4" fill="url(#liquidblobBubble)" opacity="0.7">
-    <animate attributeName="cy" values="100;90;100" dur="3s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="115" cy="120" r="3" fill="url(#liquidblobBubble)" opacity="0.6">
-    <animate attributeName="cy" values="120;110;120" dur="2.5s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="95" cy="130" r="2.5" fill="url(#liquidblobBubble)" opacity="0.5">
-    <animate attributeName="cy" values="130;120;130" dur="2.8s" repeatCount="indefinite"/>
-  </circle>
+  <!-- Highlight -->
+  <ellipse cx="80" cy="85" rx="18" ry="12" fill="#ffffff" opacity="0.15" transform="rotate(-30 80 85)" />
 
   <!-- Eyes -->
-  <ellipse cx="82" cy="105" rx="6" ry="7" fill="white"/>
-  <ellipse cx="118" cy="105" rx="6" ry="7" fill="white"/>
-  <circle cx="83" cy="106" r="3.5" fill="url(#liquidblobPupil)"/>
-  <circle cx="119" cy="106" r="3.5" fill="url(#liquidblobPupil)"/>
-  <circle cx="84" cy="103" r="1.5" fill="white"/>
-  <circle cx="120" cy="103" r="1.5" fill="white"/>
+  <circle cx="86" cy="105" r="7" fill="#ffffff" />
+  <circle cx="114" cy="105" r="7" fill="#ffffff" />
+  <circle cx="87" cy="106" r="3.2" fill="#0f172a" data-pets-skip="true" />
+  <circle cx="113" cy="106" r="3.2" fill="#0f172a" data-pets-skip="true" />
+  <circle cx="88" cy="103" r="1.2" fill="#ffffff" data-pets-skip="true" />
+  <circle cx="115" cy="103" r="1.2" fill="#ffffff" data-pets-skip="true" />
 
-  <!-- Mouth -->
-  <path d="M 92 122 Q 100 128 108 122" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+  <!-- Mouth + tongue -->
+  <path d="M 93 122 Q 100 128 107 122" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+  <ellipse cx="100" cy="126" rx="3.5" ry="2.5" fill="#f472b6" />
 
-  <!-- Drip -->
-  <path d="M 100 165 Q 100 178 108 180 Q 116 178 112 165" fill="url(#liquidblobBody)" opacity="0.8">
-    <animate attributeName="d" values="M 100 165 Q 100 178 108 180 Q 116 178 112 165;M 100 165 Q 100 185 108 188 Q 116 185 112 165;M 100 165 Q 100 178 108 180 Q 116 178 112 165" dur="4s" repeatCount="indefinite"/>
-  </path>
+  <!-- Blush -->
+  <circle cx="72" cy="100" r="2" fill="#22d3ee" />
+  <circle cx="128" cy="100" r="2" fill="#22d3ee" />
 
-  <!-- Gradient definitions -->
   <defs>
     <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#0891b2"/>
-      <stop offset="50%" stop-color="#0e7490"/>
-      <stop offset="100%" stop-color="#164e63"/>
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="50%" stop-color="#16a34a" />
+      <stop offset="100%" stop-color="#14532d" />
     </radialGradient>
-    <radialGradient id="liquidblobCore" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="70%" stop-color="#06b6d4"/>
-      <stop offset="100%" stop-color="#0891b2"/>
+    <radialGradient id="liquidblobGlow" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0" />
     </radialGradient>
-    <radialGradient id="liquidblobBubble" cx="0.3" cy="0.3">
-      <stop offset="0%" stop-color="#cffafe"/>
-      <stop offset="100%" stop-color="#22d3ee"/>
-    </radialGradient>
-    <radialGradient id="liquidblobPupil" cx="0.3" cy="0.3">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#0e7490"/>
-    </radialGradient>
-    <linearGradient id="liquidblobCyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#67e8f9"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
-    </linearGradient>
   </defs>
 </svg>`;
 
 const LIQUIDBLOB_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Outer glow blob -->
-  <path d="M 100 55 C 135 55 155 80 155 110 C 155 145 130 165 100 165 C 65 165 45 140 45 110 C 45 75 70 55 100 55 Z" fill="url(#liquidblobBody)" stroke="url(#liquidblobCyan)" stroke-width="2" opacity="0.9"/>
-
-  <!-- Inner liquid core -->
-  <path d="M 100 70 C 125 70 140 88 140 110 C 140 135 120 150 100 150 C 75 150 60 132 60 110 C 60 85 80 70 100 70 Z" fill="url(#liquidblobCore)" opacity="0.8"/>
-
-  <!-- Sleeping eyes -->
-  <path d="M 76 106 Q 82 110 88 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
-  <path d="M 112 106 Q 118 110 124 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
-
-  <!-- Mouth -->
-  <path d="M 94 124 Q 100 128 106 124" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
-
-  <!-- Sleep zzz -->
-  <text x="140" y="75" fill="url(#liquidblobCyan)" font-family="monospace" font-size="10" opacity="0.6">Z</text>
-  <text x="150" y="62" fill="url(#liquidblobCyan)" font-family="monospace" font-size="8" opacity="0.4">z</text>
-
-  <!-- Gradient definitions -->
+  <circle cx="100" cy="110" r="55" fill="url(#liquidblobBody)" opacity="0.85" />
+  <path d="M 80 106 Q 86 110 92 106" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M 108 106 Q 114 110 120 106" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M 95 124 Q 100 128 105 124" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+  <text x="140" y="75" fill="#4ade80" font-family="monospace" font-size="10" opacity="0.6">Z</text>
+  <text x="150" y="62" fill="#4ade80" font-family="monospace" font-size="8" opacity="0.4">z</text>
   <defs>
     <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#0891b2"/>
-      <stop offset="50%" stop-color="#0e7490"/>
-      <stop offset="100%" stop-color="#164e63"/>
+      <stop offset="0%" stop-color="#4ade80" />
+      <stop offset="50%" stop-color="#16a34a" />
+      <stop offset="100%" stop-color="#14532d" />
     </radialGradient>
-    <radialGradient id="liquidblobCore" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="70%" stop-color="#06b6d4"/>
-      <stop offset="100%" stop-color="#0891b2"/>
-    </radialGradient>
-    <linearGradient id="liquidblobCyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#67e8f9"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
-    </linearGradient>
   </defs>
 </svg>`;
 
