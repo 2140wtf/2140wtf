@@ -10,8 +10,8 @@
     /* Mobile chrome dimensions — referenced by layout utility classes below */
     --top-bar-height: 2.5rem;   /* MobileTopBar h-10 = 40px */
     --bottom-nav-height: 2.75rem; /* MobileBottomNav h-11 = 44px */
-    /* Blobbi room canvas: vertical space reserved for the bottom dock */
-    --blobbi-room-dock-height: 82px; /* Desktop: pt-2.5 + carousel(48) + pb-6(24) */
+    /* Pets room canvas: vertical space reserved for the bottom dock */
+    --pets-room-dock-height: 82px; /* Desktop: pt-2.5 + carousel(48) + pb-6(24) */
   }
 
   .dark {
@@ -19,10 +19,10 @@
     --success-foreground: 138 60% 94%;
   }
 
-  /* Mobile: Blobbi room dock includes bottom-nav clearance + safe-area */
+  /* Mobile: Pets room dock includes bottom-nav clearance + safe-area */
   @media (max-width: 899px) {
     :root {
-      --blobbi-room-dock-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 74px);
+      --pets-room-dock-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 74px);
     }
   }
 }
@@ -38,15 +38,15 @@
   }
 
   /* Visible thin scrollbar inside the room editor modal */
-  .blobbi-room-editor-scroll {
+  .pets-room-editor-scroll {
     scrollbar-width: thin;
     scrollbar-gutter: stable;
   }
-  .blobbi-room-editor-scroll::-webkit-scrollbar {
+  .pets-room-editor-scroll::-webkit-scrollbar {
     display: block;
     width: 6px;
   }
-  .blobbi-room-editor-scroll::-webkit-scrollbar-thumb {
+  .pets-room-editor-scroll::-webkit-scrollbar-thumb {
     background: hsl(var(--muted-foreground) / 0.25);
     border-radius: 999px;
   }
@@ -147,18 +147,6 @@
     }
   }
 
-  /* AI chat height on mobile: full viewport minus top bar, extends behind bottom nav.
-     Padding-bottom keeps input above the nav. */
-  .ai-chat-height {
-    height: calc(100dvh - var(--top-bar-height) - var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
-    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  }
-  @media (min-width: 900px) {
-    .ai-chat-height {
-      padding-bottom: 0;
-    }
-  }
-
   /* Live stream page height on mobile: full viewport minus top bar, bottom nav, and safe-area insets */
   .livestream-height {
     height: calc(100dvh - var(--top-bar-height) - var(--bottom-nav-height) - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
@@ -173,9 +161,9 @@
     }
   }
 
-  /* Vine feed slide height: full viewport on mobile (top bar + bottom nav are
+  /* Short-video slide height: full viewport on mobile (top bar + bottom nav are
      both hidden for an immersive experience). Tab bar floats over video. */
-  .vine-slide-height {
+  .short-video-slide-height {
     height: 100dvh;
   }
 }
@@ -406,27 +394,6 @@
   display: block;
 }
 
-/* Letter send animation keyframes */
-@keyframes letter-send-fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes letter-send-avatar-in {
-  0%   { transform: scale(0);    opacity: 0; }
-  50%  { transform: scale(1.15); opacity: 1; }
-  70%  { transform: scale(0.92); }
-  85%  { transform: scale(1.04); }
-  100% { transform: scale(1);    opacity: 1; }
-}
-
-@keyframes letter-send-burst {
-  0%   { transform: translate(0, 0) rotate(0deg) scale(0); opacity: 0; }
-  15%  { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
-  60%  { opacity: 0.8; transform: translate(var(--burst-tx), var(--burst-ty)) rotate(var(--burst-rot)) scale(1); }
-  100% { opacity: 0;   transform: translate(var(--burst-tx), var(--burst-ty)) rotate(var(--burst-rot)) scale(0.4); }
-}
-
 /* Reduced motion: disable all vanish animations */
 @media (prefers-reduced-motion: reduce) {
   .vanish-stripes {
@@ -446,11 +413,11 @@
 }
 
 /* ==========================================
-   Blobbi Reaction Animations
-   Shared animations for all Blobbi stages (egg, baby, adult)
+   Pets Reaction Animations
+   Shared animations for all Pets stages (egg, baby, adult)
    ========================================== */
 
-@keyframes blobbi-gentle-sway {
+@keyframes pets-gentle-sway {
   0%, 100% {
     transform: rotate(-2deg);
   }
@@ -459,7 +426,7 @@
   }
 }
 
-@keyframes blobbi-bounce {
+@keyframes pets-bounce {
   0%, 100% {
     transform: translateY(0) rotate(0deg);
   }
@@ -474,19 +441,19 @@
   }
 }
 
-.animate-blobbi-sway {
+.animate-pets-sway {
   /* Baby/adult sway is livelier than egg (1.2s vs 1.8s) */
-  animation: blobbi-gentle-sway 1.2s ease-in-out infinite;
+  animation: pets-gentle-sway 1.2s ease-in-out infinite;
 }
 
-.animate-blobbi-bounce {
+.animate-pets-bounce {
   /* Baby/adult sing bounce - smoother and cuter than before (0.5s) */
-  animation: blobbi-bounce 0.5s ease-in-out infinite;
+  animation: pets-bounce 0.5s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-blobbi-sway,
-  .animate-blobbi-bounce {
+  .animate-pets-sway,
+  .animate-pets-bounce {
     animation: none !important;
   }
 }
@@ -671,10 +638,10 @@
   }
 }
 
-/* ─── Blobbi Eye Animation ───────────────────────────────────────────────────── */
+/* ─── Pets Eye Animation ───────────────────────────────────────────────────── */
 
 /**
- * Eye animation for Blobbi characters.
+ * Eye animation for Pets characters.
  *
  * Features:
  * - Mouse tracking: eyes follow cursor instantly
@@ -687,7 +654,7 @@
  * - translate: mouse tracking position
  * - scale: vertical squash for blink effect (1 = open, 0.1 = closed)
  */
-.blobbi-eye {
+.pets-eye {
   /* SVG transform properties - scale from center of each eye element */
   transform-box: fill-box;
   transform-origin: center center;
@@ -695,7 +662,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blobbi-eye {
+  .pets-eye {
     /* Disable all eye animations for users who prefer reduced motion */
     transform: none !important;
   }
@@ -859,31 +826,31 @@
   @apply min-h-[350px];
 }
 
-/* Blobbi idle animations — speed/intensity driven by happiness via inline style */
-@keyframes blobbi-bob {
+/* Pets idle animations — speed/intensity driven by happiness via inline style */
+@keyframes pets-bob {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
 }
 
-@keyframes blobbi-shadow-breathe {
+@keyframes pets-shadow-breathe {
   0%, 100% { transform: translateX(-50%) scaleX(1); }
   50% { transform: translateX(-50%) scaleX(0.92); }
 }
 
-@keyframes blobbi-sway {
+@keyframes pets-sway {
   0%, 100% { transform: rotate(0deg); }
   25% { transform: rotate(1.5deg); }
   75% { transform: rotate(-1.5deg); }
 }
 
 /* Hatch ceremony shake animations */
-@keyframes blobbi-shake-light {
+@keyframes pets-shake-light {
   0%, 100% { transform: rotate(0deg); }
   25% { transform: rotate(-3deg); }
   75% { transform: rotate(3deg); }
 }
 
-@keyframes blobbi-shake-medium {
+@keyframes pets-shake-medium {
   0%, 100% { transform: rotate(0deg); }
   20% { transform: rotate(-6deg); }
   40% { transform: rotate(5deg); }
@@ -891,7 +858,7 @@
   80% { transform: rotate(6deg); }
 }
 
-@keyframes blobbi-shake-heavy {
+@keyframes pets-shake-heavy {
   0%, 100% { transform: rotate(0deg) scale(1); }
   15% { transform: rotate(-8deg) scale(1.02); }
   30% { transform: rotate(7deg) scale(0.98); }
@@ -901,12 +868,12 @@
   90% { transform: rotate(9deg) scale(1); }
 }
 
-@keyframes blobbi-flash {
+@keyframes pets-flash {
   0% { opacity: 1; }
   100% { opacity: 0; }
 }
 
-@keyframes blobbi-fade-to-white {
+@keyframes pets-fade-to-white {
   0% { opacity: 0; }
   100% { opacity: 1; }
 }
@@ -929,7 +896,7 @@
 }
 
 /* Legacy per-element keyframes — still used by the reusable StatIndicator
-   component (src/blobbi/ui/StatIndicator.tsx) outside the crown context. */
+   component (src/pets/ui/StatIndicator.tsx) outside the crown context. */
 @keyframes stat-glow {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50% { box-shadow: 0 0 6px 2px currentColor; }
@@ -1027,4 +994,328 @@
 @keyframes furniture-hold-fill {
   from { width: 0%; }
   to   { width: 100%; }
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════════ *
+ * CYPHERPUNK 2140 PETS — scoped theme layer
+ * Generated from Open Design artifact: cypherpunk-2140-pets
+ * ═════════════════════════════════════════════════════════════════════════════ */
+
+.pets-cyber {
+  /* Core canvas */
+  --cyber-bg:        oklch(18%  0.022 260);
+  --cyber-surface-1: oklch(24%  0.028 260);
+  --cyber-surface-2: oklch(30%  0.032 260);
+  --cyber-surface-3: oklch(36%  0.036 260);
+  --cyber-fg:        oklch(96%  0.008 260);
+  --cyber-muted:     oklch(70%  0.020 260);
+  --cyber-subtle:    oklch(52%  0.018 260);
+  --cyber-border:    oklch(34%  0.030 260);
+  --cyber-ring:      oklch(75%  0.18  210);
+
+  /* Neon accents */
+  --cyber-cyan:      oklch(78%  0.18  210);
+  --cyber-cyan-dim:  oklch(60%  0.14  210);
+  --cyber-magenta:   oklch(68%  0.22  340);
+  --cyber-magenta-dim: oklch(52% 0.16  340);
+  --cyber-green:     oklch(72%  0.18  145);
+  --cyber-green-dim: oklch(56%  0.14  145);
+  --cyber-amber:     oklch(76%  0.14  85);
+  --cyber-amber-dim: oklch(60%  0.10  85);
+  --cyber-red:       oklch(60%  0.20  25);
+  --cyber-red-dim:   oklch(46%  0.14  25);
+
+  /* Glows */
+  --glow-cyan:    0 0 8px oklch(78% 0.18 210 / 0.55), 0 0 24px oklch(78% 0.18 210 / 0.25);
+  --glow-magenta: 0 0 10px oklch(68% 0.22 340 / 0.55), 0 0 28px oklch(68% 0.22 340 / 0.25);
+  --glow-green:   0 0 8px oklch(72% 0.18 145 / 0.55), 0 0 24px oklch(72% 0.18 145 / 0.25);
+  --glow-amber:   0 0 8px oklch(76% 0.14 85 / 0.55), 0 0 24px oklch(76% 0.14 85 / 0.25);
+  --glow-red:     0 0 8px oklch(60% 0.20 25 / 0.55), 0 0 24px oklch(60% 0.20 25 / 0.25);
+
+  /* Typography (loaded via @font-face below, fallback to system) */
+  --font-display:  'Orbitron', 'Chakra Petch', 'Exo 2', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:     'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', ui-monospace, Menlo, monospace;
+}
+
+/* Display / monospace font faces */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/orbitron/v31/yMJMMIlzdpvBhQQL_SC3X9yhF25-T1nyGy6xpmIyXjU1pgZ6.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F;
+}
+
+/* Scoped backgrounds for pet surfaces */
+.pets-cyber {
+  position: relative;
+  background: var(--cyber-bg);
+  color: var(--cyber-fg);
+}
+
+.pets-cyber .pets-cyber-surface {
+  background: var(--cyber-surface-1);
+  border-color: var(--cyber-border);
+  color: var(--cyber-fg);
+}
+
+/* Scanline overlay */
+.pets-cyber::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  background: repeating-linear-gradient(
+    0deg,
+    oklch(0% 0 0 / 0) 0px,
+    oklch(0% 0 0 / 0) 2px,
+    oklch(0% 0 0 / 0.045) 2px,
+    oklch(0% 0 0 / 0.045) 4px
+  );
+  mix-blend-mode: overlay;
+  opacity: 0.55;
+}
+
+/* Cyber typography */
+.pets-cyber-display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pets-cyber-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Cyber stat bars */
+.pets-cyber-bar-bg {
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--cyber-surface-3);
+  border: 1px solid var(--cyber-border);
+  box-shadow: inset 0 1px 3px oklch(0% 0 0 / 0.35);
+  overflow: hidden;
+}
+
+.pets-cyber-bar-fill {
+  height: 100%;
+  width: var(--cyber-value, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyber-fill-dim, var(--cyber-cyan-dim)), var(--cyber-fill, var(--cyber-cyan)));
+  box-shadow: 0 0 10px var(--cyber-fill, var(--cyber-cyan));
+  transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pets-cyber-bar-fill-cyan     { --cyber-fill-dim: var(--cyber-cyan-dim);     --cyber-fill: var(--cyber-cyan); }
+.pets-cyber-bar-fill-magenta  { --cyber-fill-dim: var(--cyber-magenta-dim);  --cyber-fill: var(--cyber-magenta); }
+.pets-cyber-bar-fill-green    { --cyber-fill-dim: var(--cyber-green-dim);    --cyber-fill: var(--cyber-green); }
+.pets-cyber-bar-fill-amber    { --cyber-fill-dim: var(--cyber-amber-dim);    --cyber-fill: var(--cyber-amber); }
+.pets-cyber-bar-fill-red      { --cyber-fill-dim: var(--cyber-red-dim);      --cyber-fill: var(--cyber-red); }
+
+.pets-cyber-bar-fill::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, oklch(100% 0 0 / 0.35), transparent);
+  animation: cyber-scan-shimmer 2.2s linear infinite;
+  background-size: 200% 100%;
+}
+
+/* Cyber button variants */
+.pets-cyber-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.pets-cyber-btn:active { transform: translateY(1px); }
+
+.pets-cyber-btn-cyan {
+  background: var(--cyber-cyan-dim);
+  color: oklch(12% 0.05 260);
+  border-color: var(--cyber-cyan);
+  box-shadow: var(--glow-cyan);
+}
+.pets-cyber-btn-cyan:hover { background: var(--cyber-cyan); }
+
+.pets-cyber-btn-magenta {
+  background: var(--cyber-magenta-dim);
+  color: oklch(98% 0.01 340);
+  border-color: var(--cyber-magenta);
+  box-shadow: var(--glow-magenta);
+}
+.pets-cyber-btn-magenta:hover { background: var(--cyber-magenta); }
+
+.pets-cyber-btn-green {
+  background: var(--cyber-green-dim);
+  color: oklch(12% 0.05 145);
+  border-color: var(--cyber-green);
+  box-shadow: var(--glow-green);
+}
+.pets-cyber-btn-green:hover { background: var(--cyber-green); }
+
+.pets-cyber-btn-amber {
+  background: var(--cyber-amber-dim);
+  color: oklch(12% 0.05 85);
+  border-color: var(--cyber-amber);
+  box-shadow: var(--glow-amber);
+}
+.pets-cyber-btn-amber:hover { background: var(--cyber-amber); }
+
+.pets-cyber-btn-red {
+  background: var(--cyber-red-dim);
+  color: oklch(98% 0.01 25);
+  border-color: var(--cyber-red);
+  box-shadow: var(--glow-red);
+}
+.pets-cyber-btn-red:hover { background: var(--cyber-red); }
+
+.pets-cyber-btn-ghost {
+  background: transparent;
+  color: var(--cyber-fg);
+  border-color: var(--cyber-border);
+}
+.pets-cyber-btn-ghost:hover {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+/* Cyber badges */
+.pets-cyber-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+}
+
+.pets-cyber-badge-cyan  { color: var(--cyber-cyan);  background: oklch(78% 0.18 210 / 0.12); }
+.pets-cyber-badge-magenta { color: var(--cyber-magenta); background: oklch(68% 0.22 340 / 0.12); }
+.pets-cyber-badge-green { color: var(--cyber-green); background: oklch(72% 0.18 145 / 0.12); }
+.pets-cyber-badge-amber { color: var(--cyber-amber); background: oklch(76% 0.14 85 / 0.12); }
+.pets-cyber-badge-red   { color: var(--cyber-red);   background: oklch(60% 0.20 25 / 0.12); }
+
+/* Cyber keyframes */
+@keyframes cyber-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes cyber-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 0.92; }
+}
+
+@keyframes cyber-pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px currentColor); }
+  50% { filter: drop-shadow(0 0 18px currentColor); }
+}
+
+@keyframes cyber-glitch-flicker {
+  0%, 90%, 100% { opacity: 1; transform: translate(0); }
+  91% { opacity: 0.7; transform: translate(-2px, 1px); }
+  93% { opacity: 0.85; transform: translate(2px, -1px); }
+  95% { opacity: 0.6; transform: translate(-1px, 2px); }
+  97% { opacity: 1; transform: translate(1px, -2px); }
+}
+
+@keyframes cyber-scan-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes cyber-hatch-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  10% { transform: translate(-2px, 1px) rotate(-1deg); }
+  20% { transform: translate(2px, -1px) rotate(1deg); }
+  30% { transform: translate(-3px, 2px) rotate(-2deg); }
+  40% { transform: translate(3px, -2px) rotate(2deg); }
+  50% { transform: translate(-1px, 1px) rotate(-1deg); }
+  60% { transform: translate(1px, -1px) rotate(1deg); }
+  70%, 90% { transform: translate(0, 0) rotate(0); }
+}
+
+@keyframes cyber-evolve-flash {
+  0%, 100% { opacity: 0; }
+  25%, 75% { opacity: 0.35; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes cyber-ring-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.pets-cyber-anim-float { animation: cyber-float 4s ease-in-out infinite; }
+.pets-cyber-anim-breathe { animation: cyber-breathe 3.2s ease-in-out infinite; }
+.pets-cyber-anim-pulse { animation: cyber-pulse-glow 2.2s ease-in-out infinite; }
+.pets-cyber-anim-glitch { animation: cyber-glitch-flicker 3.5s infinite; }
+.pets-cyber-anim-shake { animation: cyber-hatch-shake 0.8s ease-in-out infinite; }
+.pets-cyber-anim-spin { animation: cyber-ring-spin 24s linear infinite; }
+
+/* Ceremony overlay */
+.pets-cyber-ceremony {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  background: oklch(18% 0.022 260 / 0.92);
+  backdrop-filter: blur(10px);
+  z-index: 50;
+}
+
+.pets-cyber-ceremony-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  text-transform: uppercase;
+  color: var(--cyber-fg);
+}
+
+.pets-cyber-ceremony-sub {
+  font-family: var(--font-mono);
+  color: var(--cyber-cyan);
+  text-shadow: var(--glow-cyan);
+}
+
+.pets-cyber-glitch-flash {
+  position: absolute;
+  inset: 0;
+  background: var(--cyber-cyan);
+  opacity: 0;
+  pointer-events: none;
+  animation: cyber-evolve-flash 1.2s ease-in-out infinite;
 }

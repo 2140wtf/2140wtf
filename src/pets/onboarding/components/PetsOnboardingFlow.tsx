@@ -1,8 +1,8 @@
 /**
- * BlobbiOnboardingFlow - Immersive hatching ceremony for every new Blobbi
+ * PetsOnboardingFlow - Immersive hatching ceremony for every new Pets
  *
  * Every new egg goes through the hatching ceremony - whether it's a user's
- * first Blobbi or their tenth. The ceremony creates the egg silently in the
+ * first Pets or their tenth. The ceremony creates the egg silently in the
  * background and presents a wordless, emotional hatching experience.
  *
  * The `adoptionOnly` prop is accepted for API compatibility but no longer
@@ -11,11 +11,11 @@
 
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { BlobbiHatchingCeremony } from './BlobbiHatchingCeremony';
+import { PetsHatchingCeremony } from './PetsHatchingCeremony';
 
-import type { BlobbonautProfile, BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { BlobbonautProfile, PetsCompanion } from '@/pets/core/lib/pets';
 
-interface BlobbiOnboardingFlowProps {
+interface PetsOnboardingFlowProps {
   /** Current profile (null if doesn't exist) */
   profile: BlobbonautProfile | null;
   /** Called to update profile event in cache after publishing */
@@ -31,7 +31,7 @@ interface BlobbiOnboardingFlowProps {
   /** Called when onboarding is complete */
   onComplete?: () => void;
   /** If provided, skip egg creation and use this existing egg for the ceremony. */
-  existingCompanion?: BlobbiCompanion | null;
+  existingCompanion?: PetsCompanion | null;
   /**
    * Accepted for API compatibility. Every new egg goes through the ceremony.
    * @deprecated No longer changes the flow.
@@ -39,7 +39,7 @@ interface BlobbiOnboardingFlowProps {
   adoptionOnly?: boolean;
 }
 
-export function BlobbiOnboardingFlow({
+export function PetsOnboardingFlow({
   profile,
   updateProfileEvent,
   updateCompanionEvent,
@@ -49,9 +49,9 @@ export function BlobbiOnboardingFlow({
   onComplete,
   existingCompanion,
   adoptionOnly,
-}: BlobbiOnboardingFlowProps) {
+}: PetsOnboardingFlowProps) {
   return (
-    <BlobbiHatchingCeremony
+    <PetsHatchingCeremony
       profile={profile}
       updateProfileEvent={updateProfileEvent}
       updateCompanionEvent={updateCompanionEvent}

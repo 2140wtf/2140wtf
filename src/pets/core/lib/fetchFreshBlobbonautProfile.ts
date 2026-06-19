@@ -8,7 +8,7 @@ import {
   isLegacyBlobbonautKind,
   parseBlobbonautEvent,
   type BlobbonautProfile,
-} from './blobbi';
+} from './pets';
 
 /**
  * Fetch the freshest Blobbonaut profile (kind 11125) directly from relays,

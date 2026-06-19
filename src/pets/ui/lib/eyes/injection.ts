@@ -1,17 +1,17 @@
 /**
- * Blobbi Eye System - Injection Module
+ * Pets Eye System - Injection Module
  *
  * This module provides helpers for safely injecting content into eye structures.
  * All injection should go through these helpers to ensure proper placement.
  *
  * Eye Structure (after processing by eye-animation.ts):
  *
- * <ellipse class="blobbi-eyelid blobbi-eyelid-{side}" />  <!-- eyelid back -->
- * <g class="blobbi-blink blobbi-blink-{side}" clip-path="...">  <!-- blink group -->
+ * <ellipse class="pets-eyelid pets-eyelid-{side}" />  <!-- eyelid back -->
+ * <g class="pets-blink pets-blink-{side}" clip-path="...">  <!-- blink group -->
  *   <ellipse ... />  <!-- eye white - FIXED (doesn't track) -->
  *   <!-- FIXED EFFECT LAYER: Insert fixed effects here (e.g., water fill) -->
- *   <g class="blobbi-eye blobbi-eye-{side}">  <!-- CSS animation layer (e.g., sleepy wake-glance) -->
- *     <g class="blobbi-eye-gaze blobbi-eye-gaze-{side}">  <!-- gaze tracking layer -->
+ *   <g class="pets-eye pets-eye-{side}">  <!-- CSS animation layer (e.g., sleepy wake-glance) -->
+ *     <g class="pets-eye-gaze pets-eye-gaze-{side}">  <!-- gaze tracking layer -->
  *       <circle ... />  <!-- pupil -->
  *       <circle ... />  <!-- highlight(s) -->
  *       <!-- TRACKING EFFECT LAYER: Insert tracking effects here (e.g., sad highlights, stars) -->
@@ -25,7 +25,7 @@ import { EyeSide, EYE_CLASSES } from './types';
 // ─── Layer Injection ──────────────────────────────────────────────────────────
 
 /**
- * Inject markup into the eye tracking layer (blobbi-eye-gaze group).
+ * Inject markup into the eye tracking layer (pets-eye-gaze group).
  *
  * Content injected here will:
  * - Track with eye movement (follow mouse/gaze)
@@ -33,8 +33,8 @@ import { EyeSide, EYE_CLASSES } from './types';
  *
  * Use for: Replacement pupils (stars, hearts), tracking highlights
  *
- * Note: This targets the innermost gaze group (.blobbi-eye-gaze), not .blobbi-eye.
- * The .blobbi-eye layer is for CSS animations; gaze transforms happen in .blobbi-eye-gaze.
+ * Note: This targets the innermost gaze group (.pets-eye-gaze), not .pets-eye.
+ * The .pets-eye layer is for CSS animations; gaze transforms happen in .pets-eye-gaze.
  *
  * @param svgText - The SVG content
  * @param side - Which eye to inject into
@@ -46,7 +46,7 @@ export function injectIntoEyeTrackLayer(
   side: EyeSide,
   markup: string
 ): string {
-  // Find the blobbi-eye-gaze group (innermost tracking group) and inject before closing </g>
+  // Find the pets-eye-gaze group (innermost tracking group) and inject before closing </g>
   // Use balanced group matching to handle nested groups correctly
   const gazeGroupStart = svgText.indexOf(`class="${EYE_CLASSES.gaze} ${EYE_CLASSES.gaze}-${side}"`);
   if (gazeGroupStart === -1) {
@@ -72,7 +72,7 @@ export function injectIntoEyeTrackLayer(
 }
 
 /**
- * Inject markup into the eye fixed layer (blobbi-blink group, before blobbi-eye).
+ * Inject markup into the eye fixed layer (pets-blink group, before pets-eye).
  *
  * Content injected here will:
  * - Stay fixed (not track with eye movement)
@@ -90,15 +90,15 @@ export function injectIntoEyeFixedLayer(
   side: EyeSide,
   markup: string
 ): string {
-  // Find the blobbi-blink group and insert after eye white, before blobbi-eye
-  // Structure: <g class="blobbi-blink-{side}" ...>
+  // Find the pets-blink group and insert after eye white, before pets-eye
+  // Structure: <g class="pets-blink-{side}" ...>
   //              <ellipse ... /> <!-- eye white -->
   //              <!-- INSERT HERE -->
-  //              <g class="blobbi-eye-{side}"> <!-- tracking group -->
+  //              <g class="pets-eye-{side}"> <!-- tracking group -->
   const blinkGroupRegex = new RegExp(
     `(<g[^>]*class="[^"]*${EYE_CLASSES.blink}-${side}[^"]*"[^>]*>)` + // Opening blink tag
-    `([\\s\\S]*?)` + // Content before blobbi-eye (eye white is here)
-    `(<g[^>]*class="[^"]*${EYE_CLASSES.eye}-${side}[^"]*"[^>]*>)`, // Opening blobbi-eye tag
+    `([\\s\\S]*?)` + // Content before pets-eye (eye white is here)
+    `(<g[^>]*class="[^"]*${EYE_CLASSES.eye}-${side}[^"]*"[^>]*>)`, // Opening pets-eye tag
     'i'
   );
 
@@ -109,7 +109,7 @@ export function injectIntoEyeFixedLayer(
 
   const [fullMatch, blinkOpenTag, contentBetween, eyeOpenTag] = match;
 
-  // Insert markup after eye white but before blobbi-eye group
+  // Insert markup after eye white but before pets-eye group
   const replacement = `${blinkOpenTag}${contentBetween}${markup}\n    ${eyeOpenTag}`;
   return svgText.replace(fullMatch, replacement);
 }
@@ -369,7 +369,7 @@ function findGroupByClass(
 /**
  * Modify the content inside an eye gaze group.
  * 
- * This targets the innermost .blobbi-eye-gaze group to modify pupils/highlights.
+ * This targets the innermost .pets-eye-gaze group to modify pupils/highlights.
  *
  * @param svgText - The SVG content
  * @param side - Which eye to modify

@@ -2,14 +2,14 @@
  * Action Bar Preferences
  *
  * Lightweight localStorage-backed model controlling which items are
- * visible in the BlobbiBottomBar and in which order.
+ * visible in the PetsBottomBar and in which order.
  *
  * Fixed items (cannot be hidden or reordered by the user):
  *   - Main Action (center button) -- always present
  *   - More (right-most button)   -- always present
  *
  * Customizable items (up to 3 visible slots):
- *   Candidates: Blobbies, Missions, Items, Take Photo, Set as Companion
+ *   Candidates: Petses, Missions, Items, Take Photo, Set as Companion
  *
  * Persistence: localStorage only for now. Shape is designed so it can
  * later migrate to a Nostr event tag.
@@ -19,7 +19,7 @@
 
 /** Identifiers for customizable bottom-bar items */
 export type BarItemId =
-  | 'blobbies'
+  | 'petses'
   | 'missions'
   | 'items'
   | 'take_photo'
@@ -45,24 +45,24 @@ export interface ActionBarPreferences {
 export const MAX_VISIBLE_SLOTS = 3;
 
 /** localStorage key for bar slot preferences */
-export const STORAGE_KEY = 'blobbi:action-bar-prefs';
+export const STORAGE_KEY = 'pets:action-bar-prefs';
 
 /** localStorage key for inline mission surface card visibility */
-export const MISSION_CARD_STORAGE_KEY = 'blobbi:mission-card-visible';
+export const MISSION_CARD_STORAGE_KEY = 'pets:mission-card-visible';
 
 /** Human-readable labels */
 export const BAR_ITEM_LABELS: Record<BarItemId, string> = {
-  blobbies: 'Blobbies',
+  petses: 'Petses',
   missions: 'Missions',
   items: 'Items',
   take_photo: 'Take Photo',
   set_companion: 'Companion',
 };
 
-/** Default preferences: only Blobbies visible, others hidden */
+/** Default preferences: only Petses visible, others hidden */
 export const DEFAULT_PREFERENCES: ActionBarPreferences = {
   slots: [
-    { id: 'blobbies', visible: true },
+    { id: 'petses', visible: true },
     { id: 'missions', visible: false },
     { id: 'items', visible: false },
     { id: 'take_photo', visible: false },

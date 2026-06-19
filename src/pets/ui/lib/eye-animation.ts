@@ -5,8 +5,8 @@
  *
  * Three layers per eye:
  * 1. EYELID BACK: Ellipse behind eye white, matches eye white shape, darker body color
- * 2. TRACKING: Wraps pupil + highlight in <g class="blobbi-eye"> for mouse following
- * 3. BLINKING: Wraps entire eye (white + pupil + highlight) in <g class="blobbi-blink"> for blink
+ * 2. TRACKING: Wraps pupil + highlight in <g class="pets-eye"> for mouse following
+ * 3. BLINKING: Wraps entire eye (white + pupil + highlight) in <g class="pets-blink"> for blink
  *
  * This separation ensures:
  * - Eyelid back is visible when eyes close (via blink scaleY)
@@ -90,8 +90,8 @@ function isEyeWhiteElement(element: string, radius: number): boolean {
       return true;
     }
     
-    // INCLUDE: Generic Eye gradients without "Base" (e.g., blobbiEyeGradient, crystiEye)
-    // This catches baby Blobbi and other forms that use simple "Eye" naming
+    // INCLUDE: Generic Eye gradients without "Base" (e.g., petsEyeGradient, crystiEye)
+    // This catches baby Pets and other forms that use simple "Eye" naming
     if (/[Ee]ye/i.test(gradientId) && !/[Bb]ase/i.test(gradientId)) {
       return true;
     }
@@ -120,10 +120,10 @@ function isEyeWhiteElement(element: string, radius: number): boolean {
  */
 function isPupilElement(element: string): boolean {
   // Skip elements explicitly marked as non-eye parts (e.g. Pandi's ear/eye-patch circles)
-  if (element.includes('data-blobbi-skip')) return false;
+  if (element.includes('data-pets-skip')) return false;
 
   // Check for explicit pupil marker (used by flat-fill forms after eyeColor replacement)
-  if (element.includes('data-blobbi-pupil')) return true;
+  if (element.includes('data-pets-pupil')) return true;
 
   // Check for pupil gradient
   if (/fill="url\(#[^"]*[Pp]upil[^"]*\)"/.test(element)) {
@@ -331,7 +331,7 @@ function generateEyelidElement(
   color: string
 ): string {
   return `<ellipse 
-      class="blobbi-eyelid blobbi-eyelid-${side}"
+      class="pets-eyelid pets-eyelid-${side}"
       cx="${cx}" 
       cy="${cy}" 
       rx="${rx}" 
@@ -348,7 +348,7 @@ function generateEyelidElement(
 export interface EyeAnimationOptions {
   /** Base body color for deriving eyelid color (optional) */
   baseColor?: string;
-  /** Unique instance ID to prevent clipPath ID collisions when multiple Blobbis are rendered */
+  /** Unique instance ID to prevent clipPath ID collisions when multiple Petss are rendered */
   instanceId?: string;
 }
 
@@ -356,15 +356,15 @@ export interface EyeAnimationOptions {
  * Add eye animation capability to SVG content.
  *
  * Creates layers per eye:
- * 1. Eyelid back (blobbi-eyelid): ellipse behind eye, darker body color
- * 2. Outer group (blobbi-blink): wraps eye white + tracking group for blink animation (scaleY)
- * 3. Inner group (blobbi-eye): wraps only pupil+highlight for mouse tracking (translate)
+ * 1. Eyelid back (pets-eyelid): ellipse behind eye, darker body color
+ * 2. Outer group (pets-blink): wraps eye white + tracking group for blink animation (scaleY)
+ * 3. Inner group (pets-eye): wraps only pupil+highlight for mouse tracking (translate)
  *
  * Structure:
- * <ellipse class="blobbi-eyelid" ... />  <!-- eyelid back - behind everything -->
- * <g class="blobbi-blink blobbi-blink-left">  <!-- blink: scaleY -->
+ * <ellipse class="pets-eyelid" ... />  <!-- eyelid back - behind everything -->
+ * <g class="pets-blink pets-blink-left">  <!-- blink: scaleY -->
  *   <ellipse ... />  <!-- eye white - NOT tracked -->
- *   <g class="blobbi-eye blobbi-eye-left">  <!-- tracking: translate -->
+ *   <g class="pets-eye pets-eye-left">  <!-- tracking: translate -->
  *     <circle ... />  <!-- pupil -->
  *     <circle ... />  <!-- highlight -->
  *   </g>
@@ -391,7 +391,7 @@ export function addEyeAnimation(svgText: string, options?: EyeAnimationOptions):
   const baseColor = options?.baseColor || DEFAULT_EYELID_COLOR;
   const eyelidColor = darkenColor(baseColor, EYELID_DARKEN_AMOUNT);
   
-  // Generate unique ID prefix for clipPaths to avoid collisions between multiple Blobbis
+  // Generate unique ID prefix for clipPaths to avoid collisions between multiple Petss
   // Sanitize to only allow valid SVG ID characters (letters, numbers, underscore, hyphen)
   const rawInstanceId = options?.instanceId || Math.random().toString(36).substring(2, 8);
   const instanceId = rawInstanceId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -457,11 +457,11 @@ export function addEyeAnimation(svgText: string, options?: EyeAnimationOptions):
     // data-eye-cx/cy: eye center coordinates
     // data-eye-rx/ry: eye white dimensions (used by eyebrow placement)
     // data-clip-top/height/id: clipping bounds for blink animation
-    const clipId = `blobbi-blink-clip-${instanceId}-${group.side}`;
+    const clipId = `pets-blink-clip-${instanceId}-${group.side}`;
     const eyeWhiteAttrs = group.eyeWhiteGeometry
       ? ` data-eye-rx="${group.eyeWhiteGeometry.rx}" data-eye-ry="${group.eyeWhiteGeometry.ry}"`
       : '';
-    const blinkGroup = `<g class="blobbi-blink blobbi-blink-${group.side}" data-eye-cx="${group.blinkCenterX}" data-eye-cy="${group.blinkCenterY}" data-eye-side="${group.side}"${eyeWhiteAttrs} data-clip-top="${clipTop}" data-clip-height="${clipHeight}" data-clip-id="${clipId}" clip-path="url(#${clipId})">
+    const blinkGroup = `<g class="pets-blink pets-blink-${group.side}" data-eye-cx="${group.blinkCenterX}" data-eye-cy="${group.blinkCenterY}" data-eye-side="${group.side}"${eyeWhiteAttrs} data-clip-top="${clipTop}" data-clip-height="${clipHeight}" data-clip-id="${clipId}" clip-path="url(#${clipId})">
     ${blinkContent}
   </g>`;
 

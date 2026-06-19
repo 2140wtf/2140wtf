@@ -14,6 +14,17 @@ export function getNsiteNostrProviderScript(pubkey: string): string {
   'use strict';
 
   // ------------------------------------------------------------------
+  // Origin restriction — only talk to the frame that loaded us
+  // ------------------------------------------------------------------
+  var parentOrigin = (function() {
+    try {
+      return document.referrer ? new URL(document.referrer).origin : '*';
+    } catch (e) {
+      return '*';
+    }
+  })();
+
+  // ------------------------------------------------------------------
   // Serial queue — one RPC at a time to avoid concurrent prompts
   // ------------------------------------------------------------------
   var _queue = [];
@@ -43,6 +54,7 @@ export function getNsiteNostrProviderScript(pubkey: string): string {
   var _pending = {};
 
   window.addEventListener('message', function(event) {
+    if (parentOrigin !== '*' && event.origin !== parentOrigin) return;
     var msg = event.data;
     if (!msg || typeof msg !== 'object' || msg.jsonrpc !== '2.0') return;
     if (msg.id === undefined || msg.id === null) return;
@@ -66,7 +78,7 @@ export function getNsiteNostrProviderScript(pubkey: string): string {
           id: id,
           method: method,
           params: params || {}
-        }, '*');
+        }, parentOrigin);
       });
     });
   }

@@ -1,11 +1,11 @@
-# Blobbi Tag Schema
+# Pets Tag Schema
 
-> **Product Specification** - This document is the canonical source of truth for Blobbi tag definitions.  
-> The runtime schema at `src/lib/blobbi-tag-schema.ts` MUST align with this spec.
+> **Product Specification** - This document is the canonical source of truth for Pets tag definitions.  
+> The runtime schema at `src/pets/core/lib/pets-tag-schema.ts` MUST align with this spec.
 
 ## Overview
 
-Blobbi events (Kind 31124) use tags to store all state data. This document defines:
+Pets events (Kind 31124) use tags to store all state data. This document defines:
 - All valid tags and their purposes
 - Which tags are required vs optional
 - Which tags persist across stage transitions
@@ -22,14 +22,14 @@ Core protocol-level tags required for event identification and ecosystem members
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
-| `d` | **Yes** | egg, baby, adult | Yes | system | `blobbi-{pubkeyPrefix12}-{petId10}` | Unique identifier (addressable event d-tag) |
-| `b` | **Yes** | egg, baby, adult | Yes | system | `blobbi:ecosystem:v1` | Ecosystem namespace identifier |
-| `t` | **Yes** | egg, baby, adult | Yes | system | `blobbi` | Topic tag for discoverability |
-| `client` | No | egg, baby, adult | Yes | system | `blobbi` | Client identifier |
+| `d` | **Yes** | egg, baby, adult | Yes | system | `2140pets-{pubkeyPrefix12}-{petId10}` | Unique identifier (addressable event d-tag) |
+| `b` | **Yes** | egg, baby, adult | Yes | system | `pets:ecosystem:v1` | Ecosystem namespace identifier |
+| `t` | **Yes** | egg, baby, adult | Yes | system | `2140pets` | Topic tag for discoverability |
+| `client` | No | egg, baby, adult | Yes | system | `2140.wtf` | Client identifier |
 
 ### 2. Core Identity Tags
 
-Tags that define the Blobbi's unique identity. These MUST be preserved across all transitions.
+Tags that define the Pets's unique identity. These MUST be preserved across all transitions.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -37,7 +37,7 @@ Tags that define the Blobbi's unique identity. These MUST be preserved across al
 | `seed` | **Yes** | egg, baby, adult | Yes | system | 64 hex chars | Deterministic seed for visual traits |
 | `generation` | No | egg, baby, adult | Yes | system | positive integer | Lineage generation (default: 1) |
 
-**Important**: The `seed` is derived once at creation using `sha256("blobbi:v1|{pubkey}:{d}:{createdAt}")` and MUST NEVER be recomputed.
+**Important**: The `seed` is derived once at creation using `sha256("pets:v1|{pubkey}:{d}:{createdAt}")` and MUST NEVER be recomputed.
 
 ### 3. Visual Trait Tags
 
@@ -56,7 +56,7 @@ Tags derived deterministically from the seed. These are stored explicitly for fa
 
 ### 4. Personality / Trait Tags
 
-Character traits that define the Blobbi's personality. These are generated at creation and MUST persist.
+Character traits that define the Pets's personality. These are generated at creation and MUST persist.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -66,11 +66,11 @@ Character traits that define the Blobbi's personality. These are generated at cr
 | `voice_type` | No | egg, baby, adult | Yes | generated | string | Voice characteristic |
 | `mood` | No | egg, baby, adult | Yes | computed | string | Current emotional state |
 
-**Not Regenerable**: These tags are generated once and MUST be preserved. Do NOT invent values for existing Blobbis that lack these tags.
+**Not Regenerable**: These tags are generated once and MUST be preserved. Do NOT invent values for existing Petss that lack these tags.
 
 ### 5. Stat Tags
 
-Numeric values representing the Blobbi's current condition. These are actively computed and change frequently.
+Numeric values representing the Pets's current condition. These are actively computed and change frequently.
 
 | Tag | Required | Stages | Persistent | Source | Format | Default | Description |
 |-----|----------|--------|------------|--------|--------|---------|-------------|
@@ -86,7 +86,7 @@ Numeric values representing the Blobbi's current condition. These are actively c
 
 ### 6. State / Lifecycle Tags
 
-Tags that track the Blobbi's current lifecycle state.
+Tags that track the Pets's current lifecycle state.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -131,7 +131,7 @@ User preferences and computed flags.
 
 ### 10. Evolution Tags
 
-Tags specific to adult Blobbis.
+Tags specific to adult Petss.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -145,6 +145,8 @@ Optional tags for themes and crossover features.
 |-----|----------|--------|------------|--------|--------|-------------|
 | `theme` | No | egg, baby, adult | Yes | system | string (e.g., `divine`) | Theme variant |
 | `crossover_app` | No | egg, baby, adult | Yes | system | string (e.g., `divine`) | Crossover app identifier |
+| `archetype` | No | egg, baby, adult | Yes | generated | `ghost\|runner\|netrunner\|drone\|construct\|cipher` | Cypherpunk 2140 archetype class |
+| `special_ability` | No | egg, baby, adult | Yes | generated | `glitch-step\|overclock\|firewall\|synesthesia\|recursion\|mirror-self` | Cypherpunk 2140 special ability |
 
 ---
 
@@ -192,7 +194,7 @@ These tags are from legacy versions and MUST be removed when republishing events
 - All personality tags (if present)
 - All progression tags (`experience`, `care_streak`)
 - All social tags (`breeding_ready`)
-- All extension tags (`theme`, `crossover_app`)
+- All extension tags (`theme`, `crossover_app`, `archetype`, `special_ability`)
 
 ### Evolve (baby → adult)
 
@@ -218,7 +220,7 @@ These tags are from legacy versions and MUST be removed when republishing events
 
 ## Migration Rules
 
-When migrating legacy Blobbis to canonical format:
+When migrating legacy Petss to canonical format:
 
 1. **Always preserve existing values** - Do not regenerate tags that already exist
 2. **Generate missing required tags** - Derive `seed` if missing using the legacy event's `created_at`
@@ -230,10 +232,10 @@ When migrating legacy Blobbis to canonical format:
 
 ## Validation Rules
 
-A valid Blobbi event MUST have:
+A valid Pets event MUST have:
 - `d` tag in canonical format
-- `b` tag = `blobbi:ecosystem:v1`
-- `t` tag = `blobbi`
+- `b` tag = `pets:ecosystem:v1`
+- `t` tag = `pets`
 - `name` tag (non-empty)
 - `seed` tag (64 hex chars)
 - `stage` tag (valid value)
@@ -244,7 +246,7 @@ A valid Blobbi event MUST have:
 
 ## Implementation Checklist
 
-When implementing any flow that modifies Blobbi tags:
+When implementing any flow that modifies Pets tags:
 
 - [ ] Start from `canonical.allTags` as the base
 - [ ] Remove only task-specific tags (`task`, `task_completed`, `state_started_at`)

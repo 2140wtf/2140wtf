@@ -1,5 +1,5 @@
 /**
- * Blobbi Preview Generation Utilities
+ * Pets Preview Generation Utilities
  * 
  * This module provides utilities for generating egg previews during onboarding.
  * The preview is the source of truth for the final adopted event - no regeneration
@@ -8,26 +8,26 @@
 
 import {
   DEFAULT_EGG_STATS,
-  BLOBBI_ECOSYSTEM_NAMESPACE,
+  PETS_ECOSYSTEM_NAMESPACE,
   deriveVisualTraits,
-  deriveBlobbiSeedV1,
+  derivePetsSeedV1,
   generatePetId10,
-  getCanonicalBlobbiD,
+  getCanonicalPetsD,
   getLocalDayString,
-  type BlobbiVisualTraits,
-  type BlobbiStats,
-} from '@/blobbi/core/lib/blobbi';
+  type PetsVisualTraits,
+  type PetsStats,
+} from '@/pets/core/lib/pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * Complete preview data for a Blobbi egg before adoption.
+ * Complete preview data for a Pets egg before adoption.
  * This is the source of truth - the same data is used to build the final event.
  */
-export interface BlobbiEggPreview {
+export interface PetsEggPreview {
   /** Random 10-char hex petId */
   petId: string;
-  /** Canonical d-tag: blobbi-{pubkeyPrefix12}-{petId10} */
+  /** Canonical d-tag: pets-{pubkeyPrefix12}-{petId10} */
   d: string;
   /** 64-char hex seed for deterministic visual traits */
   seed: string;
@@ -40,9 +40,9 @@ export interface BlobbiEggPreview {
   /** Progression state - new eggs start incubating; older eggs may be 'none' */
   progressionState: 'incubating' | 'none';
   /** Visual traits derived from seed */
-  visualTraits: BlobbiVisualTraits;
+  visualTraits: PetsVisualTraits;
   /** Default stats for a new egg */
-  stats: BlobbiStats;
+  stats: PetsStats;
   /** Unix timestamp when preview was created (used for seed derivation) */
   createdAt: number;
   /** Owner pubkey */
@@ -65,13 +65,13 @@ export interface BlobbiEggPreview {
 export function generateEggPreview(
   pubkey: string,
   name = 'Egg'
-): BlobbiEggPreview {
+): PetsEggPreview {
   const petId = generatePetId10();
-  const d = getCanonicalBlobbiD(pubkey, petId);
+  const d = getCanonicalPetsD(pubkey, petId);
   const createdAt = Math.floor(Date.now() / 1000);
-  const seed = deriveBlobbiSeedV1(pubkey, d, createdAt);
+  const seed = derivePetsSeedV1(pubkey, d, createdAt);
   
-  // Derive visual traits from seed (same as parseBlobbiEvent does)
+  // Derive visual traits from seed (same as parsePetsEvent does)
   // Pass empty tags since this is a new preview with no existing tags
   const visualTraits = deriveVisualTraits([], seed);
   
@@ -101,9 +101,9 @@ export function generateEggPreview(
  * at the UI level (disable adopt button) or on submit, not here.
  */
 export function updatePreviewName(
-  preview: BlobbiEggPreview,
+  preview: PetsEggPreview,
   name: string
-): BlobbiEggPreview {
+): PetsEggPreview {
   return {
     ...preview,
     name, // Allow empty during editing - validate on submit
@@ -127,13 +127,13 @@ export function updatePreviewName(
  * @param preview - The preview to convert
  * @returns Tags array for Kind 31124 event
  */
-export function previewToEventTags(preview: BlobbiEggPreview): string[][] {
+export function previewToEventTags(preview: PetsEggPreview): string[][] {
   const now = preview.createdAt.toString();
   const { visualTraits } = preview;
   
   return [
     ['d', preview.d],
-    ['b', BLOBBI_ECOSYSTEM_NAMESPACE],
+    ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['name', preview.name],
     ['stage', preview.stage],
     ['state', preview.state],
@@ -160,19 +160,21 @@ export function previewToEventTags(preview: BlobbiEggPreview): string[][] {
     ['pattern', visualTraits.pattern],
     ['special_mark', visualTraits.specialMark],
     ['size', visualTraits.size],
+    ['archetype', visualTraits.archetype],
+    ['special_ability', visualTraits.specialAbility],
   ];
 }
 
 // ─── Adapter for Visual Components ────────────────────────────────────────────
 
 /**
- * Convert a preview to a minimal BlobbiCompanion-like object for rendering.
- * This allows the existing BlobbiStageVisual/BlobbiEggVisual to render the preview.
+ * Convert a preview to a minimal PetsCompanion-like object for rendering.
+ * This allows the existing PetsStageVisual/PetsEggVisual to render the preview.
  */
-export function previewToBlobbiCompanion(preview: BlobbiEggPreview) {
-  // Create a minimal object that matches what BlobbiStageVisual needs
+export function previewToPetsCompanion(preview: PetsEggPreview) {
+  // Create a minimal object that matches what PetsStageVisual needs
   return {
-    // Required fields for BlobbiStageVisual
+    // Required fields for PetsStageVisual
     d: preview.d,
     name: preview.name,
     stage: preview.stage,

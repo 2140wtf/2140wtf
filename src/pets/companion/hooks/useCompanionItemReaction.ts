@@ -1,10 +1,10 @@
 /**
  * useCompanionItemReaction Hook
  * 
- * Handles Blobbi's reaction when items land on the ground.
+ * Handles Pets's reaction when items land on the ground.
  * Uses the centralized need detection system to determine:
- * - If Blobbi needs the item: trigger movement toward it
- * - If Blobbi doesn't need the item: trigger a brief glance
+ * - If Pets needs the item: trigger movement toward it
+ * - If Pets doesn't need the item: trigger a brief glance
  * 
  * Architecture:
  * - Fetches companion stats from the active companion
@@ -20,19 +20,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import {
-  KIND_BLOBBI_STATE,
-  isValidBlobbiEvent,
-  parseBlobbiEvent,
-  type BlobbiStats,
-} from '@/blobbi/core/lib/blobbi';
+  KIND_PETS_STATE,
+  isValidPetsEvent,
+  parsePetsEvent,
+  type PetsStats,
+} from '@/pets/core/lib/pets';
 import { checkItemCategoryNeed, type NeedCheckResult } from '../interaction/needDetection';
-import type { ShopItemCategory } from '@/blobbi/shop/types/shop.types';
+import type { ShopItemCategory } from '@/pets/shop/types/shop.types';
 import type { Position } from '../types/companion.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ItemReactionResult {
-  /** Whether Blobbi needs this item category */
+  /** Whether Pets needs this item category */
   needsItem: boolean;
   /** The need check result with full details */
   needResult: NeedCheckResult;
@@ -48,14 +48,14 @@ export interface UseCompanionItemReactionOptions {
 }
 
 export interface UseCompanionItemReactionResult {
-  /** Check if Blobbi needs an item and get reaction details */
+  /** Check if Pets needs an item and get reaction details */
   checkItemNeed: (category: ShopItemCategory) => ItemReactionResult | null;
   /** React to an item landing - handles both needed and not-needed cases */
   reactToItemLanding: (category: ShopItemCategory, position: Position) => void;
   /** Whether companion stats are available */
   hasStats: boolean;
   /** Current companion stats (for debugging/display) */
-  stats: Partial<BlobbiStats> | null;
+  stats: Partial<PetsStats> | null;
 }
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -93,18 +93,18 @@ export function useCompanionItemReaction({
       if (!user?.pubkey || !currentCompanionD) return null;
       
       const events = await nostr.query([{
-        kinds: [KIND_BLOBBI_STATE],
+        kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [currentCompanionD],
       }], { signal });
       
       const validEvents = events
-        .filter(isValidBlobbiEvent)
+        .filter(isValidPetsEvent)
         .sort((a, b) => b.created_at - a.created_at);
       
       if (validEvents.length === 0) return null;
       
-      const companion = parseBlobbiEvent(validEvents[0]);
+      const companion = parsePetsEvent(validEvents[0]);
       return companion?.stats ?? null;
     },
     enabled: isActive && !!user?.pubkey && !!currentCompanionD,
@@ -116,7 +116,7 @@ export function useCompanionItemReaction({
   const hasStats = stats !== null;
   
   /**
-   * Check if Blobbi needs an item category based on current stats.
+   * Check if Pets needs an item category based on current stats.
    */
   const checkItemNeed = useCallback((category: ShopItemCategory): ItemReactionResult | null => {
     if (!stats) return null;
@@ -131,8 +131,8 @@ export function useCompanionItemReaction({
   /**
    * React to an item landing on the ground.
    * 
-   * - If Blobbi needs the item: walk toward it (via onWalkTo)
-   * - If Blobbi doesn't need the item: glance at it briefly (via onGlance)
+   * - If Pets needs the item: walk toward it (via onWalkTo)
+   * - If Pets doesn't need the item: glance at it briefly (via onGlance)
    */
   const reactToItemLanding = useCallback((category: ShopItemCategory, position: Position) => {
     if (!isActive || !stats) return;
@@ -149,9 +149,9 @@ export function useCompanionItemReaction({
     // Delay reaction slightly for more natural feel
     setTimeout(() => {
       if (needResult.needsItem) {
-        // Blobbi needs this item - walk toward it
+        // Pets needs this item - walk toward it
         if (import.meta.env.DEV) {
-          console.log('[CompanionItemReaction] Blobbi needs item, walking to:', {
+          console.log('[CompanionItemReaction] Pets needs item, walking to:', {
             category,
             priority: needResult.priority,
             triggeringStat: needResult.triggeringStat,
@@ -160,9 +160,9 @@ export function useCompanionItemReaction({
         }
         onWalkTo?.(position);
       } else {
-        // Blobbi doesn't need this item - just glance at it
+        // Pets doesn't need this item - just glance at it
         if (import.meta.env.DEV) {
-          console.log('[CompanionItemReaction] Blobbi glancing at unneeded item:', {
+          console.log('[CompanionItemReaction] Pets glancing at unneeded item:', {
             category,
             position,
           });

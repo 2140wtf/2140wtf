@@ -72,39 +72,17 @@ export interface FeedSettings {
   showEvents: boolean;
   /** Include calendar events in the follows/global feed */
   feedIncludeEvents: boolean;
-  /** Show Vines (kind 34236) link in sidebar */
-  showVines: boolean;
   /** Show Polls (kind 1068) link in sidebar */
   showPolls: boolean;
-  /** Show Treasures link in sidebar */
-  showTreasures: boolean;
-  /** Show Treasure listings (kind 37516) in Treasures */
-  showTreasureGeocaches: boolean;
-  /** Show Found logs (kind 7516) in Treasures */
-  showTreasureFoundLogs: boolean;
-  /** Show Colors (kind 3367) link in sidebar */
-  showColors: boolean;
   /** Show People Lists (kind 39089 follow packs, kind 30000 people sets) link in sidebar */
   showPeopleLists: boolean;
-  /** Include Vines in the follows/global feed */
-  feedIncludeVines: boolean;
   /** Include Polls in the follows/global feed */
   feedIncludePolls: boolean;
-  /** Include Treasure listings in the follows/global feed */
-  feedIncludeTreasureGeocaches: boolean;
-  /** Include Treasure found logs in the follows/global feed */
-  feedIncludeTreasureFoundLogs: boolean;
-  /** Include Colors in the follows/global feed */
-  feedIncludeColors: boolean;
   /** Include People Lists (kind 3 follow lists, kind 30000 people sets, kind 39089 follow packs) in the follows/global feed */
   feedIncludePeopleLists: boolean;
-  /** Show Magic Decks (kind 37381) link in sidebar */
-  showDecks: boolean;
-  /** Include Magic Decks in the follows/global feed */
-  feedIncludeDecks: boolean;
-  /** Show Webxdc apps (NIP-94 kind 1063 with m=application/x-webxdc) link in sidebar */
+  /** Show Mini apps (NIP-94 kind 1063 with m=application/x-webxdc) link in sidebar */
   showWebxdc: boolean;
-  /** Include Webxdc apps in the follows/global feed */
+  /** Include Mini apps in the follows/global feed */
   feedIncludeWebxdc: boolean;
   /** Show Themes link in sidebar */
   showProfileThemes: boolean;
@@ -174,10 +152,14 @@ export interface FeedSettings {
   feedIncludeVanish: boolean;
   /** Include Love List updates (kind 15683, see NIP.md) in the follows/global feed */
   feedIncludeLoveLists: boolean;
-  /** Include Blobbi pet updates (kind 31124) in the follows/global feed */
-  feedIncludeBlobbi: boolean;
+  /** Include Pets pet updates (kind 31124) in the follows/global feed */
+  feedIncludePets: boolean;
   /** Show Birdstar (kind 2473 bird detections + kind 30621 custom constellations) link in sidebar */
   showBirdstar: boolean;
+  /** Show Roadstr (kind 1315 road event reports) link in sidebar */
+  showRoadstr: boolean;
+  /** Include Roadstr reports (kind 1315) in the follows/global feed */
+  feedIncludeRoadstr: boolean;
   /** Include bird detections (kind 2473) in the follows/global feed */
   feedIncludeBirdDetections: boolean;
   /** Include Birdex life lists (kind 12473) in the follows/global feed */
@@ -186,6 +168,8 @@ export interface FeedSettings {
   feedIncludeConstellations: boolean;
   /** Include replies in the follows feed (default: true) */
   followsFeedShowReplies: boolean;
+  /** Include Private Group chat messages (kind 445) in the follows/global feed. Default: false. */
+  feedIncludeGroups: boolean;
 }
 
 /**
@@ -340,7 +324,7 @@ export interface AppConfig {
 
 /** Configuration for a single widget in the right sidebar. */
 export interface WidgetConfig {
-  /** Widget type identifier (e.g. "trends", "blobbi", "wikipedia", "bluesky"). */
+  /** Widget type identifier (e.g. "trends", "pets", "wikipedia"). */
   id: string;
   /** User-configured height in pixels. Overrides the widget's default height. */
   height?: number;

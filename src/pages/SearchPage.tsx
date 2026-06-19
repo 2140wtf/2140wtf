@@ -112,12 +112,12 @@ export function SearchPage() {
 
   // ── Filter state — all derived from URL params ──────────────────────────
   const includeReplies = parseBoolParam(searchParams.get('replies'), DEFAULT_FILTERS.includeReplies);
-  const VALID_MEDIA_TYPES = ['all', 'images', 'videos', 'vines', 'none'] as const;
+  const VALID_MEDIA_TYPES = ['all', 'images', 'videos', 'none'] as const;
   type MediaType = typeof VALID_MEDIA_TYPES[number];
   const rawMedia = searchParams.get('media') ?? DEFAULT_FILTERS.mediaType;
   const mediaType: MediaType = (VALID_MEDIA_TYPES as readonly string[]).includes(rawMedia) ? (rawMedia as MediaType) : DEFAULT_FILTERS.mediaType;
   const language = searchParams.get('lang') ?? DEFAULT_FILTERS.language;
-  const VALID_PLATFORMS = ['nostr', 'activitypub', 'atproto'] as const;
+  const VALID_PLATFORMS = ['nostr', 'activitypub'] as const;
   type PlatformType = typeof VALID_PLATFORMS[number];
   const rawPlatform = searchParams.get('platform') ?? DEFAULT_FILTERS.platform;
   const platform: PlatformType = (VALID_PLATFORMS as readonly string[]).includes(rawPlatform) ? (rawPlatform as PlatformType) : DEFAULT_FILTERS.platform;
@@ -297,9 +297,9 @@ export function SearchPage() {
   const activeFilterLabels = useMemo(() => {
     const labels: string[] = [];
     if (!includeReplies) labels.push('No replies');
-    if (mediaType !== 'all') labels.push({ images: 'Images', videos: 'Videos', vines: 'Shorts & Divines', none: 'No media' }[mediaType] ?? mediaType);
+    if (mediaType !== 'all') labels.push({ images: 'Images', videos: 'Videos', none: 'No media' }[mediaType] ?? mediaType);
     if (language !== 'global') labels.push(language.toUpperCase());
-    if (platform !== 'nostr') labels.push({ activitypub: 'Mastodon', atproto: 'Bluesky' }[platform] ?? platform);
+    if (platform !== 'nostr') labels.push({ activitypub: 'Mastodon' }[platform] ?? platform);
     if (sort !== 'recent') labels.push(sort === 'hot' ? 'Hot' : 'Trending');
     if (kindFilter !== 'all' && kindFilter !== 'custom') {
       const kindValues = kindFilter.split(',').filter(Boolean);
@@ -659,13 +659,12 @@ export function SearchPage() {
                         <SelectItem value="all">All</SelectItem>
                         <SelectItem value="images">Images</SelectItem>
                         <SelectItem value="videos">Videos</SelectItem>
-                        <SelectItem value="vines">Shorts</SelectItem>
                         <SelectItem value="none">No media</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">Protocol <HelpTip faqId="vs-mastodon-bluesky" iconSize="size-3" /></span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">Protocol <HelpTip faqId="vs-mastodon" iconSize="size-3" /></span>
                     <Select value={platform} onValueChange={(v) => setPlatform(v)}>
                       <SelectTrigger className="w-full bg-secondary/50 h-8 text-base md:text-xs">
                         <SelectValue />
@@ -673,7 +672,6 @@ export function SearchPage() {
                       <SelectContent>
                         <SelectItem value="nostr">Nostr</SelectItem>
                         <SelectItem value="activitypub">Mastodon</SelectItem>
-                        <SelectItem value="atproto">Bluesky</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -729,8 +727,8 @@ export function SearchPage() {
         {/* Active filter summary chips (posts tab only) */}
         {activeTab === 'posts' && activeFilterLabels.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {activeFilterLabels.map((label) => (
-              <Badge key={label} variant="secondary" className="text-xs font-normal">
+            {activeFilterLabels.map((label, idx) => (
+              <Badge key={`${label}-${idx}`} variant="secondary" className="text-xs font-normal">
                 {label}
               </Badge>
             ))}

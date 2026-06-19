@@ -1,5 +1,5 @@
 /**
- * Blobbi Room System — IDs, metadata, ordering, navigation.
+ * Pets Room System — IDs, metadata, ordering, navigation.
  *
  * Room order is data, not control flow, so it can be customised per-user later.
  * The kind 11125 profile has a `room` tag for cross-session continuity.
@@ -10,18 +10,18 @@ import { Home, Refrigerator, Cross, Moon, Shirt, type LucideIcon } from 'lucide-
 
 // ─── Room IDs ─────────────────────────────────────────────────────────────────
 
-export type BlobbiRoomId = 'home' | 'kitchen' | 'care' | 'rest' | 'closet';
+export type PetsRoomId = 'home' | 'kitchen' | 'care' | 'rest' | 'closet';
 
 // ─── Metadata ─────────────────────────────────────────────────────────────────
 
-export interface BlobbiRoomMeta {
-  id: BlobbiRoomId;
+export interface PetsRoomMeta {
+  id: PetsRoomId;
   label: string;
   description: string;
   icon: LucideIcon;
 }
 
-export const ROOM_META: Record<BlobbiRoomId, BlobbiRoomMeta> = {
+export const ROOM_META: Record<PetsRoomId, PetsRoomMeta> = {
   home: {
     id: 'home',
     label: 'Home',
@@ -31,7 +31,7 @@ export const ROOM_META: Record<BlobbiRoomId, BlobbiRoomMeta> = {
   kitchen: {
     id: 'kitchen',
     label: 'Kitchen',
-    description: 'Feed your Blobbi',
+    description: 'Feed your Pets',
     icon: Refrigerator,
   },
   care: {
@@ -56,7 +56,7 @@ export const ROOM_META: Record<BlobbiRoomId, BlobbiRoomMeta> = {
 
 // ─── Default Order ────────────────────────────────────────────────────────────
 
-export const DEFAULT_ROOM_ORDER: BlobbiRoomId[] = [
+export const DEFAULT_ROOM_ORDER: PetsRoomId[] = [
   'care',
   'kitchen',
   'home',
@@ -64,36 +64,36 @@ export const DEFAULT_ROOM_ORDER: BlobbiRoomId[] = [
   // 'closet', — re-enable when wardrobe is ready
 ];
 
-export const DEFAULT_INITIAL_ROOM: BlobbiRoomId = 'home';
+export const DEFAULT_INITIAL_ROOM: PetsRoomId = 'home';
 
 /** Validate a string as a room ID (for parsing persisted values) */
-export function isValidRoomId(value: string | undefined): value is BlobbiRoomId {
+export function isValidRoomId(value: string | undefined): value is PetsRoomId {
   return !!value && value in ROOM_META;
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 export function getNextRoom(
-  current: BlobbiRoomId,
-  order: BlobbiRoomId[] = DEFAULT_ROOM_ORDER,
-): BlobbiRoomId {
+  current: PetsRoomId,
+  order: PetsRoomId[] = DEFAULT_ROOM_ORDER,
+): PetsRoomId {
   const idx = order.indexOf(current);
   if (idx === -1) return order[0];
   return order[(idx + 1) % order.length];
 }
 
 export function getPreviousRoom(
-  current: BlobbiRoomId,
-  order: BlobbiRoomId[] = DEFAULT_ROOM_ORDER,
-): BlobbiRoomId {
+  current: PetsRoomId,
+  order: PetsRoomId[] = DEFAULT_ROOM_ORDER,
+): PetsRoomId {
   const idx = order.indexOf(current);
   if (idx === -1) return order[order.length - 1];
   return order[(idx - 1 + order.length) % order.length];
 }
 
 export function getRoomIndex(
-  room: BlobbiRoomId,
-  order: BlobbiRoomId[] = DEFAULT_ROOM_ORDER,
+  room: PetsRoomId,
+  order: PetsRoomId[] = DEFAULT_ROOM_ORDER,
 ): number {
   return order.indexOf(room);
 }

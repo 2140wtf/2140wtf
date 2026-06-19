@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { generateUUID } from '@/lib/uuid';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useCurrentUser } from './useCurrentUser';
 
@@ -40,7 +41,7 @@ export function useContentFilters() {
       const currentFilters = filters;
       const newFilter: ContentFilter = {
         ...filter,
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };

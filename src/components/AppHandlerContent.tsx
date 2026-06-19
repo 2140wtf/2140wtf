@@ -1,5 +1,5 @@
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
-import { ExternalLink, GitFork, Package, Play } from 'lucide-react';
+import { ExternalLink, Package, Play } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -8,7 +8,6 @@ import { ExternalFavicon } from '@/components/ExternalFavicon';
 import { NsitePreviewDialog } from '@/components/NsitePreviewDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAddrEvent } from '@/hooks/useEvent';
-import { NostrURI } from '@/lib/NostrURI';
 import { parseAddr } from '@/lib/parseAddr';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
@@ -55,19 +54,6 @@ function displayDomain(url: string): string {
   }
 }
 
-/** Build a Shakespeare "Edit with Shakespeare" URL from a kind 30617 `a` tag, if present. */
-function getShakespeareUrl(tags: string[][]): string | undefined {
-  for (const tag of tags) {
-    if (tag[0] !== 'a') continue;
-    const parsed = parseAddr(tag[1]);
-    if (!parsed || parsed.kind !== 30617) continue;
-    const nostrUri = new NostrURI({ pubkey: parsed.pubkey, identifier: parsed.identifier }).toString();
-    return `https://shakespeare.diy/clone?url=${encodeURIComponent(nostrUri)}`;
-  }
-  return undefined;
-}
-
-
 interface NsiteRef {
   /** The author pubkey (hex) of the kind 35128 event. */
   pubkey: string;
@@ -110,7 +96,6 @@ export function AppHandlerContent({ event, compact }: AppHandlerContentProps) {
   const websiteUrl = sanitizeUrl(getWebsiteUrl(event.tags, metadata));
   const hashtags = getAllTags(event.tags, 't');
 
-  const shakespeareUrl = useMemo(() => getShakespeareUrl(event.tags), [event.tags]);
   const nsiteRef = useMemo(() => getNsiteRef(event.tags), [event.tags]);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -210,14 +195,7 @@ export function AppHandlerContent({ event, compact }: AppHandlerContentProps) {
                   </a>
                 </Button>
               )}
-              {shakespeareUrl && (
-                <Button asChild variant="secondary" size="sm" className="h-7 text-xs">
-                  <a href={shakespeareUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                    Fork
-                    <GitFork className="size-3 ml-1" />
-                  </a>
-                </Button>
-              )}
+
             </div>
           </div>
         </div>
@@ -328,14 +306,7 @@ export function AppHandlerContent({ event, compact }: AppHandlerContentProps) {
                 </a>
               </Button>
             )}
-            {shakespeareUrl && (
-              <Button asChild variant="secondary" size="sm">
-                <a href={shakespeareUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                  Fork
-                  <GitFork className="size-3.5 ml-1.5" />
-                </a>
-              </Button>
-            )}
+
           </div>
         </div>
       </div>

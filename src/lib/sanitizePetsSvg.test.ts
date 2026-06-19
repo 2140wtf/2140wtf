@@ -1,23 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeBlobbiSvg } from './sanitizeBlobbiSvg';
+import { sanitizePetsSvg } from './sanitizePetsSvg';
 import { sanitizeSvg } from './sanitizeSvg';
 
-describe('sanitizeBlobbiSvg', () => {
+describe('sanitizePetsSvg', () => {
   it('preserves data-* attributes used by eye animation', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-      <g class="blobbi-blink blobbi-blink-left" data-cx="35" data-cy="45" data-eye-top="18" data-eye-bottom="52" data-clip-height="25" data-clip-id="blobbi-blink-clip-abc123-left">
+      <g class="pets-blink pets-blink-left" data-cx="35" data-cy="45" data-eye-top="18" data-eye-bottom="52" data-clip-height="25" data-clip-id="pets-blink-clip-abc123-left">
         <circle cx="35" cy="45" r="5" fill="#1f2937" />
       </g>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('data-cx="35"');
     expect(sanitized).toContain('data-cy="45"');
     expect(sanitized).toContain('data-eye-top="18"');
     expect(sanitized).toContain('data-eye-bottom="52"');
     expect(sanitized).toContain('data-clip-height="25"');
-    expect(sanitized).toContain('data-clip-id="blobbi-blink-clip-abc123-left"');
+    expect(sanitized).toContain('data-clip-id="pets-blink-clip-abc123-left"');
   });
 
   it('preserves SMIL animation attributes', () => {
@@ -27,7 +27,7 @@ describe('sanitizeBlobbiSvg', () => {
       </rect>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('attributeName="y"');
     expect(sanitized).toContain('keyTimes="0;0.5;1"');
@@ -43,7 +43,7 @@ describe('sanitizeBlobbiSvg', () => {
       </path>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('<animateTransform');
     expect(sanitized).toContain('type="rotate"');
@@ -56,15 +56,15 @@ describe('sanitizeBlobbiSvg', () => {
       <defs>
         <style type="text/css">
           @keyframes sleepy-zzz { 0% { opacity: 0; } 100% { opacity: 1; } }
-          .blobbi-zzz { animation: sleepy-zzz 8s ease-in-out infinite; }
+          .pets-zzz { animation: sleepy-zzz 8s ease-in-out infinite; }
         </style>
       </defs>
-      <g class="blobbi-zzz" opacity="0">
+      <g class="pets-zzz" opacity="0">
         <text x="70" y="12" font-family="system-ui" font-size="8">z</text>
       </g>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('<style');
     expect(sanitized).toContain('@keyframes sleepy-zzz');
@@ -74,19 +74,19 @@ describe('sanitizeBlobbiSvg', () => {
   it('preserves clipPath with references', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <defs>
-        <clipPath id="blobbi-blink-clip-abc123-left">
-          <rect class="blobbi-blink-clip-rect" x="10" y="20" width="30" height="25" />
+        <clipPath id="pets-blink-clip-abc123-left">
+          <rect class="pets-blink-clip-rect" x="10" y="20" width="30" height="25" />
         </clipPath>
       </defs>
-      <g clip-path="url(#blobbi-blink-clip-abc123-left)">
+      <g clip-path="url(#pets-blink-clip-abc123-left)">
         <circle cx="35" cy="45" r="5" fill="white" />
       </g>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
-    expect(sanitized).toContain('<clipPath id="blobbi-blink-clip-abc123-left"');
-    expect(sanitized).toContain('clip-path="url(#blobbi-blink-clip-abc123-left)"');
+    expect(sanitized).toContain('<clipPath id="pets-blink-clip-abc123-left"');
+    expect(sanitized).toContain('clip-path="url(#pets-blink-clip-abc123-left)"');
   });
 
   it('preserves gradient definitions', () => {
@@ -100,7 +100,7 @@ describe('sanitizeBlobbiSvg', () => {
       <ellipse fill="url(#tearGradient)" cx="50" cy="50" rx="10" ry="15" />
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('<radialGradient id="tearGradient"');
     expect(sanitized).toContain('stop-color="#e0f2fe"');
@@ -109,12 +109,12 @@ describe('sanitizeBlobbiSvg', () => {
 
   it('preserves transform-origin and transform-box in style', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-      <g class="blobbi-eye" style="transform-box: fill-box; transform-origin: center;">
+      <g class="pets-eye" style="transform-box: fill-box; transform-origin: center;">
         <circle cx="35" cy="45" r="5" fill="#1f2937" />
       </g>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('transform-box: fill-box');
     expect(sanitized).toContain('transform-origin: center');
@@ -125,7 +125,7 @@ describe('sanitizeBlobbiSvg', () => {
       <circle cx="50" cy="50" r="10" onclick="alert('xss')" />
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).not.toContain('onload');
     expect(sanitized).not.toContain('onclick');
@@ -138,7 +138,7 @@ describe('sanitizeBlobbiSvg', () => {
       <circle cx="50" cy="50" r="10" />
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).not.toContain('<script');
     expect(sanitized).not.toContain('alert');
@@ -151,7 +151,7 @@ describe('sanitizeBlobbiSvg', () => {
       </a>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).not.toContain('href');
     expect(sanitized).not.toContain('javascript');
@@ -164,7 +164,7 @@ describe('sanitizeBlobbiSvg', () => {
       </foreignObject>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).not.toContain('foreignObject');
     expect(sanitized).not.toContain('XSS');
@@ -178,7 +178,7 @@ describe('sanitizeBlobbiSvg', () => {
       </text>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('<text');
     expect(sanitized).toContain('<tspan');
@@ -196,7 +196,7 @@ describe('sanitizeBlobbiSvg', () => {
       <circle mask="url(#test-mask)" cx="50" cy="50" r="40" fill="blue" />
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('<mask id="test-mask"');
     expect(sanitized).toContain('mask="url(#test-mask)"');
@@ -207,7 +207,7 @@ describe('sanitizeBlobbiSvg', () => {
       <text>${'x'.repeat(600 * 1024)}</text>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(largeSvg);
+    const sanitized = sanitizePetsSvg(largeSvg);
 
     expect(sanitized).toBe('');
   });
@@ -217,40 +217,40 @@ describe('sanitizer isolation', () => {
   // These tests verify that the two sanitizers are properly isolated and
   // that importing one doesn't affect the other.
 
-  it('sanitizeBlobbiSvg allows data-* attributes', () => {
+  it('sanitizePetsSvg allows data-* attributes', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <g data-cx="35" data-cy="45">
         <circle cx="35" cy="45" r="5" fill="#1f2937" />
       </g>
     </svg>`;
 
-    const sanitized = sanitizeBlobbiSvg(svg);
+    const sanitized = sanitizePetsSvg(svg);
 
     expect(sanitized).toContain('data-cx="35"');
     expect(sanitized).toContain('data-cy="45"');
   });
 
-  it('sanitizeSvg blocks style tags (Blobbi allows them)', () => {
-    // This is a key difference: Blobbi needs <style> for @keyframes, generic doesn't
+  it('sanitizeSvg blocks style tags (Pets allows them)', () => {
+    // This is a key difference: Pets needs <style> for @keyframes, generic doesn't
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <style>.test { fill: red; }</style>
       <circle cx="50" cy="50" r="10" fill="blue" />
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Generic sanitizer blocks <style>
     expect(genericSanitized).not.toContain('<style');
     expect(genericSanitized).not.toContain('.test');
 
-    // Blobbi sanitizer allows <style>
-    expect(blobbiSanitized).toContain('<style');
-    expect(blobbiSanitized).toContain('.test');
+    // Pets sanitizer allows <style>
+    expect(petsSanitized).toContain('<style');
+    expect(petsSanitized).toContain('.test');
   });
 
-  it('sanitizeSvg blocks animate elements (Blobbi allows them)', () => {
-    // This is a key difference: Blobbi needs SMIL animations, generic doesn't
+  it('sanitizeSvg blocks animate elements (Pets allows them)', () => {
+    // This is a key difference: Pets needs SMIL animations, generic doesn't
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <rect x="10" y="20" width="30" height="25">
         <animate attributeName="y" values="20;40;20" dur="2s" />
@@ -258,33 +258,33 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Generic sanitizer blocks <animate>
     expect(genericSanitized).not.toContain('<animate');
     expect(genericSanitized).not.toContain('attributeName');
 
-    // Blobbi sanitizer allows <animate>
-    expect(blobbiSanitized).toContain('<animate');
-    expect(blobbiSanitized).toContain('attributeName="y"');
+    // Pets sanitizer allows <animate>
+    expect(petsSanitized).toContain('<animate');
+    expect(petsSanitized).toContain('attributeName="y"');
   });
 
-  it('sanitizeSvg blocks style attribute (Blobbi allows it)', () => {
-    // This is a key difference: Blobbi needs inline styles for animations, generic blocks them
+  it('sanitizeSvg blocks style attribute (Pets allows it)', () => {
+    // This is a key difference: Pets needs inline styles for animations, generic blocks them
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="10" fill="blue" style="transform-origin: center; animation: pulse 2s infinite;" />
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Generic sanitizer blocks style attribute (explicitly forbidden)
     expect(genericSanitized).not.toContain('style=');
     expect(genericSanitized).not.toContain('transform-origin');
 
-    // Blobbi sanitizer allows style attribute for animations
-    expect(blobbiSanitized).toContain('style=');
-    expect(blobbiSanitized).toContain('transform-origin');
+    // Pets sanitizer allows style attribute for animations
+    expect(petsSanitized).toContain('style=');
+    expect(petsSanitized).toContain('transform-origin');
   });
 
   it('both sanitizers allow defs/gradients (SVG profile includes them)', () => {
@@ -299,13 +299,13 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Both sanitizers allow structural SVG elements
     expect(genericSanitized).toContain('<defs');
     expect(genericSanitized).toContain('<linearGradient');
-    expect(blobbiSanitized).toContain('<defs');
-    expect(blobbiSanitized).toContain('<linearGradient');
+    expect(petsSanitized).toContain('<defs');
+    expect(petsSanitized).toContain('<linearGradient');
   });
 
   it('both sanitizers block script tags', () => {
@@ -315,13 +315,13 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Both should block script
     expect(genericSanitized).not.toContain('<script');
     expect(genericSanitized).not.toContain('alert');
-    expect(blobbiSanitized).not.toContain('<script');
-    expect(blobbiSanitized).not.toContain('alert');
+    expect(petsSanitized).not.toContain('<script');
+    expect(petsSanitized).not.toContain('alert');
   });
 
   it('both sanitizers block event handlers', () => {
@@ -330,13 +330,13 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Both should block event handlers
     expect(genericSanitized).not.toContain('onload');
     expect(genericSanitized).not.toContain('onclick');
-    expect(blobbiSanitized).not.toContain('onload');
-    expect(blobbiSanitized).not.toContain('onclick');
+    expect(petsSanitized).not.toContain('onload');
+    expect(petsSanitized).not.toContain('onclick');
   });
 
   it('both sanitizers block foreignObject', () => {
@@ -347,13 +347,13 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Both should block foreignObject
     expect(genericSanitized).not.toContain('foreignObject');
     expect(genericSanitized).not.toContain('XSS content');
-    expect(blobbiSanitized).not.toContain('foreignObject');
-    expect(blobbiSanitized).not.toContain('XSS content');
+    expect(petsSanitized).not.toContain('foreignObject');
+    expect(petsSanitized).not.toContain('XSS content');
   });
 
   it('both sanitizers block href/xlink:href', () => {
@@ -364,12 +364,12 @@ describe('sanitizer isolation', () => {
     </svg>`;
 
     const genericSanitized = sanitizeSvg(svg);
-    const blobbiSanitized = sanitizeBlobbiSvg(svg);
+    const petsSanitized = sanitizePetsSvg(svg);
 
     // Both should block href
     expect(genericSanitized).not.toContain('href');
     expect(genericSanitized).not.toContain('javascript');
-    expect(blobbiSanitized).not.toContain('href');
-    expect(blobbiSanitized).not.toContain('javascript');
+    expect(petsSanitized).not.toContain('href');
+    expect(petsSanitized).not.toContain('javascript');
   });
 });

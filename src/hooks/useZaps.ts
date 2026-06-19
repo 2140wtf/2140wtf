@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
 import { useNWC } from '@/hooks/useNWCContext';
 import type { NWCConnection } from '@/hooks/useNWC';
+import { redactSecrets } from '@/lib/redactSecrets';
 import { nip57 } from 'nostr-tools';
 import type { Event } from 'nostr-tools';
 import type { WebLNProvider } from '@webbtc/webln-types';
@@ -27,6 +28,16 @@ export function useZaps(
    * payment target, which the user prefers over the profile's `lud16`.
    */
   lnAddressOverride?: string,
+  /**
+   * Optional NIP-69 poll option index. When provided, the zap request is
+   * tagged as a vote on a kind 6969 zap poll.
+   */
+  pollOption?: string,
+  /**
+   * Primary hosting relay for NIP-69 poll votes. Must be the same relay hint
+   * used in the poll event's `e` and `p` tags.
+   */
+  primaryRelay?: string,
 ) {
   const { toast } = useToast();
   const { user } = useCurrentUser();
@@ -36,12 +47,19 @@ export function useZaps(
   const { sendPayment, getActiveConnection } = useNWC();
   const [isZapping, setIsZapping] = useState(false);
   const [invoice, setInvoice] = useState<string | null>(null);
+  // Ref guard prevents double-zap if two clicks fire before React has flushed
+  // the isZapping state update.
+  const zapInFlightRef = useRef(false);
+
+  const MAX_ZAP_COMMENT_LENGTH = 1000;
+  const MAX_ZAP_AMOUNT_SATS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 
   // Cleanup state when component unmounts
   useEffect(() => {
     return () => {
       setIsZapping(false);
       setInvoice(null);
+      zapInFlightRef.current = false;
     };
   }, []);
 
@@ -49,7 +67,26 @@ export function useZaps(
     if (amount <= 0) {
       return;
     }
-
+    if (amount > MAX_ZAP_AMOUNT_SATS) {
+      toast({
+        title: 'Amount too large',
+        description: 'Zap amount exceeds the maximum allowed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (comment.length > MAX_ZAP_COMMENT_LENGTH) {
+      toast({
+        title: 'Comment too long',
+        description: `Zap comments must be under ${MAX_ZAP_COMMENT_LENGTH} characters.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (zapInFlightRef.current) {
+      return;
+    }
+    zapInFlightRef.current = true;
     setIsZapping(true);
     setInvoice(null); // Clear any previous invoice at the start
 
@@ -59,6 +96,7 @@ export function useZaps(
         description: 'You must be logged in to send a zap.',
         variant: 'destructive',
       });
+      zapInFlightRef.current = false;
       setIsZapping(false);
       return;
     }
@@ -69,6 +107,7 @@ export function useZaps(
         description: 'Could not find the event to zap.',
         variant: 'destructive',
       });
+      zapInFlightRef.current = false;
       setIsZapping(false);
       return;
     }
@@ -80,6 +119,7 @@ export function useZaps(
           description: 'Could not find the author of this item.',
           variant: 'destructive',
         });
+        zapInFlightRef.current = false;
         setIsZapping(false);
         return;
       }
@@ -95,6 +135,7 @@ export function useZaps(
           description: 'The author does not have a lightning address configured.',
           variant: 'destructive',
         });
+        zapInFlightRef.current = false;
         setIsZapping(false);
         return;
       }
@@ -119,26 +160,41 @@ export function useZaps(
           description: 'Could not find a zap endpoint for the author.',
           variant: 'destructive',
         });
+        zapInFlightRef.current = false;
         setIsZapping(false);
         return;
       }
 
-      // Create zap request - use appropriate event format based on kind
-      // For addressable events (30000-39999), pass the object to get 'a' tag
-      // For all other events, pass the ID string to get 'e' tag
-      const event = (target.kind >= 30000 && target.kind < 40000)
-        ? target
-        : target.id;
-
       const zapAmount = amount * 1000; // convert to millisats
 
-      const zapRequest = nip57.makeZapRequest({
-        profile: target.pubkey,
-        event: event,
+      // Create zap request - use appropriate event format based on kind
+      // For addressable events (30000-39999), pass the object to get 'a' tag
+      // For all other events, omit `event` so nip57 emits an 'e' tag from the
+      // caller's context (profile-only zap request).
+      const baseZapParams = {
+        pubkey: target.pubkey,
         amount: zapAmount,
         relays: config.relayMetadata.relays.map(r => r.url),
-        comment
-      });
+        comment,
+      };
+
+      const zapRequest = (target.kind >= 30000 && target.kind < 40000)
+        ? nip57.makeZapRequest({ ...baseZapParams, event: target })
+        : nip57.makeZapRequest(baseZapParams);
+
+      // NIP-69 zap poll vote: add the poll_option tag and ensure the `e` and
+      // `p` tags carry the same primary hosting relay hint.
+      if (pollOption !== undefined) {
+        const relay = primaryRelay || config.relayMetadata.relays[0]?.url;
+        if (relay) {
+          zapRequest.tags = zapRequest.tags.map((tag) => {
+            if (tag[0] === 'p') return ['p', tag[1], relay];
+            if (tag[0] === 'e') return ['e', tag[1], relay];
+            return tag;
+          });
+        }
+        zapRequest.tags.push(['poll_option', pollOption]);
+      }
 
       // Sign the zap request (but don't publish to relays - only send to LNURL endpoint)
       if (!user.signer) {
@@ -151,7 +207,14 @@ export function useZaps(
         zapUrl.searchParams.set('amount', String(zapAmount));
         zapUrl.searchParams.set('nostr', JSON.stringify(signedZapRequest));
 
-        const res = await fetch(zapUrl.toString());
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 30000);
+        let res: Response;
+        try {
+          res = await fetch(zapUrl.toString(), { signal: controller.signal });
+        } finally {
+          clearTimeout(fetchTimeout);
+        }
         const responseText = await res.text();
         let responseData: { pr?: string; reason?: string } = {};
 
@@ -164,7 +227,11 @@ export function useZaps(
 
         if (!res.ok) {
           const fallbackReason = responseText.trim() || 'Unknown error';
-          throw new Error(`HTTP ${res.status}: ${responseData.reason || fallbackReason}`);
+          // Avoid echoing raw HTML error pages into the toast.
+          const safeReason = fallbackReason.length > 500
+            ? `${fallbackReason.slice(0, 500)}…`
+            : fallbackReason;
+          throw new Error(`HTTP ${res.status}: ${responseData.reason || safeReason}`);
         }
 
         const newInvoice = responseData.pr;
@@ -200,13 +267,15 @@ export function useZaps(
             }
             return;
           } catch (nwcError) {
-            console.error('NWC payment failed, falling back:', nwcError);
+            const rawMessage = nwcError instanceof Error ? nwcError.message : 'Unknown NWC error';
+            // Log a redacted version of the error for support; never show the
+            // raw provider message to the user because it may contain invoice
+            // hints, wallet metadata, or a leaked connection URI.
+            console.error('NWC payment failed, falling back:', redactSecrets(rawMessage));
 
-            // Show specific NWC error to user for debugging
-            const errorMessage = nwcError instanceof Error ? nwcError.message : 'Unknown NWC error';
             toast({
               title: 'NWC payment failed',
-              description: `${errorMessage}. Falling back to other payment methods...`,
+              description: 'Falling back to other payment methods...',
               variant: 'destructive',
             });
           }
@@ -245,13 +314,12 @@ export function useZaps(
               });
             }
           } catch (weblnError) {
-            console.error('WebLN payment failed, falling back:', weblnError);
+            const rawMessage = weblnError instanceof Error ? weblnError.message : 'Unknown WebLN error';
+            console.error('WebLN payment failed, falling back:', redactSecrets(rawMessage));
 
-            // Show specific WebLN error to user for debugging
-            const errorMessage = weblnError instanceof Error ? weblnError.message : 'Unknown WebLN error';
             toast({
               title: 'WebLN payment failed',
-              description: `${errorMessage}. Falling back to other payment methods...`,
+              description: 'Falling back to other payment methods...',
               variant: 'destructive',
             });
 
@@ -263,22 +331,26 @@ export function useZaps(
           setIsZapping(false);
         }
       } catch (err) {
-        console.error('Zap error:', err);
+        const rawMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Zap error:', redactSecrets(rawMessage));
         toast({
           title: 'Zap failed',
-          description: (err as Error).message,
+          description: 'Could not complete the zap. Please try again.',
           variant: 'destructive',
         });
         setIsZapping(false);
       }
     } catch (err) {
-      console.error('Zap error:', err);
+      const rawMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Zap error:', redactSecrets(rawMessage));
       toast({
         title: 'Zap failed',
-        description: (err as Error).message,
+        description: 'Could not complete the zap. Please try again.',
         variant: 'destructive',
       });
       setIsZapping(false);
+    } finally {
+      zapInFlightRef.current = false;
     }
   };
 

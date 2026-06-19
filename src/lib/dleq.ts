@@ -18,15 +18,15 @@
  * Backed by `@noble/curves/secp256k1` for EC arithmetic and `@noble/hashes`
  * for SHA-256 — no `bitcoinjs-lib` / `@bitcoinerlab/secp256k1` dependency.
  */
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 /**
  * secp256k1 Point class. `@noble/curves` v1 exposes the projective-point
  * constructor as `secp256k1.ProjectivePoint`; v2 moved it to
  * `schnorr.Point`. We use the v1 export to match the rest of the codebase.
  */
-const Point = secp256k1.ProjectivePoint;
+const Point = secp256k1.Point;
 /** Point at infinity sentinel. */
 const POINT_ZERO = Point.ZERO;
 
@@ -71,6 +71,10 @@ function hexToBytes(hex: string): Uint8Array {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function bytesToScalar(b: Uint8Array): bigint {
@@ -143,7 +147,7 @@ function tryDecodePoint(bytes: Uint8Array): InstanceType<typeof Point> | null {
   if (bytes.length !== 33) return null;
   if (bytes[0] !== 0x02 && bytes[0] !== 0x03) return null;
   try {
-    return Point.fromHex(bytes);
+    return Point.fromHex(bytesToHex(bytes));
   } catch {
     return null;
   }
@@ -208,7 +212,7 @@ export function generateDLEQProof(input: DLEQProveInput): DLEQProveResult {
   // collapses the BIP's "B = infinity" abort into a thrown error.
   let BPoint: InstanceType<typeof Point>;
   try {
-    BPoint = Point.fromHex(B);
+    BPoint = Point.fromHex(bytesToHex(B));
   } catch (err) {
     throw new Error(`DLEQ: B is not a valid compressed point (${(err as Error).message}).`, {
       cause: err,
@@ -220,7 +224,7 @@ export function generateDLEQProof(input: DLEQProveInput): DLEQProveResult {
     GPoint = Point.BASE;
   } else {
     try {
-      GPoint = Point.fromHex(G);
+      GPoint = Point.fromHex(bytesToHex(G));
     } catch (err) {
       throw new Error(`DLEQ: G is not a valid compressed point (${(err as Error).message}).`, {
         cause: err,
@@ -229,8 +233,8 @@ export function generateDLEQProof(input: DLEQProveInput): DLEQProveResult {
   }
 
   // A = a·G, C = a·B. `multiply` rejects 0 / ≥ n scalars; we already validated.
-  const A = GPoint.multiply(aScalar).toRawBytes(true);
-  const C = BPoint.multiply(aScalar).toRawBytes(true);
+  const A = GPoint.multiply(aScalar).toBytes(true);
+  const C = BPoint.multiply(aScalar).toBytes(true);
 
   // t = a XOR hash_{BIP0374/aux}(r)
   const auxTag = taggedHash('BIP0374/aux', auxRand);
@@ -244,8 +248,8 @@ export function generateDLEQProof(input: DLEQProveInput): DLEQProveResult {
   }
 
   // R1 = k·G, R2 = k·B
-  const R1 = GPoint.multiply(k).toRawBytes(true);
-  const R2 = BPoint.multiply(k).toRawBytes(true);
+  const R1 = GPoint.multiply(k).toBytes(true);
+  const R2 = BPoint.multiply(k).toBytes(true);
 
   // e = int(hash_{BIP0374/challenge}(cbytes(A) || cbytes(B) || cbytes(C) || cbytes(G) || cbytes(R1) || cbytes(R2) || m'))
   const eHash = taggedHash(
@@ -329,8 +333,8 @@ export function verifyDLEQProof(input: DLEQVerifyInput): boolean {
     );
     if (R2Point.equals(POINT_ZERO)) return false;
 
-    const R1 = R1Point.toRawBytes(true);
-    const R2 = R2Point.toRawBytes(true);
+    const R1 = R1Point.toBytes(true);
+    const R2 = R2Point.toBytes(true);
 
     const expected = taggedHash(
       'BIP0374/challenge',

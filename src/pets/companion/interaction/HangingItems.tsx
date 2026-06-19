@@ -20,9 +20,9 @@
  * - Circular containers for hanging items
  * - Click releases item: one instance falls to the ground
  * - Multiple dropped instances of same item type can exist
- * - Contact detection: items auto-use when touching Blobbi
+ * - Contact detection: items auto-use when touching Pets
  * - Click-to-use: click landed items to use them
- * - Drag-and-drop: drag landed items to Blobbi to use them
+ * - Drag-and-drop: drag landed items to Pets to use them
  * 
  * All three item use methods (contact, click, drag-drop) use the same
  * real item-use flow via onItemUse callback.
@@ -98,15 +98,15 @@ interface HangingItemsProps {
   viewportHeight?: number;
   /** Ground Y offset from bottom of viewport */
   groundOffset?: number;
-  /** Blobbi's current position (for contact detection) */
+  /** Pets's current position (for contact detection) */
   companionPosition?: Position;
-  /** Blobbi's size (for contact detection) */
+  /** Pets's size (for contact detection) */
   companionSize?: number;
   /** Callback when an item is clicked/released */
   onItemRelease?: (item: CompanionItem) => void;
   /** 
    * Callback when an item finishes falling and lands on the ground.
-   * Includes position info for Blobbi to react to.
+   * Includes position info for Pets to react to.
    */
   onItemLanded?: (data: ItemLandedData) => void;
   /** 
@@ -116,7 +116,7 @@ interface HangingItemsProps {
    */
   onItemUse?: (item: CompanionItem) => Promise<ItemUseAttemptResult>;
   /** 
-   * Callback when an item is collected by Blobbi (contact).
+   * Callback when an item is collected by Pets (contact).
    * @deprecated Use onItemUse instead for proper item-use flow.
    */
   onItemCollected?: (item: CompanionItem) => void;
@@ -158,11 +158,11 @@ const HANGING_CONFIG = {
   badgeSize: 20,
   /** Size of landed item hitbox for contact detection */
   landedItemSize: 40,
-  /** Contact detection radius (how close Blobbi needs to be) */
+  /** Contact detection radius (how close Pets needs to be) */
   contactRadius: 50,
   /** Drag threshold - min distance to start drag instead of click */
   dragThreshold: 5,
-  /** Drop-on-Blobbi radius (how close to Blobbi center to trigger use) */
+  /** Drop-on-Pets radius (how close to Pets center to trigger use) */
   dropRadius: 80,
   /** Cooldown after failed item use attempt (ms) */
   failedUseCooldown: 3000,
@@ -181,8 +181,8 @@ interface DragState {
   currentX: number;
   /** Current drag position Y */
   currentY: number;
-  /** Whether the item is currently over Blobbi (for visual feedback) */
-  isOverBlobbi: boolean;
+  /** Whether the item is currently over Pets (for visual feedback) */
+  isOverPets: boolean;
 }
 
 const initialDragState: DragState = {
@@ -190,7 +190,7 @@ const initialDragState: DragState = {
   instanceId: null,
   currentX: 0,
   currentY: 0,
-  isOverBlobbi: false,
+  isOverPets: false,
 };
 
 // ─── Released Item Component ──────────────────────────────────────────────────
@@ -216,7 +216,7 @@ interface ReleasedItemProps {
  * 
  * Supports:
  * - Click to use (when landed, if not dragged)
- * - Drag to Blobbi to use (when landed)
+ * - Drag to Pets to use (when landed)
  */
 function ReleasedItem({ 
   data, 
@@ -333,8 +333,8 @@ function ReleasedItem({
         !isThisItemDragging && "duration-100",
         // Instant position updates when dragging
         isThisItemDragging && "duration-0",
-        // Visual feedback when dragging over Blobbi
-        isThisItemDragging && dragState.isOverBlobbi && "scale-125",
+        // Visual feedback when dragging over Pets
+        isThisItemDragging && dragState.isOverPets && "scale-125",
         // Hover effect only for interactable landed items
         canInteract && "hover:scale-125 cursor-grab",
         // Grabbing cursor while dragging
@@ -364,7 +364,7 @@ function ReleasedItem({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       role={canInteract ? 'button' : undefined}
-      aria-label={canInteract ? `${item.name} on ground. Click or drag to Blobbi to use.` : undefined}
+      aria-label={canInteract ? `${item.name} on ground. Click or drag to Pets to use.` : undefined}
     >
       <span
         style={{ 
@@ -481,9 +481,9 @@ export function HangingItems({
   // Calculate the Y position where hanging items are (bottom of circle)
   const hangingBottomY = HANGING_CONFIG.lineLength + HANGING_CONFIG.circleSize;
   
-  // Calculate Blobbi center for drop detection
-  const blobbiCenterX = companionPosition ? companionPosition.x + companionSize / 2 : 0;
-  const blobbiCenterY = companionPosition ? companionPosition.y + companionSize / 2 : 0;
+  // Calculate Pets center for drop detection
+  const petsCenterX = companionPosition ? companionPosition.x + companionSize / 2 : 0;
+  const petsCenterY = companionPosition ? companionPosition.y + companionSize / 2 : 0;
   
   /**
    * Calculate fall duration based on distance.
@@ -718,10 +718,10 @@ export function HangingItems({
     }
   }, [checkItemCooldown, setLocalCooldown]); // Minimal dependencies - rest uses refs
   
-  // Contact detection with Blobbi (for auto-use)
+  // Contact detection with Pets (for auto-use)
   // 
   // ZONE ENTRY DETECTION: Items only auto-use when they ENTER the contact zone.
-  // This prevents continuous retries while an item remains overlapping with Blobbi.
+  // This prevents continuous retries while an item remains overlapping with Pets.
   // 
   // Flow:
   // 1. Track which items are currently inside the zone (itemsInZoneRef)
@@ -744,9 +744,9 @@ export function HangingItems({
         return;
       }
       
-      // Calculate distance between Blobbi center and item center
-      const dx = blobbiCenterX - data.x;
-      const dy = blobbiCenterY - data.y;
+      // Calculate distance between Pets center and item center
+      const dx = petsCenterX - data.x;
+      const dy = petsCenterY - data.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
       // Contact threshold is sum of radii
@@ -773,7 +773,7 @@ export function HangingItems({
         }
       }
     });
-  }, [companionPosition, companionSize, releasedItems, attemptUseItem, dragState.isDragging, blobbiCenterX, blobbiCenterY]);
+  }, [companionPosition, companionSize, releasedItems, attemptUseItem, dragState.isDragging, petsCenterX, petsCenterY]);
   
   // ─── Drag Handlers ────────────────────────────────────────────────────────────
   
@@ -797,9 +797,9 @@ export function HangingItems({
       return next;
     });
     
-    // Check if over Blobbi
-    const isOverBlobbi = companionPosition 
-      ? Math.sqrt(Math.pow(x - blobbiCenterX, 2) + Math.pow(y - blobbiCenterY, 2)) < HANGING_CONFIG.dropRadius
+    // Check if over Pets
+    const isOverPets = companionPosition 
+      ? Math.sqrt(Math.pow(x - petsCenterX, 2) + Math.pow(y - petsCenterY, 2)) < HANGING_CONFIG.dropRadius
       : false;
     
     setDragState({
@@ -807,25 +807,25 @@ export function HangingItems({
       instanceId,
       currentX: x,
       currentY: y,
-      isOverBlobbi,
+      isOverPets,
     });
-  }, [releasedItems, companionPosition, blobbiCenterX, blobbiCenterY]);
+  }, [releasedItems, companionPosition, petsCenterX, petsCenterY]);
   
   const handleDragMove = useCallback((x: number, y: number) => {
     if (!dragState.isDragging) return;
     
-    // Check if over Blobbi
-    const isOverBlobbi = companionPosition 
-      ? Math.sqrt(Math.pow(x - blobbiCenterX, 2) + Math.pow(y - blobbiCenterY, 2)) < HANGING_CONFIG.dropRadius
+    // Check if over Pets
+    const isOverPets = companionPosition 
+      ? Math.sqrt(Math.pow(x - petsCenterX, 2) + Math.pow(y - petsCenterY, 2)) < HANGING_CONFIG.dropRadius
       : false;
     
     setDragState(prev => ({
       ...prev,
       currentX: x,
       currentY: y,
-      isOverBlobbi,
+      isOverPets,
     }));
-  }, [dragState.isDragging, companionPosition, blobbiCenterX, blobbiCenterY]);
+  }, [dragState.isDragging, companionPosition, petsCenterX, petsCenterY]);
   
   const handleDragEnd = useCallback(() => {
     if (!dragState.isDragging || !dragState.instanceId) {
@@ -845,11 +845,11 @@ export function HangingItems({
     const originalX = itemData.dragStartX ?? itemData.x;
     const originalY = itemData.dragStartY ?? itemData.y;
     
-    // Check if dropped on Blobbi
-    if (dragState.isOverBlobbi) {
-      // IMPORTANT: When dropping on Blobbi, we reset the item to its ORIGINAL position
+    // Check if dropped on Pets
+    if (dragState.isOverPets) {
+      // IMPORTANT: When dropping on Pets, we reset the item to its ORIGINAL position
       // before attempting to use it. This prevents the contact detection effect from
-      // also triggering (since the item won't be near Blobbi anymore).
+      // also triggering (since the item won't be near Pets anymore).
       // If use succeeds, the item is removed. If it fails, it's already back in place.
       setReleasedItems(prev => {
         const next = new Map(prev);
@@ -1114,8 +1114,8 @@ export function HangingItems({
         </div>
       )}
       
-      {/* Visual feedback: Blobbi glow when item is being dragged over */}
-      {dragState.isDragging && dragState.isOverBlobbi && companionPosition && (
+      {/* Visual feedback: Pets glow when item is being dragged over */}
+      {dragState.isDragging && dragState.isOverPets && companionPosition && (
         <div
           className="fixed rounded-full pointer-events-none animate-pulse"
           style={{

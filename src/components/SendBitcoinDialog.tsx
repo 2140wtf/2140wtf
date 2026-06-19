@@ -63,6 +63,7 @@ import {
   looksLikeSilentPaymentAddress,
   parseBitcoinUri,
   validateSilentPaymentAddress,
+  MAX_FEE_RATE_SATS_PER_VB,
   type FeeRates,
 } from '@/lib/bitcoin';
 import { extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
@@ -72,6 +73,9 @@ import { extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
 // ---------------------------------------------------------------------------
 
 const USD_PRESETS = [1, 5, 10, 25, 100];
+
+/** Bitcoin dust limit in satoshis. Outputs below this are dropped by relay policy. */
+const DUST_LIMIT_SATS = 546;
 
 /** Preset confirmation-speed tiers, plus a user-entered `'custom'` rate. */
 type FeeSpeed = 'fastest' | 'halfHour' | 'hour' | 'economy' | 'custom';
@@ -352,6 +356,25 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
   const showBalance = insufficient || (amountSats > 0 && totalBalance === 0);
 
+  // Estimated change if we include a change output. Used both for the dust
+  // warning and for the full-balance sweep warning.
+  const changeAmount = useMemo(() => {
+    if (!utxos?.length || !currentFeeRate || amountSats <= 0 || totalBalance <= 0) return undefined;
+    const feeWithChange = estimateFee(utxos.length, 2, currentFeeRate);
+    return totalBalance - amountSats - feeWithChange;
+  }, [utxos, currentFeeRate, amountSats, totalBalance]);
+
+  // Warn when the transaction will have no change output because the leftover
+  // is below the dust limit. In that case the leftover sats become extra fee
+  // rather than coming back to the sender — fine for a sweep, but worth
+  // flagging on a regular send.
+  const noChangeDust = changeAmount !== undefined && changeAmount > 0 && changeAmount <= DUST_LIMIT_SATS;
+
+  // Warn when the transaction would spend the entire balance with no change
+  // output (possible sweep / fee attack) unless the user explicitly means to
+  // send max.
+  const noChangeSweep = changeAmount !== undefined && changeAmount <= 0 && !insufficient;
+
   // Auto-tune the fee speed so the network fee stays under 40% of the send
   // amount, unless the user has manually picked a speed. Mirrors OnchainZapContent.
   useEffect(() => {
@@ -446,6 +469,15 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       setProgress('building');
       const rate = resolveFeeRate(feeSpeed, feeRates, customFeeRate);
       if (rate < 1) throw new Error('Enter a fee rate of at least 1 sat/vB.');
+      if (rate > MAX_FEE_RATE_SATS_PER_VB) {
+        throw new Error(`Fee rate is unreasonably high (max ${MAX_FEE_RATE_SATS_PER_VB} sat/vB).`);
+      }
+      if (recipient.kind === 'onchain' && recipient.address === senderAddress) {
+        throw new Error("You can't send to your own address.");
+      }
+      if (recipient.kind === 'onchain' && !validateBitcoinAddress(recipient.address)) {
+        throw new Error('Recipient Bitcoin address failed validation.');
+      }
 
       let psbtHex: string;
       let fee: number;
@@ -526,6 +558,13 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       }
     },
     onError: (err) => {
+      // A send error can be caused by stale UTXO/balance data (e.g. the
+      // displayed balance no longer reflects spendable outputs). Invalidate
+      // the wallet caches so the next render shows the real state.
+      queryClient.invalidateQueries({ queryKey: ['bitcoin-wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['bitcoin-utxos'] });
+      queryClient.invalidateQueries({ queryKey: ['bitcoin-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['bitcoin-txs'] });
       toast({ title: 'Transaction failed', description: err.message, variant: 'destructive' });
     },
     onSettled: () => {
@@ -551,6 +590,14 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       );
       return;
     }
+    if (currentFeeRate > MAX_FEE_RATE_SATS_PER_VB) {
+      setError(`Fee rate is too high (max ${MAX_FEE_RATE_SATS_PER_VB} sat/vB).`);
+      return;
+    }
+    if (recipient.kind === 'onchain' && recipient.address === senderAddress) {
+      setError("You can't send to your own address.");
+      return;
+    }
     if (insufficient) { setError('Not enough Bitcoin for this amount + network fee.'); return; }
 
     if (requiresArm && !confirmArmed) {
@@ -563,7 +610,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     } catch {
       // Toast handled in onError; nothing further to do here.
     }
-  }, [user, recipient, btcPrice, amountSats, utxos, currentFeeRate, feeSpeed, insufficient, requiresArm, confirmArmed, sendMutation]);
+  }, [user, recipient, btcPrice, amountSats, utxos, currentFeeRate, feeSpeed, insufficient, requiresArm, confirmArmed, sendMutation, senderAddress]);
 
   // ── Reset on close ───────────────────────────────────────────
 
@@ -749,6 +796,33 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
                 </Alert>
               )}
 
+              {/* No-change dust warning: leftover below the dust limit will be
+                  swallowed by the fee instead of returning as change. */}
+              {noChangeDust && (
+                <Alert className="border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription className="text-xs">
+                    This send leaves less than the dust limit, so there will be
+                    no change output. The remaining sats will be added to the
+                    network fee.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Full-balance sweep warning: no change output and the send is
+                  not an explicit max-send, so the user may be being tricked
+                  into sweeping the wallet. */}
+              {noChangeSweep && (
+                <Alert className="border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-300 [&>svg]:text-red-600 dark:[&>svg]:text-red-400">
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription className="text-xs">
+                    This transaction has no change output and will spend your
+                    full available balance. Only continue if you intended to
+                    sweep this wallet.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Send button */}
               <Button
                 onClick={handleSend}
@@ -759,6 +833,8 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
                   || insufficient
                   || !recipient
                   || currentFeeRate < 1
+                  || currentFeeRate > MAX_FEE_RATE_SATS_PER_VB
+                  || (recipient?.kind === 'onchain' && recipient?.address === senderAddress)
                 }
                 variant={(insufficient || requiresArm) && !isPending ? 'destructive' : 'default'}
                 className="w-full"

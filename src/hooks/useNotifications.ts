@@ -7,13 +7,12 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from './useCurrentUser';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useFollowList } from './useFollowActions';
-import { LETTER_KIND } from '@/lib/letterTypes';
 import { ALL_NOTIFICATION_KINDS, getEnabledNotificationKinds } from '@/lib/notificationKinds';
 
 const PAGE_SIZE = 20;
 
 export interface NotificationItem {
-  /** The notification event (kind 1, 6, 16, 7, 8, 9735, 8333, 9802, 1111, 1222, 1244, or 8211). */
+  /** The notification event (kind 1, 6, 16, 7, 8, 9735, 8333, 9802, 1111, 1222, or 1244). */
   event: NostrEvent;
   /** The referenced event (the post that was liked/reposted/zapped/highlighted), if available. */
   referencedEvent?: NostrEvent;
@@ -127,7 +126,7 @@ function groupKey(item: NotificationItem): string {
     return `${bucket}:${refId}`;
   }
 
-  // Mentions (kind 1), comments (kind 1111), and letters (8211) are always standalone
+  // Mentions (kind 1) and comments (kind 1111) are always standalone
   return event.id;
 }
 
@@ -248,9 +247,9 @@ export function useNotifications(): NotificationData {
       // Collect referenced event IDs for batch fetching
       const referencedIds: string[] = [];
       for (const ev of filtered) {
-        // kind 1 (mention), voice messages (1222/1244), and letters (8211) ARE the notification content;
+        // kind 1 (mention) and voice messages (1222/1244) ARE the notification content;
         // highlights (9802) and kind 1111 (comment) ARE the content but we also fetch the parent for context.
-        if (ev.kind !== 1 && ev.kind !== 1222 && ev.kind !== 1244 && ev.kind !== LETTER_KIND) {
+        if (ev.kind !== 1 && ev.kind !== 1222 && ev.kind !== 1244) {
           const refId = getReferencedEventId(ev);
           if (refId) referencedIds.push(refId);
         }
@@ -292,7 +291,7 @@ export function useNotifications(): NotificationData {
       // Build notification items, filtering out reactions/reposts on posts the
       // user didn't author (i.e. they were only tagged in them).
       const items: NotificationItem[] = filtered.flatMap((ev) => {
-        const refId = (ev.kind !== 1 && ev.kind !== 1222 && ev.kind !== 1244 && ev.kind !== LETTER_KIND) ? getReferencedEventId(ev) : undefined;
+        const refId = (ev.kind !== 1 && ev.kind !== 1222 && ev.kind !== 1244) ? getReferencedEventId(ev) : undefined;
         const referencedEvent = refId ? referencedMap.get(refId) : undefined;
 
         // For reactions (7) and reposts (6, 16), only exclude if we know for

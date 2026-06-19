@@ -4,6 +4,7 @@ import { Play, Pause, Volume1, Volume2, VolumeX, Expand } from 'lucide-react';
 import { Blurhash } from 'react-blurhash';
 import { cn } from '@/lib/utils';
 import { isValidBlurhash } from '@/lib/blurhash';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { useBlossomFallback } from '@/hooks/useBlossomFallback';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 import { useVideoThumbnail } from '@/hooks/useVideoThumbnail';
@@ -61,6 +62,8 @@ function useHls(videoRef: React.RefObject<HTMLVideoElement | null>, src: string)
       hlsRef.current = hls;
       hls.loadSource(src);
       hls.attachMedia(video);
+    }).catch(() => {
+      // hls.js is bundled; failure is unexpected. Ignore to keep video fallback.
     });
   }, [videoRef, src, isHls]);
 
@@ -79,19 +82,21 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { src, onError: onBlossomError } = useBlossomFallback(originalSrc);
+  const safeOriginalSrc = sanitizeUrl(originalSrc) ?? '';
+  const safePoster = sanitizeUrl(poster) ?? undefined;
+  const { src, onError: onBlossomError } = useBlossomFallback(safeOriginalSrc);
   const { isHls } = useHls(videoRef, src);
   const { config } = useAppContext();
   const shouldAutoPlay = autoPlay ?? config.autoplayVideos;
 
-  const generatedPoster = useVideoThumbnail(src, poster);
+  const generatedPoster = useVideoThumbnail(src, safePoster);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   // True once the video has enough data to display a frame (or has a poster/generated thumbnail)
-  const [videoReady, setVideoReady] = useState(!!poster);
+  const [videoReady, setVideoReady] = useState(!!safePoster);
 
   const dimensions = parseDim(dim);
   const aspectRatio = dimensions ? `${dimensions.width} / ${dimensions.height}` : undefined;
@@ -139,8 +144,8 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     const video = videoRef.current;
     if (!video) return;
 
-    const artwork: MediaImage[] = (generatedPoster || poster)
-      ? [{ src: (generatedPoster || poster)!, sizes: '512x512', type: 'image/jpeg' }]
+    const artwork: MediaImage[] = (generatedPoster || safePoster)
+      ? [{ src: (generatedPoster || safePoster)!, sizes: '512x512', type: 'image/jpeg' }]
       : [];
     navigator.mediaSession.metadata = new MediaMetadata({
       title: title || 'Video',
@@ -163,7 +168,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
       navigator.mediaSession.setActionHandler('pause', null);
       navigator.mediaSession.setActionHandler('seekto', null);
     };
-  }, [hasStarted, title, artist, poster, generatedPoster]);
+  }, [hasStarted, title, artist, safePoster, generatedPoster]);
 
   // Keep OS playback state in sync
   useEffect(() => {

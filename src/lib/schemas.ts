@@ -79,6 +79,29 @@ export const ThemeBackgroundSchema = z.object({
   blurhash: z.string().optional(),
 });
 
+/** Zod schema for the full ThemeTokens object. */
+export const ThemeTokensSchema = z.object({
+  background: HslValue,
+  foreground: HslValue,
+  card: HslValue,
+  cardForeground: HslValue,
+  popover: HslValue,
+  popoverForeground: HslValue,
+  primary: HslValue,
+  primaryForeground: HslValue,
+  secondary: HslValue,
+  secondaryForeground: HslValue,
+  muted: HslValue,
+  mutedForeground: HslValue,
+  accent: HslValue,
+  accentForeground: HslValue,
+  destructive: HslValue,
+  destructiveForeground: HslValue,
+  border: HslValue,
+  input: HslValue,
+  ring: HslValue,
+});
+
 /** Zod schema for the full ThemeConfig */
 export const ThemeConfigSchema = z.object({
   title: z.string().optional(),
@@ -86,6 +109,9 @@ export const ThemeConfigSchema = z.object({
   font: ThemeFontSchema.optional(),
   titleFont: ThemeFontSchema.optional(),
   background: ThemeBackgroundSchema.optional(),
+  tokens: ThemeTokensSchema.partial().optional(),
+  radius: z.string().optional(),
+  backgroundOpacity: z.number().min(0).max(1).optional(),
 });
 
 /** Zod schema for ThemesConfig (light + dark theme configs) */
@@ -146,23 +172,12 @@ export const FeedSettingsSchema = z.looseObject({
   feedIncludeCampaigns: z.boolean().optional(),
   showEvents: z.boolean().optional(),
   feedIncludeEvents: z.boolean().optional(),
-  showVines: z.boolean().optional(),
   showPolls: z.boolean().optional(),
-  showTreasures: z.boolean().optional(),
-  showTreasureGeocaches: z.boolean().optional(),
-  showTreasureFoundLogs: z.boolean().optional(),
-  showColors: z.boolean().optional(),
   showPeopleLists: z.boolean().optional(),
   showStreams: z.boolean().optional(),
-  feedIncludeVines: z.boolean().optional(),
   feedIncludePolls: z.boolean().optional(),
-  feedIncludeTreasureGeocaches: z.boolean().optional(),
-  feedIncludeTreasureFoundLogs: z.boolean().optional(),
-  feedIncludeColors: z.boolean().optional(),
   feedIncludePeopleLists: z.boolean().optional(),
   feedIncludeStreams: z.boolean().optional(),
-  showDecks: z.boolean().optional(),
-  feedIncludeDecks: z.boolean().optional(),
   showWebxdc: z.boolean().optional(),
   feedIncludeWebxdc: z.boolean().optional(),
   showProfileThemes: z.boolean().optional(),
@@ -185,14 +200,17 @@ export const FeedSettingsSchema = z.looseObject({
   feedIncludePodcastTrailers: z.boolean().optional(),
   showDevelopment: z.boolean().optional(),
   feedIncludeDevelopment: z.boolean().optional(),
-  feedIncludeBlobbi: z.boolean().optional(),
+  feedIncludePets: z.boolean().optional(),
   showBadgeAwards: z.boolean().optional(),
   feedIncludeBadgeAwards: z.boolean().optional(),
   showBirdstar: z.boolean().optional(),
+  showRoadstr: z.boolean().optional(),
+  feedIncludeRoadstr: z.boolean().optional(),
   feedIncludeBirdDetections: z.boolean().optional(),
   feedIncludeBirdex: z.boolean().optional(),
   feedIncludeConstellations: z.boolean().optional(),
   feedIncludeLoveLists: z.boolean().optional(),
+  feedIncludeGroups: z.boolean().optional(),
 });
 
 /** Schema for a NIP-01 filter object (lenient — allows variable placeholder strings). */
@@ -337,7 +355,6 @@ export const EncryptedSettingsSchema = z.looseObject({
     mentions: z.boolean().optional(),
     comments: z.boolean().optional(),
     badges: z.boolean().optional(),
-    letters: z.boolean().optional(),
     onlyFollowing: z.boolean().optional(),
   }).optional(),
   lastSync: z.number().optional(),

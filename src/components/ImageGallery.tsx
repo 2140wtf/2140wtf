@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X, Download } from 'lucide-react';
 import { Blurhash } from 'react-blurhash';
@@ -7,6 +7,7 @@ import { isValidBlurhash } from '@/lib/blurhash';
 import { openUrl } from '@/lib/downloadFile';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBlossomFallback } from '@/hooks/useBlossomFallback';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -61,11 +62,18 @@ export function ImageGallery({
 }: ImageGalleryProps) {
   const [internalIndex, setInternalIndex] = useState<number | null>(null);
 
+  // Defense in depth: callers are expected to sanitize, but malformed UGC URLs
+  // must not reach <img src> / <a href> in the lightbox.
+  const safeImages = useMemo(
+    () => images.map((url) => sanitizeUrl(url)).filter((url): url is string => !!url),
+    [images],
+  );
+
   // Support both controlled and uncontrolled lightbox index
   const lightboxIndex = controlledIndex !== undefined ? controlledIndex : internalIndex;
 
-  const visibleImages = images.slice(0, maxVisible);
-  const overflow = images.length - maxVisible;
+  const visibleImages = safeImages.slice(0, maxVisible);
+  const overflow = safeImages.length - maxVisible;
 
   const openLightbox = (index: number, e: React.MouseEvent) => {
     e.preventDefault();
@@ -85,11 +93,11 @@ export function ImageGallery({
 
   const goNext = useCallback(() => {
     if (onLightboxOpen && lightboxIndex !== null && lightboxIndex !== undefined) {
-      onLightboxOpen(lightboxIndex + 1 < images.length ? lightboxIndex + 1 : lightboxIndex);
+      onLightboxOpen(lightboxIndex + 1 < safeImages.length ? lightboxIndex + 1 : lightboxIndex);
     } else {
-      setInternalIndex((prev) => (prev !== null ? Math.min(prev + 1, images.length - 1) : null));
+      setInternalIndex((prev) => (prev !== null ? Math.min(prev + 1, safeImages.length - 1) : null));
     }
-  }, [images.length, lightboxIndex, onLightboxOpen]);
+  }, [safeImages.length, lightboxIndex, onLightboxOpen]);
 
   const goPrev = useCallback(() => {
     if (onLightboxOpen && lightboxIndex !== null && lightboxIndex !== undefined) {
@@ -99,7 +107,7 @@ export function ImageGallery({
     }
   }, [lightboxIndex, onLightboxOpen]);
 
-  if (images.length === 0) return null;
+  if (safeImages.length === 0) return null;
 
   return (
     <>
@@ -129,7 +137,7 @@ export function ImageGallery({
       {/* Lightbox (portals to document.body internally to escape stacking contexts) */}
       {lightboxIndex !== null && lightboxIndex !== undefined && (
         <Lightbox
-          images={images}
+          images={safeImages}
           currentIndex={lightboxIndex}
           onClose={closeLightbox}
           onNext={goNext}

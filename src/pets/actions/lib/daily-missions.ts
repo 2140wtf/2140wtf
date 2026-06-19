@@ -1,5 +1,5 @@
 /**
- * Daily Missions System for Blobbi
+ * Daily Missions System for Pets
  *
  * Defines the daily mission pool, selection logic, and state management.
  * Missions use the tally/event model from missions.ts:
@@ -9,8 +9,8 @@
  * No explicit completed/claimed flags.
  */
 
-import type { Mission, TallyMission, EventMission, MissionsContent } from '@/blobbi/core/lib/missions';
-import { isTallyMission, isEventMission, isMissionComplete } from '@/blobbi/core/lib/missions';
+import type { Mission, TallyMission, EventMission, MissionsContent } from '@/pets/core/lib/missions';
+import { isTallyMission, isEventMission, isMissionComplete } from '@/pets/core/lib/missions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,15 +24,15 @@ export type DailyMissionAction =
   | 'clean'         // Cleaning action (tally)
   | 'sing'          // Sing direct action (tally)
   | 'play_music'    // Play music direct action (tally)
-  | 'sleep'         // Put Blobbi to sleep (tally)
+  | 'sleep'         // Put Pets to sleep (tally)
   | 'take_photo'    // Take a photo (event)
   | 'medicine';     // Give medicine (tally)
 
 /** Whether a mission action tracks events or tallies */
 export type MissionTrackingType = 'tally' | 'event';
 
-/** Blobbi stage type for filtering missions */
-export type BlobbiStage = 'egg' | 'baby' | 'adult';
+/** Pets stage type for filtering missions */
+export type PetsStage = 'egg' | 'baby' | 'adult';
 
 /**
  * Definition of a daily mission in the pool.
@@ -56,7 +56,7 @@ export interface DailyMissionDefinition {
   /** Selection weight (higher = more likely) */
   weight: number;
   /** Required stages to show this mission */
-  requiredStages?: BlobbiStage[];
+  requiredStages?: PetsStage[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,49 +76,49 @@ export const DAILY_MISSION_POOL: DailyMissionDefinition[] = [
   // ── Baby/Adult only ──────────────────────────────────────────────────────
   {
     id: 'interact_3', title: 'Quick Care',
-    description: 'Interact with your Blobbi 3 times',
+    description: 'Interact with your Pets 3 times',
     action: 'interact', target: 3, tracking: 'tally', xp: 15, weight: 10,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'interact_6', title: 'Attentive Caretaker',
-    description: 'Interact with your Blobbi 6 times',
+    description: 'Interact with your Pets 6 times',
     action: 'interact', target: 6, tracking: 'tally', xp: 30, weight: 8,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'feed_1', title: 'Snack Time',
-    description: 'Feed your Blobbi once',
+    description: 'Feed your Pets once',
     action: 'feed', target: 1, tracking: 'tally', xp: 10, weight: 10,
     requiredStages: ['baby', 'adult'],
   },
   {
-    id: 'feed_2', title: 'Hungry Blobbi',
-    description: 'Feed your Blobbi 2 times',
+    id: 'feed_2', title: 'Hungry Pets',
+    description: 'Feed your Pets 2 times',
     action: 'feed', target: 2, tracking: 'tally', xp: 20, weight: 8,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'feed_3', title: 'Feast Day',
-    description: 'Feed your Blobbi 3 times',
+    description: 'Feed your Pets 3 times',
     action: 'feed', target: 3, tracking: 'tally', xp: 35, weight: 5,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'sleep_1', title: 'Nap Time',
-    description: 'Put your Blobbi to sleep',
+    description: 'Put your Pets to sleep',
     action: 'sleep', target: 1, tracking: 'tally', xp: 15, weight: 6,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'take_photo_1', title: 'Snapshot',
-    description: 'Take a photo of your Blobbi',
+    description: 'Take a photo of your Pets',
     action: 'take_photo', target: 1, tracking: 'tally', xp: 25, weight: 4,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'take_photo_2', title: 'Photo Album',
-    description: 'Take 2 photos of your Blobbi',
+    description: 'Take 2 photos of your Pets',
     action: 'take_photo', target: 2, tracking: 'tally', xp: 40, weight: 2,
     requiredStages: ['baby', 'adult'],
   },
@@ -126,49 +126,49 @@ export const DAILY_MISSION_POOL: DailyMissionDefinition[] = [
   // ── All stages ───────────────────────────────────────────────────────────
   {
     id: 'clean_1', title: 'Quick Cleanup',
-    description: 'Clean your Blobbi once',
+    description: 'Clean your Pets once',
     action: 'clean', target: 1, tracking: 'tally', xp: 10, weight: 10,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'clean_2', title: 'Squeaky Clean',
-    description: 'Clean your Blobbi 2 times',
+    description: 'Clean your Pets 2 times',
     action: 'clean', target: 2, tracking: 'tally', xp: 20, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'sing_1', title: 'Sing Along',
-    description: 'Sing a song to your Blobbi',
+    description: 'Sing a song to your Pets',
     action: 'sing', target: 1, tracking: 'tally', xp: 15, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'sing_2', title: 'Karaoke Session',
-    description: 'Sing 2 songs to your Blobbi',
+    description: 'Sing 2 songs to your Pets',
     action: 'sing', target: 2, tracking: 'tally', xp: 25, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'play_music_1', title: 'DJ Time',
-    description: 'Play a song for your Blobbi',
+    description: 'Play a song for your Pets',
     action: 'play_music', target: 1, tracking: 'tally', xp: 15, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'play_music_2', title: 'Music Marathon',
-    description: 'Play 2 songs for your Blobbi',
+    description: 'Play 2 songs for your Pets',
     action: 'play_music', target: 2, tracking: 'tally', xp: 25, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'medicine_1', title: 'Health Check',
-    description: 'Give medicine to your Blobbi',
+    description: 'Give medicine to your Pets',
     action: 'medicine', target: 1, tracking: 'tally', xp: 20, weight: 5,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'medicine_2', title: 'Doctor Visit',
-    description: 'Give medicine to your Blobbi 2 times',
+    description: 'Give medicine to your Pets 2 times',
     action: 'medicine', target: 2, tracking: 'tally', xp: 35, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
@@ -219,7 +219,7 @@ function generateDailySeed(dateString: string, pubkey?: string): number {
   return Math.abs(hash);
 }
 
-function isMissionAvailableForStages(def: DailyMissionDefinition, stages: BlobbiStage[]): boolean {
+function isMissionAvailableForStages(def: DailyMissionDefinition, stages: PetsStage[]): boolean {
   const required = def.requiredStages ?? ['baby', 'adult'];
   return required.some((s) => stages.includes(s));
 }
@@ -232,7 +232,7 @@ export function selectDailyMissions(
   count: number,
   dateString: string,
   pubkey?: string,
-  availableStages?: BlobbiStage[],
+  availableStages?: PetsStage[],
 ): DailyMissionDefinition[] {
   const stages = availableStages ?? ['baby', 'adult'];
   const eligible = DAILY_MISSION_POOL.filter((m) => isMissionAvailableForStages(m, stages));
@@ -271,7 +271,7 @@ export function createMission(def: DailyMissionDefinition): Mission {
 export function createDailyMissionsContent(
   dateString: string,
   pubkey?: string,
-  availableStages?: BlobbiStage[],
+  availableStages?: PetsStage[],
 ): MissionsContent {
   const defs = selectDailyMissions(DAILY_MISSION_COUNT, dateString, pubkey, availableStages);
   return {
@@ -406,7 +406,7 @@ export function missionXp(missionId: string, mission: Mission): number {
 export function selectReplacementMission(
   currentMissions: Mission[],
   missionToReplaceId: string,
-  availableStages?: BlobbiStage[],
+  availableStages?: PetsStage[],
 ): DailyMissionDefinition | null {
   const stages = availableStages ?? ['baby', 'adult'];
   const excludedIds = new Set(currentMissions.map((m) => m.id));
@@ -434,7 +434,7 @@ export function selectReplacementMission(
 export function rerollMission(
   missions: MissionsContent,
   missionId: string,
-  availableStages?: BlobbiStage[],
+  availableStages?: PetsStage[],
 ): MissionsContent | null {
   if (missions.rerolls <= 0) return null;
 
@@ -458,5 +458,5 @@ export function rerollMission(
 }
 
 // Re-export mission utilities for convenience
-export { isTallyMission, isEventMission, isMissionComplete, missionProgress } from '@/blobbi/core/lib/missions';
-export type { Mission, TallyMission, EventMission, MissionsContent } from '@/blobbi/core/lib/missions';
+export { isTallyMission, isEventMission, isMissionComplete, missionProgress } from '@/pets/core/lib/missions';
+export type { Mission, TallyMission, EventMission, MissionsContent } from '@/pets/core/lib/missions';

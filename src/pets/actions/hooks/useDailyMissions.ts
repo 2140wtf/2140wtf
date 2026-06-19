@@ -12,19 +12,19 @@
  * intermediate progress resets on page refresh.
  *
  * NOTE: Evolution missions are NOT managed here. They live on kind 31124
- * (per-Blobbi) and are handled by the evolution session store.
+ * (per-Pets) and are handled by the evolution session store.
  */
 
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
-import type { MissionsContent } from '@/blobbi/core/lib/missions';
-import { isMissionComplete, missionProgress } from '@/blobbi/core/lib/missions';
-import { parseProfileContent } from '@/blobbi/core/lib/missions';
+import type { MissionsContent } from '@/pets/core/lib/missions';
+import { isMissionComplete, missionProgress } from '@/pets/core/lib/missions';
+import { parseProfileContent } from '@/pets/core/lib/missions';
 
 import {
-  type BlobbiStage,
+  type PetsStage,
   type DailyMissionAction,
   getTodayDateString,
   needsDailyReset,
@@ -63,8 +63,8 @@ export interface DailyMissionView {
 }
 
 export interface UseDailyMissionsOptions {
-  /** Available Blobbi stages the user has (filters eligible missions) */
-  availableStages?: BlobbiStage[];
+  /** Available Pets stages the user has (filters eligible missions) */
+  availableStages?: PetsStage[];
   /**
    * Raw content string from the kind 11125 profile event.
    * Pass `profile.content` here. The hook parses it to extract
@@ -87,7 +87,7 @@ export interface UseDailyMissionsResult {
   /** Bonus XP amount */
   bonusXp: number;
   /**
-   * Whether the account has no hatched (baby/adult) Blobbi at all.
+   * Whether the account has no hatched (baby/adult) Pets at all.
    * True only when availableStages contains neither 'baby' nor 'adult'.
    * NOT a loading indicator — use `isLoading` for that.
    */
@@ -218,7 +218,7 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
   const allComplete = raw ? areAllDailyComplete(raw) : false;
   const todayXp = raw ? totalDailyXp(raw) : 0;
   const bonusUnlocked = allComplete;
-  // noMissionsAvailable means the account genuinely has no hatched Blobbi.
+  // noMissionsAvailable means the account genuinely has no hatched Pets.
   // It does NOT reflect loading state — use `isLoading` for that.
   const hasHatchedStage = availableStages
     ? availableStages.includes('baby') || availableStages.includes('adult')

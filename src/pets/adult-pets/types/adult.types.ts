@@ -1,10 +1,10 @@
 /**
- * Adult Blobbi Module Types
+ * Adult Pets Module Types
  * 
  * Type definitions for adult stage visuals and customization
  */
 
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
+import type { Pets } from '@/pets/core/types/pets';
 
 /**
  * All available adult evolution forms.
@@ -27,6 +27,9 @@ export const ADULT_FORMS = [
   'rocky',
   'rosey',
   'starri',
+  'glitchfox',
+  'biomechmoth',
+  'liquidblob',
 ] as const;
 
 export type AdultForm = typeof ADULT_FORMS[number];
@@ -57,13 +60,13 @@ export interface AdultSvgResolverOptions {
 }
 
 /**
- * Extracts adult-specific customization from a Blobbi
+ * Extracts adult-specific customization from a Pets
  */
-export function extractAdultCustomization(blobbi: Blobbi): AdultSvgCustomization {
+export function extractAdultCustomization(pets: Pets): AdultSvgCustomization {
   return {
-    baseColor: blobbi.baseColor,
-    secondaryColor: blobbi.secondaryColor,
-    eyeColor: blobbi.eyeColor,
+    baseColor: pets.baseColor,
+    secondaryColor: pets.secondaryColor,
+    eyeColor: pets.eyeColor,
   };
 }
 
@@ -82,18 +85,18 @@ export function getDefaultAdultForm(): AdultForm {
 }
 
 /**
- * Resolves adult form from Blobbi data.
+ * Resolves adult form from Pets data.
  * Uses adult.evolutionForm if set and valid, otherwise derives from seed.
  */
-export function resolveAdultForm(blobbi: Blobbi): AdultForm {
+export function resolveAdultForm(pets: Pets): AdultForm {
   // Check explicit evolutionForm first
-  if (blobbi.adult?.evolutionForm && isValidAdultForm(blobbi.adult.evolutionForm)) {
-    return blobbi.adult.evolutionForm;
+  if (pets.adult?.evolutionForm && isValidAdultForm(pets.adult.evolutionForm)) {
+    return pets.adult.evolutionForm;
   }
   
   // Derive from seed if available
-  if (blobbi.seed) {
-    return deriveAdultFormFromSeed(blobbi.seed);
+  if (pets.seed) {
+    return deriveAdultFormFromSeed(pets.seed);
   }
   
   // Fallback to default
@@ -104,10 +107,10 @@ export function resolveAdultForm(blobbi: Blobbi): AdultForm {
  * Derives adult form deterministically from a seed string.
  *
  * Uses the same seed-slice approach as all other visual-trait derivations
- * in blobbi.ts: reads 8 hex chars from offset [40..48] and maps to a
+ * in pets.ts: reads 8 hex chars from offset [40..48] and maps to a
  * form index via modular arithmetic.
  *
- * This is the single canonical seed → adult form derivation. blobbi.ts
+ * This is the single canonical seed → adult form derivation. pets.ts
  * imports and delegates to this function for all adult-type resolution.
  */
 export function deriveAdultFormFromSeed(seed: string): AdultForm {

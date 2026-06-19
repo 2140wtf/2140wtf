@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
  *
  * @param scrollContainer - Optional element whose scroll events should be
  *   tracked instead of `window`. Useful for pages that scroll an internal
- *   container (e.g. the Vines snap-scroll feed).
+ *   container (e.g. the Videos shorts snap-scroll feed).
  */
 export function useScrollDirection(scrollContainer?: HTMLElement | null): { hidden: boolean } {
   const [hidden, setHidden] = useState(false);

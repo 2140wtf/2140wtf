@@ -1,0 +1,83 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Glitch aura -->
+  <g opacity="0.35">
+    <rect x="30" y="60" width="140" height="80" rx="4" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1" stroke-dasharray="8 6">
+      <animate attributeName="stroke-dashoffset" from="0" to="28" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="25" y="55" width="150" height="90" rx="6" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="0.5" opacity="0.6"/>
+  </g>
+
+  <!-- Tail -->
+  <path d="M 70 145 L 55 165 L 75 160 L 65 180 L 90 155" fill="url(#glitchfoxTail)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Body -->
+  <path d="M 85 145 L 115 145 L 110 115 L 90 115 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxMagenta)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <path d="M 70 110 L 100 75 L 130 110 L 115 125 L 85 125 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxCyan)" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Ears -->
+  <path d="M 75 85 L 55 45 L 92 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M 125 85 L 145 45 L 108 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Eyes -->
+  <g>
+    <polygon points="82,102 95,98 95,110 82,108" fill="url(#glitchfoxEye)"/>
+    <polygon points="118,102 105,98 105,110 118,108" fill="url(#glitchfoxEye)"/>
+    <!-- Pupils -->
+    <rect x="86" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
+    <rect x="109" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
+  </g>
+
+  <!-- Snout / mouth -->
+  <path d="M 92 118 L 100 124 L 108 118" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Circuit traces -->
+  <path d="M 88 135 L 88 142 M 100 135 L 100 142 M 112 135 L 112 142" stroke="url(#glitchfoxCyan)" stroke-width="1" opacity="0.8"/>
+  <circle cx="88" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="100" cy="142" r="1.5" fill="url(#glitchfoxMagenta)">
+    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="112" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Glitch shards -->
+  <rect x="132" y="95" width="12" height="3" fill="url(#glitchfoxCyan)" opacity="0.7"/>
+  <rect x="55" y="105" width="10" height="2" fill="url(#glitchfoxMagenta)" opacity="0.6"/>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="50%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </radialGradient>
+    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxTail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4b5563"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <radialGradient id="glitchfoxEye" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <radialGradient id="glitchfoxPupil" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#f0abfc"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </radialGradient>
+    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e879f9"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -13,7 +13,7 @@ export const DEFAULT_COMPANION_CONFIG: CompanionConfig = {
   
   // Viewport padding
   padding: {
-    left: 100,   // Minimum left padding in main content area (increased for larger Blobbi)
+    left: 100,   // Minimum left padding in main content area (increased for larger Pets)
     right: 24,
     bottom: 24,
   },
@@ -60,7 +60,7 @@ export const DEFAULT_COMPANION_CONFIG: CompanionConfig = {
     mouseFollowChance: 0.35,     // 35% chance to follow mouse (was 25%)
   },
   
-  // Observation target behavior - Blobbi notices something and walks toward it
+  // Observation target behavior - Pets notices something and walks toward it
   // REBALANCED: Less frequent observations, longer looking duration
   observation: {
     chance: 0.25,          // 25% chance (was 35%) - less walking overall

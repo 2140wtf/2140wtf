@@ -28,11 +28,10 @@ import { DittoLogo } from "@/components/DittoLogo";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { IntroImage } from "@/components/IntroImage";
 import { ProfileCard } from "@/components/ProfileCard";
-import { ThemeGrid } from "@/components/ThemeSelector";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthors } from "@/hooks/useAuthors";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -40,12 +39,13 @@ import { useEncryptedSettings, getLocalSettingsSync } from "@/hooks/useEncrypted
 import { type SyncPhase, useInitialSync } from "@/hooks/useInitialSync";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { useNostrStorage } from "@/hooks/useNostrStorage";
 import { OnboardingContext } from "@/hooks/useOnboarding";
-import { useTheme } from "@/hooks/useTheme";
+
 import { toast } from "@/hooks/useToast";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { getAvatarShape, isValidAvatarShape } from "@/lib/avatarShape";
-import { resolveTheme, resolveThemeConfig } from "@/themes";
+
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -220,31 +220,36 @@ function SyncScreen({ phase }: { phase: SyncPhase }) {
 // Setup Questionnaire
 // ---------------------------------------------------------------------------
 
-/** Suggested follow packs shown to new users with empty follow lists. */
-const SUGGESTED_PACKS: { kind: number; pubkey: string; identifier: string }[] =
-  [
-    {
-      kind: 39089,
-      pubkey:
-        "932614571afcbad4d17a191ee281e39eebbb41b93fac8fd87829622aeb112f4d",
-      identifier: "k4p5w0n22suf",
-    },
-  ];
+/** Suggested accounts shown to new users with empty follow lists. */
+const SUGGESTED_PACK: NostrEvent = {
+  id: "suggested-accounts",
+  pubkey: "",
+  kind: 39089,
+  created_at: 0,
+  content: "",
+  sig: "",
+  tags: [
+    ["title", "Suggested for you"],
+    ["description", "Follow these accounts to start building your feed."],
+    ["p", "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6"],
+    ["p", "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416"],
+    ["p", "0232eb19d1b1168e91c1a8f765d45f6839e9a7861951cd63ae18a544af8a3902"],
+  ],
+};
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
-type SettingsStep = "theme" | "follows" | "outro";
+type SettingsStep = "follows" | "outro";
 type Step = SignupStep | SettingsStep;
 
 const SIGNUP_STEPS: Step[] = [
-  "theme",
   "keygen",
   "download",
   "profile",
   "follows",
   "outro",
 ];
-const SETTINGS_STEPS: Step[] = ["theme", "follows", "outro"];
+const SETTINGS_STEPS: Step[] = ["follows", "outro"];
 
 function SetupQuestionnaire({
   onComplete,
@@ -397,6 +402,14 @@ function SetupQuestionnaire({
     }
   }, [user, nostr, goTo]);
 
+  // Settings-only flow: the theme step is skipped, so run the follow-list check
+  // immediately and route to follows/outro accordingly.
+  useEffect(() => {
+    if (!isSignup && step === "follows" && hasFollows === null) {
+      handleSaveAndContinue();
+    }
+  }, [isSignup, step, hasFollows, handleSaveAndContinue]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* Progress bar */}
@@ -426,15 +439,6 @@ function SetupQuestionnaire({
           )}
 
           {/* Settings steps */}
-          {step === "theme" && (
-            <ThemeStep
-              onNext={isSignup ? next : handleSaveAndContinue}
-              onBack={back}
-              isFirst={isSignup && steps.indexOf("theme") === 0}
-              isSaving={!isSignup && isSaving}
-            />
-          )}
-
           {step === "follows" && hasFollows === false && (
             <FollowsStep
               onNext={(didFollow) => {
@@ -786,105 +790,6 @@ function ProfileStep({
 }
 
 // ---------------------------------------------------------------------------
-// Settings steps
-// ---------------------------------------------------------------------------
-
-function ThemeStep({
-  onNext,
-  onBack,
-  isFirst = false,
-  isSaving = false,
-}: {
-  onNext: () => void;
-  onBack: () => void;
-  isFirst?: boolean;
-  isSaving?: boolean;
-}) {
-  const { theme, customTheme, themes } = useTheme();
-  const resolved = resolveTheme(theme);
-  const activeConfig = resolved === 'custom' ? customTheme : resolveThemeConfig(resolved, themes);
-  const bgUrl = activeConfig?.background?.url;
-
-  return (
-    <>
-      {/* Background image — full screen behind everything */}
-      {bgUrl && (
-        <div
-          className="fixed inset-0 z-0 bg-cover bg-center opacity-50 transition-all duration-700"
-          style={{ backgroundImage: `url(${bgUrl})` }}
-        />
-      )}
-
-      {/* Center content — semi-transparent on desktop when bg is active */}
-      <div
-        className={cn(
-          "relative z-10 flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400",
-          "sm:rounded-2xl sm:transition-[background-color,backdrop-filter] sm:duration-700",
-          bgUrl
-            ? "sm:bg-background/60 sm:backdrop-blur-md sm:-mx-4 sm:px-4 sm:py-4"
-            : "",
-        )}
-      >
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold tracking-tight">
-            Choose your look
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Pick a theme that feels right.
-          </p>
-        </div>
-
-        <ThemeGrid columns="scroll" limit={9} />
-
-        {isFirst ? (
-          <Button
-            onClick={onNext}
-            className="w-full rounded-full h-11 gap-1.5"
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Saving...
-              </>
-            ) : (
-              <>
-                Continue <ChevronRight className="w-4 h-4" />
-              </>
-            )}
-          </Button>
-        ) : (
-          <div className="flex gap-3">
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="flex-1 rounded-full h-11"
-              disabled={isSaving}
-            >
-              Back
-            </Button>
-            <Button
-              onClick={onNext}
-              className="flex-1 rounded-full h-11 gap-1.5"
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Saving...
-                </>
-              ) : (
-                <>
-                  Continue <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Follow Packs Step
 // ---------------------------------------------------------------------------
 
@@ -909,112 +814,75 @@ function FollowsStep({
   /**
    * Hex pubkey of the just-generated signup key. When set, the follow-all
    * handler refuses to publish kind 3 unless the active signer matches —
-   * a defensive guard against merging a follow pack into a previously
-   * logged-in user's contact list.
+   * a defensive guard against adding follows to the wrong account.
    */
   expectedPubkey?: string;
 }) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { store } = useNostrStorage();
 
-  const [packs, setPacks] = useState<NostrEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [followedPacks, setFollowedPacks] = useState<Set<string>>(new Set());
-  const [followingPack, setFollowingPack] = useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowed, setIsFollowed] = useState(false);
 
-  // Fetch the suggested follow packs
-  useEffect(() => {
-    let cancelled = false;
+  const handleFollowAll = useCallback(async () => {
+    if (!user) return;
 
-    const fetchPacks = async () => {
-      try {
-        const filters = SUGGESTED_PACKS.map((p) => ({
-          kinds: [p.kind],
-          authors: [p.pubkey],
-          "#d": [p.identifier],
-          limit: 1,
-        }));
+    // Defensive guard: when this is the signup flow, only publish kind 3
+    // if the active signer matches the freshly generated key. Without
+    // this, a regression in the auto-switch would add follows to the
+    // previously logged-in user's contact list.
+    if (expectedPubkey && user.pubkey !== expectedPubkey) {
+      toast({
+        title: "Follows not saved",
+        description:
+          "The new account is not active yet, so your follows were not saved (this prevents modifying another account). You can follow people later from the app.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-        const events = await nostr.query(filters, {
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!cancelled) {
-          setPacks(events);
-        }
-      } catch (error) {
-        console.warn("Failed to fetch suggested follow packs:", error);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
+    setIsFollowing(true);
 
-    fetchPacks();
-    return () => {
-      cancelled = true;
-    };
-  }, [nostr]);
+    try {
+      const packPubkeys = SUGGESTED_PACK.tags
+        .filter(([n]) => n === "p")
+        .map(([, pk]) => pk);
 
-  const handleFollowAll = useCallback(
-    async (pack: NostrEvent) => {
-      if (!user) return;
+      // 1. Fetch freshest kind 3 from relays, with the local event store as a
+      // fallback floor so a relay miss cannot wipe the existing follow list.
+      const prev = await fetchFreshEvent(
+        nostr,
+        { kinds: [3], authors: [user.pubkey] },
+        { store },
+      );
 
-      // Defensive guard: when this is the signup flow, only publish kind 3
-      // if the active signer matches the freshly generated key. Without
-      // this, a regression in the auto-switch would merge the follow pack
-      // into the *previously logged-in user's* contact list — silently
-      // adding follows to the wrong account.
-      if (expectedPubkey && user.pubkey !== expectedPubkey) {
-        toast({
-          title: "Follows not saved",
-          description:
-            "The new account is not active yet, so your follows were not saved (this prevents modifying another account). You can follow people later from the app.",
-          variant: "destructive",
-        });
-        return;
-      }
+      // 2. Separate p-tags from non-p-tags to preserve relay hints, petnames, etc.
+      const existingPTags = prev?.tags.filter(([n]) => n === "p") ?? [];
+      const nonPTags = prev?.tags.filter(([n]) => n !== "p") ?? [];
+      const existingPubkeys = new Set(existingPTags.map(([, pk]) => pk));
 
-      const packId = pack.id;
-      setFollowingPack(packId);
+      // 3. Merge: add new pubkeys that aren't already followed
+      const newPTags = packPubkeys
+        .filter((pk) => !existingPubkeys.has(pk))
+        .map((pk) => ["p", pk]);
 
-      try {
-        const packPubkeys = pack.tags
-          .filter(([n]) => n === "p")
-          .map(([, pk]) => pk);
+      // 4. Publish with prev for published_at preservation
+      await publishEvent({
+        kind: 3,
+        content: prev?.content ?? "",
+        tags: [...nonPTags, ...existingPTags, ...newPTags],
+        prev: prev ?? undefined,
+      });
 
-        // 1. Fetch freshest kind 3 from relays (not cache)
-        const prev = await fetchFreshEvent(nostr, {
-          kinds: [3],
-          authors: [user.pubkey],
-        });
-
-        // 2. Separate p-tags from non-p-tags to preserve relay hints, petnames, etc.
-        const existingPTags = prev?.tags.filter(([n]) => n === "p") ?? [];
-        const nonPTags = prev?.tags.filter(([n]) => n !== "p") ?? [];
-        const existingPubkeys = new Set(existingPTags.map(([, pk]) => pk));
-
-        // 3. Merge: add new pubkeys that aren't already followed
-        const newPTags = packPubkeys
-          .filter((pk) => !existingPubkeys.has(pk))
-          .map((pk) => ["p", pk]);
-
-        // 4. Publish with prev for published_at preservation
-        await publishEvent({
-          kind: 3,
-          content: prev?.content ?? "",
-          tags: [...nonPTags, ...existingPTags, ...newPTags],
-          prev: prev ?? undefined,
-        });
-
-        setFollowedPacks((prev) => new Set([...prev, packId]));
-      } catch (error) {
-        console.error("Failed to follow pack:", error);
-      } finally {
-        setFollowingPack(null);
-      }
-    },
-    [user, nostr, publishEvent, expectedPubkey],
-  );
+      setIsFollowed(true);
+    } catch (error) {
+      console.error("Failed to follow suggested accounts:", error);
+    } finally {
+      setIsFollowing(false);
+    }
+  }, [user, nostr, publishEvent, expectedPubkey, store]);
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">
@@ -1023,32 +891,18 @@ function FollowsStep({
           Find your people
         </h2>
         <p className="text-sm text-muted-foreground">
-          Your feed is empty! Follow some people to get started. Here are some
-          curated packs to help you find interesting voices.
+          Your feed is empty! Follow some people to get started. Here are a few
+          suggested accounts to help you find interesting voices.
         </p>
       </div>
 
       <div className="space-y-3">
-        {loading ? (
-          Array.from({ length: SUGGESTED_PACKS.length }).map((_, i) => (
-            <PackCardSkeleton key={i} />
-          ))
-        ) : packs.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            Couldn't load suggestions right now. You can find follow packs later
-            in the app.
-          </p>
-        ) : (
-          packs.map((pack) => (
-            <PackCard
-              key={pack.id}
-              event={pack}
-              isFollowed={followedPacks.has(pack.id)}
-              isFollowing={followingPack === pack.id}
-              onFollowAll={() => handleFollowAll(pack)}
-            />
-          ))
-        )}
+        <PackCard
+          event={SUGGESTED_PACK}
+          isFollowed={isFollowed}
+          isFollowing={isFollowing}
+          onFollowAll={handleFollowAll}
+        />
       </div>
 
       <div className="flex gap-3">
@@ -1060,10 +914,10 @@ function FollowsStep({
           Back
         </Button>
         <Button
-          onClick={() => onNext(followedPacks.size > 0)}
+          onClick={() => onNext(isFollowed)}
           className="flex-1 rounded-full h-11 gap-1.5"
         >
-          {followedPacks.size > 0 ? "Continue" : "Skip for now"}
+          {isFollowed ? "Continue" : "Skip for now"}
           <ChevronRight className="w-4 h-4" />
         </Button>
       </div>
@@ -1168,7 +1022,9 @@ function PackCard({
 
 /** Small author attribution bar at the bottom of a pack card. */
 function AuthorAttribution({ pubkey }: { pubkey: string }) {
-  const { data: authorData } = useAuthors([pubkey]);
+  const { data: authorData } = useAuthors(pubkey ? [pubkey] : []);
+  if (!pubkey) return null;
+
   const metadata: NostrMetadata | undefined = authorData?.get(pubkey)?.metadata;
   const name = metadata?.name || metadata?.display_name || 'Anonymous';
 
@@ -1191,29 +1047,6 @@ function MiniAvatar({ src, name, metadata }: { src?: string; name: string; metad
         {name[0]?.toUpperCase()}
       </AvatarFallback>
     </Avatar>
-  );
-}
-
-function PackCardSkeleton() {
-  return (
-    <div className="rounded-xl ring-1 ring-border p-4 space-y-3">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1.5 flex-1">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-3 w-48" />
-        </div>
-        <Skeleton className="h-4 w-8" />
-      </div>
-      <div className="flex -space-x-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton
-            key={i}
-            className="size-7 rounded-full ring-2 ring-background"
-          />
-        ))}
-      </div>
-      <Skeleton className="h-8 w-full rounded-md" />
-    </div>
   );
 }
 

@@ -10,6 +10,7 @@ hydrateNip05Cache();
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import App from './App.tsx';
 import './index.css';
+import 'leaflet/dist/leaflet.css';
 
 import '@fontsource-variable/inter';
 

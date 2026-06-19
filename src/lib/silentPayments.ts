@@ -36,8 +36,8 @@
  */
 import * as btc from '@scure/btc-signer';
 import { hash160, taprootTweakPrivKey } from '@scure/btc-signer/utils.js';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 /**
  * secp256k1 Point class (used for all EC arithmetic).
@@ -46,7 +46,12 @@ import { sha256 } from '@noble/hashes/sha256';
  * `secp256k1.ProjectivePoint`; v2 moved it to `schnorr.Point`. We use the
  * v1 export to match the rest of the ditto codebase.
  */
-const Point = secp256k1.ProjectivePoint;
+const Point = secp256k1.Point;
+
+function pointFromBytes(bytes: Uint8Array): InstanceType<typeof Point> {
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Point.fromHex(hex);
+}
 
 // ---------------------------------------------------------------------------
 // bech32m (BIP350) — variant for silent payment addresses (BIP352)
@@ -386,7 +391,7 @@ function isValidCompressedPoint(bytes: Uint8Array): boolean {
   if (bytes.length !== 33) return false;
   if (bytes[0] !== 0x02 && bytes[0] !== 0x03) return false;
   try {
-    Point.fromHex(bytes);
+    pointFromBytes(bytes);
     return true;
   } catch {
     return false;
@@ -399,7 +404,7 @@ function pubKeyFromScalar(privateKey: Uint8Array): Uint8Array {
   if (k === 0n || k >= SECP_N) {
     throw new Error('Silent payment: invalid input private key.');
   }
-  return Point.BASE.multiply(k).toRawBytes(true);
+  return Point.BASE.multiply(k).toBytes(true);
 }
 
 /** Negate a 32-byte private key mod N. */
@@ -732,7 +737,7 @@ export function deriveSilentPaymentOutputs(
   }
 
   // A = a·G (compressed)
-  const aPub = Point.BASE.multiply(aSum).toRawBytes(true);
+  const aPub = Point.BASE.multiply(aSum).toBytes(true);
 
   // ── Step 2: outpoint_L = lex-smallest serialized outpoint ─────────────
   const outpointsForHash = options.allOutpoints ?? inputs.map((i) => ({ txid: i.txid, vout: i.vout }));
@@ -763,12 +768,12 @@ export function deriveSilentPaymentOutputs(
   for (const group of groups.values()) {
     // ecdh = input_hash · a · B_scan
     // Compute as Point arithmetic: ((input_hash * a) mod n) · B_scan.
-    const scanPoint = Point.fromHex(group[0].address.scanPubKey);
+    const scanPoint = pointFromBytes(group[0].address.scanPubKey);
     const combinedScalar = (inputHashScalar * aSum) % SECP_N;
     if (combinedScalar === 0n) {
       throw new Error('Silent payment: input_hash · a is zero.');
     }
-    const ecdh = scanPoint.multiply(combinedScalar).toRawBytes(true);
+    const ecdh = scanPoint.multiply(combinedScalar).toBytes(true);
 
     let k = 0;
     for (const recipient of group) {
@@ -782,7 +787,7 @@ export function deriveSilentPaymentOutputs(
       }
 
       // P_mn = B_spend + t_k·G
-      const spendPoint = Point.fromHex(recipient.address.spendPubKey);
+      const spendPoint = pointFromBytes(recipient.address.spendPubKey);
       const P = spendPoint.add(Point.BASE.multiply(tScalar));
       // noble v1 has no `is0()`; an x=y=0 affine reading means the point
       // at infinity. `toRawBytes` would throw on that, so the round-trip
@@ -791,7 +796,7 @@ export function deriveSilentPaymentOutputs(
       if (Paff.x === 0n && Paff.y === 0n) {
         throw new Error('Silent payment: B_spend + t_k·G is point at infinity.');
       }
-      const Pbytes = P.toRawBytes(true);
+      const Pbytes = P.toBytes(true);
 
       // BIP341 taproot output is the x-only of P.
       const xonly = new Uint8Array(Pbytes.subarray(1, 33));
@@ -967,7 +972,7 @@ export function aggregateSenderPrivateKey(
     throw new Error('Silent payment: sum of input private keys is zero.');
   }
   const aBytes = scalarToBytes(aSum);
-  const aPub = Point.BASE.multiply(aSum).toRawBytes(true);
+  const aPub = Point.BASE.multiply(aSum).toBytes(true);
 
   const outpointsForHash =
     allOutpoints ?? eligibleInputs.map((i) => ({ txid: i.txid, vout: i.vout }));
@@ -1017,8 +1022,8 @@ export function computeBip375EcdhShare(
   if (k === 0n || k >= SECP_N) {
     throw new Error('Silent payment: aggregate scalar out of range.');
   }
-  const scanPoint = Point.fromHex(scanPubKey);
-  return scanPoint.multiply(k).toRawBytes(true);
+  const scanPoint = pointFromBytes(scanPubKey);
+  return scanPoint.multiply(k).toBytes(true);
 }
 
 /**
@@ -1036,12 +1041,12 @@ export function deriveSPOutputScriptFromShare(params: {
   k: number;
 }): Uint8Array {
   const { ecdhShare, inputHash, spendPubKey, k } = params;
-  const sharePoint = Point.fromHex(ecdhShare);
+  const sharePoint = pointFromBytes(ecdhShare);
   const inputHashScalar = bytesToScalar(inputHash);
   if (inputHashScalar === 0n || inputHashScalar >= SECP_N) {
     throw new Error('Silent payment: invalid input_hash.');
   }
-  const ecdh = sharePoint.multiply(inputHashScalar).toRawBytes(true);
+  const ecdh = sharePoint.multiply(inputHashScalar).toBytes(true);
   const tK = taggedHash(
     'BIP0352/SharedSecret',
     concatBytes(ecdh, u32be(k)),
@@ -1050,13 +1055,13 @@ export function deriveSPOutputScriptFromShare(params: {
   if (tScalar === 0n || tScalar >= SECP_N) {
     throw new Error('Silent payment: invalid t_k.');
   }
-  const spendPoint = Point.fromHex(spendPubKey);
+  const spendPoint = pointFromBytes(spendPubKey);
   const P = spendPoint.add(Point.BASE.multiply(tScalar));
   const Paff = P.toAffine();
   if (Paff.x === 0n && Paff.y === 0n) {
     throw new Error('Silent payment: B_spend + t_k·G is point at infinity.');
   }
-  return new Uint8Array(P.toRawBytes(true).subarray(1, 33));
+  return new Uint8Array(P.toBytes(true).subarray(1, 33));
 }
 
 // ---------------------------------------------------------------------------

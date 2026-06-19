@@ -1,14 +1,14 @@
 import { createContext, useContext } from 'react';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotions';
+import type { PetsEmotion } from '@/pets/ui/lib/emotions';
 import { isLocalhostDev } from './index';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface EmotionDevContextValue {
   /** Current dev emotion override (null = use default/neutral) */
-  devEmotion: BlobbiEmotion | null;
+  devEmotion: PetsEmotion | null;
   /** Set the dev emotion override */
-  setDevEmotion: (emotion: BlobbiEmotion | null) => void;
+  setDevEmotion: (emotion: PetsEmotion | null) => void;
   /** Clear the dev emotion override (back to neutral) */
   clearDevEmotion: () => void;
   /** Whether dev emotion is active */
@@ -42,11 +42,11 @@ export function useEmotionDev(): EmotionDevContextValue {
 }
 
 /**
- * Get the effective emotion for a Blobbi.
+ * Get the effective emotion for a Pets.
  * In dev mode with an override, returns the dev emotion.
  * Otherwise returns the provided emotion or 'neutral'.
  */
-export function useEffectiveEmotion(baseEmotion?: BlobbiEmotion): BlobbiEmotion {
+export function useEffectiveEmotion(baseEmotion?: PetsEmotion): PetsEmotion {
   const { devEmotion, isDevEmotionActive } = useEmotionDev();
   
   // Dev override takes precedence (only in localhost dev)

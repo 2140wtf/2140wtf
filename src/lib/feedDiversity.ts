@@ -13,7 +13,7 @@ export interface DiversifyOptions {
 
 /** Default per-type cap overrides. */
 const DEFAULT_TYPE_CAPS: Record<string, number> = {
-  blobbi: 0.1, // 10% cap for Blobbi
+  pets: 0.1, // 10% cap for Pets
 };
 
 /** Resolve a kind number to a content-type bucket string. */
@@ -186,7 +186,7 @@ function applyGapInterleave(
   // Drop anything still deferred rather than clustering same-type items
   // at the tail. The cap already limits per-type count; these leftovers
   // are items that can't be placed without violating the gap, so it's
-  // better to omit them than to show three Blobbis in a row.
+  // better to omit them than to show three Petss in a row.
 
   return result;
 }

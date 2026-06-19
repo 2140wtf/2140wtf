@@ -33,12 +33,8 @@ const OVER_FETCH_MULTIPLIER = 3;
 
 export type ProfileTab = 'posts' | 'replies' | 'media' | 'likes' | 'wall' | 'badges';
 
-/** Kinds that are inherently media (video/image) content. */
-const MEDIA_KINDS = new Set([34236]); // vines
-
-/** Check if a feed item contains media (URLs in content or media-native kinds like vines). */
+/** Check if a feed item contains media (URLs in content). */
 function hasMedia(item: FeedItem): boolean {
-  if (MEDIA_KINDS.has(item.event.kind)) return true;
   return /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov)(\?[^\s]*)?/i.test(item.event.content);
 }
 
@@ -141,7 +137,7 @@ export function useProfileFeed(pubkey: string | undefined, activeTab: ProfileTab
       const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
       // Drop events the feed layer wants hidden (deprecated kind 30000 follow sets,
-      // unlisted decks, hidden treasures, empty emoji packs). NoteCard would return
+      // empty emoji packs). NoteCard would return
       // null anyway, but filtering here avoids wasted mounts and keeps the profile
       // feed consistent with the home feed (Feed.tsx uses the same helper).
       const visibleEvents = validEvents.filter((ev) => !shouldHideFeedEvent(ev));

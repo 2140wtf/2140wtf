@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Bitcoin, Loader2, X, Check, ExternalLink } from 'lucide-react';
+import { Bitcoin, Loader2, X, Check, ExternalLink, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -16,6 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
@@ -199,6 +200,16 @@ export function ZapAllOnchainDialog({
   const totalSats = totalRecipientSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
   const showBalance = insufficient || (amountPerRecipientSats > 0 && totalBalance === 0);
+
+  // Warn when the transaction will have no change output because the leftover
+  // is below the dust limit. In that case the leftover sats become extra fee
+  // rather than returning as change.
+  const noChangeDust = useMemo(() => {
+    if (!utxos?.length || !currentFeeRate || totalRecipientSats <= 0 || totalBalance <= 0) return false;
+    const feeWithChange = estimateFee(utxos.length, recipientCount + 1, currentFeeRate);
+    const change = totalBalance - totalRecipientSats - feeWithChange;
+    return change > 0 && change <= DUST_LIMIT_SATS;
+  }, [utxos, currentFeeRate, totalRecipientSats, totalBalance, recipientCount]);
 
   // Per-recipient dust check — every output MUST be at or above the 546 sat
   // dust limit, otherwise the tx won't relay. When the user picks a total
@@ -475,6 +486,19 @@ export function ZapAllOnchainDialog({
 
               {error && (
                 <p className="text-xs text-destructive">{error}</p>
+              )}
+
+              {/* No-change dust warning: leftover below the dust limit will be
+                  swallowed by the fee instead of returning as change. */}
+              {noChangeDust && (
+                <Alert className="border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription className="text-xs">
+                    This zap leaves less than the dust limit, so there will be no
+                    change output. The remaining sats will be added to the
+                    network fee.
+                  </AlertDescription>
+                </Alert>
               )}
 
               <Button

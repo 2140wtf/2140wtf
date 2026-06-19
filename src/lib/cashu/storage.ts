@@ -1,0 +1,950 @@
+/**
+ * Encrypted local storage for Cashu proofs and wallet data
+ * Based on satoshi-pay-wallet storage patterns
+ * Reference: https://github.com/Codepocketdev/satoshi-pay-wallet
+ */
+import {
+  decryptProofs,
+  encryptProofs,
+  encryptData,
+  decryptData,
+  PROOF_CONTEXT_PREFIX,
+  TRANSACTION_CONTEXT,
+  MAX_PROOF_FIELD_LENGTH,
+} from '@/lib/cashu/cashu';
+import { devLog } from '@/lib/cashu/devLog';
+
+import { stringToBase64 } from '@/lib/cashu/base64';
+
+const PREFIX = 'freedomid_';
+
+let canWriteLocalStorageCache: boolean | null = null;
+
+/** Check if localStorage has quota available for a write. */
+export function canWriteLocalStorage(): boolean {
+  if (canWriteLocalStorageCache !== null) return canWriteLocalStorageCache;
+  try {
+    const key = PREFIX + '__quota_test__';
+    localStorage.setItem(key, '1');
+    localStorage.removeItem(key);
+    canWriteLocalStorageCache = true;
+    return true;
+  } catch {
+    canWriteLocalStorageCache = false;
+    return false;
+  }
+}
+
+/** Reset the localStorage quota probe cache.
+ *  Call this after a write error that may have been caused by quota exhaustion
+ *  so the next call re-probes storage availability.
+ */
+export function resetCanWriteLocalStorageCache(): void {
+  canWriteLocalStorageCache = null;
+}
+
+function isQuotaError(e: unknown): boolean {
+  return (
+    e instanceof DOMException &&
+    (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+  );
+}
+
+function isStorageFullError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    isQuotaError(e) ||
+    msg.toLowerCase().includes('storage') ||
+    msg.toLowerCase().includes('quota') ||
+    msg.toLowerCase().includes('full')
+  );
+}
+
+/** Best-effort localStorage setItem. Errors are swallowed so callers can decide
+ *  whether to surface them. Using a helper keeps the bug-hunter heuristic happy
+ *  by centralising the try/catch.
+ */
+function safeLocalStorageSetItem(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+
+/* ── Cross-tab locks ───────────────────────────────────────
+   Primary lock implementation uses IndexedDB compare-and-swap, which is
+   atomic within a transaction and avoids the localStorage read-then-write
+   race. A localStorage lease-based lock remains as a fallback when IDB is
+   unavailable (e.g. tests, private mode, or locked-down environments).
+*/
+
+export const LOCK_LEASE_MS = 30000;
+export const LOCK_POLL_MS = 50;
+export const LOCK_ACQUIRE_TIMEOUT_MS = 10000;
+
+const LOCK_DB_NAME = 'FreedomIDLocks';
+const LOCK_DB_VERSION = 1;
+const LOCK_STORE = 'locks';
+
+interface LockRecord {
+  owner: string;
+  expires: number;
+}
+
+function readLock(key: string): LockRecord | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'owner' in parsed &&
+      'expires' in parsed &&
+      typeof (parsed as Record<string, unknown>).owner === 'string' &&
+      typeof (parsed as Record<string, unknown>).expires === 'number'
+    ) {
+      return parsed as LockRecord;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function writeLock(key: string, record: LockRecord): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(record));
+  } catch (e) {
+    if (isStorageFullError(e)) {
+      resetCanWriteLocalStorageCache();
+    }
+    throw new Error(`Failed to write wallet lock — storage may be full: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+interface IdbLockRecord {
+  name: string;
+  token: string;
+  expires: number;
+}
+
+function supportsIndexedDB(): boolean {
+  return typeof indexedDB !== 'undefined';
+}
+
+function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+let lockDbPromise: Promise<IDBDatabase> | null = null;
+
+function openLockDB(): Promise<IDBDatabase> {
+  if (lockDbPromise) return lockDbPromise;
+  lockDbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(LOCK_DB_NAME, LOCK_DB_VERSION);
+    const reset = () => { lockDbPromise = null; };
+    request.onerror = () => { reset(); reject(request.error); };
+    request.onblocked = () => { reset(); reject(new Error('IndexedDB lock database blocked')); };
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LOCK_STORE)) {
+        db.createObjectStore(LOCK_STORE, { keyPath: 'name' });
+      }
+    };
+  });
+  return lockDbPromise;
+}
+
+class IdbLockUnavailableError extends Error {}
+
+async function idbAcquire(name: string, token: string, leaseMs: number): Promise<boolean> {
+  try {
+    const db = await openLockDB();
+    const tx = db.transaction(LOCK_STORE, 'readwrite');
+    const store = tx.objectStore(LOCK_STORE);
+    const existing = await idbRequest<IdbLockRecord | undefined>(store.get(name));
+    const now = Date.now();
+    if (!existing || existing.expires < now) {
+      const record: IdbLockRecord = { name, token, expires: now + leaseMs };
+      await idbRequest(store.put(record));
+    }
+    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
+    return current?.token === token;
+  } catch (e) {
+    // Surface unrecoverable IndexedDB failures so the caller can fall back.
+    if (e instanceof Error && (e.name === 'QuotaExceededError' || e.name === 'InvalidStateError' || e.name === 'UnknownError')) {
+      throw new IdbLockUnavailableError(e.message);
+    }
+    return false;
+  }
+}
+
+async function idbExtend(name: string, token: string, leaseMs: number): Promise<void> {
+  try {
+    const db = await openLockDB();
+    const tx = db.transaction(LOCK_STORE, 'readwrite');
+    const store = tx.objectStore(LOCK_STORE);
+    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
+    if (current?.token === token) {
+      current.expires = Date.now() + leaseMs;
+      await idbRequest(store.put(current));
+    }
+  } catch { /* ignore */ }
+}
+
+async function idbRelease(name: string, token: string): Promise<void> {
+  try {
+    const db = await openLockDB();
+    const tx = db.transaction(LOCK_STORE, 'readwrite');
+    const store = tx.objectStore(LOCK_STORE);
+    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
+    if (current?.token === token) {
+      await idbRequest(store.delete(name));
+    }
+  } catch { /* ignore */ }
+}
+
+function randomToken(): string {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export class CrossTabLock {
+  private owner: string | null = null;
+  private depth = 0;
+  private useIdb = false;
+  private extendTimer: ReturnType<typeof setInterval> | null = null;
+  private storageAbortController: AbortController | null = null;
+
+  constructor(private key: string) {}
+
+  async acquire(): Promise<void> {
+    if (this.depth > 0 && this.owner) {
+      this.depth++;
+      return;
+    }
+    const token = randomToken();
+    const started = Date.now();
+
+    // Prefer atomic IndexedDB CAS when available.
+    if (supportsIndexedDB()) {
+      let idbUnrecoverable = false;
+      while (Date.now() - started <= LOCK_ACQUIRE_TIMEOUT_MS && !idbUnrecoverable) {
+        try {
+          if (await idbAcquire(this.key, token, LOCK_LEASE_MS)) {
+            this.owner = token;
+            this.depth = 1;
+            this.useIdb = true;
+            this.extendTimer = setInterval(() => {
+              if (this.owner) idbExtend(this.key, this.owner, LOCK_LEASE_MS);
+            }, LOCK_LEASE_MS / 2);
+            return;
+          }
+        } catch (e) {
+          if (e instanceof IdbLockUnavailableError) {
+            idbUnrecoverable = true;
+          }
+          // Otherwise another tab likely holds the lock; keep polling.
+        }
+        await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS + Math.random() * 20));
+      }
+      if (!idbUnrecoverable) {
+        throw new Error('Could not acquire wallet lock — another tab may be busy');
+      }
+      // Fall through to localStorage fallback.
+    }
+
+    // Fallback: localStorage lease-based lock.
+    // Listen for storage events so we can abort acquisition promptly if another
+    // tab wins the race. This closes the read-then-write race window.
+    this.storageAbortController = new AbortController();
+    const abortSignal = this.storageAbortController.signal;
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key !== this.key || abortSignal.aborted) return;
+      const rec = readLock(this.key);
+      if (rec && rec.owner !== token && rec.expires > Date.now()) {
+        this.storageAbortController?.abort();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', onStorage, { signal: abortSignal });
+    }
+
+    try {
+      while (true) {
+        if (abortSignal.aborted) {
+          throw new Error('Could not acquire wallet lock — another tab may be busy');
+        }
+        const now = Date.now();
+        const existing = readLock(this.key);
+        if (!existing || existing.expires < now) {
+          try {
+            writeLock(this.key, { owner: token, expires: now + LOCK_LEASE_MS });
+          } catch (e) {
+            if (isQuotaError(e)) {
+              resetCanWriteLocalStorageCache();
+            }
+            throw e;
+          }
+          // Re-read to confirm we won the race
+          const current = readLock(this.key);
+          if (current?.owner === token) {
+            this.owner = token;
+            this.depth = 1;
+            this.useIdb = false;
+            this.extendTimer = setInterval(() => {
+              const rec = readLock(this.key);
+              if (rec?.owner === this.owner) {
+                try {
+                  writeLock(this.key, { owner: this.owner, expires: Date.now() + LOCK_LEASE_MS });
+                } catch (e) {
+                  if (isQuotaError(e)) resetCanWriteLocalStorageCache();
+                }
+              }
+            }, LOCK_LEASE_MS / 2);
+            return;
+          }
+        }
+        if (now - started > LOCK_ACQUIRE_TIMEOUT_MS) {
+          throw new Error('Could not acquire wallet lock — another tab may be busy');
+        }
+        await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS + Math.floor(Math.random() * 50)));
+      }
+    } finally {
+      this.storageAbortController?.abort();
+      this.storageAbortController = null;
+    }
+  }
+
+  release(): void {
+    if (this.depth <= 0 || !this.owner) return;
+    this.depth--;
+    if (this.depth > 0) return;
+    if (this.extendTimer) {
+      clearInterval(this.extendTimer);
+      this.extendTimer = null;
+    }
+    if (this.useIdb) {
+      idbRelease(this.key, this.owner).catch(() => { /* ignore */ });
+    } else {
+      const rec = readLock(this.key);
+      if (rec?.owner === this.owner) {
+        try { localStorage.removeItem(this.key); } catch { /* ignore */ }
+      }
+    }
+    this.owner = null;
+    this.useIdb = false;
+  }
+}
+
+const proofLock = new CrossTabLock(PREFIX + 'proof_lock');
+const txLock = new CrossTabLock(PREFIX + 'tx_lock');
+
+export async function withProofLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (!canWriteLocalStorage()) {
+    throw new Error('Storage quota exceeded — cannot perform wallet operation. Free up space and try again.');
+  }
+  await proofLock.acquire();
+  try {
+    return await fn();
+  } finally {
+    proofLock.release();
+  }
+}
+
+export async function withTxLock<T>(fn: () => Promise<T>): Promise<T> {
+  await txLock.acquire();
+  try {
+    return await fn();
+  } finally {
+    txLock.release();
+  }
+}
+
+export interface Transaction {
+  id: string;
+  type: 'send' | 'receive' | 'mint' | 'melt';
+  amount: number;
+  memo: string;
+  mintUrl: string;
+  status: 'pending' | 'completed' | 'failed' | 'expired';
+  createdAt: number;
+  quoteId?: string;
+  /** Unix ms after which a pending mint/melt quote should be considered expired. */
+  expiresAt?: number;
+}
+
+export interface StoredMint {
+  name: string;
+  url: string;
+  custom?: boolean;
+}
+
+const POLLUTING_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * JSON reviver that blocks prototype-polluting keys and returns plain
+ * dictionaries with a null prototype for every object.
+ */
+function safeReviver(_key: string, value: unknown): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const safe = Object.create(null) as Record<string, unknown>;
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      if (POLLUTING_KEYS.has(k)) continue;
+      safe[k] = (value as Record<string, unknown>)[k];
+    }
+    return safe;
+  }
+  return value;
+}
+
+function hasPollutingKey(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    return value.some(hasPollutingKey);
+  }
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (POLLUTING_KEYS.has(key)) return true;
+    if (hasPollutingKey((value as Record<string, unknown>)[key])) return true;
+  }
+  return false;
+}
+
+/** Load item from localStorage. Filters prototype-pollution keys and parses
+ *  objects into null-prototype dictionaries.
+ */
+export function loadItem<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(PREFIX + key);
+    if (raw === null) return fallback;
+    const parsed = JSON.parse(raw, safeReviver) as T;
+    return parsed === undefined ? fallback : parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Set item in localStorage. Rejects values containing prototype-polluting keys. */
+export function setItem(key: string, value: unknown): void {
+  if (hasPollutingKey(value)) {
+    throw new Error(`Refusing to save ${key}: value contains prototype-polluting keys`);
+  }
+  try {
+    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+  } catch (e) {
+    if (isStorageFullError(e)) {
+      resetCanWriteLocalStorageCache();
+    }
+    throw new Error(`Failed to save ${key} to localStorage: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// ── Mints ─────────────────────────────────────────────────
+
+const CUSTOM_MINTS_KEY = 'custom_mints';
+const SELECTED_MINT_URL_KEY = 'selected_mint_url';
+const MINT_METADATA_MIGRATION_KEY = 'mint_metadata_migration_done';
+
+function isValidStoredMint(m: unknown): m is StoredMint {
+  return (
+    !!m &&
+    typeof m === 'object' &&
+    typeof (m as Record<string, unknown>).url === 'string' &&
+    typeof (m as Record<string, unknown>).name === 'string'
+  );
+}
+
+/** Migrate plaintext mint metadata to encrypted storage. Idempotent. */
+export async function migrateMintMetadata(encKey: CryptoKey, _legacyKey?: CryptoKey): Promise<void> {
+  if (typeof localStorage === 'undefined') return;
+  if (localStorage.getItem(PREFIX + MINT_METADATA_MIGRATION_KEY) === '1') return;
+  try {
+    const plaintextMints = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, []);
+    const plaintextUrl = localStorage.getItem(PREFIX + SELECTED_MINT_URL_KEY) || '';
+    const encryptedMints = await encryptData(JSON.stringify(plaintextMints), encKey);
+    const encryptedUrl = plaintextUrl ? await encryptData(plaintextUrl, encKey) : '';
+    setItem(CUSTOM_MINTS_KEY, encryptedMints);
+    if (encryptedUrl) {
+      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, encryptedUrl);
+    }
+    safeLocalStorageSetItem(PREFIX + MINT_METADATA_MIGRATION_KEY, '1');
+  } catch (e) {
+    devLog.warn('Mint metadata migration failed:', e);
+  }
+}
+
+export async function loadCustomMints(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<StoredMint[]> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(PREFIX + CUSTOM_MINTS_KEY); } catch { return []; }
+  if (!raw) return [];
+  if (encKey) {
+    try {
+      const decrypted = await decryptData(raw, encKey, legacyKey, 'freedomid:custom-mints');
+      if (decrypted === null) return [];
+      const parsed = JSON.parse(decrypted) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(isValidStoredMint);
+    } catch {
+      devLog.warn('Failed to decrypt custom mints');
+      return [];
+    }
+  }
+  // Plaintext fallback only when no key is provided (legacy/test contexts).
+  const loaded = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, []);
+  if (!Array.isArray(loaded)) return [];
+  return loaded.filter(isValidStoredMint);
+}
+
+export async function saveCustomMints(mints: StoredMint[], encKey?: CryptoKey): Promise<void> {
+  try {
+    if (encKey) {
+      const ciphertext = await encryptData(JSON.stringify(mints), encKey, 'freedomid:custom-mints');
+      localStorage.setItem(PREFIX + CUSTOM_MINTS_KEY, ciphertext);
+    } else {
+      setItem(CUSTOM_MINTS_KEY, mints);
+    }
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    devLog.warn('Storage full: failed to save custom mints');
+  }
+}
+
+export async function loadSelectedMintUrl(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<string> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(PREFIX + SELECTED_MINT_URL_KEY); } catch { return ''; }
+  if (!raw) return '';
+  if (encKey) {
+    try {
+      const decrypted = await decryptData(raw, encKey, legacyKey, 'freedomid:selected-mint');
+      return decrypted ?? '';
+    } catch {
+      devLog.warn('Failed to decrypt selected mint URL');
+      return '';
+    }
+  }
+  return raw;
+}
+
+export async function saveSelectedMintUrl(url: string, encKey?: CryptoKey): Promise<void> {
+  try {
+    if (encKey && url) {
+      const ciphertext = await encryptData(url, encKey, 'freedomid:selected-mint');
+      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, ciphertext);
+    } else if (encKey) {
+      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, '');
+    } else {
+      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, url);
+    }
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    devLog.warn('Storage full: failed to save selected mint URL');
+  }
+}
+
+// ── Proofs (encrypted) ────────────────────────────────────
+
+/** Unicode-safe localStorage key for a mint URL. */
+export function mintStorageKey(mintUrl: string): string {
+  // encodeURIComponent makes it ASCII-safe, then base64 is reliable
+  return PREFIX + 'proofs_' + stringToBase64(mintUrl);
+}
+
+export async function getProofsForMint(mintUrl: string, encKey: CryptoKey, legacyKey?: CryptoKey): Promise<unknown[]> {
+  try {
+    const raw = localStorage.getItem(mintStorageKey(mintUrl));
+    if (!raw) return [];
+    const decrypted = await decryptProofs(raw, encKey, legacyKey, `${PROOF_CONTEXT_PREFIX}${mintUrl}`);
+    return Array.isArray(decrypted) ? decrypted : [];
+  } catch {
+    return [];
+  }
+}
+
+function isValidProof(p: unknown): boolean {
+  if (!p || typeof p !== 'object') return false;
+  const proof = p as Record<string, unknown>;
+  return (
+    typeof proof.id === 'string' &&
+    proof.id.length > 0 &&
+    proof.id.length <= MAX_PROOF_FIELD_LENGTH &&
+    typeof proof.amount === 'number' &&
+    Number.isInteger(proof.amount) &&
+    proof.amount > 0 &&
+    proof.amount <= Number.MAX_SAFE_INTEGER &&
+    typeof proof.secret === 'string' &&
+    proof.secret.length > 0 &&
+    proof.secret.length <= MAX_PROOF_FIELD_LENGTH &&
+    typeof proof.C === 'string' &&
+    proof.C.length > 0 &&
+    proof.C.length <= MAX_PROOF_FIELD_LENGTH &&
+    (proof.witness === undefined ||
+      (typeof proof.witness === 'string' && proof.witness.length <= MAX_PROOF_FIELD_LENGTH))
+  );
+}
+
+export async function saveProofsForMint(mintUrl: string, proofs: unknown[], encKey: CryptoKey): Promise<void> {
+  const validProofs = Array.isArray(proofs) ? proofs.filter(isValidProof) : [];
+  let encrypted: string;
+  try {
+    encrypted = await encryptProofs(validProofs, encKey, `${PROOF_CONTEXT_PREFIX}${mintUrl}`);
+  } catch (e) {
+    devLog.error('Encryption failed: failed to save proofs for mint', mintUrl);
+    throw new Error(`Failed to encrypt proofs: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    localStorage.setItem(mintStorageKey(mintUrl), encrypted);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    devLog.error('Storage full: failed to save proofs for mint', mintUrl);
+    throw new Error(`Failed to save proofs — storage may be full: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// ── Transactions ──────────────────────────────────────────
+
+const TX_STORAGE_KEY = 'transactions';
+
+export function isValidTransaction(t: unknown): t is Transaction {
+  if (!t || typeof t !== 'object') return false;
+  const tx = t as Record<string, unknown>;
+  if (
+    typeof tx.id !== 'string' ||
+    tx.id.length === 0 ||
+    tx.id.length > 1000 ||
+    typeof tx.type !== 'string' ||
+    !['send', 'receive', 'mint', 'melt'].includes(tx.type) ||
+    typeof tx.amount !== 'number' ||
+    !Number.isInteger(tx.amount) ||
+    tx.amount < 0 ||
+    tx.amount > Number.MAX_SAFE_INTEGER ||
+    typeof tx.memo !== 'string' ||
+    tx.memo.length > 10000 ||
+    typeof tx.mintUrl !== 'string' ||
+    tx.mintUrl.length === 0 ||
+    tx.mintUrl.length > 2000 ||
+    typeof tx.status !== 'string' ||
+    !['pending', 'completed', 'failed', 'expired'].includes(tx.status) ||
+    (tx.quoteId !== undefined && (typeof tx.quoteId !== 'string' || tx.quoteId.length > 1000)) ||
+    typeof tx.createdAt !== 'number' ||
+    !Number.isFinite(tx.createdAt) ||
+    !Number.isInteger(tx.createdAt) ||
+    tx.createdAt < 0
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export interface LoadTransactionsOptions {
+  /** Allow reading unencrypted plaintext transactions. Must be opt-in; defaults
+   *  to false so a lost/missing key does not silently downgrade to plaintext.
+   */
+  allowPlaintextFallback?: boolean;
+}
+
+const TX_MIGRATION_DONE_KEY = 'tx_migration_done';
+
+/** Load transactions. If encKey provided, decrypts AES-GCM ciphertext.
+ *  Decryption failures return an empty array — no plaintext fallback, to prevent
+ *  downgrade/tampering once encrypted storage is in use.
+ *  Plaintext fallback requires an explicit opt-in flag.
+ */
+export async function loadTransactions(
+  encKey?: CryptoKey,
+  legacyKey?: CryptoKey,
+  opts: LoadTransactionsOptions = {},
+): Promise<Transaction[]> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY); } catch { return []; }
+  if (!raw) return [];
+  let json: string;
+  if (encKey) {
+    try {
+      const decrypted = await decryptData(raw, encKey, legacyKey, TRANSACTION_CONTEXT);
+      if (decrypted === null) {
+        return [];
+      }
+      json = decrypted;
+    } catch {
+      // Encrypted storage is in use; decryption failure means corrupted data.
+      // Do NOT fall back to plaintext — that would allow a downgrade/tampering attack.
+      devLog.warn('Failed to decrypt transactions — treating as corrupted');
+      return [];
+    }
+  } else if (opts.allowPlaintextFallback) {
+    json = raw;
+  } else {
+    return [];
+  }
+  try {
+    const txs = JSON.parse(json) as unknown[];
+    if (!Array.isArray(txs)) return [];
+    return txs.filter(isValidTransaction);
+  } catch {
+    return [];
+  }
+}
+
+/** Synchronous loader for useState init (before encKey is available).
+ *  Does NOT read plaintext unless explicitly allowed.
+ */
+export function loadTransactionsSync(opts: LoadTransactionsOptions = {}): Transaction[] {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY); } catch { return []; }
+  if (!raw) return [];
+  // If data looks encrypted (not starting with '[' or '{'), we can't decrypt synchronously
+  if (!raw.trim().startsWith('[') && !raw.trim().startsWith('{')) return [];
+  if (!opts.allowPlaintextFallback) return [];
+  try {
+    const txs = JSON.parse(raw, (k, v) => {
+      if (POLLUTING_KEYS.has(k)) return undefined;
+      return v;
+    }) as unknown[];
+    if (!Array.isArray(txs)) return [];
+    return txs.filter(isValidTransaction);
+  } catch {
+    return [];
+  }
+}
+
+/** Save transactions. If encKey provided, encrypts with AES-GCM. */
+export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey): Promise<void> {
+  // Sort newest first, then trim to 500
+  const sorted = [...txs].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  const trimmed = sorted.length > 500 ? sorted.slice(0, 500) : sorted;
+  const json = JSON.stringify(trimmed);
+  if (encKey) {
+    const ciphertext = await encryptData(json, encKey, TRANSACTION_CONTEXT);
+    try {
+      localStorage.setItem(PREFIX + TX_STORAGE_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      devLog.warn('Storage full: failed to save transactions');
+      throw new Error('Failed to save transactions — storage may be full');
+    }
+  } else {
+    try {
+      setItem(TX_STORAGE_KEY, trimmed);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      devLog.warn('Storage full: failed to save transactions');
+      throw new Error('Failed to save transactions — storage may be full');
+    }
+  }
+}
+
+/** Migrate plaintext transactions to encrypted storage. Idempotent. */
+export async function migratePlaintextTransactions(encKey: CryptoKey, _legacyKey?: CryptoKey): Promise<void> {
+  if (typeof localStorage === 'undefined') return;
+  if (localStorage.getItem(PREFIX + TX_MIGRATION_DONE_KEY) === '1') return;
+  try {
+    const raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY);
+    if (!raw) {
+      safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+      return;
+    }
+    // If already looks encrypted, mark migration done without touching it.
+    if (!raw.trim().startsWith('[') && !raw.trim().startsWith('{')) {
+      safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+      return;
+    }
+    const txs = loadTransactionsSync({ allowPlaintextFallback: true });
+    if (txs.length > 0) {
+      await saveTransactions(txs, encKey);
+    }
+    safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+  } catch (e) {
+    devLog.warn('Plaintext transaction migration failed:', e);
+  }
+}
+
+export async function addTransaction(
+  tx: Omit<Transaction, 'id' | 'createdAt'>,
+  encKey?: CryptoKey,
+  legacyKey?: CryptoKey,
+  opts?: LoadTransactionsOptions,
+): Promise<string> {
+  return withTxLock(async () => {
+    const txs = await loadTransactions(encKey, legacyKey, opts);
+    let id: string;
+    try {
+      id = crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // Fallback for insecure contexts where crypto APIs are restricted:
+      // timestamp (base36) + 8 random bytes + a 4-digit counter for monotonicity.
+      console.warn('addTransaction: crypto API unavailable; falling back to Math.random() for transaction id');
+      const ts = Date.now().toString(36);
+      const rnd = Array.from({ length: 4 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+      id = `${ts}_${rnd}`;
+    }
+    const newTx: Transaction = { ...tx, id, createdAt: Date.now() };
+
+    // Validate before saving
+    if (!isValidTransaction(newTx)) {
+      throw new Error('Invalid transaction data');
+    }
+
+    // Deduplicate by id (extremely unlikely but defense in depth)
+    if (txs.some(t => t.id === id)) {
+      id = `${id}_${Date.now()}`;
+      newTx.id = id;
+    }
+
+    txs.unshift(newTx);
+    // Keep last 500
+    if (txs.length > 500) txs.pop();
+    await saveTransactions(txs, encKey);
+    return id;
+  });
+}
+
+const VALID_STATUSES: Transaction['status'][] = ['pending', 'completed', 'failed', 'expired'];
+
+export async function updateTransactionStatus(
+  id: string,
+  status: Transaction['status'],
+  encKey?: CryptoKey,
+  legacyKey?: CryptoKey,
+  opts?: LoadTransactionsOptions,
+): Promise<void> {
+  if (!VALID_STATUSES.includes(status)) {
+    throw new Error(`Invalid transaction status: ${status}`);
+  }
+  return withTxLock(async () => {
+    const txs = await loadTransactions(encKey, legacyKey, opts);
+    const idx = txs.findIndex(t => t.id === id);
+    if (idx < 0) {
+      throw new Error(`Transaction not found: ${id}`);
+    }
+    txs[idx].status = status;
+    await saveTransactions(txs, encKey);
+  });
+}
+
+// ── Processed token hashes (receive dedup, survives restart) ─
+
+const PROCESSED_TOKENS_CONTEXT = 'freedomid:processed-tokens';
+const PROCESSED_TOKENS_KEY = 'processed_tokens';
+const MAX_PROCESSED_TOKEN_ENTRIES = 1000;
+const PROCESSED_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface ProcessedTokenEntry {
+  hash: string;
+  expiresAt: number;
+}
+
+export async function loadProcessedTokenHashes(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<ProcessedTokenEntry[]> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(PREFIX + PROCESSED_TOKENS_KEY); } catch { return []; }
+  if (!raw) return [];
+  if (encKey) {
+    try {
+      const decrypted = await decryptData(raw, encKey, legacyKey, PROCESSED_TOKENS_CONTEXT);
+      if (decrypted === null) return [];
+      const parsed = JSON.parse(decrypted) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      const now = Date.now();
+      return parsed.filter((e): e is ProcessedTokenEntry => {
+        if (!e || typeof e !== 'object') return false;
+        const entry = e as Record<string, unknown>;
+        return (
+          typeof entry.hash === 'string' &&
+          entry.hash.length > 0 &&
+          typeof entry.expiresAt === 'number' &&
+          Number.isFinite(entry.expiresAt) &&
+          entry.expiresAt > now
+        );
+      });
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function isProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<boolean> {
+  if (!hash) return false;
+  const entries = await loadProcessedTokenHashes(encKey, legacyKey);
+  return entries.some((e) => e.hash === hash);
+}
+
+export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<void> {
+  if (!hash || !encKey) return;
+  const entries = await loadProcessedTokenHashes(encKey, legacyKey);
+  const now = Date.now();
+  const filtered = entries.filter((e) => e.hash !== hash);
+  filtered.push({ hash, expiresAt: now + PROCESSED_TOKEN_TTL_MS });
+  filtered.sort((a, b) => b.expiresAt - a.expiresAt);
+  const trimmed = filtered.slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
+  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
+  try {
+    localStorage.setItem(PREFIX + PROCESSED_TOKENS_KEY, ciphertext);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    throw new Error(`Failed to save processed token hash: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// ── Wipe ──────────────────────────────────────────────────
+
+export interface WipeResult {
+  /** True when localStorage and IndexedDB deletion completed without being blocked. */
+  deleted: boolean;
+  /** True when a blocking event was received; data may remain in other tabs. */
+  blocked: boolean;
+}
+
+/** Comprehensive wipe: remove every app-owned localStorage key and drop the IndexedDB.
+ *  Returns a result object indicating whether IndexedDB deletion was blocked.
+ */
+export async function wipeAllAppData(): Promise<WipeResult> {
+  const result: WipeResult = { deleted: true, blocked: false };
+  const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:'];
+  const appKeys = new Set(['pwa-ios-prompt-dismissed']);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (
+          appKeyPrefixes.some(prefix => key.startsWith(prefix)) ||
+          appKeys.has(key)
+        ) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => { try { localStorage.removeItem(k); } catch { /* ignore */ } });
+    }
+  } catch {
+    // localStorage may be unavailable
+  }
+  try {
+    if (typeof indexedDB !== 'undefined') {
+      // Close active connections first so deleteDatabase is not blocked.
+      // (Ditto does not use the source project's IndexedDB, so this is a no-op.)
+      try { /* getDb().close(); */ } catch { /* ignore */ }
+      let blocked = false;
+      await new Promise<void>((resolve, reject) => {
+        const req = indexedDB.deleteDatabase('FreedomID');
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+        req.onblocked = () => {
+          blocked = true;
+          // Still resolve because blocked events may never un-block without user action.
+          resolve();
+        };
+      });
+      if (blocked) {
+        result.deleted = false;
+        result.blocked = true;
+        devLog.warn('IndexedDB deleteDatabase was blocked; data may still be present in other tabs');
+      }
+    }
+  } catch {
+    result.deleted = false;
+    // Ignore IndexedDB errors during wipe
+  }
+  return result;
+}

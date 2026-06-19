@@ -37,6 +37,32 @@ const COLOR_LABELS: Record<keyof CoreThemeColors, string> = {
   background: 'Background',
 };
 
+/** Advanced token keys exposed in the editor, in display order */
+const ADVANCED_TOKEN_KEYS: (keyof ThemeTokens)[] = ['card', 'secondary', 'muted', 'accent', 'border'];
+
+/** Human-readable labels for advanced token keys */
+const TOKEN_LABELS: Record<keyof ThemeTokens, string> = {
+  background: 'Background',
+  foreground: 'Foreground',
+  card: 'Card',
+  cardForeground: 'Card Text',
+  popover: 'Popover',
+  popoverForeground: 'Popover Text',
+  primary: 'Primary',
+  primaryForeground: 'Primary Text',
+  secondary: 'Secondary',
+  secondaryForeground: 'Secondary Text',
+  muted: 'Muted',
+  mutedForeground: 'Muted Text',
+  accent: 'Accent',
+  accentForeground: 'Accent Text',
+  destructive: 'Destructive',
+  destructiveForeground: 'Destructive Text',
+  border: 'Border',
+  input: 'Input',
+  ring: 'Ring',
+};
+
 /** Get the effective CoreThemeColors for the current theme */
 function getEffectiveColors(theme: Theme, customTheme?: ThemeConfig, themes?: ThemesConfig): CoreThemeColors {
   if (theme === 'custom' && customTheme) return customTheme.colors;
@@ -50,14 +76,16 @@ function ThemePreviewCard({
   colors,
   isActive,
   backgroundUrl,
+  tokens: tokensOverride,
   children,
 }: {
   colors: CoreThemeColors;
   isActive: boolean;
   backgroundUrl?: string;
+  tokens?: Partial<ThemeTokens>;
   children?: React.ReactNode;
 }) {
-  const tokens = useMemo(() => coreToTokens(colors), [colors]);
+  const tokens = useMemo(() => coreToTokens(colors, tokensOverride), [colors, tokensOverride]);
 
   return (
     <>
@@ -195,6 +223,9 @@ export function ThemeGrid({
     font: preset.font,
     titleFont: preset.titleFont,
     background: preset.background,
+    tokens: preset.tokens,
+    radius: preset.radius,
+    backgroundOpacity: preset.backgroundOpacity,
   }));
 
   const isPresetActive = (presetColors: CoreThemeColors): boolean => {
@@ -212,9 +243,17 @@ export function ThemeGrid({
     onSelect?.();
   }, [setTheme, onSelect, onEditingThemeChange]);
 
-  const handleSelectPreset = useCallback((preset: { colors: CoreThemeColors; font?: ThemeConfig['font']; titleFont?: ThemeConfig['titleFont']; background?: ThemeConfig['background'] }) => {
+  const handleSelectPreset = useCallback((preset: { colors: CoreThemeColors; font?: ThemeConfig['font']; titleFont?: ThemeConfig['titleFont']; background?: ThemeConfig['background']; tokens?: ThemeConfig['tokens']; radius?: ThemeConfig['radius']; backgroundOpacity?: ThemeConfig['backgroundOpacity'] }) => {
     onEditingThemeChange?.(null);
-    applyCustomTheme({ colors: preset.colors, font: preset.font, titleFont: preset.titleFont, background: preset.background });
+    applyCustomTheme({
+      colors: preset.colors,
+      font: preset.font,
+      titleFont: preset.titleFont,
+      background: preset.background,
+      tokens: preset.tokens,
+      radius: preset.radius,
+      backgroundOpacity: preset.backgroundOpacity,
+    });
     onSelect?.();
   }, [applyCustomTheme, onSelect, onEditingThemeChange]);
 
@@ -508,6 +547,9 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
     font: ThemeFont | undefined;
     titleFont: ThemeFont | undefined;
     background: ThemeBackground | undefined;
+    tokens: Partial<ThemeTokens> | undefined;
+    radius: string | undefined;
+    backgroundOpacity: number | undefined;
   } | null>(null);
 
   // Capture snapshot when builder opens
@@ -518,6 +560,9 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
         font: customTheme?.font,
         titleFont: customTheme?.titleFont,
         background: customTheme?.background,
+        tokens: customTheme?.tokens,
+        radius: customTheme?.radius,
+        backgroundOpacity: customTheme?.backgroundOpacity,
       });
     } else {
       setSnapshot(null);
@@ -530,13 +575,25 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
     JSON.stringify(effectiveColors) !== JSON.stringify(snapshot.colors) ||
     JSON.stringify(customTheme?.font) !== JSON.stringify(snapshot.font) ||
     JSON.stringify(customTheme?.titleFont) !== JSON.stringify(snapshot.titleFont) ||
-    JSON.stringify(customTheme?.background) !== JSON.stringify(snapshot.background)
+    JSON.stringify(customTheme?.background) !== JSON.stringify(snapshot.background) ||
+    JSON.stringify(customTheme?.tokens) !== JSON.stringify(snapshot.tokens) ||
+    customTheme?.radius !== snapshot.radius ||
+    customTheme?.backgroundOpacity !== snapshot.backgroundOpacity
   );
 
   /** Reset all theme values to the snapshot */
   const handleReset = useCallback(() => {
     if (!snapshot) return;
-    applyCustomTheme({ ...customTheme, colors: snapshot.colors, font: snapshot.font, titleFont: snapshot.titleFont, background: snapshot.background });
+    applyCustomTheme({
+      ...customTheme,
+      colors: snapshot.colors,
+      font: snapshot.font,
+      titleFont: snapshot.titleFont,
+      background: snapshot.background,
+      tokens: snapshot.tokens,
+      radius: snapshot.radius,
+      backgroundOpacity: snapshot.backgroundOpacity,
+    });
   }, [snapshot, customTheme, applyCustomTheme]);
 
   /** Handle a color change from the inline editor */
@@ -545,6 +602,46 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
     const newColors = { ...effectiveColors, [key]: hslValue };
     applyCustomTheme({ ...customTheme, colors: newColors });
   }, [effectiveColors, applyCustomTheme, customTheme]);
+
+  /** Derived tokens for the current effective colors (used as defaults). */
+  const derivedTokens = useMemo(() => coreToTokens(effectiveColors), [effectiveColors]);
+
+  /** Handle an advanced token override change. */
+  const handleTokenChange = useCallback((key: keyof ThemeTokens, hex: string) => {
+    const hslValue = hexToHslString(hex);
+    const newTokens: Partial<ThemeTokens> = { ...customTheme?.tokens, [key]: hslValue };
+    applyCustomTheme({
+      ...(customTheme ?? { colors: effectiveColors }),
+      tokens: newTokens,
+    });
+  }, [customTheme, effectiveColors, applyCustomTheme]);
+
+  /** Reset a single advanced token override to its derived value. */
+  const handleTokenReset = useCallback((key: keyof ThemeTokens) => {
+    const newTokens = { ...customTheme?.tokens };
+    delete newTokens[key];
+    applyCustomTheme({
+      ...(customTheme ?? { colors: effectiveColors }),
+      tokens: Object.keys(newTokens).length > 0 ? newTokens : undefined,
+    });
+  }, [customTheme, effectiveColors, applyCustomTheme]);
+
+  /** Handle radius change. */
+  const handleRadiusChange = useCallback((value: string) => {
+    applyCustomTheme({
+      ...(customTheme ?? { colors: effectiveColors }),
+      radius: value || undefined,
+    });
+  }, [customTheme, effectiveColors, applyCustomTheme]);
+
+  /** Handle background opacity change. */
+  const handleBackgroundOpacityChange = useCallback((value: number) => {
+    const opacity = Math.max(0, Math.min(1, value));
+    applyCustomTheme({
+      ...(customTheme ?? { colors: effectiveColors }),
+      backgroundOpacity: opacity < 1 ? opacity : undefined,
+    });
+  }, [customTheme, effectiveColors, applyCustomTheme]);
 
   /** Open the publish dialog for a new theme */
   const handlePublishNew = useCallback(() => {
@@ -640,6 +737,9 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
     font: preset.font,
     titleFont: preset.titleFont,
     background: preset.background,
+    tokens: preset.tokens,
+    radius: preset.radius,
+    backgroundOpacity: preset.backgroundOpacity,
   }));
 
   const isPresetActive = (presetColors: CoreThemeColors): boolean => {
@@ -656,9 +756,17 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
     setTheme(id);
   }, [setTheme]);
 
-  const handleSelectPreset = useCallback((preset: { colors: CoreThemeColors; font?: ThemeConfig['font']; titleFont?: ThemeConfig['titleFont']; background?: ThemeConfig['background'] }) => {
+  const handleSelectPreset = useCallback((preset: { colors: CoreThemeColors; font?: ThemeConfig['font']; titleFont?: ThemeConfig['titleFont']; background?: ThemeConfig['background']; tokens?: ThemeConfig['tokens']; radius?: ThemeConfig['radius']; backgroundOpacity?: ThemeConfig['backgroundOpacity'] }) => {
     setEditingTheme(null);
-    applyCustomTheme({ colors: preset.colors, font: preset.font, titleFont: preset.titleFont, background: preset.background });
+    applyCustomTheme({
+      colors: preset.colors,
+      font: preset.font,
+      titleFont: preset.titleFont,
+      background: preset.background,
+      tokens: preset.tokens,
+      radius: preset.radius,
+      backgroundOpacity: preset.backgroundOpacity,
+    });
   }, [applyCustomTheme]);
 
   const handleSelectUserTheme = useCallback((def: ThemeDefinition) => {
@@ -890,6 +998,76 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
 
             {/* Background */}
             <BackgroundPicker />
+
+            {/* Advanced tokens */}
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group">
+                <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
+                Advanced
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="pt-3 space-y-4">
+                  <div className="space-y-2">
+                    <span className="text-xs font-medium text-muted-foreground">Token Overrides</span>
+                    <div className="flex flex-wrap gap-4">
+                      {ADVANCED_TOKEN_KEYS.map((key) => {
+                        const overridden = customTheme?.tokens?.[key];
+                        const value = hslStringToHex(overridden ?? derivedTokens[key]);
+                        return (
+                          <div key={key} className="flex flex-col items-center gap-1">
+                            <ColorPicker
+                              label={TOKEN_LABELS[key]}
+                              value={value}
+                              onChange={(hex) => handleTokenChange(key, hex)}
+                            />
+                            {overridden && (
+                              <button
+                                onClick={() => handleTokenReset(key)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Radius</span>
+                      <span className="text-xs text-muted-foreground">{customTheme?.radius ?? '0.75rem'}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={32}
+                      step={1}
+                      value={parseFloat(customTheme?.radius ?? '0.75') * 16}
+                      onChange={(e) => handleRadiusChange(`${Number(e.target.value) / 16}rem`)}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Background Opacity</span>
+                      <span className="text-xs text-muted-foreground">{Math.round((customTheme?.backgroundOpacity ?? 1) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={Math.round((customTheme?.backgroundOpacity ?? 1) * 100)}
+                      onChange={(e) => handleBackgroundOpacityChange(Number(e.target.value) / 100)}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Auto-share toggle */}
             {user && (

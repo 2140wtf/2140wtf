@@ -1,5 +1,5 @@
 /**
- * Blobbi Body Effects System
+ * Pets Body Effects System
  * 
  * Canonical owner of body-level visual decorators:
  * - Dirt marks
@@ -11,7 +11,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type {
-  BlobbiVariant,
+  PetsVariant,
   DirtMarksConfig,
   StinkCloudsConfig,
   BodyEffectConfig,

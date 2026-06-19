@@ -14,6 +14,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useQueryClient } from '@tanstack/react-query';
 import { extractWebxdcMeta } from '@/lib/webxdcMeta';
+import { generateUUID } from '@/lib/uuid';
 import { toast } from '@/hooks/useToast';
 
 interface WebxdcUploadDialogProps {
@@ -115,11 +116,11 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
       if (sizeTag) tags.push(['size', sizeTag[1]]);
 
       // Alt tag with app name
-      const altText = appName ? `Webxdc app: ${appName}` : 'Webxdc app';
+      const altText = appName ? `Mini app: ${appName}` : 'Mini app';
       tags.push(['alt', altText]);
 
-      // Webxdc UUID for state coordination
-      const uuid = crypto.randomUUID();
+      // Mini-app UUID for state coordination
+      const uuid = generateUUID();
       tags.push(['webxdc', uuid]);
 
       // App icon thumbnail
@@ -132,11 +133,11 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      toast({ title: 'Published', description: `${appName ?? 'Webxdc app'} shared successfully.` });
+      toast({ title: 'Published', description: `${appName ?? 'Mini app'} shared successfully.` });
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       handleOpenChange(false);
     } catch {
-      toast({ title: 'Publish failed', description: 'Could not publish the webxdc app.', variant: 'destructive' });
+      toast({ title: 'Publish failed', description: 'Could not publish the mini-app.', variant: 'destructive' });
     } finally {
       setIsUploading(false);
     }
@@ -148,7 +149,7 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Blocks className="size-5" />
-            Share Webxdc App
+            Share Mini App
           </DialogTitle>
         </DialogHeader>
 
@@ -198,7 +199,7 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-medium">Choose a .xdc file</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Webxdc apps are sandboxed HTML5 archives</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Mini-apps are sandboxed HTML5 archives</p>
                 </div>
               </button>
             )}
@@ -213,9 +214,9 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="webxdc-description">Description</Label>
+            <Label htmlFor="mini-app-description">Description</Label>
             <Textarea
-              id="webxdc-description"
+              id="mini-app-description"
               placeholder="What does this app do?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

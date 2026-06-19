@@ -12,10 +12,10 @@
  * and avoid circular imports.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { FurniturePlacement } from './room-furniture-schema';
 
-export const DEFAULT_ROOM_FURNITURE: Partial<Record<BlobbiRoomId, FurniturePlacement[]>> = {
+export const DEFAULT_ROOM_FURNITURE: Partial<Record<PetsRoomId, FurniturePlacement[]>> = {
   home: [
     { id: 'official:rug-round', x: 0.5, y: 0.85, layer: 'floor', scale: 1 },
     { id: 'official:plant-tall', x: 0.88, y: 0.72, layer: 'front', scale: 1 },

@@ -7,7 +7,7 @@ export const VIDEO_EXTS = 'mp4|webm|mov|qt|avi|mkv|flv';
 /** Audio extensions rendered as players. */
 export const AUDIO_EXTS = 'mp3|wav|ogg|flac|m4a|aac|opus';
 
-/** All media extensions (image + video + audio + webxdc). */
+/** All media extensions (image + video + audio + mini-apps). */
 export const ALL_MEDIA_EXTS = `${IMAGE_EXTS}|${VIDEO_EXTS}|${AUDIO_EXTS}|xdc`;
 
 /** Matches image URLs. */
@@ -28,13 +28,13 @@ export const AUDIO_URL_REGEX = new RegExp(
   'gi',
 );
 
-/** Matches any media URL (video, audio, webxdc) that is rendered as an embed — not a link preview. */
+/** Matches any media URL (video, audio, mini-app) that is rendered as an embed — not a link preview. */
 export const EMBED_MEDIA_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s]+\\.(${VIDEO_EXTS}|${AUDIO_EXTS}|xdc)(\\?[^\\s]*)?`,
   'i',
 );
 
-/** Matches all NIP-92 media URLs for imeta tag generation (images + video + audio + webxdc). */
+/** Matches all NIP-92 media URLs for imeta tag generation (images + video + audio + mini-apps). */
 export const IMETA_MEDIA_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s]+\\.(${ALL_MEDIA_EXTS})(\\?[^\\s]*)?`,
   'gi',

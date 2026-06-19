@@ -1,5 +1,5 @@
 /**
- * Shared Types for Blobbi Visual System
+ * Shared Types for Pets Visual System
  *
  * Centralized type definitions used across:
  * - Visual components (Baby, Adult, Companion)
@@ -14,26 +14,26 @@
 // ─── Render Mode ──────────────────────────────────────────────────────────────
 
 /**
- * Controls how the Blobbi visual is rendered.
+ * Controls how the Pets visual is rendered.
  *
  * - 'page': Default. Runs eye tracking hooks internally, applies reaction
- *   CSS classes on the SVG container. Used by BlobbiStageVisual / BlobbiPage.
+ *   CSS classes on the SVG container. Used by PetsStageVisual / PetsPage.
  *
  * - 'companion': Optimized for the floating companion runtime. Disables
  *   internal mouse tracking (gaze driven by ref), suppresses reaction CSS
  *   classes on the SVG container (applied by outer wrapper instead) to
  *   keep the dangerouslySetInnerHTML node stable.
  */
-export type BlobbiRenderMode = 'page' | 'companion';
+export type PetsRenderMode = 'page' | 'companion';
 
 // ─── Eye Tracking Types ───────────────────────────────────────────────────────
 
 /**
- * Controls how the Blobbi's eyes behave.
+ * Controls how the Pets's eyes behave.
  * - 'follow-pointer': Eyes track the mouse cursor (default)
  * - 'forward': Eyes look straight ahead (for photos/export)
  */
-export type BlobbiLookMode = 'follow-pointer' | 'forward';
+export type PetsLookMode = 'follow-pointer' | 'forward';
 
 /**
  * External eye offset for companion control.
@@ -58,15 +58,15 @@ export interface EyePosition {
 // ─── Reaction Types ───────────────────────────────────────────────────────────
 
 /**
- * Reaction states for Blobbi CSS animations.
+ * Reaction states for Pets CSS animations.
  * Controls music/sing/dance animations applied to the container.
  */
-export type BlobbiReactionState = 'idle' | 'listening' | 'swaying' | 'singing' | 'happy';
+export type PetsReactionState = 'idle' | 'listening' | 'swaying' | 'singing' | 'happy';
 
-// ─── Blobbi Variant Types ─────────────────────────────────────────────────────
+// ─── Pets Variant Types ─────────────────────────────────────────────────────
 
 /**
- * Blobbi variant for variant-specific adjustments.
+ * Pets variant for variant-specific adjustments.
  * Used by emotion system for different eyebrow positions, etc.
  */
-export type BlobbiVariant = 'baby' | 'adult';
+export type PetsVariant = 'baby' | 'adult';

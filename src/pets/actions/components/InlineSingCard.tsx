@@ -1,4 +1,4 @@
-// src/blobbi/actions/components/InlineSingCard.tsx
+// src/pets/actions/components/InlineSingCard.tsx
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { 
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 import { useAudioPlayback } from '../hooks/useAudioPlayback';
-import { getRandomLyrics, type LyricsEntry } from '../lib/blobbi-random-lyrics';
+import { getRandomLyrics, type LyricsEntry } from '../lib/pets-random-lyrics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,9 +29,9 @@ interface InlineSingCardProps {
   onConfirm: () => Promise<void>;
   /** Called when user closes the sing card */
   onClose: () => void;
-  /** Called when recording starts (for Blobbi reaction) */
+  /** Called when recording starts (for Pets reaction) */
   onRecordingStart?: () => void;
-  /** Called when recording stops (for Blobbi reaction) */
+  /** Called when recording stops (for Pets reaction) */
   onRecordingStop?: () => void;
   /** Whether publishing is in progress */
   isPublishing: boolean;
@@ -230,7 +230,7 @@ export function InlineSingCard({
       setRecordingState('recording');
       setRecordingDuration(0);
       
-      // Notify parent that recording started (for Blobbi reaction)
+      // Notify parent that recording started (for Pets reaction)
       onRecordingStart?.();
       
       timerRef.current = setInterval(() => {
@@ -264,7 +264,7 @@ export function InlineSingCard({
       mediaRecorderRef.current.stop();
     }
     
-    // Notify parent that recording stopped (for Blobbi reaction)
+    // Notify parent that recording stopped (for Pets reaction)
     onRecordingStop?.();
   }, [onRecordingStop]);
   
@@ -438,7 +438,7 @@ export function InlineSingCard({
                   ) : (
                     <Check className="size-4 mr-2" />
                   )}
-                  {isPublishing ? 'Singing...' : 'Sing for Blobbi'}
+                  {isPublishing ? 'Singing...' : 'Sing for Pets'}
                 </Button>
               </>
             )}

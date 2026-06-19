@@ -1,8 +1,8 @@
 /**
- * Color Guardrails for Blobbi Visual Traits
+ * Color Guardrails for Pets Visual Traits
  *
  * Pure validation/adjustment utilities that ensure generated colors produce
- * good visual results in the Blobbi rendering pipeline. Operates in HSL
+ * good visual results in the Pets rendering pipeline. Operates in HSL
  * color space for perceptually-aware adjustments.
  *
  * These guardrails are designed to be applied at the generation layer only.
@@ -200,7 +200,7 @@ export function clampBaseColor(hex: string): string {
  *
  * The secondary color provides the inner gradient stops in the 3D body
  * gradient. If it's too close to the base, the gradient collapses into
- * a flat fill and the Blobbi loses its characteristic rounded shading.
+ * a flat fill and the Pets loses its characteristic rounded shading.
  *
  * Distinction is measured by a combination of hue and lightness distance:
  * - Hue difference >= 30° → colors are visually distinct (passes as-is)
@@ -295,7 +295,7 @@ export function ensureEyeVisibility(eyeHex: string, baseHex: string): string {
 // ─── Combined Entry Point ─────────────────────────────────────────────────────
 
 /**
- * Apply all color guardrails to a set of generated Blobbi colors.
+ * Apply all color guardrails to a set of generated Pets colors.
  *
  * Guardrails are applied in dependency order:
  * 1. Clamp base color to usable luminance/saturation range

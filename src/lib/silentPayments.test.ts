@@ -20,6 +20,7 @@ import {
   deriveSilentPaymentOutputs,
   extractEligibleInputPubKey,
   isSilentPaymentAddress,
+  validateSilentPaymentAddress,
   type SilentPaymentInput,
   type SilentPaymentRecipient,
 } from './silentPayments';
@@ -241,6 +242,17 @@ describe('decodeSilentPaymentAddress', () => {
     expect(isSilentPaymentAddress('bc1q…')).toBe(false);
     expect(isSilentPaymentAddress('')).toBe(false);
   });
+
+  it('rejects malformed / non-hex recipient strings', () => {
+    // Not an SP address at all.
+    expect(validateSilentPaymentAddress('not-an-sp-address')).toBe(false);
+    // Characters outside the bech32m charset.
+    expect(validateSilentPaymentAddress('sp1!!!')).toBe(false);
+    // Wrong HRP.
+    expect(validateSilentPaymentAddress('bc1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv')).toBe(false);
+    // Looks like an SP address but is far too short.
+    expect(validateSilentPaymentAddress('sp1qqqqq')).toBe(false);
+  });
 });
 
 describe('extractEligibleInputPubKey', () => {
@@ -270,11 +282,15 @@ for (let i = 0; i < cases.length; i++) {
         const allOutpoints = s.given.vin.map((v) => ({ txid: v.txid, vout: v.vout }));
 
         // Expand `count` per the BIP352 reference (`recipients.extend([r] * count)`).
+        // Reuse the decoded address object for repeated recipients — decoding a
+        // silent payment address involves bech32m + curve validation and would
+        // otherwise make the K_max vector (2324 copies) timeout.
         const recipients: SilentPaymentRecipient[] = [];
         for (const r of s.given.recipients) {
           const count = r.count ?? 1;
+          const decoded = decodeSilentPaymentAddress(r.address);
           for (let n = 0; n < count; n++) {
-            recipients.push({ address: decodeSilentPaymentAddress(r.address), raw: r.address });
+            recipients.push({ address: decoded, raw: r.address });
           }
         }
 

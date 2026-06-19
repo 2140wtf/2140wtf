@@ -2,21 +2,21 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeftRight, Egg, Footprints, Loader2, X } from 'lucide-react';
 
-import { BlobbiAwayState } from '@/blobbi/ui/BlobbiAwayState';
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
-import { StatIndicator } from '@/blobbi/ui/StatIndicator';
-import { useProjectedBlobbiState } from '@/blobbi/core/hooks/useProjectedBlobbiState';
-import { useStatusReaction } from '@/blobbi/ui/hooks/useStatusReaction';
-import { useBlobbisCollection } from '@/blobbi/core/hooks/useBlobbisCollection';
-import { useBlobbiCompanionData } from '@/blobbi/companion/hooks/useBlobbiCompanionData';
-import { useBlobbiMigration } from '@/blobbi/core/hooks/useBlobbiMigration';
-import { useBlobbiUseInventoryItem } from '@/blobbi/actions/hooks/useBlobbiUseInventoryItem';
-import { isActionVisibleForStage, type InventoryAction, type BlobbiAction } from '@/blobbi/actions/lib/blobbi-action-utils';
-import { getVisibleStats } from '@/blobbi/core/lib/blobbi-decay';
-import { getBlobbiStatDisplayState } from '@/blobbi/core/lib/blobbi-segments';
-import { KIND_BLOBBI_STATE, KIND_BLOBBONAUT_PROFILE, updateBlobbiTags, updateBlobbonautTags, filterMigratedLegacyCompanions } from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { getStreakTagUpdates } from '@/blobbi/actions/lib/blobbi-streak';
+import { PetsAwayState } from '@/pets/ui/PetsAwayState';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
+import { StatIndicator } from '@/pets/ui/StatIndicator';
+import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
+import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
+import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
+import { usePetsCompanionData } from '@/pets/companion/hooks/usePetsCompanionData';
+import { usePetsMigration } from '@/pets/core/hooks/usePetsMigration';
+import { usePetsUseInventoryItem } from '@/pets/actions/hooks/usePetsUseInventoryItem';
+import { isActionVisibleForStage, type InventoryAction, type PetsAction } from '@/pets/actions/lib/pets-action-utils';
+import { getVisibleStats } from '@/pets/core/lib/pets-decay';
+import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
+import { KIND_PETS_STATE, KIND_BLOBBONAUT_PROFILE, updatePetsTags, updateBlobbonautTags, filterMigratedLegacyCompanions } from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
@@ -26,8 +26,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
-import type { BlobbiStats } from '@/blobbi/core/types/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { PetsStats } from '@/pets/core/types/pets';
 
 /** Stat-to-action mapping: each stat has an associated quick action + default item. */
 const STAT_ACTION_MAP: Record<string, { itemId: string; action: InventoryAction } | 'sleep'> = {
@@ -38,7 +38,7 @@ const STAT_ACTION_MAP: Record<string, { itemId: string; action: InventoryAction 
   energy: 'sleep',
 };
 
-/** Stat-to-color mapping matching the BlobbiPage convention. */
+/** Stat-to-color mapping matching the PetsPage convention. */
 const STAT_COLOR_MAP: Record<string, 'orange' | 'yellow' | 'green' | 'blue' | 'violet'> = {
   hunger: 'orange',
   happiness: 'yellow',
@@ -47,25 +47,25 @@ const STAT_COLOR_MAP: Record<string, 'orange' | 'yellow' | 'green' | 'blue' | 'v
   energy: 'violet',
 };
 
-/** Blobbi action name for stage visibility checks. */
-const STAT_ACTION_NAME: Record<string, BlobbiAction> = {
+/** Pets action name for stage visibility checks. */
+const STAT_ACTION_NAME: Record<string, PetsAction> = {
   hunger: 'feed',
   happiness: 'play',
   health: 'medicine',
   hygiene: 'clean',
 };
 
-/** localStorage key helper matching BlobbiPage pattern. */
-function getSelectedBlobbiKey(pubkey: string): string {
-  return `blobbi:selected:d:${pubkey.slice(0, 8)}`;
+/** localStorage key helper matching PetsPage pattern. */
+function getSelectedPetsKey(pubkey: string): string {
+  return `pets:selected:d:${pubkey.slice(0, 8)}`;
 }
 
-/** Mini Blobbi widget with live stats and quick actions. */
-export function BlobbiWidget() {
+/** Mini Pets widget with live stats and quick actions. */
+export function PetsWidget() {
   const { user } = useCurrentUser();
-  const { companions, isLoading, updateCompanionEvent } = useBlobbisCollection();
+  const { companions, isLoading, updateCompanionEvent } = usePetssCollection();
   const { profile, updateProfileEvent, invalidate: invalidateProfile } = useBlobbonautProfile();
-  const { ensureCanonicalBlobbiBeforeAction } = useBlobbiMigration();
+  const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
   const { mutateAsync: publishEvent } = useNostrPublish();
 
   // Filter out legacy companions that have been migrated to canonical format
@@ -75,18 +75,18 @@ export function BlobbiWidget() {
   }, [companions, profile]);
 
   const filteredCompanionsByD = useMemo(() => {
-    const record: Record<string, BlobbiCompanion> = {};
+    const record: Record<string, PetsCompanion> = {};
     for (const c of filteredCompanions) {
       record[c.d] = c;
     }
     return record;
   }, [filteredCompanions]);
 
-  // Match BlobbiPage's selection logic: localStorage > profile.has > first companion
-  const localStorageKey = user?.pubkey ? getSelectedBlobbiKey(user.pubkey) : 'blobbi:selected:d:none';
+  // Match PetsPage's selection logic: localStorage > profile.has > first companion
+  const localStorageKey = user?.pubkey ? getSelectedPetsKey(user.pubkey) : 'pets:selected:d:none';
   const [storedSelectedD, setStoredSelectedD] = useLocalStorage<string | null>(localStorageKey, null);
 
-  const companion = useMemo<BlobbiCompanion | null>(() => {
+  const companion = useMemo<PetsCompanion | null>(() => {
     if (!filteredCompanions || filteredCompanions.length === 0) return null;
     if (storedSelectedD && filteredCompanionsByD[storedSelectedD]) return filteredCompanionsByD[storedSelectedD];
     if (profile) {
@@ -97,20 +97,20 @@ export function BlobbiWidget() {
     return filteredCompanions[0];
   }, [filteredCompanions, filteredCompanionsByD, storedSelectedD, profile]);
 
-  // Zero-arg wrapper for ensureCanonical (same pattern as BlobbiPage)
+  // Zero-arg wrapper for ensureCanonical (same pattern as PetsPage)
   const ensureCanonicalBeforeAction = useCallback(async () => {
     if (!companion || !profile) return null;
-    return ensureCanonicalBlobbiBeforeAction({
+    return ensureCanonicalPetsBeforeAction({
       companion,
       profile,
       updateProfileEvent,
       updateCompanionEvent,
       updateStoredSelectedD: setStoredSelectedD,
     });
-  }, [companion, profile, ensureCanonicalBlobbiBeforeAction, updateProfileEvent, updateCompanionEvent, setStoredSelectedD]);
+  }, [companion, profile, ensureCanonicalPetsBeforeAction, updateProfileEvent, updateCompanionEvent, setStoredSelectedD]);
 
   // Wire up item action hook
-  const { mutateAsync: executeUseItem, isPending: isUsingItem } = useBlobbiUseInventoryItem({
+  const { mutateAsync: executeUseItem, isPending: isUsingItem } = usePetsUseInventoryItem({
     companion,
     profile,
     ensureCanonicalBeforeAction,
@@ -118,7 +118,7 @@ export function BlobbiWidget() {
     updateProfileEvent,
   });
 
-  // Sleep/wake handler (same pattern as BlobbiPage)
+  // Sleep/wake handler (same pattern as PetsPage)
   const [isSleepPending, setIsSleepPending] = useState(false);
   const handleRest = useCallback(async () => {
     if (!user?.pubkey || !companion) return;
@@ -130,7 +130,7 @@ export function BlobbiWidget() {
       if (!canonical) return;
 
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -140,7 +140,7 @@ export function BlobbiWidget() {
 
       const nowStr = now.toString();
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
-      const newTags = updateBlobbiTags(canonical.allTags, {
+      const newTags = updatePetsTags(canonical.allTags, {
         state: newState,
         hunger: decayResult.stats.hunger.toString(),
         happiness: decayResult.stats.happiness.toString(),
@@ -153,7 +153,7 @@ export function BlobbiWidget() {
       });
 
       const prev = canonical.companion.event;
-      const event = await publishEvent({ kind: KIND_BLOBBI_STATE, content: canonical.content, tags: newTags, prev });
+      const event = await publishEvent({ kind: KIND_PETS_STATE, content: canonical.content, tags: newTags, prev });
       updateCompanionEvent(event);
       toast({ title: isCurrentlySleeping ? 'Woke up!' : 'Resting...' });
     } catch {
@@ -163,10 +163,10 @@ export function BlobbiWidget() {
     }
   }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
 
-  // Companion toggle handler (same logic as BlobbiPage)
+  // Companion toggle handler (same logic as PetsPage)
   const [isUpdatingCompanion, setIsUpdatingCompanion] = useState(false);
   const isCurrentCompanion = companion ? profile?.currentCompanion === companion.d : false;
-  const { companion: activeCompanion } = useBlobbiCompanionData();
+  const { companion: activeCompanion } = usePetsCompanionData();
   const isActiveFloatingCompanion = companion ? activeCompanion?.d === companion.d : false;
 
   const handleSetAsCompanion = useCallback(async () => {
@@ -213,11 +213,11 @@ export function BlobbiWidget() {
 
   if (!user) {
     return (
-      <Link to="/blobbi" className="flex flex-col items-center gap-2 py-4 hover:bg-secondary/40 rounded-lg transition-colors">
+      <Link to="/pets" className="flex flex-col items-center gap-2 py-4 hover:bg-secondary/40 rounded-lg transition-colors">
         <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-8 text-primary" />
         </div>
-        <span className="text-xs text-muted-foreground">Log in to hatch your Blobbi</span>
+        <span className="text-xs text-muted-foreground">Log in to hatch your Pets</span>
       </Link>
     );
   }
@@ -237,18 +237,18 @@ export function BlobbiWidget() {
 
   if (!companion) {
     return (
-      <Link to="/blobbi" className="flex flex-col items-center gap-2 py-4 hover:bg-secondary/40 rounded-lg transition-colors">
+      <Link to="/pets" className="flex flex-col items-center gap-2 py-4 hover:bg-secondary/40 rounded-lg transition-colors">
         <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-8 text-primary" />
         </div>
-        <span className="text-sm font-medium text-primary">Hatch your Blobbi</span>
+        <span className="text-sm font-medium text-primary">Hatch your Pets</span>
         <span className="text-xs text-muted-foreground">Get your virtual pet companion</span>
       </Link>
     );
   }
 
   return (
-    <BlobbiWidgetContent
+    <PetsWidgetContent
       companion={companion}
       allCompanions={filteredCompanions}
       onSelectCompanion={setStoredSelectedD}
@@ -264,9 +264,9 @@ export function BlobbiWidget() {
   );
 }
 
-interface BlobbiWidgetContentProps {
-  companion: BlobbiCompanion;
-  allCompanions: BlobbiCompanion[];
+interface PetsWidgetContentProps {
+  companion: PetsCompanion;
+  allCompanions: PetsCompanion[];
   onSelectCompanion: (d: string) => void;
   onUseItem: (req: { itemId: string; action: InventoryAction }) => Promise<unknown>;
   onRest: () => Promise<void>;
@@ -278,7 +278,7 @@ interface BlobbiWidgetContentProps {
   currentCompanionD?: string;
 }
 
-function BlobbiWidgetContent({
+function PetsWidgetContent({
   companion,
   allCompanions,
   onSelectCompanion,
@@ -290,11 +290,11 @@ function BlobbiWidgetContent({
   isUpdatingCompanion,
   onToggleCompanion,
   currentCompanionD,
-}: BlobbiWidgetContentProps) {
+}: PetsWidgetContentProps) {
   // Projected state with decay only — owner surfaces do not pre-project social
   // effects. Social effects are incorporated via explicit consolidation.
-  const projected = useProjectedBlobbiState(companion);
-  const defaultStats: BlobbiStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
+  const projected = useProjectedPetsState(companion);
+  const defaultStats: PetsStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
   const stats = projected?.stats ?? defaultStats;
   const { recipe, recipeLabel } = useStatusReaction({
     stats,
@@ -315,7 +315,7 @@ function BlobbiWidgetContent({
     return isActionVisibleForStage(stage, actionName);
   });
 
-  const handleStatClick = useCallback(async (stat: keyof BlobbiStats) => {
+  const handleStatClick = useCallback(async (stat: keyof PetsStats) => {
     const mapping = STAT_ACTION_MAP[stat];
     if (!mapping) return;
     if (mapping === 'sleep') {
@@ -353,10 +353,10 @@ function BlobbiWidgetContent({
     el.addEventListener('wheel', onWheel, { passive: false });
   }, []);
 
-  // When this Blobbi is the active floating companion, show "out exploring" state
+  // When this Pets is the active floating companion, show "out exploring" state
   if (isActiveFloatingCompanion) {
     return (
-      <BlobbiAwayState
+      <PetsAwayState
         name={companion.name}
         size="sm"
         isUpdating={isUpdatingCompanion}
@@ -387,20 +387,20 @@ function BlobbiWidgetContent({
             : <Footprints className="size-3.5" />}
         </button>
 
-        {/* Switch blobbi button */}
+        {/* Switch pets button */}
         {hasMultipleCompanions && (
           <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
             <PopoverTrigger asChild>
               <button
                 className="size-7 rounded-full flex items-center justify-center transition-colors text-muted-foreground bg-muted/50 hover:bg-muted hover:text-foreground"
-                title="Switch Blobbi"
+                title="Switch Pets"
               >
                 <ArrowLeftRight className="size-3.5" />
               </button>
             </PopoverTrigger>
             <PopoverContent side="left" align="start" className="w-auto p-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-muted-foreground">Switch Blobbi</p>
+                <p className="text-xs font-medium text-muted-foreground">Switch Pets</p>
                 <button
                   onClick={() => setSwitcherOpen(false)}
                   aria-label="Close"
@@ -432,7 +432,7 @@ function BlobbiWidgetContent({
                         disabled={isSelected}
                       >
                         <div className="relative">
-                          <BlobbiStageVisual companion={c} size="sm" />
+                          <PetsStageVisual companion={c} size="sm" />
                           {isFloatingCompanion && (
                             <div className="absolute -bottom-0.5 -right-0.5 size-4 rounded-full bg-background ring-1 ring-background flex items-center justify-center">
                               <Footprints className="size-2.5 text-emerald-500" />
@@ -455,8 +455,8 @@ function BlobbiWidgetContent({
       </div>
 
       {/* Pet visual — links to full page */}
-      <Link to="/blobbi" className="relative hover:scale-105 transition-transform">
-        <BlobbiStageVisual
+      <Link to="/pets" className="relative hover:scale-105 transition-transform">
+        <PetsStageVisual
           companion={companion}
           size="lg"
           animated
@@ -467,14 +467,14 @@ function BlobbiWidgetContent({
       </Link>
 
       {/* Name */}
-      <Link to="/blobbi" className="text-sm font-semibold hover:text-primary transition-colors">
+      <Link to="/pets" className="text-sm font-semibold hover:text-primary transition-colors">
         {companion.name}
       </Link>
 
       {/* Unified stat wheels — each is both a status indicator and an action button */}
       <div className="flex items-center justify-center gap-1.5 px-2">
         {visibleStats.map((stat) => {
-          const display = getBlobbiStatDisplayState({ stage, stat, value: stats[stat] ?? 100 });
+          const display = getPetsStatDisplayState({ stage, stat, value: stats[stat] ?? 100 });
           return (
             <StatIndicator
               key={stat}

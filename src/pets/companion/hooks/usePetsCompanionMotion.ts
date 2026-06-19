@@ -1,5 +1,5 @@
 /**
- * useBlobbiCompanionMotion Hook
+ * usePetsCompanionMotion Hook
  * 
  * Handles the physics and movement of the companion.
  * This includes walking, gravity, and drag behavior.
@@ -22,7 +22,7 @@ import {
 } from '../core/companionMachine';
 import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 
-interface UseBlobbiCompanionMotionOptions {
+interface UsePetsCompanionMotionOptions {
   /** Initial X position */
   initialX: number;
   /** Ground Y position */
@@ -45,7 +45,7 @@ interface UseBlobbiCompanionMotionOptions {
   sharedMotionRef?: MutableRefObject<CompanionMotion>;
 }
 
-interface UseBlobbiCompanionMotionResult {
+interface UsePetsCompanionMotionResult {
   /** Current motion state */
   motion: CompanionMotion;
   /** Start dragging */
@@ -61,7 +61,7 @@ interface UseBlobbiCompanionMotionResult {
 /**
  * Hook to manage companion physics and movement.
  */
-export function useBlobbiCompanionMotion({
+export function usePetsCompanionMotion({
   initialX,
   groundY,
   bounds,
@@ -70,7 +70,7 @@ export function useBlobbiCompanionMotion({
   energy,
   onReachedTarget,
   sharedMotionRef,
-}: UseBlobbiCompanionMotionOptions): UseBlobbiCompanionMotionResult {
+}: UsePetsCompanionMotionOptions): UsePetsCompanionMotionResult {
   const [motion, setMotion] = useState<CompanionMotion>(() => 
     createInitialMotion(initialX, groundY)
   );

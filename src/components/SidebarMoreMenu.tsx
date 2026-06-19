@@ -5,6 +5,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { sidebarItemIcon, itemPath } from '@/lib/sidebarItems';
+import { cn } from '@/lib/utils';
 import type { HiddenSidebarItem } from '@/hooks/useFeedSettings';
 import { nip19 } from 'nostr-tools';
 import { parseNsiteSubdomain } from '@/lib/nsiteSubdomain';
@@ -21,6 +22,8 @@ interface SidebarMoreMenuProps {
   onOpenChange: (open: boolean) => void;
   /** Sidebar item ID configured as the homepage. */
   homePage?: string;
+  /** When true, render trigger buttons icon-only for a collapsed sidebar. */
+  compact?: boolean;
 }
 
 function useScrollCarets(centerOnOpen = false) {
@@ -105,7 +108,7 @@ function ItemRow({ item, onAdd, onClose }: { item: HiddenSidebarItem; onAdd: (id
 }
 
 export function SidebarMoreMenu({
-  editing, hiddenItems, onDoneEditing, onStartEditing, onAdd, onAddDivider, onNavigate, open, onOpenChange, homePage,
+  editing, hiddenItems, onDoneEditing, onStartEditing, onAdd, onAddDivider, onNavigate, open, onOpenChange, homePage, compact,
 }: SidebarMoreMenuProps) {
   const [query, setQuery] = useState('');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -200,9 +203,15 @@ export function SidebarMoreMenu({
       <div className="flex flex-col gap-0.5">
         <DropdownMenu open={addMenuOpen} onOpenChange={(o) => { setAddMenuOpen(o); if (!o) setAddQuery(''); }}>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-4 px-4 py-2.5 rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85">
+            <button
+              className={cn(
+                'flex items-center rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85',
+                compact ? 'justify-center py-2.5 px-2' : 'gap-4 px-4 py-2.5',
+              )}
+              title="Add"
+            >
               <Plus className="size-4" />
-              <span>Add</span>
+              {!compact && <span>Add</span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" collisionPadding={8} className="w-[240px] p-1 flex flex-col max-h-[calc(var(--radix-dropdown-menu-content-available-height)-12px)]">
@@ -219,9 +228,16 @@ export function SidebarMoreMenu({
             {add.canScrollDown && <ScrollCaret direction="down" onMouseEnter={() => add.startScroll('down')} onMouseLeave={add.stopScroll} />}
           </DropdownMenuContent>
         </DropdownMenu>
-        <button onClick={onAddDivider} className="flex items-center gap-4 px-4 py-2.5 rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85">
+        <button
+          onClick={onAddDivider}
+          className={cn(
+            'flex items-center rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85',
+            compact ? 'justify-center py-2.5 px-2' : 'gap-4 px-4 py-2.5',
+          )}
+          title="Add divider"
+        >
           <SeparatorHorizontal className="size-4" />
-          <span>Add divider</span>
+          {!compact && <span>Add divider</span>}
         </button>
         {linkInput ? (
           <div className="flex flex-col gap-1 px-4 py-2 bg-background/85 rounded-2xl">
@@ -264,15 +280,26 @@ export function SidebarMoreMenu({
         ) : (
           <button
             onClick={() => setLinkInput(true)}
-            className="flex items-center gap-4 px-4 py-2.5 rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85"
+            className={cn(
+              'flex items-center rounded-full transition-colors text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 bg-background/85',
+              compact ? 'justify-center py-2.5 px-2' : 'gap-4 px-4 py-2.5',
+            )}
+            title="Add link"
           >
             <LinkIcon className="size-4" />
-            <span>Add link</span>
+            {!compact && <span>Add link</span>}
           </button>
         )}
-        <button onClick={onDoneEditing} className="flex items-center gap-4 px-4 py-2.5 rounded-full transition-colors text-sm text-primary font-medium hover:bg-primary/10 bg-background/85">
+        <button
+          onClick={onDoneEditing}
+          className={cn(
+            'flex items-center rounded-full transition-colors text-sm text-primary font-medium hover:bg-primary/10 bg-background/85',
+            compact ? 'justify-center py-2.5 px-2' : 'gap-4 px-4 py-2.5',
+          )}
+          title="Done editing"
+        >
           <Check className="size-4" />
-          <span>Done editing</span>
+          {!compact && <span>Done editing</span>}
         </button>
       </div>
     );
@@ -281,9 +308,15 @@ export function SidebarMoreMenu({
   return (
     <DropdownMenu open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setQuery(''); }}>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-4 px-4 py-2.5 rounded-full transition-colors text-sm text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary/40 bg-background/85">
+        <button
+          className={cn(
+            'flex items-center rounded-full transition-colors text-sm text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary/40 bg-background/85',
+            compact ? 'justify-center py-2.5 px-2' : 'gap-4 px-4 py-2.5',
+          )}
+          title="More"
+        >
           {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          <span>More...</span>
+          {!compact && <span>More...</span>}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" collisionPadding={8} className="w-[240px] p-1 flex flex-col max-h-[calc(var(--radix-dropdown-menu-content-available-height)-12px)]">

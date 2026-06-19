@@ -18,8 +18,8 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { getLiveShopItems } from '@/blobbi/shop/lib/blobbi-shop-items';
-import { canUseItemForStage } from '@/blobbi/actions/lib/blobbi-action-utils';
+import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
+import { canUseItemForStage } from '@/pets/actions/lib/pets-action-utils';
 
 import type {
   CompanionMenuAction,

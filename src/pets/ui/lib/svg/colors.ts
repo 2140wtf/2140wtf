@@ -1,5 +1,5 @@
 /**
- * Color Utilities for Blobbi SVG Manipulation
+ * Color Utilities for Pets SVG Manipulation
  *
  * Shared color manipulation functions used across:
  * - Baby SVG customizer

@@ -1,10 +1,10 @@
 /**
- * BlobbiEggPreviewCard - Egg preview display during adoption flow
+ * PetsEggPreviewCard - Egg preview display during adoption flow
  * 
  * Shows the preview egg with visual traits and action buttons for
  * rerolling (generating another) or adopting.
  * 
- * Includes a name input so users can customize their Blobbi's name
+ * Includes a name input so users can customize their Pets's name
  * before adoption. The name in the preview becomes the final name.
  */
 
@@ -14,19 +14,19 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { cn, formatCompactNumber } from '@/lib/utils';
 import {
-  BLOBBI_PREVIEW_REROLL_COST,
-  BLOBBI_ADOPTION_COST,
-} from '@/blobbi/core/lib/blobbi';
+  PETS_PREVIEW_REROLL_COST,
+  PETS_ADOPTION_COST,
+} from '@/pets/core/lib/pets';
 
-import type { BlobbiEggPreview } from '../lib/blobbi-preview';
-import { previewToBlobbiCompanion } from '../lib/blobbi-preview';
+import type { PetsEggPreview } from '../lib/pets-preview';
+import { previewToPetsCompanion } from '../lib/pets-preview';
 
-interface BlobbiEggPreviewCardProps {
+interface PetsEggPreviewCardProps {
   /** The preview data to display */
-  preview: BlobbiEggPreview;
+  preview: PetsEggPreview;
   /** Current coin balance */
   coins: number;
   /** Whether this is the first (free) preview */
@@ -43,7 +43,7 @@ interface BlobbiEggPreviewCardProps {
   onNameChange: (name: string) => void;
 }
 
-export function BlobbiEggPreviewCard({
+export function PetsEggPreviewCard({
   preview,
   coins,
   isFirstPreview,
@@ -52,12 +52,12 @@ export function BlobbiEggPreviewCard({
   onReroll,
   onAdopt,
   onNameChange,
-}: BlobbiEggPreviewCardProps) {
+}: PetsEggPreviewCardProps) {
   // Convert preview to companion for visual rendering
-  const companionForVisual = previewToBlobbiCompanion(preview);
+  const companionForVisual = previewToPetsCompanion(preview);
   
-  const canAffordReroll = coins >= BLOBBI_PREVIEW_REROLL_COST;
-  const canAffordAdopt = coins >= BLOBBI_ADOPTION_COST;
+  const canAffordReroll = coins >= PETS_PREVIEW_REROLL_COST;
+  const canAffordAdopt = coins >= PETS_ADOPTION_COST;
   
   // Validate name - must not be empty after trim
   const trimmedName = preview.name.trim();
@@ -77,7 +77,7 @@ export function BlobbiEggPreviewCard({
         {/* Title */}
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-bold">
-            Meet Your Blobbi!
+            Meet Your Pets!
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
             {isFirstPreview 
@@ -89,12 +89,12 @@ export function BlobbiEggPreviewCard({
         
         {/* Name Input */}
         <div className="w-full max-w-xs space-y-2">
-          <Label htmlFor="blobbi-name" className="text-sm font-medium flex items-center gap-1">
+          <Label htmlFor="pets-name" className="text-sm font-medium flex items-center gap-1">
             <Pencil className="size-3" />
-            Name Your Blobbi
+            Name Your Pets
           </Label>
           <Input
-            id="blobbi-name"
+            id="pets-name"
             type="text"
             value={preview.name}
             onChange={(e) => onNameChange(e.target.value)}
@@ -104,7 +104,7 @@ export function BlobbiEggPreviewCard({
             maxLength={32}
           />
           {!isValidName && (
-            <p className="text-xs text-destructive">Please enter a name for your Blobbi</p>
+            <p className="text-xs text-destructive">Please enter a name for your Pets</p>
           )}
         </div>
         
@@ -128,7 +128,7 @@ export function BlobbiEggPreviewCard({
               "relative transition-all duration-300",
               isProcessing && "opacity-50"
             )}>
-              <BlobbiStageVisual
+              <PetsStageVisual
                 key={preview.d}
                 companion={companionForVisual}
                 size="lg"
@@ -178,7 +178,7 @@ export function BlobbiEggPreviewCard({
             ) : (
               <>
                 <Heart className="size-4 mr-2" />
-                Adopt {trimmedName || 'This Blobbi'} ({BLOBBI_ADOPTION_COST} coins)
+                Adopt {trimmedName || 'This Pets'} ({PETS_ADOPTION_COST} coins)
               </>
             )}
           </Button>
@@ -199,7 +199,7 @@ export function BlobbiEggPreviewCard({
             ) : (
               <>
                 <RefreshCw className="size-4 mr-2" />
-                Try Another ({BLOBBI_PREVIEW_REROLL_COST} coins)
+                Try Another ({PETS_PREVIEW_REROLL_COST} coins)
               </>
             )}
           </Button>
@@ -208,7 +208,7 @@ export function BlobbiEggPreviewCard({
         {/* Insufficient Coins Warning */}
         {!canAffordAdopt && (
           <p className="text-sm text-destructive">
-            You need {BLOBBI_ADOPTION_COST - coins} more coins to adopt.
+            You need {PETS_ADOPTION_COST - coins} more coins to adopt.
           </p>
         )}
         {canAffordAdopt && !canAffordReroll && (
@@ -219,7 +219,7 @@ export function BlobbiEggPreviewCard({
         
         {/* Cost Explanation */}
         <p className="text-xs text-muted-foreground mt-2">
-          Adopting costs {BLOBBI_ADOPTION_COST} coins. Trying another costs {BLOBBI_PREVIEW_REROLL_COST} coins.
+          Adopting costs {PETS_ADOPTION_COST} coins. Trying another costs {PETS_PREVIEW_REROLL_COST} coins.
         </p>
       </div>
     </div>

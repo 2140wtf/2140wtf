@@ -1,31 +1,36 @@
 /**
- * Blobbi Interaction Event (Kind 1124)
+ * Pets Interaction Event (Kind 1124)
  *
- * Immutable interaction log events targeting a canonical Blobbi (kind 31124).
+ * Immutable interaction log events targeting a canonical Pets (kind 31124).
  * These events do NOT directly mutate canonical state. They form an append-only
  * log that can later be projected for social status or consolidated by the owner.
  *
  * Required tags:
- *   ["a", "31124:<owner-pubkey>:<blobbi-d-tag>"]
+ *   ["a", "31124:<owner-pubkey>:<pets-d-tag>"]
  *   ["p", "<owner-pubkey>"]
  *   ["action", "<action>"]
  *   ["source", "<source>"]
  *
  * Optional tags:
- *   ["blobbi", "<short-id>"]
+ *   ["2140pets", "<short-id>"]
  *   ["item", "<item-id>"]
  *   ["client", "<client-id>"]  — added automatically by useNostrPublish
  *
- * @module blobbi-interaction
+ * @module pets-interaction
  */
 
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import type { BlobbiCompanion } from './blobbi';
+import type { PetsCompanion } from './pets';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const KIND_BLOBBI_INTERACTION = 1124;
+export const KIND_PETS_INTERACTION = 1124;
+
+/** Tag name used to attach the short pet ID to kind-1124 interaction events. */
+const PETS_TAG = '2140pets';
+/** Legacy tag names accepted when parsing older interaction events. */
+const LEGACY_PETS_TAGS = ['pets'];
 
 // ─── V1 Action Types ──────────────────────────────────────────────────────────
 
@@ -67,21 +72,21 @@ export const INTERNAL_TO_INTERACTION_ACTION: Record<string, InteractionAction | 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * Parsed representation of a kind 1124 Blobbi Interaction event.
+ * Parsed representation of a kind 1124 Pets Interaction event.
  */
-export interface BlobbiInteraction {
+export interface PetsInteraction {
   /** Original event */
   event: NostrEvent;
   /** The `a` tag coordinate (e.g. "31124:<owner>:<d>") */
-  blobbiCoordinate: string;
+  petsCoordinate: string;
   /** Owner pubkey from the `p` tag */
   ownerPubkey: string;
   /** V1 action name */
   action: InteractionAction;
   /** UI origin source */
   source: string;
-  /** Short Blobbi ID from `blobbi` tag (optional) */
-  blobbiShortId: string | undefined;
+  /** Short Pets ID from `pets` tag (optional) */
+  petsShortId: string | undefined;
   /** Item used from `item` tag (optional) */
   itemId: string | undefined;
   /** Author pubkey of the interaction event */
@@ -94,10 +99,10 @@ export interface BlobbiInteraction {
  * Parameters needed to build a 1124 event template.
  */
 export interface InteractionEventParams {
-  /** Pubkey of the Blobbi owner */
+  /** Pubkey of the Pets owner */
   ownerPubkey: string;
-  /** The d-tag of the target Blobbi (kind 31124) */
-  blobbiDTag: string;
+  /** The d-tag of the target Pets (kind 31124) */
+  petsDTag: string;
   /** The interaction action */
   action: InteractionAction;
   /** UI surface that originated this interaction */
@@ -109,14 +114,17 @@ export interface InteractionEventParams {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Extract the short Blobbi ID (10-hex petId) from a canonical d-tag.
+ * Extract the short Pets ID (10-hex petId) from a canonical d-tag.
  * Returns `undefined` for non-canonical d-tags.
  *
- * Canonical format: `blobbi-{12 hex}-{10 hex}`
+ * Canonical format: `pets-{12 hex}-{10 hex}`
  */
-export function extractBlobbiShortId(dTag: string): string | undefined {
-  const match = dTag.match(/^blobbi-[0-9a-f]{12}-([0-9a-f]{10})$/);
-  return match?.[1];
+export function extractPetsShortId(dTag: string): string | undefined {
+  const match = dTag.match(/^2140pets-[0-9a-f]{12}-([0-9a-f]{10})$/);
+  if (match) return match[1];
+  // Legacy fallback for pre-rename events (originally "blobbi-...", renamed to "pets-...")
+  const legacyMatch = dTag.match(/^pets-[0-9a-f]{12}-([0-9a-f]{10})$/);
+  return legacyMatch?.[1];
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
@@ -132,7 +140,7 @@ export function buildInteractionEventTemplate(params: InteractionEventParams): {
   content: string;
   tags: string[][];
 } {
-  const coordinate = `31124:${params.ownerPubkey}:${params.blobbiDTag}`;
+  const coordinate = `31124:${params.ownerPubkey}:${params.petsDTag}`;
 
   const tags: string[][] = [
     ['a', coordinate],
@@ -141,9 +149,9 @@ export function buildInteractionEventTemplate(params: InteractionEventParams): {
     ['source', params.source],
   ];
 
-  const shortId = extractBlobbiShortId(params.blobbiDTag);
+  const shortId = extractPetsShortId(params.petsDTag);
   if (shortId) {
-    tags.push(['blobbi', shortId]);
+    tags.push([PETS_TAG, shortId]);
   }
 
   if (params.itemId) {
@@ -151,10 +159,10 @@ export function buildInteractionEventTemplate(params: InteractionEventParams): {
   }
 
   // NIP-31 alt tag for human-readable description
-  tags.push(['alt', `Blobbi interaction: ${params.action}`]);
+  tags.push(['alt', `Pets interaction: ${params.action}`]);
 
   return {
-    kind: KIND_BLOBBI_INTERACTION,
+    kind: KIND_PETS_INTERACTION,
     content: '',
     tags,
   };
@@ -179,11 +187,11 @@ export function isValidInteractionEvent(event: NostrEvent): boolean {
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
 /**
- * Parse a NostrEvent into a typed BlobbiInteraction.
+ * Parse a NostrEvent into a typed PetsInteraction.
  * Returns `undefined` if the event is invalid.
  */
-export function parseInteractionEvent(event: NostrEvent): BlobbiInteraction | undefined {
-  if (event.kind !== KIND_BLOBBI_INTERACTION) return undefined;
+export function parseInteractionEvent(event: NostrEvent): PetsInteraction | undefined {
+  if (event.kind !== KIND_PETS_INTERACTION) return undefined;
 
   const tags = event.tags;
   const aTag = tags.find(([n]) => n === 'a')?.[1];
@@ -196,16 +204,16 @@ export function parseInteractionEvent(event: NostrEvent): BlobbiInteraction | un
   if (!actionTag || !(INTERACTION_ACTIONS as readonly string[]).includes(actionTag)) return undefined;
   if (!sourceTag) return undefined;
 
-  const blobbiTag = tags.find(([n]) => n === 'blobbi')?.[1];
+  const petsTag = tags.find(([n]) => n === PETS_TAG || LEGACY_PETS_TAGS.includes(n))?.[1];
   const itemTag = tags.find(([n]) => n === 'item')?.[1];
 
   return {
     event,
-    blobbiCoordinate: aTag,
+    petsCoordinate: aTag,
     ownerPubkey: pTag,
     action: actionTag as InteractionAction,
     source: sourceTag,
-    blobbiShortId: blobbiTag,
+    petsShortId: petsTag,
     itemId: itemTag,
     authorPubkey: event.pubkey,
     createdAt: event.created_at,
@@ -245,7 +253,7 @@ export function emitInteractionEvent(
 ): void {
   const template = buildInteractionEventTemplate(params);
   publishEvent(template).catch((err: unknown) => {
-    console.warn('[Blobbi] Failed to publish interaction event (kind 1124):', err);
+    console.warn('[Pets] Failed to publish interaction event (kind 1124):', err);
   });
 }
 
@@ -307,7 +315,7 @@ function parseSocialCheckpoint(content: string): SocialCheckpoint | undefined {
  * Canonical checkpoint resolution for kind 1124 social interactions.
  *
  * This is the **single entry point** for checkpoint interpretation. Both the
- * query layer (useBlobbiInteractions — derives `since` filter) and the
+ * query layer (usePetsInteractions — derives `since` filter) and the
  * projection layer (applySocialInteractions — derives dedup seed) must
  * call this function so their checkpoint interpretation cannot drift.
  *
@@ -321,7 +329,7 @@ function parseSocialCheckpoint(content: string): SocialCheckpoint | undefined {
  * 3. **V1 no-checkpoint fallback** (explicit):
  *    - Query: fetch kind 1124 events WITHOUT a `since` filter (no prior
  *      consolidation is assumed). A finite relay-side limit still applies
- *      (currently 50 events — see `BLOBBI_INTERACTIONS_LIMIT`). This
+ *      (currently 50 events — see `PETS_INTERACTIONS_LIMIT`). This
  *      means the first 50 most-recent events are fetched, NOT the full
  *      history. This is a known V1 limitation.
  *    - Projection: do NOT pre-exclude any interaction. All fetched events
@@ -338,12 +346,12 @@ function parseSocialCheckpoint(content: string): SocialCheckpoint | undefined {
  * - Does not consolidate or write back to kind 31124
  * - Does not depend on `socialOpen` permission state
  *
- * @param companion - The Blobbi companion whose 31124 content may contain a checkpoint.
+ * @param companion - The Pets companion whose 31124 content may contain a checkpoint.
  *                    Pass `null` when no companion is selected.
  * @returns Discriminated union: `{ valid: true, checkpoint }` or `{ valid: false, checkpoint: undefined }`.
  */
 export function resolveSocialCheckpoint(
-  companion: BlobbiCompanion | null,
+  companion: PetsCompanion | null,
 ): ResolvedCheckpoint {
   if (!companion) {
     return { valid: false, checkpoint: undefined };

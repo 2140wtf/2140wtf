@@ -1,7 +1,7 @@
-// src/blobbi/actions/hooks/useBlobbiIncubation.ts
+// src/pets/actions/hooks/usePetsIncubation.ts
 
 /**
- * Hooks for Blobbi incubation task system.
+ * Hooks for Pets incubation task system.
  * 
  * When a user starts incubation:
  * 1. Apply accumulated decay from last_decay_at to now
@@ -21,13 +21,13 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion, BlobbonautProfile } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
+  KIND_PETS_STATE,
+  updatePetsTags,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createHatchMissions, createEvolveMissions } from '../lib/evolution-missions';
 import {
   writeEvolutionToStorage,
@@ -41,9 +41,9 @@ import {
  * This makes the intent explicit rather than auto-detecting behavior.
  */
 export type StartIncubationMode = 
-  | 'start'              // Normal start (no other Blobbi incubating)
-  | 'restart'            // Restart same Blobbi (already incubating)
-  | 'switch';            // Switch from another incubating Blobbi
+  | 'start'              // Normal start (no other Pets incubating)
+  | 'restart'            // Restart same Pets (already incubating)
+  | 'switch';            // Switch from another incubating Pets
 
 /**
  * Request to start incubation with explicit mode.
@@ -51,7 +51,7 @@ export type StartIncubationMode =
 export interface StartIncubationRequest {
   /** Explicit mode for this operation */
   mode: StartIncubationMode;
-  /** The d-tag of the other Blobbi to stop (required when mode === 'switch') */
+  /** The d-tag of the other Pets to stop (required when mode === 'switch') */
   stopOtherD?: string;
 }
 
@@ -59,16 +59,16 @@ export interface StartIncubationRequest {
  * Parameters for start incubation hook.
  */
 export interface UseStartIncubationParams {
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   profile: BlobbonautProfile | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
     profileAllTags: string[][];
-    profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+    profileStorage: import('@/pets/core/lib/pets').StorageItem[];
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
@@ -78,13 +78,13 @@ export interface UseStartIncubationParams {
  * Result of starting incubation.
  */
 export interface StartIncubationResult {
-  /** The Blobbi's name */
+  /** The Pets's name */
   name: string;
   /** Timestamp when incubation started */
   progressionStartedAt: number;
   /** Mode that was used */
   mode: StartIncubationMode;
-  /** Name of other Blobbi that was stopped (if mode === 'switch') */
+  /** Name of other Pets that was stopped (if mode === 'switch') */
   stoppedOtherName?: string;
 }
 
@@ -101,12 +101,12 @@ export interface StartIncubationResult {
  * The UI dialog determines the mode and passes it explicitly.
  * 
  * Modes:
- * - 'start': Normal start, no other Blobbi incubating
- * - 'restart': Restart same Blobbi (already incubating), resets task progress
- * - 'switch': Stop another Blobbi first, then start this one
+ * - 'start': Normal start, no other Pets incubating
+ * - 'restart': Restart same Pets (already incubating), resets task progress
+ * - 'switch': Stop another Pets first, then start this one
  * 
  * Requirements:
- * - Blobbi must be in egg stage
+ * - Pets must be in egg stage
  * - User must be logged in
  */
 export function useStartIncubation({
@@ -147,11 +147,11 @@ export function useStartIncubation({
 
       let stoppedOtherName: string | undefined;
 
-      // ─── Stop Other Incubating Blobbi (switch mode only) ───
+      // ─── Stop Other Incubating Pets (switch mode only) ───
       if (mode === 'switch' && stopOtherD) {
-        // Fetch the current event for the other Blobbi
+        // Fetch the current event for the other Pets
         const [otherEvent] = await nostr.query([{
-          kinds: [KIND_BLOBBI_STATE],
+          kinds: [KIND_PETS_STATE],
           authors: [user.pubkey],
           '#d': [stopOtherD],
           limit: 1,
@@ -162,25 +162,29 @@ export function useStartIncubation({
           const nameTag = otherEvent.tags.find(t => t[0] === 'name');
           stoppedOtherName = nameTag?.[1] ?? stopOtherD;
           
-          // Stop the other Blobbi's incubation
+          // Stop the other Pets's incubation
           const now = Math.floor(Date.now() / 1000);
           const nowStr = now.toString();
           
-          // Parse stats from the event
-          const getTagValue = (tags: string[][], name: string): number => 
-            parseInt(tags.find(t => t[0] === name)?.[1] ?? '50', 10);
-          
-          const otherStats = {
-            hunger: getTagValue(otherEvent.tags, 'hunger'),
-            happiness: getTagValue(otherEvent.tags, 'happiness'),
-            health: getTagValue(otherEvent.tags, 'health'),
-            hygiene: getTagValue(otherEvent.tags, 'hygiene'),
-            energy: getTagValue(otherEvent.tags, 'energy'),
+          // Parse stats from the event (defensive: malformed tag values fall back to defaults)
+          const getNumericTag = (tags: string[][], name: string, fallback = 50): number => {
+            const raw = tags.find(t => t[0] === name)?.[1];
+            if (!raw) return fallback;
+            const parsed = parseInt(raw, 10);
+            return Number.isNaN(parsed) ? fallback : parsed;
           };
-          const otherLastDecayAt = getTagValue(otherEvent.tags, 'last_decay_at') || now;
+
+          const otherStats = {
+            hunger: getNumericTag(otherEvent.tags, 'hunger'),
+            happiness: getNumericTag(otherEvent.tags, 'happiness'),
+            health: getNumericTag(otherEvent.tags, 'health'),
+            hygiene: getNumericTag(otherEvent.tags, 'hygiene'),
+            energy: getNumericTag(otherEvent.tags, 'energy'),
+          };
+          const otherLastDecayAt = getNumericTag(otherEvent.tags, 'last_decay_at', now);
           
-          // Apply decay to the other Blobbi
-          const otherDecayResult = applyBlobbiDecay({
+          // Apply decay to the other Pets
+          const otherDecayResult = applyPetsDecay({
             stage: 'egg',
             state: 'active',
             stats: otherStats,
@@ -188,7 +192,7 @@ export function useStartIncubation({
             now,
           });
           
-          // Remove task tags and progression timing from the other Blobbi
+          // Remove task tags and progression timing from the other Pets
           const otherCleanedTags = otherEvent.tags.filter(tag => 
             tag[0] !== 'task' && 
             tag[0] !== 'task_completed' && 
@@ -196,7 +200,7 @@ export function useStartIncubation({
             tag[0] !== 'progression_started_at'
           );
           
-          const otherNewTags = updateBlobbiTags(otherCleanedTags, {
+          const otherNewTags = updatePetsTags(otherCleanedTags, {
             health: otherDecayResult.stats.health.toString(),
             hygiene: otherDecayResult.stats.hygiene.toString(),
             happiness: otherDecayResult.stats.happiness.toString(),
@@ -207,20 +211,20 @@ export function useStartIncubation({
             last_decay_at: nowStr,
           });
           
-          // Clear evolution from the other Blobbi's content
+          // Clear evolution from the other Pets's content
           const otherContent = serializeEvolutionContent(otherEvent.content, []);
 
-          // Publish the stop event for the other Blobbi
+          // Publish the stop event for the other Pets
           const stopEvent = await publishEvent({
-            kind: KIND_BLOBBI_STATE,
+            kind: KIND_PETS_STATE,
             content: otherContent,
             tags: otherNewTags,
           });
           
-          // Update the cache for the stopped Blobbi
+          // Update the cache for the stopped Pets
           updateCompanionEvent(stopEvent);
 
-          // Clear evolution session store for the stopped Blobbi
+          // Clear evolution session store for the stopped Pets
           clearEvolutionFromStorage(user.pubkey, stopOtherD);
         }
       }
@@ -236,7 +240,7 @@ export function useStartIncubation({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -260,7 +264,7 @@ export function useStartIncubation({
         energy: '100',
       };
       
-      const newTags = updateBlobbiTags(cleanedTags, {
+      const newTags = updatePetsTags(cleanedTags, {
         ...statsUpdate,
         progression_state: 'incubating',
         progression_started_at: nowStr,
@@ -274,14 +278,14 @@ export function useStartIncubation({
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: newTags,
       });
 
       updateCompanionEvent(event);
 
-      // ─── Populate evolution missions in session store (per-Blobbi) ───
+      // ─── Populate evolution missions in session store (per-Pets) ───
       writeEvolutionToStorage(hatchMissions, user.pubkey, canonical.companion.d);
       window.dispatchEvent(new CustomEvent('daily-missions-updated', { detail: { evolution: true, d: canonical.companion.d } }));
 
@@ -326,15 +330,15 @@ export function useStartIncubation({
  * Parameters for stop incubation hook.
  */
 export interface UseStopIncubationParams {
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
     profileAllTags: string[][];
-    profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+    profileStorage: import('@/pets/core/lib/pets').StorageItem[];
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
@@ -344,12 +348,12 @@ export interface UseStopIncubationParams {
  * Result of stopping incubation.
  */
 export interface StopIncubationResult {
-  /** The Blobbi's name */
+  /** The Pets's name */
   name: string;
 }
 
 /**
- * Hook to stop/cancel the incubation process for a Blobbi.
+ * Hook to stop/cancel the incubation process for a Pets.
  * 
  * This clears the progression process and all task progress tags.
  * The user can restart incubation later, but will need to complete tasks again.
@@ -361,7 +365,7 @@ export interface StopIncubationResult {
  * - Remove all task and task_completed tags
  * 
  * Requirements:
- * - Blobbi must have progressionState === 'incubating'
+ * - Pets must have progressionState === 'incubating'
  * - User must be logged in
  */
 export function useStopIncubation({
@@ -384,7 +388,7 @@ export function useStopIncubation({
       }
 
       if (companion.progressionState !== 'incubating') {
-        throw new Error('This Blobbi is not incubating');
+        throw new Error('This Pets is not incubating');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -397,7 +401,7 @@ export function useStopIncubation({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -424,7 +428,7 @@ export function useStopIncubation({
         energy: '100',
       };
       
-      const newTags = updateBlobbiTags(cleanedTags, {
+      const newTags = updatePetsTags(cleanedTags, {
         ...statsUpdate,
         progression_state: 'none',
         last_interaction: nowStr,
@@ -436,7 +440,7 @@ export function useStopIncubation({
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: newTags,
       });
@@ -460,15 +464,15 @@ export function useStopIncubation({
  * Parameters for start evolution hook.
  */
 export interface UseStartEvolutionParams {
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
     profileAllTags: string[][];
-    profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+    profileStorage: import('@/pets/core/lib/pets').StorageItem[];
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
@@ -478,21 +482,21 @@ export interface UseStartEvolutionParams {
  * Result of starting evolution.
  */
 export interface StartEvolutionResult {
-  /** The Blobbi's name */
+  /** The Pets's name */
   name: string;
   /** Timestamp when evolution started */
   progressionStartedAt: number;
 }
 
 /**
- * Hook to start the evolution process for a baby Blobbi.
+ * Hook to start the evolution process for a baby Pets.
  * 
  * This sets progression_state to 'evolving' and records the start timestamp.
  * Tasks will be computed based on events created after this timestamp.
  * 
  * Requirements:
- * - Blobbi must be in baby stage
- * - Blobbi must not already be evolving
+ * - Pets must be in baby stage
+ * - Pets must not already be evolving
  * - User must be logged in
  */
 export function useStartEvolution({
@@ -515,11 +519,11 @@ export function useStartEvolution({
       }
 
       if (companion.stage !== 'baby') {
-        throw new Error('Only baby Blobbis can evolve');
+        throw new Error('Only baby Petss can evolve');
       }
 
       if (companion.progressionState === 'evolving') {
-        throw new Error('This Blobbi is already evolving');
+        throw new Error('This Pets is already evolving');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -532,7 +536,7 @@ export function useStartEvolution({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -555,7 +559,7 @@ export function useStartEvolution({
         energy: decayResult.stats.energy.toString(),
       };
       
-      const newTags = updateBlobbiTags(cleanedTags, {
+      const newTags = updatePetsTags(cleanedTags, {
         ...statsUpdate,
         progression_state: 'evolving',
         progression_started_at: nowStr,
@@ -569,14 +573,14 @@ export function useStartEvolution({
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: newTags,
       });
 
       updateCompanionEvent(event);
 
-      // ─── Populate evolution missions in session store (per-Blobbi) ───
+      // ─── Populate evolution missions in session store (per-Pets) ───
       writeEvolutionToStorage(evolveMissions, user.pubkey, canonical.companion.d);
       window.dispatchEvent(new CustomEvent('daily-missions-updated', { detail: { evolution: true, d: canonical.companion.d } }));
 
@@ -607,15 +611,15 @@ export function useStartEvolution({
  * Parameters for stop evolution hook.
  */
 export interface UseStopEvolutionParams {
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
     profileAllTags: string[][];
-    profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+    profileStorage: import('@/pets/core/lib/pets').StorageItem[];
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
@@ -625,12 +629,12 @@ export interface UseStopEvolutionParams {
  * Result of stopping evolution.
  */
 export interface StopEvolutionResult {
-  /** The Blobbi's name */
+  /** The Pets's name */
   name: string;
 }
 
 /**
- * Hook to stop/cancel the evolution process for a Blobbi.
+ * Hook to stop/cancel the evolution process for a Pets.
  * 
  * This clears the progression process and all task progress tags.
  * The user can restart evolution later, but will need to complete tasks again.
@@ -642,7 +646,7 @@ export interface StopEvolutionResult {
  * - Remove all task and task_completed tags
  * 
  * Requirements:
- * - Blobbi must have progressionState === 'evolving'
+ * - Pets must have progressionState === 'evolving'
  * - User must be logged in
  */
 export function useStopEvolution({
@@ -665,7 +669,7 @@ export function useStopEvolution({
       }
 
       if (companion.progressionState !== 'evolving') {
-        throw new Error('This Blobbi is not evolving');
+        throw new Error('This Pets is not evolving');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -678,7 +682,7 @@ export function useStopEvolution({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -704,7 +708,7 @@ export function useStopEvolution({
         energy: decayResult.stats.energy.toString(),
       };
       
-      const newTags = updateBlobbiTags(cleanedTags, {
+      const newTags = updatePetsTags(cleanedTags, {
         ...statsUpdate,
         progression_state: 'none',
         last_interaction: nowStr,
@@ -716,7 +720,7 @@ export function useStopEvolution({
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: newTags,
       });

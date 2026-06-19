@@ -1,7 +1,7 @@
 /**
  * RoomFurnitureEditor — Bottom toolbar overlay for editing room furniture.
  *
- * Renders as an absolute overlay within the BlobbiRoomShell.
+ * Renders as an absolute overlay within the PetsRoomShell.
  *
  * Features: select/move/resize/flip/delete items, change layer, add from
  * catalog, reset to defaults. Save persists to Nostr profile; Cancel discards.
@@ -28,7 +28,7 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 import { useToast } from '@/hooks/useToast';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
-import type { BlobbiRoomId } from '../lib/room-config';
+import type { PetsRoomId } from '../lib/room-config';
 import { ROOM_META } from '../lib/room-config';
 import type { FurniturePlacement, FurnitureLayer, FurnitureContent } from '../lib/room-furniture-schema';
 import { FURNITURE_LAYERS, MAX_FURNITURE_PER_ROOM } from '../lib/room-furniture-schema';
@@ -38,7 +38,7 @@ import { DEFAULT_ROOM_FURNITURE } from '../lib/room-furniture-defaults';
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface RoomFurnitureEditorProps {
-  roomId: BlobbiRoomId;
+  roomId: PetsRoomId;
   draft: FurniturePlacement[];
   onDraftChange: (draft: FurniturePlacement[]) => void;
   selectedIndex: number | null;

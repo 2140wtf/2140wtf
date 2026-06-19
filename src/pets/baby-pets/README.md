@@ -1,10 +1,10 @@
-# Baby Blobbi Module
+# Baby Pets Module
 
-Self-contained module for baby stage Blobbi visuals and customization.
+Self-contained module for baby stage Pets visuals and customization.
 
 ## Overview
 
-This module provides everything needed to render and customize baby stage Blobbis:
+This module provides everything needed to render and customize baby stage Petss:
 
 - **SVG Assets**: Base and sleeping variants
 - **SVG Resolution**: Loading and variant selection
@@ -14,10 +14,10 @@ This module provides everything needed to render and customize baby stage Blobbi
 ## Module Structure
 
 ```
-src/blobbi/baby-blobbi/
+src/pets/baby-pets/
 ├── assets/
-│   ├── blobbi-baby-base.svg      # Awake baby variant
-│   └── blobbi-baby-sleeping.svg   # Sleeping baby variant
+│   ├── pets-baby-base.svg      # Awake baby variant
+│   └── pets-baby-sleeping.svg   # Sleeping baby variant
 ├── lib/
 │   ├── baby-svg-resolver.ts       # SVG loading and resolution
 │   └── baby-svg-customizer.ts     # Color customization utilities
@@ -32,32 +32,32 @@ src/blobbi/baby-blobbi/
 ### Basic SVG Resolution
 
 ```typescript
-import { resolveBabySvg, getBabyBaseSvg, getBabySleepingSvg } from '@/blobbi/baby-blobbi';
+import { resolveBabySvg, getBabyBaseSvg, getBabySleepingSvg } from '@/pets/baby-pets';
 
 // Get specific variant
 const awakeSvg = getBabyBaseSvg();
 const sleepingSvg = getBabySleepingSvg();
 
-// Resolve from Blobbi instance
-const svg = resolveBabySvg(blobbi, { isSleeping: false });
+// Resolve from Pets instance
+const svg = resolveBabySvg(pets, { isSleeping: false });
 ```
 
 ### Color Customization
 
 ```typescript
-import { customizeBabySvgFromBlobbi } from '@/blobbi/baby-blobbi';
+import { customizeBabySvgFromPets } from '@/pets/baby-pets';
 
 // Get base SVG
 const baseSvg = getBabyBaseSvg();
 
-// Apply Blobbi's colors
-const customizedSvg = customizeBabySvgFromBlobbi(baseSvg, blobbi, false);
+// Apply Pets's colors
+const customizedSvg = customizeBabySvgFromPets(baseSvg, pets, false);
 ```
 
 ### Preloading
 
 ```typescript
-import { preloadBabySvgs } from '@/blobbi/baby-blobbi';
+import { preloadBabySvgs } from '@/pets/baby-pets';
 
 // Preload all baby SVGs for quick switching
 preloadBabySvgs();
@@ -83,7 +83,7 @@ The module supports three color customizations:
 
 This module is designed to be:
 
-- Imported via barrel exports from `@/blobbi/baby-blobbi`
+- Imported via barrel exports from `@/pets/baby-pets`
 - Used alongside egg and adult modules
 - Easily moved to other projects with minimal changes
 

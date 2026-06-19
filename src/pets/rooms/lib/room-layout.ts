@@ -1,5 +1,5 @@
 /**
- * Shared layout constants for Blobbi room components.
+ * Shared layout constants for Pets room components.
  */
 
 /**

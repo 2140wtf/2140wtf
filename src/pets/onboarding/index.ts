@@ -1,28 +1,28 @@
 /**
- * Blobbi Onboarding Module
+ * Pets Onboarding Module
  *
  * Every new egg goes through the immersive hatching ceremony:
  * dark screen, huge egg, click-to-hatch, sentimental birth reveal, naming.
  */
 
 // Components
-export { BlobbiOnboardingFlow } from './components/BlobbiOnboardingFlow';
-export { BlobbiHatchingCeremony } from './components/BlobbiHatchingCeremony';
+export { PetsOnboardingFlow } from './components/PetsOnboardingFlow';
+export { PetsHatchingCeremony } from './components/PetsHatchingCeremony';
 
 // Hooks (used internally; kept exported for potential external use)
-export { useBlobbiOnboarding } from './hooks/useBlobbiOnboarding';
+export { usePetsOnboarding } from './hooks/usePetsOnboarding';
 export type {
   OnboardingStep,
   OnboardingState,
   OnboardingActions,
-  UseBlobbiOnboardingResult,
-} from './hooks/useBlobbiOnboarding';
+  UsePetsOnboardingResult,
+} from './hooks/usePetsOnboarding';
 
 // Utilities
 export {
   generateEggPreview,
   updatePreviewName,
   previewToEventTags,
-  previewToBlobbiCompanion,
-} from './lib/blobbi-preview';
-export type { BlobbiEggPreview } from './lib/blobbi-preview';
+  previewToPetsCompanion,
+} from './lib/pets-preview';
+export type { PetsEggPreview } from './lib/pets-preview';

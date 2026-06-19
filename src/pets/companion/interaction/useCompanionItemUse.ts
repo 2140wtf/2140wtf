@@ -14,8 +14,8 @@
 
 import { useState, useCallback } from 'react';
 
-import type { ShopItemCategory } from '@/blobbi/shop/types/shop.types';
-import type { InventoryAction } from '@/blobbi/actions/lib/blobbi-action-utils';
+import type { ShopItemCategory } from '@/pets/shop/types/shop.types';
+import type { InventoryAction } from '@/pets/actions/lib/pets-action-utils';
 
 import type { CompanionItem, CompanionMenuAction } from './types';
 
@@ -37,7 +37,7 @@ export interface ItemUseResult {
 
 /**
  * Callback for performing the actual item use.
- * This should be provided by the parent context that has access to the Blobbi state.
+ * This should be provided by the parent context that has access to the Pets state.
  */
 export type UseItemCallback = (
   itemId: string,

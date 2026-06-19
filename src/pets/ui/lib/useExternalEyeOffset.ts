@@ -1,31 +1,31 @@
 /**
  * useExternalEyeOffset Hook
  *
- * Applies external eye offset control to Blobbi eye elements.
+ * Applies external eye offset control to Pets eye elements.
  * Used when companion system (or other external system) controls eye position
  * instead of the default mouse tracking.
  *
  * This hook:
  * - Runs a RAF loop to continuously apply eye offset
- * - Queries the DOM for blobbi-eye-gaze-left and blobbi-eye-gaze-right elements
+ * - Queries the DOM for pets-eye-gaze-left and pets-eye-gaze-right elements
  * - Converts -1 to 1 offset to pixel movement
  * - Applies asymmetric vertical movement (up stronger than down)
  *
  * The RAF loop is necessary because:
- * - useBlobbiEyes also runs a RAF loop for blinking
+ * - usePetsEyes also runs a RAF loop for blinking
  * - SVG content can change due to emotion recipes
  * - A useEffect that only runs on prop change can miss DOM updates
  *
  * Eye Structure (nested groups):
- * - .blobbi-eye (outer) - CSS animations like sleepy wake-glance
- * - .blobbi-eye-gaze (inner) - JS-controlled gaze transforms
+ * - .pets-eye (outer) - CSS animations like sleepy wake-glance
+ * - .pets-eye-gaze (inner) - JS-controlled gaze transforms
  *
  * This separation allows CSS animations and gaze tracking to work together.
  */
 
 import { useEffect, useRef } from 'react';
 
-import type { ExternalEyeOffset, BlobbiVariant } from './types';
+import type { ExternalEyeOffset, PetsVariant } from './types';
 import {
   BABY_EXTERNAL_EYE_MAX_X,
   BABY_EXTERNAL_EYE_MAX_Y_UP,
@@ -37,10 +37,10 @@ import {
 import { EYE_CLASSES } from './eyes/types';
 
 interface UseExternalEyeOffsetOptions {
-  /** Reference to the container element containing the Blobbi SVG */
+  /** Reference to the container element containing the Pets SVG */
   containerRef: React.RefObject<HTMLDivElement | null>;
   /**
-   * External eye offset as a value prop. Used in page mode (BlobbiStageVisual).
+   * External eye offset as a value prop. Used in page mode (PetsStageVisual).
    * In companion mode, prefer externalEyeOffsetRef instead to avoid rerenders.
    */
   externalEyeOffset?: ExternalEyeOffset | undefined;
@@ -50,16 +50,16 @@ interface UseExternalEyeOffsetOptions {
    * When provided, takes precedence over externalEyeOffset value.
    */
   externalEyeOffsetRef?: React.RefObject<ExternalEyeOffset>;
-  /** Whether the Blobbi is sleeping (disables eye offset) */
+  /** Whether the Pets is sleeping (disables eye offset) */
   isSleeping: boolean;
-  /** Blobbi variant for movement scaling */
-  variant: BlobbiVariant;
+  /** Pets variant for movement scaling */
+  variant: PetsVariant;
 }
 
 /**
- * Apply external eye offset to Blobbi eye elements.
+ * Apply external eye offset to Pets eye elements.
  *
- * This bypasses useBlobbiEyes tracking and gives the external system (e.g., companion)
+ * This bypasses usePetsEyes tracking and gives the external system (e.g., companion)
  * full control over eye position. Uses a RAF loop to ensure transforms are continuously
  * applied even when the SVG DOM changes.
  */
@@ -108,8 +108,8 @@ export function useExternalEyeOffset({
       }
       
       // Target the inner gaze groups, not the outer eye groups.
-      // This allows CSS animations (like sleepy wake-glance) to run on .blobbi-eye
-      // while we control gaze position on the nested .blobbi-eye-gaze elements.
+      // This allows CSS animations (like sleepy wake-glance) to run on .pets-eye
+      // while we control gaze position on the nested .pets-eye-gaze elements.
       const gazeElements = containerRef.current.querySelectorAll<SVGGElement>(
         `.${EYE_CLASSES.gazeLeft}, .${EYE_CLASSES.gazeRight}`
       );

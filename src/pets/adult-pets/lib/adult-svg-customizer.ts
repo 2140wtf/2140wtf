@@ -1,5 +1,5 @@
 /**
- * Adult Blobbi SVG Customizer
+ * Adult Pets SVG Customizer
  *
  * Handles applying colors and customizations to adult SVG content.
  * Each adult form has different gradient IDs that need color mapping.
@@ -7,12 +7,12 @@
  * IMPORTANT: Gradients must be preserved for 3D shading effects.
  * We replace gradient colors, not the gradient structure.
  *
- * Uses shared utilities from blobbi/ui/lib/svg for common operations.
+ * Uses shared utilities from pets/ui/lib/svg for common operations.
  */
 
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
-import { hexToHsl, hslToHex } from '@/blobbi/core/lib/color-guardrails';
-import { lightenColor, darkenColor, uniquifySvgIds, ensureSvgFillsContainer } from '@/blobbi/ui/lib/svg';
+import type { Pets } from '@/pets/core/types/pets';
+import { hexToHsl, hslToHex } from '@/pets/core/lib/color-guardrails';
+import { lightenColor, darkenColor, uniquifySvgIds, ensureSvgFillsContainer } from '@/pets/ui/lib/svg';
 import type { AdultForm, AdultSvgCustomization } from '../types/adult.types';
 
 // ─── Gradient Builders ────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ function replaceGradient(
 // ─── Form-Specific Customizers ────────────────────────────────────────────────
 
 /**
- * Catti: Body, ears, and tail should use Blobbi color
+ * Catti: Body, ears, and tail should use Pets color
  * Gradients: cattiBody3D, cattiEar3D, cattiEarInner, cattiTail3D, cattiTailHighlight
  */
 function customizeCatti(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -163,7 +163,7 @@ function customizeCatti(svgText: string, baseColor: string, secondaryColor?: str
 }
 
 /**
- * Droppi: Body, arms, legs, and droplets should use Blobbi color
+ * Droppi: Body, arms, legs, and droplets should use Pets color
  * Gradients: droppiBody, droppiInner, droppiArm, droppiLeg, droppiDroplet
  */
 function customizeDroppi(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -189,7 +189,7 @@ function customizeDroppi(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Flammi: Body, inner, core, arms, legs, and embers should use Blobbi color
+ * Flammi: Body, inner, core, arms, legs, and embers should use Pets color
  * Gradients: flammiBody, flammiInner, flammiCore, flammiArm, flammiLeg, flammiEmber
  */
 function customizeFlammi(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -223,7 +223,7 @@ function customizeFlammi(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Froggi: Body, eye base, feet should use Blobbi color
+ * Froggi: Body, eye base, feet should use Pets color
  * Gradients: froggiBody3D, froggiEyeBase3D, froggiFeet3D, froggiFeetHighlight, froggiToe3D
  */
 function customizeFroggi(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -252,7 +252,7 @@ function customizeFroggi(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Leafy: Petals should use Blobbi color (center/face keeps brown)
+ * Leafy: Petals should use Pets color (center/face keeps brown)
  * Gradients: leafyPetal (petals only - the yellow parts)
  */
 function customizeLeafy(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -271,7 +271,7 @@ function customizeLeafy(svgText: string, baseColor: string, secondaryColor?: str
 }
 
 /**
- * Mushie: Cap should use Blobbi color (stem keeps original)
+ * Mushie: Cap should use Pets color (stem keeps original)
  * Gradients: mushieCap, mushieCapHighlight
  */
 function customizeMushie(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -287,7 +287,7 @@ function customizeMushie(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Rocky: Body, inner, arms, legs, and pebbles should use Blobbi color
+ * Rocky: Body, inner, arms, legs, and pebbles should use Pets color
  * Gradients: rockyBody, rockyInner, rockyArm, rockyLeg, rockyPebble
  */
 function customizeRocky(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -312,7 +312,7 @@ function customizeRocky(svgText: string, baseColor: string, secondaryColor?: str
 }
 
 /**
- * Rosey: Petals, center, and floating petals should use Blobbi color
+ * Rosey: Petals, center, and floating petals should use Pets color
  * Gradients: roseyPetal1, roseyPetal2, roseyPetal3, roseyCenter, roseyFloatingPetal
  */
 function customizeRosey(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -337,8 +337,8 @@ function customizeRosey(svgText: string, baseColor: string, secondaryColor?: str
 }
 
 /**
- * Starri: Inner star should use Blobbi color (outer stays dark/cosmic)
- * Gradients: starriInner (the inner golden star - this should be the Blobbi color)
+ * Starri: Inner star should use Pets color (outer stays dark/cosmic)
+ * Gradients: starriInner (the inner golden star - this should be the Pets color)
  */
 function customizeStarri(svgText: string, baseColor: string, secondaryColor?: string): string {
   let svg = svgText;
@@ -356,7 +356,7 @@ function customizeStarri(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Breezy: Body, inner, veins, arms, legs, and floating leaves should use Blobbi color
+ * Breezy: Body, inner, veins, arms, legs, and floating leaves should use Pets color
  * Gradients: breezyBody, breezyInner, breezyVein, breezyArm, breezyLeg, breezyFloating
  */
 function customizeBreezy(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -388,14 +388,14 @@ function customizeBreezy(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Bloomi: Petals, center, and pollen should use Blobbi color
+ * Bloomi: Petals, center, and pollen should use Pets color
  * Note: Bloomi has 6 different colored petals - we'll make them all use variations of the base color
  * Gradients: bloomiPetal1-6, bloomiCenter, bloomiPollen
  */
 function customizeBloomi(svgText: string, baseColor: string, secondaryColor?: string): string {
   let svg = svgText;
   
-  // All 6 petals use variations of the Blobbi color
+  // All 6 petals use variations of the Pets color
   // Create a gradient effect across petals by varying lightness
   svg = replaceGradient(svg, 'bloomiPetal1', buildRadialGradient2Stop('bloomiPetal1', lightenColor(baseColor, 30)));
   svg = replaceGradient(svg, 'bloomiPetal2', buildRadialGradient2Stop('bloomiPetal2', lightenColor(baseColor, 20)));
@@ -420,7 +420,7 @@ function customizeBloomi(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Cacti: Body and arms should use Blobbi color (pot keeps original red)
+ * Cacti: Body and arms should use Pets color (pot keeps original red)
  * Gradients: cactiBody, cactiArm
  */
 function customizeCacti(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -436,7 +436,7 @@ function customizeCacti(svgText: string, baseColor: string, secondaryColor?: str
 }
 
 /**
- * Cloudi: Body, highlights, and raindrops should use Blobbi color
+ * Cloudi: Body, highlights, and raindrops should use Pets color
  * Gradients: cloudiBody, cloudiHighlight, cloudiRain
  */
 function customizeCloudi(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -464,7 +464,7 @@ function customizeCloudi(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Crysti: Body and inner should use Blobbi color (facets keep their colorful nature)
+ * Crysti: Body and inner should use Pets color (facets keep their colorful nature)
  * Gradients: crystiBody, crystiInner
  */
 function customizeCrysti(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -483,7 +483,7 @@ function customizeCrysti(svgText: string, baseColor: string, secondaryColor?: st
 }
 
 /**
- * Owli: Body, ears, and wings should use Blobbi color (beak keeps yellow/orange)
+ * Owli: Body, ears, and wings should use Pets color (beak keeps yellow/orange)
  * Gradients: owliBody3D, owliEar3D, owliWing3D, owliWingHighlight
  */
 function customizeOwli(svgText: string, baseColor: string, secondaryColor?: string): string {
@@ -536,11 +536,11 @@ function customizePandi(svgText: string, baseColor: string, secondaryColor?: str
   svg = svg.replaceAll('fill="#f8fafc"', `fill="${tintFill}"`);
   svg = svg.replaceAll('stroke="#e2e8f0"', `stroke="${tintStroke}"`);
 
-  // ── Dark areas with data-blobbi-skip: ear patches, inner ears, eye patches ──
-  // These use data-blobbi-skip="true" to prevent eye-animation from touching them.
+  // ── Dark areas with data-pets-skip: ear patches, inner ears, eye patches ──
+  // These use data-pets-skip="true" to prevent eye-animation from touching them.
   // Original dark: fill="#1f2937", lighter dark: fill="#374151"
-  svg = svg.replaceAll('fill="#1f2937" data-blobbi-skip="true"', `fill="${darkPrimary}" data-blobbi-skip="true"`);
-  svg = svg.replaceAll('fill="#374151" data-blobbi-skip="true"', `fill="${darkLight}" data-blobbi-skip="true"`);
+  svg = svg.replaceAll('fill="#1f2937" data-pets-skip="true"', `fill="${darkPrimary}" data-pets-skip="true"`);
+  svg = svg.replaceAll('fill="#374151" data-pets-skip="true"', `fill="${darkLight}" data-pets-skip="true"`);
 
   // ── Arm & leg gradients ──
   svg = replaceGradient(svg, 'pandiArm3D', `<radialGradient id="pandiArm3D" cx="0.3" cy="0.2">
@@ -597,13 +597,13 @@ const FORM_CUSTOMIZERS: Partial<Record<AdultForm, FormCustomizer>> = {
  * Apply color customizations to adult SVG.
  * 
  * Each form has specific gradients that need to be replaced
- * to apply the Blobbi's custom colors while preserving 3D shading.
+ * to apply the Pets's custom colors while preserving 3D shading.
  * 
  * @param svgText - The SVG content to customize
  * @param form - The adult form type
  * @param customization - Color customization options
- * @param isSleeping - Whether the Blobbi is sleeping (affects eye rendering)
- * @param instanceId - Optional unique ID to prevent gradient ID collisions when multiple Blobbis are rendered
+ * @param isSleeping - Whether the Pets is sleeping (affects eye rendering)
+ * @param instanceId - Optional unique ID to prevent gradient ID collisions when multiple Petss are rendered
  */
 export function customizeAdultSvg(
   svgText: string,
@@ -642,7 +642,7 @@ export function customizeAdultSvg(
     modifiedSvg = applyPupilGradient(modifiedSvg, form, customization.eyeColor);
   }
 
-  // Make all IDs unique to prevent collisions when multiple Blobbis are rendered
+  // Make all IDs unique to prevent collisions when multiple Petss are rendered
   if (instanceId) {
     modifiedSvg = uniquifySvgIds(modifiedSvg, instanceId);
   }
@@ -740,7 +740,7 @@ function applyPupilGradient(
     const blockMatch = modified.match(pupilBlockRegex);
     if (blockMatch) {
       const block = blockMatch[0];
-      const newBlock = block.replaceAll(`fill="${defaultFill}"`, `fill="${eyeColor}" data-blobbi-pupil="true"`);
+      const newBlock = block.replaceAll(`fill="${defaultFill}"`, `fill="${eyeColor}" data-pets-pupil="true"`);
       modified = modified.replace(block, newBlock);
     }
   }
@@ -751,23 +751,23 @@ function applyPupilGradient(
 // ─── Convenience Functions ────────────────────────────────────────────────────
 
 /**
- * Convenience function to customize adult SVG from a Blobbi instance.
+ * Convenience function to customize adult SVG from a Pets instance.
  * 
- * Uses the Blobbi's ID to uniquify SVG IDs, preventing gradient collisions
- * when multiple Blobbis are rendered on the same page.
+ * Uses the Pets's ID to uniquify SVG IDs, preventing gradient collisions
+ * when multiple Petss are rendered on the same page.
  */
-export function customizeAdultSvgFromBlobbi(
+export function customizeAdultSvgFromPets(
   svgText: string,
   form: AdultForm,
-  blobbi: Blobbi,
+  pets: Pets,
   isSleeping: boolean = false
 ): string {
   const customization: AdultSvgCustomization = {
-    baseColor: blobbi.baseColor,
-    secondaryColor: blobbi.secondaryColor,
-    eyeColor: blobbi.eyeColor,
+    baseColor: pets.baseColor,
+    secondaryColor: pets.secondaryColor,
+    eyeColor: pets.eyeColor,
   };
 
-  // Pass blobbi.id to uniquify gradient IDs and prevent collisions
-  return customizeAdultSvg(svgText, form, customization, isSleeping, blobbi.id);
+  // Pass pets.id to uniquify gradient IDs and prevent collisions
+  return customizeAdultSvg(svgText, form, customization, isSleeping, pets.id);
 }

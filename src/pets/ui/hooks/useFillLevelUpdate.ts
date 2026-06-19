@@ -8,7 +8,7 @@
 
 import { useMemo, useEffect, type RefObject } from 'react';
 
-import type { BlobbiVisualRecipe } from '../lib/recipe';
+import type { PetsVisualRecipe } from '../lib/recipe';
 
 /** Feather zone matching generateAngerRiseEffect() in generators.ts. */
 const FEATHER = 0.10;
@@ -17,7 +17,7 @@ const FEATHER = 0.10;
  * Compute a stable fingerprint from a recipe that ignores angerRise.level.
  * Returns an empty string when recipe is null/undefined.
  */
-export function useRecipeFingerprint(recipe: BlobbiVisualRecipe | undefined): string {
+export function useRecipeFingerprint(recipe: PetsVisualRecipe | undefined): string {
   return useMemo(() => {
     if (!recipe) return '';
     const { bodyEffects, ...rest } = recipe;
@@ -38,8 +38,8 @@ export function useRecipeFingerprint(recipe: BlobbiVisualRecipe | undefined): st
  */
 export function useFillLevelUpdate(
   containerRef: RefObject<HTMLDivElement | null>,
-  blobbiId: string,
-  recipe: BlobbiVisualRecipe | undefined,
+  petsId: string,
+  recipe: PetsVisualRecipe | undefined,
 ): void {
   const fillLevel = recipe?.bodyEffects?.angerRise?.level;
 
@@ -47,7 +47,7 @@ export function useFillLevelUpdate(
     const container = containerRef.current;
     if (!container || fillLevel === undefined) return;
 
-    const gradientId = `blobbi-anger-gradient-${blobbiId}`;
+    const gradientId = `pets-anger-gradient-${petsId}`;
     const gradient = container.querySelector(`#${CSS.escape(gradientId)}`);
     if (!gradient) return;
 
@@ -57,5 +57,5 @@ export function useFillLevelUpdate(
     const edgeOffset = Math.max(0, fillLevel - FEATHER);
     stops[1]?.setAttribute('offset', String(edgeOffset));
     stops[2]?.setAttribute('offset', String(fillLevel));
-  }, [fillLevel, blobbiId, containerRef]);
+  }, [fillLevel, petsId, containerRef]);
 }

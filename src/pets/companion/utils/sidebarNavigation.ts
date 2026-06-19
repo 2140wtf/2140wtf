@@ -2,7 +2,7 @@
  * Sidebar Navigation Utilities
  * 
  * Maps routes to sidebar positions to determine entry animation direction.
- * Used by the companion entry system to decide if Blobbi should fall from
+ * Used by the companion entry system to decide if Pets should fall from
  * above or rise from below based on navigation direction.
  */
 
@@ -100,7 +100,7 @@ export function getSidebarIndex(itemId: string, orderedItems: string[]): number 
  * Compare two routes and determine the navigation direction.
  * 
  * This is the main function used by the entry animation system to decide
- * whether Blobbi should fall from above or rise from below.
+ * whether Pets should fall from above or rise from below.
  * 
  * @param fromPath - The source route pathname
  * @param toPath - The destination route pathname  

@@ -1,5 +1,5 @@
 /**
- * BlobbiRoomShell — Outer layout for room-based navigation.
+ * PetsRoomShell — Outer layout for room-based navigation.
  *
  * Manages: room navigation (arrows + dots), sleep overlay, poop state.
  * Renders children in a flex column with the hero above and children below.
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { impactLight } from '@/lib/haptics';
 
 import {
-  type BlobbiRoomId,
+  type PetsRoomId,
   ROOM_META,
   DEFAULT_ROOM_ORDER,
   getNextRoom,
@@ -44,32 +44,32 @@ export interface PoopState {
   addPoop: (source?: PoopInstance['source']) => void;
 }
 
-interface BlobbiRoomShellProps {
+interface PetsRoomShellProps {
   /** Current active room */
-  roomId: BlobbiRoomId;
+  roomId: PetsRoomId;
   /** Called when user navigates to a different room */
-  onChangeRoom: (roomId: BlobbiRoomId) => void;
-  /** Whether the Blobbi is sleeping (darkens the room) */
+  onChangeRoom: (roomId: PetsRoomId) => void;
+  /** Whether the Pets is sleeping (darkens the room) */
   isSleeping: boolean;
-  /** Hero element (BlobbiRoomHero) rendered in the flex-1 area */
+  /** Hero element (PetsRoomHero) rendered in the flex-1 area */
   hero: React.ReactNode;
   /** Bottom bar content (per-room actions + carousel) */
   children: React.ReactNode;
   /** Optional content between hero and bottom bar (inline music/sing) */
   middleSlot?: React.ReactNode;
   /**
-   * Stage overlay — absolutely positioned Blobbi visual (BlobbiRoomStage).
+   * Stage overlay — absolutely positioned Pets visual (PetsRoomStage).
    * Rendered as a direct child of the shell so it shares the same coordinate
    * system as the wall/floor background layers.
    */
   stageOverlay?: React.ReactNode;
   /**
    * Stats HUD — rendered in the top overlay area below the room header.
-   * Absolutely positioned so it does not affect Blobbi stage layout.
+   * Absolutely positioned so it does not affect Pets stage layout.
    */
   statusHud?: React.ReactNode;
   /** Room order (defaults to DEFAULT_ROOM_ORDER) */
-  roomOrder?: BlobbiRoomId[];
+  roomOrder?: PetsRoomId[];
   /** Poop generation params */
   hunger: number;
   lastFeedTimestamp: number | undefined;
@@ -99,7 +99,7 @@ interface BlobbiRoomShellProps {
   roomOverlay?: React.ReactNode;
   /**
    * Ref to expose the shovel-drag state managed internally by the shell.
-   * `useShovelDrag` runs inside BlobbiRoomShell (co-located with poop state)
+   * `useShovelDrag` runs inside PetsRoomShell (co-located with poop state)
    * and becomes active when `roomId === 'kitchen'`. KitchenBar reads this
    * ref to wire up the ShovelButton.
    */
@@ -136,13 +136,13 @@ const SWIPE_THRESHOLD = 50;
  * controls below the natural SubHeaderBar height (~32px) + ARC_OVERHANG_PX
  * (20px) + 4px breathing room.
  *
- * The bottom inset uses the CSS variable --blobbi-room-dock-height (defined in
+ * The bottom inset uses the CSS variable --pets-room-dock-height (defined in
  * index.css) which resolves responsively to match the actual dock height on
  * mobile (with bottom-nav + safe-area) and desktop.
  */
 const ROOM_CANVAS_INSET_TOP = 56;
 
-export function BlobbiRoomShell({
+export function PetsRoomShell({
   roomId,
   onChangeRoom,
   isSleeping,
@@ -172,7 +172,7 @@ export function BlobbiRoomShell({
   onFurnitureMove,
   furnitureActiveLayer,
   onFurnitureBackgroundClick,
-}: BlobbiRoomShellProps) {
+}: PetsRoomShellProps) {
   const goLeft = useCallback(() => {
     onChangeRoom(getPreviousRoom(roomId, roomOrder));
   }, [roomId, roomOrder, onChangeRoom]);
@@ -266,7 +266,7 @@ export function BlobbiRoomShell({
     >
       {/* ═══════════════════════════════════════════════════════════════════════
           COORDINATE CANVAS — fixed aspect-ratio room surface.
-          Contains: backgrounds, furniture, Blobbi, nav arrows, sleep overlay,
+          Contains: backgrounds, furniture, Pets, nav arrows, sleep overlay,
           room header/HUD, and editor triggers for visual cohesion.
           containerRef lives here so furniture drag normalizes against this rect.
           Absolutely positioned and centered; pointer-events-none by default so
@@ -284,7 +284,7 @@ export function BlobbiRoomShell({
           width: '100%',
           maxWidth: '100%',
           top: ROOM_CANVAS_INSET_TOP,
-          maxHeight: `calc(100% - ${ROOM_CANVAS_INSET_TOP}px - var(--blobbi-room-dock-height))`,
+          maxHeight: `calc(100% - ${ROOM_CANVAS_INSET_TOP}px - var(--pets-room-dock-height))`,
         }}
       >
         {/* Room background layers (decorative, behind all content).
@@ -365,7 +365,7 @@ export function BlobbiRoomShell({
           <PoopOverlay poopStateRef={internalPoopRef} />
         )}
 
-        {/* Stage overlay — Blobbi visual anchored to the canvas ground line */}
+        {/* Stage overlay — Pets visual anchored to the canvas ground line */}
         {stageOverlay && (
           <div className={cn(
             'absolute inset-0 z-10 transition-opacity duration-300',

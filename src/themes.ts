@@ -58,6 +58,12 @@ export interface ThemeConfig {
   titleFont?: ThemeFont;
   /** Optional background media */
   background?: ThemeBackground;
+  /** Advanced token overrides (card, secondary, muted, accent, border, etc.) */
+  tokens?: Partial<ThemeTokens>;
+  /** Global border radius (CSS length, e.g. "0.75rem") */
+  radius?: string;
+  /** Background image opacity (0-1) */
+  backgroundOpacity?: number;
 }
 
 /**
@@ -131,6 +137,12 @@ export interface ThemePreset {
   titleFont?: ThemeFont;
   /** Optional background for this preset. */
   background?: ThemeBackground;
+  /** Advanced token overrides for this preset. */
+  tokens?: Partial<ThemeTokens>;
+  /** Global border radius for this preset. */
+  radius?: string;
+  /** Background image opacity for this preset (0-1). */
+  backgroundOpacity?: number;
 }
 
 /**
@@ -155,21 +167,10 @@ export const themePresets: Record<string, ThemePreset> = {
     },
   },
 
-  toxic: {
-    label: 'Toxic',
-    emoji: '☢️',
-    colors: {
-      background: '130 30% 7%',
-      text: '120 40% 92%',
-      primary: '128 70% 42%',
-    },
-    font: { family: 'JetBrains Mono' },
-  },
-
-
   sunset: {
     label: 'Sunset',
     emoji: '🌅',
+    featured: true,
     colors: {
       background: '20 40% 96%',
       text: '15 30% 12%',
@@ -178,345 +179,80 @@ export const themePresets: Record<string, ThemePreset> = {
     font: { family: 'Lora' },
   },
 
-  skater: {
-    label: 'Skater',
-    emoji: '🛹',
+  hacker: {
+    label: 'Hacker',
+    emoji: '👾',
     featured: true,
     colors: {
-      background: '0 0% 42%',
-      text: '0 0% 100%',
-      primary: '80 100% 50%',
+      background: '130 30% 7%',
+      text: '120 40% 92%',
+      primary: '128 70% 42%',
     },
-    font: { family: 'Rubik Maps' },
+    font: { family: 'JetBrains Mono' },
     background: {
-      url: 'https://blossom.primal.net/9c4262aaa53d8feae41b3b6206647e25c6f388d9e836fb3e8abcf9be72be493e.png',
+      url: '/themes/hacker.png',
       mode: 'cover',
       mimeType: 'image/png',
+      dimensions: '1920x1080',
     },
+    backgroundOpacity: 0.2,
   },
 
-  kawaii: {
-    label: 'Kawaii',
-    emoji: '🌸',
+  aquarium: {
+    label: 'Aquarium',
+    emoji: '🐠',
     featured: true,
     colors: {
-      background: '340 60% 95%',
-      text: '345 30% 35%',
-      primary: '340 100% 76%',
-    },
-    font: { family: 'Cherry Bomb One' },
-    background: {
-      url: 'https://blossom.ditto.pub/4e11a3ca749f9cc8989b61cb9efe78682533d2836eccaf4bccf104dd7b583e09.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  grunge: {
-    label: 'Grunge',
-    emoji: '🖤',
-    featured: true,
-    colors: {
-      background: '276 40% 8%',
-      text: '0 0% 75%',
-      primary: '328 100% 54%',
-    },
-    font: { family: 'Lacquer' },
-    background: {
-      url: 'https://blossom.primal.net/9fa0f1f7cd7da344f3e1db6ecfbdbeb2bb0763d3eaccbc0f5368871d0421b50b.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  mspaint: {
-    label: 'MS Paint',
-    emoji: '🖥️',
-    featured: true,
-    colors: {
-      background: '200 20% 95%',
-      text: '0 0% 10%',
-      primary: '240 100% 50%',
-    },
-    font: { family: 'Silkscreen' },
-    background: {
-      url: 'https://blossom.ditto.pub/946fedd46ec6b283472c0b3a102817ff414a6d640517df5c679bb63830ef21bf.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  retropop: {
-    label: 'Retro Pop',
-    emoji: '💿',
-    featured: true,
-    colors: {
-      background: '244 100% 92%',
-      text: '40 40% 10%',
-      primary: '260 50% 70%',
-    },
-    font: { family: 'Bungee Shade' },
-    background: {
-      url: 'https://blossom.ditto.pub/3832abebc944668c4c0bd34309b0dfe120054671e20ca8c8e9abbb24114c972e.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  bubblegum: {
-    label: 'Bubblegum',
-    emoji: '🍬',
-    featured: true,
-    colors: {
-      background: '0 0% 100%',
-      text: '285 25% 31%',
-      primary: '279 100% 50%',
-    },
-    font: { family: 'Barriecito' },
-    background: {
-      url: 'https://blossom.ditto.pub/edd3139e0c4d60b96dcf54edbe7410b1f58d9e5753c8d481fe9bb6812aca00d4.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  gamer: {
-    label: 'Gamer',
-    emoji: '⚡',
-    featured: true,
-    colors: {
-      background: '140 60% 4%',
-      text: '120 100% 50%',
-      primary: '195 100% 50%',
-    },
-    font: { family: 'Press Start 2P' },
-    background: {
-      url: 'https://blossom.ditto.pub/c5597382d7da762dcce32b5b5dbbd95a719faee5cad7c356df1956648b58be69.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-    },
-  },
-
-  // ─── Themes inspired by MySpace Windows93 ──────────────────────────
-
-  cottage: {
-    label: 'Cottage',
-    emoji: '🌿',
-    featured: true,
-    colors: {
-      background: '100 25% 92%',
-      text: '100 20% 12%',
-      primary: '43 80% 55%',
-    },
-    font: { family: 'Lora' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  midnight: {
-    label: 'Midnight',
-    emoji: '🌃',
-    featured: true,
-    colors: {
-      background: '0 0% 9%',
-      text: '0 0% 95%',
-      primary: '190 100% 50%',
-    },
-    font: { family: 'Inter' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  sky: {
-    label: 'Sky',
-    emoji: '☁️',
-    featured: true,
-    colors: {
-      background: '200 60% 88%',
-      text: '220 30% 15%',
-      primary: '280 55% 65%',
-    },
-    font: { family: 'Nunito' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1517483000871-1dbf64a6e1c6?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  motherboard: {
-    label: 'Motherboard',
-    emoji: '🪟',
-    featured: true,
-    colors: {
-      background: '0 0% 75%',
-      text: '0 0% 5%',
-      primary: '240 100% 30%',
-    },
-    font: { family: 'Courier Prime' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  plush: {
-    label: 'Plush',
-    emoji: '🧸',
-    colors: {
-      background: '265 55% 72%',
-      text: '55 100% 50%',
-      primary: '210 90% 55%',
-    },
-    font: { family: 'Comic Neue' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  galaxy: {
-    label: 'Galaxy',
-    emoji: '🌌',
-    featured: true,
-    colors: {
-      background: '260 40% 8%',
-      text: '220 30% 95%',
-      primary: '270 80% 65%',
-    },
-    font: { family: 'DM Sans' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  ocean: {
-    label: 'Ocean',
-    emoji: '🌊',
-    featured: true,
-    colors: {
-      background: '195 50% 12%',
-      text: '185 30% 92%',
-      primary: '175 70% 50%',
-    },
-    font: { family: 'Nunito' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  forest: {
-    label: 'Forest',
-    emoji: '🌲',
-    featured: true,
-    colors: {
-      background: '150 30% 10%',
-      text: '120 20% 90%',
-      primary: '150 60% 45%',
-    },
-    font: { family: 'Merriweather' },
-    background: {
-      url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1920&q=80',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  clearsky: {
-    label: 'Clear Sky Vibes',
-    emoji: '✨',
-    featured: true,
-    colors: {
-      background: '228 37% 8%',
-      text: '185 100% 72%',
-      primary: '300 100% 60%',
+      background: '205 60% 15%',
+      text: '190 40% 92%',
+      primary: '175 80% 55%',
     },
     font: { family: 'Comfortaa' },
     background: {
-      url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80',
+      url: '/themes/aquarium.png',
       mode: 'cover',
-      mimeType: 'image/jpeg',
+      mimeType: 'image/png',
+      dimensions: '1920x1080',
     },
+    backgroundOpacity: 0.25,
   },
 
-  silenttorii: {
-    label: 'Silent Torii',
-    emoji: '⛩️',
+  space: {
+    label: 'Space',
+    emoji: '🚀',
     featured: true,
     colors: {
-      primary: '3 62% 50%',
-      text: '0 0% 100%',
-      background: '0 7% 22%',
-    },
-    font: { family: 'DM Sans' },
-    background: {
-      url: 'https://blossom.ditto.pub/7a609544b62918264b6cfd1f05ae38f9ed9a7922465a4ecc2edbb1a769f887d0.jpeg',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  quiethorizon: {
-    label: 'Quiet Horizon',
-    emoji: '🌅',
-    featured: true,
-    colors: {
-      primary: '170 15% 39%',
-      text: '0 0% 100%',
-      background: '0 7% 22%',
-    },
-    font: { family: 'Lora' },
-    background: {
-      url: 'https://blossom.ditto.pub/3fc3800e0551340c000a0ac75496e642f6dbd5bddf17c5ba7f4c4ebfc8bae55f.jpeg',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  wherepathsmeet: {
-    label: 'Where Paths Meet',
-    emoji: '🌉',
-    featured: true,
-    colors: {
-      primary: '180 11% 78%',
-      text: '120 3% 81%',
-      background: '180 19% 15%',
-    },
-    font: { family: 'DM Sans' },
-    background: {
-      url: 'https://blossom.ditto.pub/a9f38f1bda2d7d984167f3b1197d3d2c7280a650ad609d24f97e35795f7cfd17.jpeg',
-      mode: 'cover',
-      mimeType: 'image/jpeg',
-    },
-  },
-
-  once: {
-    label: 'Once',
-    emoji: '🎲',
-    featured: true,
-    colors: {
-      primary: '217 94% 72%',
-      text: '120 3% 81%',
-      background: '210 17% 7%',
+      background: '240 40% 5%',
+      text: '220 30% 95%',
+      primary: '260 80% 65%',
     },
     font: { family: 'Outfit' },
     background: {
-      url: 'https://picsum.photos/1920/1080',
+      url: '/themes/space.png',
       mode: 'cover',
-      mimeType: 'image/jpeg',
+      mimeType: 'image/png',
+      dimensions: '1920x1080',
     },
+    backgroundOpacity: 0.2,
+  },
+
+  banana: {
+    label: 'Banana',
+    emoji: '🍌',
+    featured: true,
+    colors: {
+      background: '45 90% 75%',
+      text: '30 40% 15%',
+      primary: '25 60% 25%',
+    },
+    font: { family: 'Comic Relief' },
+    background: {
+      url: '/themes/banana.png',
+      mode: 'cover',
+      mimeType: 'image/png',
+      dimensions: '1920x1080',
+    },
+    backgroundOpacity: 0.25,
   },
 };
 
@@ -533,14 +269,25 @@ export function buildThemeCss(tokens: ThemeTokens): string {
   return `:root { ${vars} }`;
 }
 
-/** Derive full ThemeTokens from CoreThemeColors */
-export function coreToTokens(colors: CoreThemeColors): ThemeTokens {
-  return deriveTokensFromCore(colors.background, colors.text, colors.primary);
+/** Derive full ThemeTokens from CoreThemeColors, optionally overriding derived tokens. */
+export function coreToTokens(colors: CoreThemeColors, tokens?: Partial<ThemeTokens>): ThemeTokens {
+  const derived = deriveTokensFromCore(colors.background, colors.text, colors.primary);
+  return tokens ? { ...derived, ...tokens } : derived;
 }
 
 /** Build CSS from CoreThemeColors (convenience) */
-export function buildThemeCssFromCore(colors: CoreThemeColors): string {
-  return buildThemeCss(coreToTokens(colors));
+export function buildThemeCssFromCore(colors: CoreThemeColors, tokens?: Partial<ThemeTokens>): string {
+  return buildThemeCss(coreToTokens(colors, tokens));
+}
+
+/** Build CSS from a full ThemeConfig, including advanced tokens and radius. */
+export function buildThemeCssFromConfig(config: ThemeConfig): string {
+  const tokens = coreToTokens(config.colors, config.tokens);
+  let css = buildThemeCss(tokens);
+  if (config.radius) {
+    css = css.replace(/\}\s*$/, ` --radius: ${config.radius}; }`);
+  }
+  return css;
 }
 
 /**

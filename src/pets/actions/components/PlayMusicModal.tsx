@@ -1,4 +1,4 @@
-// src/blobbi/actions/components/PlayMusicModal.tsx
+// src/pets/actions/components/PlayMusicModal.tsx
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Music, Play, Pause, Check, Loader2, Volume2, AlertCircle } from 'lucide-react';
@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils';
 import {
   getAllTracks,
   formatTrackDuration,
-  type BlobbiTrack,
-} from '../lib/blobbi-track-catalog';
+  type PetsTrack,
+} from '../lib/pets-track-catalog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ import {
  * Selected track for the music player
  */
 export interface SelectedTrack {
-  track: BlobbiTrack;
+  track: PetsTrack;
   url: string;
 }
 
@@ -75,7 +75,7 @@ export function PlayMusicModal({
   }, [open]);
   
   // Handle selecting a track
-  const handleSelectTrack = useCallback((track: BlobbiTrack) => {
+  const handleSelectTrack = useCallback((track: PetsTrack) => {
     // Stop current playback
     if (audioRef.current) {
       audioRef.current.pause();
@@ -161,7 +161,7 @@ export function PlayMusicModal({
             <div>
               <DialogTitle className="text-xl">Play Music</DialogTitle>
               <p className="text-sm text-muted-foreground">
-                Choose a track to play for your Blobbi
+                Choose a track to play for your Pets
               </p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export function PlayMusicModal({
               ) : (
                 <>
                   <Music className="size-4 mr-2" />
-                  Play for Blobbi
+                  Play for Pets
                 </>
               )}
             </Button>
@@ -257,7 +257,7 @@ export function PlayMusicModal({
 // ─── Track Row Component ──────────────────────────────────────────────────────
 
 interface TrackRowProps {
-  track: BlobbiTrack;
+  track: PetsTrack;
   isSelected: boolean;
   onSelect: () => void;
 }
