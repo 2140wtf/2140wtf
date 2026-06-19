@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { BarChart3, CheckCircle2, Clock, X, ChevronRight, Zap } from 'lucide-react';
 import { ZapDialog } from '@/components/ZapDialog';
 import { getZapAmountSats, getZapSenderPubkey } from '@/lib/zapHelpers';
-import { useNostr } from '@nostrify/react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
+import { usePollVotes } from '@/hooks/usePollVotes';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -130,7 +130,6 @@ function VoterAvatarsButton({
 }
 
 export function PollContent({ event }: { event: NostrEvent }) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutate: publishEvent } = useNostrPublish();
@@ -144,24 +143,9 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const [votersModalOpen, setVotersModalOpen] = useState(false);
   const [votersModalOptionId, setVotersModalOptionId] = useState<string | null>(null);
 
-  // Fetch vote events
-  const { data: votes } = useQuery<NostrEvent[]>({
-    queryKey: ['poll-votes', event.id],
-    queryFn: async ({ signal }) => {
-      const filter: Record<string, unknown> = {
-        kinds: [1018],
-        '#e': [event.id],
-        limit: 200,
-      };
-      if (endsAt) filter.until = Number(endsAt);
-      const results = await nostr.query(
-        [filter as { kinds: number[]; '#e': string[]; limit: number; until?: number }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-      );
-      return dedupeVotes(results);
-    },
-    staleTime: 30_000,
-  });
+  // Fetch vote events from default relays + poll hints + author relays.
+  const { data: rawVotes } = usePollVotes(event, 1018);
+  const votes = useMemo(() => dedupeVotes(rawVotes ?? []), [rawVotes]);
 
   const tally = useMemo(() => tallyVotes(votes ?? [], pollType), [votes, pollType]);
   const totalVotes = useMemo(() => {
@@ -619,7 +603,6 @@ function extractPollOptionFromReceipt(receipt: NostrEvent): string | undefined {
 
 /** Render a kind 6969 NIP-69 zap poll and tally its Lightning zap votes. */
 function ZapPollContent({ event }: { event: NostrEvent }) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -632,28 +615,8 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
   const closedAt = getZapPollConstraint(event.tags, 'closed_at');
   const isExpired = closedAt !== undefined ? closedAt < Math.floor(Date.now() / 1000) : false;
 
-  const { data: receipts } = useQuery<NostrEvent[]>({
-    queryKey: ['zap-poll-votes', event.id],
-    queryFn: async ({ signal }) => {
-      const filter: Record<string, unknown> = {
-        kinds: [9735],
-        '#e': [event.id],
-        limit: 500,
-      };
-      if (closedAt !== undefined) filter.until = closedAt;
-      const results = await nostr.query(
-        [filter as { kinds: number[]; '#e': string[]; limit: number; until?: number }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
-      );
-      const seen = new Set<string>();
-      return results.filter((ev) => {
-        if (seen.has(ev.id)) return false;
-        seen.add(ev.id);
-        return true;
-      });
-    },
-    staleTime: 30_000,
-  });
+  // Fetch zap receipt events from default relays + poll hints + author relays.
+  const { data: receipts } = usePollVotes(event, 9735);
 
   const tally = useMemo(() => {
     const map = new Map<string, number>();
