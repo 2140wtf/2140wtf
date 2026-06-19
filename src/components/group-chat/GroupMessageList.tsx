@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MessageSquare } from 'lucide-react';
+import { NoMessagesIllustration } from '@/components/group-chat/GroupEmptyIllustrations';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -118,9 +118,7 @@ export function GroupMessageList({ group, messages, currentUserPubkey }: GroupMe
       {messages.length === 0 ? (
         <div className="h-full min-h-[12rem] flex items-center justify-center">
           <Card className="max-w-xs w-full p-6 text-center space-y-3 border-dashed">
-            <div className="mx-auto size-12 rounded-full bg-muted flex items-center justify-center">
-              <MessageSquare className="size-6 text-muted-foreground" />
-            </div>
+            <NoMessagesIllustration className="mx-auto size-16 text-primary/60" />
             <div>
               <p className="font-medium">No messages yet</p>
               <p className="text-sm text-muted-foreground mt-1">Say something to get the conversation started.</p>
