@@ -37,6 +37,7 @@ const FALLBACK_EFFECTS: Record<InteractionAction, ItemEffect> = {
   clean:    { hygiene: 15 },
   medicate: { health: 10 },
   boost:    { energy: 15 },
+  battle:   {},
 };
 
 // ─── Core ─────────────────────────────────────────────────────────────────────

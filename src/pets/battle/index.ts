@@ -6,6 +6,14 @@ export { BattlePetSprite } from './components/BattlePetSprite';
 export { BattleTouchControls } from './components/BattleTouchControls';
 export { useBattleGame } from './hooks/useBattleGame';
 export { useBattlePayout } from './hooks/useBattlePayout';
+export {
+  buildBattleInteractionEventTemplate,
+  emitBattleInteractionEvent,
+  parseBattleInteractionEvent,
+  type BattleInteractionParams,
+  type BattleMode,
+  type PetsBattleInteraction,
+} from './lib/battleInteraction';
 export type {
   BattleFighter,
   BattleInputState,

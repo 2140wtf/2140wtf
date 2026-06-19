@@ -812,7 +812,7 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
 |----------|---------------------------------------------------------------------------------|
 | `a`      | Coordinate of the target Pets: `31124:<owner-pubkey>:<pets-d-tag>`          |
 | `p`      | Owner pubkey of the target Pets                                               |
-| `action` | Interaction action. Values: `feed`, `play`, `clean`, `medicate`, `boost`        |
+| `action` | Interaction action. Values: `feed`, `play`, `clean`, `medicate`, `boost`, `battle` |
 | `source` | UI surface that originated the interaction (e.g. `pets-page`, `companion`)    |
 
 **Optional tags:**
@@ -821,6 +821,12 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
 |----------|--------------------------------------------------------------------|
 | `pets` | Short Pets identifier (10-hex petId extracted from canonical d-tag) |
 | `item`   | Shop item ID used in the interaction, when applicable              |
+| `winner` | Canonical d-tag of the winning pet, or `draw` (battle action only) |
+| `mode`   | Battle payout mode: `demo` or `real` (battle action only)          |
+| `prize`  | Credits awarded to the winner as a decimal integer (battle only)   |
+| `duration` | Round duration in seconds as a decimal integer (battle only)     |
+| `p1_health` | Final health of fighter 1, 0–100 (battle only)                  |
+| `p2_health` | Final health of fighter 2, 0–100 (battle only)                  |
 | `client` | Client identifier (added automatically by the publishing hook)     |
 
 **Action values:**
@@ -832,8 +838,34 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
 | `clean`    | Cleaning the Pets                      |
 | `medicate` | Administering medicine to the Pets     |
 | `boost`    | Recharging the Pets's energy           |
+| `battle`   | Completed pet battle match (see Battle action below) |
 
 The `pet` action is reserved for a future version.
+
+### Battle action
+
+When `action` is `battle`, the event logs the outcome of a match from the 2140 Pets Battle Arena. Two `a` tags identify the fighters in player order (`31124:<owner>:<fighter-1-d-tag>`, `31124:<owner>:<fighter-2-d-tag>`). The `winner` tag contains the winning pet's d-tag or `draw`. Battle-specific tags (`mode`, `prize`, `duration`, `p1_health`, `p2_health`) are optional but recommended; clients SHOULD ignore unknown battle tags so the schema can evolve.
+
+```json
+{
+  "kind": 1124,
+  "content": "",
+  "tags": [
+    ["a", "31124:<owner-pubkey>:<fighter-1-d-tag>"],
+    ["a", "31124:<owner-pubkey>:<fighter-2-d-tag>"],
+    ["p", "<owner-pubkey>"],
+    ["action", "battle"],
+    ["source", "battle-arena"],
+    ["winner", "<winner-d-tag>"],
+    ["mode", "demo"],
+    ["prize", "50"],
+    ["duration", "60"],
+    ["p1_health", "34"],
+    ["p2_health", "0"],
+    ["alt", "Pet battle won by <winner-d-tag>"]
+  ]
+}
+```
 
 **Processing model:**
 
