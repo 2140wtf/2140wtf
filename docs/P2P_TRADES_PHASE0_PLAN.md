@@ -1,8 +1,8 @@
 # Phase 0 Implementation Plan — Remove Letters, Add NIP-17 DMs
 
-> **Status:** Ready for implementation  
+> **Status:** Implemented  
 > **Goal:** Delete the kind 8211 letter feature from Ditto and replace it with NIP-17 private direct messages, using 0xchat as the UX reference.  
-> **Estimated timeline:** 4–6 weeks for one senior developer; 2–3 weeks with two developers parallelizing removal vs. NIP-17 build.
+> **Timeline:** Completed in a single implementation pass.
 
 ---
 
@@ -16,6 +16,25 @@ This plan covers the first phase of the P2P Trades project. Before P2P Trades ca
 
 **No P2P trading logic is added in this phase.** That comes in Phase 1.
 
+## 1.1 Implementation Notes
+
+This plan was executed in a single pass. The following files were created:
+
+- `src/lib/nip17.ts` — NIP-17 crypto primitives and conversation helpers.
+- `src/lib/nip17.test.ts` — unit tests for round-trip and tamper detection.
+- `src/hooks/useDmRelays.ts` — DM relay resolution (kind 10050 → NIP-65 fallback).
+- `src/hooks/useNip17SendMessage.ts` — send hook with recipient + self-copy publishing.
+- `src/hooks/useNip17Inbox.ts` — inbox subscription and conversation grouping.
+- `src/pages/MessagesPage.tsx` — `/messages` conversation list.
+- `src/pages/MessageThreadPage.tsx` — `/messages/:npub` thread view.
+
+The following planned items were **not** implemented and are deferred:
+
+- IndexedDB persistence of decrypted messages (`useNip17Inbox` keeps state in React only).
+- A separate `useNip17Thread` hook (`MessageThreadPage` filters `useNip17Inbox` output by participant).
+- A settings UI for editing the user's kind 10050 DM relay list.
+- DM notifications / unread badge.
+
 ---
 
 ## 2. Goals & Non-Goals
@@ -28,7 +47,7 @@ This plan covers the first phase of the P2P Trades project. Before P2P Trades ca
 - [x] DM inbox (`/messages`) lists conversations with last-message preview and unread state.
 - [x] DM thread view shows message bubbles, timestamps, and reply context.
 - [x] A "Message" button on profiles opens a DM thread.
-- [ ] DM notifications surface new messages.
+- [ ] DM notifications surface new messages. *Deferred out of Phase 0; see §11.*
 - [x] DM relay preferences (kind 10050) are supported with NIP-65 fallback.
 - [x] `npm run test` passes after all changes.
 
@@ -249,18 +268,12 @@ Responsibilities:
 - Subscribe to `{ kinds: [1059], '#p': [userPubkey] }`.
 - Unwrap and decrypt incoming events.
 - Merge with self-copies so sent messages appear in threads.
-- Cache decrypted messages in IndexedDB to avoid re-decrypting on every render.
+- Cache decrypted messages in React state. IndexedDB persistence was planned but deferred to a future optimization.
 - Handle malformed/unverifiable wraps gracefully (drop them, don't crash).
 
 ### 4.4 Add DM thread hook
 
-Create `src/hooks/useNip17Thread.ts`:
-
-```ts
-export function useNip17Thread(partnerPubkey: string) {
-  // returns messages between user and partnerPubkey, sorted by created_at
-}
-```
+A separate `src/hooks/useNip17Thread.ts` was not created. `MessageThreadPage` filters the conversations returned by `useNip17Inbox` for the requested participant. A dedicated thread hook can be extracted later if needed.
 
 ### 4.5 Add DM relay discovery
 
@@ -274,7 +287,7 @@ export function useDmRelays(pubkey: string) {
 }
 ```
 
-Also add a settings UI to edit the user's own kind 10050 DM relay list (can be lightweight, under Settings → Privacy/Messages).
+A settings UI to edit the user's own kind 10050 DM relay list was not built in Phase 0.
 
 ### 4.6 Add IndexedDB storage for decrypted messages
 
@@ -367,8 +380,8 @@ In `src/hooks/useNotifications.ts` and `src/pages/NotificationsPage.tsx`:
 
 Add under Settings:
 
-- **DM relays:** Edit kind 10050 relay list.
-- **Blocked DMs:** Manage pubkey block list (reuse existing mute list or create DM-specific block list).
+- **DM relays:** Edit kind 10050 relay list. *Not implemented in Phase 0.*
+- **Blocked DMs:** Manage pubkey block list (reuse existing mute list or create DM-specific block list). *Not implemented in Phase 0.*
 
 ---
 
@@ -436,44 +449,51 @@ If Phase 0 needs to be reverted:
 
 ## 8. Definition of Done
 
-- [ ] All letter files, routes, sidebar items, kind labels, and notification plumbing removed.
-- [ ] `npm run test` passes with zero letter references.
-- [ ] NIP-17 DMs can be sent and received between two Ditto users.
-- [ ] `/messages` inbox renders conversation list.
-- [ ] `/messages/:npub` thread renders messages and supports reply.
-- [ ] Profile "Message" button works.
-- [ ] DM notifications work.
-- [ ] DM relay preferences (kind 10050) supported with fallback.
-- [ ] NIP.md updated.
-- [ ] CHANGELOG.md updated.
+- [x] All letter files, routes, sidebar items, kind labels, and notification plumbing removed.
+- [x] `npm run test` passes with zero letter references.
+- [x] NIP-17 DMs can be sent and received between two Ditto users.
+- [x] `/messages` inbox renders conversation list.
+- [x] `/messages/:npub` thread renders messages and supports reply.
+- [x] Profile "Message" button works.
+- [ ] DM notifications work. *Deferred out of Phase 0; see §11.*
+- [x] DM relay preferences (kind 10050) supported with fallback.
+- [x] NIP.md updated.
+- [x] CHANGELOG.md updated.
 
 ---
 
 ## 9. Task Order Recommendation
 
-| Order | Task | Status | Est. Days |
+| Order | Task | Status | Notes |
 |---|---|---|---|
-| 1 | Delete letter files + routes + sidebar + kind label | ✅ Done | 1 |
-| 2 | Fix notification/templates consumers after deletion | Dev A | 1–2 |
-| 3 | Add `src/lib/nip17.ts` crypto utilities + tests | Dev B | 2 |
-| 4 | Add `useNip17SendMessage` + signer integration | Dev B | 2–3 |
-| 5 | Add `useNip17Inbox` + IndexedDB caching | Dev B | 2–3 |
-| 6 | Add `useNip17Thread` + DM message parser | Dev B | 1 |
-| 7 | Build `MessagesPage` + `MessageThreadPage` | Dev A | 2–3 |
-| 8 | Add profile "Message" buttons | Dev A | 0.5 |
-| 9 | DM notifications integration | Dev A | 1–2 |
-| 10 | kind 10050 DM relay settings | Dev A/B | 1 |
-| 11 | End-to-end testing + bug fixes | Both | 2–3 |
-| 12 | NIP.md + CHANGELOG + final `npm run test` | Both | 1 |
+| 1 | Delete letter files + routes + sidebar + kind label | ✅ Done | Removed pages, components, hooks, lib files, kind labels, and NIP.md section. |
+| 2 | Fix notification/templates consumers after deletion | ✅ Done | No letter-specific notification code remained; sidebar slot reused for Messages. |
+| 3 | Add `src/lib/nip17.ts` crypto utilities + tests | ✅ Done | Includes round-trip and auth-check tests. |
+| 4 | Add `useNip17SendMessage` + signer integration | ✅ Done | Sends to recipient + self-copy via recipient DM relays. |
+| 5 | Add `useNip17Inbox` | ✅ Done | Streams kind 1059 `#p`-tagged wraps and groups into conversations. |
+| 6 | Add `useDmRelays` + relay targeting | ✅ Done | kind 10050 with NIP-65 read-relay fallback. |
+| 7 | Build `MessagesPage` + `MessageThreadPage` | ✅ Done | Routes `/messages` and `/messages/:npub`. |
+| 8 | Add profile "Message" buttons | ✅ Done | Opens DM thread for foreign profiles. |
+| 9 | DM notifications integration | ⏸️ Deferred | Out of scope for Phase 0; see §11. |
+| 10 | End-to-end testing + bug fixes | ✅ Done | `npm run test` passes. |
+| 11 | NIP.md + CHANGELOG + final `npm run test` | ✅ Done | |
 
-**Total:** ~14–21 dev-days.
+**Total effort:** compressed into one implementation pass.
 
 ---
 
-## 10. Open Questions Before Starting
+## 10. Decisions Made
 
-1. **Signer NIP-44 support:** Does `nostrify`'s signer abstraction expose NIP-44 encrypt/decrypt, or do we need to add a method?
-2. **Historical letters:** Do we want a one-time read-only migration view, or fully drop support?
-3. **DM block list:** Reuse the existing mute list (kind 10000), or create a separate DM block list?
-4. **Notification push:** Should DM notifications wake the Capacitor app? If yes, push notification changes are needed.
-5. **Route naming:** `/messages` or `/dm`? 0xchat uses chat-centric naming; Ditto currently uses `/letters`.
+1. **Signer NIP-44 support:** Implemented signer-based seal creation directly in `src/lib/nip17.ts` using the `NostrSigner` interface (`signEvent` + NIP-44 encrypt). No changes to `nostrify` were required.
+2. **Historical letters:** Fully dropped. Existing kind 8211 events remain on relays but are not rendered; no migration was attempted.
+3. **DM block list:** Not implemented in Phase 0. Existing mute list can be reused in a future phase if needed.
+4. **Notification push:** Not implemented in Phase 0. Local in-app unread badge only is deferred.
+5. **Route naming:** Used `/messages` and `/messages/:npub` to replace the previous `/letters` routes.
+
+## 11. Remaining Work for Phase 1 / Future Phases
+
+- **DM notifications:** Add an unread indicator on the Messages sidebar item and/or surface new NIP-17 messages in the Notifications page. This was intentionally left out of Phase 0.
+- **Group DMs:** Multi-recipient threads.
+- **P2P trade request composer:** Link DMs to trade offers (Phase 1).
+- **NIP-59 private offers:** Phase 2.
+- **DM relay settings UI:** The `useDmRelays` hook supports kind 10050, but a dedicated settings page to edit the user's DM relay list was not built.
