@@ -20,6 +20,7 @@ import {
   verifyEvent,
   nip44,
 } from 'nostr-tools';
+import { isNostrId } from './nostrId';
 import type { UnsignedEvent } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -109,6 +110,7 @@ export interface MLSGroupState {
 }
 
 export interface MLSApplicationMessage {
+  id: string;
   kind: number;
   senderPubkey: string;
   content: string;
@@ -143,7 +145,7 @@ export function parseNostrGroupDataExtension(json: unknown): NostrGroupData | nu
       nostrGroupId: p.nostrGroupId,
       name: p.name,
       description: typeof p.description === 'string' ? p.description : undefined,
-      adminPubkeys: p.adminPubkeys.filter((k): k is string => typeof k === 'string'),
+      adminPubkeys: p.adminPubkeys.filter((k): k is string => typeof k === 'string' && isNostrId(k)),
       relays: validateRelayUrls(p.relays),
     };
   } catch {
@@ -257,7 +259,7 @@ export async function unwrapWelcomeEvent(
     if (
       typeof ev.content !== 'string' ||
       typeof ev.pubkey !== 'string' ||
-      !Array.isArray(ev.tags)
+      !isStringArrayArray(ev.tags)
     ) {
       return null;
     }
@@ -298,7 +300,7 @@ export function parseApplicationMessage(json: string): MLSApplicationMessage | n
       typeof ev.created_at !== 'number' ||
       typeof ev.id !== 'string' ||
       typeof ev.sig !== 'string' ||
-      !Array.isArray(ev.tags)
+      !isStringArrayArray(ev.tags)
     ) {
       return null;
     }
@@ -313,6 +315,7 @@ export function parseApplicationMessage(json: string): MLSApplicationMessage | n
     if (!sigValid) return null;
 
     return {
+      id: ev.id,
       kind: ev.kind,
       senderPubkey: ev.pubkey,
       content: ev.content,
@@ -322,6 +325,12 @@ export function parseApplicationMessage(json: string): MLSApplicationMessage | n
   } catch {
     return null;
   }
+}
+
+function isStringArrayArray(value: unknown): value is string[][] {
+  return (
+    Array.isArray(value) && value.every((item) => Array.isArray(item) && item.every((x) => typeof x === 'string'))
+  );
 }
 
 export async function createGroupEvent(
