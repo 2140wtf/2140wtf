@@ -10,16 +10,16 @@ vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { pubkey: viewerPubkey } }),
 }));
 
-vi.mock('@/hooks/useNip17Inbox', () => ({
-  useNip17Inbox: vi.fn(),
+vi.mock('@/hooks/useDmInbox', () => ({
+  useDmInbox: vi.fn(),
 }));
 
-import { useNip17Inbox } from './useNip17Inbox';
+import { useDmInbox } from './useDmInbox';
 
 describe('useHasUnreadMessages', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.mocked(useNip17Inbox).mockReturnValue({ conversations: [], isLoading: false });
+    vi.mocked(useDmInbox).mockReturnValue({ conversations: [], isLoading: false });
   });
 
   it('returns no unread when there are no conversations', () => {
@@ -29,7 +29,7 @@ describe('useHasUnreadMessages', () => {
   });
 
   it('ignores messages sent by the viewer', () => {
-    vi.mocked(useNip17Inbox).mockReturnValue({
+    vi.mocked(useDmInbox).mockReturnValue({
       conversations: [{
         id: 'c1',
         participants: [otherPubkey],
@@ -50,7 +50,7 @@ describe('useHasUnreadMessages', () => {
       JSON.stringify({ c1: 50 }),
     );
 
-    vi.mocked(useNip17Inbox).mockReturnValue({
+    vi.mocked(useDmInbox).mockReturnValue({
       conversations: [{
         id: 'c1',
         participants: [otherPubkey],
@@ -74,7 +74,7 @@ describe('useHasUnreadMessages', () => {
       JSON.stringify({ c1: 100 }),
     );
 
-    vi.mocked(useNip17Inbox).mockReturnValue({
+    vi.mocked(useDmInbox).mockReturnValue({
       conversations: [{
         id: 'c1',
         participants: [otherPubkey],
