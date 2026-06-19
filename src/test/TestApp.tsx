@@ -22,7 +22,7 @@ export function TestApp({ children }: TestAppProps) {
   });
 
   const defaultConfig: AppConfig = {
-    appName: "Ditto",
+    appName: "2140.wtf",
     appId: "ditto",
     homePage: "feed",
     theme: "light",
