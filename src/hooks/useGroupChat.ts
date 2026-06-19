@@ -23,16 +23,18 @@ import { KIND_GROUP } from '@/lib/nip104Protocol';
 
 function extractPrivateKey(logins: unknown[]): Uint8Array | null {
   if (!Array.isArray(logins)) return null;
-  const login = logins[0] as { type?: string; data?: { nsec?: string } } | undefined;
-  if (!login || login.type !== 'nsec' || !login.data?.nsec) return null;
+  for (const login of logins) {
+    const l = login as { type?: string; data?: { nsec?: string } } | undefined;
+    if (!l || l.type !== 'nsec' || !l.data?.nsec) continue;
 
-  try {
-    const decoded = nip19.decode(login.data.nsec);
-    if (decoded.type === 'nsec') {
-      return decoded.data as Uint8Array;
+    try {
+      const decoded = nip19.decode(l.data.nsec);
+      if (decoded.type === 'nsec') {
+        return decoded.data as Uint8Array;
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
   }
   return null;
 }

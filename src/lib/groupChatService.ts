@@ -5,13 +5,12 @@
  * Group Ratchet fallback (no Rust MLS backend required).
  */
 
-import { nip19, verifyEvent } from 'nostr-tools';
+import { nip19, verifyEvent, getPublicKey } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import {
   generateRootSecret,
   deriveEpochSecret,
-  rotateRootSecret,
 } from './groupRatchet';
 import {
   KIND_GROUP,
@@ -151,6 +150,12 @@ export class GroupChatService {
 
   constructor(userPubkey: string, userPrivkey: Uint8Array, defaultRelays: string[] = []) {
     this.userPubkey = userPubkey.toLowerCase();
+
+    const derivedPubkey = getPublicKey(userPrivkey).toLowerCase();
+    if (derivedPubkey !== this.userPubkey) {
+      throw new Error('Provided private key does not match the user pubkey');
+    }
+
     this.userPrivkey = userPrivkey;
     this.defaultRelays = defaultRelays.filter((r) => /^wss?:\/\//.test(r));
 
@@ -158,25 +163,25 @@ export class GroupChatService {
   }
 
   private loadState(): void {
-    const groups = loadGroups();
+    const groups = loadGroups(this.userPubkey);
     for (const g of groups) {
       this.groups.set(g.nostrGroupId, g);
       this.groupStates.set(g.nostrGroupId, {
         exporterSecret: g.exporterSecret,
         rootSecret: g.rootSecret,
       });
-      this.messages.set(g.nostrGroupId, loadMessages(g.nostrGroupId));
+      this.messages.set(g.nostrGroupId, loadMessages(this.userPubkey, g.nostrGroupId));
     }
   }
 
   private persistGroup(group: StoredGroup): void {
     this.groups.set(group.nostrGroupId, group);
-    saveGroup(group);
+    saveGroup(this.userPubkey, group);
   }
 
   private persistMessages(groupId: string): void {
     const msgs = this.messages.get(groupId) ?? [];
-    saveMessages(groupId, msgs);
+    saveMessages(this.userPubkey, groupId, msgs);
   }
 
   private getExporterSecret(groupId: string): string | undefined {
@@ -452,7 +457,7 @@ export class GroupChatService {
     }
 
     const newEpoch = group.epoch + 1;
-    const newRootSecret = await rotateRootSecret(oldRootSecret, groupId);
+    const newRootSecret = generateRootSecret();
     const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
 
     group.members.push(memberPubkey);
@@ -538,7 +543,7 @@ export class GroupChatService {
       return { success: false, error: 'Missing group root secret' };
     }
 
-    const newRootSecret = await rotateRootSecret(oldRootSecret, groupId);
+    const newRootSecret = generateRootSecret();
     const newEpoch = group.epoch + 1;
     const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
 
@@ -644,12 +649,19 @@ export class GroupChatService {
       return { success: false, error: 'Invalid group id in Welcome' };
     }
 
+    const welcomeEpoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
+
     const existing = this.groups.get(groupId);
     if (existing && existing.bannedPubkeys.some((b) => b === this.userPubkey)) {
       return { success: false, error: 'You are banned from this group' };
     }
-    if (existing && existing.epoch >= (typeof wd.epoch === 'number' ? wd.epoch : 0)) {
-      return { success: false, error: 'Welcome event is outdated' };
+    if (existing) {
+      if (welcomeEpoch <= existing.epoch) {
+        return { success: false, error: 'Welcome event is outdated' };
+      }
+      if (welcomeEpoch !== existing.epoch + 1) {
+        return { success: false, error: 'Welcome epoch is not sequential' };
+      }
     }
     if (existing && !existing.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
       return { success: false, error: 'Welcome not from a group admin' };
@@ -664,7 +676,7 @@ export class GroupChatService {
       return { success: false, error: 'Welcome sender is not a group admin' };
     }
 
-    const epoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
+    const epoch = welcomeEpoch;
 
     let rootSecret: string | undefined;
     let exporterSecret: string;
@@ -718,7 +730,14 @@ export class GroupChatService {
       return { success: false, error: 'Group not found' };
     }
 
-    deleteGroup(groupId);
+    if (this.isAdmin(group) && group.adminPubkeys.length === 1) {
+      return {
+        success: false,
+        error: 'Transfer admin role before leaving the group',
+      };
+    }
+
+    deleteGroup(this.userPubkey, groupId);
     this.groups.delete(groupId);
     this.messages.delete(groupId);
     this.groupStates.delete(groupId);
