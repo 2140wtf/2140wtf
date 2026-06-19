@@ -23,13 +23,22 @@ vi.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
 
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
 describe('RoadstrReportDialog', () => {
   beforeEach(() => {
     mocks.currentUser = null;
     mocks.publish.mockClear();
     mocks.toast.mockClear();
 
-    const getCurrentPosition = vi.fn((success: PositionCallback, _error?: PositionErrorCallback | null, _opts?: PositionOptions) => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
         coords: { latitude: 12.345, longitude: 67.89 },
       } as GeolocationPosition);
@@ -41,11 +50,13 @@ describe('RoadstrReportDialog', () => {
   });
 
   it('prompts login when the user is not authenticated', async () => {
-    render(
-      <TestApp>
-        <RoadstrReportDialog open onOpenChange={() => {}} />
-      </TestApp>,
-    );
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportDialog open onOpenChange={() => {}} />
+        </TestApp>,
+      );
+    });
 
     const reportButton = screen.getByRole('button', { name: /Report/i });
     await act(async () => {
@@ -59,15 +70,17 @@ describe('RoadstrReportDialog', () => {
   it('publishes a kind 1315 report using the provided location', async () => {
     mocks.currentUser = { pubkey: '11'.repeat(32) };
 
-    render(
-      <TestApp>
-        <RoadstrReportDialog
-          open
-          onOpenChange={() => {}}
-          location={{ lat: 48.856614, lon: 2.3522219 }}
-        />
-      </TestApp>,
-    );
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportDialog
+            open
+            onOpenChange={() => {}}
+            location={{ lat: 48.856614, lon: 2.3522219 }}
+          />
+        </TestApp>,
+      );
+    });
 
     const reportButton = screen.getByRole('button', { name: /Report/i });
     await act(async () => {
@@ -89,11 +102,13 @@ describe('RoadstrReportDialog', () => {
   it('uses navigator.geolocation when no location is provided', async () => {
     mocks.currentUser = { pubkey: '11'.repeat(32) };
 
-    render(
-      <TestApp>
-        <RoadstrReportDialog open onOpenChange={() => {}} />
-      </TestApp>,
-    );
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportDialog open onOpenChange={() => {}} />
+        </TestApp>,
+      );
+    });
 
     const reportButton = screen.getByRole('button', { name: /Report/i });
     await act(async () => {
