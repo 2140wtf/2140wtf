@@ -61,6 +61,7 @@ const NIP19Page = lazy(() => import("./pages/NIP19Page").then(m => ({ default: m
 const NotificationSettings = lazy(() => import("./pages/NotificationSettings").then(m => ({ default: m.NotificationSettings })));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then(m => ({ default: m.NotificationsPage })));
 const PhotosFeedPage = lazy(() => import("./pages/PhotosFeedPage").then(m => ({ default: m.PhotosFeedPage })));
+const PetsPage = lazy(() => import("./pages/PetsPage").then(m => ({ default: m.PetsPage })));
 const PodcastsFeedPage = lazy(() => import("./pages/PodcastsFeedPage").then(m => ({ default: m.PodcastsFeedPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage").then(m => ({ default: m.PrivacyPolicyPage })));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings").then(m => ({ default: m.ProfileSettings })));
@@ -319,7 +320,7 @@ export function AppRouter() {
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/groups" element={<GroupChatPage />} />
 
-            <Route path="/pets" element={<Navigate to="/" replace />} />
+            <Route path="/pets" element={<PetsPage />} />
             <Route path="/badges" element={<BadgesPage />} />
             <Route path="/books" element={<BooksPage />} />
             <Route path="/archive" element={<ArchivePage />} />

@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ScrollText,
   BarChart3,
+  Cat,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 
@@ -111,6 +112,18 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 120,
     category: 'personal',
     href: '/profile',
+  },
+  {
+    id: 'pets',
+    label: '2140 Pets',
+    description: 'Your 2140 Pets companion, quick actions, and daily bounties',
+    icon: Cat,
+    defaultHeight: 360,
+    minHeight: 250,
+    maxHeight: 700,
+    category: 'personal',
+    href: '/pets',
+    fillHeight: true,
   },
   // Content feeds
   {
