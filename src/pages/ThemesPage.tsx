@@ -9,15 +9,12 @@ import { PullToRefresh } from "@/components/PullToRefresh";
 import { SubHeaderBar } from "@/components/SubHeaderBar";
 import { TabButton } from "@/components/TabButton";
 import { ThemeSelector } from "@/components/ThemeSelector";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useFeedTab } from "@/hooks/useFeedTab";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
-import { useTheme } from "@/hooks/useTheme";
 import { usePageRefresh } from "@/hooks/usePageRefresh";
 import { useThemeFeed } from "@/hooks/useThemeFeed";
 import { deduplicateEvents } from "@/lib/deduplicateEvents";
@@ -27,7 +24,6 @@ type ThemesTab = "my-themes" | "follows" | "global";
 export function ThemesPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const { autoShareTheme, setAutoShareTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useFeedTab<ThemesTab>("themes", [
     "my-themes",
@@ -115,30 +111,6 @@ export function ThemesPage() {
             onBuilderOpenChange={setBuilderOpen}
           />
 
-          {/* Sync theme toggle */}
-          {user && (
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between gap-4">
-                <Label
-                  htmlFor="auto-share-theme"
-                  className="flex flex-col gap-1 cursor-pointer"
-                >
-                  <span className="text-sm font-medium">
-                    Sync app theme with your profile theme
-                  </span>
-                  <span className="text-xs text-muted-foreground font-normal">
-                    Turn this off if you want to display a different theme on
-                    your profile than you use in the rest of the app.
-                  </span>
-                </Label>
-                <Switch
-                  id="auto-share-theme"
-                  checked={autoShareTheme}
-                  onCheckedChange={setAutoShareTheme}
-                />
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         <PullToRefresh onRefresh={handleRefresh}>
