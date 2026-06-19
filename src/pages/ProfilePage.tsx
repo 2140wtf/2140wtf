@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useInView } from 'react-intersection-observer';
 import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { ProfileRightSidebar } from '@/components/ProfileRightSidebar';
 import { NoteCard } from '@/components/NoteCard';
+import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
 import { ComposeBox } from '@/components/ComposeBox';
 import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { ProfileLoveButton } from '@/components/ProfileLoveButton';
@@ -39,6 +40,7 @@ import { isEventMuted } from '@/lib/muteHelpers';
 import { useProfileFeed, useProfileLikes as useProfileLikesInfinite, useTabFeed, filterByTab } from '@/hooks/useProfileFeed';
 import type { ProfileTab as CoreProfileTab } from '@/hooks/useProfileFeed';
 import { useProfileMedia } from '@/hooks/useProfileMedia';
+import { useProfileProducts } from '@/hooks/useProfileProducts';
 import { MediaCollage, MediaCollageSkeleton } from '@/components/MediaCollage';
 import { useProfileSupplementary } from '@/hooks/useProfileData';
 import { LOVE_LIST_KIND } from '@/hooks/useLoveList';
@@ -146,7 +148,6 @@ interface ProfileMoreMenuProps {
 function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile, authorEvent }: ProfileMoreMenuProps) {
   const { toast } = useToast();
   const { user } = useCurrentUser();
-  const navigate = useNavigate();
   const shareOrigin = useShareOrigin();
   const npubEncoded = useMemo(() => nip19.npubEncode(pubkey), [pubkey]);
   const { addMute, removeMute, isMuted } = useMuteList();
@@ -215,10 +216,6 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
 
   const handleRecovery = () => openAfterClose(setRecoveryOpen);
   const handleGiveBadge = () => openAfterClose(setGiveBadgeOpen);
-  const handleWriteLetter = () => {
-    close();
-    navigate(`/letters/compose?to=${npubEncoded}`);
-  };
   const handleZap = () => {
     close();
     setTimeout(() => zapTriggerRef.current?.click(), 150);
@@ -289,13 +286,6 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
                   icon={<Award className="size-5" />}
                   label="Award badge"
                   onClick={handleGiveBadge}
-                />
-              )}
-              {user && (
-                <MenuRow
-                  icon={<Mail className="size-5" />}
-                  label="Write a letter"
-                  onClick={handleWriteLetter}
                 />
               )}
               <MenuRow
@@ -948,13 +938,13 @@ function ProfileImageLightbox({ imageUrl, onClose }: { imageUrl: string; onClose
 
 // ----- Main Component -----
 
-const CORE_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Badges', 'Likes', 'Wall'];
-const DEFAULT_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Likes', 'Wall'];
+const CORE_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Badges', 'Likes', 'Wall'];
+const DEFAULT_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Likes', 'Wall'];
 
 // Map from display label → internal tab id for core tabs
 const CORE_TAB_IDS: Record<string, string> = {
   'Posts': 'posts', 'Posts & replies': 'replies',
-  'Media': 'media', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall',
+  'Media': 'media', 'Products': 'products', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall',
 };
 
 export function ProfilePage() {
@@ -1232,6 +1222,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     'Posts': { kinds: [1, 6], authors: [pubkey] },
     'Posts & replies': { authors: [pubkey] },
     'Media': { kinds: [1], authors: [pubkey] },
+    'Products': { kinds: [30402], authors: [pubkey] },
     'Badges': { kinds: [10008, 30008], authors: [pubkey] },
     'Likes': { kinds: [7], authors: [pubkey] },
     'Wall': { kinds: [1111], '#A': [`0:${pubkey}:`] },
@@ -1277,7 +1268,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
 
   // Drop active tab if it was deleted
   useEffect(() => {
-    const isCoreTab = ['posts', 'replies', 'media', 'badges', 'likes', 'wall'].includes(activeTab);
+    const isCoreTab = ['posts', 'replies', 'media', 'products', 'badges', 'likes', 'wall'].includes(activeTab);
     if (!isCoreTab && !profileSavedTabs.find((t) => t.label === activeTab)) {
       setActiveTab(firstTabId);
     }
@@ -1340,6 +1331,20 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     hasNextPage: hasNextMediaPage,
     isFetchingNextPage: isFetchingNextMediaPage,
   } = useProfileMedia(pubkey, hasTabs);
+
+  // Profile products — NIP-99 classified listings authored by this user
+  const {
+    data: productsData,
+    isPending: productsPending,
+    fetchNextPage: fetchNextProductsPage,
+    hasNextPage: hasNextProductsPage,
+    isFetchingNextPage: isFetchingNextProductsPage,
+  } = useProfileProducts(pubkey, hasTabs && activeTab === 'products');
+
+  const productListings = useMemo(() => {
+    const all = productsData?.pages.flatMap((page) => page.listings) ?? [];
+    return all.filter((listing) => listing.status === 'active');
+  }, [productsData]);
 
   // Infinite-scroll likes
   const {
@@ -1776,6 +1781,10 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
       if (hasNextMediaPage && !isFetchingNextMediaPage) {
         fetchNextMediaPage();
       }
+    } else if (activeTab === 'products') {
+      if (hasNextProductsPage && !isFetchingNextProductsPage) {
+        fetchNextProductsPage();
+      }
     } else if (activeTab === 'wall') {
       if (hasNextWallPage && !isFetchingNextWallPage) {
         fetchNextWallPage();
@@ -1785,7 +1794,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         fetchNextFeedPage();
       }
     }
-  }, [inView, activeTab, hasNextFeedPage, isFetchingNextFeedPage, fetchNextFeedPage, hasNextLikesPage, isFetchingNextLikesPage, fetchNextLikesPage, hasNextMediaPage, isFetchingNextMediaPage, fetchNextMediaPage, hasNextWallPage, isFetchingNextWallPage, fetchNextWallPage]);
+  }, [inView, activeTab, hasNextFeedPage, isFetchingNextFeedPage, fetchNextFeedPage, hasNextLikesPage, isFetchingNextLikesPage, fetchNextLikesPage, hasNextMediaPage, isFetchingNextMediaPage, fetchNextMediaPage, hasNextProductsPage, isFetchingNextProductsPage, fetchNextProductsPage, hasNextWallPage, isFetchingNextWallPage, fetchNextWallPage]);
 
   const authorEvent = metadataEvent;
 
@@ -1801,11 +1810,11 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     [mediaEvents]
   );
 
-  const isCoreProfileTab = activeTab === 'posts' || activeTab === 'replies' || activeTab === 'media' || activeTab === 'likes' || activeTab === 'wall' || activeTab === 'badges';
-  const currentItems = activeTab === 'wall' ? [] : activeTab === 'likes' ? likedFeedItems : activeTab === 'media' ? mediaFeedItems : filterByTab(feedItems, isCoreProfileTab ? (activeTab as CoreProfileTab) : 'posts');
-  const currentLoading = activeTab === 'wall' ? wallPending : activeTab === 'likes' ? likesPending : activeTab === 'media' ? mediaPending : feedPending;
-  const hasMore = activeTab === 'wall' ? hasNextWallPage : activeTab === 'likes' ? hasNextLikesPage : activeTab === 'media' ? hasNextMediaPage : hasNextFeedPage;
-  const isFetchingMore = activeTab === 'wall' ? isFetchingNextWallPage : activeTab === 'likes' ? isFetchingNextLikesPage : activeTab === 'media' ? isFetchingNextMediaPage : isFetchingNextFeedPage;
+  const isCoreProfileTab = activeTab === 'posts' || activeTab === 'replies' || activeTab === 'media' || activeTab === 'products' || activeTab === 'likes' || activeTab === 'wall' || activeTab === 'badges';
+  const currentItems = activeTab === 'wall' ? [] : activeTab === 'likes' ? likedFeedItems : activeTab === 'media' ? mediaFeedItems : activeTab === 'products' ? [] : filterByTab(feedItems, isCoreProfileTab ? (activeTab as CoreProfileTab) : 'posts');
+  const currentLoading = activeTab === 'wall' ? wallPending : activeTab === 'likes' ? likesPending : activeTab === 'media' ? mediaPending : activeTab === 'products' ? productsPending : feedPending;
+  const hasMore = activeTab === 'wall' ? hasNextWallPage : activeTab === 'likes' ? hasNextLikesPage : activeTab === 'media' ? hasNextMediaPage : activeTab === 'products' ? hasNextProductsPage : hasNextFeedPage;
+  const isFetchingMore = activeTab === 'wall' ? isFetchingNextWallPage : activeTab === 'likes' ? isFetchingNextLikesPage : activeTab === 'media' ? isFetchingNextMediaPage : activeTab === 'products' ? isFetchingNextProductsPage : isFetchingNextFeedPage;
 
   // Auto-fetch next page when client-side filtering (e.g. removing replies
   // from the "posts" tab) leaves fewer visible items than the page size.
@@ -1813,7 +1822,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   const MIN_VISIBLE_ITEMS = 5;
   useEffect(() => {
     if (currentLoading || isFetchingMore) return;
-    if (activeTab === 'wall' || activeTab === 'likes' || activeTab === 'media') return;
+    if (activeTab === 'wall' || activeTab === 'likes' || activeTab === 'media' || activeTab === 'products') return;
     if (currentItems.length < MIN_VISIBLE_ITEMS && hasNextFeedPage && !isFetchingNextFeedPage) {
       fetchNextFeedPage();
     }
@@ -1831,6 +1840,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           (tag === 'profile-supplementary' && key[1] === pubkey) ||
           (tag === 'profile-feed' && key[1] === pubkey) ||
           (tag === 'profile-media' && key[1] === pubkey) ||
+          (tag === 'profile-products' && key[1] === pubkey) ||
           (tag === 'profile-likes-infinite' && key[1] === pubkey) ||
           (tag === 'profile-pinned-events' && key[1] === pubkey) ||
           (tag === 'wall-comments' && key[1] === pubkey)
@@ -2166,17 +2176,26 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                       </Button>
                     </Link>
                   ) : (
-                    <Button
-                      className={cn(
-                        'rounded-full font-bold',
-                        isFollowing && 'bg-transparent border border-border text-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50',
+                    <>
+                      {pubkey && (
+                        <Link to={`/messages/${nip19.npubEncode(pubkey)}`}>
+                          <Button variant="outline" className="rounded-full font-bold">
+                            Message
+                          </Button>
+                        </Link>
                       )}
-                      variant={isFollowing ? 'outline' : 'default'}
-                      onClick={handleToggleFollow}
-                      disabled={followPending || !user}
-                    >
-                      {followPending ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
-                    </Button>
+                      <Button
+                        className={cn(
+                          'rounded-full font-bold',
+                          isFollowing && 'bg-transparent border border-border text-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50',
+                        )}
+                        variant={isFollowing ? 'outline' : 'default'}
+                        onClick={handleToggleFollow}
+                        disabled={followPending || !user}
+                      >
+                        {followPending ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -2602,6 +2621,39 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           <ProfileBadgesTab pubkey={pubkey} displayName={displayName} />
         )}
 
+        {/* Products tab — NIP-99 classified listings authored by this user */}
+        {hasTabs && activeTab === 'products' && (
+          <div>
+            {productsPending ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
+                    <Skeleton className="aspect-[4/3] w-full" />
+                    <div className="p-4 space-y-3">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                      <Skeleton className="h-3 w-1/3" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : productListings.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                {productListings.map((listing) => (
+                  <Nip99ListingCard key={listing.id} listing={listing} />
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-muted-foreground">
+                This user has no items for sale at the moment.
+              </div>
+            )}
+            {hasNextProductsPage && (
+              <div ref={scrollRef} className="h-px" />
+            )}
+          </div>
+        )}
+
         {/* Custom saved-feed tab content */}
         {hasTabs && !isCoreProfileTab && profileSavedTabs.find((t) => t.label === activeTab) && pubkey && (
           <ProfileSavedFeedContent
@@ -2612,7 +2664,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         )}
 
         {/* Tab content (posts / replies / likes) */}
-        {hasTabs && isCoreProfileTab && activeTab !== 'wall' && activeTab !== 'media' && activeTab !== 'badges' && (
+        {hasTabs && isCoreProfileTab && activeTab !== 'wall' && activeTab !== 'media' && activeTab !== 'products' && activeTab !== 'badges' && (
         <div>
           {currentLoading ? (
             <div className="space-y-0">
