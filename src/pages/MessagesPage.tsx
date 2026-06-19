@@ -110,7 +110,7 @@ function ConversationRow({
       className="relative flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
     >
       {unreadCount > 0 && (
-        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 size-2 bg-primary rounded-full" aria-hidden="true" />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 size-2.5 bg-primary rounded-full" aria-hidden="true" />
       )}
       <ConversationAvatar pubkey={otherPubkey} />
       <div className="flex-1 min-w-0">
