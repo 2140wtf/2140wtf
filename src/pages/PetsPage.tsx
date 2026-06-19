@@ -3360,7 +3360,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
             <TrendingUp className="size-4 text-amber-500" />
           </div>
           <p className="text-sm font-semibold">
-            Bitcoin{profile?.walletMode === 'demo' && ' (₿AO DEMO)'}
+            {profile?.walletMode === 'demo' ? '(bao demo sats)' : 'Bitcoin'}
           </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -3368,6 +3368,10 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
             </span>
           )}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Your open BAO orders accrue a daily BAO reward. More active sats
+          and a higher trader tier mean a larger reward, up to the daily cap.
+        </p>
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Open orders</span>
           <span className="tabular-nums font-medium">
