@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { LogIn, Lock, Menu, Shield, Users } from 'lucide-react';
 
@@ -8,12 +8,15 @@ import { Card } from '@/components/ui/card';
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
+  SheetTitle,
 } from '@/components/ui/sheet';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGroupChatContext } from '@/hooks/useGroupChatContext';
 import { useGroupChatReadCursors } from '@/hooks/useGroupChatReadCursors';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { GroupList } from '@/components/group-chat/GroupList';
 import { GroupMessageList } from '@/components/group-chat/GroupMessageList';
 import { GroupMessageInput } from '@/components/group-chat/GroupMessageInput';
@@ -35,6 +38,7 @@ export function GroupChatPage() {
     canUseGroupChat,
     requiresNsec,
     selectGroup,
+    getMessagesForGroup,
     createGroup,
     sendMessage,
     addMember,
@@ -46,14 +50,16 @@ export function GroupChatPage() {
     isAdmin,
   } = useGroupChatContext();
   const { markGroupRead, markAllGroupsRead } = useGroupChatReadCursors();
+  const { unreadGroups } = useGroupChatHasUnread();
+  const unreadGroupIds = unreadGroups.map(({ group }) => group.nostrGroupId);
   const initialMarkReadDone = useRef(false);
 
   useEffect(() => {
     if (!isLoading && groups.length > 0 && !initialMarkReadDone.current) {
       initialMarkReadDone.current = true;
-      markAllGroupsRead(groups, (groupId) => messages.filter((m) => m.nostrGroupId === groupId));
+      markAllGroupsRead(groups, getMessagesForGroup);
     }
-  }, [isLoading, groups, messages, markAllGroupsRead]);
+  }, [isLoading, groups, messages, getMessagesForGroup, markAllGroupsRead]);
 
   useEffect(() => {
     if (selectedGroup) {
@@ -69,6 +75,17 @@ export function GroupChatPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [mobileListOpen, setMobileListOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const initialGroupSelected = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || initialGroupSelected.current) return;
+    const groupId = searchParams.get('g');
+    if (groupId && groups.some((g) => g.nostrGroupId === groupId)) {
+      initialGroupSelected.current = true;
+      selectGroup(groupId);
+    }
+  }, [isLoading, groups, searchParams, selectGroup]);
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -128,6 +145,7 @@ export function GroupChatPage() {
   };
 
   const handleRemoveMember = async (pubkey: string): Promise<void> => {
+    if (!window.confirm('Remove this member from the group?')) return;
     const result = await removeMember(pubkey);
     if (!result.success) {
       toast({ title: result.error ?? 'Failed to remove member', variant: 'destructive' });
@@ -135,6 +153,7 @@ export function GroupChatPage() {
   };
 
   const handleBanMember = async (pubkey: string): Promise<void> => {
+    if (!window.confirm('Ban this member from the group? They will not be able to rejoin.')) return;
     const result = await banMember(pubkey);
     if (!result.success) {
       toast({ title: result.error ?? 'Failed to ban member', variant: 'destructive' });
@@ -181,6 +200,7 @@ export function GroupChatPage() {
             <GroupList
               groups={groups}
               selectedGroupId={selectedGroup?.nostrGroupId ?? null}
+              unreadGroupIds={unreadGroupIds}
               onSelectGroup={selectGroup}
               onCreateClick={() => setCreateOpen(true)}
             />
@@ -201,7 +221,16 @@ export function GroupChatPage() {
                     variant="ghost"
                     size="sm"
                     className="text-destructive"
-                    onClick={() => void leaveGroup(selectedGroup.nostrGroupId)}
+                    disabled={isAdmin && selectedGroup.adminPubkeys.length === 1}
+                    title={
+                      isAdmin && selectedGroup.adminPubkeys.length === 1
+                        ? 'Transfer admin role before leaving'
+                        : 'Leave group'
+                    }
+                    onClick={() => {
+                      if (!window.confirm('Leave this group? Your local copy of the chat will be removed.')) return;
+                      void leaveGroup(selectedGroup.nostrGroupId);
+                    }}
                   >
                     Leave
                   </Button>
@@ -236,9 +265,12 @@ export function GroupChatPage() {
 
       <Sheet open={mobileListOpen} onOpenChange={setMobileListOpen}>
         <SheetContent side="left" className="p-0 w-72">
+          <SheetTitle className="sr-only">Private Groups</SheetTitle>
+          <SheetDescription className="sr-only">Select a group to chat</SheetDescription>
           <GroupList
             groups={groups}
             selectedGroupId={selectedGroup?.nostrGroupId ?? null}
+            unreadGroupIds={unreadGroupIds}
             onSelectGroup={(groupId) => {
               selectGroup(groupId);
               setMobileListOpen(false);

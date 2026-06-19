@@ -31,8 +31,8 @@ export function useGroupChatReadCursors() {
 
   const markGroupRead = useCallback(
     (group: GroupChatGroup | undefined, messages: import('@/lib/groupChatService').GroupChatMessage[]) => {
-      if (!group) return;
-      const newest = messages.reduce((max, message) => Math.max(max, message.timestamp), group.lastActivity);
+      if (!group || messages.length === 0) return;
+      const newest = messages.reduce((max, message) => Math.max(max, message.timestamp), 0);
       if (newest > 0) {
         setCursor(group.nostrGroupId, newest);
       }
@@ -46,10 +46,9 @@ export function useGroupChatReadCursors() {
         let changed = false;
         const next = { ...prev };
         for (const group of groups) {
-          const newest = getMessages(group.nostrGroupId).reduce(
-            (max, message) => Math.max(max, message.timestamp),
-            group.lastActivity,
-          );
+          const messages = getMessages(group.nostrGroupId);
+          if (messages.length === 0) continue;
+          const newest = messages.reduce((max, message) => Math.max(max, message.timestamp), 0);
           if (newest > 0 && next[group.nostrGroupId] !== newest) {
             next[group.nostrGroupId] = newest;
             changed = true;

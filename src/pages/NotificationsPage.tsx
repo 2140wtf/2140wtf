@@ -419,7 +419,7 @@ function GroupChatNotificationRow({
 }) {
   return (
     <Link
-      to="/groups"
+      to={`/groups?g=${encodeURIComponent(group.nostrGroupId)}`}
       className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
     >
       <Avatar className="size-10 shrink-0">
