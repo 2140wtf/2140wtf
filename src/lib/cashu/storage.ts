@@ -16,15 +16,19 @@ import { devLog } from '@/lib/cashu/devLog';
 
 import { stringToBase64 } from '@/lib/cashu/base64';
 
-const PREFIX = 'freedomid_';
+const DEFAULT_PREFIX = 'freedomid_';
+
+function resolvePrefix(namespace?: string): string {
+  return namespace && namespace.length > 0 ? namespace : DEFAULT_PREFIX;
+}
 
 let canWriteLocalStorageCache: boolean | null = null;
 
 /** Check if localStorage has quota available for a write. */
-export function canWriteLocalStorage(): boolean {
+export function canWriteLocalStorage(namespace?: string): boolean {
   if (canWriteLocalStorageCache !== null) return canWriteLocalStorageCache;
   try {
-    const key = PREFIX + '__quota_test__';
+    const key = resolvePrefix(namespace) + '__quota_test__';
     localStorage.setItem(key, '1');
     localStorage.removeItem(key);
     canWriteLocalStorageCache = true;
@@ -338,27 +342,49 @@ export class CrossTabLock {
   }
 }
 
-const proofLock = new CrossTabLock(PREFIX + 'proof_lock');
-const txLock = new CrossTabLock(PREFIX + 'tx_lock');
+const proofLocks = new Map<string, CrossTabLock>();
+const txLocks = new Map<string, CrossTabLock>();
 
-export async function withProofLock<T>(fn: () => Promise<T>): Promise<T> {
-  if (!canWriteLocalStorage()) {
+function getProofLock(namespace?: string): CrossTabLock {
+  const key = resolvePrefix(namespace) + 'proof_lock';
+  let lock = proofLocks.get(key);
+  if (!lock) {
+    lock = new CrossTabLock(key);
+    proofLocks.set(key, lock);
+  }
+  return lock;
+}
+
+function getTxLock(namespace?: string): CrossTabLock {
+  const key = resolvePrefix(namespace) + 'tx_lock';
+  let lock = txLocks.get(key);
+  if (!lock) {
+    lock = new CrossTabLock(key);
+    txLocks.set(key, lock);
+  }
+  return lock;
+}
+
+export async function withProofLock<T>(fn: () => Promise<T>, namespace?: string): Promise<T> {
+  if (!canWriteLocalStorage(namespace)) {
     throw new Error('Storage quota exceeded — cannot perform wallet operation. Free up space and try again.');
   }
-  await proofLock.acquire();
+  const lock = getProofLock(namespace);
+  await lock.acquire();
   try {
     return await fn();
   } finally {
-    proofLock.release();
+    lock.release();
   }
 }
 
-export async function withTxLock<T>(fn: () => Promise<T>): Promise<T> {
-  await txLock.acquire();
+export async function withTxLock<T>(fn: () => Promise<T>, namespace?: string): Promise<T> {
+  const lock = getTxLock(namespace);
+  await lock.acquire();
   try {
     return await fn();
   } finally {
-    txLock.release();
+    lock.release();
   }
 }
 
@@ -414,9 +440,9 @@ function hasPollutingKey(value: unknown): boolean {
 /** Load item from localStorage. Filters prototype-pollution keys and parses
  *  objects into null-prototype dictionaries.
  */
-export function loadItem<T>(key: string, fallback: T): T {
+export function loadItem<T>(key: string, fallback: T, namespace?: string): T {
   try {
-    const raw = localStorage.getItem(PREFIX + key);
+    const raw = localStorage.getItem(resolvePrefix(namespace) + key);
     if (raw === null) return fallback;
     const parsed = JSON.parse(raw, safeReviver) as T;
     return parsed === undefined ? fallback : parsed;
@@ -426,12 +452,12 @@ export function loadItem<T>(key: string, fallback: T): T {
 }
 
 /** Set item in localStorage. Rejects values containing prototype-polluting keys. */
-export function setItem(key: string, value: unknown): void {
+export function setItem(key: string, value: unknown, namespace?: string): void {
   if (hasPollutingKey(value)) {
     throw new Error(`Refusing to save ${key}: value contains prototype-polluting keys`);
   }
   try {
-    localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    localStorage.setItem(resolvePrefix(namespace) + key, JSON.stringify(value));
   } catch (e) {
     if (isStorageFullError(e)) {
       resetCanWriteLocalStorageCache();
@@ -456,27 +482,27 @@ function isValidStoredMint(m: unknown): m is StoredMint {
 }
 
 /** Migrate plaintext mint metadata to encrypted storage. Idempotent. */
-export async function migrateMintMetadata(encKey: CryptoKey, _legacyKey?: CryptoKey): Promise<void> {
+export async function migrateMintMetadata(encKey: CryptoKey, _legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (typeof localStorage === 'undefined') return;
-  if (localStorage.getItem(PREFIX + MINT_METADATA_MIGRATION_KEY) === '1') return;
+  if (localStorage.getItem(resolvePrefix(namespace) + MINT_METADATA_MIGRATION_KEY) === '1') return;
   try {
-    const plaintextMints = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, []);
-    const plaintextUrl = localStorage.getItem(PREFIX + SELECTED_MINT_URL_KEY) || '';
+    const plaintextMints = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, [], namespace);
+    const plaintextUrl = localStorage.getItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY) || '';
     const encryptedMints = await encryptData(JSON.stringify(plaintextMints), encKey);
     const encryptedUrl = plaintextUrl ? await encryptData(plaintextUrl, encKey) : '';
-    setItem(CUSTOM_MINTS_KEY, encryptedMints);
+    setItem(CUSTOM_MINTS_KEY, encryptedMints, namespace);
     if (encryptedUrl) {
-      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, encryptedUrl);
+      safeLocalStorageSetItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY, encryptedUrl);
     }
-    safeLocalStorageSetItem(PREFIX + MINT_METADATA_MIGRATION_KEY, '1');
+    safeLocalStorageSetItem(resolvePrefix(namespace) + MINT_METADATA_MIGRATION_KEY, '1');
   } catch (e) {
     devLog.warn('Mint metadata migration failed:', e);
   }
 }
 
-export async function loadCustomMints(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<StoredMint[]> {
+export async function loadCustomMints(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<StoredMint[]> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(PREFIX + CUSTOM_MINTS_KEY); } catch { return []; }
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + CUSTOM_MINTS_KEY); } catch { return []; }
   if (!raw) return [];
   if (encKey) {
     try {
@@ -491,18 +517,18 @@ export async function loadCustomMints(encKey?: CryptoKey, legacyKey?: CryptoKey)
     }
   }
   // Plaintext fallback only when no key is provided (legacy/test contexts).
-  const loaded = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, []);
+  const loaded = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, [], namespace);
   if (!Array.isArray(loaded)) return [];
   return loaded.filter(isValidStoredMint);
 }
 
-export async function saveCustomMints(mints: StoredMint[], encKey?: CryptoKey): Promise<void> {
+export async function saveCustomMints(mints: StoredMint[], encKey?: CryptoKey, namespace?: string): Promise<void> {
   try {
     if (encKey) {
       const ciphertext = await encryptData(JSON.stringify(mints), encKey, 'freedomid:custom-mints');
-      localStorage.setItem(PREFIX + CUSTOM_MINTS_KEY, ciphertext);
+      localStorage.setItem(resolvePrefix(namespace) + CUSTOM_MINTS_KEY, ciphertext);
     } else {
-      setItem(CUSTOM_MINTS_KEY, mints);
+      setItem(CUSTOM_MINTS_KEY, mints, namespace);
     }
   } catch (e) {
     if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
@@ -510,9 +536,9 @@ export async function saveCustomMints(mints: StoredMint[], encKey?: CryptoKey): 
   }
 }
 
-export async function loadSelectedMintUrl(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<string> {
+export async function loadSelectedMintUrl(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<string> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(PREFIX + SELECTED_MINT_URL_KEY); } catch { return ''; }
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY); } catch { return ''; }
   if (!raw) return '';
   if (encKey) {
     try {
@@ -526,15 +552,15 @@ export async function loadSelectedMintUrl(encKey?: CryptoKey, legacyKey?: Crypto
   return raw;
 }
 
-export async function saveSelectedMintUrl(url: string, encKey?: CryptoKey): Promise<void> {
+export async function saveSelectedMintUrl(url: string, encKey?: CryptoKey, namespace?: string): Promise<void> {
   try {
     if (encKey && url) {
       const ciphertext = await encryptData(url, encKey, 'freedomid:selected-mint');
-      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, ciphertext);
+      safeLocalStorageSetItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY, ciphertext);
     } else if (encKey) {
-      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, '');
+      safeLocalStorageSetItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY, '');
     } else {
-      safeLocalStorageSetItem(PREFIX + SELECTED_MINT_URL_KEY, url);
+      safeLocalStorageSetItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY, url);
     }
   } catch (e) {
     if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
@@ -545,14 +571,14 @@ export async function saveSelectedMintUrl(url: string, encKey?: CryptoKey): Prom
 // ── Proofs (encrypted) ────────────────────────────────────
 
 /** Unicode-safe localStorage key for a mint URL. */
-export function mintStorageKey(mintUrl: string): string {
+export function mintStorageKey(mintUrl: string, namespace?: string): string {
   // encodeURIComponent makes it ASCII-safe, then base64 is reliable
-  return PREFIX + 'proofs_' + stringToBase64(mintUrl);
+  return resolvePrefix(namespace) + 'proofs_' + stringToBase64(mintUrl);
 }
 
-export async function getProofsForMint(mintUrl: string, encKey: CryptoKey, legacyKey?: CryptoKey): Promise<unknown[]> {
+export async function getProofsForMint(mintUrl: string, encKey: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<unknown[]> {
   try {
-    const raw = localStorage.getItem(mintStorageKey(mintUrl));
+    const raw = localStorage.getItem(mintStorageKey(mintUrl, namespace));
     if (!raw) return [];
     const decrypted = await decryptProofs(raw, encKey, legacyKey, `${PROOF_CONTEXT_PREFIX}${mintUrl}`);
     return Array.isArray(decrypted) ? decrypted : [];
@@ -583,7 +609,7 @@ function isValidProof(p: unknown): boolean {
   );
 }
 
-export async function saveProofsForMint(mintUrl: string, proofs: unknown[], encKey: CryptoKey): Promise<void> {
+export async function saveProofsForMint(mintUrl: string, proofs: unknown[], encKey: CryptoKey, namespace?: string): Promise<void> {
   const validProofs = Array.isArray(proofs) ? proofs.filter(isValidProof) : [];
   let encrypted: string;
   try {
@@ -593,7 +619,7 @@ export async function saveProofsForMint(mintUrl: string, proofs: unknown[], encK
     throw new Error(`Failed to encrypt proofs: ${e instanceof Error ? e.message : String(e)}`);
   }
   try {
-    localStorage.setItem(mintStorageKey(mintUrl), encrypted);
+    localStorage.setItem(mintStorageKey(mintUrl, namespace), encrypted);
   } catch (e) {
     if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
     devLog.error('Storage full: failed to save proofs for mint', mintUrl);
@@ -653,10 +679,9 @@ const TX_MIGRATION_DONE_KEY = 'tx_migration_done';
 export async function loadTransactions(
   encKey?: CryptoKey,
   legacyKey?: CryptoKey,
-  opts: LoadTransactionsOptions = {},
-): Promise<Transaction[]> {
+  opts: LoadTransactionsOptions = {}, namespace?: string): Promise<Transaction[]> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY); } catch { return []; }
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + TX_STORAGE_KEY); } catch { return []; }
   if (!raw) return [];
   let json: string;
   if (encKey) {
@@ -689,9 +714,9 @@ export async function loadTransactions(
 /** Synchronous loader for useState init (before encKey is available).
  *  Does NOT read plaintext unless explicitly allowed.
  */
-export function loadTransactionsSync(opts: LoadTransactionsOptions = {}): Transaction[] {
+export function loadTransactionsSync(opts: LoadTransactionsOptions = {}, namespace?: string): Transaction[] {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY); } catch { return []; }
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + TX_STORAGE_KEY); } catch { return []; }
   if (!raw) return [];
   // If data looks encrypted (not starting with '[' or '{'), we can't decrypt synchronously
   if (!raw.trim().startsWith('[') && !raw.trim().startsWith('{')) return [];
@@ -709,7 +734,7 @@ export function loadTransactionsSync(opts: LoadTransactionsOptions = {}): Transa
 }
 
 /** Save transactions. If encKey provided, encrypts with AES-GCM. */
-export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey): Promise<void> {
+export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey, namespace?: string): Promise<void> {
   // Sort newest first, then trim to 500
   const sorted = [...txs].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   const trimmed = sorted.length > 500 ? sorted.slice(0, 500) : sorted;
@@ -717,7 +742,7 @@ export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey): 
   if (encKey) {
     const ciphertext = await encryptData(json, encKey, TRANSACTION_CONTEXT);
     try {
-      localStorage.setItem(PREFIX + TX_STORAGE_KEY, ciphertext);
+      localStorage.setItem(resolvePrefix(namespace) + TX_STORAGE_KEY, ciphertext);
     } catch (e) {
       if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
       devLog.warn('Storage full: failed to save transactions');
@@ -725,7 +750,7 @@ export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey): 
     }
   } else {
     try {
-      setItem(TX_STORAGE_KEY, trimmed);
+      setItem(TX_STORAGE_KEY, trimmed, namespace);
     } catch (e) {
       if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
       devLog.warn('Storage full: failed to save transactions');
@@ -735,25 +760,25 @@ export async function saveTransactions(txs: Transaction[], encKey?: CryptoKey): 
 }
 
 /** Migrate plaintext transactions to encrypted storage. Idempotent. */
-export async function migratePlaintextTransactions(encKey: CryptoKey, _legacyKey?: CryptoKey): Promise<void> {
+export async function migratePlaintextTransactions(encKey: CryptoKey, _legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (typeof localStorage === 'undefined') return;
-  if (localStorage.getItem(PREFIX + TX_MIGRATION_DONE_KEY) === '1') return;
+  if (localStorage.getItem(resolvePrefix(namespace) + TX_MIGRATION_DONE_KEY) === '1') return;
   try {
-    const raw = localStorage.getItem(PREFIX + TX_STORAGE_KEY);
+    const raw = localStorage.getItem(resolvePrefix(namespace) + TX_STORAGE_KEY);
     if (!raw) {
-      safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+      safeLocalStorageSetItem(resolvePrefix(namespace) + TX_MIGRATION_DONE_KEY, '1');
       return;
     }
     // If already looks encrypted, mark migration done without touching it.
     if (!raw.trim().startsWith('[') && !raw.trim().startsWith('{')) {
-      safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+      safeLocalStorageSetItem(resolvePrefix(namespace) + TX_MIGRATION_DONE_KEY, '1');
       return;
     }
-    const txs = loadTransactionsSync({ allowPlaintextFallback: true });
+    const txs = loadTransactionsSync({ allowPlaintextFallback: true }, namespace);
     if (txs.length > 0) {
-      await saveTransactions(txs, encKey);
+      await saveTransactions(txs, encKey, namespace);
     }
-    safeLocalStorageSetItem(PREFIX + TX_MIGRATION_DONE_KEY, '1');
+    safeLocalStorageSetItem(resolvePrefix(namespace) + TX_MIGRATION_DONE_KEY, '1');
   } catch (e) {
     devLog.warn('Plaintext transaction migration failed:', e);
   }
@@ -763,10 +788,9 @@ export async function addTransaction(
   tx: Omit<Transaction, 'id' | 'createdAt'>,
   encKey?: CryptoKey,
   legacyKey?: CryptoKey,
-  opts?: LoadTransactionsOptions,
-): Promise<string> {
+  opts?: LoadTransactionsOptions, namespace?: string): Promise<string> {
   return withTxLock(async () => {
-    const txs = await loadTransactions(encKey, legacyKey, opts);
+    const txs = await loadTransactions(encKey, legacyKey, opts, namespace);
     let id: string;
     try {
       id = crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
@@ -794,9 +818,9 @@ export async function addTransaction(
     txs.unshift(newTx);
     // Keep last 500
     if (txs.length > 500) txs.pop();
-    await saveTransactions(txs, encKey);
+    await saveTransactions(txs, encKey, namespace);
     return id;
-  });
+  }, namespace);
 }
 
 const VALID_STATUSES: Transaction['status'][] = ['pending', 'completed', 'failed', 'expired'];
@@ -806,20 +830,19 @@ export async function updateTransactionStatus(
   status: Transaction['status'],
   encKey?: CryptoKey,
   legacyKey?: CryptoKey,
-  opts?: LoadTransactionsOptions,
-): Promise<void> {
+  opts?: LoadTransactionsOptions, namespace?: string): Promise<void> {
   if (!VALID_STATUSES.includes(status)) {
     throw new Error(`Invalid transaction status: ${status}`);
   }
   return withTxLock(async () => {
-    const txs = await loadTransactions(encKey, legacyKey, opts);
+    const txs = await loadTransactions(encKey, legacyKey, opts, namespace);
     const idx = txs.findIndex(t => t.id === id);
     if (idx < 0) {
       throw new Error(`Transaction not found: ${id}`);
     }
     txs[idx].status = status;
-    await saveTransactions(txs, encKey);
-  });
+    await saveTransactions(txs, encKey, namespace);
+  }, namespace);
 }
 
 // ── Processed token hashes (receive dedup, survives restart) ─
@@ -834,9 +857,9 @@ interface ProcessedTokenEntry {
   expiresAt: number;
 }
 
-export async function loadProcessedTokenHashes(encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<ProcessedTokenEntry[]> {
+export async function loadProcessedTokenHashes(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<ProcessedTokenEntry[]> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(PREFIX + PROCESSED_TOKENS_KEY); } catch { return []; }
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY); } catch { return []; }
   if (!raw) return [];
   if (encKey) {
     try {
@@ -863,13 +886,13 @@ export async function loadProcessedTokenHashes(encKey?: CryptoKey, legacyKey?: C
   return [];
 }
 
-export async function isProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<boolean> {
+export async function isProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<boolean> {
   if (!hash) return false;
-  const entries = await loadProcessedTokenHashes(encKey, legacyKey);
+  const entries = await loadProcessedTokenHashes(encKey, legacyKey, namespace);
   return entries.some((e) => e.hash === hash);
 }
 
-export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey): Promise<void> {
+export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!hash || !encKey) return;
   const entries = await loadProcessedTokenHashes(encKey, legacyKey);
   const now = Date.now();
@@ -879,7 +902,7 @@ export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, le
   const trimmed = filtered.slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
   const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
   try {
-    localStorage.setItem(PREFIX + PROCESSED_TOKENS_KEY, ciphertext);
+    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
   } catch (e) {
     if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
     throw new Error(`Failed to save processed token hash: ${e instanceof Error ? e.message : String(e)}`);
@@ -900,7 +923,7 @@ export interface WipeResult {
  */
 export async function wipeAllAppData(): Promise<WipeResult> {
   const result: WipeResult = { deleted: true, blocked: false };
-  const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:'];
+  const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:', 'pets:cashu:'];
   const appKeys = new Set(['pwa-ios-prompt-dismissed']);
   try {
     if (typeof localStorage !== 'undefined') {
@@ -947,4 +970,43 @@ export async function wipeAllAppData(): Promise<WipeResult> {
     // Ignore IndexedDB errors during wipe
   }
   return result;
+}
+
+// ── Namespace-scoped storage factory ──────────────────────
+
+/**
+ * All public Cashu storage operations bound to a single namespace.
+ * Passing no namespace (or an empty string) uses the default `freedomid_`
+ * prefix and keeps the legacy user wallet working unchanged.
+ */
+export type CashuStorage = ReturnType<typeof createCashuStorage>;
+
+export function createCashuStorage(namespace?: string) {
+  return {
+    canWriteLocalStorage: () => canWriteLocalStorage(namespace),
+    resetCanWriteLocalStorageCache: () => resetCanWriteLocalStorageCache(),
+    withProofLock: <T>(fn: () => Promise<T>) => withProofLock(fn, namespace),
+    withTxLock: <T>(fn: () => Promise<T>) => withTxLock(fn, namespace),
+    loadItem: <T>(key: string, fallback: T) => loadItem<T>(key, fallback, namespace),
+    setItem: (key: string, value: unknown) => setItem(key, value, namespace),
+    migrateMintMetadata: (encKey: CryptoKey, legacyKey?: CryptoKey) => migrateMintMetadata(encKey, legacyKey, namespace),
+    loadCustomMints: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadCustomMints(encKey, legacyKey, namespace),
+    saveCustomMints: (mints: StoredMint[], encKey?: CryptoKey) => saveCustomMints(mints, encKey, namespace),
+    loadSelectedMintUrl: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadSelectedMintUrl(encKey, legacyKey, namespace),
+    saveSelectedMintUrl: (url: string, encKey?: CryptoKey) => saveSelectedMintUrl(url, encKey, namespace),
+    mintStorageKey: (mintUrl: string) => mintStorageKey(mintUrl, namespace),
+    getProofsForMint: (mintUrl: string, encKey: CryptoKey, legacyKey?: CryptoKey) => getProofsForMint(mintUrl, encKey, legacyKey, namespace),
+    saveProofsForMint: (mintUrl: string, proofs: unknown[], encKey: CryptoKey) => saveProofsForMint(mintUrl, proofs, encKey, namespace),
+    isValidTransaction: (t: unknown) => isValidTransaction(t),
+    loadTransactions: (encKey?: CryptoKey, legacyKey?: CryptoKey, opts?: LoadTransactionsOptions) => loadTransactions(encKey, legacyKey, opts, namespace),
+    loadTransactionsSync: (opts?: LoadTransactionsOptions) => loadTransactionsSync(opts, namespace),
+    saveTransactions: (txs: Transaction[], encKey?: CryptoKey) => saveTransactions(txs, encKey, namespace),
+    migratePlaintextTransactions: (encKey: CryptoKey, legacyKey?: CryptoKey) => migratePlaintextTransactions(encKey, legacyKey, namespace),
+    addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>, encKey?: CryptoKey, legacyKey?: CryptoKey, opts?: LoadTransactionsOptions) => addTransaction(tx, encKey, legacyKey, opts, namespace),
+    updateTransactionStatus: (id: string, status: Transaction['status'], encKey?: CryptoKey, legacyKey?: CryptoKey, opts?: LoadTransactionsOptions) => updateTransactionStatus(id, status, encKey, legacyKey, opts, namespace),
+    loadProcessedTokenHashes: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadProcessedTokenHashes(encKey, legacyKey, namespace),
+    isProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, ns?: string) => isProcessedTokenHash(hash, encKey, legacyKey, ns),
+    addProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => addProcessedTokenHash(hash, encKey, legacyKey, namespace),
+    wipeAllAppData: () => wipeAllAppData(),
+  };
 }
