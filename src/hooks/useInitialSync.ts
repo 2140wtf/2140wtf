@@ -282,7 +282,7 @@ export function useInitialSync() {
 
             // Persist the sync timestamp so future reloads can skip the spinner
             if (parsed.lastSync) {
-              setLocalSettingsSync(user.pubkey, parsed.lastSync);
+              setLocalSettingsSync(config.appId, user.pubkey, parsed.lastSync);
             }
 
             foundSettings = true;

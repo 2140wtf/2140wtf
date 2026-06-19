@@ -461,7 +461,7 @@ export function NostrSync() {
     // Persist the sync timestamp so the next page load can render immediately
     // from localStorage without showing the spinner.
     if (user && remoteSync > 0) {
-      setLocalSettingsSync(user.pubkey, remoteSync);
+      setLocalSettingsSync(config.appId, user.pubkey, remoteSync);
     }
   }, [
     user,
