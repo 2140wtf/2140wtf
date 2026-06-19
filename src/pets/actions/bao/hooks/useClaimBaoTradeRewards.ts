@@ -25,9 +25,9 @@ export interface ClaimBaoTradeRewardsResult {
 }
 
 /**
- * Claim daily BAO coins earned from BAO trading activity.
+ * Claim daily ₿AO coins earned from ₿AO trading activity.
  *
- * The mutation fetches fresh profile data and fresh BAO order events, so it
+ * The mutation fetches fresh profile data and fresh ₿AO order events, so it
  * is safe to call repeatedly. It is idempotent per local day: calling it
  * twice on the same day returns 0 coins the second time.
  *
@@ -47,7 +47,7 @@ export function useClaimBaoTradeRewards(
 
       const today = getLocalDayString();
 
-      // Fetch the latest BAO order events directly from the BAO relay.
+      // Fetch the latest ₿AO order events directly from the ₿AO relay.
       const relay = nostr.relay(BAO_RELAY_URL);
       const tradeEvents = await relay.query(
         [{ kinds: [38001], authors: [user.pubkey], limit: 1000 }],
@@ -112,14 +112,14 @@ export function useClaimBaoTradeRewards(
       }
       if (coinsAwarded > 0) {
         toast({
-          title: 'BAO Trading Reward Claimed!',
-          description: `+${coinsAwarded} BAO · Tier: ${tierLabel}`,
+          title: '₿AO Trading Reward Claimed!',
+          description: `+${coinsAwarded} ₿AO · Tier: ${tierLabel}`,
         });
       }
     },
     onError: (error: Error) => {
       toast({
-        title: 'Failed to Claim BAO Reward',
+        title: 'Failed to Claim ₿AO Reward',
         description: error.message,
         variant: 'destructive',
       });

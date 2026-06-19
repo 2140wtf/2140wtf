@@ -38,7 +38,7 @@ export function BattleResultOverlay({
           <p className="mt-2 text-muted-foreground">
             {mode === 'real'
               ? 'Real sats payout is coming soon.'
-              : `+${prizeAmount} BAO coins awarded to the winner.`}
+              : `+${prizeAmount} ₿AO coins awarded to the winner.`}
           </p>
         )}
 

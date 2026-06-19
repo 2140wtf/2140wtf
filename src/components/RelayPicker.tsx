@@ -61,7 +61,7 @@ export function RelayPicker({ selected, onChange, className }: RelayPickerProps)
                 </Label>
                 {isBao && (
                   <Badge variant="secondary" className="w-fit text-[10px]">
-                    BAO marketplace
+                    ₿AO marketplace
                   </Badge>
                 )}
               </div>
