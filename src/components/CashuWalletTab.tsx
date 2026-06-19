@@ -10,6 +10,7 @@ import {
   Shield,
   Trash2,
   Wallet as WalletIcon,
+  Zap,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
+import { useNip60Sync } from '@/hooks/useNip60Sync';
 import { useNutzapReceiver } from '@/hooks/useNutzapReceiver';
 import {
   syncCashuState,
@@ -73,8 +75,9 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
     [user, relayUrls],
   );
 
-  const wallet = useCashuWallet(seedPhrase, backupCashuState, restoreCashuState);
-  useNutzapReceiver(seedPhrase, wallet.allMints, relayUrls);
+  const nip60Sync = useNip60Sync();
+  const wallet = useCashuWallet(seedPhrase, backupCashuState, restoreCashuState, nip60Sync);
+  useNutzapReceiver(seedPhrase, wallet.allMints, wallet.receiveNutzap);
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
@@ -93,6 +96,16 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [nutzapRecipient, setNutzapRecipient] = useState('');
+  const [nutzapAmount, setNutzapAmount] = useState('');
+  const [nutzapMemo, setNutzapMemo] = useState('');
+  const [nutzapMintUrl, setNutzapMintUrl] = useState('');
+
+  useEffect(() => {
+    if (nutzapMintUrl === '' && wallet.mintUrl) {
+      setNutzapMintUrl(wallet.mintUrl);
+    }
+  }, [wallet.mintUrl, nutzapMintUrl]);
 
   useEffect(() => {
     if (walletError) {
@@ -161,6 +174,24 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
     const result = await wallet.payInvoice(invoice);
     if (result.success) {
       setSendInvoice('');
+    }
+  };
+
+  const handleSendNutzap = async () => {
+    const amount = parseInt(nutzapAmount, 10);
+    if (Number.isNaN(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount', description: 'Enter a positive number of sats.' });
+      return;
+    }
+    if (!nutzapRecipient.trim() || !nutzapMintUrl) {
+      toast({ variant: 'destructive', title: 'Missing fields', description: 'Recipient and mint are required.' });
+      return;
+    }
+    const ok = await wallet.sendNutzap(amount, nutzapRecipient.trim(), nutzapMintUrl, { memo: nutzapMemo.trim() });
+    if (ok) {
+      setNutzapAmount('');
+      setNutzapRecipient('');
+      setNutzapMemo('');
     }
   };
 
@@ -308,9 +339,10 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
 
       {/* Receive / Send tabs */}
       <Tabs defaultValue='receive' className='w-full'>
-        <TabsList className='grid w-full grid-cols-2'>
+        <TabsList className='grid w-full grid-cols-3'>
           <TabsTrigger value='receive'>Receive</TabsTrigger>
           <TabsTrigger value='send'>Send</TabsTrigger>
+          <TabsTrigger value='nutzaps'>Nutzaps</TabsTrigger>
         </TabsList>
 
         <TabsContent value='receive'>
@@ -446,6 +478,67 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
                   </Button>
                 </TabsContent>
               </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value='nutzaps'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-base font-medium'>Send Nutzap</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <Input
+                placeholder='Recipient npub or nprofile…'
+                value={nutzapRecipient}
+                onChange={(e) => setNutzapRecipient(e.target.value)}
+              />
+              <div className='flex gap-2'>
+                <Input
+                  type='number'
+                  placeholder='Amount in sats'
+                  value={nutzapAmount}
+                  onChange={(e) => setNutzapAmount(e.target.value)}
+                />
+                <Select value={nutzapMintUrl} onValueChange={setNutzapMintUrl}>
+                  <SelectTrigger className='min-w-[140px]'>
+                    <SelectValue placeholder='Select mint' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wallet.allMints.map((m) => (
+                      <SelectItem key={m.url} value={m.url}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                placeholder='Memo (optional)'
+                value={nutzapMemo}
+                onChange={(e) => setNutzapMemo(e.target.value)}
+              />
+              <Button
+                onClick={handleSendNutzap}
+                disabled={!nutzapRecipient.trim() || !nutzapAmount || !nutzapMintUrl || wallet.loading}
+              >
+                <Zap className='size-4 mr-1.5' />
+                Send Nutzap
+              </Button>
+
+              {wallet.nutzaps.length > 0 && (
+                <div className='pt-4 border-t'>
+                  <p className='text-sm font-medium mb-2'>Received Nutzaps</p>
+                  <div className='space-y-2'>
+                    {wallet.nutzaps.map((ev) => (
+                      <div key={ev.id} className='flex items-center justify-between rounded-lg border p-2 text-sm'>
+                        <span className='font-mono text-xs'>{ev.id.slice(0, 16)}…</span>
+                        <span className='text-muted-foreground'>{new Date(ev.created_at * 1000).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
