@@ -18,6 +18,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNsecPasteGuard } from "@/hooks/useNsecPasteGuard";
 import type { AppConfig } from "@/contexts/AppContext";
 import { NWCProvider } from "@/contexts/NWCContext";
+import { DmInboxProvider } from "@/contexts/DmInboxContext";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
@@ -210,9 +211,11 @@ export function App() {
                     <NWCProvider>
                       <EmotionDevProvider>
                         <TooltipProvider>
-                          <InitialSyncGate>
-                            <AppRouter />
-                          </InitialSyncGate>
+                          <DmInboxProvider>
+                            <InitialSyncGate>
+                              <AppRouter />
+                            </InitialSyncGate>
+                          </DmInboxProvider>
                         </TooltipProvider>
                       </EmotionDevProvider>
                     </NWCProvider>
