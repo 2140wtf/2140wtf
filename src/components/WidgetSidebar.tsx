@@ -36,6 +36,7 @@ const StatusWidget = lazy(() => import('@/components/widgets/StatusWidget').then
 const WikipediaWidget = lazy(() => import('@/components/widgets/WikipediaWidget').then((m) => ({ default: m.WikipediaWidget })));
 const NostrClientsWidget = lazy(() => import('@/components/widgets/NostrClientsWidget').then((m) => ({ default: m.NostrClientsWidget })));
 const PredictionMarketsWidget = lazy(() => import('@/components/widgets/PredictionMarketsWidget').then((m) => ({ default: m.PredictionMarketsWidget })));
+const RoadstrWidget = lazy(() => import('@/components/widgets/RoadstrWidget').then((m) => ({ default: m.RoadstrWidget })));
 const PhotoWidget = lazy(() => import('@/components/widgets/PhotoWidget').then((m) => ({ default: m.PhotoWidget })));
 const MusicWidget = lazy(() => import('@/components/widgets/MusicWidget').then((m) => ({ default: m.MusicWidget })));
 const FeedWidget = lazy(() => import('@/components/widgets/FeedWidget').then((m) => ({ default: m.FeedWidget })));
@@ -60,6 +61,8 @@ function WidgetContent({ id }: { id: string }) {
       return <NostrClientsWidget />;
     case 'prediction-markets':
       return <PredictionMarketsWidget />;
+    case 'roadstr':
+      return <RoadstrWidget />;
     case 'feed:photos':
       return <PhotoWidget />;
     case 'feed:music':
