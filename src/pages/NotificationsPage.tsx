@@ -240,7 +240,7 @@ export function NotificationsPage() {
 
       {/* Content */}
       <PullToRefresh onRefresh={handleRefresh}>
-        {user && unreadConversations.length > 0 && (
+        {user && activeTab === 'all' && unreadConversations.length > 0 && (
           <DmNotificationSection conversations={unreadConversations.map(({ conversation }) => conversation)} />
         )}
         {!user ? (
