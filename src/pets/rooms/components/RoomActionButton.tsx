@@ -64,7 +64,7 @@ export const RoomActionButton = forwardRef<HTMLButtonElement, RoomActionButtonPr
       <div className="relative">
         <div
           className={cn(
-            'size-10 sm:size-14 rounded-full flex items-center justify-center',
+            'pets-room-action size-10 sm:size-14 rounded-full flex items-center justify-center',
             'bg-background/50 backdrop-blur-[2px] border border-border/20 shadow-sm transition-shadow duration-200',
             'hover:shadow-[0_0_12px_var(--glow)]',
             color,
