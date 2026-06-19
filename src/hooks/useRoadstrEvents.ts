@@ -24,8 +24,9 @@ export interface RoadstrEventsResult {
  * Query active Roadstr reports and their confirmations for a set of geohash cells.
  *
  * The geohash set should already include the center cell plus its 8 neighbors
- * (see `getGeohashNeighbors`). Fetches events from the last 7 days and parses
- * both kind 1315 reports and kind 1316 confirmations.
+ * (see `getGeohashNeighbors`). Fetches events back to the longest type TTL
+ * (e.g. 30 days for speed cameras) and parses both kind 1315 reports and
+ * kind 1316 confirmations.
  */
 export function useRoadstrEvents(geohashes: string[] | undefined) {
   const { nostr } = useNostr();
