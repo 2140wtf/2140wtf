@@ -92,7 +92,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     id: 'prediction-markets',
-    label: 'Prediction Markets',
+    label: '₿AO MARKETS',
     description: 'Kind 38000 prediction markets from BAO',
     icon: BarChart3,
     defaultHeight: 360,
