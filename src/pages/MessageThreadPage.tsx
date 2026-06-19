@@ -13,6 +13,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip17Inbox } from '@/hooks/useNip17Inbox';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
+import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { computeNip17ConversationId } from '@/lib/nip17';
@@ -28,6 +29,7 @@ export function MessageThreadPage() {
   const { user } = useCurrentUser();
   const { conversations, isLoading } = useNip17Inbox();
   const { sendMessage, isPending } = useNip17SendMessage();
+  const { markConversationRead } = useDmReadCursors();
   const { toast } = useToast();
   const [draft, setDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,12 @@ export function MessageThreadPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation?.messages.length]);
+
+  useEffect(() => {
+    if (conversation) {
+      markConversationRead(conversation);
+    }
+  }, [conversation, markConversationRead]);
 
   if (!user) {
     return (
