@@ -42,6 +42,8 @@ const MAX_GROUP_NAME_LENGTH = 64;
 const MAX_GROUP_DESCRIPTION_LENGTH = 256;
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MEMBERS = 500;
+const MAX_GROUP_EVENT_CONTENT_LENGTH = 64 * 1024;
+const MAX_CLOCK_SKEW_SECONDS = 300;
 
 export interface GroupChatGroup {
   nostrGroupId: string;
@@ -100,6 +102,28 @@ function normalizePubkeyInput(key: string): string | null {
 function normalizeMember(key: string): string | null {
   const hex = normalizePubkeyInput(key);
   return hex && isNostrId(hex) ? hex : null;
+}
+
+function isStringArrayArray(value: unknown): value is string[][] {
+  return (
+    Array.isArray(value) && value.every((item) => Array.isArray(item) && item.every((x) => typeof x === 'string'))
+  );
+}
+
+function getTag(tags: string[][], name: string): string | undefined {
+  if (!isStringArrayArray(tags)) return undefined;
+  return tags.find(([n]) => n === name)?.[1];
+}
+
+function hasValidEventShape(event: NostrEvent): boolean {
+  return (
+    typeof event.id === 'string' &&
+    typeof event.pubkey === 'string' &&
+    typeof event.sig === 'string' &&
+    typeof event.kind === 'number' &&
+    typeof event.created_at === 'number' &&
+    isStringArrayArray(event.tags)
+  );
 }
 
 function secureRandomHex(length: number): string {
