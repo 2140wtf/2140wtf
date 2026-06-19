@@ -253,7 +253,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const selectedMarketId = searchParams.get("market");
 
   useSeoMeta({
-    title: `Prediction Markets | ${config.appName}`,
+    title: `₿AO MARKETS | ${config.appName}`,
     description: "Kind 38000 prediction markets from wss://relay.bao.network",
   });
 
@@ -357,7 +357,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   return (
     <main>
       <PageHeader
-        title="Prediction Markets"
+        title="₿AO MARKETS"
         icon={<BarChart3 className="size-5" />}
       >
         {isFetching && (
