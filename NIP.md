@@ -74,14 +74,18 @@ Application messages are JSON payloads encrypted with the current `exporterSecre
 
 ### Membership changes and forward secrecy
 
-When an admin adds or removes a member, Ditto:
+When an admin adds, removes, or bans a member, Ditto:
 
 1. Increments the group `epoch`.
 2. Rotates the `rootSecret`.
 3. Derives a new `exporterSecret` for the epoch.
-4. Sends the new secrets to all current members via gift-wrapped kind 444 Welcome events.
+4. Sends the new secrets to all current members via gift-wrapped kind 444 Welcome events with `type` values such as `member_add`, `member_remove`, `member_ban`, or `admin_promote`.
 
 Because old messages were encrypted with previous epoch secrets, a new member cannot decrypt history from before they were added.
+
+### Metadata changes
+
+When an admin edits the group name or description, Ditto also increments the `epoch`, rotates the secrets, and sends a gift-wrapped kind 444 Welcome event with `type: "metadata_update"` to all current members. The Welcome payload includes the updated `nostr_group_data` extension so every member applies the new metadata atomically with the new secrets.
 
 ### Client storage
 
