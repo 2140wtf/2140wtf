@@ -290,9 +290,9 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                   </button>
                   <button
                     onClick={() => { handleClose(); navigate('/settings/profile#donations'); }}
-                    className="flex items-center gap-4 w-full px-4 py-2.5 text-sm font-normal text-muted-foreground hover:bg-secondary/60 transition-colors"
+                    className="flex items-center gap-4 w-full px-4 py-2.5 text-sm font-normal text-orange-500 hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
                   >
-                    <Heart className="size-5 shrink-0" />
+                    <Heart className="size-5 shrink-0 text-orange-500" />
                     <span>Accept donations</span>
                   </button>
                   <button
