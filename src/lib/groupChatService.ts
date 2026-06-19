@@ -171,6 +171,11 @@ function toGroupChatMessage(stored: StoredMessage): GroupChatMessage {
   };
 }
 
+function metadataFromWelcome(wd: Record<string, unknown>): NostrGroupData | null {
+  const metadataJson = typeof wd.metadata === 'string' ? wd.metadata : undefined;
+  return metadataJson ? parseNostrGroupDataExtension(metadataJson) : null;
+}
+
 export class GroupChatService {
   private userPubkey: string;
   private userPrivkey: Uint8Array;
@@ -268,7 +273,6 @@ export class GroupChatService {
       return secrets.exporterSecret;
     }
 
-    const cacheKey = `${groupId}:${epoch}`;
     const cached = this.epochSecretCache.get(groupId)?.get(epoch);
     if (cached) return cached;
 
@@ -370,15 +374,13 @@ export class GroupChatService {
       members: [this.userPubkey],
       relays: groupRelays,
       epoch: 0,
-      exporterSecret,
-      rootSecret,
       bannedPubkeys: [],
       createdAt: Date.now(),
       lastActivity: Date.now(),
     };
 
-    this.setSecrets(nostrGroupId, exporterSecret, rootSecret);
-    this.persistGroup(stored);
+    await this.setSecrets(nostrGroupId, exporterSecret, rootSecret);
+    await this.persistGroup(stored);
     this.messages.set(nostrGroupId, []);
 
     return { success: true, data: toGroupChatGroup(stored) };
@@ -388,6 +390,7 @@ export class GroupChatService {
     groupId: string,
     content: string,
   ): Promise<GroupOperationResult<GroupChatMessage>> {
+    await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -409,8 +412,8 @@ export class GroupChatService {
       return { success: false, error: 'Group encryption state missing' };
     }
 
-    const appMessage = createApplicationMessage(this.userPubkey, this.userPrivkey, trimmed, groupId);
-    const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret);
+    const appMessage = createApplicationMessage(this.userPubkey, this.userPrivkey, trimmed, groupId, group.epoch);
+    const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret, group.epoch);
 
     let appTimestampMs: number;
     try {
@@ -443,6 +446,7 @@ export class GroupChatService {
   }
 
   async processGroupEvent(event: NostrEvent): Promise<GroupOperationResult<GroupChatMessage>> {
+    await this.ensureLoaded();
     if (event.kind !== KIND_GROUP) {
       return { success: false, error: 'Not a group event' };
     }
@@ -479,9 +483,25 @@ export class GroupChatService {
       return { success: false, error: 'Not a member' };
     }
 
-    const exporterSecret = this.getExporterSecret(groupId);
+    const eventEpochRaw = getTag(event.tags, 'epoch');
+    const eventEpoch = typeof eventEpochRaw === 'string' ? Number.parseInt(eventEpochRaw, 10) : group.epoch;
+    if (!Number.isFinite(eventEpoch) || eventEpoch < 0) {
+      return { success: false, error: 'Invalid epoch tag' };
+    }
+
+    if (eventEpoch > group.epoch) {
+      // We don't have the secret for this epoch yet; buffer for later.
+      const pending = this.pendingGroupEvents.get(groupId) ?? [];
+      if (!pending.some((e) => e.id === event.id)) {
+        pending.push(event);
+        this.pendingGroupEvents.set(groupId, pending);
+      }
+      return { success: false, error: 'Future epoch message buffered' };
+    }
+
+    const exporterSecret = await this.getExporterSecretForEpoch(groupId, eventEpoch);
     if (!exporterSecret) {
-      return { success: false, error: 'Missing group encryption state' };
+      return { success: false, error: 'Missing group encryption state for epoch' };
     }
 
     const decryptedJson = await decryptGroupEvent(event, exporterSecret);
@@ -510,6 +530,14 @@ export class GroupChatService {
       return { success: false, error: 'Application message is for a different group' };
     }
 
+    const appEpochRaw = getTag(appMessage.tags ?? [], 'epoch');
+    if (appEpochRaw !== undefined) {
+      const appEpoch = Number.parseInt(appEpochRaw, 10);
+      if (Number.isFinite(appEpoch) && appEpoch !== eventEpoch) {
+        return { success: false, error: 'Application message epoch mismatch' };
+      }
+    }
+
     const nowSeconds = Math.floor(Date.now() / 1000);
     if (
       appMessage.createdAt > nowSeconds + MAX_CLOCK_SKEW_SECONDS ||
@@ -525,7 +553,7 @@ export class GroupChatService {
       content: appMessage.content,
       timestamp: appMessage.createdAt * 1000,
       isOwn: appMessage.senderPubkey === this.userPubkey,
-      epoch: group.epoch,
+      epoch: eventEpoch,
       eventId: event.id,
     };
 
@@ -536,10 +564,30 @@ export class GroupChatService {
       this.persistMessages(groupId);
 
       group.lastActivity = Date.now();
-      this.persistGroup(group);
+      await this.persistGroup(group);
     }
 
     return { success: true, data: toGroupChatMessage(message) };
+  }
+
+  private async processPendingGroupEvents(groupId: string): Promise<void> {
+    const pending = this.pendingGroupEvents.get(groupId) ?? [];
+    if (pending.length === 0) return;
+
+    const group = this.groups.get(groupId);
+    if (!group) return;
+
+    const remaining: NostrEvent[] = [];
+    for (const event of pending) {
+      const eventEpochRaw = getTag(event.tags, 'epoch');
+      const eventEpoch = typeof eventEpochRaw === 'string' ? Number.parseInt(eventEpochRaw, 10) : group.epoch;
+      if (Number.isFinite(eventEpoch) && eventEpoch <= group.epoch) {
+        await this.processGroupEvent(event);
+      } else {
+        remaining.push(event);
+      }
+    }
+    this.pendingGroupEvents.set(groupId, remaining);
   }
 
   async addMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
@@ -547,6 +595,7 @@ export class GroupChatService {
   }
 
   private async addMemberLocked(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
+    await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -584,10 +633,8 @@ export class GroupChatService {
 
     group.members.push(memberPubkey);
     group.epoch = newEpoch;
-    group.exporterSecret = newExporterSecret;
-    group.rootSecret = newRootSecret;
     group.lastActivity = Date.now();
-    this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
 
     const metadata = createNostrGroupDataExtension({
       nostrGroupId: groupId,
@@ -616,6 +663,7 @@ export class GroupChatService {
           welcomePayload,
           'placeholder',
           group.relays,
+          newEpoch,
         );
         const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
         events.push(giftWrap);
@@ -625,7 +673,7 @@ export class GroupChatService {
       }
     }
 
-    this.persistGroup(group);
+    await this.persistGroup(group);
 
     return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
@@ -643,6 +691,7 @@ export class GroupChatService {
     pubkeyInput: string,
     ban: boolean,
   ): Promise<GroupOperationResult> {
+    await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -677,11 +726,9 @@ export class GroupChatService {
       group.bannedPubkeys.push(memberPubkey);
     }
     group.epoch = newEpoch;
-    group.exporterSecret = newExporterSecret;
-    group.rootSecret = newRootSecret;
     group.lastActivity = Date.now();
 
-    this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
 
     const events: NostrEvent[] = [];
     let failedCount = 0;
@@ -708,6 +755,7 @@ export class GroupChatService {
           welcomePayload,
           'placeholder',
           group.relays,
+          newEpoch,
         );
         const giftWrap = await wrapWelcomeEvent(welcomeEvent, remainingMember);
         events.push(giftWrap);
@@ -717,7 +765,7 @@ export class GroupChatService {
       }
     }
 
-    this.persistGroup(group);
+    await this.persistGroup(group);
 
     return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
@@ -727,6 +775,7 @@ export class GroupChatService {
   }
 
   private async promoteAdminLocked(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
+    await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -757,10 +806,8 @@ export class GroupChatService {
 
     group.adminPubkeys.push(memberPubkey);
     group.epoch = newEpoch;
-    group.exporterSecret = newExporterSecret;
-    group.rootSecret = newRootSecret;
     group.lastActivity = Date.now();
-    this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
 
     const metadata = createNostrGroupDataExtension({
       nostrGroupId: groupId,
@@ -789,6 +836,7 @@ export class GroupChatService {
           welcomePayload,
           'placeholder',
           group.relays,
+          newEpoch,
         );
         const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
         events.push(giftWrap);
@@ -798,7 +846,7 @@ export class GroupChatService {
       }
     }
 
-    this.persistGroup(group);
+    await this.persistGroup(group);
 
     return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
@@ -837,22 +885,23 @@ export class GroupChatService {
     welcomeEvent: NostrEvent,
     wd: Record<string, unknown>,
   ): Promise<GroupOperationResult<GroupChatGroup>> {
+    await this.ensureLoaded();
     const welcomeEpoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
 
     const existing = this.groups.get(groupId);
     if (existing && existing.bannedPubkeys.some((b) => b === this.userPubkey)) {
       return { success: false, error: 'You are banned from this group' };
     }
-    if (existing) {
-      if (welcomeEpoch <= existing.epoch) {
-        return { success: false, error: 'Welcome event is outdated' };
-      }
-      if (welcomeEpoch !== existing.epoch + 1) {
-        return { success: false, error: 'Welcome epoch is not sequential' };
-      }
+    if (existing && welcomeEpoch <= existing.epoch) {
+      return { success: false, error: 'Welcome event is outdated' };
     }
     if (existing && !existing.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
       return { success: false, error: 'Welcome not from a group admin' };
+    }
+
+    const welcomeEpochTag = getTag(welcomeEvent.tags, 'epoch');
+    if (welcomeEpochTag !== undefined && Number.parseInt(welcomeEpochTag, 10) !== welcomeEpoch) {
+      return { success: false, error: 'Welcome epoch tag mismatch' };
     }
 
     const metadataJson = typeof wd.metadata === 'string' ? wd.metadata : undefined;
@@ -864,52 +913,89 @@ export class GroupChatService {
       return { success: false, error: 'Welcome sender is not a group admin' };
     }
 
-    const epoch = welcomeEpoch;
+    // Buffer the Welcome and apply all contiguous epochs we now have.
+    let pending = this.pendingWelcomes.get(groupId);
+    if (!pending) {
+      pending = new Map();
+      this.pendingWelcomes.set(groupId, pending);
+    }
+    pending.set(welcomeEpoch, { welcomeEvent, wd });
 
-    let rootSecret: string | undefined;
-    let exporterSecret: string;
-    const isValidHex64 = (s: unknown): s is string =>
-      typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
+    return this.applyPendingWelcomes(groupId);
+  }
 
-    if (isValidHex64(wd.rootSecret)) {
-      rootSecret = wd.rootSecret;
-      exporterSecret = await deriveEpochSecret(wd.rootSecret, epoch, groupId);
-    } else if (isValidHex64(wd.exporterSecret)) {
-      exporterSecret = wd.exporterSecret;
-    } else {
-      return { success: false, error: 'Missing group secrets in Welcome' };
+  private async applyPendingWelcomes(groupId: string): Promise<GroupOperationResult<GroupChatGroup>> {
+    const pending = this.pendingWelcomes.get(groupId);
+    if (!pending || pending.size === 0) {
+      return { success: false, error: 'No pending Welcome events' };
     }
 
-    let welcomeMembers = Array.isArray(wd.members)
-      ? wd.members.filter((m): m is string => typeof m === 'string' && isNostrId(m))
-      : [];
-    if (!welcomeMembers.includes(this.userPubkey)) {
-      welcomeMembers = [...welcomeMembers, this.userPubkey];
+    let existing = this.groups.get(groupId);
+    let lastResult: GroupOperationResult<GroupChatGroup> = { success: false, error: 'No Welcome applied' };
+
+    while (true) {
+      let nextEpoch: number;
+      if (existing) {
+        nextEpoch = existing.epoch + 1;
+      } else {
+        // For a brand-new member, start from the earliest Welcome we have.
+        nextEpoch = Math.min(...pending.keys());
+      }
+      const entry = pending.get(nextEpoch);
+      if (!entry) break;
+
+      const { wd } = entry;
+      pending.delete(nextEpoch);
+
+      const epoch = nextEpoch;
+      let rootSecret: string | undefined;
+      let exporterSecret: string;
+      const isValidHex64 = (s: unknown): s is string =>
+        typeof s === 'string' && /^[0-9a-f]{64}$/.test(s);
+
+      if (isValidHex64(wd.rootSecret)) {
+        rootSecret = wd.rootSecret;
+        exporterSecret = await deriveEpochSecret(wd.rootSecret, epoch, groupId);
+      } else if (isValidHex64(wd.exporterSecret)) {
+        exporterSecret = wd.exporterSecret;
+      } else {
+        return { success: false, error: 'Missing group secrets in Welcome' };
+      }
+
+      let welcomeMembers = Array.isArray(wd.members)
+        ? wd.members.filter((m): m is string => typeof m === 'string' && isNostrId(m))
+        : [];
+      if (!welcomeMembers.includes(this.userPubkey)) {
+        welcomeMembers = [...welcomeMembers, this.userPubkey];
+      }
+
+      const metadata = metadataFromWelcome(wd);
+      const stored: StoredGroup = {
+        nostrGroupId: groupId,
+        name: metadata?.name ?? existing?.name ?? '',
+        description: metadata?.description ?? existing?.description,
+        adminPubkeys: metadata?.adminPubkeys ?? existing?.adminPubkeys ?? [this.userPubkey],
+        members: welcomeMembers.length > 0 ? welcomeMembers : (existing?.members ?? [this.userPubkey]),
+        relays: metadata?.relays ?? existing?.relays ?? [],
+        epoch,
+        bannedPubkeys: existing?.bannedPubkeys ?? [],
+        createdAt: existing?.createdAt ?? Date.now(),
+        lastActivity: Date.now(),
+      };
+
+      await this.setSecrets(groupId, exporterSecret, rootSecret);
+      await this.persistGroup(stored);
+      if (!this.messages.has(groupId)) {
+        this.messages.set(groupId, []);
+      }
+
+      existing = stored;
+      lastResult = { success: true, data: toGroupChatGroup(stored) };
+
+      await this.processPendingGroupEvents(groupId);
     }
 
-    const stored: StoredGroup = {
-      nostrGroupId: groupId,
-      name: metadata.name,
-      description: metadata.description,
-      adminPubkeys: metadata.adminPubkeys,
-      members:
-        welcomeMembers.length > 0 ? welcomeMembers : (existing?.members ?? [this.userPubkey]),
-      relays: metadata.relays,
-      epoch,
-      exporterSecret,
-      rootSecret,
-      bannedPubkeys: existing?.bannedPubkeys ?? [],
-      createdAt: existing?.createdAt ?? Date.now(),
-      lastActivity: Date.now(),
-    };
-
-    this.setSecrets(groupId, exporterSecret, rootSecret);
-    this.persistGroup(stored);
-    if (!this.messages.has(groupId)) {
-      this.messages.set(groupId, []);
-    }
-
-    return { success: true, data: toGroupChatGroup(stored) };
+    return lastResult;
   }
 
   leaveGroup(groupId: string): GroupOperationResult {
@@ -926,9 +1012,13 @@ export class GroupChatService {
     }
 
     deleteGroup(this.userPubkey, groupId);
+    void deleteGroupSecrets(this.userPubkey, groupId);
     this.groups.delete(groupId);
     this.messages.delete(groupId);
     this.groupStates.delete(groupId);
+    this.pendingWelcomes.delete(groupId);
+    this.pendingGroupEvents.delete(groupId);
+    this.epochSecretCache.delete(groupId);
 
     return { success: true };
   }
