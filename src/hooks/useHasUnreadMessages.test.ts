@@ -19,7 +19,7 @@ import { useDmInbox } from './useDmInbox';
 describe('useHasUnreadMessages', () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.mocked(useDmInbox).mockReturnValue({ conversations: [], isLoading: false });
+    vi.mocked(useDmInbox).mockReturnValue({ conversations: [], isLoading: false, addMessage: vi.fn() });
   });
 
   it('returns no unread when there are no conversations', () => {
@@ -37,6 +37,7 @@ describe('useHasUnreadMessages', () => {
         lastMessageAt: 100,
       }],
       isLoading: false,
+      addMessage: vi.fn(),
     });
 
     const { result } = renderHook(() => useHasUnreadMessages());
@@ -61,6 +62,7 @@ describe('useHasUnreadMessages', () => {
         lastMessageAt: 60,
       }],
       isLoading: false,
+      addMessage: vi.fn(),
     });
 
     const { result } = renderHook(() => useHasUnreadMessages());
@@ -82,6 +84,7 @@ describe('useHasUnreadMessages', () => {
         lastMessageAt: 80,
       }],
       isLoading: false,
+      addMessage: vi.fn(),
     });
 
     const { result } = renderHook(() => useHasUnreadMessages());
