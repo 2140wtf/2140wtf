@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
+import { toast } from './useToast';
 import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { NKinds, type NostrEvent } from '@nostrify/nostrify';
 import { isNostrId } from '@/lib/nostrId';
@@ -16,10 +18,19 @@ interface PostCommentParams {
 export function usePostComment() {
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const commentsEnabled = isEnabled('comments');
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ root, reply, content, tags: extraTags }: PostCommentParams) => {
+      if (!commentsEnabled) {
+        toast({
+          title: 'Comments disabled',
+          description: 'Turn on “Comments & replies” in Settings → Privacy & Publishing to comment.',
+        });
+        throw new Error('Comments publishing is disabled');
+      }
       // Extract hint maps from the reply event's existing tags, if available.
       const hints = extractHints(reply);
       const tags: string[][] = [];

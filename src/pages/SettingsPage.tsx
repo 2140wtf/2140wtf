@@ -22,6 +22,14 @@ interface SettingsSection {
 
 const settingsSections: SettingsSection[] = [
   {
+    id: 'privacy',
+    label: 'Privacy & Publishing',
+    description: 'Control what Ditto publishes to Nostr on your behalf',
+    illustration: '/advanced-intro.png',
+    path: '/settings/privacy',
+    requiresAuth: true,
+  },
+  {
     id: 'profile',
     label: 'Profile',
     description: 'Edit your display name, bio, and avatar',

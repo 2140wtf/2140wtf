@@ -14,6 +14,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useRelayInfo } from '@/hooks/useRelayInfo';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { useToast } from '@/hooks/useToast';
 import { APP_RELAYS } from '@/lib/appRelays';
@@ -110,6 +111,8 @@ export function RelayListManager() {
   const { config, updateConfig } = useAppContext();
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const publishRelayListEnabled = isEnabled('publishRelayList');
   const { updateSettings } = useEncryptedSettings();
   const { toast } = useToast();
 
@@ -256,6 +259,13 @@ export function RelayListManager() {
   };
 
   const publishNIP65RelayList = (relayList: Relay[]) => {
+    if (!publishRelayListEnabled) {
+      toast({
+        title: 'Relay list publishing disabled',
+        description: 'Turn on “Publish relay list” in Settings → Privacy & Publishing to sync your relays.',
+      });
+      return;
+    }
     const tags = relayList.map(relay => {
       if (relay.read && relay.write) {
         return ['r', relay.url];
