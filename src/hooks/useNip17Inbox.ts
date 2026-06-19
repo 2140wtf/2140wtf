@@ -1,10 +1,13 @@
 import { useNostr } from '@nostrify/react';
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
+import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
   computeNip17ConversationId,
+  getNip17DmRelays,
   getNip17Participants,
   unwrapNip17Message,
   type Nip17Message,
@@ -19,6 +22,15 @@ export interface Nip17Conversation {
   subject?: string;
 }
 
+const DM_RELAYS_KIND = 10050;
+const GIFT_WRAP_KIND = 1059;
+/** NIP-59 allows gift wraps to be back-dated by up to two days. */
+const GIFT_WRAP_MAX_AGE_SECONDS = 2 * 24 * 60 * 60;
+
+function isValidRelayUrl(url: string): boolean {
+  return /^wss?:\/\//.test(url);
+}
+
 /**
  * Subscribe to the logged-in user's NIP-17 gift-wrap inbox.
  *
@@ -30,8 +42,37 @@ export interface Nip17Conversation {
 export function useNip17Inbox() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const [conversations, setConversations] = useState<Map<string, Nip17Conversation>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
+
+  const defaultRelays = useMemo(
+    () =>
+      config.relayMetadata?.relays
+        ?.map((r) => r.url)
+        .filter((url): url is string => typeof url === 'string' && isValidRelayUrl(url)) ?? [],
+    [config.relayMetadata],
+  );
+
+  const { data: dmRelays } = useQuery({
+    queryKey: ['nip17-dm-relays', user?.pubkey],
+    queryFn: async ({ signal }) => {
+      if (!user) return [];
+      const events = await nostr.query(
+        [{ kinds: [DM_RELAYS_KIND], authors: [user.pubkey], limit: 1 }],
+        { signal },
+      );
+      const event = events[0];
+      return event ? getNip17DmRelays(event) : [];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const readRelays = useMemo(() => {
+    const relays = [...new Set([...(dmRelays ?? []), ...defaultRelays])];
+    return relays.length > 0 ? relays : null;
+  }, [dmRelays, defaultRelays]);
 
   useEffect(() => {
     if (!user || !user.signer.nip44) {
@@ -85,9 +126,11 @@ export function useNip17Inbox() {
     (async () => {
       setIsLoading(true);
 
+      const pool = readRelays ? nostr.group(readRelays) : nostr;
+
       try {
-        const initial = await nostr.query(
-          [{ kinds: [1059], '#p': [user.pubkey], limit: 100 }],
+        const initial = await pool.query(
+          [{ kinds: [GIFT_WRAP_KIND], '#p': [user.pubkey], limit: 100 }],
           { signal: ac.signal },
         );
         for (const wrap of initial) {
@@ -102,8 +145,9 @@ export function useNip17Inbox() {
 
       try {
         const now = Math.floor(Date.now() / 1000);
-        for await (const msg of nostr.req(
-          [{ kinds: [1059], '#p': [user.pubkey], since: now, limit: 0 }],
+        const since = now - GIFT_WRAP_MAX_AGE_SECONDS - 60;
+        for await (const msg of pool.req(
+          [{ kinds: [GIFT_WRAP_KIND], '#p': [user.pubkey], since, limit: 0 }],
           { signal: ac.signal },
         )) {
           if (!alive) break;
@@ -122,7 +166,7 @@ export function useNip17Inbox() {
       alive = false;
       ac.abort();
     };
-  }, [nostr, user]);
+  }, [nostr, user, readRelays]);
 
   const addMessage = useCallback((message: Nip17Message) => {
     if (!user) return;
