@@ -31,8 +31,9 @@ This plan was executed in a single pass. The following files were created:
 The following planned items were **not** implemented and are deferred:
 
 - IndexedDB persistence of decrypted messages (`useNip17Inbox` keeps state in React only).
-- A separate `useNip17Thread` hook (`MessageThreadPage` filters `useNip17Inbox` output by participant).
+- A separate `useNip17Thread` hook (`MessageThreadPage` filters `useDmInbox` output by participant).
 - A settings UI for editing the user's kind 10050 DM relay list.
+- Cross-device sync of DM read cursors (currently device-local localStorage).
 
 ---
 
