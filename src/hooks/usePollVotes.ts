@@ -8,10 +8,33 @@ import { useNostrStorage } from '@/hooks/useNostrStorage';
 
 const DEFAULT_LIMIT = 1000;
 
-/** Popular public relays used as a last-resort fallback for poll votes. */
-const PUBLIC_FALLBACK_RELAYS = [
-  'wss://relay.damus.io/',
-  'wss://nos.lol/',
+/**
+ * Extended poll-vote relay set borrowed from BAO Markets' ExternalPollService.
+ * These are the relays BAO scans for kind:1068 / kind:6969 polls and their
+ * kind:1018 / kind:9735 responses, so matching them gives Ditto the best
+ * chance of seeing the same votes.
+ */
+const BAO_POLL_RELAYS = [
+  'wss://nos.lol',
+  'wss://relay.snort.social',
+  'wss://relay.damus.io',
+  'wss://relay.primal.net',
+  'wss://relay.nostr.wirednet.jp',
+  'wss://nostr-01.yakihonne.com',
+  'wss://nostr21.com',
+  'wss://offchain.pub',
+  'wss://bitcoiner.social',
+  'wss://nostr.bitcoiner.social',
+  'wss://eden.nostr.land',
+  'wss://atlas.nostr.land',
+  'wss://nostr-relay.psfoundation.info',
+  'wss://filter.nostr.wine',
+  'wss://relay.nostr.band',
+  'wss://nostr.jcloud.es',
+  'wss://nostr.swiss-enigma.ch',
+  'wss://relay.nsecbunker.com',
+  'wss://relay.bao.network',
+  'wss://purplepag.es',
 ];
 
 function normalizeUrl(url: string): string {
@@ -103,7 +126,7 @@ export function usePollVotes(event: NostrEvent, kind: number) {
       // 2. Gather extra relays from hints and NIP-65 lists.
       const extraRelays = new Set<string>([
         ...getRelayHints(event),
-        ...PUBLIC_FALLBACK_RELAYS,
+        ...BAO_POLL_RELAYS,
       ]);
 
       const nip65Pubkeys = [event.pubkey];
