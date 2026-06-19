@@ -108,6 +108,8 @@ import {
 import { PetsOnboardingFlow } from '@/pets/onboarding';
 import { usePetsActionsRegistration, type UseItemFunction } from '@/pets/companion/interaction';
 import { getAdultBaseSvg } from '@/pets/adult-pets';
+import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
+import { generateBaoSvg } from '@/pets/adult-pets/lib/bao-svg';
 import {
   BREED_CATEGORIES,
   getCategoryMembers,
@@ -3504,47 +3506,23 @@ function SpeciesTabContent() {
 
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
         {members.map((member) => {
-          if (isAdultFormMember(member)) {
-            const svg = member.portraitSrc ? undefined : getAdultBaseSvg(member.form);
-            return (
-              <div
-                key={member.form}
-                className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
-              >
-                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
-                  {member.portraitSrc ? (
-                    <img
-                      src={member.portraitSrc}
-                      alt={member.label}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <img
-                      src={`data:image/svg+xml,${encodeURIComponent(svg ?? '')}`}
-                      alt={member.label}
-                      className="w-full h-full object-contain"
-                      loading="lazy"
-                    />
-                  )}
-                </div>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  {member.label}
-                </span>
-              </div>
-            );
-          }
+          const svg = isAdultFormMember(member)
+            ? getAdultBaseSvg(member.form)
+            : (() => {
+                const recipe = getBaoRecipeById(member.id);
+                return recipe ? generateBaoSvg(recipe) : '';
+              })();
 
           return (
             <div
-              key={member.id}
+              key={isAdultFormMember(member) ? member.form : member.id}
               className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
             >
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
                 <img
-                  src={member.src}
+                  src={`data:image/svg+xml,${encodeURIComponent(svg)}`}
                   alt={member.label}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   loading="lazy"
                 />
               </div>

@@ -668,6 +668,142 @@
   }
 }
 
+/* ─── 2140 Pets + ₿AO Living SVG Animations ────────────────────────────────── */
+
+@keyframes pets-breathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.02) translateY(-2px); }
+}
+
+@keyframes pets-bounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-18px) scale(1.03); }
+  60% { transform: translateY(4px) scale(0.98); }
+}
+
+@keyframes pets-tilt {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(4deg); }
+}
+
+@keyframes pets-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.15); }
+}
+
+@keyframes pets-ripple {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04) skewX(2deg); }
+}
+
+@keyframes pets-glitch-shift {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, 2px); }
+}
+
+@keyframes pets-wing-flutter {
+  0%, 100% { transform: rotateY(0deg); }
+  50% { transform: rotateY(35deg); }
+}
+
+@keyframes pets-float-note {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-40px) scale(1); }
+}
+
+/* Generic idle/sleep body motion */
+.pets-state-idle .pets-adult-art,
+.pets-state-sleeping .pets-adult-art {
+  animation: pets-breathe 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pets-state-sleeping .pets-adult-art {
+  animation-duration: 4s;
+  filter: brightness(0.55) saturate(0.7);
+}
+
+/* Eye / note visibility */
+.eye-closed,
+.singing-notes {
+  display: none;
+}
+
+.pets-state-sleeping .eye-open {
+  display: none;
+}
+
+.pets-state-sleeping .eye-closed {
+  display: block;
+}
+
+.pets-state-singing .singing-notes {
+  display: block;
+}
+
+.pets-state-singing .singing-notes .note {
+  opacity: 0;
+  animation: pets-float-note 1.2s ease-out infinite;
+}
+
+.pets-state-singing .singing-notes .note:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.pets-state-singing .singing-notes .note:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+/* Species-specific layer animations */
+.pets-form-glitchfox.pets-state-idle .glitch-stripes,
+.pets-form-glitchfox.pets-state-listening .glitch-stripes {
+  animation: pets-glitch-shift 0.25s steps(2) infinite;
+}
+
+.pets-form-glitchfox.pets-state-listening .glitch-stripes {
+  animation-duration: 0.18s;
+}
+
+.pets-form-biomechmoth.pets-state-idle .wing,
+.pets-form-biomechmoth.pets-state-singing .wing {
+  animation: pets-wing-flutter 0.18s ease-in-out infinite;
+}
+
+.pets-form-liquidblob.pets-state-idle .blob-body,
+.pets-form-liquidblob.pets-state-happy .blob-body {
+  animation: pets-ripple 2.4s ease-in-out infinite;
+}
+
+/* ₿AO variations: gentle market pulse on rarer tiers */
+[class*="pets-bao-"].pets-state-idle .pets-adult-art {
+  animation: pets-breathe 3.2s ease-in-out infinite;
+}
+
+[class*="pets-bao-"].pets-state-singing .pets-adult-art {
+  animation: pets-pulse 0.7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pets-state-idle .pets-adult-art,
+  .pets-state-sleeping .pets-adult-art,
+  .pets-form-glitchfox.pets-state-idle .glitch-stripes,
+  .pets-form-glitchfox.pets-state-listening .glitch-stripes,
+  .pets-form-biomechmoth.pets-state-idle .wing,
+  .pets-form-biomechmoth.pets-state-singing .wing,
+  .pets-form-liquidblob.pets-state-idle .blob-body,
+  .pets-form-liquidblob.pets-state-happy .blob-body,
+  [class*="pets-bao-"].pets-state-idle .pets-adult-art,
+  [class*="pets-bao-"].pets-state-singing .pets-adult-art,
+  .pets-state-singing .singing-notes .note {
+    animation: none !important;
+  }
+}
+
 /* ── Milkdown Editor Styles ─────────────────────────────────────────────────── */
 
 .milkdown-editor .milkdown {
