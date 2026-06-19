@@ -892,6 +892,22 @@ export async function isProcessedTokenHash(hash: string, encKey?: CryptoKey, leg
   return entries.some((e) => e.hash === hash);
 }
 
+export async function saveProcessedTokenHashes(entries: ProcessedTokenEntry[], encKey?: CryptoKey, namespace?: string): Promise<void> {
+  if (!encKey) return;
+  const now = Date.now();
+  const trimmed = entries
+    .filter((e) => e && typeof e === 'object' && typeof e.hash === 'string' && e.hash.length > 0 && typeof e.expiresAt === 'number' && e.expiresAt > now)
+    .sort((a, b) => b.expiresAt - a.expiresAt)
+    .slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
+  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
+  try {
+    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    throw new Error(`Failed to save processed token hashes: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!hash || !encKey) return;
   const entries = await loadProcessedTokenHashes(encKey, legacyKey);
