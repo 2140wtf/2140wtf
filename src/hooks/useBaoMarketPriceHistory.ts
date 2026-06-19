@@ -85,12 +85,17 @@ async function fetchOutcomeHistory(
   const params = new URLSearchParams({ period, outcome_id: outcomeId });
   const path = `${API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
 
+  const publicPath = `${PUBLIC_API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
+
   let res: Response;
   try {
     res = await fetch(path, { signal });
+    if (!res.ok) {
+      // Fall back to the public Bao API when the same-origin path is not proxied.
+      res = await fetch(publicPath, { signal });
+    }
   } catch {
     // Fall back to the public Bao API when running outside the hosted/proxied environment.
-    const publicPath = `${PUBLIC_API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
     res = await fetch(publicPath, { signal });
   }
 
