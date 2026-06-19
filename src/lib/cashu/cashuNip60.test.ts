@@ -76,6 +76,7 @@ describe('wallet config event', () => {
 
     const parsed = await parseWalletConfigEvent(event!, identitySigner);
     expect(parsed).toEqual({
+      id: 'default',
       privkey: config.privkey,
       mints: ['https://mint.example.com'],
     });
