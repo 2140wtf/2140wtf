@@ -5,7 +5,7 @@
  * - https://github.com/Codepocketdev/satoshi-pay-wallet (MIT)
  * - https://github.com/cashubtc/cashu.me
  */
-import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync, entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { getDecodedToken } from '@cashu/cashu-ts';
 import { verifyDLEQProof_reblind } from '@cashu/cashu-ts/crypto/client/NUT12';
@@ -40,6 +40,8 @@ export const MAX_MINT_FEE_PPM = 50_000;
 const PROOF_ENCRYPTION_INFO = 'freedomid:cashu:proof-encryption:v1';
 const NUTZAP_KEY_INFO = 'ditto:cashu:nutzap:v1';
 const NIP60_WALLET_KEY_INFO = 'ditto:cashu:walletkey:v1';
+const BAO_WALLET_KEY_INFO = 'ditto:cashu:bao:walletkey:v1';
+const BAO_MNEMONIC_INFO = '2140:cashu:bao:seed:v1';
 const CIPHER_VERSION_PREFIX = 'v1:';
 const PROOF_CONTEXT_PREFIX = 'freedomid:proofs:';
 const TRANSACTION_CONTEXT = 'freedomid:transactions';
@@ -264,6 +266,34 @@ export function deriveNip60WalletKey(seedPhrase: string): { privkey: Uint8Array;
     return { privkey, pubkey };
   } finally {
     secureZero(seed);
+  }
+}
+
+/** Deterministic BAO wallet keypair used for the BAO signet/demo Cashu wallet. */
+export function deriveBaoWalletKey(seedPhrase: string): { privkey: Uint8Array; pubkey: string } {
+  const seed = deriveMasterKey(seedPhrase);
+  try {
+    const privkey = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(BAO_WALLET_KEY_INFO), 32);
+    const pubkey = getPublicKey(privkey);
+    return { privkey, pubkey };
+  } finally {
+    secureZero(seed);
+  }
+}
+
+/** Derive a dedicated BIP-39 mnemonic for the BAO wallet from the user's main Cashu seed. */
+export function deriveBaoCashuMnemonic(userSeedPhrase: string): string {
+  const trimmed = userSeedPhrase.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Invalid seed phrase');
+  }
+  const userEntropy = mnemonicToEntropy(trimmed, wordlist);
+  const derivedEntropy = hkdf(sha256, userEntropy, new Uint8Array(0), new TextEncoder().encode(BAO_MNEMONIC_INFO), 16);
+  try {
+    return entropyToMnemonic(derivedEntropy, wordlist);
+  } finally {
+    secureZero(derivedEntropy);
+    secureZero(userEntropy);
   }
 }
 

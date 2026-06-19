@@ -35,7 +35,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
-import { useCashuWallet } from '@/hooks/useCashuWallet';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useCashuWallet, type CashuWalletState, type CashuWalletActions } from '@/hooks/useCashuWallet';
+import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
 import { useNutzapReceiver } from '@/hooks/useNutzapReceiver';
 import {
@@ -43,10 +45,13 @@ import {
   restoreCashuState as fetchCashuBackup,
   type CashuBackupPayload,
 } from '@/lib/cashu/cashuBackup';
-import { DEFAULT_MINTS, normalizeMintUrl } from '@/lib/cashu/cashu';
+import { DEFAULT_MINTS, normalizeMintUrl, deriveBaoCashuMnemonic, deriveBaoWalletKey } from '@/lib/cashu/cashu';
+import { devLog } from '@/lib/cashu/devLog';
+import type { Nip60WalletConfig } from '@/lib/cashu/cashuNip60';
 import type { Transaction } from '@/lib/cashu/storage';
 import type { NostrSigner } from '@nostrify/types';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
+import { bytesToHex } from '@noble/curves/utils.js';
 
 interface CashuWalletTabProps {
   seedPhrase: string;
@@ -75,8 +80,34 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
     [user, relayUrls],
   );
 
+  const { config: appConfig } = useAppContext();
   const nip60Sync = useNip60Sync();
-  const wallet = useCashuWallet(seedPhrase, backupCashuState, restoreCashuState, nip60Sync);
+
+  const baoWalletConfig: Nip60WalletConfig | undefined = useMemo(() => {
+    const baoMintUrl = appConfig.baoSignetMintUrl?.trim();
+    if (!baoMintUrl || !seedPhrase) return undefined;
+    try {
+      const baoSeed = deriveBaoCashuMnemonic(seedPhrase);
+      const baoKey = deriveBaoWalletKey(baoSeed);
+      return {
+        id: 'bao',
+        privkey: bytesToHex(baoKey.privkey),
+        mints: [normalizeMintUrl(baoMintUrl)!],
+      };
+    } catch (e) {
+      devLog.warn('Failed to derive BAO wallet config:', e);
+      return undefined;
+    }
+  }, [appConfig.baoSignetMintUrl, seedPhrase]);
+
+  const wallet = useCashuWallet(seedPhrase, {
+    backupCashuState,
+    restoreCashuState,
+    nip60Sync,
+    baoWalletConfig,
+  });
+  const baoWallet = useBaoCashuWallet(seedPhrase, user, relayUrls);
+
   useNutzapReceiver(seedPhrase, wallet.allMints, wallet.receiveNutzap);
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
@@ -240,9 +271,15 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
   };
 
   return (
-    <div className='space-y-6'>
-      {/* Balance */}
-      <Card>
+    <Tabs defaultValue='cashu' className='space-y-6'>
+      <TabsList className='grid w-full grid-cols-2'>
+        <TabsTrigger value='cashu'>Cashu</TabsTrigger>
+        <TabsTrigger value='bao'>BAO Demo</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value='cashu' className='space-y-6'>
+        {/* Balance */}
+        <Card>
         <CardHeader className='pb-2'>
           <CardTitle className='flex items-center justify-between text-base font-medium'>
             <span className='flex items-center gap-2'>
@@ -581,6 +618,218 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
           </div>
         </DialogContent>
       </Dialog>
+      </TabsContent>
+
+      <TabsContent value='bao' className='space-y-6'>
+        <BaoWalletPanel wallet={baoWallet} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function BaoWalletPanel({ wallet }: { wallet: CashuWalletState & CashuWalletActions }) {
+  const { toast } = useToast();
+  const [receiveTokenStr, setReceiveTokenStr] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
+  const [sendMemo, setSendMemo] = useState('');
+  const [generatedToken, setGeneratedToken] = useState('');
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceQuote, setInvoiceQuote] = useState<MintQuoteResponse | null>(null);
+  const [faucetLoading, setFaucetLoading] = useState(false);
+
+  const handleReceive = async () => {
+    if (!receiveTokenStr.trim()) return;
+    await wallet.receiveToken(receiveTokenStr.trim());
+    setReceiveTokenStr('');
+  };
+
+  const handleSend = async () => {
+    const amount = Number(sendAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    const token = await wallet.sendToken(amount, sendMemo.trim());
+    if (token) setGeneratedToken(token);
+  };
+
+  const handleCreateInvoice = async () => {
+    const amount = Number(invoiceAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    const quote = await wallet.requestInvoice(amount, 'BAO Demo top-up');
+    if (quote) setInvoiceQuote(quote);
+  };
+
+  const handleMint = async () => {
+    if (!invoiceQuote) return;
+    await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
+    setInvoiceQuote(null);
+  };
+
+  const handleFaucet = async () => {
+    setFaucetLoading(true);
+    try {
+      toast({ title: 'Faucet not configured', description: 'Set VITE_BAO_MINT_URL and a faucet endpoint to top up BAO demo sats.' });
+    } finally {
+      setFaucetLoading(false);
+    }
+  };
+
+  return (
+    <div className='space-y-6'>
+      <Card>
+        <CardHeader className='pb-2'>
+          <CardTitle className='flex items-center justify-between text-base font-medium'>
+            <span className='flex items-center gap-2'>
+              <WalletIcon className='size-5 text-primary' />
+              BAO Demo balance
+              <Badge variant='outline'>signet</Badge>
+            </span>
+            <Button variant='ghost' size='icon' className='size-7' onClick={wallet.calculateAllBalances}>
+              <RefreshCw className='size-4' />
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {wallet.loading && wallet.totalBalance === 0 ? (
+            <p className='text-sm text-muted-foreground'>Loading wallet…</p>
+          ) : (
+            <div className='flex items-baseline gap-2'>
+              <span className='text-3xl font-bold'>{wallet.totalBalance}</span>
+              <span className='text-muted-foreground'>demo sats</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className='pb-2'>
+          <CardTitle className='text-base font-medium'>Mint</CardTitle>
+        </CardHeader>
+        <CardContent className='space-y-4'>
+          <Select value={wallet.mintUrl} onValueChange={wallet.setMintUrl}>
+            <SelectTrigger>
+              <SelectValue placeholder='Select a BAO mint' />
+            </SelectTrigger>
+            <SelectContent>
+              {wallet.allMints.map((m) => (
+                <SelectItem key={normalizeMintUrl(m.url)} value={normalizeMintUrl(m.url)!}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant='outline' size='sm' onClick={handleFaucet} disabled={faucetLoading}>
+            <Zap className='size-3.5 mr-1.5' />
+            {faucetLoading ? 'Topping up…' : 'Top up from faucet'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue='receive' className='w-full'>
+        <TabsList className='grid w-full grid-cols-3'>
+          <TabsTrigger value='receive'>Receive</TabsTrigger>
+          <TabsTrigger value='send'>Send</TabsTrigger>
+          <TabsTrigger value='invoice'>Invoice</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value='receive'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-base font-medium'>Receive Cashu token</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <Textarea
+                placeholder='Paste BAO Cashu token here…'
+                value={receiveTokenStr}
+                onChange={(e) => setReceiveTokenStr(e.target.value)}
+                rows={4}
+              />
+              <Button onClick={handleReceive} disabled={!receiveTokenStr.trim() || wallet.loading}>
+                <ArrowDownLeft className='size-4 mr-1.5' />
+                Receive token
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value='send'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-base font-medium'>Send Cashu token</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              <Input
+                type='number'
+                placeholder='Amount in demo sats'
+                value={sendAmount}
+                onChange={(e) => setSendAmount(e.target.value)}
+              />
+              <Input
+                placeholder='Memo (optional)'
+                value={sendMemo}
+                onChange={(e) => setSendMemo(e.target.value)}
+              />
+              <Button onClick={handleSend} disabled={!sendAmount || wallet.loading}>
+                <ArrowUpRight className='size-4 mr-1.5' />
+                Generate token
+              </Button>
+              {generatedToken && (
+                <div className='space-y-2'>
+                  <p className='text-sm font-medium'>Cashu token</p>
+                  <div className='rounded-lg border bg-muted p-3 font-mono text-xs break-all'>{generatedToken}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value='invoice'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-base font-medium'>Lightning deposit</CardTitle>
+            </CardHeader>
+            <CardContent className='space-y-4'>
+              {!invoiceQuote ? (
+                <div className='flex gap-2'>
+                  <Input
+                    type='number'
+                    placeholder='Amount in demo sats'
+                    value={invoiceAmount}
+                    onChange={(e) => setInvoiceAmount(e.target.value)}
+                  />
+                  <Button onClick={handleCreateInvoice} disabled={wallet.loading}>
+                    Create invoice
+                  </Button>
+                </div>
+              ) : (
+                <div className='space-y-4'>
+                  <p className='text-sm text-muted-foreground'>Pay the invoice, then mint the demo sats.</p>
+                  <Button onClick={handleMint} disabled={wallet.loading}>
+                    Mint {invoiceAmount} sats
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {wallet.transactions.length > 0 && (
+        <Card>
+          <CardHeader className='pb-2'>
+            <CardTitle className='text-base font-medium'>History</CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-2'>
+            {wallet.transactions.slice(0, 20).map((tx) => (
+              <TxRow key={tx.id} tx={tx} />
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
