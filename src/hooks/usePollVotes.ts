@@ -6,7 +6,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrStorage } from '@/hooks/useNostrStorage';
 
-const DEFAULT_LIMIT = 1000;
+const VOTE_LIMIT = 5000;
+const ZAP_RECEIPT_LIMIT = 500;
 
 /**
  * Extended poll-vote relay set borrowed from BAO Markets' ExternalPollService.
@@ -90,16 +91,69 @@ function getUntil(event: NostrEvent): number | undefined {
 }
 
 /**
+ * Build the filter for a vote kind.
+ *
+ * kind:1018 regular poll votes reference the poll via `#e`.
+ * kind:9735 zap receipts reliably carry the recipient pubkey in `#p` but not
+ * always an indexed `#e`; BAO Markets queries by `#p` and filters locally.
+ */
+function buildVoteFilter(event: NostrEvent, kind: number): NostrFilter {
+  const until = getUntil(event);
+  if (kind === 9735) {
+    const filter: NostrFilter = {
+      kinds: [9735],
+      '#p': [event.pubkey],
+      limit: ZAP_RECEIPT_LIMIT,
+    };
+    if (until) filter.until = until;
+    return filter;
+  }
+
+  const filter: NostrFilter = {
+    kinds: [kind],
+    '#e': [event.id],
+    limit: VOTE_LIMIT,
+  };
+  if (until) filter.until = until;
+  return filter;
+}
+
+/** Whether a kind:9735 receipt is a zap vote for the given poll. */
+function isZapVoteForPoll(event: NostrEvent, pollId: string): boolean {
+  const descTag = event.tags.find(([n]) => n === 'description')?.[1];
+  if (!descTag) return false;
+  try {
+    const zapReq = JSON.parse(descTag) as { tags?: string[][] };
+    return zapReq.tags?.some((t) => t[0] === 'e' && t[1] === pollId) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** Deduplicate zap receipts by bolt11 invoice. */
+function dedupeZapReceipts(events: NostrEvent[]): NostrEvent[] {
+  const seenBolt11 = new Set<string>();
+  return events.filter((ev) => {
+    const bolt11 = ev.tags.find(([n]) => n === 'bolt11')?.[1];
+    if (!bolt11) return true;
+    if (seenBolt11.has(bolt11)) return false;
+    seenBolt11.add(bolt11);
+    return true;
+  });
+}
+
+/**
  * Fetch votes/receipts for a poll event.
  *
  * Queries the configured read relays first, then expands the search to:
  *   - relay hints embedded in the poll's `e`/`p` tags
  *   - the poll author's NIP-65 write relays
  *   - the logged-in user's NIP-65 write relays
- *   - a curated set of popular public relays
+ *   - the full BAO Markets poll relay set
  *
- * This catches votes that were published to the author's or voter's preferred
- * relays rather than the user's default read set.
+ * For kind:9735 zap receipts it mirrors BAO's approach: query by recipient
+ * pubkey (`#p`) and filter locally against the zap request's `e` tag, because
+ * relays index `p` tags reliably on zap receipts but often do not index `e`.
  */
 export function usePollVotes(event: NostrEvent, kind: number) {
   const { nostr } = useNostr();
@@ -110,13 +164,7 @@ export function usePollVotes(event: NostrEvent, kind: number) {
   return useQuery<NostrEvent[]>({
     queryKey: ['poll-votes', event.id, kind, user?.pubkey ?? ''],
     queryFn: async ({ signal }) => {
-      const filter: NostrFilter = {
-        kinds: [kind],
-        '#e': [event.id],
-        limit: DEFAULT_LIMIT,
-      };
-      const until = getUntil(event);
-      if (until) filter.until = until;
+      const filter = buildVoteFilter(event, kind);
 
       const querySignal = AbortSignal.any([signal, AbortSignal.timeout(6000)]);
 
@@ -173,7 +221,13 @@ export function usePollVotes(event: NostrEvent, kind: number) {
         }
       }
 
-      const votes = Array.from(all.values());
+      let votes = Array.from(all.values());
+
+      // For zap receipts queried by #p, keep only those that reference this poll.
+      if (kind === 9735) {
+        votes = votes.filter((ev) => isZapVoteForPoll(ev, event.id));
+        votes = dedupeZapReceipts(votes);
+      }
 
       // group() bypasses the AppPool cache tap — mirror extras explicitly.
       for (const ev of extraResults) {
