@@ -1,5 +1,5 @@
 import { useSeoMeta } from '@unhead/react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Info } from 'lucide-react';
 
 import { PageHeader } from '@/components/PageHeader';
 import { IntroImage } from '@/components/IntroImage';
@@ -8,14 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePublishPreferences, type PublishFeature } from '@/hooks/usePublishPreferences';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface ToggleRowProps {
   feature: PublishFeature;
   title: string;
   description: string;
+  warning?: React.ReactNode;
 }
 
-function ToggleRow({ feature, title, description }: ToggleRowProps) {
+function ToggleRow({ feature, title, description, warning }: ToggleRowProps) {
   const { isEnabled, setEnabled } = usePublishPreferences();
   const enabled = isEnabled(feature);
 
@@ -26,6 +28,7 @@ function ToggleRow({ feature, title, description }: ToggleRowProps) {
           {title}
         </Label>
         <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+        {enabled && warning && <div className="mt-2">{warning}</div>}
       </div>
       <Switch
         id={`publish-${feature}`}
@@ -420,6 +423,17 @@ export function PrivacySettingsPage() {
               feature="nutzaps"
               title="Receive Nutzaps"
               description="Publish a public Cashu receiver ad so others can send NIP-61 Nutzaps to you (kind 10019)."
+              warning={
+                <Alert>
+                  <Info className="size-4" />
+                  <AlertTitle>Public receiver ad is active</AlertTitle>
+                  <AlertDescription>
+                    Anyone can see that this account accepts Cashu Nutzaps and which mints and
+                    relays you prefer. This is a deliberate metadata leak needed for senders to
+                    target you — turn the toggle off to hide the ad again.
+                  </AlertDescription>
+                </Alert>
+              }
             />
             <ToggleRow
               feature="themeDefinitions"
