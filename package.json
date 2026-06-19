@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "test": "tsc --noEmit && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
+    "test": "tsc --noEmit --incremental false && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "ci": "npm ci && npm run test",
     "cap:sync": "npx cap sync && node scripts/patch-cap-config.mjs",
     "keygen": "keytool -genkey -v -keystore android/app/my-upload-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload",
