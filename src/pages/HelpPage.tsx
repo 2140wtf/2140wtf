@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { PageHeader } from '@/components/PageHeader';
-import { TeamSoapboxCard } from '@/components/TeamSoapboxCard';
+import { SupportContactCard } from '@/components/SupportContactCard';
 import { HelpFAQSection } from '@/components/HelpFAQSection';
 
 export function HelpPage() {
@@ -21,8 +21,8 @@ export function HelpPage() {
     <main className="min-h-screen pb-16 sidebar:pb-0">
       <PageHeader title="Help" icon={<HelpCircle className="size-5" />} />
 
-      {/* Team Soapbox follow pack */}
-      <TeamSoapboxCard className="px-4 pt-2 pb-4" />
+      {/* 2140.wtf support contact */}
+      <SupportContactCard className="px-4 pt-2 pb-4" />
 
       {/* FAQ heading */}
       <div className="px-4 pt-4 pb-1">
