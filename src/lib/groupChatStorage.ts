@@ -52,19 +52,77 @@ function safeParse<T>(value: string | null): T | null {
   }
 }
 
+function isHex64(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+}
+
+export function validateStoredGroup(g: unknown): StoredGroup | null {
+  if (typeof g !== 'object' || g === null) return null;
+  const group = g as Partial<StoredGroup>;
+  if (
+    typeof group.nostrGroupId !== 'string' ||
+    typeof group.name !== 'string' ||
+    !isHex64(group.exporterSecret) ||
+    (group.rootSecret !== undefined && !isHex64(group.rootSecret)) ||
+    typeof group.epoch !== 'number' ||
+    typeof group.createdAt !== 'number' ||
+    typeof group.lastActivity !== 'number'
+  ) {
+    return null;
+  }
+  const adminPubkeys = Array.isArray(group.adminPubkeys)
+    ? group.adminPubkeys.filter((k): k is string => typeof k === 'string' && /^[0-9a-f]{64}$/.test(k))
+    : [];
+  const members = Array.isArray(group.members)
+    ? group.members.filter((k): k is string => typeof k === 'string' && /^[0-9a-f]{64}$/.test(k))
+    : [];
+  const relays = Array.isArray(group.relays)
+    ? group.relays.filter((r): r is string => typeof r === 'string' && /^wss?:\/\//.test(r))
+    : [];
+  const bannedPubkeys = Array.isArray(group.bannedPubkeys)
+    ? group.bannedPubkeys.filter((k): k is string => typeof k === 'string' && /^[0-9a-f]{64}$/.test(k))
+    : [];
+  if (adminPubkeys.length === 0 || members.length === 0 || relays.length === 0) return null;
+  return {
+    nostrGroupId: group.nostrGroupId,
+    name: group.name,
+    description: typeof group.description === 'string' ? group.description : undefined,
+    adminPubkeys,
+    members,
+    relays,
+    epoch: group.epoch,
+    exporterSecret: group.exporterSecret,
+    rootSecret: group.rootSecret,
+    bannedPubkeys,
+    createdAt: group.createdAt,
+    lastActivity: group.lastActivity,
+  };
+}
+
+export function migrateLegacyGroupStorage(userPubkey: string): void {
+  const scopedPrefix = key(userPubkey, '');
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(STORAGE_PREFIX) && !k.startsWith(scopedPrefix)) {
+      keysToRemove.push(k);
+    }
+  }
+  for (const k of keysToRemove) {
+    localStorage.removeItem(k);
+  }
+}
+
 export function loadGroups(userPubkey: string): StoredGroup[] {
   const index = safeParse<string[]>(localStorage.getItem(key(userPubkey, 'index')));
   if (!Array.isArray(index)) return [];
 
   const groups: StoredGroup[] = [];
   for (const id of index) {
-    const g = safeParse<StoredGroup>(localStorage.getItem(key(userPubkey, 'group', id)));
-    if (g) {
-      g.adminPubkeys ??= [];
-      g.members ??= [];
-      g.relays ??= [];
-      g.bannedPubkeys ??= [];
-      groups.push(g);
+    const g = safeParse<unknown>(localStorage.getItem(key(userPubkey, 'group', id)));
+    const validated = g ? validateStoredGroup(g) : null;
+    if (validated) {
+      groups.push(validated);
     }
   }
   return groups;
