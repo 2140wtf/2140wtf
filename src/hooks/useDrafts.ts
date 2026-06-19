@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
 import { type ArticleFields } from '@/lib/articleHelpers';
 
 /** Kind 31234 — NIP-37 Draft Wrap. */
@@ -61,6 +62,7 @@ export function useDrafts() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   // Query and decrypt drafts from relay
   const query = useQuery<Draft[]>({
@@ -100,6 +102,7 @@ export function useDrafts() {
   const saveMutation = useMutation({
     mutationFn: async (draft: DraftData) => {
       if (!user?.signer.nip44) throw new Error('NIP-44 encryption not supported by signer');
+      if (!isEnabled('drafts')) throw new Error('Drafts publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       const inner = buildInnerDraftEvent(draft);
       const plaintext = JSON.stringify(inner);
@@ -123,6 +126,7 @@ export function useDrafts() {
   const deleteMutation = useMutation({
     mutationFn: async (slug: string) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('drafts')) throw new Error('Drafts publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Look up the draft's event ID so the deletion can target the specific
       // wrap event via an `e` tag, in addition to the addressable `a` tag.
