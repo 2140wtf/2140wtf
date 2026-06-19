@@ -14,6 +14,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 import {
@@ -42,13 +43,15 @@ export function useBlobbonautProfileNormalization({
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
-  
+  const { isEnabled } = usePublishPreferences();
+
   // Track whether we've already normalized this profile (by event id)
   const normalizedEventIds = useRef<Set<string>>(new Set());
   
   useEffect(() => {
     // Skip if no profile or no user
     if (!profile || !user?.pubkey) return;
+    if (!isEnabled('pets')) return;
     
     // Skip if profile belongs to different user
     if (profile.event.pubkey !== user.pubkey) return;
@@ -115,5 +118,5 @@ export function useBlobbonautProfileNormalization({
     };
     
     normalize();
-  }, [profile, user?.pubkey, nostr, publishEvent, updateProfileEvent, invalidateProfile]);
+  }, [profile, user?.pubkey, nostr, publishEvent, updateProfileEvent, invalidateProfile, isEnabled]);
 }

@@ -12,6 +12,7 @@ import type { Theme, FeedSettings, ContentWarningPolicy, SavedFeed, WidgetConfig
 import type { ThemeConfig } from '@/themes';
 import type { ContentFilter } from './useContentFilters';
 import { EncryptedSettingsSchema } from '@/lib/schemas';
+import { toast } from '@/hooks/useToast';
 
 /**
  * Timestamp (ms) of last local encrypted-settings write this session.
@@ -250,6 +251,13 @@ export function useEncryptedSettings() {
     mutationFn: async (patch: Partial<EncryptedSettings>) => {
       if (!user) throw new Error('User not logged in');
       if (!user.signer.nip44) throw new Error('NIP-44 encryption not supported by signer');
+      if (settings.data?.publishPreferences?.encryptedSettings === false) {
+        toast({
+          title: 'Encrypted settings publishing disabled',
+          description: 'Turn on “Encrypted settings” in Settings → Privacy & Publishing to sync settings.',
+        });
+        throw new Error('Encrypted settings publishing disabled');
+      }
 
       // Use the latest pending settings if available (rapid successive mutations).
       // Otherwise, fetch fresh from relays to avoid cross-device stale reads.

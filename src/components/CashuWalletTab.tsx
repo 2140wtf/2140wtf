@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
 import {
   syncCashuState,
@@ -51,9 +52,20 @@ interface CashuWalletTabProps {
 }
 
 export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabProps) {
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
   const backupCashuState = useCallback(
-    (payload: CashuBackupPayload) => syncCashuState(payload, user, relayUrls),
-    [user, relayUrls],
+    (payload: CashuBackupPayload) => {
+      if (!isEnabled('encryptedSettings')) {
+        toast({
+          title: 'Encrypted backups disabled',
+          description: 'Turn on “Encrypted settings” in Settings → Privacy & Publishing to back up your Cashu wallet.',
+        });
+        return Promise.resolve<string | null>(null);
+      }
+      return syncCashuState(payload, user, relayUrls);
+    },
+    [user, relayUrls, isEnabled, toast],
   );
   const restoreCashuState = useCallback(
     () => fetchCashuBackup(user, relayUrls),
@@ -61,7 +73,6 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
   );
 
   const wallet = useCashuWallet(seedPhrase, backupCashuState, restoreCashuState);
-  const { toast } = useToast();
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');

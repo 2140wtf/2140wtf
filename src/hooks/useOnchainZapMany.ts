@@ -198,53 +198,59 @@ export function useOnchainZapMany(
       // paid across all listed recipients (sum of their outputs in the tx).
       // Verifiers recompute per-recipient amounts on demand by matching each
       // pubkey's derived Taproot address against the tx outputs.
-      setProgress('publishing');
-      const isAddressable = target && target.kind >= 30000 && target.kind < 40000;
-      const aCoord = isAddressable
-        ? (() => {
-            const dTag = target!.tags.find(([n]) => n === 'd')?.[1] ?? '';
-            return `${target!.kind}:${target!.pubkey}:${dTag}`;
-          })()
-        : undefined;
-
       const totalAmountSats = amountPerRecipientSats * recipientPubkeysOrdered.length;
-
-      const tags: string[][] = [
-        ['i', `bitcoin:tx:${txid}`],
-        // One `p` tag per recipient. Verifiers sum tx outputs across ALL
-        // listed recipients' derived addresses.
-        ...recipientPubkeysOrdered.map((pk) => ['p', pk]),
-        ['amount', String(totalAmountSats)],
-      ];
-
-      if (target) {
-        if (aCoord) tags.push(['a', aCoord]);
-        tags.push(['e', target.id]);
-        // NIP-BC's optional `k` tag — the target event's kind, mirroring
-        // NIP-57. Helps clients filter zaps by target kind without a
-        // second lookup.
-        tags.push(['k', String(target.kind)]);
-      }
-
-      tags.push([
-        'alt',
-        `Onchain zap: ${totalAmountSats.toLocaleString()} sats across ${recipientPubkeysOrdered.length} ${
-          recipientPubkeysOrdered.length === 1 ? 'recipient' : 'recipients'
-        }`,
-      ]);
-
       let publishedEvent: NostrEvent | null = null;
-      if (isEnabled('zaps')) try {
-        publishedEvent = await publishEvent({
-          kind: 8333,
-          content: comment,
-          tags,
+      if (!isEnabled('zaps')) {
+        toast({
+          title: 'Zaps publishing disabled',
+          description: 'Turn on “Zaps” in Settings → Privacy & Publishing to publish zap receipts.',
         });
-      } catch (err) {
-        // The on-chain payment already cleared, so a relay rejection isn't
-        // fatal — the zap exists on Bitcoin regardless. Surface a console
-        // warning and let the success path return without an event.
-        console.warn('Failed to publish kind 8333 multi-recipient zap', err);
+      } else {
+        setProgress('publishing');
+        const isAddressable = target && target.kind >= 30000 && target.kind < 40000;
+        const aCoord = isAddressable
+          ? (() => {
+              const dTag = target!.tags.find(([n]) => n === 'd')?.[1] ?? '';
+              return `${target!.kind}:${target!.pubkey}:${dTag}`;
+            })()
+          : undefined;
+
+        const tags: string[][] = [
+          ['i', `bitcoin:tx:${txid}`],
+          // One `p` tag per recipient. Verifiers sum tx outputs across ALL
+          // listed recipients' derived addresses.
+          ...recipientPubkeysOrdered.map((pk) => ['p', pk]),
+          ['amount', String(totalAmountSats)],
+        ];
+
+        if (target) {
+          if (aCoord) tags.push(['a', aCoord]);
+          tags.push(['e', target.id]);
+          // NIP-BC's optional `k` tag — the target event's kind, mirroring
+          // NIP-57. Helps clients filter zaps by target kind without a
+          // second lookup.
+          tags.push(['k', String(target.kind)]);
+        }
+
+        tags.push([
+          'alt',
+          `Onchain zap: ${totalAmountSats.toLocaleString()} sats across ${recipientPubkeysOrdered.length} ${
+            recipientPubkeysOrdered.length === 1 ? 'recipient' : 'recipients'
+          }`,
+        ]);
+
+        try {
+          publishedEvent = await publishEvent({
+            kind: 8333,
+            content: comment,
+            tags,
+          });
+        } catch (err) {
+          // The on-chain payment already cleared, so a relay rejection isn't
+          // fatal — the zap exists on Bitcoin regardless. Surface a console
+          // warning and let the success path return without an event.
+          console.warn('Failed to publish kind 8333 multi-recipient zap', err);
+        }
       }
 
       return {
