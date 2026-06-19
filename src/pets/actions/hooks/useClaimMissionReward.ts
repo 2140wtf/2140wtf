@@ -25,7 +25,7 @@ import {
 import { buildXpTagUpdates } from '@/pets/core/lib/progression';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import type { MissionsContent } from '@/pets/core/lib/missions';
-import { totalDailyXp } from '../lib/daily-missions';
+import { totalDailyXp, totalDailyCoins } from '../lib/daily-missions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,8 @@ export interface AwardDailyXpRequest {
 export interface AwardDailyXpResult {
   xpAwarded: number;
   newTotalXp: number;
+  coinsAwarded: number;
+  newCoinTotal: number;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -59,7 +61,10 @@ export function useAwardDailyXp(
       if (!user?.pubkey) throw new Error('Must be logged in');
 
       const xpToAward = totalDailyXp(missions);
-      if (xpToAward <= 0) return { xpAwarded: 0, newTotalXp: 0 };
+      const coinsToAward = totalDailyCoins(missions);
+      if (xpToAward <= 0 && coinsToAward <= 0) {
+        return { xpAwarded: 0, newTotalXp: 0, coinsAwarded: 0, newCoinTotal: 0 };
+      }
 
       // Fetch fresh profile from relays to avoid stale-read overwrites
       const prev = await fetchFreshEvent(nostr, {
@@ -68,13 +73,31 @@ export function useAwardDailyXp(
       });
 
       const freshProfile = prev ? parseBlobbonautEvent(prev) : undefined;
+
+      // Idempotency: skip if rewards for this date were already claimed
+      const alreadyClaimedDate = freshProfile?.dailyRewardsClaimedAt;
+      if (alreadyClaimedDate === missions.date) {
+        return {
+          xpAwarded: 0,
+          newTotalXp: freshProfile?.xp ?? 0,
+          coinsAwarded: 0,
+          newCoinTotal: freshProfile?.coins ?? 0,
+        };
+      }
+
       const currentXp = freshProfile?.xp ?? 0;
       const newTotalXp = currentXp + xpToAward;
+      const currentCoins = freshProfile?.coins ?? 0;
+      const newCoinTotal = currentCoins + coinsToAward;
 
-      // Update XP and level tags on the fresh event's tags
+      // Update XP, level, coins, and claimed-date tags
       const updatedTags = updateBlobbonautTags(
         prev?.tags ?? [],
-        buildXpTagUpdates(newTotalXp),
+        {
+          ...buildXpTagUpdates(newTotalXp),
+          coins: newCoinTotal.toString(),
+          daily_rewards_claimed_at: missions.date,
+        },
       );
 
       // Persist missions state to content field
@@ -92,16 +115,16 @@ export function useAwardDailyXp(
 
       updateProfileEvent(event);
 
-      return { xpAwarded: xpToAward, newTotalXp };
+      return { xpAwarded: xpToAward, newTotalXp, coinsAwarded: coinsToAward, newCoinTotal };
     },
-    onSuccess: ({ xpAwarded }) => {
+    onSuccess: ({ xpAwarded, coinsAwarded }) => {
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
-      if (xpAwarded > 0) {
+      if (xpAwarded > 0 || coinsAwarded > 0) {
         toast({
-          title: 'XP Earned!',
-          description: `You earned ${xpAwarded} XP from daily missions.`,
+          title: 'Daily Rewards Claimed!',
+          description: `You earned ${xpAwarded} XP and ${coinsAwarded} coins from daily missions.`,
         });
       }
     },

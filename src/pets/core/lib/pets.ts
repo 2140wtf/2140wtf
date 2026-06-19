@@ -378,6 +378,12 @@ export interface BlobbonautProfile {
   xp: number;
   /** Player level (derived from xp, stored as queryable mirror) */
   level: number;
+  /** Date (YYYY-MM-DD) when daily mission rewards were last claimed */
+  dailyRewardsClaimedAt: string | undefined;
+  /** Date (YYYY-MM-DD) of the last daily login bonus */
+  dailyLoginLastDay: string | undefined;
+  /** Current consecutive daily login streak */
+  dailyLoginStreak: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
   /** Purchased items storage */
@@ -1375,6 +1381,9 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     pettingLevel: pettingLevelValue,
     xp: parseNumericTag(tags, 'xp') ?? 0,
     level: parseNumericTag(tags, 'level') ?? 1,
+    dailyRewardsClaimedAt: getTagValue(tags, 'daily_rewards_claimed_at') ?? undefined,
+    dailyLoginLastDay: getTagValue(tags, 'daily_login_last_day') ?? undefined,
+    dailyLoginStreak: parseNumericTag(tags, 'daily_login_streak') ?? 0,
     room: getTagValue(tags, 'room') ?? undefined,
     storage: parseStorageTags(tags),
     content: event.content,
@@ -1541,6 +1550,8 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage',
   // Progression tags
   'xp', 'level',
+  // Daily reward tags
+  'daily_rewards_claimed_at', 'daily_login_last_day', 'daily_login_streak',
   // Room persistence
   'room',
   // Legacy player progress tags (preserved for compatibility)

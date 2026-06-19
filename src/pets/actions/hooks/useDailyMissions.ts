@@ -31,9 +31,11 @@ import {
   createDailyMissionsContent,
   areAllDailyComplete,
   totalDailyXp,
+  totalDailyCoins,
   getDefinition,
   MAX_DAILY_REROLLS,
   DAILY_BONUS_XP,
+  DAILY_BONUS_COINS,
 } from '../lib/daily-missions';
 
 import {
@@ -60,6 +62,8 @@ export interface DailyMissionView {
   complete: boolean;
   /** XP reward */
   xp: number;
+  /** Coin reward */
+  coinReward: number;
 }
 
 export interface UseDailyMissionsOptions {
@@ -82,10 +86,14 @@ export interface UseDailyMissionsResult {
   allComplete: boolean;
   /** Total XP earned today (completed missions + bonus) */
   todayXp: number;
+  /** Total coins earned today (completed missions + bonus) */
+  todayCoins: number;
   /** Whether the daily bonus is unlocked (all missions complete) */
   bonusUnlocked: boolean;
   /** Bonus XP amount */
   bonusXp: number;
+  /** Bonus coin amount */
+  bonusCoins: number;
   /**
    * Whether the account has no hatched (baby/adult) Pets at all.
    * True only when availableStages contains neither 'baby' nor 'adult'.
@@ -211,12 +219,14 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
         progress: missionProgress(m),
         complete: isMissionComplete(m),
         xp: def?.xp ?? 0,
+        coinReward: def?.coinReward ?? 0,
       };
     });
   }, [raw]);
 
   const allComplete = raw ? areAllDailyComplete(raw) : false;
   const todayXp = raw ? totalDailyXp(raw) : 0;
+  const todayCoins = raw ? totalDailyCoins(raw) : 0;
   const bonusUnlocked = allComplete;
   // noMissionsAvailable means the account genuinely has no hatched Pets.
   // It does NOT reflect loading state — use `isLoading` for that.
@@ -243,8 +253,10 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
     raw,
     allComplete,
     todayXp,
+    todayCoins,
     bonusUnlocked,
     bonusXp: DAILY_BONUS_XP,
+    bonusCoins: DAILY_BONUS_COINS,
     noMissionsAvailable,
     isLoading,
     rerollsRemaining,
