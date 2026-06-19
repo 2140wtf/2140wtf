@@ -67,9 +67,9 @@ export function PetsEggPreviewCard({
     <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
       <div className="flex flex-col items-center gap-6 text-center max-w-md w-full">
         {/* Coins Display */}
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20">
-          <Coins className="size-4 text-amber-500 shrink-0" />
-          <span className="font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-100 border border-amber-200 dark:bg-amber-900/40 dark:border-amber-800">
+          <Coins className="size-4 text-amber-800 dark:text-amber-200 shrink-0" />
+          <span className="font-semibold text-amber-950 dark:text-amber-100 whitespace-nowrap">
             {formatCompactNumber(coins)} coins
           </span>
         </div>

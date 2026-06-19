@@ -195,7 +195,7 @@ export function MissionSurfaceCard({
 
   const badgeColor =
     card.badge === 'Hatch'
-      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
       : card.badge === 'Evolve'
         ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400'
         : 'bg-primary/10 text-primary';
