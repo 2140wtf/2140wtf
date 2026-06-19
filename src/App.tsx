@@ -127,6 +127,7 @@ const hardcodedConfig: AppConfig = {
     "search",
     "prediction-markets",
     "market",
+    "pets",
     "btcmap",
     "roadstr",
     "messages",
