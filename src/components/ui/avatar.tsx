@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { sanitizeUrl } from "@/lib/sanitizeUrl"
 import { type AvatarShape, isEmoji, getAvatarMaskUrl, isValidAvatarShape } from "@/lib/avatarShape"
 
 /**
@@ -81,10 +82,10 @@ Avatar.displayName = "Avatar"
 const AvatarImage = React.forwardRef<
   HTMLImageElement,
   React.ImgHTMLAttributes<HTMLImageElement>
->(({ className, onError, ...props }, ref) => {
+>(({ className, onError, src: rawSrc, ...props }, ref) => {
   const [hasError, setHasError] = React.useState(false)
   const hasSrcRef = React.useContext(AvatarHasSrcContext)
-  const src = props.src
+  const src = React.useMemo(() => sanitizeUrl(rawSrc as string | undefined), [rawSrc])
 
   // Reset error when src changes
   const prevSrc = React.useRef(src)
@@ -105,6 +106,7 @@ const AvatarImage = React.forwardRef<
   return (
     <img
       {...props}
+      src={src}
       ref={ref}
       alt=""
       className={cn("absolute inset-0 h-full w-full object-cover", className)}

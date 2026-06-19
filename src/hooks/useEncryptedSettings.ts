@@ -251,9 +251,28 @@ export function useEncryptedSettings() {
           currentSettings = settings.data ?? {};
         }
       }
+      const mergedPatch: Partial<EncryptedSettings> = { ...patch };
+      for (const key of ['dmReadCursors', 'groupReadCursors'] as const) {
+        const current = currentSettings[key] ?? {};
+        const next = patch[key] ?? {};
+        if (Object.keys(next).length > 0 || Object.keys(current).length > 0) {
+          const merged = { ...current };
+          let changed = false;
+          for (const [id, ts] of Object.entries(next)) {
+            if (ts > (merged[id] ?? 0)) {
+              merged[id] = ts;
+              changed = true;
+            }
+          }
+          if (changed || Object.keys(current).length !== Object.keys(next).length) {
+            mergedPatch[key] = merged;
+          }
+        }
+      }
+
       const updatedSettings: EncryptedSettings = {
         ...currentSettings,
-        ...patch,
+        ...mergedPatch,
         lastSync: Date.now(),
       };
 
