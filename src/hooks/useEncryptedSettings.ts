@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrFilter } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
+import { getStorageKey } from '@/lib/storageKey';
 import { useCurrentUser } from './useCurrentUser';
 import { useUploadFile } from './useUploadFile';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
@@ -26,17 +27,17 @@ let lastWriteTs: number = 0;
  * If a local timestamp exists, localStorage is trustworthy and the app can
  * render immediately while NostrSync fetches updates in the background.
  */
-export function getLocalSettingsSync(pubkey: string): number {
+export function getLocalSettingsSync(appId: string, pubkey: string): number {
   try {
-    return Number(localStorage.getItem(`ditto:settings-lastSync:${pubkey}`)) || 0;
+    return Number(localStorage.getItem(getStorageKey(appId, `settings-lastSync:${pubkey}`))) || 0;
   } catch {
     return 0;
   }
 }
 
-export function setLocalSettingsSync(pubkey: string, lastSync: number): void {
+export function setLocalSettingsSync(appId: string, pubkey: string, lastSync: number): void {
   try {
-    localStorage.setItem(`ditto:settings-lastSync:${pubkey}`, String(lastSync));
+    localStorage.setItem(getStorageKey(appId, `settings-lastSync:${pubkey}`), String(lastSync));
   } catch {
     // localStorage may not be available
   }
@@ -380,7 +381,7 @@ export function useEncryptedSettings() {
       pendingSettings.current = null;
       // Persist the sync timestamp so the next page load can skip the spinner
       if (user && updatedSettings.lastSync) {
-        setLocalSettingsSync(user.pubkey, updatedSettings.lastSync);
+        setLocalSettingsSync(config.appId, user.pubkey, updatedSettings.lastSync);
       }
     },
   });
