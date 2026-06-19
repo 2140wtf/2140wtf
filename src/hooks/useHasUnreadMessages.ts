@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
-import { useNip17Inbox } from '@/hooks/useNip17Inbox';
+import { useDmInbox } from '@/hooks/useDmInbox';
 
 /**
  * Returns whether the user has unread NIP-17 DM messages, plus a per-conversation
@@ -11,7 +11,7 @@ import { useNip17Inbox } from '@/hooks/useNip17Inbox';
  */
 export function useHasUnreadMessages() {
   const { user } = useCurrentUser();
-  const { conversations } = useNip17Inbox();
+  const { conversations } = useDmInbox();
   const { getCursor } = useDmReadCursors();
 
   const unreadConversations = useMemo(() => {
