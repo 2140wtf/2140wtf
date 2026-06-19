@@ -18,6 +18,7 @@ import { useLoginActions } from '@/hooks/useLoginActions';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { isItemActive } from '@/lib/sidebarItems';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -56,6 +57,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
   const { config } = useAppContext();
   const homePage = config.homePage;
   const hasUnread = useHasUnreadNotifications();
+  const hasUnreadMessages = useHasUnreadMessages();
   const [editing, setEditing] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountExpanded, setAccountExpanded] = useState(false);
@@ -330,7 +332,11 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     isActive={(id) => isItemActive(id, location.pathname, location.search, userProfileUrl, homePage)}
                     getOnClick={() => handleClose}
                     getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
-                    getShowIndicator={(id) => id === 'notifications' ? hasUnread : undefined}
+                    getShowIndicator={(id) => {
+                      if (id === 'notifications') return hasUnread;
+                      if (id === 'messages') return hasUnreadMessages.hasUnread;
+                      return undefined;
+                    }}
                     linkClassName="text-base"
                     homePage={homePage}
                     minimal
@@ -388,7 +394,11 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     isActive={(id) => isItemActive(id, location.pathname, location.search, userProfileUrl, homePage)}
                     getOnClick={() => handleClose}
                     getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
-                    getShowIndicator={(id) => id === 'notifications' ? hasUnread : undefined}
+                    getShowIndicator={(id) => {
+                      if (id === 'notifications') return hasUnread;
+                      if (id === 'messages') return hasUnreadMessages.hasUnread;
+                      return undefined;
+                    }}
                     linkClassName="text-base"
                     homePage={homePage}
                     minimal

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useSeoMeta } from '@unhead/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Zap, AtSign, MessageCircle, Quote, Loader2, Award } from 'lucide-react';
+import { Zap, AtSign, MessageCircle, Quote, Loader2, Award, MessageSquare } from 'lucide-react';
 import { RepostIcon } from '@/components/icons/RepostIcon';
 import { Link, useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -18,6 +18,8 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useEvent } from '@/hooks/useEvent';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNotifications, type GroupedNotificationItem, type NotificationItem } from '@/hooks/useNotifications';
+import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
+import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 import { useMuteList } from '@/hooks/useMuteList';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { nip19 } from 'nostr-tools';
@@ -161,6 +163,7 @@ export function NotificationsPage() {
     fetchNextPage,
   } = useNotifications();
   const { muteItems } = useMuteList();
+  const { unreadConversations } = useHasUnreadMessages();
 
   const handleRefresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['notifications', user?.pubkey ?? ''] });
@@ -237,6 +240,9 @@ export function NotificationsPage() {
 
       {/* Content */}
       <PullToRefresh onRefresh={handleRefresh}>
+        {user && unreadConversations.length > 0 && (
+          <DmNotificationSection conversations={unreadConversations.map(({ conversation }) => conversation)} />
+        )}
         {!user ? (
           <div className="py-16 text-center text-muted-foreground">
             Log in to see your notifications.
@@ -272,6 +278,103 @@ export function NotificationsPage() {
         )}
       </PullToRefresh>
     </main>
+  );
+}
+
+/** Renders unread DM conversations at the top of the notifications page. */
+function DmNotificationSection({
+  conversations,
+}: {
+  conversations: Nip17Conversation[];
+}) {
+  return (
+    <div className="border-b border-border">
+      <div className="flex items-center justify-between px-4 py-2 bg-primary/5">
+        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+          <MessageSquare className="size-4" />
+          <span>New messages</span>
+        </div>
+        <Link
+          to="/messages"
+          className="text-xs text-primary hover:underline"
+        >
+          View all
+        </Link>
+      </div>
+      <div className="divide-y divide-border">
+        {conversations.slice(0, 3).map((conversation) => (
+          <DmNotificationRow key={conversation.id} conversation={conversation} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DmNotificationRow({
+  conversation,
+}: {
+  conversation: Nip17Conversation;
+}) {
+  const { user } = useCurrentUser();
+  const otherPubkey = conversation.participants[0] ?? user?.pubkey ?? '';
+  const npub = useMemo(() => {
+    try {
+      return nip19.npubEncode(otherPubkey);
+    } catch {
+      return '';
+    }
+  }, [otherPubkey]);
+
+  const lastMessage = conversation.messages[conversation.messages.length - 1];
+
+  return (
+    <Link
+      to={`/messages/${npub}`}
+      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
+    >
+      <DmNotificationAvatar pubkey={otherPubkey} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <DmNotificationName pubkey={otherPubkey} />
+          {lastMessage && (
+            <span className="text-xs text-muted-foreground shrink-0">
+              {timeAgo(lastMessage.createdAt)}
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground truncate">
+          {lastMessage ? lastMessage.content : 'No messages'}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function DmNotificationName({ pubkey }: { pubkey: string }) {
+  const author = useAuthor(pubkey);
+  const metadata = author.data?.metadata;
+  const name = metadata?.name ?? metadata?.display_name ?? pubkey.slice(0, 8);
+
+  return (
+    <span className="font-semibold text-sm truncate">
+      {name}
+    </span>
+  );
+}
+
+function DmNotificationAvatar({ pubkey }: { pubkey: string }) {
+  const author = useAuthor(pubkey);
+  const metadata = author.data?.metadata;
+  const name = metadata?.name ?? metadata?.display_name ?? pubkey.slice(0, 8);
+  const shape = getAvatarShape(metadata);
+
+  return (
+    <Avatar className={cn('size-10 shrink-0', shape === 'square' && 'rounded-lg')} shape={shape}>
+      {metadata?.picture && <AvatarImage src={metadata.picture} alt={name} />}
+      <AvatarFallback className="bg-primary/20 text-primary text-xs">
+        {name[0]?.toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
   );
 }
 

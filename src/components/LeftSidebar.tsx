@@ -26,6 +26,7 @@ import { useLoginActions } from '@/hooks/useLoginActions';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
 import { VerifiedNip05Text } from '@/components/Nip05Badge';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { isItemActive } from '@/lib/sidebarItems';
@@ -59,6 +60,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
   const visibleHiddenItems = hiddenItems;
 
   const hasUnread = useHasUnreadNotifications();
+  const hasUnreadMessages = useHasUnreadMessages();
   const userProfileUrl = useProfileUrl(user?.pubkey ?? '', metadata);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { startSignup } = useOnboarding();
@@ -137,7 +139,11 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
           isActive={(id) => isItemActive(id, location.pathname, location.search, userProfileUrl, homePage)}
           getOnClick={(id) => id === homePage ? scrollToTopIfCurrent('/') : undefined}
           getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
-          getShowIndicator={(id) => id === 'notifications' ? hasUnread : undefined}
+          getShowIndicator={(id) => {
+            if (id === 'notifications') return hasUnread;
+            if (id === 'messages') return hasUnreadMessages.hasUnread;
+            return undefined;
+          }}
           homePage={homePage}
           compact={collapsed}
           minimal
