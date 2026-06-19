@@ -1,6 +1,7 @@
 import { createContext } from 'react';
 
 import { useNip17Inbox, type Nip17Conversation } from '@/hooks/useNip17Inbox';
+import { useDmReadCursorsSync } from '@/hooks/useDmReadCursorsSync';
 
 interface DmInboxContextValue {
   conversations: Nip17Conversation[];
@@ -21,6 +22,7 @@ const DmInboxContext = createContext<DmInboxContextValue>({
  */
 export function DmInboxProvider({ children }: { children: React.ReactNode }) {
   const { conversations, isLoading } = useNip17Inbox();
+  useDmReadCursorsSync();
 
   return (
     <DmInboxContext.Provider value={{ conversations, isLoading }}>
