@@ -37,7 +37,6 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets } from "@/hooks/useBaoPredictionMarkets";
 import { PredictionMarketChart } from "@/components/PredictionMarketChart";
-import { PredictionMarketVolumeChart } from "@/components/PredictionMarketVolumeChart";
 import { cn } from "@/lib/utils";
 import type { BaoMarket } from "@/lib/baoMarketParser";
 
@@ -234,10 +233,6 @@ function MarketDetailDialog({
             <PredictionMarketChart market={market} />
           </div>
 
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Market volume</h3>
-            <PredictionMarketVolumeChart market={market} />
-          </div>
         </div>
       </DialogContent>
     </Dialog>
