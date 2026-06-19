@@ -131,7 +131,6 @@ const hardcodedConfig: AppConfig = {
     "roadstr",
     "messages",
     "notifications",
-    "groups",
     "badges",
     "emojis",
     "themes",
