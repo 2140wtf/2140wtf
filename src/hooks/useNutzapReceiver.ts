@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
-import { useNostrPublish } from './useNostrPublish';
-import { usePublishPreferences } from './usePublishPreferences';
 import { deriveNutzapKey } from '@/lib/cashu/cashu';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { devLog } from '@/lib/cashu/devLog';
 
-const NUTZAP_KIND = 10019;
+const NUTZAP_PAYMENT_KIND = 9321;
 
 function dedupeMintUrls(mints: Array<{ url: string; name?: string }>): string[] {
   const seen = new Set<string>();
@@ -24,29 +22,23 @@ function dedupeMintUrls(mints: Array<{ url: string; name?: string }>): string[] 
 }
 
 /**
- * Manage the public NIP-61 Nutzap receiver advertisement (kind:10019).
+ * Subscribe to incoming NIP-61 Nutzap payments (kind:9321).
  *
- * - When the `nutzaps` preference is enabled, publishes/updates a kind:10019
- *   event listing the user's accepted mints, read relays, and nutzap pubkey.
- * - When disabled, overwrites any existing kind:10019 with an empty replacement
- *   so relays stop serving the old ad.
- *
- * The nutzap private key is derived from the wallet seed; the pubkey is the
- * only key material that ever leaves the device.
+ * - Derives the Nutzap keypair from the wallet seed (used by the receiver ad
+ *   published elsewhere).
+ * - Listens for kind:9321 events tagged with the user's identity pubkey (`#p`)
+ *   and one of the configured mint URLs (`#u`).
+ * - Calls `onNutzap` for every new event so the wallet can redeem it.
  */
 export function useNutzapReceiver(
   seedPhrase: string,
   mints: Array<{ name: string; url: string }>,
-  relayUrls: string[],
+  onNutzap?: (event: NostrEvent) => void,
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { isEnabled } = usePublishPreferences();
-  const publish = useNostrPublish();
-  const enabled = isEnabled('nutzaps');
 
   const keyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
-  const lastPublishedRef = useRef<{ enabled: boolean; mints: string[]; pubkey?: string } | null>(null);
 
   useEffect(() => {
     if (!seedPhrase) {
@@ -62,59 +54,34 @@ export function useNutzapReceiver(
   }, [seedPhrase]);
 
   const mintUrls = useMemo(() => dedupeMintUrls(mints), [mints]);
-  const relayList = useMemo(
-    () => [...new Set(relayUrls.filter((u) => typeof u === 'string' && u.length > 0))].sort(),
-    [relayUrls],
-  );
 
   useEffect(() => {
-    if (!user || !keyPairRef.current) return;
+    if (!user || !onNutzap || mintUrls.length === 0) return;
 
-    const keyPair = keyPairRef.current;
-    const last = lastPublishedRef.current;
-    if (
-      last &&
-      last.enabled === enabled &&
-      last.pubkey === keyPair.pubkey &&
-      JSON.stringify(last.mints) === JSON.stringify(mintUrls)
-    ) {
-      return;
-    }
+    const normalizedMints = [...new Set(mintUrls.map((u) => u.trim().toLowerCase()).filter(Boolean))];
+    if (normalizedMints.length === 0) return;
 
-    const publishOrClear = async () => {
+    const filters: NostrFilter[] = [
+      { kinds: [NUTZAP_PAYMENT_KIND], '#p': [user.pubkey], '#u': normalizedMints },
+    ];
+
+    let cancelled = false;
+    const _sub = (async () => {
       try {
-        const prev = await fetchFreshEvent(nostr, {
-          kinds: [NUTZAP_KIND],
-          authors: [user.pubkey],
-          limit: 1,
-        });
-
-        if (enabled) {
-          if (mintUrls.length === 0) {
-            devLog.warn('Nutzap receiver enabled but no mints available; skipping publish');
-            return;
+        for await (const msg of nostr.req(filters, { signal: AbortSignal.timeout(60_000) })) {
+          if (cancelled) break;
+          if (msg[0] === 'EVENT') {
+            onNutzap(msg[2]);
           }
-          const tags: string[][] = [
-            ['alt', 'Nutzap receiver preferences'],
-            ['pubkey', keyPair.pubkey],
-            ...relayList.map((url) => ['relay', url]),
-            ...mintUrls.map((url) => ['mint', url, 'sat']),
-          ];
-          await publish.mutateAsync({ kind: NUTZAP_KIND, content: '', tags, prev: prev ?? undefined });
-          lastPublishedRef.current = { enabled: true, mints: mintUrls, pubkey: keyPair.pubkey };
-        } else if (prev) {
-          // Overwrite the old ad with an empty replacement so it disappears from relays.
-          const tags: string[][] = [['alt', 'Nutzap receiver preferences']];
-          await publish.mutateAsync({ kind: NUTZAP_KIND, content: '', tags, prev });
-          lastPublishedRef.current = { enabled: false, mints: [], pubkey: undefined };
-        } else {
-          lastPublishedRef.current = { enabled: false, mints: [], pubkey: undefined };
         }
-      } catch (e) {
-        devLog.error('Failed to publish Nutzap receiver ad:', e);
+      } catch {
+        // Subscription errors are best-effort; the caller can re-mount to retry.
       }
-    };
+    })();
+    void _sub;
 
-    publishOrClear();
-  }, [enabled, mintUrls, relayList, user, nostr, publish]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, onNutzap, mintUrls, nostr]);
 }
