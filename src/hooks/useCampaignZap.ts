@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useAppContext } from '@/hooks/useAppContext';
 import { notificationSuccess } from '@/lib/haptics';
 import {
@@ -98,6 +99,7 @@ export function useCampaignZap(
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const { config } = useAppContext();
   const { esploraApis } = config;
   const queryClient = useQueryClient();
@@ -188,7 +190,7 @@ export function useCampaignZap(
 
       // Publish a kind 8333 receipt for on-chain donations only.
       let event: NostrEvent | undefined;
-      if (useOnchain) {
+      if (useOnchain && isEnabled('zaps')) {
         setProgress('publishing');
         const aTag = `${CAMPAIGN_KIND}:${campaign.pubkey}:${campaign.identifier}`;
         try {

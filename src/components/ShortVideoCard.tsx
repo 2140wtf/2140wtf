@@ -25,6 +25,8 @@ import { useBlossomFallback } from "@/hooks/useBlossomFallback";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { usePublishPreferences } from "@/hooks/usePublishPreferences";
+import { useToast } from "@/hooks/useToast";
 import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useRepostStatus } from "@/hooks/useRepostStatus";
 import { type EventStats, useEventStats } from "@/hooks/useTrending";
@@ -88,12 +90,18 @@ function ShortVideoHeartButton({
   const { user } = useCurrentUser();
   const userReaction = useUserReaction(event.id);
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const hasReacted = !!userReaction;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user || hasReacted) return;
+    if (!isEnabled('reactions')) {
+      toast({ title: 'Reactions publishing disabled', description: 'Turn on “Reactions” in Settings → Privacy & Publishing to react.' });
+      return;
+    }
     impactLight();
 
     const prevStats = queryClient.getQueryData<EventStats>([
@@ -159,6 +167,8 @@ function ShortVideoRepostButton({
 }) {
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
   const { mutate: deleteEvent } = useDeleteEvent();
   const queryClient = useQueryClient();
   const repostEventId = useRepostStatus(event.id);
@@ -167,6 +177,10 @@ function ShortVideoRepostButton({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
+    if (!isEnabled('reposts')) {
+      toast({ title: 'Reposts publishing disabled', description: 'Turn on “Reposts” in Settings → Privacy & Publishing to repost.' });
+      return;
+    }
     impactLight();
 
     const repostKind = getRepostKind(event.kind);

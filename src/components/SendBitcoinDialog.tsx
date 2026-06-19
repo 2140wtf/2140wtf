@@ -40,6 +40,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -209,6 +210,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const { config } = useAppContext();
   const { esploraApis } = config;
   const queryClient = useQueryClient();
@@ -518,7 +520,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       // When the recipient is a Nostr identity, publish a kind 8333 profile zap
       // attesting the send. Per NIP.md, omitting `e`/`a` targets the recipient's
       // profile (a tip to the pubkey, not a specific event).
-      if (recipient.pubkey) {
+      if (recipient.pubkey && isEnabled('zaps')) {
         setProgress('publishing');
         try {
           await publishEvent({

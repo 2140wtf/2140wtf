@@ -7,6 +7,7 @@ import { NSecSigner } from '@nostrify/nostrify';
 import type { Webxdc as WebxdcAPI, SendingStatusUpdate, ReceivedStatusUpdate, RealtimeListener } from '@webxdc/types/webxdc';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
 
 /**
  * Creates a mini-app API instance backed by Nostr kind 4932 state update events.
@@ -21,6 +22,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
   const { nostr } = useNostr();
   const { user, metadata } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
 
   // Ephemeral keypair generated once per mini-app session for logged-out users.
@@ -118,6 +120,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
   // Publish a signed event using whichever signer is active (logged-in user or ephemeral key)
   const publishSigned = useCallback(async (template: Parameters<typeof ephemeralSigner.signEvent>[0]) => {
     if (user) {
+      if (!isEnabled('webxdc')) throw new Error('Webxdc publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       // Logged-in path: delegate to useNostrPublish so the client tag is added
       return await publishEvent(template);
     } else {
@@ -125,7 +128,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
       const event = await ephemeralSigner.signEvent(template);
       return await nostr.event(event, { signal: AbortSignal.timeout(5000) });
     }
-  }, [user, publishEvent, ephemeralSigner, nostr]);
+  }, [user, publishEvent, ephemeralSigner, nostr, isEnabled]);
 
   const sendUpdate = useCallback((update: SendingStatusUpdate<unknown>, _description: '') => {
     const tags: string[][] = [

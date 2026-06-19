@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import type { NostrEvent } from '@nostrify/nostrify';
 import {
   BOOKSTR_KINDS,
@@ -72,10 +73,12 @@ export function usePublishReview() {
   const queryClient = useQueryClient();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async (review: BookReview) => {
       if (!user) throw new Error('User not logged in');
+      if (!isEnabled('notes')) throw new Error('Notes publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       const tags: string[][] = [
         ['d', `isbn:${review.isbn}`],

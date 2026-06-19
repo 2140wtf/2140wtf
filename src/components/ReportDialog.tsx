@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -47,6 +48,7 @@ type ReportType = typeof REPORT_TYPES[number]['value'];
 export function ReportDialog({ event, pubkey, open, onOpenChange }: ReportDialogProps) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const [reportType, setReportType] = useState<ReportType | ''>('');
   const [details, setDetails] = useState('');
 
@@ -56,6 +58,10 @@ export function ReportDialog({ event, pubkey, open, onOpenChange }: ReportDialog
 
   const handleSubmit = async () => {
     if (!reportType || !user || !targetPubkey) return;
+    if (!isEnabled('reports')) {
+      toast({ title: 'Reports publishing disabled', description: 'Turn on “Reports” in Settings → Privacy & Publishing to submit reports.' });
+      return;
+    }
 
     try {
       const tags: string[][] = [['p', targetPubkey, reportType]];

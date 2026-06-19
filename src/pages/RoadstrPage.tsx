@@ -8,6 +8,7 @@ import { RoadstrReportDialog } from '@/components/roadstr/RoadstrReportDialog';
 import { RoadstrSearch } from '@/components/roadstr/RoadstrSearch';
 import { useRoadstrEvents } from '@/hooks/useRoadstrEvents';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -53,6 +54,7 @@ export function RoadstrPage(): React.JSX.Element {
 
   const { mutate: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   const geohashes = useMemo(() => {
     if (!viewport) return undefined;
@@ -109,6 +111,10 @@ export function RoadstrPage(): React.JSX.Element {
 
   const handleConfirmReport = useCallback(
     (reportId: string, status: 'still_there' | 'no_longer_there') => {
+      if (!isEnabled('roadstr')) {
+        toast({ title: 'Roadstr publishing disabled', description: 'Turn on “Roadstr check-ins” in Settings → Privacy & Publishing to confirm reports.' });
+        return;
+      }
       const report = data?.reports.find((r) => r.id === reportId);
       if (!report) return;
 
@@ -141,7 +147,7 @@ export function RoadstrPage(): React.JSX.Element {
         },
       );
     },
-    [data?.reports, publishEvent, toast],
+    [data?.reports, publishEvent, toast, isEnabled],
   );
 
   const handleFlyTo = useCallback((lat: number, lon: number) => {

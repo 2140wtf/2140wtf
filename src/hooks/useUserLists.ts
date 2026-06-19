@@ -16,6 +16,7 @@ import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { useFollowPacks } from './useFollowPacks';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { isNostrId } from '@/lib/nostrId';
 import type { NostrEvent, NostrSigner } from '@nostrify/nostrify';
 
@@ -161,6 +162,7 @@ export function useUserLists() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   /** Fetch all Follow Sets for the current user, excluding deleted ones */
   const listsQuery = useQuery({
@@ -224,6 +226,7 @@ export function useUserLists() {
   const createList = useMutation({
     mutationFn: async ({ title, description, pubkeys = [] }: { title: string; description?: string; pubkeys?: string[] }) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const id = generateUUID();
       const tags: string[][] = [
         ['d', id],
@@ -248,6 +251,7 @@ export function useUserLists() {
   const addToList = useMutation({
     mutationFn: async ({ listId, pubkey }: { listId: string; pubkey: string }) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the freshest version of this specific list from relays
       const prev = await fetchFreshEvent(nostr, {
@@ -281,6 +285,7 @@ export function useUserLists() {
   const removeFromList = useMutation({
     mutationFn: async ({ listId, pubkey }: { listId: string; pubkey: string }) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the freshest version of this specific list from relays
       const prev = await fetchFreshEvent(nostr, {
@@ -316,6 +321,7 @@ export function useUserLists() {
   const renameList = useMutation({
     mutationFn: async ({ listId, title }: { listId: string; title: string }) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the freshest version of this specific list from relays
       const prev = await fetchFreshEvent(nostr, {
@@ -352,6 +358,7 @@ export function useUserLists() {
   const deleteList = useMutation({
     mutationFn: async ({ listId }: { listId: string }) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const list = lists.find((l) => l.id === listId);
       if (!list) throw new Error('List not found');
 

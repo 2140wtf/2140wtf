@@ -22,6 +22,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 /** A single emoji entry in the pack being edited. */
@@ -80,6 +81,7 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
   const { mutateAsync: uploadFile } = useUploadFile();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   const isEditMode = !!editEvent;
 
@@ -267,6 +269,10 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
   const handlePublish = useCallback(async () => {
     const resolvedId = effectiveIdentifier.trim();
     if (!user || !resolvedId || emojis.length === 0) return;
+    if (!isEnabled('emojiPacks')) {
+      toast({ title: 'Emoji packs publishing disabled', description: 'Turn on “Emoji packs” in Settings → Privacy & Publishing to publish emoji packs.' });
+      return;
+    }
 
     // Validate all shortcodes
     const invalid = emojis.find((e) => !isValidShortcode(e.shortcode));
@@ -387,7 +393,7 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, effectiveIdentifier, name, about, emojis, isEditMode, nostr, publishEvent, uploadFile, queryClient, toast, handleOpenChange]);
+  }, [user, effectiveIdentifier, name, about, emojis, isEditMode, nostr, publishEvent, uploadFile, queryClient, toast, handleOpenChange, isEnabled]);
 
   // Validation
   const pendingCount = emojis.filter((e) => e.file).length;

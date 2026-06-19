@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { PROFILE_TABS_KIND, buildProfileTabsTags, type ProfileTabsData } from '@/lib/profileTabsEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 /**
  * Publish a kind 16769 profile tabs event, replacing any previous one.
@@ -10,10 +11,12 @@ import { PROFILE_TABS_KIND, buildProfileTabsTags, type ProfileTabsData } from '@
 export function usePublishProfileTabs() {
   const { user } = useCurrentUser();
   const { mutateAsync: createEvent, isPending } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
 
   const publishProfileTabs = async (data: ProfileTabsData): Promise<void> => {
     if (!user) throw new Error('Must be logged in to publish profile tabs');
+    if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
     await createEvent({
       kind: PROFILE_TABS_KIND,

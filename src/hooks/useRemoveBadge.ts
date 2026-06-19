@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { BADGE_PROFILE_KIND, fetchFreshProfileBadges } from '@/lib/badgeUtils';
 
 /**
@@ -21,10 +22,12 @@ export function useRemoveBadge() {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async (aTag: string) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('badges')) throw new Error('Badge publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the freshest profile badges event from relays (both kinds)
       const freshEvent = await fetchFreshProfileBadges(nostr, user.pubkey);

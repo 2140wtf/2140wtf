@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 /**
  * Hook to manage NIP-51 pinned notes (kind 10001).
@@ -14,6 +15,7 @@ export function usePinnedNotes(pubkey?: string) {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   // Query the pinned notes list (kind 10001 — replaceable event).
   // On the profile page, useProfileData seeds this cache key, so the staleTime
@@ -47,6 +49,7 @@ export function usePinnedNotes(pubkey?: string) {
   const togglePin = useMutation({
     mutationFn: async (eventId: string) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the freshest kind 10001 from relays before mutating
       const prev = await fetchFreshEvent(nostr, {
