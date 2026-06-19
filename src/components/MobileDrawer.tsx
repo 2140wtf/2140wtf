@@ -19,6 +19,7 @@ import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { isItemActive } from '@/lib/sidebarItems';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -58,6 +59,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
   const homePage = config.homePage;
   const hasUnread = useHasUnreadNotifications();
   const hasUnreadMessages = useHasUnreadMessages();
+  const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const [editing, setEditing] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [accountExpanded, setAccountExpanded] = useState(false);
@@ -335,6 +337,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     getShowIndicator={(id) => {
                       if (id === 'notifications') return hasUnread;
                       if (id === 'messages') return hasUnreadMessages.hasUnread;
+                      if (id === 'groups') return hasUnreadGroups;
                       return undefined;
                     }}
                     linkClassName="text-base"
@@ -397,6 +400,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     getShowIndicator={(id) => {
                       if (id === 'notifications') return hasUnread;
                       if (id === 'messages') return hasUnreadMessages.hasUnread;
+                      if (id === 'groups') return hasUnreadGroups;
                       return undefined;
                     }}
                     linkClassName="text-base"
