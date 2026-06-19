@@ -7,12 +7,12 @@ description: Decide whether to reuse an existing NIP or mint a new kind, design 
 
 Load this skill when:
 
-- Minting a new event kind for a Ditto feature.
+- Minting a new event kind for a 2140.wtf feature.
 - Extending an existing NIP with new tags.
 - Deciding whether an existing NIP covers a use case or whether a custom kind is warranted.
 - Documenting a custom kind or extension in `NIP.md`.
 
-**Not this skill** — if an existing NIP/kind covers your use case and you only need to render it in Ditto's UI, use the **`nostr-kind-rendering`** skill instead.
+**Not this skill** — if an existing NIP/kind covers your use case and you only need to render it in 2140.wtf's UI, use the **`nostr-kind-rendering`** skill instead.
 
 ## Choosing Between Existing NIPs and Custom Kinds
 
@@ -60,7 +60,7 @@ Kinds below 1000 are "legacy"; storage is per-kind (e.g. kind 1 is regular, kind
   const events = await nostr.query([{ kinds: [30402], '#t': ['electronics'] }]);
   ```
 
-- **For Ditto-specific niches** (community apps, regional variants), tag events with a `t` value and query on it. Don't do this for generic platforms — it would silo content.
+- **For 2140.wtf-specific niches** (community apps, regional variants), tag events with a `t` value and query on it. Don't do this for generic platforms — it would silo content.
 
 ## Content vs. Tags
 
@@ -80,10 +80,10 @@ Kinds below 1000 are "legacy"; storage is per-kind (e.g. kind 1 is regular, kind
 
 ## `NIP.md`
 
-`NIP.md` documents Ditto's custom kinds and any extensions to existing NIPs. Whenever you mint a new kind or change a custom schema, **create or update `NIP.md`** with the tag list, content format, and intended usage. If a kind you add is effectively the same shape as an existing NIP, note the NIP reference rather than duplicating the spec.
+`NIP.md` documents 2140.wtf's custom kinds and any extensions to existing NIPs. Whenever you mint a new kind or change a custom schema, **create or update `NIP.md`** with the tag list, content format, and intended usage. If a kind you add is effectively the same shape as an existing NIP, note the NIP reference rather than duplicating the spec.
 
-Standard NIPs (like NIP-84 Highlights, NIP-23 Articles) do **not** go in `NIP.md` — only Ditto-custom kinds and Ditto-specific extensions.
+Standard NIPs (like NIP-84 Highlights, NIP-23 Articles) do **not** go in `NIP.md` — only 2140.wtf-custom kinds and 2140.wtf-specific extensions.
 
 ## After Designing — What's Next?
 
-Once you've settled on a kind number and tag shape, you still need to render it in Ditto's UI. Load the **`nostr-kind-rendering`** skill for the full multi-location registration checklist (feed cards, detail pages, embedded previews, kind-label maps, notifications, feed-toggle registration).
+Once you've settled on a kind number and tag shape, you still need to render it in 2140.wtf's UI. Load the **`nostr-kind-rendering`** skill for the full multi-location registration checklist (feed cards, detail pages, embedded previews, kind-label maps, notifications, feed-toggle registration).

@@ -9,7 +9,7 @@ interface HorizontalScrollProps {
 /**
  * Shared horizontal scroll container for discovery page sections.
  * Provides a flex row with overflow-x-auto and hidden scrollbar,
- * matching Ditto's existing scroll-snap-free pattern.
+ * matching 2140.wtf's existing scroll-snap-free pattern.
  *
  * Used by music track cards, playlist cards, artist cards, and
  * other horizontally-scrolling content sections.

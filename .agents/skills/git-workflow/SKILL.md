@@ -1,11 +1,11 @@
 ---
 name: git-workflow
-description: Ditto's git conventions — validating changes before committing, writing commit messages that match project style, and attributing regressions with a Regression-of trailer so the release changelog skill can filter them from the "Fixed" section.
+description: 2140.wtf's git conventions — validating changes before committing, writing commit messages that match project style, and attributing regressions with a Regression-of trailer so the release changelog skill can filter them from the "Fixed" section.
 ---
 
 # Git Workflow
 
-Ditto expects every completed task to end with a git commit. This skill covers the pre-commit validation loop, commit-message conventions, and the `Regression-of:` trailer used by the release skill to filter intra-release regressions from the changelog.
+2140.wtf expects every completed task to end with a git commit. This skill covers the pre-commit validation loop, commit-message conventions, and the `Regression-of:` trailer used by the release skill to filter intra-release regressions from the changelog.
 
 ## Pre-commit Validation
 

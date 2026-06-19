@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
  * Birdex event) is used as a fallback label while the remote fetch is
  * in flight or fails.
  *
- * Clicking the tile routes to Ditto's external-content page for the
+ * Clicking the tile routes to 2140.wtf's external-content page for the
  * species' Wikidata URL, so the species page aggregates detections,
  * comments, and other Birdex authors who have this species on their
  * life lists — the same landing spot used by kind 2473 bird-detection

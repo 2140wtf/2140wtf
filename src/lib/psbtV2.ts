@@ -10,7 +10,7 @@
  * essential for BIP-375: the signer derives the script during signing,
  * so the constructor emits SP outputs without one.
  *
- * The public API exposed here is the higher-level shape Ditto's wallet
+ * The public API exposed here is the higher-level shape 2140.wtf's wallet
  * code prefers — typed `PsbtV2Input` / `PsbtV2Output` records, the SP
  * variant flagged with `type: 'sp'`, and a parsed view that surfaces
  * `unknown` rows by their keytype so callers can poke at BIP-375 fields
@@ -204,7 +204,7 @@ export interface PsbtV2Input {
   /**
    * Witness UTXO for SegWit-style inputs: the previous output's
    * `scriptPubKey` and amount. Required for all inputs we construct in
-   * Ditto's wallet (P2TR + key-path only).
+   * 2140.wtf's wallet (P2TR + key-path only).
    */
   witnessUtxo: {
     /** Amount in satoshis. */

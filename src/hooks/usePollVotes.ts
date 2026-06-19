@@ -12,7 +12,7 @@ const ZAP_RECEIPT_LIMIT = 500;
 /**
  * Extended poll-vote relay set borrowed from BAO Markets' ExternalPollService.
  * These are the relays BAO scans for kind:1068 / kind:6969 polls and their
- * kind:1018 / kind:9735 responses, so matching them gives Ditto the best
+ * kind:1018 / kind:9735 responses, so matching them gives 2140.wtf the best
  * chance of seeing the same votes.
  */
 export const BAO_POLL_RELAYS = [

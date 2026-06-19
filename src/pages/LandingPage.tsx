@@ -151,7 +151,7 @@ export function LandingPage() {
             className="mb-6 h-32 sm:h-40 md:h-52 lg:h-64 w-auto"
           />
           <p className="mb-8 max-w-[62ch] text-[clamp(1.125rem,2.5vw,1.5rem)] text-[var(--2140-muted)]">
-            The home for Bitcoin art, events, and writing on Nostr. A feed-native client based on Ditto app, made for the bitcoin culture that outlives the cycles.
+            The home for Bitcoin art, events, and writing on Nostr. A feed-native client based on 2140.wtf, made for the bitcoin culture that outlives the cycles.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link

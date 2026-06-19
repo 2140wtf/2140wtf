@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
  * Adapted from Birdstar's BirdInfoDialog `useSongPlayer` (see
  * `~/Projects/birdstar/src/components/BirdInfoDialog.tsx`). The
  * iNaturalist fallback from the original is deliberately omitted —
- * per the user's request Ditto only uses Wikipedia/Commons.
+ * per the user's request 2140.wtf only uses Wikipedia/Commons.
  */
 
 interface BirdSongPlayerProps {

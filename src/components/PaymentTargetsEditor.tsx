@@ -49,7 +49,7 @@ export interface PaymentTargetsEditorHandle {
  *
  * Users add at most one entry per recognized payment method (Bitcoin,
  * Lightning, Monero, …). Bitcoin and Lightning entries override the values
- * Ditto would otherwise derive when zapping this user (a Taproot address from
+ * 2140.wtf would otherwise derive when zapping this user (a Taproot address from
  * the pubkey, and the kind-0 `lud16` respectively).
  *
  * The editor has no save button of its own — it's persisted alongside the

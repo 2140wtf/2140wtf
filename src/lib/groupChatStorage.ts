@@ -1,5 +1,5 @@
 /**
- * Local persistence for Ditto group chat state.
+ * Local persistence for 2140.wtf group chat state.
  *
  * Group metadata is stored in localStorage. Secrets (rootSecret / exporterSecret)
  * are routed through the platform-aware secureStorage adapter, which on native

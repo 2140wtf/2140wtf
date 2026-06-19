@@ -358,7 +358,7 @@ export function AppRouter() {
               />
               <Route path="/i/*" element={<ExternalContentPage />} />
 
-              {/* Landing route for content shared into Ditto from another app's
+              {/* Landing route for content shared into 2140.wtf from another app's
                   Share button (Android share targets). */}
               <Route path="/share" element={<SharePage />} />
 

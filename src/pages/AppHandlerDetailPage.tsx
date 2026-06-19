@@ -37,7 +37,7 @@ function hasMatchingClientTag(event: NostrEvent, addr: string): boolean {
  *
  * Shows the app showcase card on top, then a tabbed UI:
  * - **Feed** — every event published *through* this client, found via the
- *   Ditto relay's NIP-50 `search` extension `client:<addr>` where `<addr>` is
+ *   2140.wtf relay's NIP-50 `search` extension `client:<addr>` where `<addr>` is
  *   the handler's `"31990:<pubkey>:<d>"` coordinate.
  * - **Comments** — NIP-22 (kind 1111) comments addressed to the handler event.
  */
@@ -97,7 +97,7 @@ export function AppHandlerDetailPage({ event }: { event: NostrEvent }) {
 
 /**
  * Infinite-scroll feed of every event posted through this client, queried via
- * the Ditto relay's NIP-50 `client:<addr>` search extension.
+ * the 2140.wtf relay's NIP-50 `client:<addr>` search extension.
  */
 function AppHandlerFeedTab({ addr }: { addr: string }) {
   const { muteItems } = useMuteList();
