@@ -3413,8 +3413,14 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
 
 const DESIGNED_SPECIES = new Set(['glitchfox', 'biomechmoth', 'liquidblob']);
 
+const SPECIES_PORTRAITS: Record<string, { label: string; src: string }> = {
+  glitchfox: { label: 'Glitch Fox', src: '/pets/species/glitch-fox.png' },
+  biomechmoth: { label: 'Bio-Mech Moth', src: '/pets/species/bio-mech-moth.png' },
+  liquidblob: { label: 'Liquid Blob', src: '/pets/species/liquid-blob.png' },
+};
+
 function formatSpeciesName(form: string): string {
-  return form.charAt(0).toUpperCase() + form.slice(1);
+  return SPECIES_PORTRAITS[form]?.label ?? form.charAt(0).toUpperCase() + form.slice(1);
 }
 
 function SpeciesTabContent() {
@@ -3426,7 +3432,8 @@ function SpeciesTabContent() {
       </p>
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
         {forms.map((form) => {
-          const svg = getAdultBaseSvg(form);
+          const portrait = SPECIES_PORTRAITS[form];
+          const svg = portrait ? undefined : getAdultBaseSvg(form);
           const isDesigned = DESIGNED_SPECIES.has(form);
           return (
             <div
@@ -3437,12 +3444,21 @@ function SpeciesTabContent() {
               )}
             >
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
-                <img
-                  src={`data:image/svg+xml,${encodeURIComponent(svg)}`}
-                  alt={formatSpeciesName(form)}
-                  className="w-full h-full object-contain"
-                  loading="lazy"
-                />
+                {portrait ? (
+                  <img
+                    src={portrait.src}
+                    alt={portrait.label}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <img
+                    src={`data:image/svg+xml,${encodeURIComponent(svg ?? '')}`}
+                    alt={formatSpeciesName(form)}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                  />
+                )}
               </div>
               <span className={cn('text-[10px] font-medium', isDesigned ? 'text-primary' : 'text-muted-foreground')}>
                 {formatSpeciesName(form)}
