@@ -91,9 +91,9 @@
 
   /* Bottom overscroll padding for the center column:
      clears the mobile bottom nav + safe area + generous extra space
-     so content can be scrolled well past the bottom bar */
+     so content can be scrolled well past the bottom bar and FAB. */
   .pb-overscroll {
-    padding-bottom: calc(10vh + var(--bottom-nav-height) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    padding-bottom: calc(max(120px, 14vh) + var(--bottom-nav-height) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
 
   @media (min-width: 900px) {
