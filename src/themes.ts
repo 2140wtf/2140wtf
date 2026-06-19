@@ -181,21 +181,15 @@ export const themePresets: Record<string, ThemePreset> = {
 
   hacker: {
     label: 'Hacker',
-    emoji: '👾',
+    emoji: '>',
     featured: true,
     colors: {
-      background: '130 30% 7%',
-      text: '120 40% 92%',
-      primary: '128 70% 42%',
+      background: '0 0% 0%',
+      text: '120 80% 55%',
+      primary: '120 90% 45%',
     },
     font: { family: 'JetBrains Mono' },
-    background: {
-      url: '/themes/hacker.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-      dimensions: '1920x1080',
-    },
-    backgroundOpacity: 0.2,
+    radius: '0',
   },
 
   aquarium: {

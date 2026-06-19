@@ -147,8 +147,7 @@ describe('themePresets', () => {
     expect(Object.keys(themePresets).sort()).toEqual(['aquarium', 'banana', 'hacker', 'pink', 'space', 'sunset']);
   });
 
-  it('includes generated background assets for new presets', () => {
-    expect(themePresets.hacker.background?.url).toBe('/themes/hacker.png');
+  it('includes generated background assets for presets that have one', () => {
     expect(themePresets.aquarium.background?.url).toBe('/themes/aquarium.png');
     expect(themePresets.space.background?.url).toBe('/themes/space.png');
     expect(themePresets.banana.background?.url).toBe('/themes/banana.png');
