@@ -61,7 +61,7 @@ export const INITIAL_BLOBBONAUT_COINS = 200;
 /** Cost to reroll/generate another egg preview during onboarding */
 export const PETS_PREVIEW_REROLL_COST = 10;
 
-/** Cost to adopt a 2140 Pet from the preview */
+/** Cost to adopt a 2140.wtf Pet from the preview */
 export const PETS_ADOPTION_COST = 100;
 
 // ─── Date/Time Utilities ──────────────────────────────────────────────────────
@@ -1141,7 +1141,7 @@ export function isLegacyBlobbonautKind(event: NostrEvent): boolean {
  * Legacy format: pets-{name} (e.g., "pets-puck" → "Puck")
  * 
  * @param d - The d-tag value
- * @returns The derived name with first letter capitalized, or "Unnamed 2140 Pet" if not derivable
+ * @returns The derived name with first letter capitalized, or "Unnamed 2140.wtf Pet" if not derivable
  */
 /**
  * Capitalize each word in a string.
@@ -1162,16 +1162,16 @@ function capitalizeWords(str: string): string {
  * 2. Replace "-" and "_" with spaces
  * 3. Trim whitespace
  * 4. Capitalize words in a human-friendly way
- * 5. Fallback to "Unnamed 2140 Pet" if result is empty
+ * 5. Fallback to "Unnamed 2140.wtf Pet" if result is empty
  * 
  * @example "pets-puck" -> "Puck"
  * @example "pets-mr-cool" -> "Mr Cool"
  * @example "pets_blue" -> "Blue"
- * @example "pets-" -> "Unnamed 2140 Pet"
+ * @example "pets-" -> "Unnamed 2140.wtf Pet"
  */
 export function deriveNameFromLegacyD(d: string): string {
   if (!d.startsWith('pets-')) {
-    return 'Unnamed 2140 Pet';
+    return 'Unnamed 2140.wtf Pet';
   }
   
   // Remove prefix and normalize separators
@@ -1182,7 +1182,7 @@ export function deriveNameFromLegacyD(d: string): string {
   
   // If nothing meaningful remains, return fallback
   if (!rawName || rawName.length === 0) {
-    return 'Unnamed 2140 Pet';
+    return 'Unnamed 2140.wtf Pet';
   }
   
   // Capitalize words for human-friendly display
@@ -1204,7 +1204,7 @@ export function deriveNameFromLegacyD(d: string): string {
  * Name resolution priority:
  * 1. Use `name` tag if present
  * 2. Derive from legacy d-tag format (pets-{name})
- * 3. Fall back to "Unnamed 2140 Pet"
+ * 3. Fall back to "Unnamed 2140.wtf Pet"
  * 
  * Visual trait priority:
  * 1. Use explicit visual tags if valid (legacy compatibility)
@@ -1975,7 +1975,7 @@ export function buildMigrationTags(
   
   // Preserve name with priority: name tag > legacy d-tag derived > fallback
   const nameTag = getTagValue(legacyTags, 'name');
-  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed 2140 Pet');
+  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed 2140.wtf Pet');
   newTags.push(['name', resolvedName]);
   
   // Preserve all persistent tags from the legacy event

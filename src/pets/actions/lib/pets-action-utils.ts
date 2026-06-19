@@ -40,27 +40,27 @@ export const ACTION_TO_ITEM_TYPE: Record<InventoryAction, ShopItemCategory> = {
 export const ACTION_METADATA: Record<InventoryAction, { label: string; description: string; icon: string }> = {
   feed: {
     label: 'Feed',
-    description: 'Feed your 2140 Pet',
+    description: 'Feed your 2140.wtf Pet',
     icon: '🍎',
   },
   play: {
     label: 'Play',
-    description: 'Play with your 2140 Pet',
+    description: 'Play with your 2140.wtf Pet',
     icon: '⚽',
   },
   clean: {
     label: 'Clean',
-    description: 'Clean your 2140 Pet',
+    description: 'Clean your 2140.wtf Pet',
     icon: '🧼',
   },
   medicine: {
     label: 'Medicine',
-    description: 'Heal your 2140 Pet',
+    description: 'Heal your 2140.wtf Pet',
     icon: '💊',
   },
   boost: {
     label: 'Boost',
-    description: 'Recharge your 2140 Pet\'s energy',
+    description: 'Recharge your 2140.wtf Pet\'s energy',
     icon: '⚡',
   },
 };
@@ -71,12 +71,12 @@ export const ACTION_METADATA: Record<InventoryAction, { label: string; descripti
 export const DIRECT_ACTION_METADATA: Record<DirectAction, { label: string; description: string; icon: string }> = {
   play_music: {
     label: 'Play Music',
-    description: 'Play music for your 2140 Pet',
+    description: 'Play music for your 2140.wtf Pet',
     icon: '🎵',
   },
   sing: {
     label: 'Sing',
-    description: 'Sing to your 2140 Pet',
+    description: 'Sing to your 2140.wtf Pet',
     icon: '🎤',
   },
 };
@@ -400,7 +400,7 @@ export function getStageRestrictionMessage(companion: PetsCompanion, action?: In
     if (action && EGG_ALLOWED_INVENTORY_ACTIONS.includes(action)) {
       return null; // Medicine and clean are allowed for eggs
     }
-    return 'Eggs cannot use this item. Wait for your 2140 Pet to hatch!';
+    return 'Eggs cannot use this item. Wait for your 2140.wtf Pet to hatch!';
   }
   return null;
 }

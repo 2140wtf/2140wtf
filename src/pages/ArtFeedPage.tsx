@@ -15,7 +15,7 @@ export function ArtFeedPage() {
         title="Art"
         icon={sidebarItemIcon('art', 'size-5')}
         tagFilters={{ '#t': ['art'] }}
-        emptyMessage="No art listings yet. The 2140 art feed is powered by NIP-99 classifieds tagged #art."
+        emptyMessage="No art listings yet. The 2140.wtf art feed is powered by NIP-99 classifieds tagged #art."
         onFabClick={() => setComposeOpen(true)}
       />
       <ArtListingComposeDialog open={composeOpen} onOpenChange={setComposeOpen} />
