@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -56,6 +56,7 @@ import {
   type PetsStats,
   type BlobbonautProfile,
   type StorageItem,
+  getLocalDayString,
 } from '@/pets/core/lib/pets';
 
 import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
@@ -88,6 +89,10 @@ import {
    useDailyMissions,
    useAwardDailyXp,
    useDailyLoginBonus,
+  useBaoTradeStats,
+  useClaimBaoTradeRewards,
+  calculateBaoReward,
+  getBaoTierLabel,
    usePersistEvolutionProgress,
    usePersistDailyProgress,
    applyXPGain,
@@ -1973,6 +1978,7 @@ function PetsDashboard({
                   onDevInstantTransition={isEgg ? () => setShowHatchCeremony(true) : isBaby ? () => setShowEvolveCeremony(true) : undefined}
                   isHatching={isHatching}
                   isEvolving={isEvolving}
+                  updateProfileEvent={updateProfileEvent}
                 />
               )}
             </div>
@@ -3123,6 +3129,7 @@ interface MoreTabContentProps {
   onDevInstantTransition?: () => void;
   isHatching: boolean;
   isEvolving: boolean;
+  updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
 }
 
 function MoreTabContent({
@@ -3138,8 +3145,26 @@ function MoreTabContent({
   onDevInstantTransition,
   isHatching,
   isEvolving,
+  updateProfileEvent,
 }: MoreTabContentProps) {
+  const { user } = useCurrentUser();
   const isTransitioning = isHatching || isEvolving;
+  const today = getLocalDayString();
+
+  const { activity: baoActivity, isLoading: baoLoading } = useBaoTradeStats(user?.pubkey);
+  const { mutate: claimBaoReward, isPending: isClaimingBao } = useClaimBaoTradeRewards(updateProfileEvent);
+
+  const baoReward = useMemo(() => {
+    if (!baoActivity || !profile) return undefined;
+    return calculateBaoReward(
+      baoActivity,
+      profile.baoLifetimeVolume,
+      profile.baoRewardsClaimedAt,
+      today,
+    );
+  }, [baoActivity, profile, today]);
+
+  const baoClaimedToday = profile?.baoRewardsClaimedAt === today;
 
   return (
     <div className="flex flex-col items-center h-full min-h-[210px] px-3 sm:px-4">
@@ -3231,6 +3256,43 @@ function MoreTabContent({
             </button>
           </>
         )}
+      </div>
+
+      {/* ── ₿AO Trading rewards ── */}
+      <div className="w-full max-w-sm rounded-xl border p-3 mt-2 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="size-7 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+            <TrendingUp className="size-4 text-amber-500" />
+          </div>
+          <p className="text-sm font-semibold">₿AO Trading</p>
+          {profile && (
+            <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              {getBaoTierLabel(profile.baoTier)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Open orders</span>
+          <span className="tabular-nums font-medium">
+            {baoLoading ? '…' : `${baoActivity?.activeOrderCount ?? 0} · ${(baoActivity?.totalActiveAmount ?? 0).toLocaleString()} sats`}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Daily reward</span>
+          <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+            {baoLoading ? '…' : `+${(baoReward?.coins ?? 0).toLocaleString()} BAO`}
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full h-8 text-xs"
+          disabled={baoLoading || baoClaimedToday || !baoReward?.claimable || isClaimingBao}
+          onClick={() => claimBaoReward()}
+        >
+          {isClaimingBao && <Loader2 className="size-3 animate-spin mr-1.5" />}
+          {baoClaimedToday ? 'Claimed today' : baoReward?.claimable ? 'Claim BAO' : 'No open orders'}
+        </Button>
       </div>
     </div>
   );
