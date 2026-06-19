@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useSeoMeta } from '@unhead/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Zap, AtSign, MessageCircle, Quote, Loader2, Award, MessageSquare } from 'lucide-react';
+import { Zap, AtSign, MessageCircle, Quote, Loader2, Award, MessageSquare, Users } from 'lucide-react';
 import { RepostIcon } from '@/components/icons/RepostIcon';
 import { Link, useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -19,6 +19,7 @@ import { useEvent } from '@/hooks/useEvent';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNotifications, type GroupedNotificationItem, type NotificationItem } from '@/hooks/useNotifications';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 import { useMuteList } from '@/hooks/useMuteList';
 import { isEventMuted } from '@/lib/muteHelpers';
@@ -164,6 +165,7 @@ export function NotificationsPage() {
   } = useNotifications();
   const { muteItems } = useMuteList();
   const { unreadConversations } = useHasUnreadMessages();
+  const { unreadGroups } = useGroupChatHasUnread();
 
   const handleRefresh = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['notifications', user?.pubkey ?? ''] });
@@ -242,6 +244,9 @@ export function NotificationsPage() {
       <PullToRefresh onRefresh={handleRefresh}>
         {user && activeTab === 'all' && unreadConversations.length > 0 && (
           <DmNotificationSection conversations={unreadConversations.map(({ conversation }) => conversation)} />
+        )}
+        {user && activeTab === 'all' && unreadGroups.length > 0 && (
+          <GroupChatNotificationSection groups={unreadGroups.map(({ group }) => group)} />
         )}
         {!user ? (
           <div className="py-16 text-center text-muted-foreground">
@@ -375,6 +380,65 @@ function DmNotificationAvatar({ pubkey }: { pubkey: string }) {
         {name[0]?.toUpperCase()}
       </AvatarFallback>
     </Avatar>
+  );
+}
+
+/** Renders unread group-chat groups in the notifications page. */
+function GroupChatNotificationSection({
+  groups,
+}: {
+  groups: import('@/lib/groupChatService').GroupChatGroup[];
+}) {
+  return (
+    <div className="border-b border-border">
+      <div className="flex items-center justify-between px-4 py-2 bg-primary/5">
+        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+          <Users className="size-4" />
+          <span>New group messages</span>
+        </div>
+        <Link
+          to="/groups"
+          className="text-xs text-primary hover:underline"
+        >
+          View all
+        </Link>
+      </div>
+      <div className="divide-y divide-border">
+        {groups.slice(0, 3).map((group) => (
+          <GroupChatNotificationRow key={group.nostrGroupId} group={group} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GroupChatNotificationRow({
+  group,
+}: {
+  group: import('@/lib/groupChatService').GroupChatGroup;
+}) {
+  return (
+    <Link
+      to="/groups"
+      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
+    >
+      <Avatar className="size-10 shrink-0">
+        <AvatarFallback className="bg-primary/20 text-primary text-xs">
+          {group.name[0]?.toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-sm truncate">{group.name}</span>
+          <span className="text-xs text-muted-foreground shrink-0">
+            {timeAgo(group.lastActivity / 1000)}
+          </span>
+        </div>
+        {group.description && (
+          <p className="text-sm text-muted-foreground truncate">{group.description}</p>
+        )}
+      </div>
+    </Link>
   );
 }
 

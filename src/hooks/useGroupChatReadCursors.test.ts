@@ -1,0 +1,84 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+
+import { useGroupChatReadCursors } from './useGroupChatReadCursors';
+
+const viewerPubkey = 'v'.repeat(64);
+
+const group = {
+  nostrGroupId: 'g1',
+  name: 'Test Group',
+  adminPubkeys: [viewerPubkey],
+  members: [viewerPubkey],
+  relays: [],
+  epoch: 0,
+  createdAt: 0,
+  lastActivity: 100,
+};
+
+vi.mock('@/hooks/useCurrentUser', () => ({
+  useCurrentUser: () => ({ user: { pubkey: viewerPubkey } }),
+}));
+
+describe('useGroupChatReadCursors', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('starts with empty cursors', () => {
+    const { result } = renderHook(() => useGroupChatReadCursors());
+    expect(result.current.getCursor(group.nostrGroupId)).toBe(0);
+  });
+
+  it('sets a cursor for a group', () => {
+    const { result } = renderHook(() => useGroupChatReadCursors());
+
+    act(() => {
+      result.current.setCursor(group.nostrGroupId, 123);
+    });
+
+    expect(result.current.getCursor(group.nostrGroupId)).toBe(123);
+  });
+
+  it('marks a group read at the newest message timestamp', () => {
+    const { result } = renderHook(() => useGroupChatReadCursors());
+
+    act(() => {
+      result.current.markGroupRead(group, [
+        { id: 'm1', nostrGroupId: 'g1', senderPubkey: 'o'.repeat(64), content: 'hi', timestamp: 150, isOwn: false, epoch: 0 },
+        { id: 'm2', nostrGroupId: 'g1', senderPubkey: 'o'.repeat(64), content: 'bye', timestamp: 200, isOwn: false, epoch: 0 },
+      ]);
+    });
+
+    expect(result.current.getCursor(group.nostrGroupId)).toBe(200);
+  });
+
+  it('marks all groups read', () => {
+    const { result } = renderHook(() => useGroupChatReadCursors());
+
+    act(() => {
+      result.current.markAllGroupsRead(
+        [
+          { ...group, nostrGroupId: 'a', lastActivity: 0 },
+          { ...group, nostrGroupId: 'b', lastActivity: 0 },
+        ],
+        (groupId) => groupId === 'a'
+          ? [{ id: 'm1', nostrGroupId: 'a', senderPubkey: 'o'.repeat(64), content: 'hi', timestamp: 10, isOwn: false, epoch: 0 }]
+          : [],
+      );
+    });
+
+    expect(result.current.getCursor('a')).toBe(10);
+    expect(result.current.getCursor('b')).toBe(0);
+  });
+
+  it('persists cursors to localStorage', () => {
+    const { result } = renderHook(() => useGroupChatReadCursors());
+
+    act(() => {
+      result.current.setCursor(group.nostrGroupId, 42);
+    });
+
+    expect(localStorage.getItem(`ditto:group-read-cursors:${viewerPubkey}`)).toContain('42');
+  });
+});

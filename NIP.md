@@ -24,6 +24,7 @@ These event kinds were created by community contributors and are supported by Di
 | 4223  | Weather Reading        | Sensor readings from a weather station                           | [Draft NIP](https://github.com/nostr-protocol/nips/pull/2163)                            |
 | 7516  | Found Log              | Log entry recording a user finding a geocache                    | [NIP-GC](https://gitlab.com/chad.curtis/treasures/-/blob/main/NIP-GC.md)                 |
 | 8211  | Encrypted Letter (deprecated in Ditto) | Encrypted personal letter with visual stationery | [NIP](https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md) |
+| 443–445, 10051, 1059 | NIP-104 Group Chat | End-to-end encrypted group chat (Marmot/Group Ratchet fallback) | [NIP-104](https://github.com/nostr-protocol/nips/blob/master/104.md) |
 | 1124  | Pets Social Interaction | Immutable interaction log for Pets social interactions       | See [Pets Social Interaction](#kind-1124-pets-social-interaction) below                |
 | 10133 | Payment Targets        | Donation endpoints (Bitcoin, Lightning, Monero, …) per RFC-8905 | [NIP-A3](https://github.com/ATXMJ/nips/blob/main/A3.md); see [Kind 10133](#kind-10133-payment-targets-nip-a3) below |
 | 11125 | Blobbonaut Profile     | Owner profile with coins, achievements, and inventory            | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
@@ -39,6 +40,58 @@ These event kinds were created by community contributors and are supported by Di
 | 36787 | Music Track            | Addressable event for a music audio file with metadata           | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
 | 34139 | Music Playlist         | Ordered list of music track references (also used for albums)    | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
 | 30621 | Custom Constellation   | User-drawn star figure with Hipparcos-numbered edges             | [NIP](https://gitlab.com/alexgleason/birdstar/-/blob/main/NIP.md)                         |
+
+---
+
+## NIP-104: Group Chat
+
+Ditto implements NIP-104 (Marmot) encrypted group chat with a **Group Ratchet fallback** so that no external MLS backend is required. The feature is exposed in the UI as **Private Groups** (`/groups`).
+
+### Event kinds used
+
+| Kind  | Purpose |
+|-------|---------|
+| 443   | Key package published by each member |
+| 444   | Welcome event (gift-wrapped to new members) |
+| 445   | Group message / membership change event |
+| 10051 | DM relay list for key packages |
+| 1059  | Gift wrap for Welcome events |
+
+### Group state
+
+Each group has:
+
+- `nostrGroupId` — a 32-byte lowercase hex identifier.
+- `rootSecret` — the root symmetric secret from which epoch secrets are derived.
+- `exporterSecret` — the current epoch's encryption secret.
+- `epoch` — incremented on every membership change (add/remove/ban).
+- `members` — list of member pubkeys.
+- `adminPubkeys` — list of admin pubkeys.
+
+### Encryption
+
+Application messages are JSON payloads encrypted with the current `exporterSecret` and published as kind 445 events tagged with `h:<nostrGroupId>`. `createGroupEvent` / `decryptGroupEvent` handle the envelope; `createApplicationMessage` / `parseApplicationMessage` handle the inner payload.
+
+### Membership changes and forward secrecy
+
+When an admin adds or removes a member, Ditto:
+
+1. Increments the group `epoch`.
+2. Rotates the `rootSecret`.
+3. Derives a new `exporterSecret` for the epoch.
+4. Sends the new secrets to all current members via gift-wrapped kind 444 Welcome events.
+
+Because old messages were encrypted with previous epoch secrets, a new member cannot decrypt history from before they were added.
+
+### Client storage
+
+Groups, messages, secrets, and banned-member lists are persisted to `localStorage` via `groupChatStorage`. Read cursors are stored per-user in `localStorage` and synced across devices through the encrypted NIP-78 settings key `groupReadCursors`.
+
+### Limitations
+
+- Requires login with an `nsec` key; browser extension / bunker signers cannot derive the required private-key material.
+- Maximum 500 members per group.
+- Secrets are stored in `localStorage` plaintext; this is acceptable for a web client but not as hardened as a native MLS store.
 
 ---
 
