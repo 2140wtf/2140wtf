@@ -31,6 +31,8 @@ import type { BodyEffectsSpec } from './lib/bodyEffects';
 import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
+import { getSpeciesPortraitSrc, getBaoImageSrc } from '@/pets/core/lib/pet-categories';
+import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
 
 export interface PetsAdultVisualProps {
   /** The Pets data */
@@ -84,6 +86,15 @@ export function PetsAdultVisual({
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
 
+  // PNG-based adults (2140 Pets species portraits / ₿AO collectible cards) bypass
+  // the SVG pipeline and render their asset image directly.
+  const pngSrc =
+    pets.breedCategory === '2140-pets' && pets.breedAsset
+      ? getSpeciesPortraitSrc(pets.breedAsset as AdultForm)
+      : pets.breedCategory === 'bao' && pets.breedAsset
+        ? getBaoImageSrc(pets.breedAsset)
+        : undefined;
+
   // ── Eye hooks ──────────────────────────────────────────────────────────────
 
   usePetsEyes(containerRef, {
@@ -120,15 +131,23 @@ export function PetsAdultVisual({
         className,
       )}
     >
-      <PetsAdultSvgRenderer
-        pets={pets}
-        isSleeping={isSleeping}
-        recipe={recipe}
-        recipeLabel={recipeLabel}
-        emotion={emotion}
-        bodyEffects={bodyEffects}
-        className="size-full"
-      />
+      {pngSrc ? (
+        <img
+          src={pngSrc}
+          alt={pets.name}
+          className="size-full object-contain"
+        />
+      ) : (
+        <PetsAdultSvgRenderer
+          pets={pets}
+          isSleeping={isSleeping}
+          recipe={recipe}
+          recipeLabel={recipeLabel}
+          emotion={emotion}
+          bodyEffects={bodyEffects}
+          className="size-full"
+        />
+      )}
     </div>
   );
 }

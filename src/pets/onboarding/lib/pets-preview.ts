@@ -14,9 +14,16 @@ import {
   generatePetId10,
   getCanonicalPetsD,
   getLocalDayString,
+  adjustSeedForAdultType,
   type PetsVisualTraits,
   type PetsStats,
 } from '@/pets/core/lib/pets';
+
+import {
+  getRandomCategoryMember,
+  isAdultFormMember,
+  type PetsBreedCategory,
+} from '@/pets/core/lib/pet-categories';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +54,10 @@ export interface PetsEggPreview {
   createdAt: number;
   /** Owner pubkey */
   ownerPubkey: string;
+  /** Breed category selected for this egg (optional). */
+  breedCategory?: PetsBreedCategory;
+  /** Category-specific asset identifier. */
+  breedAsset?: string;
 }
 
 // ─── Generation ───────────────────────────────────────────────────────────────
@@ -87,6 +98,40 @@ export function generateEggPreview(
     stats: { ...DEFAULT_EGG_STATS },
     createdAt,
     ownerPubkey: pubkey,
+  };
+}
+
+/**
+ * Generate an egg preview constrained to a specific breed category.
+ *
+ * - For adult-form categories (2140 Pets / Ditto Blobbi) the seed is adjusted
+ *   so the pet deterministically evolves into a random form from that category.
+ * - For the ₿AO category a random collectible card id is stored as breedAsset;
+ *   the adult visual will render the card image instead of an SVG form.
+ */
+export function generateEggPreviewForCategory(
+  pubkey: string,
+  category: PetsBreedCategory,
+  name = 'Egg'
+): PetsEggPreview {
+  const member = getRandomCategoryMember(category);
+  const base = generateEggPreview(pubkey, name);
+
+  if (isAdultFormMember(member)) {
+    const adjustedSeed = adjustSeedForAdultType(base.seed, member.form);
+    return {
+      ...base,
+      seed: adjustedSeed,
+      visualTraits: deriveVisualTraits([], adjustedSeed),
+      breedCategory: category,
+      breedAsset: member.form,
+    };
+  }
+
+  return {
+    ...base,
+    breedCategory: category,
+    breedAsset: member.id,
   };
 }
 
@@ -162,6 +207,8 @@ export function previewToEventTags(preview: PetsEggPreview): string[][] {
     ['size', visualTraits.size],
     ['archetype', visualTraits.archetype],
     ['special_ability', visualTraits.specialAbility],
+    ...(preview.breedCategory ? [['breed_category', preview.breedCategory]] : []),
+    ...(preview.breedAsset ? [['breed_asset', preview.breedAsset]] : []),
   ];
 }
 
