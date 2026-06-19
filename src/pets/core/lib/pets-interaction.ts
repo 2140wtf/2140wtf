@@ -39,8 +39,9 @@ const LEGACY_PETS_TAGS = ['pets'];
  *
  * `pet` is intentionally deferred from V1 — it does not map to any current
  * owner flow and will be introduced in a later slice.
+ * `battle` logs a completed pet battle match from the Battle Arena.
  */
-export const INTERACTION_ACTIONS = ['feed', 'play', 'clean', 'medicate', 'boost'] as const;
+export const INTERACTION_ACTIONS = ['feed', 'play', 'clean', 'medicate', 'boost', 'battle'] as const;
 export type InteractionAction = typeof INTERACTION_ACTIONS[number];
 
 /**
