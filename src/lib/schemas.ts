@@ -268,6 +268,8 @@ export const AppConfigSchema = z.object({
   linkPreviewUrl: z.string(),
   corsProxy: z.string(),
   baoSignetMintUrl: z.string().optional(),
+  baoSignetFaucetUrl: z.string().optional(),
+  baoApiUrl: z.string().optional(),
   contentWarningPolicy: ContentWarningPolicySchema,
   sentryDsn: z.string(),
   sentryEnabled: z.boolean(),

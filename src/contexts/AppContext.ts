@@ -284,6 +284,14 @@ export interface AppConfig {
   sandboxDomain: string;
   /** URL of the BAO signet Cashu mint used for the BAO demo wallet. Empty/disabled if not set. */
   baoSignetMintUrl?: string;
+  /** URL of the BAO signet faucet used to fund demo wallets. Empty/disabled if not set. */
+  baoSignetFaucetUrl?: string;
+  /**
+   * Base URL of the BAO Markets REST API. Used to resolve cube designs and
+   * other BAO metadata. When unset, production endpoints are used.
+   * Example for local dev: "http://localhost:3460".
+   */
+  baoApiUrl?: string;
   /**
    * Ordered list of base URLs for Esplora-compatible Bitcoin REST APIs.
    * Used by the wallet, on-chain zap flows, and NIP-73 Bitcoin tx/address

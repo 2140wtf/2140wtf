@@ -24,6 +24,8 @@ export interface UseBaoCashuSeedResult {
   loading: boolean;
   error: string | null;
   available: boolean;
+  /** True if the seed was generated for the first time this session. */
+  isNew: boolean;
   retry: () => void;
   regenerate: () => void;
 }
@@ -41,6 +43,7 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
   const [seedPhrase, setSeedPhrase] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNew, setIsNew] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
   const retryRef = useRef(retryToken);
   retryRef.current = retryToken;
@@ -85,7 +88,10 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
             SEED_OP_TIMEOUT_MS,
             'Decrypt BAO seed',
           );
-          if (!cancelled && currentToken === retryRef.current) setSeedPhrase(decrypted);
+          if (!cancelled && currentToken === retryRef.current) {
+            setSeedPhrase(decrypted);
+            setIsNew(false);
+          }
         } else {
           const mnemonic = deriveBaoCashuMnemonic(userSeedPhrase);
           const encrypted = await withTimeout(
@@ -94,12 +100,16 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
             'Encrypt BAO seed',
           );
           localStorage.setItem(key, encrypted);
-          if (!cancelled && currentToken === retryRef.current) setSeedPhrase(mnemonic);
+          if (!cancelled && currentToken === retryRef.current) {
+            setSeedPhrase(mnemonic);
+            setIsNew(true);
+          }
         }
       } catch (err: unknown) {
         if (!cancelled && currentToken === retryRef.current) {
           setError(err instanceof Error ? err.message : 'Failed to load or create BAO seed');
           setSeedPhrase(undefined);
+          setIsNew(false);
         }
       } finally {
         if (!cancelled && currentToken === retryRef.current) setLoading(false);
@@ -116,6 +126,7 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
     loading,
     error,
     available: !!seedPhrase,
+    isNew,
     retry,
     regenerate,
   };
