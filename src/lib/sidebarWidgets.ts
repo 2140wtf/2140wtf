@@ -9,6 +9,7 @@ import {
   ScrollText,
   BarChart3,
   Cat,
+  Navigation,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 
@@ -99,6 +100,17 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 650,
     category: 'discovery',
     href: '/prediction-markets',
+  },
+  {
+    id: 'roadstr',
+    label: 'Roadstr',
+    description: 'Nearby road event reports with quick confirmations',
+    icon: Navigation,
+    defaultHeight: 360,
+    minHeight: 260,
+    maxHeight: 700,
+    category: 'discovery',
+    href: '/roadstr',
   },
 
   // Personal
