@@ -11,7 +11,28 @@ export type PublishFeature =
   | 'bookmarks'
   | 'autoShareTheme'
   | 'publishRelayList'
-  | 'publishBlossomList';
+  | 'publishBlossomList'
+  | 'notes'
+  | 'polls'
+  | 'photos'
+  | 'articles'
+  | 'marketplace'
+  | 'badges'
+  | 'profile'
+  | 'lists'
+  | 'rsvp'
+  | 'reports'
+  | 'roadstr'
+  | 'directMessages'
+  | 'webxdc'
+  | 'recovery'
+  | 'encryptedSettings'
+  | 'deleteRequests'
+  | 'drafts'
+  | 'emojiPacks'
+  | 'liveChat'
+  | 'themeDefinitions'
+  | 'pushSubscriptions';
 
 /**
  * User-controlled publishing preferences.
