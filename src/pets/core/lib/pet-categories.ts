@@ -22,15 +22,12 @@ export interface AdultFormMember {
   kind: 'adult-form';
   form: AdultForm;
   label: string;
-  /** Optional portrait image (defaults to the adult SVG if absent). */
-  portraitSrc?: string;
 }
 
 export interface BaoCardMember {
   kind: 'bao-card';
   id: string;
   label: string;
-  src: string;
 }
 
 export type CategoryMember = AdultFormMember | BaoCardMember;
@@ -59,19 +56,16 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       kind: 'adult-form',
       form: 'glitchfox',
       label: 'Glitch Fox',
-      portraitSrc: '/pets/species/glitch-fox.png',
     },
     {
       kind: 'adult-form',
       form: 'biomechmoth',
       label: 'Bio-Mech Moth',
-      portraitSrc: '/pets/species/bio-mech-moth.png',
     },
     {
       kind: 'adult-form',
       form: 'liquidblob',
       label: 'Liquid Blob',
-      portraitSrc: '/pets/species/liquid-blob.png',
     },
   ],
   'ditto-blobbi': [
@@ -98,7 +92,6 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       kind: 'bao-card' as const,
       id: `bao-${n}`,
       label: `₿AO #${i + 1}`,
-      src: `/pets/bao/bao-${n}.png`,
     };
   }),
 };
@@ -133,16 +126,3 @@ export function getCategoryDescription(category: PetsBreedCategory): string {
   return getCategoryMeta(category).description;
 }
 
-export function getBaoImageSrc(id: string): string | undefined {
-  const member = CATEGORY_MEMBERS.bao.find(
-    (m): m is BaoCardMember => !isAdultFormMember(m) && m.id === id,
-  );
-  return member?.src;
-}
-
-export function getSpeciesPortraitSrc(form: AdultForm): string | undefined {
-  const member = CATEGORY_MEMBERS['2140-pets'].find(
-    (m): m is AdultFormMember => isAdultFormMember(m) && m.form === form,
-  );
-  return member?.portraitSrc;
-}

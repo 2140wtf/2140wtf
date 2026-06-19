@@ -24,6 +24,8 @@
 import { useMemo } from 'react';
 
 import { resolveAdultSvgWithForm, customizeAdultSvgFromPets } from '@/pets/adult-pets';
+import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
+import { generateBaoSvg, customizeBaoSvg } from '@/pets/adult-pets/lib/bao-svg';
 import { sanitizePetsSvg } from '@/lib/sanitizePetsSvg';
 
 import { addEyeAnimation } from './lib/eye-animation';
@@ -79,9 +81,23 @@ export function PetsAdultSvgRenderer({
   const customizedSvg = useMemo(() => {
     debugPets('svg-rebuild', 'adult customizedSvg rebuild');
 
-    // Always use the base (awake) SVG — sleeping is a recipe overlay, not an asset swap
-    const { form, svg } = resolveAdultSvgWithForm(pets, { isSleeping: false });
-    const colorizedSvg = customizeAdultSvgFromPets(svg, form, pets, false);
+    // Resolve the correct adult art. 2140 Pets use the standard adult-form SVGs;
+    // ₿AO Pets render a generated trading-card variation.
+    let form: string;
+    let colorizedSvg: string;
+
+    if (pets.breedCategory === 'bao' && pets.breedAsset) {
+      const baoRecipe = getBaoRecipeById(pets.breedAsset);
+      if (!baoRecipe) {
+        return '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><text x="100" y="110" text-anchor="middle" font-size="12" fill="#666">Unknown ₿AO</text></svg>';
+      }
+      form = pets.breedAsset;
+      colorizedSvg = customizeBaoSvg(generateBaoSvg(baoRecipe), baoRecipe, instanceId);
+    } else {
+      const resolved = resolveAdultSvgWithForm(pets, { isSleeping: false });
+      form = resolved.form;
+      colorizedSvg = customizeAdultSvgFromPets(resolved.svg, resolved.form, pets, false);
+    }
 
     let animatedSvg = addEyeAnimation(colorizedSvg, { baseColor: pets.baseColor, instanceId });
 
@@ -102,7 +118,7 @@ export function PetsAdultSvgRenderer({
   // upstream reference churn do NOT trigger full SVG rebuilds. The closure
   // captures the current pets/recipeProp for the rare structural rebuilds.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pets.id, pets.baseColor, pets.secondaryColor, pets.eyeColor, pets.adult?.evolutionForm, pets.seed, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects]);
+  }, [pets.id, pets.baseColor, pets.secondaryColor, pets.eyeColor, pets.adult?.evolutionForm, pets.seed, pets.breedCategory, pets.breedAsset, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects]);
 
   const safeSvg = useMemo(() => sanitizePetsSvg(customizedSvg), [customizedSvg]);
 

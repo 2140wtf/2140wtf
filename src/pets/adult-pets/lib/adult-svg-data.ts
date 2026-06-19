@@ -2786,237 +2786,161 @@ const STARRI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   <text x="162" y="51" font-size="6" fill="#666" opacity="0.4">z</text>
 </svg>`;
 
-const GLITCHFOX_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Soft glow behind -->
-  <circle cx="100" cy="125" r="75" fill="url(#glitchfoxGlow)" opacity="0.35" />
-
-  <!-- Floating cyan data oval -->
-  <g opacity="0.9">
-    <ellipse cx="82" cy="58" rx="16" ry="22" fill="url(#glitchfoxCyan)" />
-    <line x1="74" y1="54" x2="90" y2="54" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
-    <line x1="74" y1="60" x2="90" y2="60" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
-    <line x1="74" y1="66" x2="90" y2="66" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />
-  </g>
-
-  <!-- Floating magenta diamond -->
-  <path d="M 125 42 L 139 56 L 125 70 L 111 56 Z" fill="url(#glitchfoxMagenta)" opacity="0.85" />
-
+const GLITCHFOX_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art glitchfox">
+  <defs>
+    <linearGradient id="gf-body" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--baseColor, #1a1a2e)" />
+      <stop offset="100%" stop-color="var(--secondaryColor, #16213e)" />
+    </linearGradient>
+    <linearGradient id="gf-accent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="var(--eyeColor, #22d3ee)" />
+      <stop offset="100%" stop-color="var(--secondaryColor, #d946ef)" />
+    </linearGradient>
+    <filter id="gf-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="var(--eyeColor, #22d3ee)" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <!-- Tail -->
+  <path d="M150 130 Q180 110 175 80 Q170 60 155 70 Q165 90 150 110 Z" fill="url(#gf-body)" stroke="var(--eyeColor, #22d3ee)" stroke-width="1.5" />
   <!-- Ears -->
-  <path d="M 72 118 L 48 68 L 92 108 Z" fill="url(#glitchfoxEar)" />
-  <path d="M 128 118 L 152 68 L 108 108 Z" fill="url(#glitchfoxEar)" />
-
-  <!-- Body diamond -->
-  <path d="M 100 85 L 132 130 L 100 175 L 68 130 Z" fill="url(#glitchfoxBody)" />
-
-  <!-- Eyes -->
-  <circle cx="88" cy="128" r="6" fill="#ffffff" />
-  <circle cx="112" cy="128" r="6" fill="#ffffff" />
-  <circle cx="89" cy="128" r="2.8" fill="#0f172a" data-pets-skip="true" />
-  <circle cx="111" cy="128" r="2.8" fill="#0f172a" data-pets-skip="true" />
-  <circle cx="90" cy="126" r="1.2" fill="#ffffff" data-pets-skip="true" />
-  <circle cx="113" cy="126" r="1.2" fill="#ffffff" data-pets-skip="true" />
-
-  <!-- Mouth -->
-  <path d="M 95 143 Q 100 148 105 143" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-
-  <defs>
-    <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#22d3ee" />
-      <stop offset="100%" stop-color="#0891b2" />
-    </radialGradient>
-    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#e879f9" />
-      <stop offset="100%" stop-color="#c026d3" />
-    </linearGradient>
-    <radialGradient id="glitchfoxGlow" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.6" />
-      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
-    </radialGradient>
-    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#67e8f9" />
-      <stop offset="100%" stop-color="#06b6d4" />
-    </linearGradient>
-    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f0abfc" />
-      <stop offset="100%" stop-color="#c026d3" />
-    </linearGradient>
-  </defs>
-</svg>`;
-
-const GLITCHFOX_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <g opacity="0.75">
-    <circle cx="100" cy="125" r="75" fill="url(#glitchfoxGlow)" opacity="0.25" />
-    <path d="M 72 118 L 48 68 L 92 108 Z" fill="url(#glitchfoxEar)" />
-    <path d="M 128 118 L 152 68 L 108 108 Z" fill="url(#glitchfoxEar)" />
-    <path d="M 100 85 L 132 130 L 100 175 L 68 130 Z" fill="url(#glitchfoxBody)" />
-    <path d="M 82 128 Q 88 132 94 128" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M 106 128 Q 112 132 118 128" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M 95 143 Q 100 148 105 143" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
+  <polygon points="55,75 35,25 80,55" fill="url(#gf-body)" stroke="var(--eyeColor, #22d3ee)" stroke-width="1.5" />
+  <polygon points="145,75 165,25 120,55" fill="url(#gf-body)" stroke="var(--eyeColor, #22d3ee)" stroke-width="1.5" />
+  <!-- Body -->
+  <ellipse cx="100" cy="115" rx="62" ry="52" fill="url(#gf-body)" />
+  <!-- Glitch stripes -->
+  <g class="glitch-stripes" opacity="0.9">
+    <rect x="48" y="92" width="42" height="6" fill="var(--eyeColor, #22d3ee)" />
+    <rect x="110" y="108" width="50" height="5" fill="var(--secondaryColor, #d946ef)" />
+    <rect x="60" y="128" width="30" height="4" fill="var(--eyeColor, #22d3ee)" />
   </g>
-  <text x="135" y="70" fill="url(#glitchfoxCyan)" font-family="monospace" font-size="10" opacity="0.6">Z</text>
-  <text x="145" y="57" fill="url(#glitchfoxMagenta)" font-family="monospace" font-size="8" opacity="0.4">z</text>
-  <defs>
-    <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#22d3ee" />
-      <stop offset="100%" stop-color="#0891b2" />
-    </radialGradient>
-    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#e879f9" />
-      <stop offset="100%" stop-color="#c026d3" />
-    </linearGradient>
-    <radialGradient id="glitchfoxGlow" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.6" />
-      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0" />
-    </radialGradient>
-    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#67e8f9" />
-      <stop offset="100%" stop-color="#06b6d4" />
-    </linearGradient>
-    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f0abfc" />
-      <stop offset="100%" stop-color="#c026d3" />
-    </linearGradient>
-  </defs>
+  <!-- Face -->
+  <g class="face">
+    <g class="eye-group eye-open">
+      <ellipse cx="76" cy="102" rx="12" ry="14" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="76" cy="102" rx="5" ry="7" fill="var(--eyeColor, #22d3ee)" filter="url(#gf-glow)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-open">
+      <ellipse cx="124" cy="102" rx="12" ry="14" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="124" cy="102" rx="5" ry="7" fill="var(--eyeColor, #22d3ee)" filter="url(#gf-glow)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M64 102 Q76 110 88 102" stroke="var(--eyeColor, #22d3ee)" stroke-width="2" fill="none" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M112 102 Q124 110 136 102" stroke="var(--eyeColor, #22d3ee)" stroke-width="2" fill="none" />
+    </g>
+    <polygon points="100,120 92,132 108,132" fill="var(--secondaryColor, #d946ef)" />
+  </g>
+  <!-- Singing notes -->
+  <g class="singing-notes">
+    <text class="note" x="155" y="70" fill="var(--eyeColor, #22d3ee)" font-size="18" font-family="monospace">♪</text>
+    <text class="note" x="170" y="55" fill="var(--secondaryColor, #d946ef)" font-size="14" font-family="monospace">♫</text>
+    <text class="note" x="145" y="50" fill="var(--eyeColor, #22d3ee)" font-size="16" font-family="monospace">♩</text>
+  </g>
 </svg>`;
 
-const BIOMECHMOTH_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+const GLITCHFOX_SLEEPING = GLITCHFOX_BASE;
+
+const BIOMECHMOTH_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art biomechmoth">
+  <defs>
+    <linearGradient id="bm-body" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--baseColor, #2d1b4e)" />
+      <stop offset="100%" stop-color="var(--secondaryColor, #4c1d95)" />
+    </linearGradient>
+    <linearGradient id="bm-wing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--secondaryColor, #a855f7)" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="var(--eyeColor, #c084fc)" stop-opacity="0.15" />
+    </linearGradient>
+    <filter id="bm-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="var(--eyeColor, #c084fc)" flood-opacity="0.5"/>
+    </filter>
+  </defs>
   <!-- Wings -->
-  <g opacity="0.95">
-    <path d="M 100 100 C 65 55 15 50 10 100 C 15 150 65 140 100 115" fill="url(#biomechmothWing)" />
-    <path d="M 100 100 C 135 55 185 50 190 100 C 185 150 135 140 100 115" fill="url(#biomechmothWing)" />
-    <circle cx="45" cy="95" r="1.5" fill="#ffffff" opacity="0.4" data-pets-skip="true" />
-    <circle cx="155" cy="95" r="1.5" fill="#ffffff" opacity="0.4" data-pets-skip="true" />
-    <circle cx="35" cy="110" r="1" fill="#ffffff" opacity="0.3" data-pets-skip="true" />
-    <circle cx="165" cy="110" r="1" fill="#ffffff" opacity="0.3" data-pets-skip="true" />
+  <g class="wing" transform-origin="100 100">
+    <path d="M100 100 Q40 30 10 60 Q30 100 100 110 Z" fill="url(#bm-wing)" stroke="var(--secondaryColor, #a855f7)" stroke-width="1.2" />
+    <path d="M100 100 Q40 170 10 140 Q30 100 100 90 Z" fill="url(#bm-wing)" stroke="var(--secondaryColor, #a855f7)" stroke-width="1.2" />
   </g>
-
+  <g class="wing" transform-origin="100 100">
+    <path d="M100 100 Q160 30 190 60 Q170 100 100 110 Z" fill="url(#bm-wing)" stroke="var(--secondaryColor, #a855f7)" stroke-width="1.2" />
+    <path d="M100 100 Q160 170 190 140 Q170 100 100 90 Z" fill="url(#bm-wing)" stroke="var(--secondaryColor, #a855f7)" stroke-width="1.2" />
+  </g>
   <!-- Antennae -->
-  <path d="M 90 90 Q 75 55 65 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
-  <path d="M 110 90 Q 125 55 135 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
-  <circle cx="65" cy="50" r="3" fill="url(#biomechmothTip)" />
-  <circle cx="135" cy="50" r="3" fill="url(#biomechmothTip)" />
-
+  <line x1="88" y1="78" x2="70" y2="45" stroke="var(--eyeColor, #c084fc)" stroke-width="2" />
+  <circle cx="70" cy="45" r="3" fill="var(--eyeColor, #c084fc)" />
+  <line x1="112" y1="78" x2="130" y2="45" stroke="var(--eyeColor, #c084fc)" stroke-width="2" />
+  <circle cx="130" cy="45" r="3" fill="var(--eyeColor, #c084fc)" />
   <!-- Body -->
-  <ellipse cx="100" cy="120" rx="22" ry="38" fill="url(#biomechmothBody)" />
-  <circle cx="100" cy="80" r="16" fill="url(#biomechmothBody)" />
-
-  <!-- Eyes -->
-  <circle cx="92" cy="78" r="4" fill="#22d3ee" />
-  <circle cx="108" cy="78" r="4" fill="#22d3ee" />
-
-  <!-- Body lines -->
-  <line x1="96" y1="100" x2="96" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
-  <line x1="104" y1="100" x2="104" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
-
-  <!-- Mouth -->
-  <path d="M 96 92 Q 100 95 104 92" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
-
-  <defs>
-    <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#cbd5e1" />
-      <stop offset="100%" stop-color="#64748b" />
-    </radialGradient>
-    <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#f472b6" />
-      <stop offset="70%" stop-color="#db2777" />
-      <stop offset="100%" stop-color="#9d174d" />
-    </radialGradient>
-    <radialGradient id="biomechmothTip" cx="0.3" cy="0.3">
-      <stop offset="0%" stop-color="#67e8f9" />
-      <stop offset="100%" stop-color="#06b6d4" />
-    </radialGradient>
-  </defs>
-</svg>`;
-
-const BIOMECHMOTH_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <g opacity="0.8">
-    <path d="M 100 100 C 65 55 15 50 10 100 C 15 150 65 140 100 115" fill="url(#biomechmothWing)" />
-    <path d="M 100 100 C 135 55 185 50 190 100 C 185 150 135 140 100 115" fill="url(#biomechmothWing)" />
-    <path d="M 90 90 Q 75 55 65 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M 110 90 Q 125 55 135 50" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" />
-    <circle cx="65" cy="50" r="2.5" fill="url(#biomechmothTip)" opacity="0.5" />
-    <circle cx="135" cy="50" r="2.5" fill="url(#biomechmothTip)" opacity="0.5" />
-    <ellipse cx="100" cy="120" rx="22" ry="38" fill="url(#biomechmothBody)" />
-    <circle cx="100" cy="80" r="16" fill="url(#biomechmothBody)" />
-    <path d="M 88 78 Q 92 81 96 78" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
-    <path d="M 104 78 Q 108 81 112 78" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
-    <line x1="96" y1="100" x2="96" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
-    <line x1="104" y1="100" x2="104" y2="145" stroke="#334155" stroke-width="1.5" stroke-linecap="round" />
-    <path d="M 96 92 Q 100 95 104 92" fill="none" stroke="#334155" stroke-width="1" stroke-linecap="round" />
+  <ellipse cx="100" cy="110" rx="34" ry="46" fill="url(#bm-body)" stroke="var(--secondaryColor, #a855f7)" stroke-width="1.5" />
+  <path d="M74 100 H126 M74 115 H126 M78 130 H122" stroke="var(--secondaryColor, #a855f7)" stroke-width="1" opacity="0.6" />
+  <!-- Face -->
+  <g class="face">
+    <g class="eye-group eye-open">
+      <ellipse cx="88" cy="102" rx="9" ry="12" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="88" cy="102" rx="4" ry="6" fill="var(--eyeColor, #c084fc)" filter="url(#bm-glow)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-open">
+      <ellipse cx="112" cy="102" rx="9" ry="12" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="112" cy="102" rx="4" ry="6" fill="var(--eyeColor, #c084fc)" filter="url(#bm-glow)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M79 102 Q88 108 97 102" stroke="var(--eyeColor, #c084fc)" stroke-width="1.8" fill="none" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M103 102 Q112 108 121 102" stroke="var(--eyeColor, #c084fc)" stroke-width="1.8" fill="none" />
+    </g>
   </g>
-  <text x="130" y="55" fill="#22d3ee" font-family="monospace" font-size="10" opacity="0.5">Z</text>
-  <text x="140" y="42" fill="#22d3ee" font-family="monospace" font-size="8" opacity="0.35">z</text>
-  <defs>
-    <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#cbd5e1" />
-      <stop offset="100%" stop-color="#64748b" />
-    </radialGradient>
-    <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#f472b6" />
-      <stop offset="70%" stop-color="#db2777" />
-      <stop offset="100%" stop-color="#9d174d" />
-    </radialGradient>
-    <radialGradient id="biomechmothTip" cx="0.3" cy="0.3">
-      <stop offset="0%" stop-color="#67e8f9" />
-      <stop offset="100%" stop-color="#06b6d4" />
-    </radialGradient>
-  </defs>
+  <!-- Singing notes -->
+  <g class="singing-notes">
+    <text class="note" x="160" y="55" fill="var(--eyeColor, #c084fc)" font-size="16">✦</text>
+    <text class="note" x="30" y="55" fill="var(--eyeColor, #c084fc)" font-size="16">✦</text>
+  </g>
 </svg>`;
 
-const LIQUIDBLOB_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <!-- Glow -->
-  <circle cx="100" cy="110" r="70" fill="url(#liquidblobGlow)" opacity="0.5" />
+const BIOMECHMOTH_SLEEPING = BIOMECHMOTH_BASE;
 
-  <!-- Body -->
-  <circle cx="100" cy="110" r="55" fill="url(#liquidblobBody)" />
-
-  <!-- Highlight -->
-  <ellipse cx="80" cy="85" rx="18" ry="12" fill="#ffffff" opacity="0.15" transform="rotate(-30 80 85)" />
-
-  <!-- Eyes -->
-  <circle cx="86" cy="105" r="7" fill="#ffffff" />
-  <circle cx="114" cy="105" r="7" fill="#ffffff" />
-  <circle cx="87" cy="106" r="3.2" fill="#0f172a" data-pets-skip="true" />
-  <circle cx="113" cy="106" r="3.2" fill="#0f172a" data-pets-skip="true" />
-  <circle cx="88" cy="103" r="1.2" fill="#ffffff" data-pets-skip="true" />
-  <circle cx="115" cy="103" r="1.2" fill="#ffffff" data-pets-skip="true" />
-
-  <!-- Mouth + tongue -->
-  <path d="M 93 122 Q 100 128 107 122" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-  <ellipse cx="100" cy="126" rx="3.5" ry="2.5" fill="#f472b6" />
-
-  <!-- Blush -->
-  <circle cx="72" cy="100" r="2" fill="#22d3ee" />
-  <circle cx="128" cy="100" r="2" fill="#22d3ee" />
-
+const LIQUIDBLOB_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art liquidblob">
   <defs>
-    <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#4ade80" />
-      <stop offset="50%" stop-color="#16a34a" />
-      <stop offset="100%" stop-color="#14532d" />
+    <radialGradient id="lb-body" cx="40%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="var(--secondaryColor, #67e8f9)" />
+      <stop offset="60%" stop-color="var(--baseColor, #0891b2)" />
+      <stop offset="100%" stop-color="var(--baseColor, #164e63)" />
     </radialGradient>
-    <radialGradient id="liquidblobGlow" cx="0.5" cy="0.5">
-      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.6" />
-      <stop offset="100%" stop-color="#4ade80" stop-opacity="0" />
-    </radialGradient>
+    <filter id="lb-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="var(--secondaryColor, #67e8f9)" flood-opacity="0.4"/>
+    </filter>
   </defs>
+  <!-- Blob body -->
+  <path class="blob-body" d="M100 45 C140 45 165 75 160 110 C155 150 120 170 100 165 C70 160 40 140 42 105 C45 70 65 45 100 45 Z" fill="url(#lb-body)" filter="url(#lb-glow)" />
+  <!-- Inner bubbles -->
+  <circle cx="80" cy="95" r="6" fill="var(--secondaryColor, #a5f3fc)" opacity="0.5" />
+  <circle cx="125" cy="120" r="9" fill="var(--secondaryColor, #a5f3fc)" opacity="0.35" />
+  <circle cx="95" cy="135" r="4" fill="var(--secondaryColor, #a5f3fc)" opacity="0.45" />
+  <!-- Face -->
+  <g class="face">
+    <g class="eye-group eye-open">
+      <ellipse cx="82" cy="98" rx="10" ry="12" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="82" cy="98" rx="4" ry="6" fill="var(--eyeColor, #ecfeff)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-open">
+      <ellipse cx="118" cy="98" rx="10" ry="12" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="118" cy="98" rx="4" ry="6" fill="var(--eyeColor, #ecfeff)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M72 98 Q82 105 92 98" stroke="var(--eyeColor, #ecfeff)" stroke-width="2" fill="none" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M108 98 Q118 105 128 98" stroke="var(--eyeColor, #ecfeff)" stroke-width="2" fill="none" />
+    </g>
+    <path d="M92 118 Q100 126 108 118" stroke="var(--eyeColor, #ecfeff)" stroke-width="2" fill="none" opacity="0.8" />
+  </g>
+  <!-- Singing notes -->
+  <g class="singing-notes">
+    <text class="note" x="150" y="70" fill="var(--secondaryColor, #a5f3fc)" font-size="18">♪</text>
+    <text class="note" x="35" y="85" fill="var(--secondaryColor, #a5f3fc)" font-size="14">♫</text>
+  </g>
 </svg>`;
 
-const LIQUIDBLOB_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="100" cy="110" r="55" fill="url(#liquidblobBody)" opacity="0.85" />
-  <path d="M 80 106 Q 86 110 92 106" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-  <path d="M 108 106 Q 114 110 120 106" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-  <path d="M 95 124 Q 100 128 105 124" fill="none" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round" />
-  <text x="140" y="75" fill="#4ade80" font-family="monospace" font-size="10" opacity="0.6">Z</text>
-  <text x="150" y="62" fill="#4ade80" font-family="monospace" font-size="8" opacity="0.4">z</text>
-  <defs>
-    <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#4ade80" />
-      <stop offset="50%" stop-color="#16a34a" />
-      <stop offset="100%" stop-color="#14532d" />
-    </radialGradient>
-  </defs>
-</svg>`;
+const LIQUIDBLOB_SLEEPING = LIQUIDBLOB_BASE;
 
 /**
  * Map of adult form to { base, sleeping } SVG content
