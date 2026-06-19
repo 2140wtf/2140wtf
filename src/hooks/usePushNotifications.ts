@@ -18,6 +18,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { NostrPushClient, serializePushSubscription, urlBase64ToUint8Array } from '@/lib/nostrPush';
 import { NOTIFICATION_TEMPLATES } from '@/lib/notificationTemplates';
 import { generateUUID } from '@/lib/uuid';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { useToast } from '@/hooks/useToast';
 import type { EncryptedSettings } from '@/hooks/useEncryptedSettings';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -82,6 +84,8 @@ export interface UsePushNotificationsReturn {
 }
 
 export function usePushNotifications(): UsePushNotificationsReturn {
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
   const supported =
     typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
@@ -175,6 +179,13 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     const client = clientRef.current;
     const baseId = localStorage.getItem(SUBSCRIPTION_ID_KEY);
     if (!client || !baseId) return;
+    if (!isEnabled('pushSubscriptions')) {
+      toast({
+        title: 'Push subscriptions disabled',
+        description: 'Turn on “Push subscriptions” in Settings → Privacy & Publishing to sync push preferences.',
+      });
+      return;
+    }
 
     const onlyFollowing = prefs.onlyFollowing === true;
 
@@ -202,7 +213,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         });
       }),
     );
-  }, []);
+  }, [isEnabled, toast]);
 
   // ─── enable() ─────────────────────────────────────────────────────────────
 
@@ -218,6 +229,13 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     const client = clientRef.current;
     if (!client) {
       console.warn('[push] NostrPushClient not initialized — service worker may still be loading');
+      return;
+    }
+    if (!isEnabled('pushSubscriptions')) {
+      toast({
+        title: 'Push subscriptions disabled',
+        description: 'Turn on “Push subscriptions” in Settings → Privacy & Publishing to register for push notifications.',
+      });
       return;
     }
 
@@ -281,7 +299,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     }
 
     setEnabled(true);
-  }, [supported, syncPreferences]);
+  }, [supported, syncPreferences, isEnabled, toast]);
 
   // ─── disable() ────────────────────────────────────────────────────────────
 
