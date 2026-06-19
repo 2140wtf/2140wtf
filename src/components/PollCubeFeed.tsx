@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -7,11 +7,13 @@ import { HostedPollCube } from '@/components/HostedPollCube';
 import { useAppContext } from '@/hooks/useAppContext';
 import { BAO_POLL_RELAYS } from '@/hooks/usePollVotes';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const POLL_KIND = 1068;
 const ZAP_POLL_KIND = 6969;
-const FETCH_LIMIT = 50;
+const INITIAL_LIMIT = 50;
+const LOAD_MORE_INCREMENT = 50;
 
 interface PollCubeFeedProps {
   filter?: 'all' | 'zap' | 'regular';
@@ -39,6 +41,7 @@ function extractTitle(event: NostrEvent): string {
 export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: PollCubeFeedProps) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
+  const [limit, setLimit] = useState(INITIAL_LIMIT);
 
   const kinds = useMemo(() => {
     if (filter === 'zap') return [ZAP_POLL_KIND];
@@ -47,10 +50,10 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
   }, [filter]);
 
   const { data: polls, isLoading } = useQuery<NostrEvent[]>({
-    queryKey: ['poll-cube-feed', kinds, filter],
+    queryKey: ['poll-cube-feed', kinds, filter, limit],
     queryFn: async ({ signal }) => {
       const since = Math.floor(Date.now() / 1000) - 86400 * 90; // last 90 days
-      const relayFilter = { kinds, limit: FETCH_LIMIT, since };
+      const relayFilter = { kinds, limit, since };
 
       const readRelays = config.relayMetadata.relays
         .filter((r) => r.read)
@@ -105,16 +108,31 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
     );
   }
 
+  const canLoadMore = (polls?.length ?? 0) >= limit;
+
   return (
-    <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-6 py-4', className)}>
-      {filteredPolls.map((poll) => (
-        <div key={poll.id} className="flex flex-col gap-3">
-          <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-80" />
-          <div className="text-center px-2">
-            <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
+    <div className={cn('space-y-6 py-4', className)}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {filteredPolls.map((poll) => (
+          <div key={poll.id} className="flex flex-col gap-3">
+            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-80" />
+            <div className="text-center px-2">
+              <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
+            </div>
           </div>
+        ))}
+      </div>
+      {canLoadMore && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLimit((prev) => prev + LOAD_MORE_INCREMENT)}
+          >
+            Load more cubes
+          </Button>
         </div>
-      ))}
+      )}
     </div>
   );
 }
