@@ -13,6 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { encodeGeohash } from '@/lib/geohash';
 import { isRoadstrEventType, ROADSTR_EVENT_TYPES, type RoadstrEventType } from '@/components/roadstr/roadstrTypes';
@@ -41,6 +42,7 @@ export function RoadstrReportDialog({
   const { user } = useCurrentUser();
   const { mutate: publishEvent, isPending } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const [type, setType] = useState<RoadstrEventType>('other');
   const [comment, setComment] = useState('');
   const [locating, setLocating] = useState(false);
@@ -53,6 +55,10 @@ export function RoadstrReportDialog({
   const handleSubmit = () => {
     if (!user) {
       toast({ title: 'Log in to report road events' });
+      return;
+    }
+    if (!isEnabled('reports')) {
+      toast({ title: 'Reports publishing disabled', description: 'Turn on “Reports” in Settings → Privacy & Publishing to submit Roadstr reports.' });
       return;
     }
 

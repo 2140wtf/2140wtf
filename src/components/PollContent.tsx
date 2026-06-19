@@ -8,6 +8,8 @@ import { nip19 } from 'nostr-tools';
 import { usePollVotes } from '@/hooks/usePollVotes';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { useToast } from '@/hooks/useToast';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAuthors } from '@/hooks/useAuthors';
 import { NoteContent } from '@/components/NoteContent';
@@ -133,6 +135,8 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
 
   const options = useMemo(() => getOptions(event.tags), [event.tags]);
   const pollType = getTag(event.tags, 'polltype') ?? 'singlechoice';
@@ -169,6 +173,10 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const handleVote = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!selectedOption || !user || hasVoted || isExpired || isVoting) return;
+    if (!isEnabled('polls')) {
+      toast({ title: 'Polls publishing disabled', description: 'Turn on “Polls” in Settings → Privacy & Publishing to vote.' });
+      return;
+    }
     setIsVoting(true);
     publishEvent({
       kind: 1018,

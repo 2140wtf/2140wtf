@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmbeddedPost } from '@/components/EmbeddedPost';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { isAddressableKind } from '@/lib/eventKinds';
 import { cn } from '@/lib/utils';
 
@@ -118,6 +119,7 @@ function RecoveryContent({ event, onClose }: RecoveryContentProps) {
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -164,6 +166,10 @@ function RecoveryContent({ event, onClose }: RecoveryContentProps) {
   const currentId = events[0].id;
 
   const handleRestore = async (snapshot: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(snapshot.id);
     try {
       await publishEvent({

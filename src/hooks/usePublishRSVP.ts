@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 type RSVPStatus = 'accepted' | 'declined' | 'tentative';
 
@@ -20,9 +21,11 @@ interface PublishRSVPParams {
 export function usePublishRSVP() {
   const queryClient = useQueryClient();
   const { mutateAsync: createEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async ({ eventCoord, eventAuthorPubkey, status, note }: PublishRSVPParams) => {
+      if (!isEnabled('rsvp')) throw new Error('Calendar RSVPs are disabled. Turn them on in Settings → Privacy & Publishing.');
       // Use a stable d-tag derived from the event coordinate so that
       // updating an RSVP replaces the previous one (kind 31925 is addressable).
       const dTag = eventCoord;

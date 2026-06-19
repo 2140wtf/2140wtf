@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { CustomEmojiImg } from '@/components/CustomEmoji';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,7 @@ export function EmojiPackContent({ event }: EmojiPackContentProps) {
   const { mutateAsync: publishEvent } = useNostrPublish();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const [isPending, setIsPending] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -94,6 +96,10 @@ export function EmojiPackContent({ event }: EmojiPackContentProps) {
 
   const handleTogglePack = useCallback(async () => {
     if (!user || !pack) return;
+    if (!isEnabled('emojiPacks')) {
+      toast({ title: 'Emoji packs publishing disabled', description: 'Turn on “Emoji packs” in Settings → Privacy & Publishing to manage your collection.' });
+      return;
+    }
     setIsPending(true);
 
     try {
@@ -137,7 +143,7 @@ export function EmojiPackContent({ event }: EmojiPackContentProps) {
     } finally {
       setIsPending(false);
     }
-  }, [user, pack, emojiListQuery.data, isAdded, packRef, publishEvent, queryClient, toast]);
+  }, [user, pack, emojiListQuery.data, isAdded, packRef, publishEvent, queryClient, toast, isEnabled]);
 
   if (!pack) return null;
 

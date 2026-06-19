@@ -32,6 +32,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
 
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -439,6 +440,7 @@ export function ProfileSettings() {
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   const [cropState, setCropState] = useState<CropState | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -645,6 +647,14 @@ export function ProfileSettings() {
 
   const onSubmit = async (values: FormValues) => {
     if (!user) return;
+    if (!isEnabled('profile')) {
+      toast({
+        title: 'Profile publishing disabled',
+        description: 'Turn on “Profile metadata” in Settings → Privacy & Publishing to update your profile.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const { fields: customFields, shape, ...standardMetadata } = values;
       const data: Record<string, unknown> = { ...metadata, ...standardMetadata };
