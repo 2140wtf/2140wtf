@@ -83,6 +83,20 @@ export interface EncryptedSettings {
     highlights?: boolean;
     onlyFollowing?: boolean;
   };
+  /** Per-feature publishing preferences (all default to true/enabled) */
+  publishPreferences?: {
+    pets?: boolean;
+    reactions?: boolean;
+    reposts?: boolean;
+    comments?: boolean;
+    zaps?: boolean;
+    follows?: boolean;
+    mutes?: boolean;
+    bookmarks?: boolean;
+    autoShareTheme?: boolean;
+    publishRelayList?: boolean;
+    publishBlossomList?: boolean;
+  };
   /** Last sync timestamp */
   lastSync?: number;
   /** Ordered list of sidebar item IDs (built-in + extra-kind) */

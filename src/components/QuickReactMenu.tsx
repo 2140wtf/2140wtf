@@ -8,6 +8,8 @@ import { CustomEmojiImg } from '@/components/CustomEmoji';
 import { EmojiPicker, type EmojiSelection } from '@/components/EmojiPicker';
 import { isCustomEmoji } from '@/lib/customEmoji';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { toast } from '@/hooks/useToast';
 import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEmojiUsage } from '@/hooks/useEmojiUsage';
@@ -57,6 +59,8 @@ export function QuickReactMenu({
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const reactionsEnabled = isEnabled('reactions');
   const queryClient = useQueryClient();
   const { trackEmojiUsage, getTopEmojis } = useEmojiUsage();
   const { feedSettings } = useFeedSettings();
@@ -92,6 +96,13 @@ export function QuickReactMenu({
   /** Publish a reaction with a native Unicode emoji string. */
   const publishReaction = useCallback((emoji: string, emojiTag?: [string, string, string]) => {
     if (!user) return;
+    if (!reactionsEnabled) {
+      toast({
+        title: 'Reactions disabled',
+        description: 'Turn on “Reactions” in Settings → Privacy & Publishing to react.',
+      });
+      return;
+    }
     impactLight();
 
     // Close the entire popover
@@ -161,7 +172,7 @@ export function QuickReactMenu({
         },
       },
     );
-  }, [user, eventId, eventPubkey, eventKind, reactedEvent, nostr, onReact, publishEvent, queryClient, trackEmojiUsage, onClose]);
+  }, [user, eventId, eventPubkey, eventKind, reactedEvent, nostr, onReact, publishEvent, queryClient, trackEmojiUsage, onClose, reactionsEnabled]);
 
   /** Handle selection from the quick buttons (native or custom emoji). */
   const handleQuickSelect = useCallback((emoji: string) => {

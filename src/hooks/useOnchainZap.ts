@@ -5,6 +5,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { notificationSuccess } from '@/lib/haptics';
@@ -93,6 +94,8 @@ export function useOnchainZap(
   const { user } = useCurrentUser();
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const zapsEnabled = isEnabled('zaps');
   const { toast } = useToast();
   const { config } = useAppContext();
   const { esploraApis } = config;
@@ -112,6 +115,11 @@ export function useOnchainZap(
       }
       if (!Number.isFinite(amountSats) || amountSats <= 0) {
         throw new Error('Invalid amount.');
+      }
+      if (!zapsEnabled) {
+        throw new Error(
+          'Zaps are disabled in Settings → Privacy & Publishing. Turn on “Zap receipts” to send zaps.',
+        );
       }
 
       setIsZapping(true);

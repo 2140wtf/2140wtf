@@ -9,6 +9,8 @@ import { RenderResolvedEmoji } from '@/components/CustomEmoji';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useUserReaction } from '@/hooks/useUserReaction';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { toast } from '@/hooks/useToast';
 import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { formatNumber } from '@/lib/formatNumber';
 import { impactLight } from '@/lib/haptics';
@@ -48,6 +50,8 @@ export function ReactionButton({
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const reactionsEnabled = isEnabled('reactions');
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -60,6 +64,13 @@ export function ReactionButton({
   const handleUnreact = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
+    if (!reactionsEnabled) {
+      toast({
+        title: 'Reactions disabled',
+        description: 'Turn on “Reactions” in Settings → Privacy & Publishing to manage reactions.',
+      });
+      return;
+    }
 
     // Find the user's kind 7 event ID to delete
     const events = await nostr.query([{
@@ -105,7 +116,7 @@ export function ReactionButton({
         },
       },
     );
-  }, [user, nostr, eventId, publishEvent, queryClient]);
+  }, [user, nostr, eventId, publishEvent, queryClient, reactionsEnabled]);
 
   const handleMouseEnter = useCallback(() => {
     if (!user) return;
@@ -146,6 +157,13 @@ export function ReactionButton({
           onClick={(e) => {
             e.stopPropagation();
             if (!user) return;
+            if (!reactionsEnabled) {
+              toast({
+                title: 'Reactions disabled',
+                description: 'Turn on “Reactions” in Settings → Privacy & Publishing to react.',
+              });
+              return;
+            }
             if (hasReacted) {
               impactLight();
               handleUnreact(e);
@@ -157,6 +175,13 @@ export function ReactionButton({
           onDoubleClick={(e) => {
             e.stopPropagation();
             if (!user) return;
+            if (!reactionsEnabled) {
+              toast({
+                title: 'Reactions disabled',
+                description: 'Turn on “Reactions” in Settings → Privacy & Publishing to react.',
+              });
+              return;
+            }
             if (hasReacted) return;
             impactLight();
             setMenuOpen(false);
