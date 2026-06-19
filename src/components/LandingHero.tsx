@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { DittoLogo } from '@/components/DittoLogo';
+
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useTheme } from '@/hooks/useTheme';
@@ -133,7 +133,7 @@ export function LandingHero({ onLoginClick, onSignupClick }: LandingHeroProps) {
       {/* ── Hero Header ── */}
       <div className="px-4 pt-8 pb-6 text-center space-y-4">
         <div className="flex justify-center landing-hero-fade" style={{ animationDelay: '0ms' }}>
-          <DittoLogo size={56} />
+          <img src="/logo-icon.png" alt="" className="h-24 sm:h-32 w-auto" />
         </div>
 
         <div className="space-y-2 landing-hero-fade" style={{ animationDelay: '80ms' }}>
