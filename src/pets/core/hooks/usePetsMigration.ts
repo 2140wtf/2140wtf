@@ -1,9 +1,10 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 import { useCallback } from 'react';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import {
@@ -120,7 +121,7 @@ export interface EnsureCanonicalResult {
 export function usePetsMigration() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   
   /**
    * Migrate a legacy Pets to canonical format.
@@ -251,7 +252,7 @@ export function usePetsMigration() {
     pubkey: string,
     dTag: string,
   ): Promise<PetsCompanion | null> => {
-    const events = await nostr.query([{
+    const events = await queryPetsRelay(nostr, [{
       kinds: [KIND_PETS_STATE],
       authors: [pubkey],
       '#d': [dTag],
@@ -272,7 +273,7 @@ export function usePetsMigration() {
   const fetchAllCompanions = useCallback(async (
     pubkey: string,
   ): Promise<PetsCompanion[]> => {
-    const events = await nostr.query([{
+    const events = await queryPetsRelay(nostr, [{
       kinds: [KIND_PETS_STATE],
       authors: [pubkey],
       '#b': [PETS_ECOSYSTEM_NAMESPACE],

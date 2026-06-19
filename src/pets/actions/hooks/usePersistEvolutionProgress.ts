@@ -18,8 +18,8 @@ import { useNostr } from '@nostrify/react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import {
   KIND_PETS_STATE,
@@ -46,7 +46,7 @@ export function usePersistEvolutionProgress(
 ): void {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,7 +62,7 @@ export function usePersistEvolutionProgress(
     publishingRef.current = true;
     try {
       // Fetch the fresh Pets event from relays
-      const prev = await fetchFreshEvent(nostr, {
+      const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_PETS_STATE],
         authors: [pubkey],
         '#d': [companionD],

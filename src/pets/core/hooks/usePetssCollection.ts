@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 import { useCallback, useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -80,7 +81,7 @@ export function usePetssCollection(dList?: string[] | undefined) {
         
         console.log('[Pets] 31124 query filter (all):', JSON.stringify(filter, null, 2));
         
-        allEvents = await nostr.query([filter], { signal });
+        allEvents = await queryPetsRelay(nostr, [filter], { signal });
         
         console.log('[usePetssCollection] Fetch-all returned', allEvents.length, 'events');
       } else {
@@ -106,7 +107,7 @@ export function usePetssCollection(dList?: string[] | undefined) {
           
           console.log('[Pets] 31124 query filter:', JSON.stringify(filter, null, 2));
           
-          const events = await nostr.query([filter], { signal });
+          const events = await queryPetsRelay(nostr, [filter], { signal });
           allEvents.push(...events);
           
           console.log('[usePetssCollection] Chunk returned', events.length, 'events');

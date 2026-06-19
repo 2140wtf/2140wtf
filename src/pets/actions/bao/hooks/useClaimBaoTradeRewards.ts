@@ -2,9 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import {
   KIND_BLOBBONAUT_PROFILE,
@@ -38,7 +38,7 @@ export function useClaimBaoTradeRewards(
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -56,7 +56,7 @@ export function useClaimBaoTradeRewards(
       const activity = aggregateBaoTradeActivity(tradeEvents);
 
       // Fetch the latest profile so we never overwrite concurrent updates.
-      const prev = await fetchFreshEvent(nostr, {
+      const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
         authors: [user.pubkey],
       });
