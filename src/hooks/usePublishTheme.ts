@@ -42,6 +42,8 @@ export function usePublishTheme() {
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const autoShareThemeEnabled = isEnabled('autoShareTheme');
+  const themeDefinitionsEnabled = isEnabled('themeDefinitions');
+  const deleteRequestsEnabled = isEnabled('deleteRequests');
   const queryClient = useQueryClient();
 
   /** Publish or update a kind 36767 theme definition. */
@@ -53,6 +55,13 @@ export function usePublishTheme() {
     identifier?: string;
   }) => {
     if (!user) throw new Error('Must be logged in');
+    if (!themeDefinitionsEnabled) {
+      toast({
+        title: 'Theme definitions publishing disabled',
+        description: 'Turn on “Theme definitions” in Settings → Privacy & Publishing to publish themes.',
+      });
+      throw new Error('Theme definitions publishing disabled');
+    }
 
     const identifier = opts.identifier || titleToSlug(opts.title);
     const resolved = resolveThemeForPublishing(opts.themeConfig);
@@ -68,7 +77,7 @@ export function usePublishTheme() {
     queryClient.invalidateQueries({ queryKey: ['userThemes', user.pubkey] });
 
     return identifier;
-  }, [user, publishEvent, queryClient]);
+  }, [user, publishEvent, queryClient, themeDefinitionsEnabled]);
 
   /** Set a theme as the active profile theme (kind 16767). */
   const setActiveTheme = useCallback(async (opts: {
@@ -104,6 +113,13 @@ export function usePublishTheme() {
   /** Delete a kind 36767 theme definition. */
   const deleteTheme = useCallback(async (theme: ThemeDefinition) => {
     if (!user) throw new Error('Must be logged in');
+    if (!deleteRequestsEnabled) {
+      toast({
+        title: 'Delete requests publishing disabled',
+        description: 'Turn on “Delete requests” in Settings → Privacy & Publishing to delete themes.',
+      });
+      throw new Error('Delete requests publishing disabled');
+    }
 
     await publishEvent({
       kind: 5,
@@ -124,7 +140,7 @@ export function usePublishTheme() {
     // Also invalidate feed caches so the theme disappears from public feeds
     queryClient.invalidateQueries({ queryKey: ['feed'] });
     queryClient.invalidateQueries({ queryKey: ['streamKind'] });
-  }, [user, publishEvent, queryClient]);
+  }, [user, publishEvent, queryClient, deleteRequestsEnabled]);
 
   /** Clear the active profile theme by publishing an empty kind 16767 replacement. */
   const clearActiveTheme = useCallback(async () => {

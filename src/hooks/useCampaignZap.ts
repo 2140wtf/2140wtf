@@ -190,26 +190,33 @@ export function useCampaignZap(
 
       // Publish a kind 8333 receipt for on-chain donations only.
       let event: NostrEvent | undefined;
-      if (useOnchain && isEnabled('zaps')) {
-        setProgress('publishing');
-        const aTag = `${CAMPAIGN_KIND}:${campaign.pubkey}:${campaign.identifier}`;
-        try {
-          event = await publishEvent({
-            kind: 8333,
-            content: comment,
-            tags: [
-              ['i', `bitcoin:tx:${txid}`],
-              ['amount', String(amountSats)],
-              ['a', aTag],
-              ['K', String(CAMPAIGN_KIND)],
-              ['alt', `Donation to ${campaign.title}: ${amountSats.toLocaleString()} sats`],
-            ],
+      if (useOnchain) {
+        if (!isEnabled('zaps')) {
+          toast({
+            title: 'Zaps publishing disabled',
+            description: 'Turn on “Zaps” in Settings → Privacy & Publishing to publish donation receipts.',
           });
-        } catch (err) {
-          // The Bitcoin transaction already broadcast — the kind 8333 is a
-          // best-effort attestation. Surface the failure in the console but
-          // don't roll back: the donation stands on-chain regardless.
-          console.warn('Failed to publish kind 8333 campaign receipt:', err);
+        } else {
+          setProgress('publishing');
+          const aTag = `${CAMPAIGN_KIND}:${campaign.pubkey}:${campaign.identifier}`;
+          try {
+            event = await publishEvent({
+              kind: 8333,
+              content: comment,
+              tags: [
+                ['i', `bitcoin:tx:${txid}`],
+                ['amount', String(amountSats)],
+                ['a', aTag],
+                ['K', String(CAMPAIGN_KIND)],
+                ['alt', `Donation to ${campaign.title}: ${amountSats.toLocaleString()} sats`],
+              ],
+            });
+          } catch (err) {
+            // The Bitcoin transaction already broadcast — the kind 8333 is a
+            // best-effort attestation. Surface the failure in the console but
+            // don't roll back: the donation stands on-chain regardless.
+            console.warn('Failed to publish kind 8333 campaign receipt:', err);
+          }
         }
       }
 

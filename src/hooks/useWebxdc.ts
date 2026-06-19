@@ -8,6 +8,7 @@ import type { Webxdc as WebxdcAPI, SendingStatusUpdate, ReceivedStatusUpdate, Re
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { usePublishPreferences } from './usePublishPreferences';
+import { useToast } from './useToast';
 
 /**
  * Creates a mini-app API instance backed by Nostr kind 4932 state update events.
@@ -118,9 +119,17 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
   const selfName = metadata?.name || metadata?.display_name || nip19.npubEncode(activePubkey).slice(0, 12);
 
   // Publish a signed event using whichever signer is active (logged-in user or ephemeral key)
+  const { toast } = useToast();
+
   const publishSigned = useCallback(async (template: Parameters<typeof ephemeralSigner.signEvent>[0]) => {
+    if (!isEnabled('webxdc')) {
+      toast({
+        title: 'Mini apps publishing disabled',
+        description: 'Turn on “Mini apps” in Settings → Privacy & Publishing to publish updates.',
+      });
+      throw new Error('Mini apps publishing disabled');
+    }
     if (user) {
-      if (!isEnabled('webxdc')) throw new Error('Webxdc publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       // Logged-in path: delegate to useNostrPublish so the client tag is added
       return await publishEvent(template);
     } else {
@@ -128,7 +137,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
       const event = await ephemeralSigner.signEvent(template);
       return await nostr.event(event, { signal: AbortSignal.timeout(5000) });
     }
-  }, [user, publishEvent, ephemeralSigner, nostr, isEnabled]);
+  }, [user, publishEvent, ephemeralSigner, nostr, isEnabled, toast]);
 
   const sendUpdate = useCallback((update: SendingStatusUpdate<unknown>, _description: '') => {
     const tags: string[][] = [

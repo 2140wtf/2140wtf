@@ -21,6 +21,7 @@ import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { toast } from '@/hooks/useToast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -67,6 +68,7 @@ export function PetsWidget() {
   const { profile, updateProfileEvent, invalidate: invalidateProfile } = useBlobbonautProfile();
   const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   // Filter out legacy companions that have been migrated to canonical format
   const filteredCompanions = useMemo(() => {
@@ -128,6 +130,10 @@ export function PetsWidget() {
     try {
       const canonical = await ensureCanonicalBeforeAction();
       if (!canonical) return;
+      if (!isEnabled('pets')) {
+        toast({ title: 'Pets publishing disabled', description: 'Turn on “Publish pet events” in Settings → Privacy & Publishing to interact with pets.' });
+        return;
+      }
 
       const now = Math.floor(Date.now() / 1000);
       const decayResult = applyPetsDecay({
@@ -161,7 +167,7 @@ export function PetsWidget() {
     } finally {
       setIsSleepPending(false);
     }
-  }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
+  }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent, isEnabled]);
 
   // Companion toggle handler (same logic as PetsPage)
   const [isUpdatingCompanion, setIsUpdatingCompanion] = useState(false);
@@ -176,6 +182,10 @@ export function PetsWidget() {
       // Fetch fresh profile data from relays to avoid stale-read-then-write
       const canonical = await ensureCanonicalBeforeAction();
       if (!canonical) return;
+      if (!isEnabled('pets')) {
+        toast({ title: 'Pets publishing disabled', description: 'Turn on “Publish pet events” in Settings → Privacy & Publishing to interact with pets.' });
+        return;
+      }
 
       let updatedTags: string[][];
       if (isCurrentCompanion) {
@@ -207,7 +217,7 @@ export function PetsWidget() {
     } finally {
       setIsUpdatingCompanion(false);
     }
-  }, [profile, companion, isCurrentCompanion, ensureCanonicalBeforeAction, publishEvent, updateProfileEvent, invalidateProfile]);
+  }, [profile, companion, isCurrentCompanion, ensureCanonicalBeforeAction, publishEvent, updateProfileEvent, invalidateProfile, isEnabled]);
 
   const isActionPending = isUsingItem || isSleepPending;
 

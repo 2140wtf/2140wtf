@@ -57,8 +57,8 @@ export function RoadstrReportDialog({
       toast({ title: 'Log in to report road events' });
       return;
     }
-    if (!isEnabled('reports')) {
-      toast({ title: 'Reports publishing disabled', description: 'Turn on “Reports” in Settings → Privacy & Publishing to submit Roadstr reports.' });
+    if (!isEnabled('roadstr')) {
+      toast({ title: 'Roadstr publishing disabled', description: 'Turn on “Roadstr” in Settings → Privacy & Publishing to submit Roadstr reports.' });
       return;
     }
 
