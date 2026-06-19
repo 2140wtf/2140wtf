@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -876,7 +876,7 @@ function DashboardShell({ children, className }: DashboardShellProps) {
 // ─── Dashboard Drawer Type ────────────────────────────────────────────────────
 
 /** Which drawer is open; 'none' = room view visible */
-type DashboardDrawer = 'none' | 'missions' | 'activity' | 'more';
+type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'blobbi' | 'baos';
 
 // ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
@@ -1980,12 +1980,11 @@ function PetsDashboard({
                   isEgg={isEgg}
                 />
               )}
-              {activeDrawer === 'more' && (
-                <MoreTabContent
+              {activeDrawer === 'pets' && (
+                <PetsTabContent
                   companion={companion}
                   companions={companions}
                   selectedD={selectedD}
-                  profile={profile}
                   petsNaddr={petsNaddr}
                   onSelectPets={onSelectPets}
                   onAdopt={() => setShowAdoptionFlow(true)}
@@ -1994,8 +1993,16 @@ function PetsDashboard({
                   onDevInstantTransition={isEgg ? () => setShowHatchCeremony(true) : isBaby ? () => setShowEvolveCeremony(true) : undefined}
                   isHatching={isHatching}
                   isEvolving={isEvolving}
+                />
+              )}
+              {activeDrawer === 'blobbi' && (
+                <BlobbiTabContent
+                  profile={profile}
                   updateProfileEvent={updateProfileEvent}
                 />
+              )}
+              {activeDrawer === 'baos' && (
+                <BaosTabContent />
               )}
             </div>
           </ScrollArea>
@@ -2014,10 +2021,22 @@ function PetsDashboard({
               <span className="text-sm">Activity</span>
             </span>
           </TabButton>
-          <TabButton label="2140 PETS" active={activeDrawer === 'more'} onClick={() => toggleDrawer('more')} className="translate-y-0">
+          <TabButton label="Pets" active={activeDrawer === 'pets'} onClick={() => toggleDrawer('pets')} className="translate-y-0">
             <span className="flex items-center gap-1.5">
               <Egg className="size-4" />
-              <span className="text-sm">2140 PETS</span>
+              <span className="text-sm">Pets</span>
+            </span>
+          </TabButton>
+          <TabButton label="Blobbi" active={activeDrawer === 'blobbi'} onClick={() => toggleDrawer('blobbi')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="size-4" />
+              <span className="text-sm">Blobbi</span>
+            </span>
+          </TabButton>
+          <TabButton label="Baos" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-0">
+            <span className="flex items-center gap-1.5">
+              <Wallet className="size-4" />
+              <span className="text-sm">Baos</span>
             </span>
           </TabButton>
         </SubHeaderBar>
@@ -3130,13 +3149,12 @@ function DailyMissionIcon({ action, complete }: { action: string; complete: bool
   );
 }
 
-// ─── More Tab Content ─────────────────────────────────────────────────────────
+// ─── Pets Tab Content ─────────────────────────────────────────────────────────
 
-interface MoreTabContentProps {
+interface PetsTabContentProps {
   companion: PetsCompanion;
   companions: PetsCompanion[];
   selectedD: string;
-  profile: BlobbonautProfile | null;
   petsNaddr: string;
   onSelectPets: (d: string) => void;
   onAdopt: () => void;
@@ -3145,14 +3163,12 @@ interface MoreTabContentProps {
   onDevInstantTransition?: () => void;
   isHatching: boolean;
   isEvolving: boolean;
-  updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
 }
 
-function MoreTabContent({
+function PetsTabContent({
   companion,
   companions,
   selectedD,
-  profile,
   petsNaddr,
   onSelectPets,
   onAdopt,
@@ -3161,26 +3177,9 @@ function MoreTabContent({
   onDevInstantTransition,
   isHatching,
   isEvolving,
-  updateProfileEvent,
-}: MoreTabContentProps) {
-  const { user } = useCurrentUser();
+}: PetsTabContentProps) {
+  const profile = useBlobbonautProfile().profile;
   const isTransitioning = isHatching || isEvolving;
-  const today = getLocalDayString();
-
-  const { activity: baoActivity, isLoading: baoLoading } = useBaoTradeStats(user?.pubkey);
-  const { mutate: claimBaoReward, isPending: isClaimingBao } = useClaimBaoTradeRewards(updateProfileEvent);
-
-  const baoReward = useMemo(() => {
-    if (!baoActivity || !profile) return undefined;
-    return calculateBaoReward(
-      baoActivity,
-      profile.baoLifetimeVolume,
-      profile.baoRewardsClaimedAt,
-      today,
-    );
-  }, [baoActivity, profile, today]);
-
-  const baoClaimedToday = profile?.baoRewardsClaimedAt === today;
 
   return (
     <div className="flex flex-col items-center h-full min-h-[210px] px-3 sm:px-4">
@@ -3277,8 +3276,38 @@ function MoreTabContent({
           </>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* ── ₿AO Trading rewards ── */}
+// ─── Blobbi Tab Content ───────────────────────────────────────────────────────
+
+interface BlobbiTabContentProps {
+  profile: BlobbonautProfile | null;
+  updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
+}
+
+function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps) {
+  const { user } = useCurrentUser();
+  const today = getLocalDayString();
+
+  const { activity: baoActivity, isLoading: baoLoading } = useBaoTradeStats(user?.pubkey);
+  const { mutate: claimBaoReward, isPending: isClaimingBao } = useClaimBaoTradeRewards(updateProfileEvent);
+
+  const baoReward = useMemo(() => {
+    if (!baoActivity || !profile) return undefined;
+    return calculateBaoReward(
+      baoActivity,
+      profile.baoLifetimeVolume,
+      profile.baoRewardsClaimedAt,
+      today,
+    );
+  }, [baoActivity, profile, today]);
+
+  const baoClaimedToday = profile?.baoRewardsClaimedAt === today;
+
+  return (
+    <div className="flex flex-col items-center h-full min-h-[210px] px-3 sm:px-4">
       <div className="w-full max-w-sm rounded-xl border p-3 mt-2 space-y-2">
         <div className="flex items-center gap-2">
           <div className="size-7 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
@@ -3313,6 +3342,39 @@ function MoreTabContent({
           {isClaimingBao && <Loader2 className="size-3 animate-spin mr-1.5" />}
           {baoClaimedToday ? 'Claimed today' : baoReward?.claimable ? 'Claim BAO' : 'No open orders'}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Baos Tab Content ───────────────────────────────────────────────────────────
+
+const BAO_VARIATIONS = Array.from({ length: 21 }, (_, i) => ({
+  id: i + 1,
+  name: `Bao #${i + 1}`,
+  src: `/pets/bao/bao-${String(i + 1).padStart(2, '0')}.png`,
+}));
+
+function BaosTabContent() {
+  return (
+    <div className="h-full min-h-[210px] px-3 sm:px-4">
+      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 py-3">
+        {BAO_VARIATIONS.map((bao) => (
+          <div
+            key={bao.id}
+            className="flex flex-col items-center gap-1.5 rounded-xl border p-2 bg-card/50"
+          >
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-muted/40">
+              <img
+                src={bao.src}
+                alt={bao.name}
+                className="w-full h-full object-contain"
+                loading="lazy"
+              />
+            </div>
+            <span className="text-[10px] font-medium text-muted-foreground">{bao.name}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
