@@ -43,7 +43,7 @@ export function canWriteLocalStorage(namespace?: string): boolean {
  *  Call this after a write error that may have been caused by quota exhaustion
  *  so the next call re-probes storage availability.
  */
-export function resetCanWriteLocalStorageCache(): void {
+export function resetCanWriteLocalStorageCache(_namespace?: string): void {
   canWriteLocalStorageCache = null;
 }
 
@@ -631,7 +631,7 @@ export async function saveProofsForMint(mintUrl: string, proofs: unknown[], encK
 
 const TX_STORAGE_KEY = 'transactions';
 
-export function isValidTransaction(t: unknown): t is Transaction {
+export function isValidTransaction(t: unknown, _namespace?: string): t is Transaction {
   if (!t || typeof t !== 'object') return false;
   const tx = t as Record<string, unknown>;
   if (
@@ -705,7 +705,7 @@ export async function loadTransactions(
   try {
     const txs = JSON.parse(json) as unknown[];
     if (!Array.isArray(txs)) return [];
-    return txs.filter(isValidTransaction);
+    return txs.filter((t): t is Transaction => isValidTransaction(t));
   } catch {
     return [];
   }
@@ -727,7 +727,7 @@ export function loadTransactionsSync(opts: LoadTransactionsOptions = {}, namespa
       return v;
     }) as unknown[];
     if (!Array.isArray(txs)) return [];
-    return txs.filter(isValidTransaction);
+    return txs.filter((t): t is Transaction => isValidTransaction(t));
   } catch {
     return [];
   }
@@ -921,7 +921,7 @@ export interface WipeResult {
 /** Comprehensive wipe: remove every app-owned localStorage key and drop the IndexedDB.
  *  Returns a result object indicating whether IndexedDB deletion was blocked.
  */
-export async function wipeAllAppData(): Promise<WipeResult> {
+export async function wipeAllAppData(_namespace?: string): Promise<WipeResult> {
   const result: WipeResult = { deleted: true, blocked: false };
   const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:', 'pets:cashu:'];
   const appKeys = new Set(['pwa-ios-prompt-dismissed']);

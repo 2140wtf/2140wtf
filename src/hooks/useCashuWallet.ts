@@ -872,7 +872,7 @@ export function useCashuWallet(
                     const MAX_TX_AMOUNT = Number.MAX_SAFE_INTEGER;
                     const VERY_OLD_MS = 180 * 24 * 60 * 60 * 1000;
                     const now = Date.now();
-                    let validTxs = restored.transactions.filter(isValidTransaction);
+                    let validTxs = restored.transactions.filter((t): t is Transaction => isValidTransaction(t));
                     validTxs = validTxs.filter((t) => t.amount <= MAX_TX_AMOUNT);
                     const veryOld = validTxs.filter((t) => now - t.createdAt > VERY_OLD_MS);
                     if (veryOld.length > 0) {
@@ -2206,7 +2206,7 @@ export function useCashuWallet(
           const MAX_TX_AMOUNT = Number.MAX_SAFE_INTEGER;
           const VERY_OLD_MS = 180 * 24 * 60 * 60 * 1000;
           const now = Date.now();
-          let validTxs = payload.transactions.filter(isValidTransaction);
+          let validTxs = payload.transactions.filter((t): t is Transaction => isValidTransaction(t));
           validTxs = validTxs.filter((t) => t.amount <= MAX_TX_AMOUNT);
           const veryOld = validTxs.filter((t) => now - t.createdAt > VERY_OLD_MS);
           if (veryOld.length > 0) {
