@@ -105,9 +105,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
       {/* Logo + collapse toggle */}
       <div className={cn('flex mb-1', collapsed ? 'flex-col items-center gap-2 px-1' : 'items-center justify-between px-3')}>
         <Link to="/" onClick={scrollToTopIfCurrent('/')}>
-          <div className="bg-background/85 rounded-full">
-            <DittoLogo size={collapsed ? 36 : 48} />
-          </div>
+          <DittoLogo size={collapsed ? 36 : 48} />
         </Link>
         <button
           type="button"
