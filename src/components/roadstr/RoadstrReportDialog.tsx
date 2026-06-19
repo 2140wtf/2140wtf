@@ -24,8 +24,8 @@ interface RoadstrReportDialogProps {
   location?: { lat: number; lon: number } | null;
 }
 
-/** Pad the type TTL slightly so the event survives a bit beyond its display lifetime. */
-const EXPIRATION_PADDING_SECONDS = 5 * 60;
+/** Relay-side NIP-40 expiration for all Roadstr events (14 days). */
+const EXPIRATION_SECONDS = 14 * 24 * 60 * 60;
 
 /**
  * Lightweight dialog to publish a kind 1315 Roadstr report.
@@ -58,8 +58,8 @@ export function RoadstrReportDialog({
 
     const publishAtLocation = (lat: number, lon: number) => {
       const createdAt = Math.floor(Date.now() / 1000);
+      const expiration = createdAt + EXPIRATION_SECONDS;
       const cfg = ROADSTR_EVENT_TYPES[type];
-      const expiration = createdAt + cfg.ttlSeconds + EXPIRATION_PADDING_SECONDS;
 
       const tags: string[][] = [
         ['t', type],
