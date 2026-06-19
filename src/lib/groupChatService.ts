@@ -5,7 +5,8 @@
  * Group Ratchet fallback (no Rust MLS backend required).
  */
 
-import { nip19, verifyEvent, getPublicKey } from 'nostr-tools';
+import { nip19, getPublicKey } from 'nostr-tools';
+import { verifyEvent } from 'nostr-tools/pure';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import {
@@ -188,6 +189,7 @@ export class GroupChatService {
   private pendingWelcomes: Map<string, Map<number, { welcomeEvent: NostrEvent; wd: Record<string, unknown> }>> = new Map();
   private pendingGroupEvents: Map<string, NostrEvent[]> = new Map();
   private epochSecretCache: Map<string, Map<number, string>> = new Map();
+  private epochRootSecrets: Map<string, Map<number, string>> = new Map();
   private loadStatePromise: Promise<void>;
 
   constructor(userPubkey: string, userPrivkey: Uint8Array, defaultRelays: string[] = []) {
@@ -224,6 +226,13 @@ export class GroupChatService {
       const secrets = (await loadGroupSecrets(this.userPubkey, groupId)) ?? legacySecrets;
       if (secrets) {
         this.groupStates.set(groupId, secrets);
+        const epochMap = new Map<number, string>();
+        if (secrets.epochRootSecrets) {
+          for (const [epoch, root] of Object.entries(secrets.epochRootSecrets)) {
+            epochMap.set(Number(epoch), root);
+          }
+        }
+        this.epochRootSecrets.set(groupId, epochMap);
         if (legacySecrets) {
           // Migrate legacy inline secrets to secure storage and strip from metadata.
           await saveGroupSecrets(this.userPubkey, groupId, legacySecrets);
@@ -276,9 +285,10 @@ export class GroupChatService {
     const cached = this.epochSecretCache.get(groupId)?.get(epoch);
     if (cached) return cached;
 
-    if (secrets.rootSecret) {
+    const rootForEpoch = this.epochRootSecrets.get(groupId)?.get(epoch);
+    if (rootForEpoch) {
       try {
-        const derived = await deriveEpochSecret(secrets.rootSecret, epoch, groupId);
+        const derived = await deriveEpochSecret(rootForEpoch, epoch, groupId);
         let groupCache = this.epochSecretCache.get(groupId);
         if (!groupCache) {
           groupCache = new Map();
@@ -293,8 +303,19 @@ export class GroupChatService {
     return undefined;
   }
 
-  private async setSecrets(groupId: string, exporterSecret: string, rootSecret?: string): Promise<void> {
-    const secrets: StoredGroupSecrets = { exporterSecret, rootSecret };
+  private async setSecrets(groupId: string, epoch: number, exporterSecret: string, rootSecret?: string): Promise<void> {
+    const existingMap = this.epochRootSecrets.get(groupId) ?? new Map<number, string>();
+    if (rootSecret) {
+      existingMap.set(epoch, rootSecret);
+    }
+    this.epochRootSecrets.set(groupId, existingMap);
+
+    const epochRootSecrets: Record<number, string> = {};
+    for (const [e, r] of existingMap) {
+      epochRootSecrets[e] = r;
+    }
+
+    const secrets: StoredGroupSecrets = { exporterSecret, rootSecret, epochRootSecrets };
     this.groupStates.set(groupId, secrets);
     await saveGroupSecrets(this.userPubkey, groupId, secrets);
   }
@@ -379,7 +400,7 @@ export class GroupChatService {
       lastActivity: Date.now(),
     };
 
-    await this.setSecrets(nostrGroupId, exporterSecret, rootSecret);
+    await this.setSecrets(nostrGroupId, 0, exporterSecret, rootSecret);
     await this.persistGroup(stored);
     this.messages.set(nostrGroupId, []);
 
@@ -461,7 +482,7 @@ export class GroupChatService {
 
     let sigValid = false;
     try {
-      sigValid = verifyEvent(event as Parameters<typeof verifyEvent>[0]);
+      sigValid = verifyEvent(event);
     } catch {
       sigValid = false;
     }
@@ -634,7 +655,7 @@ export class GroupChatService {
     group.members.push(memberPubkey);
     group.epoch = newEpoch;
     group.lastActivity = Date.now();
-    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newEpoch, newExporterSecret, newRootSecret);
 
     const metadata = createNostrGroupDataExtension({
       nostrGroupId: groupId,
@@ -728,7 +749,7 @@ export class GroupChatService {
     group.epoch = newEpoch;
     group.lastActivity = Date.now();
 
-    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newEpoch, newExporterSecret, newRootSecret);
 
     const events: NostrEvent[] = [];
     let failedCount = 0;
@@ -807,7 +828,7 @@ export class GroupChatService {
     group.adminPubkeys.push(memberPubkey);
     group.epoch = newEpoch;
     group.lastActivity = Date.now();
-    await this.setSecrets(groupId, newExporterSecret, newRootSecret);
+    await this.setSecrets(groupId, newEpoch, newExporterSecret, newRootSecret);
 
     const metadata = createNostrGroupDataExtension({
       nostrGroupId: groupId,
@@ -983,7 +1004,7 @@ export class GroupChatService {
         lastActivity: Date.now(),
       };
 
-      await this.setSecrets(groupId, exporterSecret, rootSecret);
+      await this.setSecrets(groupId, epoch, exporterSecret, rootSecret);
       await this.persistGroup(stored);
       if (!this.messages.has(groupId)) {
         this.messages.set(groupId, []);
@@ -1016,6 +1037,7 @@ export class GroupChatService {
     this.groups.delete(groupId);
     this.messages.delete(groupId);
     this.groupStates.delete(groupId);
+    this.epochRootSecrets.delete(groupId);
     this.pendingWelcomes.delete(groupId);
     this.pendingGroupEvents.delete(groupId);
     this.epochSecretCache.delete(groupId);
