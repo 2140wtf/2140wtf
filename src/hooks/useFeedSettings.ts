@@ -3,7 +3,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useEncryptedSettings } from "@/hooks/useEncryptedSettings";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { SIDEBAR_ITEMS, SIDEBAR_ITEM_IDS, SIDEBAR_DIVIDER_ID, isNostrUri, isExternalUri, isNsiteUri } from "@/lib/sidebarItems";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 // ── Order computation ─────────────────────────────────────────────────────────
 
@@ -122,6 +122,26 @@ export function useFeedSettings() {
     () => computeHiddenItems(orderedItems),
     [orderedItems],
   );
+
+  // Migration: make sure Polls is visible in the sidebar right below ₿AO MARKETS.
+  // This only runs once for users whose saved order predates the Polls item.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0 || order.includes("polls")) return;
+
+    const next = [...order];
+    const baoIdx = next.indexOf("prediction-markets");
+    if (baoIdx !== -1) {
+      next.splice(baoIdx + 1, 0, "polls");
+    } else {
+      next.push("polls");
+    }
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
   const updateFeedSettings = useCallback(
     (patch: Partial<FeedSettings>) => {
