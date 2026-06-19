@@ -7,8 +7,12 @@ import {
   type RoadstrConfirmation,
   type RoadstrReport,
 } from '@/lib/roadstr';
+import { ROADSTR_EVENT_TYPES } from '@/components/roadstr/roadstrTypes';
 
-const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
+/** Look back far enough to cover the longest-lived report type (speed camera). */
+const MAX_TTL_SECONDS = Math.max(
+  ...Object.values(ROADSTR_EVENT_TYPES).map((cfg) => cfg.ttlSeconds),
+);
 
 export interface RoadstrEventsResult {
   reports: RoadstrReport[];
@@ -33,7 +37,7 @@ export function useRoadstrEvents(geohashes: string[] | undefined) {
         return { reports: [], confirmations: [], allEvents: [] };
       }
 
-      const since = Math.floor(Date.now() / 1000) - SEVEN_DAYS_SECONDS;
+      const since = Math.floor(Date.now() / 1000) - MAX_TTL_SECONDS;
       const events = await nostr.query(
         [{ kinds: [1315, 1316], '#g': geohashes, since }],
         { signal },
