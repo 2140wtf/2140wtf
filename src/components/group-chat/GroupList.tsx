@@ -1,16 +1,18 @@
 import { Users, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 import type { GroupChatGroup } from '@/lib/groupChatService';
 
 interface GroupListProps {
   groups: GroupChatGroup[];
   selectedGroupId: string | null;
+  unreadGroupIds?: string[];
   onSelectGroup: (groupId: string) => void;
   onCreateClick: () => void;
 }
 
-export function GroupList({ groups, selectedGroupId, onSelectGroup, onCreateClick }: GroupListProps) {
+export function GroupList({ groups, selectedGroupId, unreadGroupIds = [], onSelectGroup, onCreateClick }: GroupListProps) {
   return (
     <div className="flex flex-col h-full border-r bg-muted/30">
       <div className="p-3 border-b flex items-center justify-between">
@@ -32,20 +34,25 @@ export function GroupList({ groups, selectedGroupId, onSelectGroup, onCreateClic
                 <button
                   key={group.nostrGroupId}
                   type="button"
+                  aria-selected={isActive}
                   onClick={() => onSelectGroup(group.nostrGroupId)}
-                  className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                  className={cn(
+                    'w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors',
                     isActive
                       ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                      : 'hover:bg-muted',
+                  )}
                 >
                   <Users className="size-4 shrink-0" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{group.name}</div>
                     <div className="text-[10px] opacity-80 truncate">
                       {group.members.length} member{group.members.length !== 1 ? 's' : ''}
                     </div>
                   </div>
+                  {!isActive && unreadGroupIds.includes(group.nostrGroupId) && (
+                    <span className="size-2 rounded-full bg-primary shrink-0" aria-hidden="true" />
+                  )}
                 </button>
               );
             })}

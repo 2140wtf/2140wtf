@@ -29,7 +29,7 @@ export function GroupChatCard({ event, className }: GroupChatCardProps) {
           </p>
         </div>
         <Link
-          to="/groups"
+          to={groupId ? `/groups?g=${encodeURIComponent(groupId)}` : '/groups'}
           className="text-xs font-medium text-primary hover:underline shrink-0"
         >
           Open groups

@@ -6,7 +6,7 @@ import { useGroupChatReadCursors } from '@/hooks/useGroupChatReadCursors';
 
 export function useGroupChatHasUnread() {
   const { user } = useCurrentUser();
-  const { groups, messages: allMessages } = useGroupChatContext();
+  const { groups, getMessagesForGroup } = useGroupChatContext();
   const { getCursor } = useGroupChatReadCursors();
 
   const unreadGroups = useMemo(() => {
@@ -15,7 +15,10 @@ export function useGroupChatHasUnread() {
     return groups
       .map((group) => {
         const cursor = getCursor(group.nostrGroupId);
-        const groupMessages = allMessages.filter((m) => m.nostrGroupId === group.nostrGroupId);
+        const memberSet = new Set(group.members);
+        const groupMessages = getMessagesForGroup(group.nostrGroupId).filter((m) =>
+          memberSet.has(m.senderPubkey),
+        );
         const unreadCount = groupMessages.reduce((count, message) => {
           if (message.senderPubkey === user.pubkey) return count;
           return message.timestamp > cursor ? count + 1 : count;
@@ -23,7 +26,7 @@ export function useGroupChatHasUnread() {
         return { group, unreadCount };
       })
       .filter(({ unreadCount }) => unreadCount > 0);
-  }, [groups, allMessages, getCursor, user]);
+  }, [groups, getMessagesForGroup, getCursor, user]);
 
   const unreadCount = useMemo(
     () => unreadGroups.reduce((sum, { unreadCount }) => sum + unreadCount, 0),
