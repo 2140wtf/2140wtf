@@ -14,5 +14,5 @@ interface PollCubePreviewProps {
 export function PollCubePreview({ pollId, title }: PollCubePreviewProps) {
   const { data: embedUrl, isLoading } = useHostedCubeEmbed(pollId);
   if (isLoading || !embedUrl) return null;
-  return <HostedPollCube pollId={pollId} title={title} className="mb-4 h-80" />;
+  return <HostedPollCube pollId={pollId} title={title} className="mb-4 h-[420px]" />;
 }
