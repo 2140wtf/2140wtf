@@ -69,6 +69,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   const { user } = useCurrentUser();
   const { phase, markComplete } = useInitialSync();
   const { isLoading: settingsLoading } = useEncryptedSettings();
+  const { config } = useAppContext();
   const [preloadApp, setPreloadApp] = useState(false);
   const [signupActive, setSignupActive] = useState(false);
   // Track whether we've shown the app at least once so we don't re-gate on
@@ -140,7 +141,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   // Only gate on the very first load — once the app has been shown, don't
   // re-gate on background refetches (e.g. window focus).
   if (phase === "complete" && settingsLoading && !hasShownApp.current) {
-    const hasLocalSync = user ? getLocalSettingsSync(user.pubkey) > 0 : false;
+    const hasLocalSync = user ? getLocalSettingsSync(config.appId, user.pubkey) > 0 : false;
     if (!hasLocalSync) {
       return (
         <OnboardingContext.Provider value={contextValue}>
