@@ -32,7 +32,7 @@ import {
   type SocialCheckpoint,
 } from '../lib/pets-interaction';
 
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ interface UseConsolidateSocialInteractionsReturn {
 export function useConsolidateSocialInteractions(
   updateCompanionEvent: (event: import('@nostrify/nostrify').NostrEvent) => void,
 ): UseConsolidateSocialInteractionsReturn {
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
   const [isPending, setIsPending] = useState(false);
 

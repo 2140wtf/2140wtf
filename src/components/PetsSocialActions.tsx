@@ -25,7 +25,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 import { parsePetsEvent } from '@/pets/core/lib/pets';
 import {
@@ -117,7 +117,7 @@ interface PetsSocialActionsProps {
 
 export function PetsSocialActions({ event, source = DEFAULT_SOURCE, onInteractionSuccess, companion: companionProp, className }: PetsSocialActionsProps) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
   const parsedCompanion = useMemo(() => companionProp !== undefined ? companionProp : parsePetsEvent(event), [event, companionProp]);

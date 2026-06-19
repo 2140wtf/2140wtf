@@ -14,8 +14,8 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import {
   KIND_PETS_STATE,
@@ -37,7 +37,7 @@ export function useSeedIdentitySync(
   updateCompanionEvent: (event: NostrEvent) => void,
 ): void {
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   // Track which d-tags we've already synced in this session to avoid loops.
   const syncedRef = useRef<Set<string>>(new Set());
@@ -69,7 +69,7 @@ export function useSeedIdentitySync(
         try {
           // Fetch the freshest version from relays to avoid stale overwrites
           // (another device may have updated the event since our cache was populated).
-          const prev = await fetchFreshEvent(nostr, {
+          const prev = await fetchFreshPetsEvent(nostr, {
             kinds: [KIND_PETS_STATE],
             authors: [c.event.pubkey],
             '#d': [c.d],

@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 /**
  * useCompanionItemReaction Hook
  * 
@@ -92,7 +93,7 @@ export function useCompanionItemReaction({
     queryFn: async ({ signal }) => {
       if (!user?.pubkey || !currentCompanionD) return null;
       
-      const events = await nostr.query([{
+      const events = await queryPetsRelay(nostr, [{
         kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [currentCompanionD],

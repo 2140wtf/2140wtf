@@ -12,8 +12,8 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion, PetsStage } from '@/pets/core/lib/pets';
@@ -43,7 +43,7 @@ export function usePetsDevUpdate({
 }: UsePetsDevUpdateParams) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (updates: PetsDevUpdates): Promise<DevUpdateResult> => {
@@ -147,7 +147,7 @@ export function usePetsDevUpdate({
       // ─── Fetch Fresh Event ───
       // Read-modify-write: fetch the latest canonical 31124 from relays
       // so we don't overwrite concurrent changes (e.g. social consolidation).
-      const prev = await fetchFreshEvent(nostr, {
+      const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [companion.d],

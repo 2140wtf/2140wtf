@@ -37,7 +37,7 @@ import {
   type PetsInteraction,
   type SocialCheckpoint,
 } from '../lib/pets-interaction';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 
 // ─── Minimum elapsed time before a decay-only sync is worth publishing ───────
 // If decay occurred for less than this many seconds and there are no social
@@ -96,7 +96,7 @@ export function useCanonicalSync({
   ensureCanonicalBeforeAction,
   onSocialConsolidated,
 }: UseCanonicalSyncParams): void {
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
   // Track which companion d-tag has already been synced this session.
