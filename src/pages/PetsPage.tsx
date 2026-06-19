@@ -3359,7 +3359,9 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           <div className="size-7 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
             <TrendingUp className="size-4 text-amber-500" />
           </div>
-          <p className="text-sm font-semibold">₿AO Trading</p>
+          <p className="text-sm font-semibold">
+            Bitcoin{profile?.walletMode === 'demo' && ' (₿AO DEMO)'}
+          </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
               {getBaoTierLabel(profile.baoTier)}
