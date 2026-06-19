@@ -40,7 +40,7 @@ interface PredictionMarketVolumeChartProps {
 
 export function PredictionMarketVolumeChart({ market, className }: PredictionMarketVolumeChartProps) {
   const [range, setRange] = useState<VolumeRange>('ALL');
-  const { data, isLoading, error } = useBaoMarketVolume(market.marketId, range);
+  const { data, isLoading, error } = useBaoMarketVolume(market, range);
 
   const chartData = useMemo(() => {
     if (!data?.buckets) return [];

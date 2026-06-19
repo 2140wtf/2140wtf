@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { NRelay1, type NostrEvent, type NostrFilter } from '@nostrify/nostrify';
 
-import {
-  BAO_MARKETS_TRADE_KIND,
-  type BaoMarket,
-  type BaoMarketOutcome,
-} from '@/lib/baoMarketParser';
+import type { BaoMarket } from '@/lib/baoMarketParser';
 
-const RELAY = 'wss://relay.bao.network';
-const QUERY_TIMEOUT_MS = 15_000;
-const QUERY_LIMIT = 500;
+export type PriceHistoryRange = '1H' | '1D' | '1W' | '1M' | 'ALL';
 
 export interface PricePoint {
   /** Unix timestamp in seconds. */
@@ -18,146 +11,138 @@ export interface PricePoint {
   price: number;
 }
 
-function getTagValue(tags: string[][], name: string): string | undefined {
-  return tags.find((t) => t[0] === name)?.[1];
-}
-
-function normalizePrice(raw: unknown): number | null {
-  const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
-  if (!Number.isFinite(num)) return null;
-  // Trade events store avgPrice in cents (0-100). Normalize to [0, 1].
-  const ratio = num > 1 ? num / 100 : num;
-  return Math.max(0, Math.min(1, ratio));
-}
-
-export interface ParsedTrade {
-  tradeId: string;
-  outcomeId: string;
+interface ApiPricePoint {
+  timestamp: number;
   price: number;
-  createdAt: number;
+  volume: number;
 }
 
-export function parseBaoTradeEvent(event: NostrEvent): ParsedTrade | null {
-  if (event.kind !== BAO_MARKETS_TRADE_KIND) return null;
-
-  const tags = event.tags ?? [];
-  const tradeId = getTagValue(tags, 'd') || '';
-  const marketId = getTagValue(tags, 'm') || '';
-  if (!tradeId || !marketId) return null;
-
-  let content: Record<string, unknown> = {};
-  try {
-    content = JSON.parse(event.content || '{}') as Record<string, unknown>;
-  } catch {
-    content = {};
-  }
-
-  const outcomeId =
-    (typeof content.outcomeId === 'string' ? content.outcomeId : undefined) ||
-    getTagValue(tags, 'o') ||
-    getTagValue(tags, 'outcome') ||
-    '';
-
-  const price = normalizePrice(content.avgPrice);
-  if (price === null || outcomeId === '') return null;
-
-  return {
-    tradeId,
-    outcomeId,
-    price,
-    createdAt: event.created_at,
+interface PriceHistoryApiResponse {
+  data: {
+    market_id: string;
+    outcome_id: string;
+    period: string;
+    prices: ApiPricePoint[];
   };
+  meta?: unknown;
 }
 
-function buildSyntheticHistory(
-  outcomes: BaoMarketOutcome[],
-): Record<string, PricePoint[]> {
-  const history: Record<string, PricePoint[]> = {};
-  const now = Math.floor(Date.now() / 1000);
-  for (let idx = 0; idx < outcomes.length; idx++) {
-    const outcome = outcomes[idx];
-    const start = 0.5;
-    const end = outcome.probability ?? 1 / outcomes.length;
-    // Deterministic, stable synthetic line from 50% to current probability.
-    // Use recent timestamps so the ALL range doesn't expand to the Unix epoch.
-    history[outcome.label] = [
-      { time: now - 24 * 60 * 60, price: start },
-      { time: now, price: Math.max(0, Math.min(1, end)) },
-    ];
+const API_BASE = '/v1';
+const PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
+
+function rangeToPeriod(range: PriceHistoryRange): string {
+  switch (range) {
+    case '1H':
+      return '1h';
+    case '1D':
+      return '24h';
+    case '1W':
+      return '7d';
+    case '1M':
+      return '30d';
+    case 'ALL':
+      return 'all';
   }
-  return history;
 }
 
-export function buildPriceHistory(
-  market: BaoMarket,
-  trades: ParsedTrade[],
-): Record<string, PricePoint[]> {
-  if (trades.length === 0) {
-    return buildSyntheticHistory(market.outcomes);
-  }
-
-  const byOutcome = new Map<string, PricePoint[]>();
-  const sorted = [...trades].sort((a, b) => a.createdAt - b.createdAt);
-
-  for (const trade of sorted) {
-    const points = byOutcome.get(trade.outcomeId) ?? [];
-    points.push({ time: trade.createdAt, price: trade.price });
-    byOutcome.set(trade.outcomeId, points);
-  }
-
-  const history: Record<string, PricePoint[]> = {};
-  for (const outcome of market.outcomes) {
-    const points = byOutcome.get(outcome.label) ?? byOutcome.get(outcome.id);
-    if (points && points.length >= 2) {
-      history[outcome.label] = points;
-      continue;
-    }
-
-    // No trades for this outcome — show a flat line at its current probability.
-    const prob = Math.max(0, Math.min(1, outcome.probability ?? 1 / market.outcomes.length));
-    history[outcome.label] = [
-      { time: sorted[0]?.createdAt ?? market.createdAt, price: prob },
-      { time: sorted[sorted.length - 1]?.createdAt ?? market.createdAt, price: prob },
-    ];
-  }
-
-  return history;
+function normalizePrice(raw: unknown): number {
+  const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(0, Math.min(1, num));
 }
 
-export function useBaoMarketPriceHistory(market: BaoMarket | null) {
+function outcomeQueryIds(outcome: BaoMarket['outcomes'][number]): string[] {
+  const ids: string[] = [];
+
+  function add(id: string) {
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+
+  add(outcome.id);
+
+  // Try the raw label (used by categorical markets).
+  if (outcome.label && outcome.label !== outcome.id) {
+    add(outcome.label);
+  }
+
+  // Binary market outcomes are labelled YES/NO; the API expects uppercase IDs.
+  if (outcome.id.toUpperCase() !== outcome.id) {
+    add(outcome.id.toUpperCase());
+  }
+  if (outcome.label && outcome.label.toUpperCase() !== outcome.label) {
+    add(outcome.label.toUpperCase());
+  }
+
+  return ids;
+}
+
+async function fetchOutcomeHistory(
+  marketId: string,
+  outcomeId: string,
+  period: string,
+  signal: AbortSignal,
+): Promise<PricePoint[]> {
+  const params = new URLSearchParams({ period, outcome_id: outcomeId });
+  const path = `${API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
+
+  let res: Response;
+  try {
+    res = await fetch(path, { signal });
+  } catch {
+    // Fall back to the public Bao API when running outside the hosted/proxied environment.
+    const publicPath = `${PUBLIC_API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
+    res = await fetch(publicPath, { signal });
+  }
+
+  if (!res.ok) {
+    throw new Error(`Price history API returned ${res.status}`);
+  }
+
+  const json = (await res.json()) as PriceHistoryApiResponse;
+  const prices = json.data?.prices;
+  if (!Array.isArray(prices)) {
+    throw new Error('Invalid price history response: missing prices array');
+  }
+
+  return prices
+    .filter((p) => typeof p.timestamp === 'number')
+    .map((p) => ({
+      time: p.timestamp,
+      price: normalizePrice(p.price),
+    }));
+}
+
+export function useBaoMarketPriceHistory(
+  market: BaoMarket | null,
+  range: PriceHistoryRange = 'ALL',
+) {
   return useQuery<Record<string, PricePoint[]>>({
-    queryKey: ['bao-market-price-history', market?.marketId],
+    queryKey: ['bao-market-price-history', market?.marketId, range],
     queryFn: async ({ signal }) => {
       if (!market) return {};
 
-      const relay = new NRelay1(RELAY);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
-      if (signal) {
-        signal.addEventListener('abort', () => controller.abort(), { once: true });
-      }
+      const period = rangeToPeriod(range);
+      const result: Record<string, PricePoint[]> = {};
 
-      const filter: NostrFilter = {
-        kinds: [BAO_MARKETS_TRADE_KIND],
-        '#m': [market.marketId],
-        limit: QUERY_LIMIT,
-      };
+      await Promise.all(
+        market.outcomes.map(async (outcome) => {
+          const ids = outcomeQueryIds(outcome);
 
-      try {
-        const events = await relay.query([filter], { signal: controller.signal });
-        const seen = new Set<string>();
-        const trades: ParsedTrade[] = [];
-        for (const event of events) {
-          if (seen.has(event.id)) continue;
-          seen.add(event.id);
-          const parsed = parseBaoTradeEvent(event);
-          if (parsed) trades.push(parsed);
-        }
-        return buildPriceHistory(market, trades);
-      } finally {
-        clearTimeout(timeoutId);
-        relay.close().catch(() => {});
-      }
+          for (const id of ids) {
+            try {
+              const points = await fetchOutcomeHistory(market.marketId, id, period, signal);
+              if (points.length > 0) {
+                result[outcome.label] = points;
+                return;
+              }
+            } catch {
+              // Try the next candidate outcome id.
+            }
+          }
+        }),
+      );
+
+      return result;
     },
     enabled: !!market,
     staleTime: 60 * 1000,
