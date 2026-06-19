@@ -125,8 +125,9 @@ export {
   getActionForItem,
 } from './lib/pets-action-utils';
 
-// Daily Missions
+// Daily Missions & Login Bonus
 export { useDailyMissions } from './hooks/useDailyMissions';
+export { useDailyLoginBonus } from './hooks/useDailyLoginBonus';
 export type { DailyMissionView, UseDailyMissionsResult } from './hooks/useDailyMissions';
 export { useAwardDailyXp, useClaimMissionReward } from './hooks/useClaimMissionReward';
 export { usePersistEvolutionProgress } from './hooks/usePersistEvolutionProgress';
@@ -139,6 +140,13 @@ export {
   trackDailyMissionEvent,
   trackMultipleDailyMissionActions,
 } from './lib/daily-mission-tracker';
+export {
+  calculateDailyLoginBonus,
+  DAILY_LOGIN_BASE_COINS,
+  DAILY_LOGIN_STREAK_BONUS_COINS,
+  MAX_DAILY_LOGIN_STREAK_BONUS_COINS,
+} from './lib/daily-login-bonus';
+export type { DailyLoginBonusResult } from './lib/daily-login-bonus';
 export type {
   DailyMissionAction,
   DailyMissionDefinition,
