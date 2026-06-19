@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigation, Plus, Loader2, Locate } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 
@@ -60,7 +60,13 @@ export function RoadstrPage(): React.JSX.Element {
   }, [viewport]);
 
   const { data, isLoading, error } = useRoadstrEvents(geohashes);
-  const now = Math.floor(Date.now() / 1000);
+
+  // Re-evaluate "active" periodically so reports expire while the page is open.
+  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const visibleReports = useMemo(() => {
     if (!data) return [];
