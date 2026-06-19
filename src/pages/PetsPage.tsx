@@ -3370,7 +3370,9 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
             <TrendingUp className="size-4 text-amber-500" />
           </div>
           <p className="text-sm font-semibold">
-            {profile?.walletMode === 'demo' ? '(₿AO demo sats)' : 'Bitcoin'}
+            {profile?.walletMode === 'demo'
+              ? 'Bitcoin (cashu/₿AO demo sats)'
+              : 'Bitcoin (cashu/real sats)'}
           </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
