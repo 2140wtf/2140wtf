@@ -2,9 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { DittoLogo } from '@/components/DittoLogo';
 import { Button } from '@/components/ui/button';
-import { useAppContext } from '@/hooks/useAppContext';
 import { useTheme } from '@/hooks/useTheme';
 import { themePresets, coreToTokens, type CoreThemeColors } from '@/themes';
 import { cn } from '@/lib/utils';
@@ -90,7 +88,6 @@ function ThemeSwatch({
 }
 
 export function LandingHero({ onLoginClick, onSignupClick }: LandingHeroProps) {
-  const { config } = useAppContext();
   const { theme, customTheme, applyCustomTheme, setTheme } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -133,13 +130,10 @@ export function LandingHero({ onLoginClick, onSignupClick }: LandingHeroProps) {
       {/* ── Hero Header ── */}
       <div className="px-4 pt-8 pb-6 text-center space-y-4">
         <div className="flex justify-center landing-hero-fade" style={{ animationDelay: '0ms' }}>
-          <DittoLogo size={56} />
+          <img src="/logo.jpg" alt="" className="h-24 sm:h-32 w-auto" />
         </div>
 
-        <div className="space-y-2 landing-hero-fade" style={{ animationDelay: '80ms' }}>
-          <h1 className="text-2xl sidebar:text-3xl font-bold tracking-tight">
-            {config.appName}
-          </h1>
+        <div className="landing-hero-fade" style={{ animationDelay: '80ms' }}>
           <p className="text-muted-foreground text-sm sidebar:text-base max-w-xs mx-auto leading-relaxed">
             Your content. Your vibe. Your&nbsp;rules.
           </p>
