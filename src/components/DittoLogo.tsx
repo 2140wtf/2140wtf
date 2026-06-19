@@ -12,7 +12,7 @@ export function DittoLogo({ className, size = 40 }: DittoLogoProps) {
 
   return (
     <img
-      src="/logo.jpg"
+      src="/logo.png"
       alt={config.appName}
       width={size}
       height={size}

@@ -146,7 +146,7 @@ export function LandingPage() {
       <section className="border-b border-[var(--2140-border)] px-4 pb-16 pt-10 sm:pt-14">
         <div className="mx-auto max-w-[1100px]">
           <img
-            src="/logo.jpg"
+            src="/logo.png"
             alt="2140.wtf"
             className="mb-6 h-32 sm:h-40 md:h-52 lg:h-64 w-auto"
           />
@@ -241,7 +241,7 @@ export function LandingPage() {
       <footer className="px-4 py-12 text-sm text-[var(--2140-muted)]">
         <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 font-[family-name:var(--font-display)] text-xl font-bold tracking-[-0.04em]">
-            <img src="/logo.jpg" alt="2140.wtf" className="h-7 w-auto" />
+            <img src="/logo.png" alt="2140.wtf" className="h-7 w-auto" />
           </div>
           <div className="flex gap-5">
             <a href="https://2140.wtf" target="_blank" rel="noreferrer" className="hover:text-[var(--2140-fg)]">2140.wtf</a>
