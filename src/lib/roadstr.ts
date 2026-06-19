@@ -11,7 +11,7 @@ export interface RoadstrReport {
   lon: number;
   geohashes: string[];
   comment: string;
-  expiration: number;
+  expiration?: number;
   alt?: string;
   event: NostrEvent;
 }
@@ -56,7 +56,6 @@ export function parseRoadstrReport(event: NostrEvent): RoadstrReport | undefined
   if (lat === undefined || lon === undefined) return undefined;
 
   const expiration = parseNumberTag(event.tags, 'expiration');
-  if (expiration === undefined) return undefined;
 
   const geohashes = event.tags.filter(([n]) => n === 'g').map(([, v]) => v).filter(Boolean);
   if (geohashes.length === 0) return undefined;
@@ -75,6 +74,11 @@ export function parseRoadstrReport(event: NostrEvent): RoadstrReport | undefined
     alt: parseStringTag(event.tags, 'alt'),
     event,
   };
+}
+
+/** Default expiry for a report when no explicit expiration tag is present. */
+export function getRoadstrDefaultExpiry(report: RoadstrReport): number {
+  return (report.expiration ?? report.createdAt + ROADSTR_EVENT_TYPES[report.type].ttlSeconds);
 }
 
 /**
@@ -116,7 +120,8 @@ export function computeEffectiveExpiry(
   confirmations: RoadstrConfirmation[],
 ): number {
   const ttl = ROADSTR_EVENT_TYPES[report.type].ttlSeconds;
-  let expiry = report.createdAt + ttl;
+  const cap = report.expiration ?? Infinity;
+  let expiry = Math.min(report.createdAt + ttl, cap);
 
   const sorted = [...confirmations]
     .filter((c) => c.reportId === report.id)
@@ -124,7 +129,7 @@ export function computeEffectiveExpiry(
 
   for (const conf of sorted) {
     if (conf.status === 'still_there') {
-      expiry = Math.max(expiry, conf.createdAt + ttl);
+      expiry = Math.min(Math.max(expiry, conf.createdAt + ttl), cap);
     } else {
       expiry = Math.min(expiry, conf.createdAt);
     }

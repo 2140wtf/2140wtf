@@ -60,8 +60,8 @@ export const HATCH_MISSIONS: readonly EvolutionMissionDefinition[] = [
   },
   {
     id: 'interactions',
-    title: 'Interact with Pets',
-    description: 'Care for your Pets 7 times',
+    title: 'Interact with 2140 Pet',
+    description: 'Care for your 2140 Pet 7 times',
     target: 7,
     tracking: 'tally',
   },
@@ -82,8 +82,8 @@ export const EVOLVE_MISSIONS: readonly EvolutionMissionDefinition[] = [
   },
   {
     id: 'interactions',
-    title: 'Interact with Pets',
-    description: 'Care for your Pets 21 times',
+    title: 'Interact with 2140 Pet',
+    description: 'Care for your 2140 Pet 21 times',
     target: 21,
     tracking: 'tally',
   },
