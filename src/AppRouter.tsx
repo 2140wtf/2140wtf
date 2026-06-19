@@ -42,7 +42,7 @@ const BadgesPage = lazy(() => import("./pages/BadgesPage").then(m => ({ default:
 const BookmarksPage = lazy(() => import("./pages/BookmarksPage").then(m => ({ default: m.BookmarksPage })));
 const BooksPage = lazy(() => import("./pages/BooksPage").then(m => ({ default: m.BooksPage })));
 const ChangelogPage = lazy(() => import("./pages/ChangelogPage").then(m => ({ default: m.ChangelogPage })));
-const AboutPage = lazy(() => import("./pages/AboutPage").then(m => ({ default: m.AboutPage })));
+const LandingPage = lazy(() => import("./pages/LandingPage").then(m => ({ default: m.LandingPage })));
 const ClientFeedPage = lazy(() => import("./pages/ClientFeedPage").then(m => ({ default: m.ClientFeedPage })));
 const ContentPage = lazy(() => import("./pages/ContentPage").then(m => ({ default: m.ContentPage })));
 const ContentSettingsPage = lazy(() => import("./pages/ContentSettingsPage").then(m => ({ default: m.ContentSettingsPage })));
@@ -328,7 +328,7 @@ export function AppRouter() {
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/safety" element={<CSAEPolicyPage />} />
             <Route path="/changelog" element={<ChangelogPage />} />
-            <Route path="/about" element={<AboutPage />} />
+            <Route path="/about" element={<LandingPage />} />
             <Route path="/r/*" element={<RelayPage />} />
             <Route
               path="/settings/lists"
