@@ -256,7 +256,7 @@ export function PetsHatchingCeremony({
 
         const eggEvent = await publishEvent({
           kind: KIND_PETS_STATE,
-          content: 'A new Pets egg!',
+          content: 'A new 2140 Pet egg!',
           tags: eggTags,
           created_at: eggPreview.createdAt,
         });
@@ -312,7 +312,7 @@ export function PetsHatchingCeremony({
         console.error('[HatchingCeremony] Setup failed:', error);
         toast({
           title: 'Something went wrong',
-          description: 'Failed to set up your Pets. Please try again.',
+          description: 'Failed to set up your 2140 Pet. Please try again.',
           variant: 'destructive',
         });
       } finally {
@@ -543,7 +543,7 @@ export function PetsHatchingCeremony({
       console.error('[HatchingCeremony] Naming failed:', error);
       toast({
         title: 'Failed to save name',
-        description: 'Your Pets was created, but the name could not be saved.',
+        description: 'Your 2140 Pet was created, but the name could not be saved.',
         variant: 'destructive',
       });
       setFadeOut(true);

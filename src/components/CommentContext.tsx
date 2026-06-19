@@ -161,7 +161,7 @@ const KIND_LABELS: Record<number, string> = {
   9735: 'a zap',
   9802: 'a highlight',
   8333: 'a zap',
-  31124: 'a Pets',
+  31124: 'a 2140 Pet',
   33863: 'a fundraiser',
   1315: 'a road event',
   1316: 'a road event confirmation',

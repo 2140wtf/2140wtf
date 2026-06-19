@@ -1,11 +1,11 @@
-# Pets Tag Schema
+# 2140 Pets Tag Schema
 
-> **Product Specification** - This document is the canonical source of truth for Pets tag definitions.  
+> **Product Specification** - This document is the canonical source of truth for 2140 Pets tag definitions.  
 > The runtime schema at `src/pets/core/lib/pets-tag-schema.ts` MUST align with this spec.
 
 ## Overview
 
-Pets events (Kind 31124) use tags to store all state data. This document defines:
+2140 Pets events (Kind 31124) use tags to store all state data. This document defines:
 - All valid tags and their purposes
 - Which tags are required vs optional
 - Which tags persist across stage transitions
@@ -29,7 +29,7 @@ Core protocol-level tags required for event identification and ecosystem members
 
 ### 2. Core Identity Tags
 
-Tags that define the Pets's unique identity. These MUST be preserved across all transitions.
+Tags that define the 2140 Pet's unique identity. These MUST be preserved across all transitions.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -56,7 +56,7 @@ Tags derived deterministically from the seed. These are stored explicitly for fa
 
 ### 4. Personality / Trait Tags
 
-Character traits that define the Pets's personality. These are generated at creation and MUST persist.
+Character traits that define the 2140 Pet's personality. These are generated at creation and MUST persist.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -66,11 +66,11 @@ Character traits that define the Pets's personality. These are generated at crea
 | `voice_type` | No | egg, baby, adult | Yes | generated | string | Voice characteristic |
 | `mood` | No | egg, baby, adult | Yes | computed | string | Current emotional state |
 
-**Not Regenerable**: These tags are generated once and MUST be preserved. Do NOT invent values for existing Petss that lack these tags.
+**Not Regenerable**: These tags are generated once and MUST be preserved. Do NOT invent values for existing 2140 Pets that lack these tags.
 
 ### 5. Stat Tags
 
-Numeric values representing the Pets's current condition. These are actively computed and change frequently.
+Numeric values representing the 2140 Pet's current condition. These are actively computed and change frequently.
 
 | Tag | Required | Stages | Persistent | Source | Format | Default | Description |
 |-----|----------|--------|------------|--------|--------|---------|-------------|
@@ -86,7 +86,7 @@ Numeric values representing the Pets's current condition. These are actively com
 
 ### 6. State / Lifecycle Tags
 
-Tags that track the Pets's current lifecycle state.
+Tags that track the 2140 Pet's current lifecycle state.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -131,7 +131,7 @@ User preferences and computed flags.
 
 ### 10. Evolution Tags
 
-Tags specific to adult Petss.
+Tags specific to adult 2140 Pets.
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
@@ -220,7 +220,7 @@ These tags are from legacy versions and MUST be removed when republishing events
 
 ## Migration Rules
 
-When migrating legacy Petss to canonical format:
+When migrating legacy 2140 Pets to canonical format:
 
 1. **Always preserve existing values** - Do not regenerate tags that already exist
 2. **Generate missing required tags** - Derive `seed` if missing using the legacy event's `created_at`
@@ -232,7 +232,7 @@ When migrating legacy Petss to canonical format:
 
 ## Validation Rules
 
-A valid Pets event MUST have:
+A valid 2140 Pets event MUST have:
 - `d` tag in canonical format
 - `b` tag = `pets:ecosystem:v1`
 - `t` tag = `pets`
@@ -246,7 +246,7 @@ A valid Pets event MUST have:
 
 ## Implementation Checklist
 
-When implementing any flow that modifies Pets tags:
+When implementing any flow that modifies 2140 Pets tags:
 
 - [ ] Start from `canonical.allTags` as the base
 - [ ] Remove only task-specific tags (`task`, `task_completed`, `state_started_at`)
