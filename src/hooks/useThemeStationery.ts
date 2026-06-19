@@ -3,7 +3,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAppContext } from '@/hooks/useAppContext';
 import { builtinThemes, resolveTheme, resolveThemeConfig } from '@/themes';
 import { hslStringToHex } from '@/lib/colorUtils';
-import type { Stationery } from '@/lib/letterTypes';
+import type { Stationery } from '@/lib/themeTypes';
 
 /**
  * Converts the user's currently active Ditto theme into a letter Stationery.

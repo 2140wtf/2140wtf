@@ -153,6 +153,8 @@ export function ProfileCard({
       if (!cancelled) {
         setOverlayMaskUrl(url);
       }
+    }).catch(() => {
+      // Avatar mask is decorative; ignore load failures.
     });
 
     return () => {

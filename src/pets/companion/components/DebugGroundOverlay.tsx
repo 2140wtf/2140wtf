@@ -2,11 +2,11 @@
  * DebugGroundOverlay — Debug-only visual overlay for ground contact debugging.
  *
  * Shows horizontal lines indicating:
- *   - Container bottom (where Blobbi's container ends)
+ *   - Container bottom (where Pets's container ends)
  *   - Viewport bottom minus padding (target ground position)
  *   - Entry animation type and phase (during entry)
  *
- * Enabled by setting DEBUG_GROUND_CONTACT = true in BlobbiCompanionLayer.
+ * Enabled by setting DEBUG_GROUND_CONTACT = true in PetsCompanionLayer.
  */
 
 import type { EntryState } from '../types/companion.types';
@@ -30,7 +30,7 @@ export function DebugGroundOverlay({
 }: DebugGroundOverlayProps) {
   return (
     <>
-      {/* Ground line where Blobbi's CONTAINER bottom should be */}
+      {/* Ground line where Pets's CONTAINER bottom should be */}
       <div
         style={{
           position: 'fixed',

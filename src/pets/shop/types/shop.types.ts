@@ -1,7 +1,7 @@
-// src/blobbi/shop/types/shop.types.ts
+// src/pets/shop/types/shop.types.ts
 
 /**
- * Shop item category for Blobbi items
+ * Shop item category for Pets items
  */
 export type ShopItemCategory = 
   | 'food' 
@@ -11,7 +11,7 @@ export type ShopItemCategory =
   | 'energy';
 
 /**
- * Stat effects that items can apply to Blobbi
+ * Stat effects that items can apply to Pets
  * 
  * All stages use the same 5 stats: hunger, happiness, energy, hygiene, health
  * For eggs, only health, hygiene, happiness are active (hunger/energy fixed at 100)
@@ -25,7 +25,7 @@ export interface ItemEffect {
 }
 
 /**
- * Shop item definition for Blobbi shop
+ * Shop item definition for Pets shop
  */
 export interface ShopItem {
   id: string;
@@ -38,7 +38,7 @@ export interface ShopItem {
 }
 
 /**
- * Purchase request payload for Blobbi shop
+ * Purchase request payload for Pets shop
  */
 export interface PurchaseRequest {
   itemId: string;

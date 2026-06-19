@@ -13,7 +13,7 @@
  * - Max 20 items per room (excess items are dropped).
  */
 
-import { type BlobbiRoomId, isValidRoomId } from './room-config';
+import { type PetsRoomId, isValidRoomId } from './room-config';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ export const MAX_FURNITURE_PER_ROOM = 20;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** Allowed furniture layers (back = wall-mounted, floor = behind Blobbi, front = in front of Blobbi) */
+/** Allowed furniture layers (back = wall-mounted, floor = behind Pets, front = in front of Pets) */
 export const FURNITURE_LAYERS = ['back', 'floor', 'front'] as const;
 export type FurnitureLayer = typeof FURNITURE_LAYERS[number];
 
@@ -56,7 +56,7 @@ export interface FurniturePlacement {
 /** Top-level content key shape (stored in kind 11125 content JSON) */
 export interface RoomFurnitureContent {
   v: 1;
-  by_room: Partial<Record<BlobbiRoomId, FurniturePlacement[]>>;
+  by_room: Partial<Record<PetsRoomId, FurniturePlacement[]>>;
 }
 
 // ─── Validation Helpers ───────────────────────────────────────────────────────

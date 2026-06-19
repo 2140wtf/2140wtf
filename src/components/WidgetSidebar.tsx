@@ -30,12 +30,12 @@ import type { WidgetDefinition } from '@/lib/sidebarWidgets';
 
 const TrendingWidget = lazy(() => import('@/components/widgets/TrendingWidget').then((m) => ({ default: m.TrendingWidget })));
 const HotPostsWidget = lazy(() => import('@/components/widgets/HotPostsWidget').then((m) => ({ default: m.HotPostsWidget })));
-const BlobbiWidget = lazy(() => import('@/components/widgets/BlobbiWidget').then((m) => ({ default: m.BlobbiWidget })));
+const PetsWidget = lazy(() => import('@/components/widgets/PetsWidget').then((m) => ({ default: m.PetsWidget })));
 const StatusWidget = lazy(() => import('@/components/widgets/StatusWidget').then((m) => ({ default: m.StatusWidget })));
-const AIChatWidget = lazy(() => import('@/components/widgets/AIChatWidget').then((m) => ({ default: m.AIChatWidget })));
+
 const WikipediaWidget = lazy(() => import('@/components/widgets/WikipediaWidget').then((m) => ({ default: m.WikipediaWidget })));
-const BlueskyWidget = lazy(() => import('@/components/widgets/BlueskyWidget').then((m) => ({ default: m.BlueskyWidget })));
 const NostrClientsWidget = lazy(() => import('@/components/widgets/NostrClientsWidget').then((m) => ({ default: m.NostrClientsWidget })));
+const PredictionMarketsWidget = lazy(() => import('@/components/widgets/PredictionMarketsWidget').then((m) => ({ default: m.PredictionMarketsWidget })));
 const PhotoWidget = lazy(() => import('@/components/widgets/PhotoWidget').then((m) => ({ default: m.PhotoWidget })));
 const MusicWidget = lazy(() => import('@/components/widgets/MusicWidget').then((m) => ({ default: m.MusicWidget })));
 const FeedWidget = lazy(() => import('@/components/widgets/FeedWidget').then((m) => ({ default: m.FeedWidget })));
@@ -50,18 +50,16 @@ function WidgetContent({ id }: { id: string }) {
       return <TrendingWidget />;
     case 'hot-posts':
       return <HotPostsWidget />;
-    case 'blobbi':
-      return <BlobbiWidget />;
+    case 'pets':
+      return <PetsWidget />;
     case 'status':
       return <StatusWidget />;
-    case 'ai-chat':
-      return <AIChatWidget />;
     case 'wikipedia':
       return <WikipediaWidget />;
-    case 'bluesky':
-      return <BlueskyWidget />;
     case 'nostr-clients':
       return <NostrClientsWidget />;
+    case 'prediction-markets':
+      return <PredictionMarketsWidget />;
     case 'feed:photos':
       return <PhotoWidget />;
     case 'feed:music':

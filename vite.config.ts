@@ -10,6 +10,17 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 
 import { DittoConfigSchema } from "./src/lib/schemas";
 
+const PROJECT_ROOT = path.resolve(process.cwd());
+
+/**
+ * Ensure `target` resolves inside the project root. Prevents build-time path
+ * traversal via environment variables such as DITTO_CONFIG_FILE.
+ */
+function isWithinProjectRoot(target: string): boolean {
+  const resolved = path.resolve(PROJECT_ROOT, target);
+  return resolved === PROJECT_ROOT || resolved.startsWith(PROJECT_ROOT + path.sep);
+}
+
 /**
  * Load and validate the build-time ditto.json configuration file.
  * Returns the parsed config object, or `undefined` if the file doesn't exist.
@@ -20,7 +31,11 @@ import { DittoConfigSchema } from "./src/lib/schemas";
  * so a generic name silently breaks every CI build that runs on a self-hosted runner.
  */
 function loadDittoConfig(): object | undefined {
-  const configPath = path.resolve(process.env.DITTO_CONFIG_FILE ?? "./ditto.json");
+  const rawPath = process.env.DITTO_CONFIG_FILE ?? "./ditto.json";
+  if (!isWithinProjectRoot(rawPath)) {
+    throw new Error(`DITTO_CONFIG_FILE must resolve inside the project root: ${rawPath}`);
+  }
+  const configPath = path.resolve(PROJECT_ROOT, rawPath);
 
   let raw: string;
   try {
@@ -73,7 +88,10 @@ function mergePublicDir(externalDir: string): Plugin {
         if (!req.url) return next();
 
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
-        const filePath = path.join(resolved, urlPath);
+        const filePath = path.resolve(resolved, urlPath);
+        if (filePath !== resolved && !filePath.startsWith(resolved + path.sep)) {
+          return next();
+        }
 
         try {
           const stat = fs.statSync(filePath);
@@ -144,11 +162,15 @@ export default defineConfig(({ mode }) => {
   },
   plugins: [
     react(),
-    visualizer({
-      filename: "dist/bundle.html",
-      template: "treemap",
-      gzipSize: true,
-    }),
+    ...(process.env.ANALYZE
+      ? [
+          visualizer({
+            filename: "dist/bundle.html",
+            template: "treemap",
+            gzipSize: true,
+          }),
+        ]
+      : []),
     ...(publicDir ? [mergePublicDir(publicDir)] : []),
   ],
   define: {

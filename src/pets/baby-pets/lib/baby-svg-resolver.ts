@@ -1,10 +1,10 @@
 /**
- * Baby Blobbi SVG Resolver
+ * Baby Pets SVG Resolver
  * 
  * Handles loading and resolving baby stage SVG assets
  */
 
-import { Blobbi } from '@/blobbi/core/types/blobbi';
+import { Pets } from '@/pets/core/types/pets';
 import { BabyVariant, BabySvgResolverOptions } from '../types/baby.types';
 import { BABY_BASE_SVG, BABY_SLEEPING_SVG } from './baby-svg-data';
 
@@ -30,13 +30,13 @@ export function getBabySvgByVariant(variant: BabyVariant): string {
 }
 
 /**
- * Resolve baby Blobbi SVG content
+ * Resolve baby Pets SVG content
  */
-export function resolveBabySvg(blobbi: Blobbi, options: BabySvgResolverOptions = {}): string {
+export function resolveBabySvg(pets: Pets, options: BabySvgResolverOptions = {}): string {
   const { isSleeping = false } = options;
   
-  if (blobbi.lifeStage !== 'baby') {
-    console.warn('resolveBabySvg called with non-baby Blobbi');
+  if (pets.lifeStage !== 'baby') {
+    console.warn('resolveBabySvg called with non-baby Pets');
     return getFallbackBabySvg();
   }
   

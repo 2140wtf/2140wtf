@@ -1,28 +1,28 @@
 /**
- * Blobbi Data Adapters
+ * Pets Data Adapters
  *
- * Adapter functions for converting various Blobbi data types
+ * Adapter functions for converting various Pets data types
  * to the format expected by visual components.
  *
  * Previously duplicated in:
- * - BlobbiStageVisual.tsx (toBlobbiForVisual)
- * - BlobbiCompanionVisual.tsx (toBlobiForVisual - note typo)
+ * - PetsStageVisual.tsx (toPetsForVisual)
+ * - PetsCompanionVisual.tsx (toBlobiForVisual - note typo)
  */
 
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
-import type { CompanionData } from '@/blobbi/companion/types/companion.types';
+import type { Pets } from '@/pets/core/types/pets';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { CompanionData } from '@/pets/companion/types/companion.types';
 
 /**
- * Convert BlobbiCompanion to Blobbi type for visual rendering.
+ * Convert PetsCompanion to Pets type for visual rendering.
  *
  * This is a minimal adapter that extracts only the fields needed
- * by BlobbiBabyVisual and BlobbiAdultVisual.
+ * by PetsBabyVisual and PetsAdultVisual.
  *
- * @param companion - BlobbiCompanion from parseBlobbiEvent
- * @returns Blobbi type for visual components
+ * @param companion - PetsCompanion from parsePetsEvent
+ * @returns Pets type for visual components
  */
-export function blobbiCompanionToBlobbi(companion: BlobbiCompanion): Blobbi {
+export function petsCompanionToPets(companion: PetsCompanion): Pets {
   return {
     id: companion.d,
     name: companion.name,
@@ -43,6 +43,8 @@ export function blobbiCompanionToBlobbi(companion: BlobbiCompanion): Blobbi {
     pattern: companion.visualTraits.pattern,
     specialMark: companion.visualTraits.specialMark,
     size: companion.visualTraits.size,
+    archetype: companion.visualTraits.archetype,
+    specialAbility: companion.visualTraits.specialAbility,
     // Metadata
     seed: companion.seed,
     tags: companion.allTags ?? [],
@@ -52,15 +54,15 @@ export function blobbiCompanionToBlobbi(companion: BlobbiCompanion): Blobbi {
 }
 
 /**
- * Convert CompanionData to Blobbi type for visual rendering.
+ * Convert CompanionData to Pets type for visual rendering.
  *
  * CompanionData is the companion system's internal data type,
- * different from BlobbiCompanion used in the main app.
+ * different from PetsCompanion used in the main app.
  *
  * @param companion - CompanionData from companion system
- * @returns Blobbi type for visual components
+ * @returns Pets type for visual components
  */
-export function companionDataToBlobbi(companion: CompanionData): Blobbi {
+export function companionDataToPets(companion: CompanionData): Pets {
   const isSleeping = companion.state === 'sleeping';
   return {
     id: companion.d,
@@ -81,6 +83,8 @@ export function companionDataToBlobbi(companion: CompanionData): Blobbi {
     pattern: companion.visualTraits.pattern,
     specialMark: companion.visualTraits.specialMark,
     size: companion.visualTraits.size,
+    archetype: companion.visualTraits.archetype,
+    specialAbility: companion.visualTraits.specialAbility,
     seed: companion.seed ?? '',
     tags: [],
     // Include adult form info for proper rendering

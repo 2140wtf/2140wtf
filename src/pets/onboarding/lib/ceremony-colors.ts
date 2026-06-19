@@ -1,8 +1,8 @@
 /**
  * Shared color utilities for ceremony backgrounds.
  *
- * Used by both BlobbiHatchingCeremony and BlobbiEvolveCeremony to derive
- * a soft pastel background from the blobbi's base color.
+ * Used by both PetsHatchingCeremony and PetsEvolveCeremony to derive
+ * a soft pastel background from the pets's base color.
  */
 
 /** Parse a CSS hex color (#RRGGBB) to its RGB components. */

@@ -18,14 +18,15 @@ export interface LayoutOptions {
   wrapperClassName?: string;
   /**
    * Optional scroll container element for the MobileBottomNav hide-on-scroll
-   * behavior. Pages that scroll an internal container (e.g. Vines snap-scroll)
-   * should set this so the bottom nav detects scroll direction correctly.
+   * behavior. Pages that scroll an internal container (e.g. Videos shorts
+   * snap-scroll) should set this so the bottom nav detects scroll direction
+   * correctly.
    */
   scrollContainer?: HTMLElement | null;
   /**
    * If true, disables the bottom overscroll padding on the center column.
-   * Use for pages with fixed-height layouts (chat, vines, livestream, etc.)
-   * that manage their own scroll containers.
+   * Use for pages with fixed-height layouts (chat, livestream, etc.) that
+   * manage their own scroll containers.
    */
   noOverscroll?: boolean;
   /**
@@ -43,19 +44,20 @@ export interface LayoutOptions {
   /**
    * If true, all decorative arcs are replaced with plain rectangles on the
    * mobile top bar, bottom nav, and sub-header. Use for immersive pages
-   * (e.g. vines) where curved chrome interferes with full-bleed content.
+   * (e.g. full-screen video feeds) where curved chrome interferes with
+   * full-bleed content.
    */
   noArcs?: boolean;
   /**
    * If true, hides the mobile top bar entirely for a fully immersive
    * experience. The page is responsible for its own navigation chrome.
-   * Use for full-screen media pages like vines/reels.
+   * Use for full-screen media pages like video/reels.
    */
   hideTopBar?: boolean;
   /**
    * If true, hides the mobile bottom nav entirely. The page is responsible
    * for providing its own navigation affordances (e.g. embedded back button).
-   * Use for full-screen media pages like vines/reels.
+   * Use for full-screen media pages like video/reels.
    */
   hideBottomNav?: boolean;
 }

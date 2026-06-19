@@ -1,4 +1,4 @@
-// src/blobbi/actions/components/InlineMusicPlayer.tsx
+// src/pets/actions/components/InlineMusicPlayer.tsx
 
 import { useCallback, useEffect } from 'react';
 import { Music, Play, Pause, RotateCcw, MoreHorizontal, Loader2, AlertCircle, X, Volume2, VolumeX } from 'lucide-react';
@@ -21,9 +21,9 @@ interface InlineMusicPlayerProps {
   onChangeTrack: () => void;
   /** Called when user closes the player */
   onClose: () => void;
-  /** Called when playback starts (for Blobbi reaction state) */
+  /** Called when playback starts (for Pets reaction state) */
   onPlaybackStart?: () => void;
-  /** Called when playback stops/pauses (for Blobbi reaction state) */
+  /** Called when playback stops/pauses (for Pets reaction state) */
   onPlaybackStop?: () => void;
   /** Whether the action has been published (playback only starts after publish) */
   isPublished: boolean;

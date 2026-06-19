@@ -1,7 +1,7 @@
 /**
- * BlobbiRoomEditor — Centered modal room customization panel.
+ * PetsRoomEditor — Centered modal room customization panel.
  *
- * Renders within the BlobbiRoomShell coordinate system (no portal).
+ * Renders within the PetsRoomShell coordinate system (no portal).
  * Uses absolute inset-0 relative to the room's main container so
  * sidebars remain uncovered.
  *
@@ -14,7 +14,7 @@ import { Paintbrush, Palette, RotateCcw, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-import type { BlobbiRoomId } from '../lib/room-config';
+import type { PetsRoomId } from '../lib/room-config';
 import { ROOM_META } from '../lib/room-config';
 import {
   type RoomLayout,
@@ -28,17 +28,17 @@ import { RoomSurfaceEditor } from './RoomSurfaceEditor';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface BlobbiRoomEditorProps {
-  roomId: BlobbiRoomId;
+interface PetsRoomEditorProps {
+  roomId: PetsRoomId;
   currentLayout: RoomLayout;
-  onSave: (roomId: BlobbiRoomId, layout: RoomLayout) => Promise<void> | void;
+  onSave: (roomId: PetsRoomId, layout: RoomLayout) => Promise<void> | void;
   onClose?: () => void;
   isSaving?: boolean;
 }
 
 // ─── Trigger Button (exported separately for slot usage) ──────────────────────
 
-export function BlobbiRoomEditorTrigger({ onClick }: { onClick: () => void }) {
+export function PetsRoomEditorTrigger({ onClick }: { onClick: () => void }) {
   return (
     <Button
       variant="ghost"
@@ -92,13 +92,13 @@ function RoomPreviewCard({ wall, floor }: { wall: RoomSurfaceLayout; floor: Room
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function BlobbiRoomEditor({
+export function PetsRoomEditor({
   roomId,
   currentLayout,
   onSave,
   onClose,
   isSaving,
-}: BlobbiRoomEditorProps) {
+}: PetsRoomEditorProps) {
   const [draftWall, setDraftWall] = useState<RoomSurfaceLayout>(currentLayout.wall);
   const [draftFloor, setDraftFloor] = useState<RoomSurfaceLayout>(currentLayout.floor);
   const [activeTab, setActiveTab] = useState<'wall' | 'floor'>('wall');
@@ -209,9 +209,9 @@ export function BlobbiRoomEditor({
           </div>
         </div>
 
-        {/* Scrollable content — visible scrollbar via .blobbi-room-editor-scroll */}
+        {/* Scrollable content — visible scrollbar via .pets-room-editor-scroll */}
         <div
-          className="overflow-y-auto flex-1 min-h-0 px-5 pb-4 space-y-4 blobbi-room-editor-scroll"
+          className="overflow-y-auto flex-1 min-h-0 px-5 pb-4 space-y-4 pets-room-editor-scroll"
         >
           {/* Room preview */}
           <div>

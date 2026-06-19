@@ -1,5 +1,5 @@
 /**
- * SVG Utilities for Blobbi Visual System
+ * SVG Utilities for Pets Visual System
  *
  * Centralized exports for all SVG manipulation utilities.
  *

@@ -21,7 +21,7 @@ export interface ExternalExternal {
 
 /**
  * Shared shape for a social post from any external platform
- * (Bluesky, Mastodon, etc.).
+ * (Mastodon, etc.).
  */
 export interface ExternalPostData {
   /** Display name of the post author. */

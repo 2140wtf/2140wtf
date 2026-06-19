@@ -1,5 +1,5 @@
 /**
- * BlobbiBabySvgRenderer — Pure SVG rendering component for baby Blobbi.
+ * PetsBabySvgRenderer — Pure SVG rendering component for baby Pets.
  *
  * This component is the leaf node of the visual pipeline. It:
  *   1. Resolves the base SVG for the baby
@@ -11,7 +11,7 @@
  *   7. Renders via dangerouslySetInnerHTML
  *
  * It does NOT know about:
- *   - Eye tracking hooks (useBlobbiEyes / useExternalEyeOffset)
+ *   - Eye tracking hooks (usePetsEyes / useExternalEyeOffset)
  *   - Render mode (page vs companion)
  *   - Reaction CSS classes (sway / bounce)
  *   - Companion runtime (drag, float, position)
@@ -19,29 +19,29 @@
 
 import { useMemo } from 'react';
 
-import { resolveBabySvg, customizeBabySvgFromBlobbi } from '@/blobbi/baby-blobbi';
-import { sanitizeBlobbiSvg } from '@/lib/sanitizeBlobbiSvg';
+import { resolveBabySvg, customizeBabySvgFromPets } from '@/pets/baby-pets';
+import { sanitizePetsSvg } from '@/lib/sanitizePetsSvg';
 
 import { addEyeAnimation } from './lib/eye-animation';
-import { resolveVisualRecipe, applyVisualRecipe, type BlobbiVisualRecipe } from './lib/recipe';
-import type { BlobbiEmotion } from './lib/emotion-types';
+import { resolveVisualRecipe, applyVisualRecipe, type PetsVisualRecipe } from './lib/recipe';
+import type { PetsEmotion } from './lib/emotion-types';
 import { applyBodyEffects, type BodyEffectsSpec } from './lib/bodyEffects';
-import { debugBlobbi } from './lib/debug';
+import { debugPets } from './lib/debug';
 import { useRecipeFingerprint } from './hooks/useFillLevelUpdate';
-import { useBlobbiInstanceId } from './hooks/useBlobbiInstanceId';
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
+import { usePetsInstanceId } from './hooks/usePetsInstanceId';
+import type { Pets } from '@/pets/core/types/pets';
 
-export interface BlobbiBabySvgRendererProps {
-  /** The Blobbi data */
-  blobbi: Blobbi;
-  /** Whether the Blobbi is sleeping */
+export interface PetsBabySvgRendererProps {
+  /** The Pets data */
+  pets: Pets;
+  /** Whether the Pets is sleeping */
   isSleeping: boolean;
   /** Pre-resolved visual recipe. Takes precedence over `emotion`. */
-  recipe?: BlobbiVisualRecipe;
+  recipe?: PetsVisualRecipe;
   /** Label for the recipe (used in CSS class names). */
   recipeLabel?: string;
   /** Named emotion preset. Ignored when `recipe` is provided. Default: 'neutral' */
-  emotion?: BlobbiEmotion;
+  emotion?: PetsEmotion;
   /** Body-level visual effects (manual/external use only — not from status reaction). */
   bodyEffects?: BodyEffectsSpec;
   /** Additional CSS classes for the container */
@@ -49,7 +49,7 @@ export interface BlobbiBabySvgRendererProps {
 }
 
 /**
- * Pure SVG renderer for baby Blobbi.
+ * Pure SVG renderer for baby Pets.
  *
  * IMPORTANT: This component must remain a pure rendering leaf. It must NOT:
  * - Run eye-tracking hooks (those belong in the Visual wrapper)
@@ -59,27 +59,27 @@ export interface BlobbiBabySvgRendererProps {
  * The parent Visual wrapper owns the DOM query boundary (containerRef)
  * that eye hooks use to find SVG elements via querySelector.
  */
-export function BlobbiBabySvgRenderer({
-  blobbi,
+export function PetsBabySvgRenderer({
+  pets,
   isSleeping: _isSleeping,
   recipe: recipeProp,
   recipeLabel,
   emotion = 'neutral',
   bodyEffects,
   className,
-}: BlobbiBabySvgRendererProps) {
+}: PetsBabySvgRendererProps) {
   const recipeFingerprint = useRecipeFingerprint(recipeProp);
 
-  const instanceId = useBlobbiInstanceId(blobbi.id);
+  const instanceId = usePetsInstanceId(pets.id);
 
   const customizedSvg = useMemo(() => {
-    debugBlobbi('svg-rebuild', 'baby customizedSvg rebuild');
+    debugPets('svg-rebuild', 'baby customizedSvg rebuild');
 
     // Always use the base (awake) SVG — sleeping is a recipe overlay, not an asset swap
-    const baseSvg = resolveBabySvg(blobbi, { isSleeping: false });
-    const colorizedSvg = customizeBabySvgFromBlobbi(baseSvg, blobbi, false);
+    const baseSvg = resolveBabySvg(pets, { isSleeping: false });
+    const colorizedSvg = customizeBabySvgFromPets(baseSvg, pets, false);
 
-    let animatedSvg = addEyeAnimation(colorizedSvg, { baseColor: blobbi.baseColor, instanceId });
+    let animatedSvg = addEyeAnimation(colorizedSvg, { baseColor: pets.baseColor, instanceId });
 
     if (recipeProp) {
       animatedSvg = applyVisualRecipe(animatedSvg, recipeProp, recipeLabel ?? 'status', 'baby', undefined, instanceId);
@@ -93,14 +93,14 @@ export function BlobbiBabySvgRenderer({
     }
 
     return animatedSvg;
-  // Deps use stable primitives from blobbi (not the object reference) and
+  // Deps use stable primitives from pets (not the object reference) and
   // recipeFingerprint (not recipeProp) so that level-only changes and
   // upstream reference churn do NOT trigger full SVG rebuilds. The closure
-  // captures the current blobbi/recipeProp for the rare structural rebuilds.
+  // captures the current pets/recipeProp for the rare structural rebuilds.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blobbi.id, blobbi.baseColor, blobbi.secondaryColor, blobbi.eyeColor, blobbi.seed, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects]);
+  }, [pets.id, pets.baseColor, pets.secondaryColor, pets.eyeColor, pets.seed, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects]);
 
-  const safeSvg = useMemo(() => sanitizeBlobbiSvg(customizedSvg), [customizedSvg]);
+  const safeSvg = useMemo(() => sanitizePetsSvg(customizedSvg), [customizedSvg]);
 
   return (
     <div

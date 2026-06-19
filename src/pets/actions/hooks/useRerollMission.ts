@@ -9,7 +9,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiStage } from '../lib/daily-missions';
+import type { PetsStage } from '../lib/daily-missions';
 import { rerollMission, getDefinition } from '../lib/daily-missions';
 import {
   readMissionsFromStorage,
@@ -20,7 +20,7 @@ import {
 
 export interface RerollMissionRequest {
   missionId: string;
-  availableStages?: BlobbiStage[];
+  availableStages?: PetsStage[];
 }
 
 export interface RerollMissionResult {

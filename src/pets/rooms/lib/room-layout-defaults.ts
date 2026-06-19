@@ -14,10 +14,10 @@
  * room-layout-schema.ts and room-theme-defaults.ts.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { RoomLayout } from './room-layout-schema';
 
-export const DEFAULT_ROOM_LAYOUTS: Record<BlobbiRoomId, RoomLayout> = {
+export const DEFAULT_ROOM_LAYOUTS: Record<PetsRoomId, RoomLayout> = {
   home: {
     // Cozy living room: warm amber gradient wall, oak wide wood floor
     wall: { style: 'gradient', palette: ['#fef9ef', '#fef3c7'] },
@@ -42,5 +42,40 @@ export const DEFAULT_ROOM_LAYOUTS: Record<BlobbiRoomId, RoomLayout> = {
     // Wardrobe: warm taupe wall, dark walnut narrow wood floor
     wall: { style: 'solid', palette: ['#faf5f0', '#f0e8df'] },
     floor: { style: 'wood', palette: ['#78350f', '#451a03'], variant: 'narrow' },
+  },
+};
+
+/**
+ * Cypherpunk 2140 themed room defaults.
+ *
+ * Used when the pet surface is rendered with the `.pets-cyber` theme.
+ * These layouts use the cyber surface styles (circuit, hexgrid, scanlines,
+ * metal, glass, holo) and the OKLch neon palette from the design system.
+ */
+export const CYBER_ROOM_LAYOUTS: Record<PetsRoomId, RoomLayout> = {
+  home: {
+    // Hacker apartment: scanline wall, circuit floor
+    wall: { style: 'scanlines', palette: ['#1a1a2e', '#22d3ee'] },
+    floor: { style: 'circuit', palette: ['#0f172a', '#06b6d4'], variant: 'medium' },
+  },
+  kitchen: {
+    // Nutrient synth: hexgrid wall, metal floor
+    wall: { style: 'hexgrid', palette: ['#1e1b4b', '#c026d3'] },
+    floor: { style: 'metal', palette: ['#171717', '#525252'], variant: 'bold' },
+  },
+  care: {
+    // Med-bay: circuit wall, glass floor
+    wall: { style: 'circuit', palette: ['#0f172a', '#22c55e'] },
+    floor: { style: 'glass', palette: ['#064e3b', '#34d399'], variant: 'medium' },
+  },
+  rest: {
+    // Sleep pod: gradient wall, holo floor
+    wall: { style: 'gradient', palette: ['#1e1b4b', '#312e81'] },
+    floor: { style: 'holo', palette: ['#4c1d95', '#a78bfa'], variant: 'soft' },
+  },
+  closet: {
+    // Gear storage: solid dark wall, hexgrid floor
+    wall: { style: 'solid', palette: ['#111827', '#374151'] },
+    floor: { style: 'hexgrid', palette: ['#0f172a', '#f59e0b'], variant: 'narrow' },
   },
 };

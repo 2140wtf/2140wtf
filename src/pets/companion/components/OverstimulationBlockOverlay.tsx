@@ -1,6 +1,6 @@
 /**
- * OverstimulationBlockOverlay — Full-screen visual feedback when Blobbi is
- * overstimulated. Zooms the UI toward Blobbi (#root transform), fires a
+ * OverstimulationBlockOverlay — Full-screen visual feedback when Pets is
+ * overstimulated. Zooms the UI toward Pets (#root transform), fires a
  * radial shockwave, and holds a red vignette. Portaled to document.body
  * so the overlay stays at viewport scale while #root is zoomed.
  */
@@ -38,8 +38,8 @@ export function OverstimulationBlockOverlay({ isBlocked }: Props) {
       savedScroll.current = window.scrollY;
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
 
-      // Find Blobbi's true visual center via DOM query (after scroll reset)
-      const el = document.querySelector<HTMLElement>('[data-blobbi-companion]');
+      // Find Pets's true visual center via DOM query (after scroll reset)
+      const el = document.querySelector<HTMLElement>('[data-pets-companion]');
       const rect = el?.getBoundingClientRect();
       const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
       const cy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;

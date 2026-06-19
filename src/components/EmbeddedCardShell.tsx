@@ -28,7 +28,7 @@ interface EmbeddedCardShellProps {
  * note / naddr preview cards.  Handles the outer border, hover style,
  * click / keyboard navigation, avatar, display name, and timestamp.
  *
- * Pass card-specific content (text preview, blobbi visual, badge row, etc.)
+ * Pass card-specific content (text preview, pets visual, badge row, etc.)
  * as `children`.
  */
 export function EmbeddedCardShell({

@@ -1,7 +1,7 @@
 /**
  * FloatingSocialHearts - Animated heart overlay for social interactions.
  *
- * Renders small floating heart symbols around the Blobbi when recent
+ * Renders small floating heart symbols around the Pets when recent
  * social interactions (kind 1124) exist. Uses the same overlay pattern
  * as FloatingMusicNotes — CSS keyframe animation, absolute positioning,
  * and `prefers-reduced-motion` support.
@@ -38,9 +38,9 @@ const HEART_CONFIGS = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * Renders floating heart/sparkle emojis around the Blobbi.
+ * Renders floating heart/sparkle emojis around the Pets.
  *
- * Position this component as an overlay on the Blobbi container.
+ * Position this component as an overlay on the Pets container.
  * Hearts drift upward and fade, signaling that social care was received.
  */
 export function FloatingSocialHearts({ active, className }: FloatingSocialHeartsProps) {

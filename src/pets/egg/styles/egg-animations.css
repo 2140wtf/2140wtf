@@ -1,5 +1,5 @@
 /**
- * Blobbi Egg Animations
+ * Pets Egg Animations
  * Self-contained CSS for egg visual system
  */
 
@@ -726,7 +726,7 @@
   animation: onboard-continue-pulse 2.5s ease-in-out infinite;
 }
 
-/* Slow rotating golden incandescence behind hatched blobbi */
+/* Slow rotating golden incandescence behind hatched pets */
 @keyframes onboard-golden-rotate {
   0% {
     transform: rotate(0deg) scale(1);
@@ -767,7 +767,7 @@
 
 /* ─── Evolve Ceremony Animations ─────────────────────────────────────────────── */
 
-/* Energy particles spiral inward toward the blobbi */
+/* Energy particles spiral inward toward the pets */
 @keyframes evolve-spiral-in {
   0% {
     opacity: 0;

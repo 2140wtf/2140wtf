@@ -1,19 +1,19 @@
 /**
  * Body Effects Type Definitions
  * 
- * Body effects are visual decorators applied to the Blobbi's body
+ * Body effects are visual decorators applied to the Pets's body
  * independently of face emotions. They can stack with any face state.
  */
 
 // ─── Variant Type ─────────────────────────────────────────────────────────────
 
 /**
- * Blobbi life stage variant.
+ * Pets life stage variant.
  * Different variants have different SVG coordinate systems:
  *   - baby:  100x100 viewBox
  *   - adult: 200x200 viewBox
  */
-export type BlobbiVariant = 'baby' | 'adult';
+export type PetsVariant = 'baby' | 'adult';
 
 // ─── Body Effect Types ────────────────────────────────────────────────────────
 
@@ -31,8 +31,8 @@ export interface DirtMarksConfig {
   enabled: boolean;
   /** Number of mud smudges (default: 3). Higher count = dirtier look */
   count?: number;
-  /** Blobbi variant for coordinate scaling (default: 'adult') */
-  variant?: BlobbiVariant;
+  /** Pets variant for coordinate scaling (default: 'adult') */
+  variant?: PetsVariant;
   /** Detected body path info for shape-aware placement (adult only) */
   bodyPath?: BodyPathInfo;
   /** Intensity 0-1 controlling smudge opacity and grime density (default: 0.6) */
@@ -52,8 +52,8 @@ export interface StinkCloudsConfig {
   enabled: boolean;
   /** Number of odor wisps (default: 3) */
   count?: number;
-  /** Blobbi variant for coordinate scaling (default: 'adult') */
-  variant?: BlobbiVariant;
+  /** Pets variant for coordinate scaling (default: 'adult') */
+  variant?: PetsVariant;
   /** Enable tiny buzzing fly particles (default: false, enabled at high severity) */
   flies?: boolean;
   /** Number of flies (default: 2) */
@@ -105,15 +105,15 @@ export interface BodyEffectsSpec {
   angerRise?: { color: string; duration: number; level?: number; bottomOpacity?: number; edgeOpacity?: number };
   /** 
    * Unique ID prefix for SVG defs (clip paths, gradients).
-   * Required when multiple Blobbis render on the same page to avoid ID collisions.
+   * Required when multiple Petss render on the same page to avoid ID collisions.
    * If not provided, a random suffix is generated.
    */
   idPrefix?: string;
   /**
-   * Blobbi variant for coordinate scaling.
+   * Pets variant for coordinate scaling.
    * Different variants have different SVG coordinate systems.
    */
-  variant?: BlobbiVariant;
+  variant?: PetsVariant;
 }
 
 /**

@@ -5,6 +5,7 @@ import { nip19 } from 'nostr-tools';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { useNostrStorage } from './useNostrStorage';
 import { useAppContext } from './useAppContext';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { isNostrId } from '@/lib/nostrId';
@@ -154,6 +155,7 @@ export function useMuteList() {
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { store } = useNostrStorage();
   const cacheKey = getMuteCacheKey(config.appId);
 
   // Placeholder from localStorage so mutes apply immediately on page load
@@ -217,8 +219,14 @@ export function useMuteList() {
         normalizedValue = ne;
       }
 
-      // ① Fetch the freshest kind 10000 from relays before mutating
-      const prev = await fetchFreshEvent(nostr, { kinds: [10000], authors: [user.pubkey] });
+      // ① Fetch the freshest kind 10000 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss cannot wipe the
+      // existing mute list.
+      const prev = await fetchFreshEvent(
+        nostr,
+        { kinds: [10000], authors: [user.pubkey] },
+        { store },
+      );
       const currentItems = await getAllMuteItems(prev, user.signer, user.pubkey);
 
       // ② Add only if not already present (dedup)
@@ -232,6 +240,10 @@ export function useMuteList() {
       // Update localStorage immediately so it survives page refresh
       setCachedMuteItems(config.appId, user.pubkey, newItems);
 
+      // Skip publishing if nothing changed (avoids empty-list publishes when the
+      // baseline is unavailable).
+      if (newItems === currentItems) return;
+
       await updateMuteList(newItems, prev);
     },
     onSuccess: () => {
@@ -244,8 +256,14 @@ export function useMuteList() {
     mutationFn: async (item: MuteListItem) => {
       if (!user) throw new Error('User not logged in');
 
-      // ① Fetch the freshest kind 10000 from relays before mutating
-      const prev = await fetchFreshEvent(nostr, { kinds: [10000], authors: [user.pubkey] });
+      // ① Fetch the freshest kind 10000 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss cannot wipe the
+      // existing mute list.
+      const prev = await fetchFreshEvent(
+        nostr,
+        { kinds: [10000], authors: [user.pubkey] },
+        { store },
+      );
       const currentItems = await getAllMuteItems(prev, user.signer, user.pubkey);
 
       // ② Remove the target item
@@ -255,6 +273,10 @@ export function useMuteList() {
 
       // Update localStorage immediately so it survives page refresh
       setCachedMuteItems(config.appId, user.pubkey, newItems);
+
+      // Skip publishing if nothing changed (avoids empty-list publishes when the
+      // baseline is unavailable).
+      if (newItems.length === currentItems.length) return;
 
       await updateMuteList(newItems, prev);
     },
@@ -277,8 +299,13 @@ export function useMuteList() {
         if (np) normalized.add(np);
       }
 
-      // ① Fetch the freshest kind 10000 from relays
-      const prev = await fetchFreshEvent(nostr, { kinds: [10000], authors: [user.pubkey] });
+      // ① Fetch the freshest kind 10000 from relays, with the local event store
+      // as a fallback floor so a relay miss cannot wipe the existing mute list.
+      const prev = await fetchFreshEvent(
+        nostr,
+        { kinds: [10000], authors: [user.pubkey] },
+        { store },
+      );
       const currentItems = await getAllMuteItems(prev, user.signer, user.pubkey);
 
       // ② Determine which pubkeys are not already muted

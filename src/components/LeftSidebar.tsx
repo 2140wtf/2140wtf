@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   UserPlus, LogOut,
   Loader2, QrCode,
+  PanelLeftClose, PanelLeftOpen,
+  Heart,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -32,9 +34,15 @@ import { useUserStatus } from '@/hooks/useUserStatus';
 import { usePublishStatus } from '@/hooks/usePublishStatus';
 import { useToast } from '@/hooks/useToast';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 
-export function LeftSidebar() {
+interface LeftSidebarProps {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, metadata, event: currentUserEvent, isLoading: isProfileLoading } = useCurrentUser();
@@ -84,20 +92,40 @@ export function LeftSidebar() {
   };
 
   return (
-    <aside className="hidden sidebar:flex flex-col h-screen sticky top-0 py-3 px-4 w-[300px] lg:w-1/4 lg:max-w-[300px] shrink-0">
-      {/* Logo */}
-      <div className="flex items-center px-3 mb-1">
+    <aside
+      className={cn(
+        'hidden sidebar:flex flex-col h-screen sticky top-0 py-3 shrink-0 transition-all',
+        collapsed ? 'w-[72px] px-2 items-center' : 'px-4 w-[300px] lg:w-1/4 lg:max-w-[300px]',
+      )}
+    >
+      {/* Logo + collapse toggle */}
+      <div className={cn('flex mb-1', collapsed ? 'flex-col items-center gap-2 px-1' : 'items-center justify-between px-3')}>
         <Link to="/" onClick={scrollToTopIfCurrent('/')}>
           <div className="bg-background/85 rounded-full">
-            <DittoLogo size={48} />
+            <DittoLogo size={collapsed ? 36 : 48} />
           </div>
         </Link>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+        </button>
       </div>
 
       {/* Search */}
-      <div className="px-2 py-4">
-        <ProfileSearchDropdown placeholder="Search..." inputClassName="py-3.5" enableTextSearch />
-      </div>
+      {!collapsed && (
+        <div className="px-2 py-4">
+          <ProfileSearchDropdown
+            placeholder="Search..."
+            inputClassName="py-3.5 !bg-[var(--2140-raised)] !text-[var(--2140-fg)] !placeholder:text-[var(--2140-placeholder)] !border-0"
+            enableTextSearch
+          />
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
@@ -111,6 +139,8 @@ export function LeftSidebar() {
           getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
           getShowIndicator={(id) => id === 'notifications' ? hasUnread : undefined}
           homePage={homePage}
+          compact={collapsed}
+          minimal
         />
 
         <SidebarMoreMenu
@@ -123,17 +153,23 @@ export function LeftSidebar() {
           open={moreMenuOpen}
           onOpenChange={setMoreMenuOpen}
           homePage={homePage}
+          compact={collapsed}
         />
       </nav>
 
       {/* Logged-out join pill — same position as account button, pushed up from bottom */}
-      {!user && location.pathname !== '/' && (
-        <div className="pt-2 pb-1">
+      {!user && (
+        <div className={cn('pt-2 pb-1', collapsed && 'px-1')}>
           <button
             onClick={() => setLoginDialogOpen(true)}
-            className="flex items-center justify-center w-full h-10 rounded-full bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors cursor-pointer"
+            className={cn(
+              'flex items-center justify-center rounded-full bg-[var(--2140-bitcoin)] text-black font-semibold hover:bg-[var(--2140-bitcoin-hover)] transition-colors cursor-pointer',
+              collapsed ? 'w-10 h-10' : 'w-full h-11 text-sm gap-2',
+            )}
+            title="Join"
           >
-            Join
+            <UserPlus className="size-4" />
+            {!collapsed && <span>Join</span>}
           </button>
         </div>
       )}
@@ -143,33 +179,40 @@ export function LeftSidebar() {
         <div className="pt-2">
           <Popover open={accountPopoverOpen} onOpenChange={setAccountPopoverOpen}>
             <PopoverTrigger asChild>
-              <button className="flex items-center gap-3 p-3 rounded-full hover:bg-secondary/60 transition-colors cursor-pointer w-full text-left bg-background/85">
+              <button
+                className={cn(
+                  'flex items-center rounded-full hover:bg-secondary/60 transition-colors cursor-pointer bg-background/85',
+                  collapsed ? 'justify-center p-2' : 'gap-3 p-3 w-full text-left',
+                )}
+              >
                 {isProfileLoading ? (
-                  <Skeleton className="size-10 shrink-0 rounded-full" />
+                  <Skeleton className={cn('shrink-0 rounded-full', collapsed ? 'size-9' : 'size-10')} />
                 ) : (
-                  <Avatar shape={currentUserAvatarShape} className="size-10 shrink-0">
+                  <Avatar shape={currentUserAvatarShape} className={cn('shrink-0', collapsed ? 'size-9' : 'size-10')}>
                     <AvatarImage src={metadata?.picture} alt={metadata?.name} />
                     <AvatarFallback className="bg-primary/20 text-primary text-sm">
                       {(metadata?.name || metadata?.display_name || 'Anonymous')[0]?.toUpperCase() ?? '?'}
                     </AvatarFallback>
                   </Avatar>
                 )}
-                <div className="flex flex-col min-w-0 flex-1 gap-1">
-                  {isProfileLoading ? (
-                    <><Skeleton className="h-3.5 w-24" /><Skeleton className="h-3 w-16" /></>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-sm truncate">
-                        {currentUserEvent && (metadata?.name || metadata?.display_name)
-                          ? <EmojifiedText tags={currentUserEvent.tags}>{metadata.name || metadata.display_name || ''}</EmojifiedText>
-                          : (metadata?.name || metadata?.display_name || 'Anonymous')}
-                      </span>
-                      {metadata?.nip05 && (
-                        <VerifiedNip05Text nip05={metadata.nip05} pubkey={user.pubkey} className="text-xs text-muted-foreground truncate" />
-                      )}
-                    </>
-                  )}
-                </div>
+                {!collapsed && (
+                  <div className="flex flex-col min-w-0 flex-1 gap-1">
+                    {isProfileLoading ? (
+                      <><Skeleton className="h-3.5 w-24" /><Skeleton className="h-3 w-16" /></>
+                    ) : (
+                      <>
+                        <span className="font-semibold text-sm truncate">
+                          {currentUserEvent && (metadata?.name || metadata?.display_name)
+                            ? <EmojifiedText tags={currentUserEvent.tags}>{metadata.name || metadata.display_name || ''}</EmojifiedText>
+                            : (metadata?.name || metadata?.display_name || 'Anonymous')}
+                        </span>
+                        {metadata?.nip05 && (
+                          <VerifiedNip05Text nip05={metadata.nip05} pubkey={user.pubkey} className="text-xs text-muted-foreground truncate" />
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </button>
             </PopoverTrigger>
             <PopoverContent side="top" align="start" sideOffset={8} className="w-[260px] p-0 rounded-2xl shadow-xl border border-border overflow-hidden">
@@ -205,12 +248,13 @@ export function LeftSidebar() {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
+                          if (publishStatus.isPending) return;
                           const text = statusDraft.trim();
                           publishStatus.mutateAsync({ status: text }).then(() => {
                             setStatusEditing(false);
                             setStatusDraft('');
                             toast({ title: text ? 'Status updated' : 'Status cleared' });
-                          });
+                          }).catch((err) => console.error('Failed to publish status:', err));
                         } else if (e.key === 'Escape') {
                           setStatusEditing(false);
                           setStatusDraft('');
@@ -220,12 +264,13 @@ export function LeftSidebar() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => {
+                          if (publishStatus.isPending) return;
                           const text = statusDraft.trim();
                           publishStatus.mutateAsync({ status: text }).then(() => {
                             setStatusEditing(false);
                             setStatusDraft('');
                             toast({ title: text ? 'Status updated' : 'Status cleared' });
-                          });
+                          }).catch((err) => console.error('Failed to publish status:', err));
                         }}
                         disabled={publishStatus.isPending}
                         className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
@@ -239,7 +284,7 @@ export function LeftSidebar() {
                               setStatusEditing(false);
                               setStatusDraft('');
                               toast({ title: 'Status cleared' });
-                            });
+                            }).catch((err) => console.error('Failed to clear status:', err));
                           }}
                           disabled={publishStatus.isPending}
                           className="text-xs font-medium text-destructive hover:underline disabled:opacity-50"
@@ -297,6 +342,10 @@ export function LeftSidebar() {
                 <button onClick={() => { setAccountPopoverOpen(false); setFollowQROpen(true); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium hover:bg-secondary/60 transition-colors">
                   <QrCode className="size-4 text-muted-foreground" />
                   <span>Share profile</span>
+                </button>
+                <button onClick={() => { setAccountPopoverOpen(false); navigate('/settings/profile#donations'); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium hover:bg-secondary/60 transition-colors">
+                  <Heart className="size-4 text-muted-foreground" />
+                  <span>Accept donations</span>
                 </button>
                 <button onClick={() => { setAccountPopoverOpen(false); setLoginDialogOpen(true); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium hover:bg-secondary/60 transition-colors">
                   <UserPlus className="size-4 text-muted-foreground" />

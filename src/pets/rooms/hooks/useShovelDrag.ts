@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { PoopState } from '../components/BlobbiRoomShell';
+import type { PoopState } from '../components/PetsRoomShell';
 import { hasAnyPoop } from '../lib/poop-system';
 
 export function useShovelDrag(poopState: PoopState | null) {
@@ -80,7 +80,7 @@ export function useShovelDrag(poopState: PoopState | null) {
     };
   }, [isDragging, moveDrag, endDrag]);
 
-  // Touch: stopPropagation prevents BlobbiRoomShell swipe navigation
+  // Touch: stopPropagation prevents PetsRoomShell swipe navigation
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     e.stopPropagation();
     startDrag(e.touches[0].clientX, e.touches[0].clientY);

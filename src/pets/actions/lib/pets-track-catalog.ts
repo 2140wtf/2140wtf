@@ -1,9 +1,9 @@
-// src/blobbi/actions/lib/blobbi-track-catalog.ts
+// src/pets/actions/lib/pets-track-catalog.ts
 
 /**
- * Blobbi Track Catalog
+ * Pets Track Catalog
  * 
- * Music tracks for the Blobbi "Play Music" action.
+ * Music tracks for the Pets "Play Music" action.
  * All tracks are hosted on remote Blossom servers and streamed on-demand.
  * 
  * ## Adding New Tracks
@@ -11,7 +11,7 @@
  * 1. Convert the audio file to M4A (AAC-LC):
  *    `ffmpeg -i input.m4a -c:a aac -b:a 64k -ar 48000 output.m4a`
  * 2. Upload the M4A file to a Blossom server
- * 3. Add a new entry to `BLOBBI_TRACK_CATALOG` below
+ * 3. Add a new entry to `PETS_TRACK_CATALOG` below
  * 4. Set `url` to the full Blossom URL
  * 5. Get the duration: `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 <file>`
  * 
@@ -20,7 +20,7 @@
  * M4A (AAC-LC) is required for iOS/Safari compatibility and small file size.
  */
 
-export interface BlobbiTrack {
+export interface PetsTrack {
   /** Unique identifier for the track (used in state/events) */
   id: string;
   /** Display title shown in the UI */
@@ -38,12 +38,12 @@ export interface BlobbiTrack {
 }
 
 /**
- * Blobbi track catalog.
+ * Pets track catalog.
  * 
  * All tracks are royalty-free/Creative Commons licensed.
  * Audio files hosted on remote Blossom servers.
  */
-export const BLOBBI_TRACK_CATALOG: BlobbiTrack[] = [
+export const PETS_TRACK_CATALOG: PetsTrack[] = [
   {
     id: 'nap_in_the_meadow',
     title: 'Nap in the Meadow',
@@ -97,15 +97,15 @@ export const BLOBBI_TRACK_CATALOG: BlobbiTrack[] = [
 /**
  * Get a track by ID from the catalog
  */
-export function getTrackById(id: string): BlobbiTrack | undefined {
-  return BLOBBI_TRACK_CATALOG.find(track => track.id === id);
+export function getTrackById(id: string): PetsTrack | undefined {
+  return PETS_TRACK_CATALOG.find(track => track.id === id);
 }
 
 /**
  * Get all tracks from the catalog
  */
-export function getAllTracks(): BlobbiTrack[] {
-  return BLOBBI_TRACK_CATALOG;
+export function getAllTracks(): PetsTrack[] {
+  return PETS_TRACK_CATALOG;
 }
 
 /**

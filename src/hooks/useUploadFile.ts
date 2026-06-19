@@ -7,6 +7,7 @@ import type { NostrSigner } from '@nostrify/nostrify';
 import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
 import { getEffectiveBlossomServers } from "@/lib/appBlossom";
+import { stripFileMetadata } from "@/lib/stripMetadata";
 
 export function useUploadFile() {
   const { user } = useCurrentUser();
@@ -22,6 +23,10 @@ export function useUploadFile() {
         config.blossomServerMetadata,
         config.useAppBlossomServers,
       );
+
+      // Strip EXIF/GPS/device metadata from images and videos before upload.
+      // Unsupported formats or browsers fall back to the original file.
+      const sanitized = await stripFileMetadata(file);
 
       const uploader = new BlossomUploader({
         servers,
@@ -40,12 +45,12 @@ export function useUploadFile() {
         }),
       });
 
-      const tags = await uploader.upload(file);
+      const tags = await uploader.upload(sanitized);
 
       // If the returned URL is missing a file extension, append one from the
-      // source file name. Blossom URLs are content-addressed (`/<sha256>`) and
-      // may omit the extension. Adding it helps clients infer the media type.
-      const ext = getFileExtension(file.name);
+      // sanitized file name. Blossom URLs are content-addressed (`/<sha256>`)
+      // and may omit the extension. Adding it helps clients infer the media type.
+      const ext = getFileExtension(sanitized.name);
       if (ext) {
         tags[0][1] = appendExtensionIfMissing(tags[0][1], ext);
       }

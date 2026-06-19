@@ -5,7 +5,7 @@ import { useEncryptedSettings } from "@/hooks/useEncryptedSettings";
 import { usePublishTheme } from "@/hooks/usePublishTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useRef, useCallback } from "react";
-import { builtinThemes, buildThemeCssFromCore, resolveTheme, resolveThemeConfig } from "@/themes";
+import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfig } from "@/themes";
 
 /**
  * Hook to get and set the active theme.
@@ -57,10 +57,10 @@ export function useTheme() {
 
     // Apply CSS vars synchronously before React re-renders to eliminate flicker
     const resolved = resolveTheme(theme);
-    const colors = resolved === 'custom'
-      ? (config.customTheme?.colors ?? builtinThemes.dark)
-      : resolveThemeConfig(resolved, config.themes).colors;
-    const css = buildThemeCssFromCore(colors);
+    const themeConfig = resolved === 'custom'
+      ? (config.customTheme ?? { colors: builtinThemes.dark })
+      : resolveThemeConfig(resolved, config.themes);
+    const css = buildThemeCssFromConfig(themeConfig);
     let el = document.getElementById('theme-vars') as HTMLStyleElement | null;
     if (!el) {
       el = document.createElement('style');
@@ -79,7 +79,7 @@ export function useTheme() {
       theme,
     }));
     syncToEncrypted({ theme });
-  }, [config.themes, config.customTheme?.colors, updateConfig, syncToEncrypted]);
+  }, [config.themes, config.customTheme, updateConfig, syncToEncrypted]);
 
   /**
    * Set theme to "custom" and apply the given theme config.

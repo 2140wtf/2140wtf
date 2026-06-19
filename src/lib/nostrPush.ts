@@ -17,7 +17,8 @@
 
 import { nip44, generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { SimplePool } from 'nostr-tools';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { generateUUID } from '@/lib/uuid';
 
 import { secureStorage } from '@/lib/secureStorage';
 
@@ -185,7 +186,7 @@ export class NostrPushClient {
     method: string,
     params: object,
   ): Promise<unknown> {
-    const request_id = crypto.randomUUID();
+    const request_id = generateUUID();
 
     // NIP-44 encrypt the payload to the server
     const conversationKey = nip44.v2.utils.getConversationKey(this.secretKey, this.serverPubkey);
@@ -215,12 +216,12 @@ export class NostrPushClient {
 
       const sub = this.pool.subscribeMany(
         this.relays,
-        [{
+        {
           kinds: [25742],
           authors: [this.serverPubkey],
           '#p': [this.publicKey],
           since: Math.floor(Date.now() / 1000) - 5,
-        }],
+        },
         {
           onevent: (responseEvent) => {
             try {

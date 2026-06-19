@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, CheckCircle2, Clock, X, ChevronRight } from 'lucide-react';
+import { BarChart3, CheckCircle2, Clock, X, ChevronRight, Zap } from 'lucide-react';
+import { ZapDialog } from '@/components/ZapDialog';
+import { getZapAmountSats, getZapSenderPubkey } from '@/lib/zapHelpers';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
@@ -178,10 +180,12 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const showResults = hasVoted || isExpired;
 
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isVoting, setIsVoting] = useState(false);
 
   const handleVote = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!selectedOption || !user || hasVoted || isExpired) return;
+    if (!selectedOption || !user || hasVoted || isExpired || isVoting) return;
+    setIsVoting(true);
     publishEvent({
       kind: 1018,
       content: '',
@@ -193,6 +197,9 @@ export function PollContent({ event }: { event: NostrEvent }) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['poll-votes', event.id] });
       },
+      onSettled: () => {
+        setIsVoting(false);
+      },
     });
   };
 
@@ -203,6 +210,11 @@ export function PollContent({ event }: { event: NostrEvent }) {
   }, [votes]);
 
   const { data: authorsMap } = useAuthors(allVoterPubkeys);
+
+  // NIP-69 zap polls are rendered by a dedicated sub-component.
+  if (event.kind === 6969) {
+    return <ZapPollContent event={event} />;
+  }
 
   const openVotersModal = (optionId: string | null) => {
     setVotersModalOptionId(optionId);
@@ -302,15 +314,15 @@ export function PollContent({ event }: { event: NostrEvent }) {
           {user && (
             <button
               onClick={handleVote}
-              disabled={!selectedOption}
+              disabled={!selectedOption || isVoting}
               className={cn(
                 'text-sm font-semibold px-4 py-1.5 rounded-full transition-colors',
-                selectedOption
+                selectedOption && !isVoting
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'bg-secondary text-muted-foreground cursor-not-allowed',
               )}
             >
-              Vote
+              {isVoting ? 'Voting…' : 'Vote'}
             </button>
           )}
         </div>
@@ -346,7 +358,7 @@ function PollVotersModal({ open, onOpenChange, allVotes, options, pollType, init
   const [activeFilter, setActiveFilter] = useState<string | null>(initialOptionId ?? null);
 
   // Sync filter when modal opens with a specific option
-  useMemo(() => {
+  useEffect(() => {
     if (open) setActiveFilter(initialOptionId ?? null);
   }, [open, initialOptionId]);
 
@@ -523,7 +535,7 @@ function VoterRow({ vote, optionLabelMap, pollType, authorsMap }: VoterRowProps)
       <Avatar shape={avatarShape} className="size-10 shrink-0">
         <AvatarImage src={metadata?.picture} alt={displayName} />
         <AvatarFallback className="bg-primary/20 text-primary text-sm">
-          {displayName[0].toUpperCase()}
+          {displayName[0]?.toUpperCase() ?? '?'}
         </AvatarFallback>
       </Avatar>
 
@@ -554,3 +566,253 @@ function VoterRow({ vote, optionLabelMap, pollType, authorsMap }: VoterRowProps)
 }
 
 
+
+/** Parse NIP-69 poll_option tags into PollOption shapes. */
+function getZapPollOptions(tags: string[][]): PollOption[] {
+  return tags
+    .filter(([name]) => name === 'poll_option')
+    .map(([, id, label]) => ({ id: id ?? '', label: label ?? '' }))
+    .filter((opt) => opt.id && opt.label);
+}
+
+/** Parse a numeric constraint tag (value_minimum / value_maximum / closed_at). */
+function getZapPollConstraint(tags: string[][], name: string): number | undefined {
+  const value = getTag(tags, name);
+  if (!value) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Validate that a kind 6969 zap poll has the required NIP-69 constraints. */
+function validateZapPoll(tags: string[][]): { ok: true } | { ok: false; reason: string } {
+  const options = getZapPollOptions(tags);
+  if (options.length < 2) {
+    return { ok: false, reason: 'A zap poll needs at least two options.' };
+  }
+  const min = getZapPollConstraint(tags, 'value_minimum');
+  const max = getZapPollConstraint(tags, 'value_maximum');
+  if (min === undefined && max === undefined) {
+    return { ok: false, reason: 'Missing vote value constraints.' };
+  }
+  if (min !== undefined && max !== undefined && min > max) {
+    return { ok: false, reason: 'Minimum vote value exceeds the maximum.' };
+  }
+  const closedAt = getTag(tags, 'closed_at');
+  if (closedAt !== undefined && getZapPollConstraint(tags, 'closed_at') === undefined) {
+    return { ok: false, reason: 'Invalid poll close time.' };
+  }
+  return { ok: true };
+}
+
+/** Extract the poll_option index a kind 9735 receipt was voting for. */
+function extractPollOptionFromReceipt(receipt: NostrEvent): string | undefined {
+  const descTag = receipt.tags.find(([name]) => name === 'description');
+  if (!descTag?.[1]) return undefined;
+  try {
+    const zapRequest = JSON.parse(descTag[1]);
+    const tags: string[][] = zapRequest.tags ?? [];
+    return tags.find(([name]) => name === 'poll_option')?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Render a kind 6969 NIP-69 zap poll and tally its Lightning zap votes. */
+function ZapPollContent({ event }: { event: NostrEvent }) {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const queryClient = useQueryClient();
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [zapDialogOpen, setZapDialogOpen] = useState(false);
+
+  const options = useMemo(() => getZapPollOptions(event.tags), [event.tags]);
+  const validation = useMemo(() => validateZapPoll(event.tags), [event.tags]);
+  const valueMinimum = getZapPollConstraint(event.tags, 'value_minimum');
+  const valueMaximum = getZapPollConstraint(event.tags, 'value_maximum');
+  const closedAt = getZapPollConstraint(event.tags, 'closed_at');
+  const isExpired = closedAt !== undefined ? closedAt < Math.floor(Date.now() / 1000) : false;
+
+  const { data: receipts } = useQuery<NostrEvent[]>({
+    queryKey: ['zap-poll-votes', event.id],
+    queryFn: async ({ signal }) => {
+      const filter: Record<string, unknown> = {
+        kinds: [9735],
+        '#e': [event.id],
+        limit: 500,
+      };
+      if (closedAt !== undefined) filter.until = closedAt;
+      const results = await nostr.query(
+        [filter as { kinds: number[]; '#e': string[]; limit: number; until?: number }],
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+      );
+      const seen = new Set<string>();
+      return results.filter((ev) => {
+        if (seen.has(ev.id)) return false;
+        seen.add(ev.id);
+        return true;
+      });
+    },
+    staleTime: 30_000,
+  });
+
+  const tally = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const receipt of receipts ?? []) {
+      const optionId = extractPollOptionFromReceipt(receipt);
+      if (optionId === undefined) continue;
+      const sats = getZapAmountSats(receipt);
+      if (sats <= 0) continue;
+      map.set(optionId, (map.get(optionId) ?? 0) + sats);
+    }
+    return map;
+  }, [receipts]);
+
+  const totalSats = useMemo(() => {
+    let sum = 0;
+    for (const value of tally.values()) sum += value;
+    return sum;
+  }, [tally]);
+
+  const userVote = useMemo(() => {
+    if (!user || !receipts) return undefined;
+    return receipts.find((r) => getZapSenderPubkey(r) === user.pubkey && extractPollOptionFromReceipt(r) !== undefined);
+  }, [user, receipts]);
+
+  const hasVoted = !!userVote;
+  const showResults = hasVoted || isExpired;
+
+  const openVote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedOption || !user || hasVoted || isExpired) return;
+    setZapDialogOpen(true);
+  };
+
+  const handleZapSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['zap-poll-votes', event.id] });
+  };
+
+  return (
+    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      {/* Question */}
+      <div className="text-[15px] leading-relaxed font-medium break-words">
+        <NoteContent event={event} />
+      </div>
+
+      {/* Badges */}
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+          <Zap className="size-3" />
+          Zap poll
+        </span>
+        {valueMinimum !== undefined && valueMaximum !== undefined && valueMinimum === valueMaximum ? (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+            {valueMinimum.toLocaleString()} sats / vote
+          </span>
+        ) : (
+          <>
+            {valueMinimum !== undefined && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+                Min {valueMinimum.toLocaleString()} sats
+              </span>
+            )}
+            {valueMaximum !== undefined && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+                Max {valueMaximum.toLocaleString()} sats
+              </span>
+            )}
+          </>
+        )}
+        {isExpired && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+            <Clock className="size-3" />
+            Ended
+          </span>
+        )}
+      </div>
+
+      {!validation.ok ? (
+        <p className="mt-2 text-sm text-muted-foreground">{validation.reason}</p>
+      ) : (
+        <>
+          {/* Options */}
+          <div className="mt-3 space-y-2">
+            {options.map((opt) => {
+              const sats = tally.get(opt.id) ?? 0;
+              const pct = totalSats > 0 ? Math.round((sats / totalSats) * 100) : 0;
+              const isSelected = selectedOption === opt.id;
+              const isMyVote = userVote && extractPollOptionFromReceipt(userVote) === opt.id;
+
+              return showResults ? (
+                <div key={opt.id} className="relative overflow-hidden rounded-lg border border-border">
+                  {/* Background fill bar */}
+                  <div
+                    className={cn(
+                      'absolute inset-0 transition-all duration-500',
+                      isMyVote ? 'bg-amber-500/15' : 'bg-secondary/40',
+                    )}
+                    style={{ width: `${pct}%` }}
+                  />
+                  <div className="relative flex items-center justify-between px-3 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isMyVote && <CheckCircle2 className="size-4 text-amber-500 shrink-0" />}
+                      <span className={cn('text-sm break-words', isMyVote && 'font-semibold')}>{opt.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3 text-xs tabular-nums text-muted-foreground">
+                      <span>{sats.toLocaleString()} sats</span>
+                      <span className="font-medium text-foreground">{pct}%</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelectedOption(opt.id)}
+                  className={cn(
+                    'w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors',
+                    isSelected
+                      ? 'border-amber-500 bg-amber-500/10 font-semibold'
+                      : 'border-border hover:bg-secondary/40',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Vote button */}
+          {!showResults && (
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-muted-foreground">
+                {totalSats > 0 ? `${totalSats.toLocaleString()} sats voted` : '0 sats voted'}
+              </span>
+              {user && (
+                <button
+                  onClick={openVote}
+                  disabled={!selectedOption}
+                  className={cn(
+                    'inline-flex items-center gap-1 text-sm font-semibold px-4 py-1.5 rounded-full transition-colors',
+                    selectedOption
+                      ? 'bg-amber-500 text-white hover:bg-amber-500/90'
+                      : 'bg-secondary text-muted-foreground cursor-not-allowed',
+                  )}
+                >
+                  <Zap className="size-3.5" />
+                  Vote with zap
+                </button>
+              )}
+            </div>
+          )}
+
+          <ZapDialog
+            target={event}
+            open={zapDialogOpen}
+            onOpenChange={setZapDialogOpen}
+            pollOption={selectedOption ?? undefined}
+            onZapSuccess={handleZapSuccess}
+          />
+        </>
+      )}
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
 /**
- * Shared Constants for Blobbi Visual System
+ * Shared Constants for Pets Visual System
  *
  * Centralized constants used across the visual system.
  * Grouped by category for easy reference and maintenance.
@@ -7,7 +7,7 @@
 
 // ─── Eye Animation Constants ──────────────────────────────────────────────────
 
-/** Maximum eye movement in pixels (default for useBlobbiEyes) */
+/** Maximum eye movement in pixels (default for usePetsEyes) */
 export const DEFAULT_EYE_MAX_MOVEMENT = 2;
 
 /** Reduce vertical movement to this factor of horizontal */
@@ -61,7 +61,7 @@ export const ADULT_EXTERNAL_EYE_MAX_Y_DOWN = 2.7; // 0.6x of up
 
 /**
  * Dark colors used to identify pupils in SVG.
- * These are solid fill colors used in Blobbi SVGs for pupils.
+ * These are solid fill colors used in Pets SVGs for pupils.
  */
 export const PUPIL_COLORS = [
   '#1f2937', // Dark gray (most forms)

@@ -1,7 +1,7 @@
 /**
- * Blobbi Egg Visual System
+ * Pets Egg Visual System
  *
- * A self-contained module for rendering Blobbi eggs with special marks,
+ * A self-contained module for rendering Pets eggs with special marks,
  * animations, and validation utilities.
  *
  * This module is designed to be portable and can be copied to another
@@ -49,15 +49,15 @@ export {
   ALL_VALID_SPECIAL_MARKS,
   ALL_VALID_TITLES,
   ALL_VALID_EYE_COLORS,
-} from './lib/blobbi-egg-validation';
+} from './lib/pets-egg-validation';
 
 // Divine utilities
 export {
   isDivineEgg,
-  isDivineBlobbi,
+  isDivinePets,
   ensureDivineTags,
   syncDivineModelFields,
-  createDivineBlobbiProperties,
+  createDivinePetsProperties,
   validateDivineConsistency,
   createTagMap,
   // Constants
@@ -65,7 +65,7 @@ export {
   DIVINE_CROSSOVER_APP,
   DIVINE_BASE_COLOR,
   DIVINE_SPECIAL_MARK,
-} from './lib/blobbi-divine-utils';
+} from './lib/pets-divine-utils';
 
 // Special marks utilities
 export {
@@ -74,5 +74,5 @@ export {
 } from './lib/special-marks-utils';
 
 // Types
-export type { EggVisualBlobbi } from './types/egg.types';
-export type { EggValidationResult } from './lib/blobbi-egg-validation';
+export type { EggVisualPets } from './types/egg.types';
+export type { EggValidationResult } from './lib/pets-egg-validation';

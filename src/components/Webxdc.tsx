@@ -12,6 +12,7 @@ import type { Webxdc as WebxdcAPI, ReceivedStatusUpdate } from '@webxdc/types/we
 
 import { SandboxFrame, type SandboxFrameHandle } from '@/components/SandboxFrame';
 import { getMimeType, bytesToBase64, injectScriptTags } from '@/lib/sandbox';
+import { generateUUID } from '@/lib/uuid';
 import type { FileResponse } from '@/lib/sandbox';
 
 // ---------------------------------------------------------------------------
@@ -91,8 +92,16 @@ function generateWebxdcBridge(api: WebxdcAPI<unknown>): string {
   var realtimeDataListener = null;
   var realtimeChannelId = null;
 
+  var parentOrigin = (function() {
+    try {
+      return document.referrer ? new URL(document.referrer).origin : '*';
+    } catch (e) {
+      return '*';
+    }
+  })();
+
   function send(msg) {
-    window.parent.postMessage(msg, "*");
+    window.parent.postMessage(msg, parentOrigin);
   }
 
   function sendRequest(method, params) {
@@ -108,6 +117,7 @@ function generateWebxdcBridge(api: WebxdcAPI<unknown>): string {
   }
 
   window.addEventListener("message", function(event) {
+    if (parentOrigin !== '*' && event.origin !== parentOrigin) return;
     var data = event.data;
     if (!data || typeof data !== "object" || data.jsonrpc !== "2.0") return;
 
@@ -394,7 +404,7 @@ export const Webxdc = forwardRef<WebxdcHandle, WebxdcProps>(function Webxdc(
 
       case 'webxdc.joinRealtimeChannel': {
         const rt = api.joinRealtimeChannel();
-        const channelId = crypto.randomUUID();
+        const channelId = generateUUID();
 
         rt.setListener((data: Uint8Array) => {
           post({

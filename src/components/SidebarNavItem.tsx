@@ -29,14 +29,18 @@ export interface SidebarNavItemProps {
   linkClassName?: string;
   /** Sidebar item ID configured as the homepage. */
   homePage?: string;
+  /** When true, render as an icon-only item for a collapsed sidebar. */
+  compact?: boolean;
+  /** Minimal row style used by the redesigned main menu. */
+  minimal?: boolean;
 }
 
 export function SidebarNavItem({
-  id, active, editing, onRemove, onClick, profilePath, showIndicator, linkClassName, homePage,
+  id, active, editing, onRemove, onClick, profilePath, showIndicator, linkClassName, homePage, compact, minimal,
 }: SidebarNavItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
   const style = { transform: CSS.Transform.toString(transform), transition };
-  const icon = sidebarItemIcon(id);
+  const icon = sidebarItemIcon(id, compact ? 'size-5' : minimal ? 'size-5' : 'size-6');
   const label = itemLabel(id);
   const path = itemPath(id, profilePath, homePage);
 
@@ -44,7 +48,11 @@ export function SidebarNavItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn('flex items-center rounded-full transition-colors relative bg-background/85', isDragging && 'z-10 opacity-80 shadow-lg')}
+      className={cn(
+        'flex items-center transition-colors relative',
+        minimal ? 'bg-transparent' : 'rounded-full bg-background/85',
+        isDragging && 'z-10 opacity-80 shadow-lg',
+      )}
     >
       {editing && (
         <button
@@ -60,19 +68,25 @@ export function SidebarNavItem({
         to={path}
         onClick={onClick}
         className={cn(
-          'flex items-center gap-4 py-3 rounded-full transition-colors hover:bg-secondary/60 flex-1 min-w-0',
-          editing ? 'px-2' : 'px-3',
-          active ? 'font-bold text-primary' : 'font-normal text-foreground',
+          'flex items-center transition-colors min-w-0',
+          minimal
+            ? 'gap-4 py-3 px-3 text-base text-[var(--2140-fg)] hover:text-[var(--2140-bitcoin)] flex-1'
+            : 'rounded-full hover:bg-secondary/60',
+          compact ? 'justify-center py-2.5 px-2' : minimal ? '' : 'gap-4 py-3 flex-1',
+          editing ? 'px-2' : compact ? 'px-2' : minimal ? '' : 'px-3',
+          active ? (minimal ? 'text-[var(--2140-bitcoin)] font-semibold' : 'font-bold text-primary') : (minimal ? '' : 'font-normal text-foreground'),
           linkClassName ?? 'text-lg',
         )}
       >
-        <span className="shrink-0 relative">
+        <span className={cn('shrink-0 relative', compact && 'flex items-center justify-center')}>
           {icon}
           {showIndicator && (
             <span className="absolute -top-1 right-0 size-2.5 bg-primary rounded-full" />
           )}
         </span>
-        <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>{label}</span>
+        {!compact && (
+          <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>{label}</span>
+        )}
       </Link>
 
       {editing && (
@@ -145,10 +159,14 @@ export interface SidebarNavListProps {
   linkClassName?: string;
   /** Sidebar item ID configured as the homepage. */
   homePage?: string;
+  /** When true, render items icon-only for a collapsed sidebar. */
+  compact?: boolean;
+  /** Minimal row style used by the redesigned main menu. */
+  minimal?: boolean;
 }
 
 export function SidebarNavList({
-  items, editing, onRemove, onReorder, isActive, getOnClick, getProfilePath, getShowIndicator, linkClassName, homePage,
+  items, editing, onRemove, onReorder, isActive, getOnClick, getProfilePath, getShowIndicator, linkClassName, homePage, compact, minimal,
 }: SidebarNavListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -192,6 +210,7 @@ export function SidebarNavList({
                 onRemove={(removeId) => onRemove(removeId, i)}
                 onClick={getOnClick?.(id)}
                 linkClassName={linkClassName}
+                compact={compact}
               />
             );
           }
@@ -205,6 +224,7 @@ export function SidebarNavList({
                 onRemove={(removeId) => onRemove(removeId, i)}
                 onClick={getOnClick?.(id)}
                 linkClassName={linkClassName}
+                compact={compact}
               />
             );
           }
@@ -218,6 +238,7 @@ export function SidebarNavList({
                 onRemove={(removeId) => onRemove(removeId, i)}
                 onClick={getOnClick?.(id)}
                 linkClassName={linkClassName}
+                compact={compact}
               />
             );
           }
@@ -233,6 +254,8 @@ export function SidebarNavList({
               showIndicator={getShowIndicator?.(id)}
               linkClassName={linkClassName}
               homePage={homePage}
+              compact={compact}
+              minimal={minimal}
             />
           );
         })}

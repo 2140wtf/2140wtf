@@ -35,6 +35,16 @@ export const secureStorage = {
 
   async setItem(key: string, value: string): Promise<void> {
     if (!Capacitor.isNativePlatform()) {
+      // SECURITY: web builds fall back to plaintext localStorage. Secrets
+      // (nsec, NWC URIs, Cashu seed/proofs) are readable by any same-origin
+      // script or XSS payload. On shared/public machines use a native build or
+      // a signer/extension instead of pasting an nsec into the web app.
+      if (/nsec|nwc|wallet|seed|cashu|proof/i.test(key)) {
+        console.warn(
+          `secureStorage: storing sensitive key "${key}" in plaintext localStorage. ` +
+            'Use the native app or a browser extension for stronger secret isolation.',
+        );
+      }
       localStorage.setItem(key, value);
       return;
     }

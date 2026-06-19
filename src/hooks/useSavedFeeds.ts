@@ -45,7 +45,13 @@ export function useSavedFeeds() {
     if (!user) throw new Error('Must be logged in to save feeds');
 
     const newFeed: SavedFeed = {
-      id: crypto.randomUUID(),
+      id: (() => {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+        console.warn('useSavedFeeds: crypto API unavailable; falling back to Math.random() for feed id');
+        return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      })(),
       label: label.trim(),
       filter,
       vars,

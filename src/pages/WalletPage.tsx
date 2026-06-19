@@ -1,17 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Bitcoin, Copy, Check, RefreshCw, Wallet, ChevronDown, ArrowDownLeft, ArrowUpRight, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { SendBitcoinDialog } from '@/components/SendBitcoinDialog';
+import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { satsToUSD, formatBTC } from '@/lib/bitcoin';
 import type { Transaction } from '@/lib/bitcoin';
 
@@ -30,6 +33,7 @@ export function WalletPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { bitcoinAddress, addressData, btcPrice, transactions, isLoading, error, refetch } = useBitcoinWallet();
+  const cashuSeed = useCashuSeed();
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,6 +48,15 @@ export function WalletPage() {
   // it's still open.
   const [pendingUri, setPendingUri] = useState<string | undefined>(undefined);
   const consumedDeepLinkRef = useRef(false);
+
+  const relayUrls = useMemo(
+    () =>
+      (config.relayMetadata?.relays ?? [])
+        .filter((r) => r.read !== false || r.write !== false)
+        .map((r) => r.url)
+        .filter(Boolean),
+    [config.relayMetadata?.relays],
+  );
 
   // Auto-open the Send dialog when the user arrived via a `bitcoin:` deep
   // link. Only fires once per navigation; we then clear `location.state` so
@@ -65,7 +78,7 @@ export function WalletPage() {
 
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
-    description: 'Your Bitcoin Taproot wallet derived from your Nostr identity.',
+    description: 'Your Bitcoin Taproot wallet and Cashu wallet.',
   });
 
   const copyAddress = async () => {
@@ -95,110 +108,173 @@ export function WalletPage() {
           <div className="space-y-2 max-w-xs">
             <h2 className="text-xl font-bold">Your Bitcoin Wallet</h2>
             <p className="text-muted-foreground text-sm">
-              Log in to see your Bitcoin Taproot address derived from your Nostr identity.
+              Log in to see your Bitcoin Taproot address and Cashu wallet.
             </p>
           </div>
           <LoginArea className="max-w-60" />
         </div>
       ) : (
-        <div className="flex flex-col items-center px-4 pt-8 pb-4 space-y-6 max-w-sm mx-auto">
-          {/* Balance */}
-          {isLoading ? (
-            <div className="flex flex-col items-center space-y-2">
-              <Skeleton className="h-10 w-40 rounded-lg" />
-              <Skeleton className="h-4 w-24 rounded" />
-            </div>
-          ) : error ? (
-            <div className="text-center space-y-3">
-              <p className="text-sm text-destructive">Failed to load balance</p>
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                <RefreshCw className="size-3.5 mr-1.5" />
-                Retry
-              </Button>
-            </div>
-          ) : addressData ? (
-            <div className="flex flex-col items-center space-y-1">
-              <span className="text-4xl font-bold tracking-tight">
-                {btcPrice
-                  ? satsToUSD(addressData.totalBalance, btcPrice)
-                  : '---'}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {formatBTC(addressData.totalBalance)} BTC
-              </span>
+        <div className="px-4 pt-6 pb-4 max-w-sm mx-auto">
+          <Tabs defaultValue="bitcoin" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="bitcoin">Bitcoin</TabsTrigger>
+              <TabsTrigger value="cashu">Cashu</TabsTrigger>
+            </TabsList>
 
-              {addressData.pendingBalance !== 0 && (
-                <span className="flex items-center gap-1 text-xs text-orange-500 dark:text-orange-400 pt-1">
-                  <RefreshCw className="size-3 animate-spin" />
-                  {btcPrice
-                    ? `${satsToUSD(addressData.pendingBalance, btcPrice)} pending`
-                    : 'pending'}
-                </span>
+            <TabsContent value="bitcoin" className="flex flex-col items-center space-y-6">
+              {/* Balance */}
+              {isLoading ? (
+                <div className="flex flex-col items-center space-y-2">
+                  <Skeleton className="h-10 w-40 rounded-lg" />
+                  <Skeleton className="h-4 w-24 rounded" />
+                </div>
+              ) : error ? (
+                <div className="text-center space-y-3">
+                  <p className="text-sm text-destructive">Failed to load balance</p>
+                  <Button variant="outline" size="sm" onClick={() => refetch()}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Retry
+                  </Button>
+                </div>
+              ) : addressData ? (
+                <div className="flex flex-col items-center space-y-1">
+                  <span className="text-4xl font-bold tracking-tight">
+                    {btcPrice
+                      ? satsToUSD(addressData.totalBalance, btcPrice)
+                      : '---'}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatBTC(addressData.totalBalance)} BTC
+                  </span>
+
+                  {addressData.pendingBalance !== 0 && (
+                    <span className="flex items-center gap-1 text-xs text-orange-500 dark:text-orange-400 pt-1">
+                      <RefreshCw className="size-3 animate-spin" />
+                      {btcPrice
+                        ? `${satsToUSD(addressData.pendingBalance, btcPrice)} pending`
+                        : 'pending'}
+                    </span>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Send button */}
+              {addressData && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSendOpen(true)}
+                  className="rounded-full"
+                >
+                  <Send className="size-3.5 mr-1.5" />
+                  Send
+                </Button>
               )}
-            </div>
-          ) : null}
 
-          {/* Send button */}
-          {addressData && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSendOpen(true)}
-              className="rounded-full"
-            >
-              <Send className="size-3.5 mr-1.5" />
-              Send
-            </Button>
-          )}
+              <SendBitcoinDialog
+                isOpen={sendOpen}
+                onClose={() => {
+                  setSendOpen(false);
+                  setPendingUri(undefined);
+                }}
+                btcPrice={btcPrice}
+                initialUri={pendingUri}
+              />
 
-          <SendBitcoinDialog
-            isOpen={sendOpen}
-            onClose={() => {
-              setSendOpen(false);
-              setPendingUri(undefined);
-            }}
-            btcPrice={btcPrice}
-            initialUri={pendingUri}
-          />
+              {/* QR Code */}
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <QRCodeCanvas value={bitcoinAddress} size={200} level="M" />
+              </div>
 
-          {/* QR Code */}
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <QRCodeCanvas value={bitcoinAddress} size={200} level="M" />
-          </div>
-
-          {/* Address + copy */}
-          <button
-            onClick={copyAddress}
-            className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-mono text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-          >
-            {truncatedAddress}
-            {copiedAddress ? (
-              <Check className="size-3.5 text-green-500" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-          </button>
-
-          {/* Transactions */}
-          {transactions && transactions.length > 0 && (
-            <>
+              {/* Address + copy */}
               <button
-                onClick={() => setTxOpen((o) => !o)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                onClick={copyAddress}
+                className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-mono text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
               >
-                Transactions
-                <ChevronDown className={`size-3 transition-transform duration-200 ${txOpen ? 'rotate-180' : ''}`} />
+                {truncatedAddress}
+                {copiedAddress ? (
+                  <Check className="size-3.5 text-green-500" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
               </button>
 
-              <TxAccordion open={txOpen}>
-                <div className="w-full divide-y">
-                  {transactions.map((tx) => (
-                    <TxRow key={tx.txid} tx={tx} btcPrice={btcPrice} />
-                  ))}
+              {/* Transactions */}
+              {transactions && transactions.length > 0 && (
+                <>
+                  <button
+                    onClick={() => setTxOpen((o) => !o)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    Transactions
+                    <ChevronDown className={`size-3 transition-transform duration-200 ${txOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  <TxAccordion open={txOpen}>
+                    <div className="w-full divide-y">
+                      {transactions.map((tx) => (
+                        <TxRow key={tx.txid} tx={tx} btcPrice={btcPrice} />
+                      ))}
+                    </div>
+                  </TxAccordion>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="cashu">
+              {cashuSeed.loading ? (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="size-5 animate-spin" />
+                    <p className="font-medium text-foreground">Sign in to wallet</p>
+                    <p className="text-xs text-muted-foreground/80 max-w-xs">
+                      Your signer may have opened a prompt in the background. Approve it to generate or unlock your Cashu seed.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Retry after signing
+                  </Button>
                 </div>
-              </TxAccordion>
-            </>
-          )}
+              ) : cashuSeed.error ? (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <p className="text-sm text-destructive">{cashuSeed.error}</p>
+                  <p className="text-xs text-muted-foreground max-w-xs">
+                    If your signer did not respond, unlock it and try again. You can also reset and create a new seed (this will erase any stored Cashu data for this account).
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                      <RefreshCw className="size-3.5 mr-1.5" />
+                      Retry
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={cashuSeed.regenerate}>
+                      Reset &amp; regenerate
+                    </Button>
+                  </div>
+                </div>
+              ) : !user.signer?.nip44 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Your signer does not support NIP-44, which is required for Cashu backup encryption.
+                </div>
+              ) : cashuSeed.available && cashuSeed.seedPhrase ? (
+                <CashuWalletTab
+                  seedPhrase={cashuSeed.seedPhrase}
+                  user={user}
+                  relayUrls={relayUrls}
+                />
+              ) : (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Cashu wallet could not be initialized.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Try again
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       )}
     </main>

@@ -83,6 +83,8 @@ export function YouTubeEmbed({ videoId, className }: YouTubeEmbedProps) {
 
     findThumbnail(videoId).then((url) => {
       if (!cancelled) setResolvedThumb(url);
+    }).catch(() => {
+      // Thumbnail resolution is best-effort; leave the placeholder.
     });
 
     return () => { cancelled = true; };
@@ -99,6 +101,7 @@ export function YouTubeEmbed({ videoId, className }: YouTubeEmbedProps) {
             src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-fullscreen"
             allowFullScreen
             className="absolute inset-0 w-full h-full"
           />

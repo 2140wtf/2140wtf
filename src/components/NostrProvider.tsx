@@ -4,7 +4,7 @@ import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getEffectiveRelays, DITTO_RELAYS, DIVINE_RELAY, ZAPSTORE_RELAY } from '@/lib/appRelays';
+import { getEffectiveRelays, DITTO_RELAYS, ZAPSTORE_RELAY } from '@/lib/appRelays';
 import { AppPool } from '@/lib/AppPool';
 import { type EventsDB, EVENTS_STORE, INDEX, NIndexedDB } from '@/lib/NIndexedDB';
 import { type IDBPDatabase, openDB } from 'idb';
@@ -111,11 +111,6 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         // Search queries must go to search relays
         if (filters.some((f) => "search" in f)) {
           return new Map(DITTO_RELAYS.map(url => [url, filters]));
-        }
-
-        // Include divine relay for kind 34236 queries, which are addressable short videos
-        if (filters.every((f) => f?.kinds?.length === 1 && f?.kinds[0] === 34236)) {
-          return new Map([...DITTO_RELAYS, DIVINE_RELAY].map(url => [url, filters]));
         }
 
         // Route to all read relays

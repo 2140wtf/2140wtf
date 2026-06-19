@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { hex } from '@scure/base';
 import { nip19 } from 'nostr-tools';
 
 import '@/lib/polyfills';
@@ -16,7 +17,7 @@ import {
   validateSilentPaymentAddress,
   type UTXO,
 } from '@/lib/bitcoin';
-import { parsePsbtV2, extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
+import { encodePsbtV2, parsePsbtV2, extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
 import { NSecSignerBtc } from '@/lib/bitcoin-signers';
 
 /**
@@ -488,5 +489,423 @@ describe('NSecSignerBtc.signPsbt — BIP-375 path', () => {
     const signed = await signer.signPsbt(psbtHex);
     // Should be a regular PSBT v0 we can hand straight to finalizePsbt.
     expect(() => finalizePsbt(signed)).not.toThrow();
+  });
+
+  it('resolves a multi-input BIP-375 PSBT v2 using every input', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 60_000,
+        status: { confirmed: true },
+      },
+      {
+        txid: 'f5184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e17',
+        vout: 1,
+        value: 60_000,
+        status: { confirmed: true },
+      },
+    ];
+
+    const { psbtHex } = buildUnsignedSilentPaymentPsbt(
+      senderPubkey,
+      REFERENCE_SP_ADDRESS,
+      40_000,
+      utxos,
+      5,
+    );
+
+    const signed = await signer.signPsbt(psbtHex);
+
+    const parsed = parsePsbtV2(signed);
+    expect(parsed.inputs).toHaveLength(2);
+    expect(parsed.outputs).toHaveLength(2);
+
+    // Both outputs must have been resolved to concrete P2TR scripts.
+    for (const o of parsed.outputs) {
+      expect(o.script).toBeDefined();
+      expect(o.script![0]).toBe(0x51);
+      expect(o.script![1]).toBe(0x20);
+      expect(o.script!.length).toBe(34);
+    }
+
+    // The recipient output must differ from the sender's change output,
+    // proving the SP derivation ran rather than copying the change script.
+    const recipientXOnly = parsed.outputs[0].script!.slice(2, 34);
+    const changeXOnly = parsed.outputs[1].script!.slice(2, 34);
+    expect(recipientXOnly).not.toEqual(changeXOnly);
+
+    const txHex = extractTxFromSignedPsbtV2(signed);
+    expect(txHex.startsWith('020000000001')).toBe(true);
+  });
+
+  it('rejects a BIP-375 PSBT whose script output is not the sender change', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+    const senderScript = btc.p2tr(hexToBytes(senderPubkey), undefined, btc.NETWORK).script;
+
+    // A valid x-only pubkey that is NOT the sender's, used to build a
+    // malicious non-change script output.
+    const otherPubkey = hexToBytes('187791b6f712a8ea41c8ecdd0ee77fab3e85263b37e1ec18a3651926b3a6cf27');
+    const otherScript = btc.p2tr(otherPubkey, undefined, btc.NETWORK).script;
+
+    const scanPubKey = hexToBytes('0220bcfac5b99e04ad1a06ddfb016ee13582609d60b6291e98d01a9bc9a16c96d4');
+    const spendPubKey = hexToBytes('025cc9856d6f8375350e123978daac200c260cb5b5ae83106cab90484dcd8fcf36');
+
+    const maliciousPsbt = encodePsbtV2({
+      inputs: [
+        {
+          txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+          vout: 0,
+          witnessUtxo: { amount: 100_000n, script: senderScript },
+          tapInternalKey: hexToBytes(senderPubkey),
+        },
+      ],
+      outputs: [
+        {
+          type: 'sp',
+          amount: 40_000n,
+          scanPubKey,
+          spendPubKey,
+        },
+        {
+          type: 'script',
+          amount: 50_000n,
+          script: otherScript,
+        },
+      ],
+    });
+
+    await expect(signer.signPsbt(maliciousPsbt)).rejects.toThrow(/not a change output/i);
+  });
+});
+
+import * as btc from '@scure/btc-signer';
+import {
+  createBitcoinTransaction,
+  MAX_FEE_RATE_SATS_PER_VB,
+  signPsbtLocal,
+} from '@/lib/bitcoin';
+
+describe('buildUnsignedPsbt safety guards', () => {
+  function hexToBytes(h: string): Uint8Array {
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+
+  /** A single 100 000-sat P2TR UTXO from the sender to their own address. */
+  function senderUtxos(): UTXO[] {
+    return [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+  }
+
+  const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+
+  it('rejects an invalid sender pubkey', () => {
+    expect(() =>
+      buildUnsignedPsbt('not-hex', recipientAddress, 10_000, senderUtxos(), 5),
+    ).toThrow(/sender public key/i);
+  });
+
+  it('rejects an invalid recipient address', () => {
+    expect(() =>
+      buildUnsignedPsbt(SENDER_PUBKEY_HEX, 'not-an-address', 10_000, senderUtxos(), 5),
+    ).toThrow(/Invalid recipient/i);
+  });
+
+  it('rejects a testnet recipient address on the mainnet path', () => {
+    // Derive a valid testnet P2TR address from the same pubkey; the mainnet
+    // validator should reject it to prevent accidental network mismatch.
+    const testnetAddr = btc.p2tr(
+      hexToBytes(SENDER_PUBKEY_HEX),
+      undefined,
+      btc.TEST_NETWORK,
+    ).address;
+    expect(testnetAddr).toMatch(/^tb1/);
+    expect(() =>
+      buildUnsignedPsbt(SENDER_PUBKEY_HEX, testnetAddr!, 10_000, senderUtxos(), 5),
+    ).toThrow(/Invalid recipient/i);
+  });
+
+  it('rejects fee rates above the sanity cap', () => {
+    expect(() =>
+      buildUnsignedPsbt(
+        SENDER_PUBKEY_HEX,
+        recipientAddress,
+        10_000,
+        senderUtxos(),
+        MAX_FEE_RATE_SATS_PER_VB + 1,
+      ),
+    ).toThrow(/Fee rate must be between 1 and/i);
+  });
+
+  it('rejects fee rates below 1 sat/vB', () => {
+    expect(() =>
+      buildUnsignedPsbt(SENDER_PUBKEY_HEX, recipientAddress, 10_000, senderUtxos(), 0),
+    ).toThrow(/Fee rate must be between 1 and/i);
+  });
+});
+
+describe('signPsbtLocal', () => {
+  it('signs a regular PSBT v0 and produces a finalizable PSBT', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+    const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+
+    const { psbtHex } = buildUnsignedPsbt(
+      senderPubkey,
+      recipientAddress,
+      40_000,
+      utxos,
+      5,
+    );
+
+    const signed = signPsbtLocal(psbtHex, SENDER_NSEC_HEX);
+    expect(() => finalizePsbt(signed)).not.toThrow();
+  });
+});
+
+describe('signPsbtLocal safety inspections', () => {
+  function hexToBytes(h: string): Uint8Array {
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+
+  const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+  const senderPrivKey = hexToBytes(SENDER_NSEC_HEX);
+  const senderPubkey = btc.utils.pubSchnorr(senderPrivKey);
+  const senderScript = btc.p2tr(senderPubkey, undefined, btc.NETWORK).script;
+
+  function psbtHexFromTx(tx: btc.Transaction): string {
+    return hex.encode(tx.toPSBT());
+  }
+
+  it('rejects a PSBT whose input is missing a witness UTXO', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({ txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16', index: 0 });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/witness/i);
+  });
+
+  it('rejects a PSBT with a zero-value input', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 0n, script: senderScript },
+      tapInternalKey: senderPubkey,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/zero/i);
+  });
+
+  it('rejects a PSBT with an input owned by a different pubkey', () => {
+    // A valid x-only pubkey that is NOT the sender's.
+    const otherPubkey = hexToBytes('187791b6f712a8ea41c8ecdd0ee77fab3e85263b37e1ec18a3651926b3a6cf27');
+    const otherScript = btc.p2tr(otherPubkey, undefined, btc.NETWORK).script;
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: otherScript },
+      tapInternalKey: otherPubkey,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/not owned/i);
+  });
+
+  it('rejects a PSBT that requests a non-standard sighash', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+      sighashType: btc.SigHash.NONE,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/sighash/i);
+  });
+
+  it('rejects a PSBT whose outputs exceed its inputs', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 1000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+    });
+    tx.addOutputAddress(recipientAddress, 2000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/outputs exceed/i);
+  });
+});
+
+describe('createBitcoinTransaction', () => {
+  it('builds, signs, and finalizes a valid mainnet Taproot transaction', () => {
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+    const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+
+    const { txHex, fee } = createBitcoinTransaction(
+      SENDER_NSEC_HEX,
+      recipientAddress,
+      40_000,
+      utxos,
+      5,
+    );
+
+    expect(fee).toBeGreaterThan(0);
+    // Version 2 + SegWit marker/flag + at least one witness input.
+    expect(txHex.startsWith('020000000001')).toBe(true);
+  });
+});
+
+describe('signPsbtLocal additional adversarial cases', () => {
+  function hexToBytes(h: string): Uint8Array {
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+    return out;
+  }
+
+  const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+  const senderPrivKey = hexToBytes(SENDER_NSEC_HEX);
+  const senderPubkey = btc.utils.pubSchnorr(senderPrivKey);
+  const senderScript = btc.p2tr(senderPubkey, undefined, btc.NETWORK).script;
+
+  function psbtHexFromTx(tx: btc.Transaction): string {
+    return hex.encode(tx.toPSBT());
+  }
+
+  it('rejects a non-P2TR input (missing tapInternalKey)', () => {
+    // P2WPKH witness v0 script: OP_0 push20 <20-byte pubkey hash>
+    const p2wpkhScript = hexToBytes('0014' + 'a'.repeat(40));
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: p2wpkhScript },
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/Taproot/i);
+  });
+
+  it('rejects SIGHASH_SINGLE', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+      sighashType: btc.SigHash.SINGLE,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/sighash/i);
+  });
+
+  it('rejects SIGHASH_ALL | ANYONECANPAY (0x81)', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+      // Use the raw bitmask; @scure does not export ANYONECANPAY as a named constant.
+      sighashType: 0x81,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+    expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow(/sighash/i);
+  });
+
+  it('zeroizes the private key after a successful signing', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+
+    let zeroized = false;
+    const spy = vi.spyOn(Uint8Array.prototype, 'fill').mockImplementation(function (this: Uint8Array, value: number) {
+      if (value === 0 && this.length === 32) {
+        zeroized = true;
+      }
+      return this;
+    });
+    try {
+      signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(zeroized).toBe(true);
+  });
+
+  it('zeroizes the private key even when signing fails', () => {
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderPubkey,
+      sighashType: btc.SigHash.NONE,
+    });
+    tx.addOutputAddress(recipientAddress, 1000n, btc.NETWORK);
+
+    let zeroized = false;
+    const spy = vi.spyOn(Uint8Array.prototype, 'fill').mockImplementation(function (this: Uint8Array, value: number) {
+      if (value === 0 && this.length === 32) {
+        zeroized = true;
+      }
+      return this;
+    });
+    try {
+      expect(() => signPsbtLocal(psbtHexFromTx(tx), SENDER_NSEC_HEX)).toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(zeroized).toBe(true);
   });
 });

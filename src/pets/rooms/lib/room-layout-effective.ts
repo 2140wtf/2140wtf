@@ -5,7 +5,7 @@
  * validation and serialization, while effective layout resolution remains isolated.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { RoomLayout, RoomLayoutsContent } from './room-layout-schema';
 import { DEFAULT_ROOM_LAYOUTS } from './room-layout-defaults';
 
@@ -20,7 +20,7 @@ import { DEFAULT_ROOM_LAYOUTS } from './room-layout-defaults';
  * to the full default.
  */
 export function getEffectiveRoomLayout(
-  roomId: BlobbiRoomId,
+  roomId: PetsRoomId,
   parsedLayouts: RoomLayoutsContent | undefined,
 ): RoomLayout {
   const saved = parsedLayouts?.by_room[roomId];

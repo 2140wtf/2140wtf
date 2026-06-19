@@ -1,4 +1,4 @@
-// src/blobbi/actions/index.ts
+// src/pets/actions/index.ts
 
 // Components
 export { PlayMusicModal } from './components/PlayMusicModal';
@@ -6,22 +6,22 @@ export { InlineMusicPlayer } from './components/InlineMusicPlayer';
 export { InlineSingCard } from './components/InlineSingCard';
 
 // Hooks
-export { useBlobbiUseInventoryItem } from './hooks/useBlobbiUseInventoryItem';
-export type { UseItemRequest, UseItemResult, UseBlobbiUseInventoryItemParams } from './hooks/useBlobbiUseInventoryItem';
+export { usePetsUseInventoryItem } from './hooks/usePetsUseInventoryItem';
+export type { UseItemRequest, UseItemResult, UsePetsUseInventoryItemParams } from './hooks/usePetsUseInventoryItem';
 
-export { useBlobbiHatch, useBlobbiEvolve } from './hooks/useBlobbiStageTransition';
+export { usePetsHatch, usePetsEvolve } from './hooks/usePetsStageTransition';
 export type { 
-  UseBlobbiStageTransitionParams, 
+  UsePetsStageTransitionParams, 
   StageTransitionResult,
   CanonicalActionResult,
-} from './hooks/useBlobbiStageTransition';
+} from './hooks/usePetsStageTransition';
 
 export { 
   useStartIncubation, 
   useStopIncubation, 
   useStartEvolution,
   useStopEvolution,
-} from './hooks/useBlobbiIncubation';
+} from './hooks/usePetsIncubation';
 export type {
   StartIncubationMode,
   StartIncubationRequest,
@@ -33,7 +33,7 @@ export type {
   StartEvolutionResult,
   UseStopEvolutionParams,
   StopEvolutionResult,
-} from './hooks/useBlobbiIncubation';
+} from './hooks/usePetsIncubation';
 
 export { useActiveTaskProcess, filterPersistentTasks as filterPersistentTasksFromProcess, filterDynamicTasks } from './hooks/useActiveTaskProcess';
 export type { TaskProcessType, TaskProcessConfig, ActiveTaskProcessResult } from './hooks/useActiveTaskProcess';
@@ -42,7 +42,6 @@ export {
   useHatchTasks, 
   filterPersistentTasks,
   KIND_THEME_DEFINITION,
-  KIND_COLOR_MOMENT,
   HATCH_REQUIRED_INTERACTIONS,
   REQUIRED_INTERACTIONS, // Legacy export
 } from './hooks/useHatchTasks';
@@ -52,26 +51,25 @@ export {
   useEvolveTasks,
   KIND_PROFILE_TABS,
   EVOLVE_REQUIRED_THEMES,
-  EVOLVE_REQUIRED_COLOR_MOMENTS,
   EVOLVE_REQUIRED_INTERACTIONS,
   EVOLVE_STAT_THRESHOLD,
 } from './hooks/useEvolveTasks';
 export type { EvolveTasksResult } from './hooks/useEvolveTasks';
 
-export { useBlobbiDirectAction, DIRECT_ACTION_HAPPINESS_EFFECTS } from './hooks/useBlobbiDirectAction';
-export type { DirectActionRequest, DirectActionResult, UseBlobbiDirectActionParams } from './hooks/useBlobbiDirectAction';
+export { usePetsDirectAction, DIRECT_ACTION_HAPPINESS_EFFECTS } from './hooks/usePetsDirectAction';
+export type { DirectActionRequest, DirectActionResult, UsePetsDirectActionParams } from './hooks/usePetsDirectAction';
 
 export { useAudioPlayback } from './hooks/useAudioPlayback';
 export type { PlaybackState, PlaybackError, UseAudioPlaybackOptions, UseAudioPlaybackReturn } from './hooks/useAudioPlayback';
 
 // Track catalog
 export { 
-  BLOBBI_TRACK_CATALOG,
+  PETS_TRACK_CATALOG,
   getAllTracks,
   getTrackById,
   formatTrackDuration,
-  type BlobbiTrack,
-} from './lib/blobbi-track-catalog';
+  type PetsTrack,
+} from './lib/pets-track-catalog';
 
 // Activity state
 export {
@@ -83,19 +81,19 @@ export {
   type MusicActivityState,
   type SingActivityState,
   type NoActivityState,
-  type BlobbiReactionState,
+  type PetsReactionState,
   type SelectedTrack,
-} from './lib/blobbi-activity-state';
+} from './lib/pets-activity-state';
 
 // Re-export stat bounds from canonical source
-export { STAT_MIN, STAT_MAX } from '@/blobbi/core/lib/blobbi';
+export { STAT_MIN, STAT_MAX } from '@/pets/core/lib/pets';
 
 // Utilities
 export {
   // Types
   type InventoryAction,
   type DirectAction,
-  type BlobbiAction,
+  type PetsAction,
   type ItemUsabilityResult,
   type StatChangeWithSegments,
   // Constants
@@ -125,7 +123,7 @@ export {
   hasHygieneEffectForEgg,
   canUseItemForStage,
   getActionForItem,
-} from './lib/blobbi-action-utils';
+} from './lib/pets-action-utils';
 
 // Daily Missions
 export { useDailyMissions } from './hooks/useDailyMissions';
@@ -159,8 +157,8 @@ export {
   getUnlocks,
   buildXpTagUpdates,
   MAX_LEVEL,
-} from '@/blobbi/core/lib/progression';
-export type { Unlocks } from '@/blobbi/core/lib/progression';
+} from '@/pets/core/lib/progression';
+export type { Unlocks } from '@/pets/core/lib/progression';
 
 // Missions content model
 export {
@@ -170,8 +168,8 @@ export {
   isTallyMission,
   isEventMission,
   missionProgress,
-} from '@/blobbi/core/lib/missions';
-export type { ProfileContent } from '@/blobbi/core/lib/missions';
+} from '@/pets/core/lib/missions';
+export type { ProfileContent } from '@/pets/core/lib/missions';
 
 // Item cooldown
 export { isItemOnCooldown, setItemCooldown, subscribeCooldowns } from './lib/item-cooldown';
@@ -188,7 +186,7 @@ export {
   calculateInventoryActionXP,
   applyXPGain,
   formatXPGain,
-} from './lib/blobbi-xp';
+} from './lib/pets-xp';
 
 // Streak tracking
 export {
@@ -196,14 +194,14 @@ export {
   getStreakTagUpdates,
   needsStreakUpdate,
   getStreakStatus,
-} from './lib/blobbi-streak';
+} from './lib/pets-streak';
 export type {
   StreakUpdateResult,
   StreakTagUpdates,
-} from './lib/blobbi-streak';
+} from './lib/pets-streak';
 
-export { useBlobbiCareActivity } from './hooks/useBlobbiCareActivity';
+export { usePetsCareActivity } from './hooks/usePetsCareActivity';
 export type {
-  UseBlobbiCareActivityParams,
+  UsePetsCareActivityParams,
   CareActivityResult,
-} from './hooks/useBlobbiCareActivity';
+} from './hooks/usePetsCareActivity';

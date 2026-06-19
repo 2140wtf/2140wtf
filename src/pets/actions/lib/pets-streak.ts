@@ -1,8 +1,8 @@
 /**
- * Blobbi Care Streak Management
+ * Pets Care Streak Management
  * 
- * This module provides centralized logic for tracking care streaks on Blobbi companions.
- * A streak represents consecutive days of care activity (opening Blobbi page, performing
+ * This module provides centralized logic for tracking care streaks on Pets companions.
+ * A streak represents consecutive days of care activity (opening Pets page, performing
  * care actions, etc.).
  * 
  * Streak Rules:
@@ -20,8 +20,8 @@
 import {
   getLocalDayString,
   getDaysDifference,
-  type BlobbiCompanion,
-} from '@/blobbi/core/lib/blobbi';
+  type PetsCompanion,
+} from '@/pets/core/lib/pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,9 +42,9 @@ export interface StreakUpdateResult {
 }
 
 /**
- * Tag updates to apply to the Blobbi event.
+ * Tag updates to apply to the Pets event.
  * Only present if wasUpdated is true.
- * Uses index signature for compatibility with updateBlobbiTags.
+ * Uses index signature for compatibility with updatePetsTags.
  */
 export interface StreakTagUpdates {
   care_streak: string;
@@ -121,15 +121,15 @@ export function calculateStreakUpdate(
 }
 
 /**
- * Get the tag updates to apply to a Blobbi event for a streak update.
+ * Get the tag updates to apply to a Pets event for a streak update.
  * Returns undefined if no update is needed (same day activity).
  * 
- * @param companion - The current Blobbi companion state
+ * @param companion - The current Pets companion state
  * @param now - Current timestamp (defaults to now)
  * @returns Tag updates to apply, or undefined if no update needed
  */
 export function getStreakTagUpdates(
-  companion: BlobbiCompanion,
+  companion: PetsCompanion,
   now: Date = new Date()
 ): StreakTagUpdates | undefined {
   const result = calculateStreakUpdate(
@@ -152,12 +152,12 @@ export function getStreakTagUpdates(
 /**
  * Check if a streak update is needed for the companion.
  * 
- * @param companion - The current Blobbi companion state
+ * @param companion - The current Pets companion state
  * @param now - Current timestamp (defaults to now)
  * @returns true if the streak should be updated
  */
 export function needsStreakUpdate(
-  companion: BlobbiCompanion,
+  companion: PetsCompanion,
   now: Date = new Date()
 ): boolean {
   const result = calculateStreakUpdate(
@@ -171,10 +171,10 @@ export function needsStreakUpdate(
 /**
  * Get the current streak status for display purposes.
  * 
- * @param companion - The current Blobbi companion state
+ * @param companion - The current Pets companion state
  * @returns Object with streak info for UI display
  */
-export function getStreakStatus(companion: BlobbiCompanion): {
+export function getStreakStatus(companion: PetsCompanion): {
   streak: number;
   lastDay: string | undefined;
   isActive: boolean;

@@ -1,11 +1,11 @@
 /**
- * BlobbiRoomHero — Flex spacer for the room layout.
+ * PetsRoomHero — Flex spacer for the room layout.
  *
  * This component now serves two purposes:
  * 1. Provides a flex-1 spacer above the bottom bar so the room layout works.
- * 2. Shows the "out exploring" state when Blobbi is an active floating companion.
+ * 2. Shows the "out exploring" state when Pets is an active floating companion.
  *
- * The actual Blobbi visual, stats crown, and name are rendered by BlobbiRoomStage
+ * The actual Pets visual, stats crown, and name are rendered by PetsRoomStage
  * (absolutely positioned against the shell). The room indicator is rendered by
  * the shell's room header overlay.
  */
@@ -14,12 +14,12 @@ import { memo } from 'react';
 import { Footprints, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-export interface BlobbiRoomHeroProps {
-  companion: BlobbiCompanion;
+export interface PetsRoomHeroProps {
+  companion: PetsCompanion;
   isActiveFloatingCompanion: boolean;
   isUpdatingCompanion: boolean;
   handleSetAsCompanion: () => Promise<void>;
@@ -30,17 +30,17 @@ export interface BlobbiRoomHeroProps {
 
 /**
  * Memoized so that high-frequency drag-state updates in the parent
- * (BlobbiDashboard) do not propagate into the Blobbi visual subtree.
+ * (PetsDashboard) do not propagate into the Pets visual subtree.
  * All props from the parent are stable references during food drag,
  * so memo effectively short-circuits the entire subtree.
  */
-export const BlobbiRoomHero = memo(function BlobbiRoomHero({
+export const PetsRoomHero = memo(function PetsRoomHero({
   companion,
   isActiveFloatingCompanion,
   isUpdatingCompanion,
   handleSetAsCompanion,
   className,
-}: BlobbiRoomHeroProps) {
+}: PetsRoomHeroProps) {
   if (isActiveFloatingCompanion) {
     return (
       <div className={cn('flex flex-col items-center justify-center gap-4 text-center flex-1 px-4', className)}>
@@ -66,7 +66,7 @@ export const BlobbiRoomHero = memo(function BlobbiRoomHero({
   }
 
   // Invisible flex spacer — occupies the visual area so the bottom bar
-  // stays at the bottom. The actual Blobbi rendering happens in BlobbiRoomStage
+  // stays at the bottom. The actual Pets rendering happens in PetsRoomStage
   // which is absolutely positioned against the shell.
   return <div className={cn('flex-1 min-h-0', className)} />;
 });

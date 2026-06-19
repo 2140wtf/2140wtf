@@ -1,4 +1,4 @@
-// src/blobbi/shop/lib/blobbi-shop-utils.ts
+// src/pets/shop/lib/pets-shop-utils.ts
 
 import type { ItemEffect } from '../types/shop.types';
 
@@ -6,7 +6,7 @@ import type { ItemEffect } from '../types/shop.types';
  * Format item effects as a concise summary string for display in list rows.
  * 
  * @deprecated Use `<ItemEffectDisplay variant="inline" />` component instead
- * for consistent effect rendering across all Blobbi UIs.
+ * for consistent effect rendering across all Pets UIs.
  * 
  * @example
  * formatEffectSummary({ hunger: 15, hygiene: -2, energy: 5 })

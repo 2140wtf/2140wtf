@@ -5,26 +5,26 @@
  * provides a short-lived emotion override that takes precedence over the
  * status reaction system. The override automatically clears after 1.5s.
  *
- * Used by BlobbiCompanionLayer to wrap item-use handlers with emotion feedback.
+ * Used by PetsCompanionLayer to wrap item-use handlers with emotion feedback.
  */
 
 import { useState, useCallback, useRef } from 'react';
 
-import { getActionEmotion, type ActionType } from '@/blobbi/ui/lib/status-reactions';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotions';
+import { getActionEmotion, type ActionType } from '@/pets/ui/lib/status-reactions';
+import type { PetsEmotion } from '@/pets/ui/lib/emotions';
 
 /** Duration of the action emotion override in milliseconds. */
 const ACTION_OVERRIDE_DURATION_MS = 1500;
 
 interface UseActionEmotionOverrideResult {
   /** Current override emotion, or null if none active. Passed to useStatusReaction. */
-  actionOverride: BlobbiEmotion | null;
+  actionOverride: PetsEmotion | null;
   /** Trigger an override for the given action type. */
   triggerOverride: (action: ActionType) => void;
 }
 
 export function useActionEmotionOverride(): UseActionEmotionOverrideResult {
-  const [actionOverride, setActionOverride] = useState<BlobbiEmotion | null>(null);
+  const [actionOverride, setActionOverride] = useState<PetsEmotion | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const triggerOverride = useCallback((action: ActionType) => {

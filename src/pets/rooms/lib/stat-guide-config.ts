@@ -8,19 +8,19 @@
  *   GuideTarget builder
  */
 
-import type { BlobbiStats } from '@/blobbi/core/types/blobbi';
-import type { ShopItemCategory } from '@/blobbi/shop/types/shop.types';
-import type { BlobbiRoomId } from './room-config';
+import type { PetsStats } from '@/pets/core/types/pets';
+import type { ShopItemCategory } from '@/pets/shop/types/shop.types';
+import type { PetsRoomId } from './room-config';
 import { DEFAULT_ROOM_ORDER } from './room-config';
-import { getLiveShopItems } from '@/blobbi/shop/lib/blobbi-shop-items';
+import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
 
 // ─── Guide target type ────────────────────────────────────────────────────────
 
 export interface GuideTarget {
   /** The stat that triggered the guide */
-  stat: keyof BlobbiStats;
+  stat: keyof PetsStats;
   /** Room the user needs to navigate to */
-  targetRoom: BlobbiRoomId;
+  targetRoom: PetsRoomId;
   /** Whether the guide targets a carousel item or a room action (e.g. sleep) */
   targetType: 'item' | 'action';
   /** Shop item ID when targetType is 'item' */
@@ -34,7 +34,7 @@ export interface GuideTarget {
 // ─── Static mappings ──────────────────────────────────────────────────────────
 
 /** Which room the user should visit for each stat. */
-export const STAT_ROOM_MAP: Record<keyof BlobbiStats, BlobbiRoomId> = {
+export const STAT_ROOM_MAP: Record<keyof PetsStats, PetsRoomId> = {
   health:    'care',
   hygiene:   'care',
   hunger:    'kitchen',
@@ -43,7 +43,7 @@ export const STAT_ROOM_MAP: Record<keyof BlobbiStats, BlobbiRoomId> = {
 };
 
 /** Whether the guide targets a carousel item or a room action. */
-export const STAT_GUIDE_TYPE: Record<keyof BlobbiStats, 'item' | 'action'> = {
+export const STAT_GUIDE_TYPE: Record<keyof PetsStats, 'item' | 'action'> = {
   health:    'item',
   hygiene:   'item',
   hunger:    'item',
@@ -52,7 +52,7 @@ export const STAT_GUIDE_TYPE: Record<keyof BlobbiStats, 'item' | 'action'> = {
 };
 
 /** Action name for action-type guides. */
-export const STAT_GUIDE_ACTION: Partial<Record<keyof BlobbiStats, string>> = {
+export const STAT_GUIDE_ACTION: Partial<Record<keyof PetsStats, string>> = {
   energy: 'sleep',
 };
 
@@ -60,9 +60,9 @@ export const STAT_GUIDE_ACTION: Partial<Record<keyof BlobbiStats, string>> = {
 
 /**
  * Which shop item types actually appear in each room's carousel.
- * This must stay in sync with the room bar components in BlobbiPage.
+ * This must stay in sync with the room bar components in PetsPage.
  */
-const ROOM_CAROUSEL_TYPES: Record<BlobbiRoomId, ShopItemCategory[]> = {
+const ROOM_CAROUSEL_TYPES: Record<PetsRoomId, ShopItemCategory[]> = {
   home:    ['toy'],
   kitchen: ['food', 'energy'],
   care:    ['hygiene', 'medicine'],
@@ -74,7 +74,7 @@ const ROOM_CAROUSEL_TYPES: Record<BlobbiRoomId, ShopItemCategory[]> = {
  * Item IDs excluded from a room's carousel even if their type matches.
  * CareBar excludes hyg_towel from the carousel (it's a side button).
  */
-const ROOM_CAROUSEL_EXCLUDED: Partial<Record<BlobbiRoomId, Set<string>>> = {
+const ROOM_CAROUSEL_EXCLUDED: Partial<Record<PetsRoomId, Set<string>>> = {
   care: new Set(['hyg_towel']),
 };
 
@@ -87,7 +87,7 @@ const ROOM_CAROUSEL_EXCLUDED: Partial<Record<BlobbiRoomId, Set<string>>> = {
  * Scans in catalog order (matching real carousel display order).
  * Returns null for action-type stats (energy) or if no eligible item exists.
  */
-function findGuideItemForStat(stat: keyof BlobbiStats): string | null {
+function findGuideItemForStat(stat: keyof PetsStats): string | null {
   if (STAT_GUIDE_TYPE[stat] !== 'item') return null;
 
   const room = STAT_ROOM_MAP[stat];
@@ -114,8 +114,8 @@ function findGuideItemForStat(stat: keyof BlobbiStats): string | null {
  * (user needs to navigate) or skips directly to 'item'/'action'.
  */
 export function buildGuideTarget(
-  stat: keyof BlobbiStats,
-  currentRoom: BlobbiRoomId,
+  stat: keyof PetsStats,
+  currentRoom: PetsRoomId,
 ): GuideTarget {
   const targetRoom = STAT_ROOM_MAP[stat];
   const targetType = STAT_GUIDE_TYPE[stat];
@@ -141,9 +141,9 @@ export function buildGuideTarget(
  * When equidistant (only possible with even-length order), prefers 'right'.
  */
 export function getGuideRoomDirection(
-  current: BlobbiRoomId,
-  target: BlobbiRoomId,
-  order: BlobbiRoomId[] = DEFAULT_ROOM_ORDER,
+  current: PetsRoomId,
+  target: PetsRoomId,
+  order: PetsRoomId[] = DEFAULT_ROOM_ORDER,
 ): 'left' | 'right' | null {
   if (current === target) return null;
 

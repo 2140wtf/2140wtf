@@ -1,4 +1,4 @@
-// src/blobbi/actions/components/ExpandableMissionCard.tsx
+// src/pets/actions/components/ExpandableMissionCard.tsx
 
 /**
  * Expandable mission card for the quest-board grid.

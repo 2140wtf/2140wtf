@@ -1,7 +1,8 @@
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
+import { generateUUID } from '@/lib/uuid';
 import { hexToBase36 } from '@/lib/nsiteSubdomain';
 import { getStorageKey } from '@/lib/storageKey';
 
@@ -15,8 +16,12 @@ function getSeed(appId: string): string {
   const stored = localStorage.getItem(key);
   if (stored) return stored;
 
-  const seed = crypto.randomUUID();
-  localStorage.setItem(key, seed);
+  const seed = generateUUID();
+  try {
+    localStorage.setItem(key, seed);
+  } catch {
+    // Storage may be unavailable; the seed is still usable for this session.
+  }
   return seed;
 }
 
@@ -30,7 +35,7 @@ function getSeed(appId: string): string {
  * on the sandbox domain.
  *
  * The `prefix` acts as a domain separator so that different use-cases
- * (e.g. "webxdc", "nsite") produce distinct subdomains even for the
+ * (e.g. "mini-apps", "nsite") produce distinct subdomains even for the
  * same identifier.
  *
  * The result is a 50-character base36 string (256 bits of entropy) that

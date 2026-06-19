@@ -7,7 +7,7 @@
  * Mirrors the room-layout-effective.ts pattern exactly.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { FurniturePlacement, RoomFurnitureContent } from './room-furniture-schema';
 import { DEFAULT_ROOM_FURNITURE } from './room-furniture-defaults';
 
@@ -20,7 +20,7 @@ import { DEFAULT_ROOM_FURNITURE } from './room-furniture-defaults';
  * Returns an empty array for rooms with no saved or default furniture.
  */
 export function getEffectiveRoomFurniture(
-  roomId: BlobbiRoomId,
+  roomId: PetsRoomId,
   parsedFurniture: RoomFurnitureContent | undefined,
 ): FurniturePlacement[] {
   const saved = parsedFurniture?.by_room[roomId];

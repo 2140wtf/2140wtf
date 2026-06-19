@@ -129,18 +129,7 @@ export function usePersistentNostrSession(
     }));
     
     clearReconnectTimeout();
-    
-    // Invalidate Blobbi-related queries to fetch fresh data
-    // This is batched by React Query to avoid multiple refetches
-    queryClient.invalidateQueries({
-      queryKey: ['blobbonaut-profile'],
-      refetchType: 'active', // Only refetch if the query is actively being used
-    });
-    queryClient.invalidateQueries({
-      queryKey: ['blobbi-companion'],
-      refetchType: 'active',
-    });
-  }, [queryClient, clearReconnectTimeout]);
+  }, [clearReconnectTimeout]);
   
   /**
    * Handle connection lost.
@@ -253,15 +242,7 @@ export function usePersistentNostrSession(
         // Use a small delay to avoid immediate refetch
         setTimeout(() => {
           if (mounted.current && state.isConnected) {
-            // Only invalidate if queries are stale (controlled by staleTime)
-            queryClient.invalidateQueries({
-              queryKey: ['blobbonaut-profile'],
-              refetchType: 'active',
-            });
-            queryClient.invalidateQueries({
-              queryKey: ['blobbi-companion'],
-              refetchType: 'active',
-            });
+            // Pets queries disabled while feature is off
           }
         }, 1000);
       }

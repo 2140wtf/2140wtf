@@ -1,5 +1,5 @@
 /**
- * Blobbi Eye System - Effects Module
+ * Pets Eye System - Effects Module
  *
  * This module provides implementations for all eye-specific effects:
  * - Sad eyes (watery highlights + blue fill)
@@ -133,7 +133,7 @@ function generateWaterFill(eye: EyePosition): string {
  * This effect:
  * 1. Adds CSS to hide original pupils
  * 2. Injects star elements into tracking groups
- * 3. Adds sparkles around the Blobbi
+ * 3. Adds sparkles around the Pets
  *
  * @param svgText - The SVG content
  * @param config - Star eye configuration
@@ -149,17 +149,17 @@ export function applyStarEyes(
   if (detectedEyes.length === 0) return svgText;
 
   // Add class to SVG root for CSS targeting
-  svgText = addSvgClass(svgText, 'blobbi-star-eyes');
+  svgText = addSvgClass(svgText, 'pets-star-eyes');
 
   // Add styles to hide original pupils
   svgText = addEyeStyles(svgText, `
     /* Hide original pupil circles */
-    .blobbi-star-eyes .${EYE_CLASSES.eye} > circle:not(.${EYE_CLASSES.starEye} *),
-    .blobbi-star-eyes .${EYE_CLASSES.eye} > circle[fill]:not([fill="white"]) {
+    .pets-star-eyes .${EYE_CLASSES.eye} > circle:not(.${EYE_CLASSES.starEye} *),
+    .pets-star-eyes .${EYE_CLASSES.eye} > circle[fill]:not([fill="white"]) {
       opacity: 0;
     }
     /* Ensure star elements are visible */
-    .blobbi-star-eyes .${EYE_CLASSES.starEye} {
+    .pets-star-eyes .${EYE_CLASSES.starEye} {
       opacity: 1;
     }
   `);
@@ -172,15 +172,15 @@ export function applyStarEyes(
 
   // Detect body geometry for precise sparkle placement.
   // Uses the same detectBodyPath system as body effects (dirt, stink),
-  // which reads actual body bounds from data-blobbi-body markers or
+  // which reads actual body bounds from data-pets-body markers or
   // gradient/comment fallback — no hardcoded viewBox assumptions.
   const bodyPath = detectBodyPath(svgText);
 
   // Add sparkles distributed around the detected body bounds
   const sparkles = generateSparkles(config.color, bodyPath);
   svgText = insertOverlay(svgText, `
-  <!-- Excited sparkles around Blobbi -->
-  <g class="blobbi-sparkles-group">
+  <!-- Excited sparkles around Pets -->
+  <g class="pets-sparkles-group">
     ${sparkles}
   </g>`);
 
@@ -239,7 +239,7 @@ function generateStarElement(eye: EyePosition, config: StarEyeConfig): string {
 }
 
 /**
- * Generate sparkle elements distributed around the Blobbi body.
+ * Generate sparkle elements distributed around the Pets body.
  *
  * Uses detected body bounds (from detectBodyPath) to place sparkles in an
  * elliptical ring around the actual body silhouette with a small margin.
@@ -295,7 +295,7 @@ function createSparkleElement(
   delay: number,
   duration: number
 ): string {
-  return `<g class="blobbi-sparkle" style="transform-origin: ${x}px ${y}px;">
+  return `<g class="pets-sparkle" style="transform-origin: ${x}px ${y}px;">
       <path 
         d="M ${x} ${y - size} L ${x + size * 0.3} ${y} L ${x} ${y + size} L ${x - size * 0.3} ${y} Z M ${x - size} ${y} L ${x} ${y + size * 0.3} L ${x + size} ${y} L ${x} ${y - size * 0.3} Z"
         fill="${color}"
@@ -329,12 +329,12 @@ export function applyDizzyEyes(
   if (detectedEyes.length === 0) return svgText;
 
   // Add class for CSS targeting
-  svgText = addSvgClass(svgText, 'blobbi-dizzy');
+  svgText = addSvgClass(svgText, 'pets-dizzy');
 
   // Add styles to hide normal eyes
   svgText = addEyeStyles(svgText, `
     /* Hide normal eyes when dizzy */
-    .blobbi-dizzy .${EYE_CLASSES.blink} {
+    .pets-dizzy .${EYE_CLASSES.blink} {
       opacity: 0;
     }
   `);
@@ -347,7 +347,7 @@ export function applyDizzyEyes(
   // Insert spirals as overlay
   svgText = insertOverlay(svgText, `
   <!-- Dizzy spiral eyes -->
-  <g class="blobbi-dizzy-eyes">
+  <g class="pets-dizzy-eyes">
     ${spirals}
   </g>`);
 
@@ -432,7 +432,7 @@ export function applySleepyEyes(
   const dur = config.cycleDuration;
 
   // Add class for CSS targeting
-  svgText = addSvgClass(svgText, 'blobbi-sleepy');
+  svgText = addSvgClass(svgText, 'pets-sleepy');
 
   // Add CSS animations
   svgText = addEyeStyles(svgText, `
@@ -468,15 +468,15 @@ export function applySleepyEyes(
       70%, 100% { transform: translateY(-10px); }
     }
     
-    .blobbi-sleepy .${EYE_CLASSES.eye} {
+    .pets-sleepy .${EYE_CLASSES.eye} {
       animation: sleepy-wake-glance ${dur}s ease-in-out infinite;
     }
     
-    .blobbi-sleepy .${EYE_CLASSES.closedEye} {
+    .pets-sleepy .${EYE_CLASSES.closedEye} {
       animation: sleepy-closed-eye ${dur}s ease-in-out infinite;
     }
     
-    .blobbi-sleepy .blobbi-zzz {
+    .pets-sleepy .pets-zzz {
       animation: 
         sleepy-zzz ${dur}s ease-in-out infinite,
         sleepy-zzz-float ${dur}s ease-in-out infinite;
@@ -503,7 +503,7 @@ export function applySleepyEyes(
   // Insert overlays
   svgText = insertOverlay(svgText, `
   <!-- Sleepy overlays -->
-  <g class="blobbi-sleepy-overlays">
+  <g class="pets-sleepy-overlays">
     ${closedEyeLines}
     ${zzz}
   </g>`);
@@ -537,7 +537,7 @@ function generateClosedEyeLine(eye: EyePosition): string {
  * Generate Zzz text for sleepy effect.
  */
 function generateSleepyZzz(): string {
-  return `<g class="blobbi-zzz" opacity="0">
+  return `<g class="pets-zzz" opacity="0">
     <text x="70" y="12" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" fill="#6b7280">
       z
     </text>

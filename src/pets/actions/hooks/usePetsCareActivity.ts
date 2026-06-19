@@ -1,14 +1,14 @@
 /**
- * useBlobbiCareActivity - Hook for registering care activity and updating streaks
+ * usePetsCareActivity - Hook for registering care activity and updating streaks
  * 
- * This hook provides a centralized way to register care activity for a Blobbi companion.
+ * This hook provides a centralized way to register care activity for a Pets companion.
  * It handles:
  * - Calculating streak updates based on the last activity day
- * - Publishing updated Blobbi state to Nostr
+ * - Publishing updated Pets state to Nostr
  * - Updating local cache
  * 
  * Use this hook whenever care activity should count toward the streak:
- * - Opening the Blobbi page (page check-in)
+ * - Opening the Pets page (page check-in)
  * - Performing care actions (feed, clean, play, etc.)
  * - Any other care interaction
  * 
@@ -24,20 +24,20 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-  isValidBlobbiEvent,
-  parseBlobbiEvent,
-} from '@/blobbi/core/lib/blobbi';
+  KIND_PETS_STATE,
+  updatePetsTags,
+  isValidPetsEvent,
+  parsePetsEvent,
+} from '@/pets/core/lib/pets';
 
-import { getStreakTagUpdates, calculateStreakUpdate, type StreakUpdateResult } from '../lib/blobbi-streak';
+import { getStreakTagUpdates, calculateStreakUpdate, type StreakUpdateResult } from '../lib/pets-streak';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface UseBlobbiCareActivityParams {
-  companion: BlobbiCompanion | null;
+export interface UsePetsCareActivityParams {
+  companion: PetsCompanion | null;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
 }
@@ -60,10 +60,10 @@ export interface CareActivityResult {
  * The register function is idempotent - calling it multiple times on the same day
  * will only update once.
  */
-export function useBlobbiCareActivity({
+export function usePetsCareActivity({
   companion,
   updateCompanionEvent,
-}: UseBlobbiCareActivityParams) {
+}: UsePetsCareActivityParams) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -84,14 +84,14 @@ export function useBlobbiCareActivity({
 
       // Fetch fresh companion from relays (read-modify-write pattern)
       const freshEvents = await nostr.query([{
-        kinds: [KIND_BLOBBI_STATE],
+        kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [companion.d],
       }]);
       const freshCompanion = freshEvents
-        .filter(isValidBlobbiEvent)
+        .filter(isValidPetsEvent)
         .sort((a, b) => b.created_at - a.created_at)
-        .map(e => parseBlobbiEvent(e))
+        .map(e => parsePetsEvent(e))
         .find(Boolean) ?? companion;
 
       const now = new Date();
@@ -125,11 +125,11 @@ export function useBlobbiCareActivity({
       }
       
       // Build updated tags from fresh data
-      const updatedTags = updateBlobbiTags(freshCompanion.allTags, streakUpdates);
+      const updatedTags = updatePetsTags(freshCompanion.allTags, streakUpdates);
       
       // Publish the updated event
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: freshCompanion.event.content,
         tags: updatedTags,
         prev: freshCompanion.event,

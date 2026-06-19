@@ -88,20 +88,20 @@ export function xpToNextLevel(xp: number): number {
 // ─── Unlocks ─────────────────────────────────────────────────────────────────
 
 export interface Unlocks {
-  /** Maximum number of Blobbis the player can own */
-  maxBlobbis: number;
+  /** Maximum number of Petss the player can own */
+  maxPetss: number;
 }
 
 /**
  * Derive unlocks from level. Pure function, no stored state.
  */
 export function getUnlocks(level: number): Unlocks {
-  let maxBlobbis = 1;
-  if (level >= 5) maxBlobbis = 2;
-  if (level >= 10) maxBlobbis = 3;
-  if (level >= 15) maxBlobbis = 4;
-  if (level >= 20) maxBlobbis = 5;
-  return { maxBlobbis };
+  let maxPetss = 1;
+  if (level >= 5) maxPetss = 2;
+  if (level >= 10) maxPetss = 3;
+  if (level >= 15) maxPetss = 4;
+  if (level >= 20) maxPetss = 5;
+  return { maxPetss };
 }
 
 // ─── Tag Helpers ─────────────────────────────────────────────────────────────

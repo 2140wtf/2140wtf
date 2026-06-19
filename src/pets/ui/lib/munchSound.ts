@@ -1,5 +1,5 @@
 /**
- * Cute synchronized "nom nom nom" sound for Blobbi feeding feedback.
+ * Cute synchronized "nom nom nom" sound for Pets feeding feedback.
  *
  * The audio rhythm is locked to the chewing mouth SMIL animation
  * ({@link CHEW_CYCLE_SEC} from mouth/generators.ts).  Each 300 ms visual
@@ -14,7 +14,7 @@
  * No audio files, no fetch, no dependencies.
  */
 
-import { CHEW_CYCLE_SEC } from '@/blobbi/ui/lib/mouth';
+import { CHEW_CYCLE_SEC } from '@/pets/ui/lib/mouth';
 
 // ─── Tuning constants ─────────────────────────────────────────────────────────
 
@@ -217,7 +217,7 @@ export function playMunchSound(): void {
     // so the "nom" is heard the instant the chewing mouth appears.
     //
     // If the sound still feels late after testing, the fix is to call
-    // playMunchSound() earlier in BlobbiPage (before setActionOverrideEmotion),
+    // playMunchSound() earlier in PetsPage (before setActionOverrideEmotion),
     // not to add a positive delay here.
 
     for (let i = 0; i < CHEW_CYCLES; i++) {

@@ -1,7 +1,7 @@
 /**
  * Need Detection System
  * 
- * Centralized logic for determining if Blobbi "needs" a particular type of item.
+ * Centralized logic for determining if Pets "needs" a particular type of item.
  * Used to trigger need-based behaviors like auto-approaching items.
  * 
  * Design:
@@ -10,27 +10,27 @@
  * - Returns both boolean need and priority level for potential future use
  */
 
-import type { BlobbiStats } from '@/blobbi/core/lib/blobbi';
-import type { ShopItemCategory } from '@/blobbi/shop/types/shop.types';
+import type { PetsStats } from '@/pets/core/lib/pets';
+import type { ShopItemCategory } from '@/pets/shop/types/shop.types';
 
 // ─── Need Thresholds ──────────────────────────────────────────────────────────
 
 /**
  * Stat thresholds for determining need.
- * When a stat drops below its threshold, Blobbi "needs" items that affect that stat.
+ * When a stat drops below its threshold, Pets "needs" items that affect that stat.
  * 
  * Centralized here for easy tuning.
  */
 export const NEED_THRESHOLDS = {
-  /** Below this hunger level, Blobbi needs food */
+  /** Below this hunger level, Pets needs food */
   hunger: 40,
-  /** Below this happiness level, Blobbi needs toys/play items */
+  /** Below this happiness level, Pets needs toys/play items */
   happiness: 35,
-  /** Below this hygiene level, Blobbi needs cleaning items */
+  /** Below this hygiene level, Pets needs cleaning items */
   hygiene: 30,
-  /** Below this health level, Blobbi needs medicine */
+  /** Below this health level, Pets needs medicine */
   health: 50,
-  /** Below this energy level, Blobbi may also seek food for energy */
+  /** Below this energy level, Pets may also seek food for energy */
   energy: 25,
 } as const;
 
@@ -40,15 +40,15 @@ export const NEED_THRESHOLDS = {
 export type NeedPriority = 'none' | 'low' | 'normal' | 'high' | 'critical';
 
 /**
- * Result of checking if Blobbi needs an item category
+ * Result of checking if Pets needs an item category
  */
 export interface NeedCheckResult {
-  /** Whether Blobbi needs this type of item */
+  /** Whether Pets needs this type of item */
   needsItem: boolean;
   /** Priority level of the need */
   priority: NeedPriority;
   /** Which stat triggered the need (if any) */
-  triggeringStat: keyof BlobbiStats | null;
+  triggeringStat: keyof PetsStats | null;
   /** Current value of the triggering stat */
   currentValue: number | null;
   /** Threshold that was crossed */
@@ -61,7 +61,7 @@ export interface NeedCheckResult {
  * Maps item categories to the primary stats they affect.
  * Used to determine if a category is "needed" based on stats.
  */
-const CATEGORY_TO_PRIMARY_STAT: Record<ShopItemCategory, (keyof BlobbiStats)[]> = {
+const CATEGORY_TO_PRIMARY_STAT: Record<ShopItemCategory, (keyof PetsStats)[]> = {
   food: ['hunger', 'energy'],
   toy: ['happiness'],
   hygiene: ['hygiene'],
@@ -87,11 +87,11 @@ function calculatePriority(value: number, threshold: number): NeedPriority {
 }
 
 /**
- * Check if Blobbi needs a specific stat to be addressed.
+ * Check if Pets needs a specific stat to be addressed.
  */
 export function checkStatNeed(
-  stat: keyof BlobbiStats,
-  stats: Partial<BlobbiStats>
+  stat: keyof PetsStats,
+  stats: Partial<PetsStats>
 ): { needed: boolean; priority: NeedPriority; value: number; threshold: number } {
   const value = stats[stat] ?? 100;
   const threshold = NEED_THRESHOLDS[stat as keyof typeof NEED_THRESHOLDS] ?? 50;
@@ -102,14 +102,14 @@ export function checkStatNeed(
 }
 
 /**
- * Check if Blobbi needs a specific category of item based on current stats.
+ * Check if Pets needs a specific category of item based on current stats.
  * 
  * This is the main function to call when an item lands to determine
- * if Blobbi should auto-approach it.
+ * if Pets should auto-approach it.
  */
 export function checkItemCategoryNeed(
   category: ShopItemCategory,
-  stats: Partial<BlobbiStats>
+  stats: Partial<PetsStats>
 ): NeedCheckResult {
   const relevantStats = CATEGORY_TO_PRIMARY_STAT[category];
   
@@ -156,24 +156,24 @@ export function checkItemCategoryNeed(
  * Get all current needs sorted by priority.
  * Useful for debugging or showing UI indicators.
  */
-export function getAllNeeds(stats: Partial<BlobbiStats>): Array<{
-  stat: keyof BlobbiStats;
+export function getAllNeeds(stats: Partial<PetsStats>): Array<{
+  stat: keyof PetsStats;
   priority: NeedPriority;
   value: number;
   threshold: number;
 }> {
   const needs: Array<{
-    stat: keyof BlobbiStats;
+    stat: keyof PetsStats;
     priority: NeedPriority;
     value: number;
     threshold: number;
   }> = [];
   
   for (const [stat, threshold] of Object.entries(NEED_THRESHOLDS)) {
-    const value = stats[stat as keyof BlobbiStats] ?? 100;
+    const value = stats[stat as keyof PetsStats] ?? 100;
     if (value < threshold) {
       needs.push({
-        stat: stat as keyof BlobbiStats,
+        stat: stat as keyof PetsStats,
         priority: calculatePriority(value, threshold),
         value,
         threshold,
@@ -192,7 +192,7 @@ export function getAllNeeds(stats: Partial<BlobbiStats>): Array<{
  * Check if stats indicate any critical needs.
  * Useful for triggering urgent behavior changes.
  */
-export function hasCriticalNeed(stats: Partial<BlobbiStats>): boolean {
+export function hasCriticalNeed(stats: Partial<PetsStats>): boolean {
   const needs = getAllNeeds(stats);
   return needs.some(n => n.priority === 'critical');
 }
@@ -200,7 +200,7 @@ export function hasCriticalNeed(stats: Partial<BlobbiStats>): boolean {
 /**
  * Check if stats indicate any needs at all.
  */
-export function hasAnyNeed(stats: Partial<BlobbiStats>): boolean {
+export function hasAnyNeed(stats: Partial<PetsStats>): boolean {
   const needs = getAllNeeds(stats);
   return needs.length > 0;
 }

@@ -295,7 +295,10 @@ export function useOnchainZapMany(
   return {
     zap: mutation.mutate,
     zapAsync: mutation.mutateAsync,
-    isZapping,
+    // Use `mutation.isPending` so the UI disables the instant the mutation is
+    // invoked, before the async `mutationFn` has had a chance to set the
+    // local `isZapping` state. This closes a small double-submit window.
+    isZapping: mutation.isPending || isZapping,
     progress,
     canZap: !!user && canSignPsbt,
     canSignPsbt,

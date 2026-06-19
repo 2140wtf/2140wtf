@@ -1,9 +1,9 @@
-// src/blobbi/actions/lib/blobbi-action-utils.ts
+// src/pets/actions/lib/pets-action-utils.ts
 
-import { STAT_MIN, STAT_MAX, type BlobbiCompanion, type BlobbiStage, type BlobbiStats, type StorageItem } from '@/blobbi/core/lib/blobbi';
-import type { ItemEffect, ShopItemCategory } from '@/blobbi/shop/types/shop.types';
-import { getShopItemById } from '@/blobbi/shop/lib/blobbi-shop-items';
-import { getBlobbiStatDisplayState, type CareState } from '@/blobbi/core/lib/blobbi-segments';
+import { STAT_MIN, STAT_MAX, type PetsCompanion, type PetsStage, type PetsStats, type StorageItem } from '@/pets/core/lib/pets';
+import type { ItemEffect, ShopItemCategory } from '@/pets/shop/types/shop.types';
+import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
+import { getPetsStatDisplayState, type CareState } from '@/pets/core/lib/pets-segments';
 
 // ─── Action Types ─────────────────────────────────────────────────────────────
 
@@ -19,9 +19,9 @@ export type InventoryAction = 'feed' | 'play' | 'clean' | 'medicine' | 'boost';
 export type DirectAction = 'play_music' | 'sing';
 
 /**
- * All Blobbi actions (item-based + direct)
+ * All Pets actions (item-based + direct)
  */
-export type BlobbiAction = InventoryAction | DirectAction;
+export type PetsAction = InventoryAction | DirectAction;
 
 /**
  * Mapping from action type to allowed item categories
@@ -40,27 +40,27 @@ export const ACTION_TO_ITEM_TYPE: Record<InventoryAction, ShopItemCategory> = {
 export const ACTION_METADATA: Record<InventoryAction, { label: string; description: string; icon: string }> = {
   feed: {
     label: 'Feed',
-    description: 'Feed your Blobbi',
+    description: 'Feed your Pets',
     icon: '🍎',
   },
   play: {
     label: 'Play',
-    description: 'Play with your Blobbi',
+    description: 'Play with your Pets',
     icon: '⚽',
   },
   clean: {
     label: 'Clean',
-    description: 'Clean your Blobbi',
+    description: 'Clean your Pets',
     icon: '🧼',
   },
   medicine: {
     label: 'Medicine',
-    description: 'Heal your Blobbi',
+    description: 'Heal your Pets',
     icon: '💊',
   },
   boost: {
     label: 'Boost',
-    description: 'Recharge your Blobbi\'s energy',
+    description: 'Recharge your Pets\'s energy',
     icon: '⚡',
   },
 };
@@ -71,12 +71,12 @@ export const ACTION_METADATA: Record<InventoryAction, { label: string; descripti
 export const DIRECT_ACTION_METADATA: Record<DirectAction, { label: string; description: string; icon: string }> = {
   play_music: {
     label: 'Play Music',
-    description: 'Play music for your Blobbi',
+    description: 'Play music for your Pets',
     icon: '🎵',
   },
   sing: {
     label: 'Sing',
-    description: 'Sing to your Blobbi',
+    description: 'Sing to your Pets',
     icon: '🎤',
   },
 };
@@ -84,20 +84,20 @@ export const DIRECT_ACTION_METADATA: Record<DirectAction, { label: string; descr
 /**
  * Combined action metadata for all action types
  */
-export const ALL_ACTION_METADATA: Record<BlobbiAction, { label: string; description: string; icon: string }> = {
+export const ALL_ACTION_METADATA: Record<PetsAction, { label: string; description: string; icon: string }> = {
   ...ACTION_METADATA,
   ...DIRECT_ACTION_METADATA,
 };
 
 // ─── Stat Helpers ─────────────────────────────────────────────────────────────
-// STAT_MIN and STAT_MAX are imported from @/lib/blobbi (single source of truth)
+// STAT_MIN and STAT_MAX are imported from @/lib/pets (single source of truth)
 
 /**
  * Clamp a stat value between STAT_MIN (1) and STAT_MAX (100).
  * Safe for undefined values (returns STAT_MIN).
  * 
  * The minimum of 1 (instead of 0) ensures:
- * - Blobbi is never in an unrecoverable state
+ * - Pets is never in an unrecoverable state
  * - Visual feedback shows critical state without being "dead"
  * - Recovery is always possible with any healing item
  */
@@ -120,10 +120,10 @@ export function applyStat(current: number | undefined, delta: number): number {
  * Only modifies stats that have corresponding effects.
  */
 export function applyItemEffects(
-  currentStats: Partial<BlobbiStats>,
+  currentStats: Partial<PetsStats>,
   effects: ItemEffect
-): Partial<BlobbiStats> {
-  const newStats: Partial<BlobbiStats> = { ...currentStats };
+): Partial<PetsStats> {
+  const newStats: Partial<PetsStats> = { ...currentStats };
 
   if (effects.hunger !== undefined) {
     newStats.hunger = applyStat(currentStats.hunger, effects.hunger);
@@ -152,7 +152,7 @@ export function applyItemEffects(
 export const SHELL_REPAIR_KIT_ID = 'med_shell_repair';
 
 /**
- * Result of checking if an item can be used by a specific Blobbi stage.
+ * Result of checking if an item can be used by a specific Pets stage.
  */
 export interface ItemUsabilityResult {
   canUse: boolean;
@@ -343,7 +343,7 @@ export const EGG_VISIBLE_INVENTORY_ACTIONS: InventoryAction[] = ['clean', 'medic
 /**
  * All actions visible in the egg UI.
  */
-export const EGG_VISIBLE_ACTIONS: BlobbiAction[] = ['clean', 'medicine', 'play_music', 'sing'];
+export const EGG_VISIBLE_ACTIONS: PetsAction[] = ['clean', 'medicine', 'play_music', 'sing'];
 
 /**
  * @deprecated Use EGG_ALLOWED_INVENTORY_ACTIONS instead
@@ -357,7 +357,7 @@ export const EGG_ALLOWED_ACTIONS = EGG_ALLOWED_INVENTORY_ACTIONS;
  * UI visibility is handled separately by `isActionVisibleForStage()`.
  * The domain layer allows all actions - UI chooses what to show.
  */
-export function canUseAction(_companion: BlobbiCompanion, _action: InventoryAction): boolean {
+export function canUseAction(_companion: PetsCompanion, _action: InventoryAction): boolean {
   // All stages can technically use all item actions at the domain layer.
   // UI filtering determines what actions are shown to users.
   return true;
@@ -367,7 +367,7 @@ export function canUseAction(_companion: BlobbiCompanion, _action: InventoryActi
  * Check if a companion can use a specific direct action.
  * Direct actions (play_music, sing) are available for all stages.
  */
-export function canUseDirectAction(_companion: BlobbiCompanion, _action: DirectAction): boolean {
+export function canUseDirectAction(_companion: PetsCompanion, _action: DirectAction): boolean {
   // All stages can use direct actions
   return true;
 }
@@ -376,7 +376,7 @@ export function canUseDirectAction(_companion: BlobbiCompanion, _action: DirectA
  * Check if an action should be visible in the UI for a given stage.
  * This is for UI filtering only - some actions are hidden but not blocked.
  */
-export function isActionVisibleForStage(stage: 'egg' | 'baby' | 'adult', action: BlobbiAction): boolean {
+export function isActionVisibleForStage(stage: 'egg' | 'baby' | 'adult', action: PetsAction): boolean {
   if (stage === 'egg') {
     return EGG_VISIBLE_ACTIONS.includes(action);
   }
@@ -388,19 +388,19 @@ export function isActionVisibleForStage(stage: 'egg' | 'baby' | 'adult', action:
  * Eggs cannot use food, toys, or hygiene items.
  * @deprecated Use canUseAction(companion, action) for action-specific checks
  */
-export function canUseInventoryItems(companion: BlobbiCompanion): boolean {
+export function canUseInventoryItems(companion: PetsCompanion): boolean {
   return GENERAL_ITEM_USABLE_STAGES.includes(companion.stage as typeof GENERAL_ITEM_USABLE_STAGES[number]);
 }
 
 /**
  * Get a user-friendly message explaining why an action can't be used.
  */
-export function getStageRestrictionMessage(companion: BlobbiCompanion, action?: InventoryAction): string | null {
+export function getStageRestrictionMessage(companion: PetsCompanion, action?: InventoryAction): string | null {
   if (companion.stage === 'egg') {
     if (action && EGG_ALLOWED_INVENTORY_ACTIONS.includes(action)) {
       return null; // Medicine and clean are allowed for eggs
     }
-    return 'Eggs cannot use this item. Wait for your Blobbi to hatch!';
+    return 'Eggs cannot use this item. Wait for your Pets to hatch!';
   }
   return null;
 }
@@ -414,7 +414,7 @@ export function getStageRestrictionMessage(companion: BlobbiCompanion, action?: 
  */
 export interface StatChangeWithSegments {
   /** Which stat is affected. */
-  stat: keyof BlobbiStats;
+  stat: keyof PetsStats;
   /** Raw delta from the item effect (before clamping). */
   delta: number;
   /** Current stat value (clamped 1–100). */
@@ -438,7 +438,7 @@ export interface StatChangeWithSegments {
 /**
  * Preview stat changes with segment (bar) impact for each affected stat.
  *
- * Uses `getBlobbiStatDisplayState` to derive segment counts before and after
+ * Uses `getPetsStatDisplayState` to derive segment counts before and after
  * the item effect, so the result exactly matches what the user sees in the
  * stat rings.
  *
@@ -446,14 +446,14 @@ export interface StatChangeWithSegments {
  * (all bars shown as full regardless of the internal value).
  */
 export function previewStatChangesWithSegments(
-  currentStats: Partial<BlobbiStats>,
+  currentStats: Partial<PetsStats>,
   effects: ItemEffect | undefined,
-  stage: BlobbiStage,
+  stage: PetsStage,
 ): StatChangeWithSegments[] {
   if (!effects) return [];
 
   const changes: StatChangeWithSegments[] = [];
-  const statKeys: (keyof BlobbiStats)[] = ['hunger', 'happiness', 'energy', 'hygiene', 'health'];
+  const statKeys: (keyof PetsStats)[] = ['hunger', 'happiness', 'energy', 'hygiene', 'health'];
 
   for (const stat of statKeys) {
     const delta = effects[stat];
@@ -462,8 +462,8 @@ export function previewStatChangesWithSegments(
     const beforeValue = clampStat(currentStats[stat] ?? 0);
     const afterValue = clampStat(beforeValue + delta);
 
-    const before = getBlobbiStatDisplayState({ stage, stat, value: beforeValue });
-    const after = getBlobbiStatDisplayState({ stage, stat, value: afterValue });
+    const before = getPetsStatDisplayState({ stage, stat, value: beforeValue });
+    const after = getPetsStatDisplayState({ stage, stat, value: afterValue });
 
     changes.push({
       stat,

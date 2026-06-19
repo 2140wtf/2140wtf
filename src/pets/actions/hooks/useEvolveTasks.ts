@@ -1,9 +1,9 @@
-// src/blobbi/actions/hooks/useEvolveTasks.ts
+// src/pets/actions/hooks/useEvolveTasks.ts
 
 /**
  * Hook to compute evolve task progress.
  *
- * Progress is stored in the kind 31124 Blobbi event content JSON (per-Blobbi).
+ * Progress is stored in the kind 31124 Pets event content JSON (per-Pets).
  * - Interactions: TallyMission tracked via `trackEvolutionMissionTally`
  * - Event-based tasks: EventMission, backfilled from retroactive Nostr queries
  * - Dynamic task (maintain_stats): computed from current companion stats, NEVER stored
@@ -15,9 +15,9 @@ import { useNostr } from '@nostrify/react';
 import type { NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
-import type { Mission } from '@/blobbi/core/lib/missions';
-import { missionProgress, isEventMission } from '@/blobbi/core/lib/missions';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { Mission } from '@/pets/core/lib/missions';
+import { missionProgress, isEventMission } from '@/pets/core/lib/missions';
 import {
   trackEvolutionMissionEvent,
   readEvolutionFromStorage,
@@ -28,7 +28,6 @@ import {
   EVOLVE_MISSIONS,
   EVOLVE_REQUIRED_INTERACTIONS,
   EVOLVE_REQUIRED_THEMES,
-  EVOLVE_REQUIRED_COLOR_MOMENTS,
   EVOLVE_STAT_THRESHOLD,
   findEvolutionMission,
   createEvolveMissions,
@@ -38,7 +37,6 @@ import {
 
 import {
   KIND_THEME_DEFINITION,
-  KIND_COLOR_MOMENT,
   KIND_PROFILE_METADATA,
   type HatchTask,
   type TaskType,
@@ -53,7 +51,6 @@ export const KIND_PROFILE_TABS = 16769;
 export {
   EVOLVE_REQUIRED_INTERACTIONS,
   EVOLVE_REQUIRED_THEMES,
-  EVOLVE_REQUIRED_COLOR_MOMENTS,
   EVOLVE_STAT_THRESHOLD,
 };
 
@@ -84,10 +81,10 @@ export interface EvolveTasksResult {
 /**
  * Hook to compute evolve task progress from evolution missions + Nostr event backfill.
  *
- * @param companion - The Blobbi companion (must be in evolving state)
+ * @param companion - The Pets companion (must be in evolving state)
  */
 export function useEvolveTasks(
-  companion: BlobbiCompanion | null,
+  companion: PetsCompanion | null,
 ): EvolveTasksResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -119,7 +116,7 @@ export function useEvolveTasks(
   }, [isEvolving, pubkey, companionD, companion?.evolution]);
 
   // ─── Ensure evolution missions exist and match current definitions ───
-  // Scoped by pubkey:d so switching Blobbis re-runs the check.
+  // Scoped by pubkey:d so switching Petss re-runs the check.
   const ensuredRef = useRef<string | null>(null);
   useEffect(() => {
     const ensureKey = `${pubkey}:${companionD}`;
@@ -148,7 +145,6 @@ export function useEvolveTasks(
 
       const filters: NostrFilter[] = [
         { kinds: [KIND_THEME_DEFINITION], authors: [pubkey], limit: EVOLVE_REQUIRED_THEMES },
-        { kinds: [KIND_COLOR_MOMENT], authors: [pubkey], limit: EVOLVE_REQUIRED_COLOR_MOMENTS },
         { kinds: [KIND_PROFILE_TABS], authors: [pubkey], limit: 1 },
         { kinds: [KIND_PROFILE_METADATA], authors: [pubkey], limit: 1 },
       ];
@@ -157,7 +153,6 @@ export function useEvolveTasks(
 
       return {
         themeEvents: events.filter(e => e.kind === KIND_THEME_DEFINITION),
-        colorMomentEvents: events.filter(e => e.kind === KIND_COLOR_MOMENT),
         profileTabsEvents: events.filter(e => e.kind === KIND_PROFILE_TABS),
         hasProfileMetadata: events.some(e => e.kind === KIND_PROFILE_METADATA),
       };
@@ -172,7 +167,6 @@ export function useEvolveTasks(
     if (!data) return {} as Record<string, number>;
     return {
       create_themes: data.themeEvents.length,
-      color_moments: data.colorMomentEvents.length,
       edit_profile: (data.profileTabsEvents.length >= 1 || data.hasProfileMetadata) ? 1 : 0,
     };
   }, [data]);
@@ -192,12 +186,6 @@ export function useEvolveTasks(
       const m = findEvolutionMission(current, 'create_themes');
       if (m && isEventMission(m) && !m.events.includes(event.id)) {
         trackEvolutionMissionEvent('create_themes', event.id, pubkey, companionD);
-      }
-    }
-    for (const event of data.colorMomentEvents) {
-      const m = findEvolutionMission(current, 'color_moments');
-      if (m && isEventMission(m) && !m.events.includes(event.id)) {
-        trackEvolutionMissionEvent('color_moments', event.id, pubkey, companionD);
       }
     }
     const profileEditEvents = [

@@ -5,7 +5,7 @@
  * Positions eyebrows relative to detected eye positions.
  */
 
-import type { EyePosition, BlobbiVariant, EyebrowConfig, AnimatedEyebrowsConfig } from './types';
+import type { EyePosition, PetsVariant, EyebrowConfig, AnimatedEyebrowsConfig } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -14,21 +14,21 @@ import type { EyePosition, BlobbiVariant, EyebrowConfig, AnimatedEyebrowsConfig 
  */
 export const EYEBROW_CLASSES = {
   /** Wrapper group with rotation transform */
-  group: 'blobbi-eyebrow-group',
+  group: 'pets-eyebrow-group',
   /** Left eyebrow group */
-  groupLeft: 'blobbi-eyebrow-group-left',
+  groupLeft: 'pets-eyebrow-group-left',
   /** Right eyebrow group */
-  groupRight: 'blobbi-eyebrow-group-right',
+  groupRight: 'pets-eyebrow-group-right',
   /** The eyebrow path element (CSS animates translateY on this) */
-  eyebrow: 'blobbi-eyebrow',
+  eyebrow: 'pets-eyebrow',
   /** Left eyebrow path */
-  eyebrowLeft: 'blobbi-eyebrow-left',
+  eyebrowLeft: 'pets-eyebrow-left',
   /** Right eyebrow path */
-  eyebrowRight: 'blobbi-eyebrow-right',
+  eyebrowRight: 'pets-eyebrow-right',
   /** Applied to SVG root when animated eyebrows are enabled */
-  animated: 'blobbi-animated-brows',
+  animated: 'pets-animated-brows',
   /** Keyframe animation name */
-  bounceKeyframe: 'blobbi-eyebrow-bounce',
+  bounceKeyframe: 'pets-eyebrow-bounce',
 } as const;
 
 /**
@@ -44,19 +44,19 @@ const BASE_EYE_WHITE_RADIUS = 8;
  * Generate eyebrow SVG elements.
  * 
  * Structure:
- *   <g class="blobbi-eyebrow-group" transform="rotate(...)">
- *     <path class="blobbi-eyebrow" />  <!-- CSS animates translateY on this -->
+ *   <g class="pets-eyebrow-group" transform="rotate(...)">
+ *     <path class="pets-eyebrow" />  <!-- CSS animates translateY on this -->
  *   </g>
  * 
  * @param eyes - Eye positions
  * @param config - Eyebrow configuration
- * @param variant - Blobbi variant for variant-specific adjustments
+ * @param variant - Pets variant for variant-specific adjustments
  * @param form - Optional adult form for form-specific adjustments
  */
 export function generateEyebrows(
   eyes: EyePosition[],
   config: EyebrowConfig,
-  variant: BlobbiVariant = 'adult',
+  variant: PetsVariant = 'adult',
   _form?: string,
 ): string {
   return eyes.map(eye => {

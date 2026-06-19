@@ -4,11 +4,11 @@
  * Each component follows the same pattern as FloatingMusicNotes and
  * FloatingSocialHearts: absolute-positioned overlay, CSS keyframe animation,
  * prefers-reduced-motion support. They are designed to be layered inside the
- * BlobbiStageVisual or BlobbiRoomHero container.
+ * PetsStageVisual or PetsRoomHero container.
  *
  * Components:
  *   - ReactionSparkles: CSS sparkle shapes after cleaning
- *   - ReactionBubbles: bubble wash covering Blobbi (clean_complete phase 1)
+ *   - ReactionBubbles: bubble wash covering Pets (clean_complete phase 1)
  */
 
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ export interface ReactionSparklesProps {
 }
 
 /**
- * Sparkle particle positions — balanced around the Blobbi body center.
+ * Sparkle particle positions — balanced around the Pets body center.
  * Horizontal spread is tightened (20%-80%) to cluster around the body
  * rather than appearing at the container edges on larger adult sizes.
  */
@@ -38,7 +38,7 @@ const SPARKLE_CONFIGS = [
 ] as const;
 
 /**
- * Sparkle particles that appear around the Blobbi after cleaning.
+ * Sparkle particles that appear around the Pets after cleaning.
  * Uses CSS 4-point star shapes instead of emoji for a polished effect.
  */
 export function ReactionSparkles({ active, className }: ReactionSparklesProps) {
@@ -94,7 +94,7 @@ export interface ReactionBubblesProps {
 }
 
 /**
- * Bubble configs — dense coverage across the full overlay to obscure Blobbi.
+ * Bubble configs — dense coverage across the full overlay to obscure Pets.
  * Uses many bubbles at varying depths to create a "covered in suds" effect.
  */
 const BUBBLE_CONFIGS = [
@@ -124,7 +124,7 @@ const BUBBLE_CONFIGS = [
 ] as const;
 
 /**
- * Bubble wash overlay that covers the Blobbi during clean_complete phase 1.
+ * Bubble wash overlay that covers the Pets during clean_complete phase 1.
  * Uses CSS circles with gradients instead of emoji for a sudsy, covering effect.
  */
 export function ReactionBubbles({ active, showBackdrop = true, className }: ReactionBubblesProps) {
@@ -135,7 +135,7 @@ export function ReactionBubbles({ active, showBackdrop = true, className }: Reac
       className={cn('absolute inset-0 overflow-hidden pointer-events-none z-10', className)}
       aria-hidden="true"
     >
-      {/* Semi-opaque backdrop to partially obscure Blobbi */}
+      {/* Semi-opaque backdrop to partially obscure Pets */}
       {showBackdrop && (
         <div className="absolute inset-0 bg-sky-100/40 dark:bg-sky-900/30 animate-reaction-bubble-backdrop rounded-full" />
       )}

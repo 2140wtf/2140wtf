@@ -1,7 +1,7 @@
 import { unzipSync } from 'fflate';
 import { parse as parseTOML } from 'smol-toml';
 
-/** Metadata extracted from a webxdc `.xdc` ZIP archive. */
+/** Metadata extracted from a mini-app `.xdc` ZIP archive. */
 export interface WebxdcMeta {
   /** App name from manifest.toml, or undefined if missing. */
   name?: string;

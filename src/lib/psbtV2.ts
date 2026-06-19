@@ -321,6 +321,13 @@ export function encodePsbtV2(opts: PsbtV2EncodeOptions): string {
   const inputs = opts.inputs;
   const outputs = opts.outputs;
 
+  if (inputs.length === 0) {
+    throw new Error('PSBT v2 encode: at least one input is required.');
+  }
+  if (outputs.length === 0) {
+    throw new Error('PSBT v2 encode: at least one output is required.');
+  }
+
   // Globals -- the library writes PSBT_GLOBAL_VERSION on encode (set to 2
   // by the table schema), so we don't pass it explicitly.
   const globalUnknown: LibUnknown = [];
@@ -475,6 +482,11 @@ export interface ParsedPsbtV2Input {
    */
   tapKeySig?: Uint8Array;
   witnessUtxo?: { amount: bigint; script: Uint8Array };
+  /**
+   * BIP-174 `PSBT_IN_SIGHASH_TYPE`. Undefined means the signer should use
+   * the default sighash for the input type (SIGHASH_ALL / SIGHASH_DEFAULT).
+   */
+  sighashType?: number;
   /** Unrecognised key/value pairs preserved for completeness. */
   unknown: PsbtKV[];
 }
@@ -613,6 +625,7 @@ export function parsePsbtV2(psbtHex: string): ParsedPsbtV2 {
     const finalScriptSig = inp.finalScriptSig as Uint8Array | undefined;
     const finalScriptWitness = inp.finalScriptWitness as Uint8Array[] | undefined;
     const tapKeySig = inp.tapKeySig as Uint8Array | undefined;
+    const sighashType = inp.sighashType as number | undefined;
     return {
       // Library returns display-order bytes (it already reversed the wire
       // little-endian during decode).
@@ -625,6 +638,7 @@ export function parsePsbtV2(psbtHex: string): ParsedPsbtV2 {
         : undefined,
       tapKeySig: tapKeySig ? new Uint8Array(tapKeySig) : undefined,
       witnessUtxo,
+      sighashType,
       unknown: unknownToKVs(inp.unknown),
     };
   });

@@ -1,15 +1,15 @@
 /**
  * CompanionActionMenu
  * 
- * Floating radial action menu that appears around Blobbi when clicked.
+ * Floating radial action menu that appears around Pets when clicked.
  * Actions are arranged in a curved arc above the companion.
  * 
  * IMPORTANT: This component calculates positions directly from props
- * on every render to ensure the menu stays perfectly attached to Blobbi
+ * on every render to ensure the menu stays perfectly attached to Pets
  * during all animations (idle, walking, floating, dragging, etc.).
  * 
  * Features:
- * - Radial/arc layout centered above Blobbi
+ * - Radial/arc layout centered above Pets
  * - Real-time position tracking (no lag)
  * - Smooth open/close animations
  * - Hover and active states
@@ -23,7 +23,7 @@ import type { CompanionMenuAction, MenuActionConfig } from './types';
 interface CompanionActionMenuProps {
   /** Whether the menu is visible */
   isOpen: boolean;
-  /** Position of Blobbi (top-left of the companion) - updates every frame */
+  /** Position of Pets (top-left of the companion) - updates every frame */
   companionPosition: Position;
   /** Size of the companion */
   companionSize: number;
@@ -35,13 +35,13 @@ interface CompanionActionMenuProps {
   onActionClick: (action: CompanionMenuAction) => void;
   /** Callback for clicking outside the menu */
   onClickOutside?: () => void;
-  /** Whether Blobbi is currently sleeping (affects sleep button label) */
+  /** Whether Pets is currently sleeping (affects sleep button label) */
   isSleeping?: boolean;
 }
 
 // Layout configuration
 const MENU_CONFIG = {
-  /** Distance from companion center to action buttons (increased for larger Blobbi) */
+  /** Distance from companion center to action buttons (increased for larger Pets) */
   radius: 85,
   /** Size of action buttons */
   buttonSize: 44,

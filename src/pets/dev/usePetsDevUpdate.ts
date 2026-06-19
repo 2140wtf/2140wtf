@@ -1,7 +1,7 @@
 /**
- * useBlobbiDevUpdate - DEV MODE ONLY
+ * usePetsDevUpdate - DEV MODE ONLY
  * 
- * Hook for applying direct Blobbi state updates during development.
+ * Hook for applying direct Pets state updates during development.
  * Uses the standard update/publish flow to ensure state consistency.
  * 
  * IMPORTANT: This hook should only be used in development mode.
@@ -16,37 +16,37 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion, BlobbiStage } from '@/blobbi/core/lib/blobbi';
-import { KIND_BLOBBI_STATE, updateBlobbiTags, getLocalDayString, adjustSeedForAdultType } from '@/blobbi/core/lib/blobbi';
-import type { AdultForm } from '@/blobbi/adult-blobbi/types/adult.types';
-import type { BlobbiDevUpdates } from './BlobbiDevEditor';
+import type { PetsCompanion, PetsStage } from '@/pets/core/lib/pets';
+import { KIND_PETS_STATE, updatePetsTags, getLocalDayString, adjustSeedForAdultType } from '@/pets/core/lib/pets';
+import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
+import type { PetsDevUpdates } from './PetsDevEditor';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface UseBlobbiDevUpdateParams {
-  companion: BlobbiCompanion | null;
+interface UsePetsDevUpdateParams {
+  companion: PetsCompanion | null;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
 }
 
 interface DevUpdateResult {
-  previousStage: BlobbiStage;
-  newStage: BlobbiStage;
+  previousStage: PetsStage;
+  newStage: PetsStage;
   changedFields: string[];
 }
 
 // ─── Hook Implementation ──────────────────────────────────────────────────────
 
-export function useBlobbiDevUpdate({
+export function usePetsDevUpdate({
   companion,
   updateCompanionEvent,
-}: UseBlobbiDevUpdateParams) {
+}: UsePetsDevUpdateParams) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
 
   return useMutation({
-    mutationFn: async (updates: BlobbiDevUpdates): Promise<DevUpdateResult> => {
+    mutationFn: async (updates: PetsDevUpdates): Promise<DevUpdateResult> => {
       // ─── Validation ───
       if (!user?.pubkey) {
         throw new Error('You must be logged in');
@@ -84,7 +84,7 @@ export function useBlobbiDevUpdate({
       }
 
       // Adult type: adjust the seed so it derives the chosen form.
-      // syncMirrorTagsToSeed (called inside updateBlobbiTags) will then
+      // syncMirrorTagsToSeed (called inside updatePetsTags) will then
       // set the adult_type tag and all other mirror tags from the new seed.
       const effectiveStage = updates.stage ?? companion.stage;
       if (effectiveStage === 'adult' && updates.adultType !== undefined && companion.seed) {
@@ -148,7 +148,7 @@ export function useBlobbiDevUpdate({
       // Read-modify-write: fetch the latest canonical 31124 from relays
       // so we don't overwrite concurrent changes (e.g. social consolidation).
       const prev = await fetchFreshEvent(nostr, {
-        kinds: [KIND_BLOBBI_STATE],
+        kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [companion.d],
       });
@@ -156,7 +156,7 @@ export function useBlobbiDevUpdate({
       const baseContent = prev?.content ?? companion.event.content;
 
       // ─── Merge Tags ───
-      const newTags = updateBlobbiTags(baseTags, tagUpdates);
+      const newTags = updatePetsTags(baseTags, tagUpdates);
 
       // ─── Preserve Content ───
       // Content is structured JSON (social_checkpoint, evolution, etc.)
@@ -166,7 +166,7 @@ export function useBlobbiDevUpdate({
 
       // ─── Publish Event ───
       if (import.meta.env.DEV) {
-        console.log('[DevUpdate] Publishing Blobbi update:', {
+        console.log('[DevUpdate] Publishing Pets update:', {
           changedFields,
           tagUpdates,
           stage: newStage,
@@ -174,7 +174,7 @@ export function useBlobbiDevUpdate({
       }
 
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: newTags,
         prev: prev ?? undefined,
@@ -196,14 +196,14 @@ export function useBlobbiDevUpdate({
         : `Updated: ${changedFields.join(', ')}`;
 
       toast({
-        title: 'Blobbi state updated (DEV)',
+        title: 'Pets state updated (DEV)',
         description,
       });
     },
     onError: (error: Error) => {
       console.error('[DevUpdate] Failed:', error);
       toast({
-        title: 'Failed to update Blobbi',
+        title: 'Failed to update Pets',
         description: error.message,
         variant: 'destructive',
       });

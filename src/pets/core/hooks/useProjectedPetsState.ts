@@ -1,5 +1,5 @@
 /**
- * Hook for projecting Blobbi decay state in the UI.
+ * Hook for projecting Pets decay state in the UI.
  * 
  * This hook provides a local projection of decay without publishing events.
  * It recalculates every 60 seconds while the component is mounted.
@@ -10,28 +10,28 @@
  * The projected state is for UI display only. Actual mutations must
  * recalculate from the persisted state before publishing.
  * 
- * @see docs/blobbi/decay-system.md
+ * @see docs/pets/decay-system.md
  */
 
 import { useState, useEffect, useMemo } from 'react';
 
-import type { BlobbiCompanion, BlobbiStats } from '../lib/blobbi';
-import { applyBlobbiDecay, getVisibleStatsWithValues, type DecayResult } from '@/blobbi/core/lib/blobbi-decay';
-import { applySocialInteractions } from '@/blobbi/core/lib/blobbi-social-projection';
-import { resolveSocialCheckpoint, type BlobbiInteraction } from '@/blobbi/core/lib/blobbi-interaction';
+import type { PetsCompanion, PetsStats } from '../lib/pets';
+import { applyPetsDecay, getVisibleStatsWithValues, type DecayResult } from '@/pets/core/lib/pets-decay';
+import { applySocialInteractions } from '@/pets/core/lib/pets-social-projection';
+import { resolveSocialCheckpoint, type PetsInteraction } from '@/pets/core/lib/pets-interaction';
 
 /** UI refresh interval in milliseconds (60 seconds) */
 const UI_REFRESH_INTERVAL_MS = 60_000;
 
 /**
- * Projected Blobbi state for UI display.
+ * Projected Pets state for UI display.
  */
-export interface ProjectedBlobbiState {
+export interface ProjectedPetsState {
   /** Stats after applying projected decay */
-  stats: BlobbiStats;
+  stats: PetsStats;
   /** Visible stats for the current stage with status indicators */
   visibleStats: Array<{
-    stat: keyof BlobbiStats;
+    stat: keyof PetsStats;
     value: number;
     status: 'critical' | 'warning' | 'normal';
   }>;
@@ -44,7 +44,7 @@ export interface ProjectedBlobbiState {
 }
 
 /**
- * Hook to get a projected Blobbi state with decay and social interactions applied.
+ * Hook to get a projected Pets state with decay and social interactions applied.
  * 
  * Features:
  * - Immediately calculates projected state on mount/companion change
@@ -53,14 +53,14 @@ export interface ProjectedBlobbiState {
  * - Pure calculation - does not publish any events
  * - Returns both full stats and stage-appropriate visible stats
  * 
- * @param companion    - The persisted Blobbi companion (source of truth)
+ * @param companion    - The persisted Pets companion (source of truth)
  * @param interactions - Optional sorted kind 1124 interactions to project on top of decay
  * @returns Projected state with decay (and social effects) applied, or null if no companion
  */
-export function useProjectedBlobbiState(
-  companion: BlobbiCompanion | null,
-  interactions?: readonly BlobbiInteraction[],
-): ProjectedBlobbiState | null {
+export function useProjectedPetsState(
+  companion: PetsCompanion | null,
+  interactions?: readonly PetsInteraction[],
+): ProjectedPetsState | null {
   // Track when we last recalculated
   const [refreshTick, setRefreshTick] = useState(0);
   
@@ -76,13 +76,13 @@ export function useProjectedBlobbiState(
   }, [companion]);
   
   // Calculate projected state
-  const projectedState = useMemo((): ProjectedBlobbiState | null => {
+  const projectedState = useMemo((): ProjectedPetsState | null => {
     if (!companion) return null;
     
     const now = Math.floor(Date.now() / 1000);
     
     // Step 1: Apply decay from persisted state
-    const decayResult: DecayResult = applyBlobbiDecay({
+    const decayResult: DecayResult = applyPetsDecay({
       stage: companion.stage,
       state: companion.state,
       stats: companion.stats,
@@ -125,19 +125,19 @@ export function useProjectedBlobbiState(
  * optionally layering social interaction effects on top.
  * 
  * This is a utility function for use outside of React components,
- * such as in feed card rendering (BlobbiStateCard).
+ * such as in feed card rendering (PetsStateCard).
  * 
- * @param companion    - The persisted Blobbi companion
+ * @param companion    - The persisted Pets companion
  * @param now          - Unix timestamp to calculate decay to (defaults to current time)
  * @param interactions - Optional sorted kind 1124 interactions to project
  * @returns Decay result with socially-adjusted stats
  */
 export function calculateProjectedDecay(
-  companion: BlobbiCompanion,
+  companion: PetsCompanion,
   now?: number,
-  interactions?: readonly BlobbiInteraction[],
+  interactions?: readonly PetsInteraction[],
 ): DecayResult {
-  const result = applyBlobbiDecay({
+  const result = applyPetsDecay({
     stage: companion.stage,
     state: companion.state,
     stats: companion.stats,

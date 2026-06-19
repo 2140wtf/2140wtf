@@ -24,19 +24,19 @@ const SIZE_PRESETS = {
   },
 } as const;
 
-export interface BlobbiAwayStateProps {
-  /** The Blobbi's name. */
+export interface PetsAwayStateProps {
+  /** The Pets's name. */
   name: string;
   /** Visual size preset. 'md' for full page, 'sm' for widget. */
   size?: 'sm' | 'md';
   /** Whether the companion update is in progress. */
   isUpdating: boolean;
-  /** Callback to bring the Blobbi home (unset as floating companion). */
+  /** Callback to bring the Pets home (unset as floating companion). */
   onBringHome: () => void;
 }
 
-/** Shared "out exploring" state shown when a Blobbi is the active floating companion. */
-export function BlobbiAwayState({ name, size = 'md', isUpdating, onBringHome }: BlobbiAwayStateProps) {
+/** Shared "out exploring" state shown when a Pets is the active floating companion. */
+export function PetsAwayState({ name, size = 'md', isUpdating, onBringHome }: PetsAwayStateProps) {
   const preset = SIZE_PRESETS[size];
 
   return (

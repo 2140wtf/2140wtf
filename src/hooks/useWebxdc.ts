@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
@@ -9,33 +9,31 @@ import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 
 /**
- * Creates a `Webxdc` API instance backed by Nostr kind 4932 state update events.
+ * Creates a mini-app API instance backed by Nostr kind 4932 state update events.
  *
  * - `sendUpdate()` publishes a kind 4932 event with an `i` tag referencing the UUID.
  * - `setUpdateListener()` / `getAllUpdates()` query kind 4932 events with `#i` = UUID,
  *   ordered by `created_at`, and assign serial numbers.
  *
- * @param uuid - The webxdc session UUID from the `webxdc` property in the imeta tag.
+ * @param uuid - The mini-app session UUID from the `webxdc` property in the imeta tag.
  */
 export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
   const { nostr } = useNostr();
   const { user, metadata } = useCurrentUser();
-  const { mutate: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = useNostrPublish();
   const queryClient = useQueryClient();
 
-  // Ephemeral keypair generated once per webxdc session for logged-out users
-  const ephemeralKeyRef = useRef<Uint8Array | null>(null);
-  if (!ephemeralKeyRef.current) {
-    ephemeralKeyRef.current = generateSecretKey();
-  }
-  const ephemeralSigner = useMemo(
-    () => new NSecSigner(ephemeralKeyRef.current!),
-    [],
-  );
-  const ephemeralPubkey = useMemo(
-    () => getPublicKey(ephemeralKeyRef.current!),
-    [],
-  );
+  // Ephemeral keypair generated once per mini-app session for logged-out users.
+  // useState's lazy initializer avoids mutating a ref during render (a side-effect
+  // that breaks in StrictMode / concurrent rendering) while keeping signer and
+  // pubkey derived from the same secret key.
+  const [{ signer: ephemeralSigner, pubkey: ephemeralPubkey }] = useState(() => {
+    const secretKey = generateSecretKey();
+    return {
+      signer: new NSecSigner(secretKey),
+      pubkey: getPublicKey(secretKey),
+    };
+  });
 
   // Track the update listener callback
   const listenerRef = useRef<((update: ReceivedStatusUpdate<unknown>) => void) | null>(null);
@@ -121,18 +119,18 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
   const publishSigned = useCallback(async (template: Parameters<typeof ephemeralSigner.signEvent>[0]) => {
     if (user) {
       // Logged-in path: delegate to useNostrPublish so the client tag is added
-      publishEvent(template);
+      return await publishEvent(template);
     } else {
       // Logged-out path: sign with the ephemeral key and publish directly
       const event = await ephemeralSigner.signEvent(template);
-      await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      return await nostr.event(event, { signal: AbortSignal.timeout(5000) });
     }
   }, [user, publishEvent, ephemeralSigner, nostr]);
 
   const sendUpdate = useCallback((update: SendingStatusUpdate<unknown>, _description: '') => {
     const tags: string[][] = [
       ['i', uuid],
-      ['alt', 'Webxdc update'],
+      ['alt', 'Mini app update'],
     ];
     if (update.info) tags.push(['info', update.info]);
     if (update.document) tags.push(['document', update.document]);
@@ -147,7 +145,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
       // Invalidate the query to pick up the new event
       queryClient.invalidateQueries({ queryKey: ['webxdc-updates', uuid] });
     }).catch((err) => {
-      console.error('Failed to publish webxdc update:', err);
+      console.error('Failed to publish mini-app update:', err);
     });
   }, [uuid, publishSigned, queryClient]);
 
@@ -245,7 +243,7 @@ export function useWebxdc(uuid: string): WebxdcAPI<unknown> {
           tags: [['i', uuid]],
           created_at: Math.floor(Date.now() / 1000),
         }).catch((err) => {
-          console.error('Failed to publish webxdc realtime event:', err);
+          console.error('Failed to publish mini-app realtime event:', err);
         });
       },
       leave() {

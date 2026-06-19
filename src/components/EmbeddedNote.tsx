@@ -9,8 +9,7 @@ import { BrokenEventFallback } from '@/components/BrokenEventFallback';
 import { EmbeddedCardShell } from '@/components/EmbeddedCardShell';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { VanishCardCompact } from '@/components/VanishEventContent';
-import { EncryptedMessageCompact } from '@/components/EncryptedMessageContent';
-import { EncryptedLetterCompact } from '@/components/EncryptedLetterContent';
+import { GroupChatCard } from '@/components/group-chat/GroupChatCard';
 import { LoveListCompact } from '@/components/LoveListContent';
 import { LOVE_LIST_KIND } from '@/hooks/useLoveList';
 import { EmbeddedProfileBadgesCard } from '@/components/EmbeddedNaddr';
@@ -37,7 +36,7 @@ import { IMAGE_URL_REGEX, IMETA_MEDIA_URL_TEST_REGEX, extractVideoUrls, extractA
 import { getKindLabel, getKindIcon, getEventFallbackText } from '@/lib/extraKinds';
 import { usePollVoteLabel } from '@/hooks/usePollVoteLabel';
 
-const BlobbiStateCard = lazy(() => import('@/components/BlobbiStateCard').then(m => ({ default: m.BlobbiStateCard })));
+const PetsStateCard = lazy(() => import('@/components/PetsStateCard').then(m => ({ default: m.PetsStateCard })));
 
 /** NIP-62 Request to Vanish. */
 const VANISH_KIND = 62;
@@ -90,14 +89,18 @@ function EmbeddedNoteInner({ eventId, relays, authorHint, className, disableHove
     return <EmbeddedVanishCardWrapper event={event} className={className} />;
   }
 
-  // Kind 4 encrypted DMs get a compact card instead of rendering ciphertext
+  // NIP-04 (kind 4) encrypted DMs are intentionally not supported.
   if (event.kind === 4) {
-    return <EncryptedMessageCompact event={event} className={className} />;
+    return (
+      <div className={cn('rounded-xl border border-border px-3 py-2 text-sm text-muted-foreground', className)}>
+        NIP-04 direct messages are not supported
+      </div>
+    );
   }
 
-  // Kind 8211 encrypted letters get a compact card
-  if (event.kind === 8211) {
-    return <EncryptedLetterCompact event={event} className={className} />;
+  // Kind 445 private group messages cannot be decrypted inline; link to /groups.
+  if (event.kind === 445) {
+    return <GroupChatCard event={event} className={className} />;
   }
 
   // Kind 15683 Love Lists (see NIP.md) get a compact paper card. All the
@@ -686,7 +689,7 @@ function EmbeddedNoteCard({
   const [contentOverflows, setContentOverflows] = useState(false);
   const [contentExpanded, setContentExpanded] = useState(false);
 
-  const isBlobbiState = event.kind === 31124;
+  const isPetsState = event.kind === 31124;
   const isPhoto = event.kind === 20;
   // Kinds whose `content` is a human-readable body/caption and can safely
   // be fed through the kind-1 tokenizer for preview. Everything else
@@ -698,7 +701,7 @@ function EmbeddedNoteCard({
 
   // Attachment counts for indicator chips
   const attachments = useMemo(() => {
-    if (isBlobbiState) return { imgs: 0, vids: 0, auds: 0, apps: 0, links: 0, photos: 0 };
+    if (isPetsState) return { imgs: 0, vids: 0, auds: 0, apps: 0, links: 0, photos: 0 };
     if (isPhoto) {
       const photoCount = event.tags.filter(([n]) => n === 'imeta').length;
       return { imgs: 0, vids: 0, auds: 0, apps: 0, links: 0, photos: photoCount };
@@ -710,7 +713,7 @@ function EmbeddedNoteCard({
     const allUrls = event.content.match(/https?:\/\/[^\s]+/g) || [];
     const links = allUrls.filter((u) => !IMETA_MEDIA_URL_TEST_REGEX.test(u)).length;
     return { imgs, vids, auds, apps, links, photos: 0 };
-  }, [event.content, event.tags, isPhoto, isBlobbiState]);
+  }, [event.content, event.tags, isPhoto, isPetsState]);
 
   // Kind label for non-text-note kinds
   const kindMeta = useMemo(() => {
@@ -733,14 +736,14 @@ function EmbeddedNoteCard({
     return { title: altText, description: undefined as string | undefined };
   }, [isContentKind, hasContent, event]);
 
-  // Truly unknown kind: not a content kind, no Blobbi inline visual, no `alt`
+  // Truly unknown kind: not a content kind, no Pets inline visual, no `alt`
   // fallback text, AND we don't recognize the kind via `getKindLabel`. Only
   // these get the "This event kind is not supported" tombstone. Kinds Ditto
   // knows about (via `EXTRA_KINDS`) but that the author authored without an
   // `alt` tag get a kind-labeled card showing the icon + label centrally,
   // so the embed at least communicates what type of content it points to.
-  const isUnknownKind = !isContentKind && !isBlobbiState && !tagMeta && !kindMeta;
-  const isKnownKindWithoutPreview = !isContentKind && !isBlobbiState && !tagMeta && !!kindMeta;
+  const isUnknownKind = !isContentKind && !isPetsState && !tagMeta && !kindMeta;
+  const isKnownKindWithoutPreview = !isContentKind && !isPetsState && !tagMeta && !!kindMeta;
 
   // NIP-36 content-warning check
   const cwTag = event.tags.find(([name]) => name === 'content-warning');
@@ -771,9 +774,9 @@ function EmbeddedNoteCard({
         <p className="text-xs text-muted-foreground italic">
           Content warning{cwTag?.[1] ? <>{' '}&ldquo;{cwTag[1]}&rdquo;</> : ''}
         </p>
-      ) : isBlobbiState ? (
+      ) : isPetsState ? (
         <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
-          <BlobbiStateCard event={event} />
+          <PetsStateCard event={event} />
         </Suspense>
       ) : tagMeta ? (
         <>

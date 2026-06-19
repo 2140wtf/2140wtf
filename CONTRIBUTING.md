@@ -32,7 +32,7 @@ If a change does all three, it belongs. If it only does one, think harder. If it
 
 ### What Ditto IS
 
-- A convergence point for interoperable Nostr experiences (games, treasure hunts, magic decks, themes, color moments, live streams, and things nobody has imagined yet)
+- A convergence point for interoperable Nostr experiences (games, treasure hunts, themes, color moments, live streams, and things nobody has imagined yet)
 - A place where profiles feel like worlds, not business cards
 - The most fun you've had on the internet in years
 

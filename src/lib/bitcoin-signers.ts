@@ -116,6 +116,8 @@ function signBip375PsbtV2Locally(
   secretKeyBytes: Uint8Array,
 ): string {
   const psbt = parsePsbtV2(psbtHex);
+  if (psbt.inputs.length === 0) throw new Error('NSecSignerBtc: PSBT has no inputs.');
+  if (psbt.outputs.length === 0) throw new Error('NSecSignerBtc: PSBT has no outputs.');
 
   // Re-derive the sender's taproot internal pubkey from the private key —
   // every input's `tapInternalKey` is expected to match.
@@ -127,6 +129,39 @@ function signBip375PsbtV2Locally(
   // uses to sign each P2TR input — and feed it into the BIP-352 sender
   // derivation as the input's contribution.
   const tweakedPrivKey = taprootTweakPrivKey(secretKeyBytes);
+
+  // Pre-signing safety inspection: every input must be a witness UTXO from
+  // the sender's own P2TR address, must not request a non-standard sighash,
+  // and outputs must not exceed inputs.
+  let inputSum = 0n;
+  for (let i = 0; i < psbt.inputs.length; i++) {
+    const inp = psbt.inputs[i];
+    if (!inp.witnessUtxo) {
+      throw new Error(`NSecSignerBtc: input ${i} is missing witnessUtxo.`);
+    }
+    if (inp.witnessUtxo.amount <= 0n) {
+      throw new Error(`NSecSignerBtc: input ${i} has a zero or negative value.`);
+    }
+    if (!bytesEqual(inp.witnessUtxo.script, senderScript)) {
+      throw new Error('NSecSignerBtc: input is not from the sender (script mismatch).');
+    }
+    if (
+      inp.sighashType !== undefined &&
+      inp.sighashType !== btc.SigHash.DEFAULT &&
+      inp.sighashType !== btc.SigHash.ALL
+    ) {
+      throw new Error(`NSecSignerBtc: input ${i} requests a non-standard sighash type (${inp.sighashType}).`);
+    }
+    inputSum += inp.witnessUtxo.amount;
+  }
+
+  let outputSum = 0n;
+  for (let i = 0; i < psbt.outputs.length; i++) {
+    outputSum += psbt.outputs[i].amount;
+  }
+  if (outputSum > inputSum) {
+    throw new Error('NSecSignerBtc: PSBT outputs exceed inputs.');
+  }
 
   // SP outputs are identified by an `unknown` row with keytype 0x09 (the
   // BIP-375 PSBT_OUT_SP_V0_INFO field number).
@@ -145,6 +180,12 @@ function signBip375PsbtV2Locally(
   const spRecipients: SilentPaymentRecipient[] = [];
   const resolvedOutputs: PsbtV2Output[] = psbt.outputs.map((out, idx) => {
     if (out.script) {
+      // In Ditto's BIP-375 PSBTs, the only script output is the sender's
+      // change. Reject any other script output so a malicious PSBT can't
+      // trick the user into paying a non-SP recipient they didn't review.
+      if (!bytesEqual(out.script, senderScript)) {
+        throw new Error('NSecSignerBtc: non-silent-payment output is not a change output to the sender.');
+      }
       return { type: 'script', amount: out.amount, script: out.script };
     }
     const spInfo = out.unknown.find((u) => u.keyType === O_SP_V0_INFO && u.keyData.length === 0);
@@ -173,13 +214,15 @@ function signBip375PsbtV2Locally(
   });
 
   if (spRecipients.length > 0) {
-    const spInput: SilentPaymentInput = {
-      txid: psbt.inputs[0].txid,
-      vout: psbt.inputs[0].vout,
+    // Every input is owned by the same sender key, so each contributes the
+    // same tweaked private key to the BIP-352 aggregate `a`.
+    const eligibleInputs: SilentPaymentInput[] = psbt.inputs.map((inp) => ({
+      txid: inp.txid,
+      vout: inp.vout,
       privateKey: tweakedPrivKey,
       isTaproot: true,
-    };
-    const derived = deriveSilentPaymentOutputs([spInput], spRecipients, {
+    }));
+    const derived = deriveSilentPaymentOutputs(eligibleInputs, spRecipients, {
       allOutpoints,
       network: 'mainnet',
     });
@@ -209,17 +252,13 @@ function signBip375PsbtV2Locally(
   // BIP-375 verifier can re-derive the output scripts without trusting us.
   const spGlobals: { scanPubKey: Uint8Array; ecdhShare: Uint8Array; dleqProof: Uint8Array }[] = [];
   if (spRecipients.length > 0) {
-    const agg = aggregateSenderPrivateKey(
-      [
-        {
-          txid: psbt.inputs[0].txid,
-          vout: psbt.inputs[0].vout,
-          privateKey: tweakedPrivKey,
-          isTaproot: true,
-        },
-      ],
-      allOutpoints,
-    );
+    const eligibleInputs: SilentPaymentInput[] = psbt.inputs.map((inp) => ({
+      txid: inp.txid,
+      vout: inp.vout,
+      privateKey: tweakedPrivKey,
+      isTaproot: true,
+    }));
+    const agg = aggregateSenderPrivateKey(eligibleInputs, allOutpoints);
     // Group recipient scan keys, deduplicating so we emit one share per
     // unique scan key (multiple SP outputs to the same recipient share).
     const seen = new Map<string, Uint8Array>();
@@ -266,7 +305,7 @@ function signBip375PsbtV2Locally(
     tx.addOutput({ amount: out.amount, script: out.script });
   }
 
-  const signed = tx.sign(secretKeyBytes);
+  const signed = tx.sign(secretKeyBytes, [btc.SigHash.DEFAULT, btc.SigHash.ALL]);
   if (signed === 0) {
     throw new Error('NSecSignerBtc: no inputs were signed.');
   }
@@ -418,8 +457,12 @@ export class NConnectSignerBtc extends NConnectSigner implements BtcSigner {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (looksLikeCapabilityError(msg)) {
+        // Keep the original signer message out of the user-facing error in
+        // case it contains the PSBT hex or other wallet data. Log it for
+        // debugging instead.
+        console.warn('NIP-46 signer capability error:', msg);
         throw new Error(
-          `Your remote signer doesn't support sending Bitcoin. Update your signer, or log in with your secret key. (${msg})`,
+          "Your remote signer doesn't support sending Bitcoin. Update your signer, or log in with your secret key.",
         );
       }
       // Not a capability failure — propagate the original error so the user
