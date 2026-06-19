@@ -52,7 +52,7 @@ export const MISSION_CARD_STORAGE_KEY = 'pets:mission-card-visible';
 
 /** Human-readable labels */
 export const BAR_ITEM_LABELS: Record<BarItemId, string> = {
-  petses: 'Petses',
+  petses: '2140 Pets',
   missions: 'Missions',
   items: 'Items',
   take_photo: 'Take Photo',
