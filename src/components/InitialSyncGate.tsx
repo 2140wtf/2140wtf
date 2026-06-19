@@ -32,6 +32,7 @@ import { ProfileCard } from "@/components/ProfileCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthors } from "@/hooks/useAuthors";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -239,7 +240,7 @@ const SUGGESTED_PACK: NostrEvent = {
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
-type SettingsStep = "follows" | "outro";
+type SettingsStep = "follows" | "privacy" | "outro";
 type Step = SignupStep | SettingsStep;
 
 const SIGNUP_STEPS: Step[] = [
@@ -247,9 +248,10 @@ const SIGNUP_STEPS: Step[] = [
   "download",
   "profile",
   "follows",
+  "privacy",
   "outro",
 ];
-const SETTINGS_STEPS: Step[] = ["follows", "outro"];
+const SETTINGS_STEPS: Step[] = ["follows", "privacy", "outro"];
 
 function SetupQuestionnaire({
   onComplete,
@@ -396,7 +398,7 @@ function SetupQuestionnaire({
     setIsSaving(false);
 
     if (userHasFollows) {
-      goTo("outro");
+      goTo("privacy");
     } else {
       goTo("follows");
     }
@@ -443,10 +445,19 @@ function SetupQuestionnaire({
             <FollowsStep
               onNext={(didFollow) => {
                 if (didFollow) onPreload();
-                goTo("outro");
+                goTo("privacy");
               }}
               onBack={back}
               expectedPubkey={expectedPubkey}
+            />
+          )}
+
+          {step === "privacy" && (
+            <PrivacyNoticeStep
+              onNext={() => goTo("outro")}
+              onOpenSettings={() => {
+                onComplete();
+              }}
             />
           )}
 
@@ -1047,6 +1058,107 @@ function MiniAvatar({ src, name, metadata }: { src?: string; name: string; metad
         {name[0]?.toUpperCase()}
       </AvatarFallback>
     </Avatar>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Privacy Notice Step
+// ---------------------------------------------------------------------------
+
+function PrivacyNoticeStep({
+  onNext,
+  onOpenSettings,
+}: {
+  onNext: () => void;
+  onOpenSettings: () => void;
+}) {
+  const navigate = useNavigate();
+  const { config } = useAppContext();
+
+  const handleOpenSettings = () => {
+    onOpenSettings();
+    navigate("/settings/privacy");
+  };
+
+  return (
+    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">
+      <div className="flex items-center gap-4">
+        <IntroImage src="/advanced-intro.png" />
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold tracking-tight">
+            Privacy & publishing
+          </h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Here is what {config.appName} may publish to Nostr so you can use
+            it across devices.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="flex gap-3">
+          <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Encrypted settings.</span>{" "}
+            Theme, feed filters, sidebar order, notification preferences, and
+            read cursors are encrypted to your key and synced as a NIP-78 event
+            (kind 30078).
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Shared theme.</span>{" "}
+            If you enable “Sync theme with profile,” your active custom theme is
+            published publicly (kind 16767) so others can see it.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">Relays & file servers.</span>{" "}
+            Changes to your relay list (kind 10002) or Blossom servers
+            (kind 10063) are published when you edit them.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">2140 PETS.</span>{" "}
+            Pet state and Blobbonaut profiles are public events (kinds 31124
+            and 11125) sent only to the BAO pets relay.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-dashed p-3 text-muted-foreground">
+        <p className="text-xs leading-relaxed">
+          You can change every auto-publish option anytime in{" "}
+          <span className="font-medium text-foreground">
+            Settings → Privacy & Publishing
+          </span>
+          .
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Button
+          size="lg"
+          className="w-full gap-2 rounded-full h-12"
+          onClick={onNext}
+        >
+          Continue to {config.appName}
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full rounded-full h-11"
+          onClick={handleOpenSettings}
+        >
+          Open Privacy & Publishing settings
+        </Button>
+      </div>
+    </div>
   );
 }
 
