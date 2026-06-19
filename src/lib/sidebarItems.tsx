@@ -32,6 +32,7 @@ import {
   ScrollText,
   Search,
   Settings,
+  Shield,
   ShoppingBag,
   Smile,
   SmilePlus,
@@ -42,7 +43,6 @@ import {
   Stars,
   TrendingUp,
   User,
-  Users,
   Zap,
 } from "lucide-react";
 import { WikipediaIcon } from "@/components/icons/WikipediaIcon";
@@ -151,7 +151,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   // System pages
   {
     id: "messages",
-    label: "Messages",
+    label: "Chat",
     path: "/messages",
     icon: MessageSquare,
     requiresAuth: true,
@@ -178,13 +178,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: Scroll,
     requiresAuth: true,
   },
-  {
-    id: "groups",
-    label: "Private Groups",
-    path: "/groups",
-    icon: Users,
-    requiresAuth: true,
-  },
+
   { id: "settings", label: "Settings", path: "/settings", icon: Settings },
   { id: "changelog", label: "Changelog", path: "/changelog", icon: ScrollText },
   { id: "help", label: "Help", path: "/help", icon: HelpCircle },
@@ -223,6 +217,7 @@ const SIDEBAR_ITEM_MAP = new Map(SIDEBAR_ITEMS.map((s) => [s.id, s]));
  */
 export const CONTENT_KIND_ICONS: Record<string, IconComponent> = {
   posts: MessageSquare,
+  groups: Shield,
   comments: MessageSquareMore,
   reposts: Repeat2,
   "generic-reposts": Repeat2,
@@ -332,6 +327,10 @@ export function isItemActive(
 
   if (id === "profile") return !!profilePath && pathname === profilePath;
   if (id === "settings") return pathname.startsWith("/settings");
+
+  if (id === "messages") {
+    return pathname.startsWith("/messages") || pathname.startsWith("/groups");
+  }
 
   const itemDef = SIDEBAR_ITEM_MAP.get(id);
   const itemPathname = itemDef?.path ?? `/${id}`;

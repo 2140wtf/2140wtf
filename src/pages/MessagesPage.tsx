@@ -1,15 +1,25 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Mail } from 'lucide-react';
+import { Lock, Mail, Users } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { GroupList } from '@/components/group-chat/GroupList';
+import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
+import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useDmInbox } from '@/hooks/useDmInbox';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
+import { useGroupChatContext } from '@/hooks/useGroupChatContext';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
+import { toast } from '@/hooks/useToast';
 import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 
 import { getAvatarShape } from '@/lib/avatarShape';
@@ -21,61 +31,158 @@ import { cn } from '@/lib/utils';
 export function MessagesPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
+  const navigate = useNavigate();
   const { conversations, isLoading } = useDmInbox();
   const { getCursor } = useDmReadCursors();
+  const {
+    groups,
+    isLoading: isGroupsLoading,
+    requiresNsec,
+    createGroup,
+    joinFromWelcome,
+  } = useGroupChatContext();
+  const { unreadGroups } = useGroupChatHasUnread();
+  const unreadGroupIds = unreadGroups.map(({ group }) => group.nostrGroupId);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
 
   useSeoMeta({
-    title: `Messages | ${config.appName}`,
-    description: 'Your private Nostr messages',
+    title: `Chat | ${config.appName}`,
+    description: 'Your private Nostr messages and groups',
   });
+
+  const handleCreate = async (name: string, description?: string) => {
+    const result = await createGroup(name, description);
+    if (result.success) {
+      toast({ title: 'Group created' });
+    } else {
+      toast({ title: result.error ?? 'Failed to create group', variant: 'destructive' });
+    }
+  };
+
+  const handleJoin = async (event: NostrEvent) => {
+    const result = await joinFromWelcome(event);
+    if (result.success) {
+      toast({ title: `Joined ${result.data?.name ?? 'group'}` });
+    } else {
+      toast({ title: result.error ?? 'Failed to join group', variant: 'destructive' });
+    }
+  };
+
+  if (!user) {
+    return (
+      <main className="flex-1 min-w-0">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
+          <h1 className="text-lg font-semibold">Chat</h1>
+        </div>
+        <div className="py-16 text-center text-muted-foreground">
+          Log in to see your messages and groups.
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 min-w-0">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
-        <h1 className="text-lg font-semibold">Messages</h1>
-      </div>
+      <Tabs defaultValue="inbox" className="flex flex-col">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
+          <h1 className="text-lg font-semibold mb-3">Chat</h1>
+          <TabsList className="w-full">
+            <TabsTrigger value="inbox" className="flex-1 gap-2">
+              <Mail className="size-4" />
+              Private Inbox
+            </TabsTrigger>
+            <TabsTrigger value="groups" className="flex-1 gap-2">
+              <Users className="size-4" />
+              Private Groups
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      {!user ? (
-        <div className="py-16 text-center text-muted-foreground">
-          Log in to see your messages.
-        </div>
-      ) : isLoading && conversations.length === 0 ? (
-        <div className="divide-y divide-border">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <ConversationSkeleton key={i} />
-          ))}
-        </div>
-      ) : conversations.length === 0 ? (
-        <div className="py-16 text-center text-muted-foreground">
-          <Mail className="mx-auto size-10 mb-3 opacity-40" />
-          <p>No messages yet.</p>
-          <p className="text-sm mt-1 max-w-xs mx-auto">
-            Start a conversation from a user's profile.
-          </p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border">
-          {conversations.map((conversation) => {
-            const cursor = getCursor(conversation.id);
-            const unreadCount = user
-              ? conversation.messages.reduce(
-                (count, message) =>
-                  message.sender === user.pubkey || message.createdAt <= cursor
-                    ? count
-                    : count + 1,
-                0,
-              )
-              : 0;
-            return (
-              <ConversationRow
-                key={conversation.id}
-                conversation={conversation}
-                unreadCount={unreadCount}
-              />
-            );
-          })}
-        </div>
-      )}
+        <TabsContent value="inbox" className="mt-0">
+          {isLoading && conversations.length === 0 ? (
+            <div className="divide-y divide-border">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <ConversationSkeleton key={i} />
+              ))}
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              <Mail className="mx-auto size-10 mb-3 opacity-40" />
+              <p>No messages yet.</p>
+              <p className="text-sm mt-1 max-w-xs mx-auto">
+                Start a conversation from a user&apos;s profile.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {conversations.map((conversation) => {
+                const cursor = getCursor(conversation.id);
+                const unreadCount = conversation.messages.reduce(
+                  (count, message) =>
+                    message.sender === user.pubkey || message.createdAt <= cursor
+                      ? count
+                      : count + 1,
+                  0,
+                );
+                return (
+                  <ConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                    unreadCount={unreadCount}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="groups" className="mt-0">
+          {requiresNsec ? (
+            <div className="p-8 flex justify-center">
+              <Card className="p-6 text-center max-w-md space-y-4">
+                <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                  <Lock className="size-6 text-muted-foreground" />
+                </div>
+                <h2 className="text-xl font-bold">Private Groups</h2>
+                <p className="text-muted-foreground">
+                  Group chat encryption requires access to your private key. Please log in with an
+                  nsec key instead of a browser extension or bunker.
+                </p>
+              </Card>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              <div className="px-4 py-2 border-b flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Your encrypted groups</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setJoinOpen(true)}>
+                    Join group
+                  </Button>
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <Users className="size-4 mr-1.5" />
+                    Create group
+                  </Button>
+                </div>
+              </div>
+              {isGroupsLoading && groups.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">Loading groups…</div>
+              ) : (
+                <GroupList
+                  groups={groups}
+                  selectedGroupId={null}
+                  unreadGroupIds={unreadGroupIds}
+                  onSelectGroup={(groupId) => navigate(`/groups?g=${encodeURIComponent(groupId)}`)}
+                  onCreateClick={() => setCreateOpen(true)}
+                  className="border-r-0 bg-transparent"
+                />
+              )}
+            </div>
+          )}
+          <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreate} />
+          <JoinGroupDialog open={joinOpen} onOpenChange={setJoinOpen} onJoin={handleJoin} />
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
