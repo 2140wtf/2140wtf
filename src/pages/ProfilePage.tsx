@@ -106,6 +106,7 @@ import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import type { AddrCoords } from '@/hooks/useEvent';
 import { isNostrId } from '@/lib/nostrId';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { canZap } from '@/lib/canZap';
 import { parseAddr } from '@/lib/parseAddr';
 import { impactMedium } from '@/lib/haptics';
 import { getStorageKey } from '@/lib/storageKey';
@@ -1308,6 +1309,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   }, [pubkey, queryClient]);
   const metadataEvent = author.data?.event;
   const displayName = metadata?.name || metadata?.display_name || 'Anonymous';
+  const canReceiveDonations = useMemo(() => !!metadata && canZap(metadata), [metadata]);
 
   // Kind 3 + 10001 — fetched separately so the large contact list
   // doesn't block the profile header or feed from rendering.
@@ -2183,6 +2185,14 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                             Message
                           </Button>
                         </Link>
+                      )}
+                      {!isOwnProfile && canReceiveDonations && metadataEvent && (
+                        <ZapDialog target={metadataEvent} initialUsdAmount={1}>
+                          <Button className="rounded-full font-bold bg-purple-500 hover:bg-purple-600 text-white">
+                            <Zap className="size-4 mr-1.5" />
+                            Donate
+                          </Button>
+                        </ZapDialog>
                       )}
                       <Button
                         className={cn(
