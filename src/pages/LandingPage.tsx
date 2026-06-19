@@ -86,7 +86,7 @@ export function LandingPage() {
   return (
     <div className="min-h-full text-[var(--2140-fg)]">
       {/* Hero */}
-      <section className="border-b border-[var(--2140-border)] px-4 pb-16 pt-20 sm:pt-24">
+      <section className="border-b border-[var(--2140-border)] px-4 pb-16 pt-10 sm:pt-14">
         <div className="mx-auto max-w-[1100px]">
           <img
             src="/logo.jpg"
