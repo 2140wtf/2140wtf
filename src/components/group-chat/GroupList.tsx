@@ -1,4 +1,4 @@
-import { MessageSquarePlus } from 'lucide-react';
+import { NoGroupsIllustration } from '@/components/group-chat/GroupEmptyIllustrations';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
@@ -50,14 +50,14 @@ export function GroupList({
       <ScrollArea className="flex-1">
         {groups.length === 0 ? (
           <div className="p-4">
-            <div className="border border-dashed rounded-xl p-5 text-center space-y-2 bg-background/50">
-              <div className="mx-auto size-10 rounded-full bg-muted flex items-center justify-center">
-                <MessageSquarePlus className="size-5 text-muted-foreground" />
+            <div className="border border-dashed rounded-xl p-5 text-center space-y-3 bg-background/50">
+              <NoGroupsIllustration className="mx-auto size-16 text-primary/60" />
+              <div>
+                <p className="text-sm font-medium">No groups yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Create or join a group to start chatting.
+                </p>
               </div>
-              <p className="text-sm font-medium">No groups yet</p>
-              <p className="text-xs text-muted-foreground">
-                Create or join a group to start chatting.
-              </p>
             </div>
           </div>
         ) : (

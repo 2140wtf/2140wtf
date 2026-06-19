@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { LogIn, Lock, LogOut, Menu, MessageSquarePlus, Pencil, Shield, Users } from 'lucide-react';
+import { LogIn, Lock, LogOut, Menu, Pencil, Shield, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,6 +26,7 @@ import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
 import { EditGroupDialog } from '@/components/group-chat/EditGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
 import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
+import { NoGroupsIllustration } from '@/components/group-chat/GroupEmptyIllustrations';
 import { toast } from '@/hooks/useToast';
 import type { GroupChatMessage } from '@/lib/groupChatService';
 
@@ -340,9 +341,7 @@ export function GroupChatPage() {
             ) : (
               <div className="flex-1 flex items-center justify-center p-4">
                 <Card className="max-w-sm w-full p-6 text-center space-y-4 border-dashed">
-                  <div className="mx-auto size-14 rounded-full bg-primary/10 flex items-center justify-center">
-                    <MessageSquarePlus className="size-7 text-primary" />
-                  </div>
+                  <NoGroupsIllustration className="mx-auto size-20 text-primary/60" />
                   <div>
                     <h2 className="text-lg font-semibold">
                       {groups.length === 0 ? 'Start a private group' : 'Select a group'}
