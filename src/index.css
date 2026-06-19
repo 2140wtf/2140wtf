@@ -1319,3 +1319,69 @@
   pointer-events: none;
   animation: cyber-evolve-flash 1.2s ease-in-out infinite;
 }
+
+
+/* ── Pets room action buttons under cyber theme ───────────────────────────── */
+.pets-cyber .pets-room-action {
+  background: var(--cyber-surface-2) !important;
+  border-color: var(--cyber-border) !important;
+  color: var(--cyber-fg) !important;
+  box-shadow: 0 0 8px oklch(78% 0.18 210 / 0.25), inset 0 1px 0 oklch(100% 0 0 / 0.08) !important;
+  background-image: none !important;
+}
+
+.pets-cyber .pets-room-action:hover {
+  border-color: var(--cyber-cyan) !important;
+  box-shadow: var(--glow-cyan), inset 0 1px 0 oklch(100% 0 0 / 0.08) !important;
+}
+
+.pets-cyber .pets-room-action svg {
+  color: var(--cyber-cyan) !important;
+  filter: drop-shadow(0 0 4px var(--cyber-cyan));
+}
+
+/* ── Pets room status HUD under cyber theme ────────────────────────────────── */
+.pets-cyber [class*="rounded-full flex items-center justify-center"][class*="border"] {
+  background: var(--cyber-surface-2) !important;
+  border-color: var(--cyber-border) !important;
+}
+
+.pets-cyber svg circle[stroke] {
+  filter: drop-shadow(0 0 2px currentColor);
+}
+
+/* ── Pets room name label under cyber theme ────────────────────────────────── */
+.pets-cyber [class*="whitespace-nowrap"] {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px currentColor;
+}
+
+/* ── Room editor / drawer surfaces under cyber theme ───────────────────────── */
+.pets-cyber .bg-background\/90 {
+  background: oklch(24% 0.028 260 / 0.95) !important;
+  border-bottom: 1px solid var(--cyber-border);
+}
+
+.pets-cyber .bg-background {
+  background: var(--cyber-bg) !important;
+}
+
+.pets-cyber .text-foreground {
+  color: var(--cyber-fg) !important;
+}
+
+.pets-cyber .text-muted-foreground {
+  color: var(--cyber-muted) !important;
+}
+
+.pets-cyber .border-border {
+  border-color: var(--cyber-border) !important;
+}
+
+/* ── SubHeaderBar under cyber theme ────────────────────────────────────────── */
+.pets-cyber [class*="SubHeaderBar"] {
+  background: oklch(24% 0.028 260 / 0.9) !important;
+  border-bottom: 1px solid var(--cyber-border);
+}
