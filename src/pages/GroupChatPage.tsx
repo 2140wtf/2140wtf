@@ -26,6 +26,7 @@ import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
 import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
 import { toast } from '@/hooks/useToast';
+import type { GroupChatMessage } from '@/lib/groupChatService';
 
 function GroupChatSkeleton() {
   return (
@@ -92,6 +93,16 @@ export function GroupChatPage() {
     () => Object.fromEntries(unreadGroups.map(({ group, unreadCount }) => [group.nostrGroupId, unreadCount])),
     [unreadGroups],
   );
+  const lastMessages = useMemo(() => {
+    const map: Record<string, GroupChatMessage> = {};
+    for (const message of messages) {
+      const existing = map[message.nostrGroupId];
+      if (!existing || message.timestamp > existing.timestamp) {
+        map[message.nostrGroupId] = message;
+      }
+    }
+    return map;
+  }, [messages]);
   const initialMarkReadDone = useRef(false);
 
   useEffect(() => {
@@ -250,6 +261,7 @@ export function GroupChatPage() {
                 groups={groups}
                 selectedGroupId={selectedGroup?.nostrGroupId ?? null}
                 unreadCounts={unreadCounts}
+                lastMessages={lastMessages}
                 onSelectGroup={selectGroup}
               />
             </div>
@@ -372,6 +384,7 @@ export function GroupChatPage() {
               groups={groups}
               selectedGroupId={selectedGroup?.nostrGroupId ?? null}
               unreadCounts={unreadCounts}
+              lastMessages={lastMessages}
               onSelectGroup={(groupId) => {
                 selectGroup(groupId);
                 setMobileListOpen(false);

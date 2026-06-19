@@ -2,21 +2,46 @@ import { MessageSquarePlus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
+import { useAuthor } from '@/hooks/useAuthor';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { getDisplayName } from '@/lib/getDisplayName';
 import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
-import type { GroupChatGroup } from '@/lib/groupChatService';
+import type { GroupChatGroup, GroupChatMessage } from '@/lib/groupChatService';
 
 interface GroupListProps {
   groups: GroupChatGroup[];
   selectedGroupId: string | null;
   unreadCounts?: Record<string, number>;
+  lastMessages?: Record<string, GroupChatMessage>;
   onSelectGroup: (groupId: string) => void;
   className?: string;
+}
+
+function truncate(str: string, max: number): string {
+  return str.length > max ? `${str.slice(0, max).trimEnd()}…` : str;
+}
+
+function LastMessageLine({ message }: { message: GroupChatMessage }) {
+  const { user } = useCurrentUser();
+  const author = useAuthor(message.senderPubkey);
+  const isOwn = message.senderPubkey === user?.pubkey;
+  const name = isOwn
+    ? 'You'
+    : getDisplayName(author.data?.metadata) || message.senderPubkey.slice(0, 8);
+
+  return (
+    <span className="truncate">
+      <span className="text-foreground/80">{name}:</span>{' '}
+      <span className="opacity-80">{truncate(message.content, 72)}</span>
+    </span>
+  );
 }
 
 export function GroupList({
   groups,
   selectedGroupId,
   unreadCounts = {},
+  lastMessages = {},
   onSelectGroup,
   className,
 }: GroupListProps) {
@@ -41,6 +66,7 @@ export function GroupList({
               const isActive = selectedGroupId === group.nostrGroupId;
               const unreadCount = unreadCounts[group.nostrGroupId] ?? 0;
               const hasUnread = unreadCount > 0;
+              const lastMessage = lastMessages[group.nostrGroupId];
 
               return (
                 <button
@@ -61,7 +87,7 @@ export function GroupList({
                     className="size-9 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
                       <div className={cn('text-sm font-medium truncate', hasUnread && 'font-semibold')}>
                         {group.name}
                       </div>
@@ -71,15 +97,24 @@ export function GroupList({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>
-                        {group.members.length} member{group.members.length !== 1 ? 's' : ''}
-                      </span>
-                      {group.lastActivity > 0 && (
-                        <>
-                          <span className="opacity-50">•</span>
-                          <span>{timeAgo(group.lastActivity)}</span>
-                        </>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0 text-[11px] text-muted-foreground truncate">
+                        {lastMessage ? (
+                          <LastMessageLine message={lastMessage} />
+                        ) : (
+                          <span>
+                            {group.members.length} member{group.members.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      {(lastMessage || group.lastActivity > 0) && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {timeAgo(
+                            Math.floor(
+                              (lastMessage ? lastMessage.timestamp : group.lastActivity) / 1000,
+                            ),
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
