@@ -10,11 +10,12 @@ interface GroupListProps {
   unreadGroupIds?: string[];
   onSelectGroup: (groupId: string) => void;
   onCreateClick: () => void;
+  className?: string;
 }
 
-export function GroupList({ groups, selectedGroupId, unreadGroupIds = [], onSelectGroup, onCreateClick }: GroupListProps) {
+export function GroupList({ groups, selectedGroupId, unreadGroupIds = [], onSelectGroup, onCreateClick, className }: GroupListProps) {
   return (
-    <div className="flex flex-col h-full border-r bg-muted/30">
+    <div className={cn('flex flex-col h-full border-r bg-muted/30', className)}>
       <div className="p-3 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Private Groups</h2>
         <Button size="icon" variant="ghost" className="size-7" aria-label="Create group" onClick={onCreateClick}>
