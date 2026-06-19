@@ -95,6 +95,18 @@ function getRadius(zoom: number): number {
   return 10;
 }
 
+function getTileConfig(theme: 'dark' | 'light') {
+  const isDark = theme === 'dark';
+  return {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    className: isDark ? 'roadstr-osm-dark' : 'roadstr-osm-light',
+    fallbackUrl: isDark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    fallbackClassName: isDark ? 'roadstr-carto-dark' : 'roadstr-carto-light',
+  };
+}
+
 export function RoadstrMap({
   reports,
   selectedReportId,
@@ -133,20 +145,20 @@ export function RoadstrMap({
       preferCanvas: true,
     });
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    const tileLayer = L.tileLayer(tileUrl, {
+    const tileConfig = getTileConfig(theme);
+    const tileLayer = L.tileLayer(tileConfig.url, {
       maxZoom: 19,
-      subdomains: 'abcd',
-      className: theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light',
+      subdomains: 'abc',
+      className: tileConfig.className,
     }).addTo(map);
 
     let fallbackTriggered = false;
     const tileErrorHandler = () => {
       if (!fallbackTriggered && tileLayerRef.current) {
         fallbackTriggered = true;
-        tileLayerRef.current.setUrl('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        tileLayerRef.current.setUrl(tileConfig.fallbackUrl);
+        tileLayerRef.current.options.className = tileConfig.fallbackClassName;
+        tileLayerRef.current.redraw();
       }
     };
     tileLayer.on('tileerror', tileErrorHandler);
@@ -219,14 +231,12 @@ export function RoadstrMap({
     if (prevThemeRef.current === theme) return;
     prevThemeRef.current = theme;
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    tileLayer.setUrl(tileUrl);
-    tileLayer.options.className = theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light';
+    const tileConfig = getTileConfig(theme);
+    tileLayer.setUrl(tileConfig.url);
+    tileLayer.options.className = tileConfig.className;
     const container = map.getContainer();
-    container.classList.remove('leaflet-bright-dark', 'leaflet-light');
-    container.classList.add(theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light');
+    container.classList.remove('roadstr-osm-light', 'roadstr-osm-dark', 'roadstr-carto-light', 'roadstr-carto-dark');
+    container.classList.add(tileConfig.className);
     tileLayer.redraw();
   }, [theme]);
 
@@ -359,7 +369,10 @@ export function RoadstrMap({
   return (
     <>
       <style>{`
-        .leaflet-bright-dark {
+        .roadstr-osm-dark {
+          filter: brightness(0.7) contrast(1.1) saturate(0.75);
+        }
+        .roadstr-carto-dark {
           filter: brightness(1.35) contrast(1.05) saturate(1.1);
         }
         .roadstr-popup-dark .leaflet-popup-content-wrapper {
