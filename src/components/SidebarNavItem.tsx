@@ -70,7 +70,7 @@ export function SidebarNavItem({
         className={cn(
           'flex items-center transition-colors min-w-0',
           minimal
-            ? 'gap-4 py-3 px-3 text-base text-[var(--2140-fg)] hover:text-[var(--2140-bitcoin)] flex-1'
+            ? 'gap-4 py-3 px-3 text-base text-foreground hover:text-[var(--2140-bitcoin)] flex-1'
             : 'rounded-full hover:bg-secondary/60',
           compact ? 'justify-center py-2.5 px-2' : minimal ? '' : 'gap-4 py-3 flex-1',
           editing ? 'px-2' : compact ? 'px-2' : minimal ? '' : 'px-3',
