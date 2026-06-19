@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 /**
  * Hook for fetching kind 1124 Pets interaction events.
  *
@@ -112,7 +113,7 @@ export function usePetsInteractions(
         since,
       };
 
-      const events = await nostr.query([filter], { signal });
+      const events = await queryPetsRelay(nostr, [filter], { signal });
 
       // Validate → parse → sort deterministically (ascending).
       // Owner-authored interactions are excluded: when the owner uses an

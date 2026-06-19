@@ -20,7 +20,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
@@ -160,7 +160,7 @@ export function usePetsOnboarding({
 }: UsePetsOnboardingOptions): UsePetsOnboardingResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   
   // Get kind 0 metadata for name suggestion
   const { data: authorData } = useAuthor(user?.pubkey);

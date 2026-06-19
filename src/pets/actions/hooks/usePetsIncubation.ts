@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 // src/pets/actions/hooks/usePetsIncubation.ts
 
 /**
@@ -18,7 +19,7 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
@@ -117,7 +118,7 @@ export function useStartIncubation({
 }: UseStartIncubationParams) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (request: StartIncubationRequest): Promise<StartIncubationResult> => {
@@ -150,7 +151,7 @@ export function useStartIncubation({
       // ─── Stop Other Incubating Pets (switch mode only) ───
       if (mode === 'switch' && stopOtherD) {
         // Fetch the current event for the other Pets
-        const [otherEvent] = await nostr.query([{
+        const [otherEvent] = await queryPetsRelay(nostr, [{
           kinds: [KIND_PETS_STATE],
           authors: [user.pubkey],
           '#d': [stopOtherD],
@@ -374,7 +375,7 @@ export function useStopIncubation({
   updateCompanionEvent,
 }: UseStopIncubationParams) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (): Promise<StopIncubationResult> => {
@@ -505,7 +506,7 @@ export function useStartEvolution({
   updateCompanionEvent,
 }: UseStartEvolutionParams) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (): Promise<StartEvolutionResult> => {
@@ -655,7 +656,7 @@ export function useStopEvolution({
   updateCompanionEvent,
 }: UseStopEvolutionParams) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (): Promise<StopEvolutionResult> => {
@@ -750,5 +751,3 @@ export function useStopEvolution({
     },
   });
 }
-
-

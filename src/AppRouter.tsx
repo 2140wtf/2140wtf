@@ -64,6 +64,7 @@ const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then(m 
 const PhotosFeedPage = lazy(() => import("./pages/PhotosFeedPage").then(m => ({ default: m.PhotosFeedPage })));
 const PetsPage = lazy(() => import("./pages/PetsPage").then(m => ({ default: m.PetsPage })));
 const PetsBattlePage = lazy(() => import("./pages/PetsBattlePage").then(m => ({ default: m.default })));
+const PetsSettingsPage = lazy(() => import("./pages/PetsSettingsPage").then(m => ({ default: m.PetsSettingsPage })));
 const PodcastsFeedPage = lazy(() => import("./pages/PodcastsFeedPage").then(m => ({ default: m.PodcastsFeedPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage").then(m => ({ default: m.PrivacyPolicyPage })));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings").then(m => ({ default: m.ProfileSettings })));
@@ -246,6 +247,7 @@ export function AppRouter() {
             <Route path="/client/:name" element={<ClientFeedPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/settings/profile" element={<ProfileSettings />} />
+            <Route path="/settings/pets" element={<PetsSettingsPage />} />
             <Route path="/settings/feed" element={<ContentSettingsPage />} />
             <Route path="/settings/content" element={<ContentPage />} />
             <Route path="/settings/wallet" element={<WalletSettingsPage />} />
