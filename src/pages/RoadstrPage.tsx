@@ -5,7 +5,10 @@ import { useSeoMeta } from '@unhead/react';
 import { PageHeader } from '@/components/PageHeader';
 import { RoadstrMap } from '@/components/roadstr/RoadstrMap';
 import { RoadstrReportDialog } from '@/components/roadstr/RoadstrReportDialog';
+import { RoadstrSearch } from '@/components/roadstr/RoadstrSearch';
 import { useRoadstrEvents } from '@/hooks/useRoadstrEvents';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useToast } from '@/hooks/useToast';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getBackgroundThemeMode } from '@/lib/colorUtils';
@@ -15,7 +18,7 @@ import {
   getGeohashNeighbors,
 } from '@/lib/geohash';
 import { isRoadstrReportActive } from '@/lib/roadstr';
-import type { RoadstrEventType } from '@/components/roadstr/roadstrTypes';
+import type { MapStyle, RoadstrEventType } from '@/components/roadstr/roadstrTypes';
 import { ROADSTR_EVENT_TYPES } from '@/components/roadstr/roadstrTypes';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,12 +42,17 @@ export function RoadstrPage(): React.JSX.Element {
 
   const [viewport, setViewport] = useState<BBox | undefined>();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number; accuracy?: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [mapStyle, setMapStyle] = useState<MapStyle>('auto');
+  const [searchTarget, setSearchTarget] = useState<{ lat: number; lon: number; zoom?: number } | null>(null);
   const [visibleTypes, setVisibleTypes] = useState<Set<RoadstrEventType>>(
     () => new Set(Object.keys(ROADSTR_EVENT_TYPES) as RoadstrEventType[]),
   );
+
+  const { mutate: publishEvent } = useNostrPublish();
+  const { toast } = useToast();
 
   const geohashes = useMemo(() => {
     if (!viewport) return undefined;
@@ -85,7 +93,11 @@ export function RoadstrPage(): React.JSX.Element {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        setUserLocation({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
         setLocating(false);
       },
       () => {
@@ -93,6 +105,47 @@ export function RoadstrPage(): React.JSX.Element {
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     );
+  }, []);
+
+  const handleConfirmReport = useCallback(
+    (reportId: string, status: 'still_there' | 'no_longer_there') => {
+      const report = data?.reports.find((r) => r.id === reportId);
+      if (!report) return;
+
+      const typeLabel = ROADSTR_EVENT_TYPES[report.type].label.toLowerCase();
+      const tags = [
+        ['e', reportId],
+        ['status', status],
+        ['lat', report.lat.toFixed(7)],
+        ['lon', report.lon.toFixed(7)],
+        ...report.geohashes.map((g) => ['g', g] as [string, string]),
+        ['alt', `Roadstr: ${status === 'still_there' ? 'confirmed' : 'dismissed'} ${typeLabel} report`],
+      ];
+
+      publishEvent(
+        { kind: 1316, content: '', tags },
+        {
+          onSuccess: () => {
+            toast({
+              title: status === 'still_there' ? 'Report confirmed' : 'Report dismissed',
+              description: `Your confirmation has been published.`,
+            });
+          },
+          onError: () => {
+            toast({
+              title: 'Publication failed',
+              description: 'Could not publish the confirmation. Please try again.',
+              variant: 'destructive',
+            });
+          },
+        },
+      );
+    },
+    [data?.reports, publishEvent, toast],
+  );
+
+  const handleFlyTo = useCallback((lat: number, lon: number) => {
+    setSearchTarget({ lat, lon, zoom: 14 });
   }, []);
 
   const toggleType = (type: RoadstrEventType) => {
@@ -153,6 +206,14 @@ export function RoadstrPage(): React.JSX.Element {
         </Button>
       </div>
 
+      <div className="flex flex-col sm:flex-row items-start gap-3 px-4 py-2 border-b border-border bg-background/85">
+        <RoadstrSearch
+          mapStyle={mapStyle}
+          onMapStyleChange={setMapStyle}
+          onFlyTo={handleFlyTo}
+        />
+      </div>
+
       <div className="relative flex-1 min-h-0">
         {isLoading && visibleReports.length === 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center text-muted-foreground text-sm bg-background/60 backdrop-blur-sm">
@@ -175,12 +236,16 @@ export function RoadstrPage(): React.JSX.Element {
 
         <RoadstrMap
           reports={visibleReports}
+          confirmations={data?.confirmations}
           selectedReportId={selectedReportId}
           onSelectReport={setSelectedReportId}
           onMapClick={() => setSelectedReportId(null)}
           userLocation={userLocation}
           onBoundsChange={handleBoundsChange}
           theme={theme}
+          mapStyle={mapStyle}
+          searchTarget={searchTarget}
+          onConfirmReport={handleConfirmReport}
         />
       </div>
 
