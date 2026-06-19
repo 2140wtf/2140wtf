@@ -5,6 +5,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { APP_RELAYS } from '@/lib/appRelays';
 import {
   computeNip17ConversationId,
   getNip17DmRelays,
@@ -46,13 +47,16 @@ export function useNip17Inbox() {
   const [conversations, setConversations] = useState<Map<string, Nip17Conversation>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
 
-  const defaultRelays = useMemo(
-    () =>
+  const defaultRelays = useMemo(() => {
+    const configured =
       config.relayMetadata?.relays
         ?.map((r) => r.url)
-        .filter((url): url is string => typeof url === 'string' && isValidRelayUrl(url)) ?? [],
-    [config.relayMetadata],
-  );
+        .filter((url): url is string => typeof url === 'string' && isValidRelayUrl(url)) ?? [];
+    const appDefaults = APP_RELAYS.relays
+      .map((r) => r.url)
+      .filter((url): url is string => typeof url === 'string' && isValidRelayUrl(url));
+    return [...new Set([...configured, ...appDefaults])];
+  }, [config.relayMetadata]);
 
   const { data: dmRelays } = useQuery({
     queryKey: ['nip17-dm-relays', user?.pubkey],
