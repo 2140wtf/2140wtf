@@ -81,8 +81,10 @@ async function fetchOutcomeVolume(
   let res: Response;
   try {
     res = await fetch(path, { signal });
-    if (!res.ok) {
-      // Fall back to the public Bao API when the same-origin path is not proxied.
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      // Fall back to the public Bao API when the same-origin path is not proxied
+      // (e.g. a static SPA server returning HTML 200 for unknown routes).
       res = await fetch(publicPath, { signal });
     }
   } catch {
