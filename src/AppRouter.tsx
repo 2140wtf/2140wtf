@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { LayoutGrid, LayoutList, Plus, Search } from "lucide-react";
+import { Box, LayoutGrid, LayoutList, Plus, Search } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { VersionCheck } from "./components/VersionCheck";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
+import { PollCubeFeed } from "./components/PollCubeFeed";
 
 // Critical-path pages: eagerly loaded (landing + fallback)
 import Index from "./pages/Index";
@@ -97,7 +98,7 @@ const highlightsDef = getExtraKindDef("highlights")!;
 /** Polls feed page with a FAB that opens the compose modal (poll mode via + menu). */
 function PollsFeedPage() {
   const [composeOpen, setComposeOpen] = useState(false);
-  const [grid, setGrid] = useState(false);
+  const [view, setView] = useState<'list' | 'grid' | 'cubes'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
 
@@ -107,15 +108,17 @@ function PollsFeedPage() {
     return [pollsDef.kind, ...(pollsDef.extraFeedKinds ?? [])];
   }, [pollFilter]);
 
+  const isCubes = view === 'cubes';
+
   return (
     <>
       <KindFeedPage
         kind={pollKinds}
         title={pollsDef.label}
         icon={sidebarItemIcon("polls", "size-5")}
-        grid={grid}
-        searchQuery={searchQuery}
-        showLoadMoreButton
+        grid={view === 'grid'}
+        searchQuery={isCubes ? undefined : searchQuery}
+        showLoadMoreButton={!isCubes}
         onFabClick={() => setComposeOpen(true)}
         headerActions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -144,9 +147,9 @@ function PollsFeedPage() {
             </div>
             <ToggleGroup
               type="single"
-              value={grid ? 'grid' : 'list'}
+              value={view}
               onValueChange={(v) => {
-                if (v) setGrid(v === 'grid');
+                if (v) setView(v as 'list' | 'grid' | 'cubes');
               }}
               variant="outline"
               size="sm"
@@ -157,6 +160,9 @@ function PollsFeedPage() {
               <ToggleGroupItem value="grid" aria-label="2-column grid">
                 <LayoutGrid className="size-4" />
               </ToggleGroupItem>
+              <ToggleGroupItem value="cubes" aria-label="Hosted cubes">
+                <Box className="size-4" />
+              </ToggleGroupItem>
             </ToggleGroup>
             <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
               <Plus className="size-4" />
@@ -164,7 +170,14 @@ function PollsFeedPage() {
             </Button>
           </div>
         }
-      />
+      >
+        {isCubes && (
+          <PollCubeFeed
+            filter={pollFilter}
+            searchQuery={searchQuery}
+          />
+        )}
+      </KindFeedPage>
       {composeOpen && (
         <Suspense fallback={null}>
           <ReplyComposeModal open={composeOpen} onOpenChange={setComposeOpen} initialMode="poll" />
