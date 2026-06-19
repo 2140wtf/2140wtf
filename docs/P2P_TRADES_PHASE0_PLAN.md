@@ -34,6 +34,17 @@ The following planned items were **not** implemented and are deferred:
 - A separate `useNip17Thread` hook (`MessageThreadPage` filters `useDmInbox` output by participant).
 - A settings UI for editing the user's kind 10050 DM relay list.
 
+### NIP-104 Group Chat Note
+
+The codebase already contained a full NIP-104 (Marmot) group-chat implementation. During this phase it was wired up for discovery:
+
+- `groups` added to the default sidebar order and mobile bottom navigation.
+- `GroupChatProvider` centralizes `useGroupChat` state so only one subscription runs.
+- Unread indicators for group chats appear on the sidebar, mobile drawer, and mobile bottom nav.
+- Unread group chats surface in a dedicated section on the Notifications page.
+- Read cursors are stored per-user in localStorage and synced across devices via encrypted NIP-78 settings (`groupReadCursors`).
+- NIP-104 is documented in `NIP.md`.
+
 ---
 
 ## 2. Goals & Non-Goals

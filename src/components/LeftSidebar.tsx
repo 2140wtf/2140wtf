@@ -27,6 +27,7 @@ import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { VerifiedNip05Text } from '@/components/Nip05Badge';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { isItemActive } from '@/lib/sidebarItems';
@@ -61,6 +62,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
 
   const hasUnread = useHasUnreadNotifications();
   const hasUnreadMessages = useHasUnreadMessages();
+  const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const userProfileUrl = useProfileUrl(user?.pubkey ?? '', metadata);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { startSignup } = useOnboarding();
@@ -142,6 +144,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
           getShowIndicator={(id) => {
             if (id === 'notifications') return hasUnread;
             if (id === 'messages') return hasUnreadMessages.hasUnread;
+            if (id === 'groups') return hasUnreadGroups;
             return undefined;
           }}
           homePage={homePage}
