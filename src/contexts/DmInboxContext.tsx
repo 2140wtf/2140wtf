@@ -2,15 +2,18 @@ import { createContext } from 'react';
 
 import { useNip17Inbox, type Nip17Conversation } from '@/hooks/useNip17Inbox';
 import { useDmReadCursorsSync } from '@/hooks/useDmReadCursorsSync';
+import type { Nip17Message } from '@/lib/nip17';
 
 interface DmInboxContextValue {
   conversations: Nip17Conversation[];
   isLoading: boolean;
+  addMessage: (message: Nip17Message) => void;
 }
 
 const DmInboxContext = createContext<DmInboxContextValue>({
   conversations: [],
   isLoading: false,
+  addMessage: () => {},
 });
 
 /**
@@ -21,11 +24,11 @@ const DmInboxContext = createContext<DmInboxContextValue>({
  * all consumers to read the same live state.
  */
 export function DmInboxProvider({ children }: { children: React.ReactNode }) {
-  const { conversations, isLoading } = useNip17Inbox();
+  const { conversations, isLoading, addMessage } = useNip17Inbox();
   useDmReadCursorsSync();
 
   return (
-    <DmInboxContext.Provider value={{ conversations, isLoading }}>
+    <DmInboxContext.Provider value={{ conversations, isLoading, addMessage }}>
       {children}
     </DmInboxContext.Provider>
   );
