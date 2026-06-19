@@ -43,54 +43,81 @@ These event kinds were created by community contributors and are supported by 21
 
 ---
 
-## 2140.wtf Private Cashu Sync (DPCS) & Nutzap Receiver
+## Cashu Wallet (NIP-60 / NIP-61) & DPCS Fallback
 
-2140.wtf stores Cashu wallet state on relays using **kind:30078** addressable events, encrypted with the user’s own NIP-44 signer (self-encryption). Unlike a public NIP-60 wallet event, DPCS keeps all mint URLs, proofs, transactions, and auxiliary state inside the ciphertext and uses an **opaque, pubkey-derived d-tag**.
+2140.wtf implements **NIP-60** (Cashu wallet events) as the primary relay-backed storage for Cashu wallet state, and **NIP-61** (Nutzaps) for peer-to-peer ecash payments. Local storage remains authoritative for the active wallet; relay events are used for restore and cross-device convergence.
 
-### DPCS d-tag
+The legacy **DPCS** `kind:30078` encrypted backup is still written as a compatibility fallback, but it is no longer the primary restore path.
 
-The d-tag is deterministically derived from the user’s hex pubkey so every device computes the same value:
+### NIP-60 wallet key
+
+The NIP-60 wallet key pair is deterministically derived from the same BIP-39 seed used for local wallet encryption:
+
+```
+walletPrivkey = hkdf_sha256(seed, salt='', info='freedomid:cashu:nip60:walletkey:v1', 32)
+walletPubkey  = compressed secp256k1 public key of walletPrivkey
+```
+
+Every device that knows the seed derives the same wallet key, so kind `7375` token events encrypted to this key can be restored anywhere.
+
+### Event kinds
+
+| Kind | Name | Use in 2140.wtf |
+|------|------|-----------------|
+| 17375 | Wallet config | Publishes the wallet pubkey, mint list, and `published_at`. |
+| 7375 | Token | NIP-44 encrypted token events storing proofs per mint. |
+| 7376 | History | NIP-44 encrypted transaction history entries. |
+| 5 | Deletion | Deletes superseded `kind:7375` token events. |
+| 10019 | Nutzap info | Receiver advertisement: trusted mints, relays, and P2PK pubkey. |
+| 9321 | Nutzap | Peer-to-peer Cashu payment event. |
+
+### Token storage and rollover
+
+After every proof mutation — receive, send, mint, or melt — 2140.wtf publishes a fresh `kind:7375` token event for the affected mint and a `kind:5` deletion for the previous token event. The token event content is NIP-44 encrypted JSON with the shape:
+
+```json
+{
+  "mint": "https://mint.example.com",
+  "unit": "sat",
+  "proofs": [ /* Cashu proofs */ ],
+  "del": ["<previous-token-event-id>"]
+}
+```
+
+The optional `del` field references the event ids being replaced, so relays and clients can garbage-collect old state.
+
+### NIP-61 Nutzaps
+
+Nutzaps are peer-to-peer Cashu payments delivered as `kind:9321` events. Sending a Nutzap is only possible when the recipient has published a valid `kind:10019` receiver ad.
+
+The sender **MUST**:
+
+1. Query the recipient's latest `kind:10019` by their identity pubkey.
+2. Verify the event signature.
+3. Confirm the chosen mint is listed in the recipient's trusted mints.
+4. P2PK-lock the proofs to `02` + the **wallet pubkey** from the `kind:10019` ad.
+
+Locking proofs to the recipient's identity pubkey makes the ecash unspendable. 2140.wtf enforces this by always reading the `pubkey` tag from `kind:10019` and passing `pubkey: '02' + walletPubkey` to the mint's `send` call.
+
+### Nutzap receiver advertisement (opt-in)
+
+The `kind:10019` receiver ad is **opt-in** via Settings → Privacy & Publishing → *Receive Nutzaps*. It defaults to **off**. When enabled, 2140.wtf publishes a `kind:10019` event with:
+
+- `relay` tags for the relays the user reads,
+- `mint` tags for the mints the user accepts,
+- a `pubkey` tag containing the user's NIP-60 wallet pubkey.
+
+When disabled, any existing `kind:10019` is overwritten with an empty replacement so relays stop serving the old ad.
+
+### DPCS fallback
+
+For backwards compatibility, 2140.wtf also writes an encrypted `kind:30078` addressable backup. The d-tag is derived from the user's hex pubkey:
 
 ```
 d = hex(sha256("ditto:cashu:v1:" + pubkeyHex)).slice(0, 16)
 ```
 
-This tag reveals no wallet-specific information. The legacy `d=freedomid:cashu` tag is still read as a migration fallback but is no longer written.
-
-### Encrypted payload (v2)
-
-The decrypted payload is JSON with the following shape:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `version` | `2` | Payload version. |
-| `timestamp` | number | Backup timestamp (ms). |
-| `epoch` | number | Reserved for future migration epochs. |
-| `mints` | `string[]` | All mint URLs the wallet knows about. |
-| `proofs` | `{ mintUrl, proofs }[]` | Proof lists grouped by mint. |
-| `transactions` | `Transaction[]` | Wallet transaction history. |
-| `selectedMintUrl` | `string` | Currently selected mint. |
-| `customMints` | `{ name, url }[]` | User-added custom mints. |
-| `nutzapPubkey` | `string` (optional) | Compressed secp256k1 pubkey used for NIP-61 Nutzaps. |
-| `mintedQuoteIds` | `string[]` (optional) | Quote IDs already minted, to prevent double-mint across devices. |
-| `processedTokenHashes` | `{ hash, expiresAt }[]` (optional) | Cross-device duplicate-token guard. |
-
-Version `1` backups are still accepted during restore but are re-published as version `2` on the next sync.
-
-### Nutzap receiver advertisement (opt-in)
-
-NIP-61 Nutzaps are peer-to-peer Cashu payments delivered as `kind:9321` events. To receive them, a user must publish a `kind:10019` receiver ad containing the mints they accept, the relays they read, and the compressed pubkey that proofs should be P2PK-locked to.
-
-2140.wtf derives the Nutzap key pair from the same BIP-39 wallet seed used for DPCS:
-
-```
-nutzapPrivkey = hkdf_sha256(seed, salt='', info='ditto:cashu:nutzap:v1', 32)
-nutzapPubkey  = compressed secp256k1 public key of nutzapPrivkey
-```
-
-Because the key is derived from the seed, a restored wallet can unlock previously received P2PK proofs.
-
-The receiver ad is **opt-in** via Settings → Privacy & Publishing → *Receive Nutzaps*. It defaults to **off**. When disabled, 2140.wtf overwrites any existing `kind:10019` with an empty replacement so relays stop serving the old ad.
+Restore prefers NIP-60 events and falls back to DPCS only when no NIP-60 state is found. The legacy `d=freedomid:cashu` tag is still read as a migration fallback but is no longer written.
 
 ---
 
