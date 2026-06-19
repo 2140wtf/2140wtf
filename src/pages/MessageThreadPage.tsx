@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNip17Inbox } from '@/hooks/useNip17Inbox';
+import { useDmInbox } from '@/hooks/useDmInbox';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
@@ -27,7 +27,7 @@ export function MessageThreadPage() {
   const navigate = useNavigate();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const { conversations, isLoading } = useNip17Inbox();
+  const { conversations, isLoading } = useDmInbox();
   const { sendMessage, isPending } = useNip17SendMessage();
   const { markConversationRead } = useDmReadCursors();
   const { toast } = useToast();
