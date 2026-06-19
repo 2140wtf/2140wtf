@@ -393,6 +393,7 @@ export const EncryptedSettingsSchema = z.looseObject({
     liveChat: z.boolean().optional(),
     themeDefinitions: z.boolean().optional(),
     pushSubscriptions: z.boolean().optional(),
+    nutzaps: z.boolean().optional(),
   }).optional(),
   lastSync: z.number().optional(),
   sidebarOrder: z.array(z.string()).optional(),

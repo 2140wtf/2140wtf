@@ -35,6 +35,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
+import { useNutzapReceiver } from '@/hooks/useNutzapReceiver';
 import {
   syncCashuState,
   restoreCashuState as fetchCashuBackup,
@@ -73,6 +74,7 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
   );
 
   const wallet = useCashuWallet(seedPhrase, backupCashuState, restoreCashuState);
+  useNutzapReceiver(seedPhrase, wallet.allMints, relayUrls);
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');

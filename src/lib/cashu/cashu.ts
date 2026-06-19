@@ -11,7 +11,7 @@ import { getDecodedToken } from '@cashu/cashu-ts';
 import { verifyDLEQProof_reblind } from '@cashu/cashu-ts/crypto/client/NUT12';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
-import { hexToBytes, bytesToNumberBE } from '@noble/curves/utils.js';
+import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToBase64, base64ToBytes } from '@/lib/cashu/base64';
@@ -37,6 +37,7 @@ export const MAX_PROOF_FIELD_LENGTH = 4096;
 export const MAX_MINT_FEE_PPM = 50_000;
 
 const PROOF_ENCRYPTION_INFO = 'freedomid:cashu:proof-encryption:v1';
+const NUTZAP_KEY_INFO = 'ditto:cashu:nutzap:v1';
 const CIPHER_VERSION_PREFIX = 'v1:';
 const PROOF_CONTEXT_PREFIX = 'freedomid:proofs:';
 const TRANSACTION_CONTEXT = 'freedomid:transactions';
@@ -223,6 +224,29 @@ export async function deriveEncryptionKey(seedPhrase: string): Promise<CryptoKey
     const keyBytes = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(PROOF_ENCRYPTION_INFO), 32);
     const keyBuf = keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer;
     return await importAesKey(keyBuf);
+  } finally {
+    secureZero(seed);
+  }
+}
+
+export interface NutzapKeyPair {
+  privkey: Uint8Array;
+  /** Compressed secp256k1 public key (hex). */
+  pubkey: string;
+}
+
+/**
+ * Derive a deterministic NIP-61 Nutzap key pair from the wallet seed.
+ *
+ * The private key is never published; only the compressed pubkey is exposed in
+ * the optional kind:10019 receiver ad.
+ */
+export function deriveNutzapKey(seedPhrase: string): NutzapKeyPair {
+  const seed = deriveMasterKey(seedPhrase);
+  try {
+    const privkey = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(NUTZAP_KEY_INFO), 32);
+    const pubkeyBytes = secp256k1.getPublicKey(privkey, true);
+    return { privkey, pubkey: bytesToHex(pubkeyBytes) };
   } finally {
     secureZero(seed);
   }
