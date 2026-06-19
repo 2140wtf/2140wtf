@@ -170,7 +170,7 @@ export async function deleteGroupSecrets(userPubkey: string, nostrGroupId: strin
  * Returns the extracted secrets and updates localStorage to remove them.
  */
 export function extractLegacyGroupSecrets(group: StoredGroup & Partial<StoredGroupSecrets>): StoredGroupSecrets | null {
-  const legacy = group as Record<string, unknown>;
+  const legacy = group as unknown as Record<string, unknown>;
   if (isHex64(legacy.exporterSecret)) {
     return {
       exporterSecret: legacy.exporterSecret,
