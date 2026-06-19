@@ -33,7 +33,6 @@ The following planned items were **not** implemented and are deferred:
 - IndexedDB persistence of decrypted messages (`useNip17Inbox` keeps state in React only).
 - A separate `useNip17Thread` hook (`MessageThreadPage` filters `useDmInbox` output by participant).
 - A settings UI for editing the user's kind 10050 DM relay list.
-- Cross-device sync of DM read cursors (currently device-local localStorage).
 
 ---
 
@@ -49,6 +48,7 @@ The following planned items were **not** implemented and are deferred:
 - [x] A "Message" button on profiles opens a DM thread.
 - [x] DM notifications surface new messages.
 - [x] DM relay preferences (kind 10050) are supported with NIP-65 fallback.
+- [x] DM read cursors sync across devices via encrypted NIP-78 settings.
 - [x] `npm run test` passes after all changes.
 
 ### Non-Goals
@@ -457,6 +457,7 @@ If Phase 0 needs to be reverted:
 - [x] Profile "Message" button works.
 - [x] DM notifications work.
 - [x] DM relay preferences (kind 10050) supported with fallback.
+- [x] DM read cursors sync across devices via encrypted NIP-78 settings.
 - [x] NIP.md updated.
 - [x] CHANGELOG.md updated.
 
