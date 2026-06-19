@@ -176,7 +176,6 @@ export function MessagesPage() {
                   selectedGroupId={null}
                   unreadCounts={unreadGroupCounts}
                   onSelectGroup={(groupId) => navigate(`/groups?g=${encodeURIComponent(groupId)}`)}
-                  onCreateClick={() => setCreateOpen(true)}
                   className="border-r-0 bg-transparent"
                 />
               )}

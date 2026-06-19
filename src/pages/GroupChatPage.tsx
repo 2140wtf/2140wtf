@@ -244,15 +244,16 @@ export function GroupChatPage() {
         <GroupChatSkeleton />
       ) : (
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-64 shrink-0 hidden sm:block">
-            <GroupList
-              groups={groups}
-              selectedGroupId={selectedGroup?.nostrGroupId ?? null}
-              unreadCounts={unreadCounts}
-              onSelectGroup={selectGroup}
-              onCreateClick={() => setCreateOpen(true)}
-            />
-          </div>
+          {groups.length > 0 && (
+            <div className="w-64 shrink-0 hidden sm:block">
+              <GroupList
+                groups={groups}
+                selectedGroupId={selectedGroup?.nostrGroupId ?? null}
+                unreadCounts={unreadCounts}
+                onSelectGroup={selectGroup}
+              />
+            </div>
+          )}
 
           <div className="flex-1 flex flex-col min-w-0">
             {selectedGroup ? (
@@ -307,32 +308,40 @@ export function GroupChatPage() {
                     <MessageSquarePlus className="size-7 text-primary" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold">Start a private group</h2>
+                    <h2 className="text-lg font-semibold">
+                      {groups.length === 0 ? 'Start a private group' : 'Select a group'}
+                    </h2>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Select an existing group from the sidebar, or create a new encrypted group.
+                      {groups.length === 0
+                        ? 'Create an encrypted group and invite others to start chatting.'
+                        : 'Choose a group from the sidebar to view messages and manage members.'}
                     </p>
                   </div>
-                  <Button className="w-full" onClick={() => setCreateOpen(true)}>
-                    <Users className="size-4 mr-2" />
-                    Create group
-                  </Button>
+                  {groups.length === 0 && (
+                    <Button className="w-full" onClick={() => setCreateOpen(true)}>
+                      <Users className="size-4 mr-2" />
+                      Create group
+                    </Button>
+                  )}
                 </Card>
               </div>
             )}
           </div>
 
-          <div className="shrink-0 hidden lg:block">
-            <GroupMemberPanel
-              group={selectedGroup}
-              members={members}
-              isAdmin={isAdmin}
-              currentUserPubkey={user.pubkey}
-              onAddMember={handleAddMember}
-              onRemoveMember={handleRemoveMember}
-              onBanMember={handleBanMember}
-              onPromoteAdmin={handlePromoteAdmin}
-            />
-          </div>
+          {selectedGroup && (
+            <div className="shrink-0 hidden lg:block">
+              <GroupMemberPanel
+                group={selectedGroup}
+                members={members}
+                isAdmin={isAdmin}
+                currentUserPubkey={user.pubkey}
+                onAddMember={handleAddMember}
+                onRemoveMember={handleRemoveMember}
+                onBanMember={handleBanMember}
+                onPromoteAdmin={handlePromoteAdmin}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -347,10 +356,6 @@ export function GroupChatPage() {
             onSelectGroup={(groupId) => {
               selectGroup(groupId);
               setMobileListOpen(false);
-            }}
-            onCreateClick={() => {
-              setMobileListOpen(false);
-              setCreateOpen(true);
             }}
           />
         </SheetContent>
