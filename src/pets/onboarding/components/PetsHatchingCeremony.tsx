@@ -41,10 +41,12 @@ import {
 
 import {
   generateEggPreview,
+  generateEggPreviewForCategory,
   previewToEventTags,
   previewToPetsCompanion,
   type PetsEggPreview,
 } from '../lib/pets-preview';
+import type { PetsBreedCategory } from '@/pets/core/lib/pet-categories';
 
 import { useTypewriter } from '../hooks/useTypewriter';
 import { buildRevealGradient } from '../lib/ceremony-colors';
@@ -87,6 +89,8 @@ interface PetsHatchingCeremonyProps {
   invalidateCompanion: () => void;
   setStoredSelectedD: (d: string) => void;
   onComplete?: () => void;
+  /** Breed category to constrain the newly created egg. */
+  breedCategory?: PetsBreedCategory;
   /** If provided, skip egg creation and start from the cracking phase with this existing egg. */
   existingCompanion?: PetsCompanion | null;
   /** If true, only create the egg and skip the hatching ceremony. The egg stays an egg. */
@@ -103,6 +107,7 @@ export function PetsHatchingCeremony({
   invalidateCompanion,
   setStoredSelectedD,
   onComplete,
+  breedCategory,
   existingCompanion,
   eggOnly = false,
 }: PetsHatchingCeremonyProps) {
@@ -247,7 +252,9 @@ export function PetsHatchingCeremony({
         }
 
         // 2. Generate and publish egg
-        const eggPreview = generateEggPreview(user.pubkey, 'Egg');
+        const eggPreview = breedCategory
+          ? generateEggPreviewForCategory(user.pubkey, breedCategory, 'Egg')
+          : generateEggPreview(user.pubkey, 'Egg');
         setPreview(eggPreview);
         previewRef.current = eggPreview;
 

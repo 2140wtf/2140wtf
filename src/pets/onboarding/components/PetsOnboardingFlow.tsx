@@ -14,6 +14,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { PetsHatchingCeremony } from './PetsHatchingCeremony';
 
 import type { BlobbonautProfile, PetsCompanion } from '@/pets/core/lib/pets';
+import type { PetsBreedCategory } from '@/pets/core/lib/pet-categories';
 
 interface PetsOnboardingFlowProps {
   /** Current profile (null if doesn't exist) */
@@ -30,6 +31,8 @@ interface PetsOnboardingFlowProps {
   setStoredSelectedD: (d: string) => void;
   /** Called when onboarding is complete */
   onComplete?: () => void;
+  /** Breed category to constrain the newly created egg. */
+  breedCategory?: PetsBreedCategory;
   /** If provided, skip egg creation and use this existing egg for the ceremony. */
   existingCompanion?: PetsCompanion | null;
   /**
@@ -47,6 +50,7 @@ export function PetsOnboardingFlow({
   invalidateCompanion,
   setStoredSelectedD,
   onComplete,
+  breedCategory,
   existingCompanion,
   adoptionOnly,
 }: PetsOnboardingFlowProps) {
@@ -59,6 +63,7 @@ export function PetsOnboardingFlow({
       invalidateCompanion={invalidateCompanion}
       setStoredSelectedD={setStoredSelectedD}
       onComplete={onComplete}
+      breedCategory={breedCategory}
       existingCompanion={existingCompanion}
       eggOnly={adoptionOnly}
     />
