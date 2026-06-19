@@ -25,7 +25,25 @@ import {
   validateReceivedProofs,
 } from '@/lib/cashu/cashu';
 import {
-  createCashuStorage,
+  loadSelectedMintUrl,
+  saveSelectedMintUrl,
+  loadCustomMints,
+  saveCustomMints,
+  getProofsForMint,
+  saveProofsForMint,
+  mintStorageKey,
+  loadTransactions,
+  saveTransactions,
+  addTransaction,
+  updateTransactionStatus,
+  isValidTransaction,
+  withTxLock,
+  withProofLock,
+  migratePlaintextTransactions,
+  migrateMintMetadata,
+  isProcessedTokenHash,
+  addProcessedTokenHash,
+  loadProcessedTokenHashes,
   type Transaction,
   type StoredMint,
 } from '@/lib/cashu/storage';
@@ -81,7 +99,166 @@ interface RecoveryEntry {
   proofs: any[];
 }
 
+const recoveryKey = (mint: string) => `freedomid_proof_recovery_${stringToBase64(mint)}`;
+const sendRecoveryKey = (mint: string) => `freedomid_send_recovery_${stringToBase64(mint)}`;
+const meltChangeRecoveryKey = (mint: string) => `freedomid_melt_change_recovery_${stringToBase64(mint)}`;
+const proofStoreTsKey = (mint: string) => `freedomid_proof_store_ts_${stringToBase64(mint)}`;
+const mintedQuotesKey = 'freedomid_minted_quotes';
 const VALID_PROOF_STATES = new Set(['UNSPENT', 'PENDING', 'SPENT']);
+
+const readProofStoreTimestamp = (mintUrl: string): number => {
+  try {
+    const raw = localStorage.getItem(proofStoreTsKey(mintUrl));
+    const ts = raw ? Number(raw) : NaN;
+    return Number.isFinite(ts) && ts > 0 ? ts : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const writeProofStoreTimestamp = (mintUrl: string) => {
+  try { localStorage.setItem(proofStoreTsKey(mintUrl), String(Date.now())); } catch { /* noop */ }
+};
+
+const writeProofRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(recoveryKey(mintUrl), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write proof recovery:', e);
+  }
+};
+
+const clearProofRecovery = (mintUrl: string) => {
+  try { localStorage.removeItem(recoveryKey(mintUrl)); } catch { /* noop */ }
+};
+
+const loadProofRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(recoveryKey(mintUrl)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    // Backward compatibility: plaintext array
+    if (Array.isArray(parsed)) {
+      return { version: 0, timestamp: 0, proofs: parsed };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const writeSendRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(sendRecoveryKey(mintUrl), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write send recovery:', e);
+  }
+};
+
+const clearSendRecovery = (mintUrl: string) => {
+  try { localStorage.removeItem(sendRecoveryKey(mintUrl)); } catch { /* noop */ }
+};
+
+const loadSendRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(sendRecoveryKey(mintUrl)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    if (Array.isArray(parsed)) {
+      return { version: 0, timestamp: 0, proofs: parsed };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const writeMeltChangeRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(meltChangeRecoveryKey(mintUrl), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write melt change recovery:', e);
+  }
+};
+
+const clearMeltChangeRecovery = (mintUrl: string) => {
+  try { localStorage.removeItem(meltChangeRecoveryKey(mintUrl)); } catch { /* noop */ }
+};
+
+const loadMeltChangeRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(meltChangeRecoveryKey(mintUrl)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const loadMintedQuotes = async (key: CryptoKey, legacyKey?: CryptoKey): Promise<string[]> => {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(mintedQuotesKey); } catch { return []; }
+  if (!encrypted) return [];
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return [];
+    const parsed = JSON.parse(decrypted);
+    return Array.isArray(parsed) ? parsed.filter((q): q is string => typeof q === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeMintedQuote = async (quoteId: string, key: CryptoKey, maxAttempts = 2) => {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const existing = await loadMintedQuotes(key);
+      if (existing.includes(quoteId)) return;
+      existing.push(quoteId);
+      const encrypted = await encryptData(JSON.stringify(existing), key);
+      localStorage.setItem(mintedQuotesKey, encrypted);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+};
+
+/* ── Pending receive recovery ────────────────────────────────
+   Cashu.receive is not atomic: the mint can issue proofs but the response
+   may time out before we persist them. We write the original token to an
+   encrypted pending-receive journal before calling the mint. On success the
+   journal is cleared; on timeout/error it remains and is re-attempted on
+   startup (with an attempt cap so a permanently-failing token does not loop
+   forever).
+*/
 
 const PENDING_RECEIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PENDING_RECEIVE_MAX_ATTEMPTS = 5;
@@ -97,9 +274,49 @@ interface PendingReceiveEntry {
   attempts: number;
 }
 
-const restoreAttemptedKey = (namespace?: string) => `${namespace && namespace.length > 0 ? namespace : 'freedomid_'}restore_attempted`;
-const legacyRecoveryPrefix = (namespace?: string) => `${namespace && namespace.length > 0 ? namespace : 'freedomid_'}recovery_`;
-const pendingReceivePrefix = (namespace?: string) => `${namespace && namespace.length > 0 ? namespace : 'freedomid_'}receive_pending_`;
+const pendingReceiveKey = (tokenHash: string) => `freedomid_receive_pending_${stringToBase64(tokenHash)}`;
+
+const loadPendingReceive = async (tokenHash: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<PendingReceiveEntry | null> => {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(pendingReceiveKey(tokenHash)); } catch { return null; }
+  if (!raw) return null;
+  try {
+    const decrypted = await decryptData(raw, key, legacyKey, pendingReceiveContext);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).tokenStr === 'string') {
+      return parsed as PendingReceiveEntry;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const clearPendingReceive = (tokenHash: string) => {
+  try { localStorage.removeItem(pendingReceiveKey(tokenHash)); } catch { /* noop */ }
+};
+
+const writePendingReceive = async (
+  tokenStr: string,
+  tokenHash: string,
+  mintUrls: string[],
+  amount: number,
+  key: CryptoKey,
+) => {
+  const existing = await loadPendingReceive(tokenHash, key);
+  const entry: PendingReceiveEntry = {
+    tokenStr,
+    tokenHash,
+    mintUrls,
+    amount,
+    status: 'pending',
+    timestamp: Date.now(),
+    attempts: existing?.attempts ?? 0,
+  };
+  const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
+  localStorage.setItem(pendingReceiveKey(tokenHash), encrypted);
+};
 
 /**
  * Generic FIFO mutex for wallet operations that spend or mint proofs.
@@ -126,7 +343,6 @@ export function useCashuWallet(
   externalSeed?: string,
   backupCashuState?: (payload: CashuBackupPayload) => Promise<string | null>,
   restoreCashuState?: () => Promise<CashuBackupPayload | null>,
-  storageNamespace?: string,
 ): CashuWalletState & CashuWalletActions {
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
   const [mintUrl, setMintUrlState] = useState<string>(DEFAULT_MINTS[0]?.url || '');
@@ -183,31 +399,6 @@ export function useCashuWallet(
   useEffect(() => { mintUrlRef.current = mintUrl; }, [mintUrl]);
   useEffect(() => { customMintsRef.current = customMints; }, [customMints]);
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
-
-  // Namespace-scoped storage. An undefined/empty namespace keeps the legacy
-  // `freedomid_` prefix so the existing user wallet is unaffected.
-  const storage = useMemo(() => createCashuStorage(storageNamespace), [storageNamespace]);
-  const {
-    loadSelectedMintUrl,
-    saveSelectedMintUrl,
-    loadCustomMints,
-    saveCustomMints,
-    getProofsForMint,
-    saveProofsForMint,
-    mintStorageKey,
-    loadTransactions,
-    saveTransactions,
-    addTransaction,
-    updateTransactionStatus,
-    isValidTransaction,
-    withTxLock,
-    withProofLock,
-    migratePlaintextTransactions,
-    migrateMintMetadata,
-    isProcessedTokenHash,
-    addProcessedTokenHash,
-    loadProcessedTokenHashes,
-  } = storage;
 
   // Persist custom mints outside of render-phase state updaters.
   useEffect(() => {
