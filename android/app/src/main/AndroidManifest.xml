@@ -59,7 +59,7 @@
         <activity-alias
             android:name=".ShareViewAlias"
             android:targetActivity=".MainActivity"
-            android:label="View in Ditto"
+            android:label="View in 2140.wtf"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -73,7 +73,7 @@
         <activity-alias
             android:name=".SharePostAlias"
             android:targetActivity=".MainActivity"
-            android:label="Post on Ditto"
+            android:label="Post on 2140.wtf"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

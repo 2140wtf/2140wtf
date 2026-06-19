@@ -584,7 +584,7 @@ public class NotificationRelayService extends Service {
         );
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Ditto")
+                .setContentTitle("2140.wtf")
                 .setContentText("Checking for notifications")
                 .setSmallIcon(R.drawable.ic_stat_ditto)
                 .setContentIntent(pendingIntent)
@@ -601,7 +601,7 @@ public class NotificationRelayService extends Service {
                     "Background Connection",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Keeps Ditto connected for instant notifications");
+            channel.setDescription("Keeps 2140.wtf connected for instant notifications");
             channel.setShowBadge(false);
 
             NotificationManager manager = getSystemService(NotificationManager.class);

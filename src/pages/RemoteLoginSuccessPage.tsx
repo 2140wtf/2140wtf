@@ -8,7 +8,7 @@ import { Capacitor } from "@capacitor/core";
  * Shown when a remote signer (e.g. Amber / Primal) redirects back after
  * approving a NIP-46 nostrconnect request.
  *
- * - Native app: the deep link re-opens Ditto; we redirect home automatically
+ * - Native app: the deep link re-opens 2140.wtf; we redirect home automatically
  *   after a short delay so the NIP-46 subscription has time to receive and
  *   persist the auth event.
  * - Web browser: the signer opened this URL in the browser.  The NIP-46

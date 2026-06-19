@@ -10,7 +10,7 @@ const MIN_FEATURED = 5;
 /**
  * Fetches hot music tracks from curated artists, deduplicated by author.
  *
- * Uses the Ditto relay's NIP-50 search extensions:
+ * Uses the 2140.wtf relay's NIP-50 search extensions:
  * - `sort:hot` — engagement weighted with time decay (surfaces what's trending now)
  * - `distinct:author` — one result per author (ensures artist variety)
  *

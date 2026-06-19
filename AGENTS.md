@@ -1,6 +1,6 @@
 # Project Overview
 
-Ditto is a Nostr client built with React 19.x, TailwindCSS 3.x, Vite, shadcn/ui, and Nostrify, wrapped as a native iOS/Android app via Capacitor.
+2140.wtf is a Nostr client built with React 19.x, TailwindCSS 3.x, Vite, shadcn/ui, and Nostrify, wrapped as a native iOS/Android app via Capacitor.
 
 ## Technology Stack
 
@@ -57,7 +57,7 @@ By default `nostr` uses the app's connection pool (reads from one relay, publish
 Two skills split the work of working with kinds:
 
 - **`nostr-kind-design`** — load when minting a new kind, extending an existing NIP with new tags, or deciding whether an existing NIP covers a use case. Covers the NIP-vs-custom decision framework, kind ranges, tag design (single-letter indexed tags, content vs. tags), and the `NIP.md` documentation requirement.
-- **`nostr-kind-rendering`** — load when adding UI for an event kind Ditto doesn't yet display, when asked to "support" / "display" / "render" a specific NIP or kind number, or when a kind renders blank / as "Kind 12345" / as "This event kind is not supported". Covers Ditto's multi-location UI registration checklist — feed cards, detail pages, embedded previews, kind-label maps (`KIND_LABELS`, `KIND_HEADER_MAP`, `NOTIFICATION_KIND_NOUNS`, `CommentContext`), notifications, routes, and the `AppConfig` triple that must stay in sync.
+- **`nostr-kind-rendering`** — load when adding UI for an event kind 2140.wtf doesn't yet display, when asked to "support" / "display" / "render" a specific NIP or kind number, or when a kind renders blank / as "Kind 12345" / as "This event kind is not supported". Covers 2140.wtf's multi-location UI registration checklist — feed cards, detail pages, embedded previews, kind-label maps (`KIND_LABELS`, `KIND_HEADER_MAP`, `NOTIFICATION_KIND_NOUNS`, `CommentContext`), notifications, routes, and the `AppConfig` triple that must stay in sync.
 
 Summary rules:
 
@@ -217,7 +217,7 @@ Load the matching skill when the feature requires it:
 - **`file-uploads`** — `useUploadFile` + Blossom + NIP-94 `imeta` tags.
 - **`nostr-encryption`** — NIP-44 / NIP-04 via the user's signer (DMs, gift wraps, private content).
 - **`nostr-relay-pools`** — `nostr.relay(url)` / `nostr.group([urls])` for targeted queries.
-- **`nostr-comments`** — Ditto's threaded comments (NIP-10 for kind 1, NIP-22 for everything else).
+- **`nostr-comments`** — 2140.wtf's threaded comments (NIP-10 for kind 1, NIP-22 for everything else).
 - **`nostr-infinite-scroll`** — feed pagination patterns.
 - **`nip85-stats`** — NIP-85 trusted-assertion stats (followers, zap totals, etc.).
 - **`ai-chat`** — Shakespeare AI streaming chat interfaces.
@@ -322,7 +322,7 @@ For empty results, show a minimalist empty state in a `border-dashed` card:
 
 ## Capacitor Compatibility
 
-Ditto runs inside Capacitor's WKWebView on iOS and WebView on Android. Several common web APIs do not work there:
+2140.wtf runs inside Capacitor's WKWebView on iOS and WebView on Android. Several common web APIs do not work there:
 
 - **`<a download>` file downloads** silently fail in WKWebView.
 - **`<a target="_blank">` new tabs** are blocked.
@@ -338,7 +338,7 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 **Running the existing test script — always do it.** After any code change, run `npm run test`. The script runs `tsc --noEmit`, `eslint`, `vitest run`, and `vite build` in sequence. **Your task is not complete until it passes.**
 
-**Writing new test files — don't, unless the user asks.** If the user explicitly requests tests, describes a bug to diagnose with a test, or reports that a problem persists after a fix, load the **`testing`** skill for Ditto's Vitest + `TestApp` setup and policy.
+**Writing new test files — don't, unless the user asks.** If the user explicitly requests tests, describes a bug to diagnose with a test, or reports that a problem persists after a fix, load the **`testing`** skill for 2140.wtf's Vitest + `TestApp` setup and policy.
 
 ## Validating Your Changes
 
@@ -348,7 +348,7 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 ## CI/CD Pipeline
 
-Ditto uses GitLab CI (`.gitlab-ci.yml`) with five stages:
+2140.wtf uses GitLab CI (`.gitlab-ci.yml`) with five stages:
 
 1. **test** — `npm run test` on every commit (skipped for tags).
 2. **deploy** — `deploy-nsite` builds and uploads `dist/` to nsite via nsyte (default branch only).

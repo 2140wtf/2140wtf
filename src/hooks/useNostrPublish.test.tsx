@@ -20,7 +20,7 @@ vi.mock('@/hooks/useAppContext', () => ({
   useAppContext: () => ({
     config: {
       clientName: 'DittoTest',
-      appName: 'Ditto',
+      appName: '2140.wtf',
       client: undefined,
     },
   }),

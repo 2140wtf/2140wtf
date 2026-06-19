@@ -33,7 +33,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const result = {
     relays: [],
-    name: 'Ditto',
+    name: '2140.wtf',
     timeout: 300, // seconds
   };
 
@@ -56,7 +56,7 @@ Options:
   --relay <url>    Relay URL for NIP-46 communication (repeatable)
                    Default: wss://relay.ditto.pub
   --name <name>    Application name shown to the signer
-                   Default: Ditto
+                   Default: 2140.wtf
   --timeout <sec>  How long to wait for signer approval (seconds)
                    Default: 300 (5 minutes)
   --help, -h       Show this help message

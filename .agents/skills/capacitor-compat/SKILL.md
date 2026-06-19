@@ -5,7 +5,7 @@ description: Browser-API gotchas inside Capacitor's WKWebView (iOS) and Android 
 
 # Capacitor Compatibility
 
-Ditto runs inside Capacitor's WKWebView on iOS and WebView on Android. Several common web APIs **do not work** in this environment. Always account for native platforms when writing code that interacts with browser-specific features.
+2140.wtf runs inside Capacitor's WKWebView on iOS and WebView on Android. Several common web APIs **do not work** in this environment. Always account for native platforms when writing code that interacts with browser-specific features.
 
 ## What Doesn't Work in WKWebView (iOS)
 

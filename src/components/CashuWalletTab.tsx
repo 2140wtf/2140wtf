@@ -134,7 +134,7 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
       toast({ variant: 'destructive', title: 'Invalid amount', description: 'Enter a positive number of sats.' });
       return;
     }
-    const quote = await wallet.requestInvoice(amount, 'Ditto Cashu deposit');
+    const quote = await wallet.requestInvoice(amount, '2140.wtf Cashu deposit');
     if (quote) setInvoiceQuote(quote);
   };
 

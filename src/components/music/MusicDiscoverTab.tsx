@@ -83,7 +83,7 @@ export function MusicDiscoverTab({ onSwitchToTracks, onSwitchToPlaylists, onSwit
     isLoading: isTracksLoading,
   } = useMusicData({ authors: curatedPubkeys });
 
-  // New Tracks: sorted query for hot/top via Ditto relay, or chronological for new
+  // New Tracks: sorted query for hot/top via 2140.wtf relay, or chronological for new
   const { data: sortedNewTracks, isLoading: isSortedLoading, isError: isSortedError } = useQuery<NostrEvent[]>({
     queryKey: ['discover-new-tracks', newTracksSort, newTracksScope, newTracksAuthors?.slice().sort().join(',') ?? '', selectedGenre ?? ''],
     queryFn: async ({ signal }) => {

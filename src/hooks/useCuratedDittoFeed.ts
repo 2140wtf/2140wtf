@@ -4,7 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { DITTO_RELAYS } from '@/lib/appRelays';
 
-/** Curated kinds for the Ditto feed: unique Ditto content types. */
+/** Curated kinds for the 2140.wtf feed: unique 2140.wtf content types. */
 const CURATED_KINDS = [
   20,    // Photos (NIP-68)
   21,    // Videos (NIP-71)
@@ -39,7 +39,7 @@ function fingerprint(items: string[]): string {
 }
 
 /**
- * Curated Ditto feed: latest content from the curator's follow list.
+ * Curated 2140.wtf feed: latest content from the curator's follow list.
  * Standard NIP-01 reverse-chronological pagination (no sort:hot).
  *
  * @param authors - Pubkeys whose content to include (from useCuratorFollowList).

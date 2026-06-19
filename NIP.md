@@ -2,7 +2,7 @@
 
 ## Event Kinds Overview
 
-### Ditto Kinds
+### 2140.wtf Kinds
 
 | Kind  | Name                 | Description                                           |
 |-------|----------------------|-------------------------------------------------------|
@@ -14,7 +14,7 @@
 
 ### Community Kinds
 
-These event kinds were created by community contributors and are supported by Ditto. Full specifications are maintained by their respective authors.
+These event kinds were created by community contributors and are supported by 2140.wtf. Full specifications are maintained by their respective authors.
 
 | Kind  | Name                   | Description                                                      | Spec                                                                                      |
 |-------|------------------------|------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
@@ -23,7 +23,7 @@ These event kinds were created by community contributors and are supported by Di
 | 3367  | Color Moment           | Color palette post expressing a mood                             | [NIP](https://gitlab.com/chad.curtis/espy/-/blob/main/NIP.md)                            |
 | 4223  | Weather Reading        | Sensor readings from a weather station                           | [Draft NIP](https://github.com/nostr-protocol/nips/pull/2163)                            |
 | 7516  | Found Log              | Log entry recording a user finding a geocache                    | [NIP-GC](https://gitlab.com/chad.curtis/treasures/-/blob/main/NIP-GC.md)                 |
-| 8211  | Encrypted Letter (deprecated in Ditto) | Encrypted personal letter with visual stationery | [NIP](https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md) |
+| 8211  | Encrypted Letter (deprecated in 2140.wtf) | Encrypted personal letter with visual stationery | [NIP](https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md) |
 | 443–445, 10051, 1059 | NIP-104 Group Chat | End-to-end encrypted group chat (Marmot/Group Ratchet fallback) | [NIP-104](https://github.com/nostr-protocol/nips/blob/master/104.md) |
 | 1124  | Pets Social Interaction | Immutable interaction log for Pets social interactions       | See [Pets Social Interaction](#kind-1124-pets-social-interaction) below                |
 | 10133 | Payment Targets        | Donation endpoints (Bitcoin, Lightning, Monero, …) per RFC-8905 | [NIP-A3](https://github.com/ATXMJ/nips/blob/main/A3.md); see [Kind 10133](#kind-10133-payment-targets-nip-a3) below |
@@ -43,9 +43,9 @@ These event kinds were created by community contributors and are supported by Di
 
 ---
 
-## Ditto Private Cashu Sync (DPCS) & Nutzap Receiver
+## 2140.wtf Private Cashu Sync (DPCS) & Nutzap Receiver
 
-Ditto stores Cashu wallet state on relays using **kind:30078** addressable events, encrypted with the user’s own NIP-44 signer (self-encryption). Unlike a public NIP-60 wallet event, DPCS keeps all mint URLs, proofs, transactions, and auxiliary state inside the ciphertext and uses an **opaque, pubkey-derived d-tag**.
+2140.wtf stores Cashu wallet state on relays using **kind:30078** addressable events, encrypted with the user’s own NIP-44 signer (self-encryption). Unlike a public NIP-60 wallet event, DPCS keeps all mint URLs, proofs, transactions, and auxiliary state inside the ciphertext and uses an **opaque, pubkey-derived d-tag**.
 
 ### DPCS d-tag
 
@@ -81,7 +81,7 @@ Version `1` backups are still accepted during restore but are re-published as ve
 
 NIP-61 Nutzaps are peer-to-peer Cashu payments delivered as `kind:9321` events. To receive them, a user must publish a `kind:10019` receiver ad containing the mints they accept, the relays they read, and the compressed pubkey that proofs should be P2PK-locked to.
 
-Ditto derives the Nutzap key pair from the same BIP-39 wallet seed used for DPCS:
+2140.wtf derives the Nutzap key pair from the same BIP-39 wallet seed used for DPCS:
 
 ```
 nutzapPrivkey = hkdf_sha256(seed, salt='', info='ditto:cashu:nutzap:v1', 32)
@@ -90,13 +90,13 @@ nutzapPubkey  = compressed secp256k1 public key of nutzapPrivkey
 
 Because the key is derived from the seed, a restored wallet can unlock previously received P2PK proofs.
 
-The receiver ad is **opt-in** via Settings → Privacy & Publishing → *Receive Nutzaps*. It defaults to **off**. When disabled, Ditto overwrites any existing `kind:10019` with an empty replacement so relays stop serving the old ad.
+The receiver ad is **opt-in** via Settings → Privacy & Publishing → *Receive Nutzaps*. It defaults to **off**. When disabled, 2140.wtf overwrites any existing `kind:10019` with an empty replacement so relays stop serving the old ad.
 
 ---
 
 ## NIP-104: Group Chat
 
-Ditto implements NIP-104 (Marmot) encrypted group chat with a **Group Ratchet fallback** so that no external MLS backend is required. The feature is exposed in the UI as **Private Groups** (`/groups`).
+2140.wtf implements NIP-104 (Marmot) encrypted group chat with a **Group Ratchet fallback** so that no external MLS backend is required. The feature is exposed in the UI as **Private Groups** (`/groups`).
 
 ### Event kinds used
 
@@ -125,7 +125,7 @@ Application messages are JSON payloads encrypted with the current `exporterSecre
 
 ### Membership changes and forward secrecy
 
-When an admin adds, removes, or bans a member, Ditto:
+When an admin adds, removes, or bans a member, 2140.wtf:
 
 1. Increments the group `epoch`.
 2. Rotates the `rootSecret`.
@@ -136,7 +136,7 @@ Because old messages were encrypted with previous epoch secrets, a new member ca
 
 ### Metadata changes
 
-When an admin edits the group name or description, Ditto also increments the `epoch`, rotates the secrets, and sends a gift-wrapped kind 444 Welcome event with `type: "metadata_update"` to all current members. The Welcome payload includes the updated `nostr_group_data` extension so every member applies the new metadata atomically with the new secrets.
+When an admin edits the group name or description, 2140.wtf also increments the `epoch`, rotates the secrets, and sends a gift-wrapped kind 444 Welcome event with `type: "metadata_update"` to all current members. The Welcome payload includes the updated `nostr_group_data` extension so every member applies the new metadata atomically with the new secrets.
 
 ### Client storage
 
@@ -303,7 +303,7 @@ The kind number spells **"1·LOVE"**: on a phone keypad L=5, O=6, V=8, E=3 → `
 
 ### Content
 
-Empty by convention. Clients MAY use the NIP-51 private-items scheme (NIP-44-encrypted stringified tag array) for loves the user prefers to keep private; Ditto currently publishes public entries only and ignores ciphertext it cannot decrypt.
+Empty by convention. Clients MAY use the NIP-51 private-items scheme (NIP-44-encrypted stringified tag array) for loves the user prefers to keep private; 2140.wtf currently publishes public entries only and ignores ciphertext it cannot decrypt.
 
 ### Client Behavior
 
@@ -321,7 +321,7 @@ Empty by convention. Clients MAY use the NIP-51 private-items scheme (NIP-44-enc
 
 ### Summary
 
-Replaceable event (one per user) that declares a user's donation endpoints — "payment targets" — as `(type, authority)` pairs in `payto` tags, following the [RFC-8905 `payto:` URI scheme](https://www.rfc-editor.org/rfc/rfc8905.html). In Ditto's UI this is surfaced as the **"Accept Donations"** section of the Edit Profile screen; the term *payment targets* is used only in code.
+Replaceable event (one per user) that declares a user's donation endpoints — "payment targets" — as `(type, authority)` pairs in `payto` tags, following the [RFC-8905 `payto:` URI scheme](https://www.rfc-editor.org/rfc/rfc8905.html). In 2140.wtf's UI this is surfaced as the **"Accept Donations"** section of the Edit Profile screen; the term *payment targets* is used only in code.
 
 ### Event Structure
 
@@ -348,11 +348,11 @@ Replaceable event (one per user) that declares a user's donation endpoints — "
 
 `type` is case-insensitive and normalized to lowercase. `authority` format is payment-system-specific.
 
-### Ditto Implementation Notes
+### 2140.wtf Implementation Notes
 
-Ditto restricts the **editable** set to a curated allowlist of recognized types and renders only those it recognizes (forward-compatible: unknown types in a fetched event are ignored, not rendered as garbage):
+2140.wtf restricts the **editable** set to a curated allowlist of recognized types and renders only those it recognizes (forward-compatible: unknown types in a fetched event are ignored, not rendered as garbage):
 
-| Type       | Label      | Kind in Ditto | Clickable URI                         |
+| Type       | Label      | Kind in 2140.wtf | Clickable URI                         |
 |------------|------------|---------------|----------------------------------------|
 | `bitcoin`  | Bitcoin    | native        | n/a (uses the built-in send flow)      |
 | `lightning`| Lightning  | native        | n/a (uses the built-in zap flow)       |
@@ -363,16 +363,16 @@ Ditto restricts the **editable** set to a curated allowlist of recognized types 
 | `venmo`    | Venmo      | generic       | `https://venmo.com/u/<handle>`         |
 | `revolut`  | Revolut    | generic       | `https://revolut.me/<handle>`          |
 
-Rules Ditto enforces:
+Rules 2140.wtf enforces:
 
 - **At most one target per type.** When parsing, the first valid target of each type wins; the editor enforces uniqueness on save.
 - **Validation per type** — each authority is validated (bech32(m)/SP checksum for Bitcoin, lightning-address/LNURL shape for Lightning, base58 for Monero, etc.). Invalid entries are dropped on parse and rejected in the editor.
 - **Precedence over derived/kind-0 values.** A `bitcoin` payment target overrides the recipient's pubkey-derived Taproot address in the zap flow; a `lightning` payment target takes precedence over the kind-0 `lud16`/`lud06`.
 - **Bitcoin target rail.** A `bc1q…`/`bc1p…` Bitcoin target sends on-chain and still publishes a kind 8333 attribution. An `sp1…` (BIP-352 silent payment) Bitcoin target sends on the silent-payment rail and publishes **no** kind 8333 event, preserving unlinkability.
-- **Native vs. generic rendering.** Bitcoin and Lightning reuse Ditto's existing purpose-built flows (no extra clickable button). Generic methods render a QR code, a copyable address, and a button that opens the **native URI** (preferred over `payto:` per the user's request) — falling back to the method's web payment page for custodial handles.
+- **Native vs. generic rendering.** Bitcoin and Lightning reuse 2140.wtf's existing purpose-built flows (no extra clickable button). Generic methods render a QR code, a copyable address, and a button that opens the **native URI** (preferred over `payto:` per the user's request) — falling back to the method's web payment page for custodial handles.
 - **Zap dialog switcher.** When a recipient has more than one available method, the zap dialog's title becomes a dropdown switcher (Bitcoin icon + down chevron) for choosing between Bitcoin, Lightning, and any declared payment targets.
 
-Ditto does **not** generate or render `payto://` URIs; it prefers each method's native scheme.
+2140.wtf does **not** generate or render `payto://` URIs; it prefers each method's native scheme.
 
 ---
 
@@ -663,7 +663,7 @@ The `shape` field is added to the JSON content of a kind 0 event alongside stand
 
 ## Community NIP Specifications
 
-The following specifications are maintained by their respective authors. Ditto implements these kinds but does not own the specs. See each link for the full event structure, tags, and client behavior.
+The following specifications are maintained by their respective authors. 2140.wtf implements these kinds but does not own the specs. See each link for the full event structure, tags, and client behavior.
 
 ### Color Moments (Kind 3367)
 
@@ -681,9 +681,9 @@ Color palette posts capturing 3-6 colors from a beautiful moment, optionally acc
 
 Birdstar merges Birdsong Spotter (a bird-by-ear checklist) and Starpoint (an interactive sky map with community constellations) into a single client.
 
-- **Kind 2473 — Bird Detection.** A regular event representing a single identified bird observation. The species is identified by a NIP-73 `i`/`k` pair pointing at the species' Wikidata entity URI (e.g. `https://www.wikidata.org/entity/Q26825` for the American Robin). The `content` field holds an optional freeform human note about the detection. Required tags: NIP-31 `alt`, NIP-73 `i` (Wikidata URL) + `k` (`web`). Ditto renders detections as a species card with the Wikipedia thumbnail, common/scientific name, and article summary.
-- **Kind 12473 — Birdex.** A replaceable event (one per author) indexing every distinct species the author has ever confirmed via kind 2473. Each species is a positional `i`/`n` pair — the Wikidata entity URI followed immediately by the scientific binomial name — emitted in chronological order of first detection. Ditto renders a Birdex as a tiled grid of species, each tile showing the Wikipedia thumbnail with the common name overlaid. In feeds, only the most recent few tiles are shown with a "+N" capstone mirroring how kind 3 follow lists preview members; the post-detail page shows every species.
-- **Kind 30621 — Custom Constellation.** An addressable event (`d` tag) representing a single user-drawn star figure. Each `edge` tag (`["edge", from, to]`) references two Hipparcos catalog numbers as decimal strings — e.g. `["edge", "32349", "37279"]` for Sirius → Procyon. Required tags: `d`, `title`, `alt`, and at least one valid `edge`. The `content` field is a freeform description. Ditto renders constellations as a stylized SVG star-map (gnomonically projected onto a tangent plane at the figure's centroid, with stars sized by magnitude) using a bundled Hipparcos catalog that is code-split so the data only loads when a constellation is actually viewed.
+- **Kind 2473 — Bird Detection.** A regular event representing a single identified bird observation. The species is identified by a NIP-73 `i`/`k` pair pointing at the species' Wikidata entity URI (e.g. `https://www.wikidata.org/entity/Q26825` for the American Robin). The `content` field holds an optional freeform human note about the detection. Required tags: NIP-31 `alt`, NIP-73 `i` (Wikidata URL) + `k` (`web`). 2140.wtf renders detections as a species card with the Wikipedia thumbnail, common/scientific name, and article summary.
+- **Kind 12473 — Birdex.** A replaceable event (one per author) indexing every distinct species the author has ever confirmed via kind 2473. Each species is a positional `i`/`n` pair — the Wikidata entity URI followed immediately by the scientific binomial name — emitted in chronological order of first detection. 2140.wtf renders a Birdex as a tiled grid of species, each tile showing the Wikipedia thumbnail with the common name overlaid. In feeds, only the most recent few tiles are shown with a "+N" capstone mirroring how kind 3 follow lists preview members; the post-detail page shows every species.
+- **Kind 30621 — Custom Constellation.** An addressable event (`d` tag) representing a single user-drawn star figure. Each `edge` tag (`["edge", from, to]`) references two Hipparcos catalog numbers as decimal strings — e.g. `["edge", "32349", "37279"]` for Sirius → Procyon. Required tags: `d`, `title`, `alt`, and at least one valid `edge`. The `content` field is a freeform description. 2140.wtf renders constellations as a stylized SVG star-map (gnomonically projected onto a tangent plane at the figure's centroid, with stars sized by magnitude) using a bundled Hipparcos catalog that is code-split so the data only loads when a constellation is actually viewed.
 
 ### Geocaching (Kinds 37516, 7516)
 
@@ -695,7 +695,7 @@ NIP-GC defines geocaching on Nostr. Kind 37516 (addressable) is a geocache listi
 
 ### Private Messaging
 
-Ditto uses **NIP-17** (kind 14 private direct messages wrapped in kind 1059 gift wraps) for private messaging. The legacy kind 8211 "Encrypted Letter" feature has been removed from Ditto's UI and will no longer be rendered or published.
+2140.wtf uses **NIP-17** (kind 14 private direct messages wrapped in kind 1059 gift wraps) for private messaging. The legacy kind 8211 "Encrypted Letter" feature has been removed from 2140.wtf's UI and will no longer be rendered or published.
 
 ### Weather Station (Kinds 4223, 16158)
 
@@ -711,13 +711,13 @@ Kind 16158 (replaceable) describes a weather station's configuration: name, geoh
 **Author:** Danifra
 **Spec:** https://github.com/Danidfra/nostr-pet/blob/production/NIP.md
 **App:** https://nostr-pet.vercel.app
-**See also:** [Pets tag schema](docs/pets/pets-tag-schema.md) (Ditto-specific integration details)
+**See also:** [Pets tag schema](docs/pets/pets-tag-schema.md) (2140.wtf-specific integration details)
 
 NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds the current pet state across three stages (egg, baby, adult) with stats, appearance, and personality traits. Kind 14919 logs individual interactions, kind 14920 records breeding events, kind 14921 stores immutable lifecycle records, and kind 11125 (replaceable) holds the owner's profile with coins, achievements, and inventory.
 
 #### Kind 11125 `content` JSON — `missions` field
 
-The `content` of kind 11125 is a JSON object. Ditto extends it with a `missions` field that tracks daily and evolution mission progress:
+The `content` of kind 11125 is a JSON object. 2140.wtf extends it with a `missions` field that tracks daily and evolution mission progress:
 
 ```jsonc
 {
@@ -1060,22 +1060,22 @@ Silent-payment donations MUST NOT publish a Nostr receipt. Doing so would defeat
 
 Clients MUST verify each kind 8333 event on-chain before counting it toward the campaign total, per the verification rules in the Kind 8333 section above. The campaign-wallet verification mode matches tx outputs against the campaign's declared `w` address rather than against derived Taproot addresses.
 
-### Ditto Implementation Notes
+### 2140.wtf Implementation Notes
 
-Ditto is not a campaign-management app — Agora is the canonical place to author campaigns. Ditto renders kind 33863 events:
+2140.wtf is not a campaign-management app — Agora is the canonical place to author campaigns. 2140.wtf renders kind 33863 events:
 
 - in the home feed and profile feeds (toggle: `feedIncludeCampaigns`, default on);
 - on a campaign's `/:nip19` route (its `naddr1…` link) via the standard addressable-event detail page, which renders the markdown story through the same pipeline as NIP-23 articles;
 - as quote-embeds inside other notes, with banner + title + summary;
 - as `Commenting on @{author}'s fundraiser` in NIP-22 comment threads anchored to the campaign coordinate.
 
-Ditto **does** support donating to a campaign from inside the app:
+2140.wtf **does** support donating to a campaign from inside the app:
 
 - The action-bar zap button on a campaign post and the in-dialog **Zap** button route through `useCampaignZap` to send Bitcoin to the campaign's declared `w` endpoint. On-chain donations publish a campaign-mode kind 8333 receipt (with `a` and `K` tags, no `p` tag). Silent-payment donations publish no Nostr event, preserving SP unlinkability.
 - The Donate dialog also exposes a BIP-21 QR + "Open native wallet" path for users without a PSBT-capable signer.
 - The "raised" headline on the campaign card is fetched directly from the on-chain `w` address (cumulative `funded_txo_sum` from the configured Esplora endpoint, default mempool.space). Donations count regardless of whether the donor published a Nostr receipt; the number does not regress when the beneficiary spends from the address. Silent-payment-only campaigns show no aggregate.
 
-Ditto does NOT consult `agora.moderation` labels for surfacing decisions — every parseable kind 33863 event renders.
+2140.wtf does NOT consult `agora.moderation` labels for surfacing decisions — every parseable kind 33863 event renders.
 
 ---
 
@@ -1092,9 +1092,9 @@ Roadstr is a decentralized road-event reporting system — “Waze without the c
 - **Kind 1315 — Road event report.** A regular event tagging the location with `lat`, `lon`, and multi-precision `g` (geohash) tags. The `t` tag carries the event type string (`police`, `speed_camera`, `traffic_jam`, `accident`, `road_closure`, `construction`, `hazard`, `road_condition`, `pothole`, `fog`, `ice`, `animal`, `other`). An optional human comment may be placed in `content`.
 - **Kind 1316 — Road event confirmation.** A regular event referencing a kind 1315 report via an `e` tag and a `status` tag of either `still_there` or `no_longer_there`. Confirmations extend or shorten the report’s effective display lifetime.
 
-### Ditto implementation notes
+### 2140.wtf implementation notes
 
-Ditto renders Roadstr reports on a dedicated `/roadstr` map page and in feeds/cards/detail pages. The map queries kinds 1315 and 1316 by the geohash cells covering the current viewport, computes each report’s effective expiry from its type TTL and any confirmations, and only displays active markers. Users can also publish new kind 1315 reports from the map page using the current device location.
+2140.wtf renders Roadstr reports on a dedicated `/roadstr` map page and in feeds/cards/detail pages. The map queries kinds 1315 and 1316 by the geohash cells covering the current viewport, computes each report’s effective expiry from its type TTL and any confirmations, and only displays active markers. Users can also publish new kind 1315 reports from the map page using the current device location.
 
 ---
 

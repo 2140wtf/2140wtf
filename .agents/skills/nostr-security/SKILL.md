@@ -1,6 +1,6 @@
 ---
 name: nostr-security
-description: Threat model and defenses for Ditto as a web Nostr client — why XSS is catastrophic when nsec keys live in localStorage, CSP as defense-in-depth, URL and CSS sanitization for untrusted event data, and author filtering for trust-sensitive queries (admin actions, moderators, addressable events, NIP-72 communities). Load when building trust-boundary features, rendering user-controlled URLs or markup, interpolating event data into CSS, or reviewing the app's security posture.
+description: Threat model and defenses for 2140.wtf as a web Nostr client — why XSS is catastrophic when nsec keys live in localStorage, CSP as defense-in-depth, URL and CSS sanitization for untrusted event data, and author filtering for trust-sensitive queries (admin actions, moderators, addressable events, NIP-72 communities). Load when building trust-boundary features, rendering user-controlled URLs or markup, interpolating event data into CSS, or reviewing the app's security posture.
 ---
 
 # Nostr Security

@@ -52,7 +52,7 @@ public class NostrPoller {
         String action = kindToAction(event);
         showNotification(
                 hashId(event.optString("id")),
-                "Ditto",
+                "2140.wtf",
                 "Someone " + action
         );
 
@@ -118,7 +118,7 @@ public class NostrPoller {
         if (notifiable.size() > 3) {
             showNotification(
                     hashId(notifiable.get(0).optString("id") + "-summary"),
-                    "Ditto",
+                    "2140.wtf",
                     "You have " + notifiable.size() + " new notifications"
             );
         } else {
@@ -126,7 +126,7 @@ public class NostrPoller {
                 String action = kindToAction(event);
                 showNotification(
                         hashId(event.optString("id")),
-                        "Ditto",
+                        "2140.wtf",
                         "Someone " + action
                 );
             }

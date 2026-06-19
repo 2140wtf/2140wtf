@@ -5,16 +5,16 @@ import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { extractFirstUrl } from '@/lib/shareText';
 
 /**
- * Landing route for content shared into Ditto from another app's Share button
+ * Landing route for content shared into 2140.wtf from another app's Share button
  * (Android share targets — see `AndroidManifest.xml` and `MainActivity.java`).
  *
  * Two modes, selected by the `mode` query param (set by the launched
  * activity-alias):
  *
- *   - `view` — "View in Ditto". Extract the first URL from the shared text and
+ *   - `view` — "View in 2140.wtf". Extract the first URL from the shared text and
  *     redirect to the external-content comment page (`/i/<url>`). If no URL is
  *     present, fall through to `post` so the share is never a dead end.
- *   - `post` — "Post on Ditto". Open the composer prefilled with the shared
+ *   - `post` — "Post on 2140.wtf". Open the composer prefilled with the shared
  *     text to create a new note.
  *
  * The raw shared text arrives URL-encoded in the `text` param.

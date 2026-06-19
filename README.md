@@ -1,4 +1,4 @@
-# Ditto
+# 2140.wtf
 
 Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.com/) client that puts you in control.
 
@@ -6,7 +6,7 @@ Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.c
 
 ## About
 
-Ditto is an open-source, decentralized social media client built on the Nostr protocol. It's designed for people who want to have fun online without feeding the Big Tech machine. Express yourself with custom themes, Lightning payments, and an ever-growing set of content types -- all while owning your identity and data.
+2140.wtf is an open-source, decentralized social media client built on the Nostr protocol. It's designed for people who want to have fun online without feeding the Big Tech machine. Express yourself with custom themes, Lightning payments, and an ever-growing set of content types -- all while owning your identity and data.
 
 Made by [Soapbox](https://soapbox.pub).
 
@@ -55,7 +55,7 @@ npm test
 
 ## Configuration
 
-Ditto is configured through a `ditto.json` file at the project root, read at build time. This file is gitignored so each deployment can have its own configuration.
+2140.wtf is configured through a `ditto.json` file at the project root, read at build time. This file is gitignored so each deployment can have its own configuration.
 
 ```jsonc
 {
@@ -94,7 +94,7 @@ For self-hosted instances:
 
 ## Deployment
 
-Ditto builds to static files and can be deployed anywhere that serves HTML.
+2140.wtf builds to static files and can be deployed anywhere that serves HTML.
 
 - **GitHub Pages / GitLab Pages** -- Push to `main` and CI auto-deploys
 - **Netlify / Vercel** -- Connect your fork and deploy. A `_redirects` file is included for SPA routing
@@ -142,11 +142,11 @@ public/           Static assets, icons, manifest
 We welcome contributions but have high standards. Please read the full [Contributing Guide](CONTRIBUTING.md) before submitting a merge request. The short version:
 
 - **Bug fixes**: One bug, one MR. Keep it small and focused.
-- **New features**: Must link to an existing issue and align with the [Ditto Philosophy](https://about.ditto.pub/philosophy).
+- **New features**: Must link to an existing issue and align with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy).
 - **Required**: Live preview URL, before/after screenshots, completed self-review checklist.
 - **Required tools**: Claude Opus 4.6 (or latest frontier model), an AI coding agent with plan mode.
 
-Read the [Ditto Philosophy](https://about.ditto.pub/philosophy) to understand what Ditto is and isn't.
+Read the [2140.wtf Philosophy](https://about.ditto.pub/philosophy) to understand what 2140.wtf is and isn't.
 
 ## License
 
