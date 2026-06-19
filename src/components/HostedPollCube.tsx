@@ -1,7 +1,7 @@
-import { Loader2, RefreshCw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 
-import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
-import { Button } from '@/components/ui/button';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 interface HostedPollCubeProps {
@@ -11,58 +11,52 @@ interface HostedPollCubeProps {
 }
 
 /**
- * Render a hosted BAO cube for a poll by fetching the kind:33889
- * cube-design event and loading its embed URL in an iframe.
+ * Render a BAO cube embed for any Nostr poll.
+ *
+ * bao.markets can build a hosted, interactive 3D cube from the poll id alone
+ * via `https://bao.markets/embed/cube/<poll-id>`. A custom kind:33889 design
+ * event will be used when one exists; otherwise a default cube is generated.
  */
 export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps) {
-  const { data: embedUrl, isLoading, isError, refetch } = useHostedCubeEmbed(pollId);
+  const [loaded, setLoaded] = useState(false);
+  const embedUrl = useMemo(
+    () => sanitizeUrl(`https://bao.markets/embed/cube/${encodeURIComponent(pollId)}`),
+    [pollId],
+  );
 
-  if (isLoading) {
+  if (!embedUrl) {
     return (
       <div
         className={cn(
-          'flex items-center justify-center rounded-xl border border-border bg-muted/30',
+          'flex items-center justify-center rounded-xl border border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground',
           className,
         )}
         style={{ minHeight: 320 }}
       >
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (isError || !embedUrl) {
-    return (
-      <div
-        className={cn(
-          'flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-muted/30 p-6 text-center',
-          className,
-        )}
-        style={{ minHeight: 320 }}
-      >
-        <p className="text-sm text-muted-foreground">
-          {isError ? 'Could not load hosted cube.' : 'No hosted cube found for this poll.'}
-        </p>
-        {isError && (
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()}>
-            <RefreshCw className="size-3.5" />
-            Try again
-          </Button>
-        )}
+        Invalid poll id.
       </div>
     );
   }
 
   return (
-    <div className={cn('relative rounded-xl overflow-hidden border border-border bg-background', className)}>
+    <div
+      className={cn('relative rounded-xl overflow-hidden border border-border bg-background', className)}
+      style={{ minHeight: 320 }}
+    >
+      {!loaded && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/30">
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
       <iframe
         src={embedUrl}
-        title={title || `Hosted cube for ${pollId}`}
-        className="w-full h-full"
-        style={{ minHeight: 320, border: 0 }}
+        title={title || `Cube for poll ${pollId}`}
+        className="w-full h-full transition-opacity duration-300"
+        style={{ minHeight: 320, border: 0, opacity: loaded ? 1 : 0 }}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         loading="lazy"
         sandbox="allow-scripts allow-same-origin allow-popups"
+        onLoad={() => setLoaded(true)}
       />
     </div>
   );
