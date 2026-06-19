@@ -1,0 +1,51 @@
+{
+  "appName": "2140.wtf",
+  "appId": "2140wtf",
+  "theme": "dark",
+  "themes": {
+    "dark": {
+      "colors": {
+        "background": "0 0% 4%",
+        "text": "0 0% 98%",
+        "primary": "32.9 93.2% 53.5%"
+      }
+    },
+    "light": {
+      "colors": {
+        "background": "0 0% 98%",
+        "text": "0 0% 10%",
+        "primary": "32.9 93.2% 53.5%"
+      }
+    }
+  },
+  "relayMetadata": {
+    "relays": [
+      {
+        "url": "wss://relay.bao.network",
+        "read": true,
+        "write": false
+      }
+    ],
+    "updatedAt": 1781714000
+  },
+  "feedSettings": {
+    "feedIncludeArticles": true,
+    "showArticles": true,
+    "showEvents": true,
+    "feedIncludeEvents": true
+  },
+  "sidebarOrder": [
+    "feed",
+    "events",
+    "art",
+    "articles",
+    "photos",
+    "videos",
+    "settings",
+    "wallet",
+    "help"
+  ],
+  "useAppRelays": true,
+  "useUserRelays": false,
+  "contentWarningPolicy": "blur"
+}

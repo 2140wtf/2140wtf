@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'pub.ditto.app',
-  appName: 'Ditto',
+  appName: '2140.wtf',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

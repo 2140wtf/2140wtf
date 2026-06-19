@@ -32,6 +32,7 @@ import {
   saveGroup,
   saveMessages,
   deleteGroup,
+  migrateLegacyGroupStorage,
   type StoredGroup,
   type StoredMessage,
 } from './groupChatStorage';
@@ -77,16 +78,18 @@ export interface GroupOperationResult<T = void> {
 }
 
 function normalizePubkeyInput(key: string): string | null {
+  const trimmed = key.trim();
+  if (!trimmed) return null;
   try {
-    if (key.startsWith('npub1')) {
-      const decoded = nip19.decode(key);
+    if (trimmed.startsWith('npub1')) {
+      const decoded = nip19.decode(trimmed);
       if (decoded.type === 'npub') {
         return (decoded.data as string).toLowerCase();
       }
       return null;
     }
-    if (/^[0-9a-fA-F]{64}$/.test(key)) {
-      return key.toLowerCase();
+    if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+      return trimmed.toLowerCase();
     }
     return null;
   } catch {
@@ -147,6 +150,7 @@ export class GroupChatService {
   private groups: Map<string, StoredGroup> = new Map();
   private messages: Map<string, StoredMessage[]> = new Map();
   private groupStates: Map<string, { exporterSecret: string; rootSecret?: string }> = new Map();
+  private mutationLocks: Map<string, Promise<unknown>> = new Map();
 
   constructor(userPubkey: string, userPrivkey: Uint8Array, defaultRelays: string[] = []) {
     this.userPubkey = userPubkey.toLowerCase();
@@ -163,6 +167,7 @@ export class GroupChatService {
   }
 
   private loadState(): void {
+    migrateLegacyGroupStorage(this.userPubkey);
     const groups = loadGroups(this.userPubkey);
     for (const g of groups) {
       this.groups.set(g.nostrGroupId, g);
@@ -172,6 +177,15 @@ export class GroupChatService {
       });
       this.messages.set(g.nostrGroupId, loadMessages(this.userPubkey, g.nostrGroupId));
     }
+  }
+
+  private withGroupLock<T>(groupId: string, fn: () => Promise<T>): Promise<T> {
+    const next = (this.mutationLocks.get(groupId) ?? Promise.resolve()).then(
+      () => fn(),
+      () => fn(),
+    );
+    this.mutationLocks.set(groupId, next);
+    return next;
   }
 
   private persistGroup(group: StoredGroup): void {
@@ -254,7 +268,8 @@ export class GroupChatService {
     const rootSecret = generateRootSecret();
     const exporterSecret = await deriveEpochSecret(rootSecret, 0, nostrGroupId);
 
-    const groupRelays = relays && relays.length > 0 ? relays : this.defaultRelays;
+    const providedRelays = relays?.filter((r) => typeof r === 'string' && /^wss?:\/\//.test(r));
+    const groupRelays = providedRelays && providedRelays.length > 0 ? providedRelays : this.defaultRelays;
     if (groupRelays.length === 0) {
       return { success: false, error: 'No relays configured for the group' };
     }
@@ -352,6 +367,14 @@ export class GroupChatService {
       return { success: false, error: 'Not a group event' };
     }
 
+    if (!hasValidEventShape(event)) {
+      return { success: false, error: 'Malformed event shape' };
+    }
+
+    if (typeof event.content === 'string' && event.content.length > MAX_GROUP_EVENT_CONTENT_LENGTH) {
+      return { success: false, error: 'Group event content too large' };
+    }
+
     let sigValid = false;
     try {
       sigValid = verifyEvent(event as Parameters<typeof verifyEvent>[0]);
@@ -362,7 +385,7 @@ export class GroupChatService {
       return { success: false, error: 'Invalid event signature' };
     }
 
-    const hTag = event.tags.find(([n]) => n === 'h')?.[1];
+    const hTag = getTag(event.tags, 'h');
     const groupId = validateGroupId(hTag);
     if (!groupId) {
       return { success: false, error: 'Missing or invalid group id' };
@@ -391,28 +414,43 @@ export class GroupChatService {
       return { success: false, error: 'Invalid application message' };
     }
 
+    if (appMessage.content.length > MAX_MESSAGE_LENGTH) {
+      return { success: false, error: 'Application message too long' };
+    }
+
     if (!group.members.some((m) => m === appMessage.senderPubkey)) {
       return { success: false, error: 'Sender is not a group member' };
     }
+    if (this.isBanned(group, appMessage.senderPubkey)) {
+      return { success: false, error: 'Sender is banned from this group' };
+    }
 
-    const appGroupId = appMessage.tags?.find(([n]) => n === 'h')?.[1];
+    const appGroupId = getTag(appMessage.tags ?? [], 'h');
     if (appGroupId !== groupId) {
       return { success: false, error: 'Application message is for a different group' };
     }
 
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (
+      appMessage.createdAt > nowSeconds + MAX_CLOCK_SKEW_SECONDS ||
+      event.created_at > nowSeconds + MAX_CLOCK_SKEW_SECONDS
+    ) {
+      return { success: false, error: 'Event timestamp is too far in the future' };
+    }
+
     const message: StoredMessage = {
-      id: event.id ?? secureRandomHex(16),
+      id: appMessage.id,
       nostrGroupId: groupId,
       senderPubkey: appMessage.senderPubkey,
       content: appMessage.content,
       timestamp: appMessage.createdAt * 1000,
       isOwn: appMessage.senderPubkey === this.userPubkey,
       epoch: group.epoch,
-      eventId: event.id ?? '',
+      eventId: event.id,
     };
 
     const groupMessages = this.messages.get(groupId) ?? [];
-    if (!groupMessages.some((m) => m.eventId === message.eventId || m.id === message.id)) {
+    if (!groupMessages.some((m) => m.id === message.id || m.eventId === message.eventId)) {
       groupMessages.push(message);
       this.messages.set(groupId, groupMessages);
       this.persistMessages(groupId);
