@@ -15,7 +15,7 @@ const ZAP_RECEIPT_LIMIT = 500;
  * kind:1018 / kind:9735 responses, so matching them gives Ditto the best
  * chance of seeing the same votes.
  */
-const BAO_POLL_RELAYS = [
+export const BAO_POLL_RELAYS = [
   'wss://nos.lol',
   'wss://relay.snort.social',
   'wss://relay.damus.io',
