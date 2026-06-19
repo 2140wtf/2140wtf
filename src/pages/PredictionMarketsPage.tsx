@@ -16,6 +16,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -248,6 +250,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
+  const [showResolved, setShowResolved] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BaoMarket | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedMarketId = searchParams.get("market");
@@ -270,9 +273,14 @@ export function PredictionMarketsPage(): React.JSX.Element {
     const now = Math.floor(Date.now() / 1000);
 
     let items = markets.filter((m) => {
-      // Hide ended markets and markets whose end time has already passed.
+      // Hide ended markets.
       if (m.state === "ended") return false;
-      if (m.endTime > 0 && m.endTime < now) return false;
+
+      // Unless showing resolved markets, only show active markets whose end time has not passed.
+      if (!showResolved) {
+        if (m.state !== "active") return false;
+        if (m.endTime > 0 && m.endTime < now) return false;
+      }
 
       if (!q) return true;
       const hay = `${m.title} ${m.description} ${m.category} ${m.outcomes
@@ -301,7 +309,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
     });
 
     return items;
-  }, [markets, search, sort]);
+  }, [markets, search, sort, showResolved]);
 
   useEffect(() => {
     if (!selectedMarketId || markets.length === 0) return;
@@ -422,6 +430,17 @@ export function PredictionMarketsPage(): React.JSX.Element {
             <ToggleGroupItem value="2" aria-label="2 columns">2</ToggleGroupItem>
             <ToggleGroupItem value="1" aria-label="1 column">1</ToggleGroupItem>
           </ToggleGroup>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Switch
+              id="show-resolved"
+              checked={showResolved}
+              onCheckedChange={setShowResolved}
+            />
+            <Label htmlFor="show-resolved" className="text-sm text-muted-foreground whitespace-nowrap">
+              Show resolved
+            </Label>
+          </div>
 
           <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} />
