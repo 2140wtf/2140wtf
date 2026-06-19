@@ -14,7 +14,6 @@
  */
 
 import {
-  getEventHash,
   getPublicKey,
   generateSecretKey,
   finalizeEvent,
@@ -272,6 +271,7 @@ export async function unwrapWelcomeEvent(
 
 export function createApplicationMessage(
   senderPubkey: string,
+  senderPrivkey: Uint8Array,
   content: string,
   groupId: string,
 ): string {
@@ -282,28 +282,42 @@ export function createApplicationMessage(
     created_at: Math.floor(Date.now() / 1000),
     pubkey: senderPubkey,
   };
-  return JSON.stringify({ ...rumor, id: getEventHash(rumor) });
+  const event = finalizeEvent(rumor, senderPrivkey);
+  return JSON.stringify(event);
 }
 
 export function parseApplicationMessage(json: string): MLSApplicationMessage | null {
   try {
     const parsed = JSON.parse(json) as unknown;
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const m = parsed as Record<string, unknown>;
+    const ev = parsed as NostrEvent;
     if (
-      typeof m.kind !== 'number' ||
-      typeof m.pubkey !== 'string' ||
-      typeof m.content !== 'string' ||
-      typeof m.created_at !== 'number'
+      typeof ev.kind !== 'number' ||
+      typeof ev.pubkey !== 'string' ||
+      typeof ev.content !== 'string' ||
+      typeof ev.created_at !== 'number' ||
+      typeof ev.id !== 'string' ||
+      typeof ev.sig !== 'string' ||
+      !Array.isArray(ev.tags)
     ) {
       return null;
     }
+    if (ev.kind !== 9) return null;
+
+    let sigValid = false;
+    try {
+      sigValid = verifyEvent(ev as Parameters<typeof verifyEvent>[0]);
+    } catch {
+      sigValid = false;
+    }
+    if (!sigValid) return null;
+
     return {
-      kind: m.kind,
-      senderPubkey: m.pubkey,
-      content: m.content,
-      createdAt: m.created_at,
-      tags: Array.isArray(m.tags) ? m.tags : undefined,
+      kind: ev.kind,
+      senderPubkey: ev.pubkey,
+      content: ev.content,
+      createdAt: ev.created_at,
+      tags: ev.tags,
     };
   } catch {
     return null;

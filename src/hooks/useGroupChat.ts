@@ -5,7 +5,7 @@
  * Manages group state, message subscriptions, and event publishing.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useNostrLogin } from '@nostrify/react/login';
 import { nip19 } from 'nostr-tools';
@@ -84,6 +84,16 @@ export function useGroupChat(): UseGroupChatReturn {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const groupsRef = useRef(groups);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
+  const groupKeys = useMemo(
+    () => groups.map((g) => `${g.nostrGroupId}:${g.epoch}`).join(','),
+    [groups],
+  );
+
   const canUseGroupChat = !!service;
   const requiresNsec = !!user && !privateKey;
 
@@ -159,14 +169,14 @@ export function useGroupChat(): UseGroupChatReturn {
 
   // Subscribe to kind 445 group events for joined groups.
   useEffect(() => {
-    if (!service || groups.length === 0) return;
+    if (!service || groupsRef.current.length === 0) return;
 
     const ac = new AbortController();
     let alive = true;
 
     (async () => {
       try {
-        const filters = groups.map((g) => ({
+        const filters = groupsRef.current.map((g) => ({
           kinds: [KIND_GROUP],
           '#h': [g.nostrGroupId],
         }));
@@ -183,7 +193,7 @@ export function useGroupChat(): UseGroupChatReturn {
 
       try {
         const now = Math.floor(Date.now() / 1000);
-        const filters = groups.map((g) => ({
+        const filters = groupsRef.current.map((g) => ({
           kinds: [KIND_GROUP],
           '#h': [g.nostrGroupId],
           since: now,
@@ -211,7 +221,7 @@ export function useGroupChat(): UseGroupChatReturn {
       alive = false;
       ac.abort();
     };
-  }, [nostr, service, groups, refreshFromService]);
+  }, [nostr, service, groupKeys, refreshFromService]);
 
   const publishEvents = useCallback(
     async (events?: NostrEvent[]) => {
