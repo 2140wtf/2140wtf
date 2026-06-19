@@ -14,6 +14,7 @@ import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { getPublicKey } from 'nostr-tools';
 import { bytesToBase64, base64ToBytes } from '@/lib/cashu/base64';
 import { devLog } from '@/lib/cashu/devLog';
 
@@ -38,6 +39,7 @@ export const MAX_MINT_FEE_PPM = 50_000;
 
 const PROOF_ENCRYPTION_INFO = 'freedomid:cashu:proof-encryption:v1';
 const NUTZAP_KEY_INFO = 'ditto:cashu:nutzap:v1';
+const NIP60_WALLET_KEY_INFO = 'ditto:cashu:walletkey:v1';
 const CIPHER_VERSION_PREFIX = 'v1:';
 const PROOF_CONTEXT_PREFIX = 'freedomid:proofs:';
 const TRANSACTION_CONTEXT = 'freedomid:transactions';
@@ -247,6 +249,19 @@ export function deriveNutzapKey(seedPhrase: string): NutzapKeyPair {
     const privkey = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(NUTZAP_KEY_INFO), 32);
     const pubkeyBytes = secp256k1.getPublicKey(privkey, true);
     return { privkey, pubkey: bytesToHex(pubkeyBytes) };
+  } finally {
+    secureZero(seed);
+  }
+}
+
+/** Deterministic secp256k1 keypair used to sign NIP-60 token/history/deletion events.
+ *  The pubkey is the x-only hex form used inside kind:10019 and for P2PK locks. */
+export function deriveNip60WalletKey(seedPhrase: string): { privkey: Uint8Array; pubkey: string } {
+  const seed = deriveMasterKey(seedPhrase);
+  try {
+    const privkey = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(NIP60_WALLET_KEY_INFO), 32);
+    const pubkey = getPublicKey(privkey);
+    return { privkey, pubkey };
   } finally {
     secureZero(seed);
   }
