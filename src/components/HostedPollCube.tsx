@@ -31,7 +31,7 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
           'flex items-center justify-center rounded-xl border border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground',
           className,
         )}
-        style={{ minHeight: 320 }}
+        style={{ minHeight: 420 }}
       >
         Invalid poll id.
       </div>
@@ -41,7 +41,7 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
   return (
     <div
       className={cn('relative rounded-xl overflow-hidden border border-border bg-background', className)}
-      style={{ minHeight: 320 }}
+      style={{ minHeight: 420 }}
     >
       {!loaded && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/30">
@@ -52,7 +52,7 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
         src={embedUrl}
         title={title || `Cube for poll ${pollId}`}
         className="w-full h-full transition-opacity duration-300"
-        style={{ minHeight: 320, border: 0, opacity: loaded ? 1 : 0 }}
+        style={{ minHeight: 420, border: 0, opacity: loaded ? 1 : 0 }}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         loading="lazy"
         sandbox="allow-scripts allow-same-origin allow-popups"
