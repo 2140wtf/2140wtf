@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:safe": "rm -rf node_modules/.vite && NODE_OPTIONS='--max-old-space-size=4096' vite",
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
     "test": "tsc --noEmit --incremental false && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "ci": "npm ci && npm run test",

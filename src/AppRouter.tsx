@@ -67,6 +67,7 @@ const PetsBattlePage = lazy(() => import("./pages/PetsBattlePage").then(m => ({ 
 const PetsSettingsPage = lazy(() => import("./pages/PetsSettingsPage").then(m => ({ default: m.PetsSettingsPage })));
 const PodcastsFeedPage = lazy(() => import("./pages/PodcastsFeedPage").then(m => ({ default: m.PodcastsFeedPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage").then(m => ({ default: m.PrivacyPolicyPage })));
+const PrivacySettingsPage = lazy(() => import("./pages/PrivacySettingsPage").then(m => ({ default: m.PrivacySettingsPage })));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings").then(m => ({ default: m.ProfileSettings })));
 const RelayPage = lazy(() => import("./pages/RelayPage").then(m => ({ default: m.RelayPage })));
 const SearchPage = lazy(() => import("./pages/SearchPage").then(m => ({ default: m.SearchPage })));
@@ -246,6 +247,7 @@ export function AppRouter() {
             <Route path="/feed/:domain" element={<DomainFeedPage />} />
             <Route path="/client/:name" element={<ClientFeedPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
             <Route path="/settings/profile" element={<ProfileSettings />} />
             <Route path="/settings/pets" element={<PetsSettingsPage />} />
             <Route path="/settings/feed" element={<ContentSettingsPage />} />
