@@ -213,3 +213,27 @@ export type {
   UsePetsCareActivityParams,
   CareActivityResult,
 } from './hooks/usePetsCareActivity';
+
+// BAO MARKETS trading rewards
+export { useBaoTradeStats } from './bao/hooks/useBaoTradeStats';
+export type { UseBaoTradeStatsResult } from './bao/hooks/useBaoTradeStats';
+export { useClaimBaoTradeRewards } from './bao/hooks/useClaimBaoTradeRewards';
+export type { ClaimBaoTradeRewardsResult } from './bao/hooks/useClaimBaoTradeRewards';
+export {
+  BAO_TRADE_KIND,
+  BAO_RELAY_URL,
+  parseBaoOrderEvent,
+  aggregateBaoTradeActivity,
+} from './bao/lib/bao-trade-parser';
+export type { BaoOrderEvent, BaoTradeActivity } from './bao/lib/bao-trade-parser';
+export {
+  BAO_SAT_TO_BAO_RATE,
+  BAO_DAILY_REWARD_CAP,
+  BAO_MIN_ACTIVE_AMOUNT,
+  BAO_TIER_THRESHOLDS,
+  BAO_TIER_LABELS,
+  calculateBaoTier,
+  getBaoTierLabel,
+  calculateBaoReward,
+} from './bao/lib/bao-rewards';
+export type { BaoRewardResult } from './bao/lib/bao-rewards';

@@ -384,6 +384,12 @@ export interface BlobbonautProfile {
   dailyLoginLastDay: string | undefined;
   /** Current consecutive daily login streak */
   dailyLoginStreak: number;
+  /** Lifetime BAO coins earned from BAO trading activity */
+  baoLifetimeVolume: number;
+  /** Current BAO trader tier (derived from bao_lifetime_volume) */
+  baoTier: number;
+  /** Date (YYYY-MM-DD) when BAO trading rewards were last claimed */
+  baoRewardsClaimedAt: string | undefined;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
   /** Purchased items storage */
@@ -1384,6 +1390,9 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     dailyRewardsClaimedAt: getTagValue(tags, 'daily_rewards_claimed_at') ?? undefined,
     dailyLoginLastDay: getTagValue(tags, 'daily_login_last_day') ?? undefined,
     dailyLoginStreak: parseNumericTag(tags, 'daily_login_streak') ?? 0,
+    baoLifetimeVolume: parseNumericTag(tags, 'bao_lifetime_volume') ?? 0,
+    baoTier: parseNumericTag(tags, 'bao_tier') ?? 0,
+    baoRewardsClaimedAt: getTagValue(tags, 'bao_rewards_claimed_at') ?? undefined,
     room: getTagValue(tags, 'room') ?? undefined,
     storage: parseStorageTags(tags),
     content: event.content,
@@ -1552,6 +1561,8 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   'xp', 'level',
   // Daily reward tags
   'daily_rewards_claimed_at', 'daily_login_last_day', 'daily_login_streak',
+  // BAO trading reward tags
+  'bao_lifetime_volume', 'bao_tier', 'bao_rewards_claimed_at',
   // Room persistence
   'room',
   // Legacy player progress tags (preserved for compatibility)
