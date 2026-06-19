@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { LogIn, Lock, LogOut, Menu, MessageSquarePlus, Shield, Users } from 'lucide-react';
+import { LogIn, Lock, LogOut, Menu, MessageSquarePlus, Pencil, Shield, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { GroupMessageList } from '@/components/group-chat/GroupMessageList';
 import { GroupMessageInput } from '@/components/group-chat/GroupMessageInput';
 import { GroupMemberPanel } from '@/components/group-chat/GroupMemberPanel';
 import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
+import { EditGroupDialog } from '@/components/group-chat/EditGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
 import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
 import { toast } from '@/hooks/useToast';
@@ -85,6 +86,7 @@ export function GroupChatPage() {
     promoteAdmin,
     leaveGroup,
     joinFromWelcome,
+    updateGroupMetadata,
     isAdmin,
   } = useGroupChatContext();
   const { markGroupRead, markAllGroupsRead } = useGroupChatReadCursors();
@@ -127,6 +129,7 @@ export function GroupChatPage() {
   });
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [mobileListOpen, setMobileListOpen] = useState(false);
   const [searchParams] = useSearchParams();
@@ -172,6 +175,15 @@ export function GroupChatPage() {
       toast({ title: 'Group created' });
     } else {
       toast({ title: result.error ?? 'Failed to create group', variant: 'destructive' });
+    }
+  };
+
+  const handleUpdateMetadata = async (name: string, description?: string) => {
+    const result = await updateGroupMetadata({ name, description });
+    if (result.success) {
+      toast({ title: 'Group updated' });
+    } else {
+      toast({ title: result.error ?? 'Failed to update group', variant: 'destructive' });
     }
   };
 
@@ -287,6 +299,18 @@ export function GroupChatPage() {
                       </p>
                     )}
                   </div>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground shrink-0"
+                      title="Edit group"
+                      aria-label="Edit group"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -400,6 +424,15 @@ export function GroupChatPage() {
         onOpenChange={setCreateOpen}
         onCreate={handleCreate}
       />
+      {selectedGroup && (
+        <EditGroupDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          initialName={selectedGroup.name}
+          initialDescription={selectedGroup.description}
+          onSave={handleUpdateMetadata}
+        />
+      )}
       <JoinGroupDialog open={joinOpen} onOpenChange={setJoinOpen} onJoin={handleJoin} />
     </div>
   );

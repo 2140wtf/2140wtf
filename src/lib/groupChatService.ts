@@ -872,6 +872,96 @@ export class GroupChatService {
     return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
 
+  async updateGroupMetadata(
+    groupId: string,
+    updates: { name?: string; description?: string },
+  ): Promise<GroupOperationResult> {
+    return this.withGroupLock(groupId, () => this.updateGroupMetadataLocked(groupId, updates));
+  }
+
+  private async updateGroupMetadataLocked(
+    groupId: string,
+    updates: { name?: string; description?: string },
+  ): Promise<GroupOperationResult> {
+    await this.ensureLoaded();
+    const group = this.groups.get(groupId);
+    if (!group) {
+      return { success: false, error: 'Group not found' };
+    }
+    if (!this.isAdmin(group)) {
+      return { success: false, error: 'Only admins can edit group info' };
+    }
+
+    const trimmedName = updates.name?.trim();
+    const trimmedDescription = updates.description?.trim();
+
+    if (trimmedName !== undefined) {
+      if (!trimmedName) {
+        return { success: false, error: 'Group name is required' };
+      }
+      group.name = trimmedName.slice(0, MAX_GROUP_NAME_LENGTH);
+    }
+
+    if (trimmedDescription !== undefined) {
+      group.description = trimmedDescription.slice(0, MAX_GROUP_DESCRIPTION_LENGTH) || undefined;
+    }
+
+    const oldRootSecret = this.getRootSecret(groupId);
+    const oldExporterSecret = this.getExporterSecret(groupId);
+    if (!oldRootSecret || !oldExporterSecret) {
+      return { success: false, error: 'Missing group encryption state' };
+    }
+
+    const newEpoch = group.epoch + 1;
+    const newRootSecret = generateRootSecret();
+    const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
+
+    group.epoch = newEpoch;
+    group.lastActivity = Date.now();
+    await this.setSecrets(groupId, newEpoch, newExporterSecret, newRootSecret);
+
+    const metadata = createNostrGroupDataExtension({
+      nostrGroupId: groupId,
+      name: group.name,
+      description: group.description,
+      adminPubkeys: group.adminPubkeys,
+      relays: group.relays,
+    });
+
+    const events: NostrEvent[] = [];
+    let failedCount = 0;
+    for (const target of group.members) {
+      if (target === this.userPubkey) continue;
+      try {
+        const welcomePayload = JSON.stringify({
+          groupId,
+          epoch: newEpoch,
+          type: 'metadata_update',
+          rootSecret: newRootSecret,
+          exporterSecret: newExporterSecret,
+          members: group.members,
+          metadata,
+        });
+        const welcomeEvent = createWelcomeEvent(
+          this.userPrivkey,
+          welcomePayload,
+          'placeholder',
+          group.relays,
+          newEpoch,
+        );
+        const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
+        events.push(giftWrap);
+      } catch (err) {
+        failedCount++;
+        console.error(`Failed to wrap metadata-update Welcome for ${target.slice(0, 8)}...`, err);
+      }
+    }
+
+    await this.persistGroup(group);
+
+    return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
+  }
+
   async joinFromWelcome(giftWrapEvent: NostrEvent): Promise<GroupOperationResult<GroupChatGroup>> {
     const welcomeEvent = await unwrapWelcomeEvent(giftWrapEvent, this.userPrivkey);
     if (!welcomeEvent) {
