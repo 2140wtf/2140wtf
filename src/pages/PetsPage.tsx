@@ -186,7 +186,7 @@ export function PetsPage() {
   useLayoutOptions({ hasSubHeader: true, noOverscroll: true });
 
   useSeoMeta({
-    title: `Pets | ${config.appName}`,
+    title: `2140 Pets | ${config.appName}`,
     description: 'Care for your virtual pet companion on Nostr',
   });
 
@@ -206,7 +206,7 @@ function LoggedOutState() {
         <div className="size-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-10 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold">Pets</h1>
+        <h1 className="text-2xl font-bold">2140 Pets</h1>
         <p className="text-muted-foreground">
           Log in with your Nostr account to care for your virtual pet companion.
         </p>
@@ -273,7 +273,7 @@ function PetsContent() {
   const localStorageKey = user?.pubkey ? getSelectedPetsKey(user.pubkey) : 'pets:selected:d:none';
   const [storedSelectedD, setStoredSelectedD] = useLocalStorage<string | null>(localStorageKey, null);
   
-  // State for showing the adoption flow (for "Adopt another Pets")
+  // State for showing the adoption flow (for "Adopt another 2140 Pet")
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
   
   // STEP 5: Selection Priority
@@ -429,8 +429,8 @@ function PetsContent() {
       toast({
         title: isCurrentlySleeping ? 'Woke up!' : 'Resting...',
         description: isCurrentlySleeping
-          ? 'Your Pets is now awake and active!'
-          : 'Your Pets is taking a rest.',
+          ? 'Your 2140 Pet is now awake and active!'
+          : 'Your 2140 Pet is taking a rest.',
       });
 
       // Track daily mission progress for sleep action (only when putting to sleep)
@@ -715,7 +715,7 @@ function PetsContent() {
             <div className="size-24 rounded-3xl bg-muted/50 flex items-center justify-center">
               <RefreshCw className="size-12 text-muted-foreground animate-spin" />
             </div>
-            <h1 className="text-2xl font-bold">Syncing your Pets...</h1>
+            <h1 className="text-2xl font-bold">Syncing your 2140 Pets...</h1>
             <p className="text-muted-foreground">
               Fetching your pet data from relays...
             </p>
@@ -738,7 +738,7 @@ function PetsContent() {
             </div>
             <h1 className="text-2xl font-bold">Pet Data Not Found</h1>
             <p className="text-muted-foreground">
-              No Pets data could be loaded from relays.
+              No 2140 Pets data could be loaded from relays.
               This may be a sync issue - try refreshing the page.
             </p>
             <Button
@@ -1004,8 +1004,8 @@ function PetsDashboard({
       toast({
         title: open ? 'Social interactions enabled' : 'Social interactions disabled',
         description: open
-          ? 'Other people can now care for this Pets.'
-          : 'Only you can interact with this Pets.',
+          ? 'Other people can now care for this 2140 Pet.'
+          : 'Only you can interact with this 2140 Pet.',
       });
     } catch (error) {
       console.error('Failed to toggle social permission:', error);
@@ -1374,7 +1374,7 @@ function PetsDashboard({
     if (!isCurrentCompanion && !canBeCompanion) {
       toast({
         title: 'Cannot set as companion',
-        description: 'Only hatched Petss (baby or adult) can be set as your companion.',
+        description: 'Only hatched 2140 Pets (baby or adult) can be set as your companion.',
         variant: 'destructive',
       });
       return;
@@ -1988,10 +1988,10 @@ function PetsDashboard({
               <span className="text-sm">Activity</span>
             </span>
           </TabButton>
-          <TabButton label="Petss" active={activeDrawer === 'more'} onClick={() => toggleDrawer('more')} className="translate-y-0">
+          <TabButton label="2140 Pets" active={activeDrawer === 'more'} onClick={() => toggleDrawer('more')} className="translate-y-0">
             <span className="flex items-center gap-1.5">
               <Egg className="size-4" />
-              <span className="text-sm">Petss</span>
+              <span className="text-sm">2140 Pets</span>
             </span>
           </TabButton>
         </SubHeaderBar>
@@ -3000,7 +3000,7 @@ function MissionsTabContent({
             {!dailyMissions.isLoading && dailyMissions.noMissionsAvailable && (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <Egg className="size-6 text-muted-foreground/30" />
-                <p className="text-xs text-muted-foreground">Hatch your Pets to unlock daily bounties</p>
+                <p className="text-xs text-muted-foreground">Hatch a 2140 Pet to unlock daily bounties</p>
               </div>
             )}
 
@@ -3315,7 +3315,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
         <div className="flex items-center gap-2.5 rounded-lg border border-dashed p-3">
           <Egg className="size-4 shrink-0 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Social care settings will unlock after your Pets hatches.
+            Social care settings will unlock after your 2140 Pet hatches.
           </p>
         </div>
       ) : (
@@ -3323,7 +3323,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
           <label htmlFor={socialToggleId} className="flex items-center gap-2.5 cursor-pointer select-none min-w-0">
             <Users className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
-              <p className="text-sm font-medium leading-tight">Allow others to care for this Pets</p>
+              <p className="text-sm font-medium leading-tight">Allow others to care for this 2140 Pet</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {socialOpen ? 'Anyone can feed, play, and clean.' : 'Only you can interact.'}
               </p>
@@ -3334,7 +3334,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
             checked={socialOpen}
             onCheckedChange={onToggleSocial}
             disabled={isSocialToggling}
-            aria-label="Allow other people to care for this Pets"
+            aria-label="Allow other people to care for this 2140 Pet"
           />
         </div>
       )}
@@ -3420,7 +3420,7 @@ function PetsSelectorPage({ companions, onSelect, isLoading, onAdopt, currentCom
         <div className="flex items-center gap-3">
           <Egg className="size-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">Choose Your Pets</h1>
+            <h1 className="text-lg font-semibold">Choose Your 2140 Pet</h1>
             <p className="text-xs text-muted-foreground">Select a companion to care for</p>
           </div>
         </div>

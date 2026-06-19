@@ -103,7 +103,7 @@ export interface StartIncubationResult {
  * Modes:
  * - 'start': Normal start, no other Pets incubating
  * - 'restart': Restart same Pets (already incubating), resets task progress
- * - 'switch': Stop another Pets first, then start this one
+ * - 'switch': Stop another 2140 Pet first, then start this one
  * 
  * Requirements:
  * - Pets must be in egg stage
@@ -388,7 +388,7 @@ export function useStopIncubation({
       }
 
       if (companion.progressionState !== 'incubating') {
-        throw new Error('This Pets is not incubating');
+        throw new Error('This 2140 Pet is not incubating');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -519,11 +519,11 @@ export function useStartEvolution({
       }
 
       if (companion.stage !== 'baby') {
-        throw new Error('Only baby Petss can evolve');
+        throw new Error('Only baby 2140 Pets can evolve');
       }
 
       if (companion.progressionState === 'evolving') {
-        throw new Error('This Pets is already evolving');
+        throw new Error('This 2140 Pet is already evolving');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -669,7 +669,7 @@ export function useStopEvolution({
       }
 
       if (companion.progressionState !== 'evolving') {
-        throw new Error('This Pets is not evolving');
+        throw new Error('This 2140 Pet is not evolving');
       }
 
       // ─── Ensure Canonical Before Action ───

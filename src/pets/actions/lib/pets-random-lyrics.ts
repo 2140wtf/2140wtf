@@ -12,15 +12,15 @@ export interface LyricsEntry {
 }
 
 /**
- * Collection of placeholder lyrics for singing to a Pets.
+ * Collection of placeholder lyrics for singing to a 2140 Pet.
  * Simple, fun, and appropriate for all ages.
  */
 export const PETS_LYRICS: LyricsEntry[] = [
   {
     id: 'lullaby-1',
-    title: 'Pets Lullaby',
+    title: '2140 Pet Lullaby',
     lines: [
-      'Little Pets, close your eyes,',
+      'Little 2140 Pet, close your eyes,',
       'Dream of stars up in the skies.',
       'Safe and warm, you drift away,',
       "We'll play again another day.",
@@ -28,9 +28,9 @@ export const PETS_LYRICS: LyricsEntry[] = [
   },
   {
     id: 'happy-song-1',
-    title: 'Happy Pets Song',
+    title: 'Happy 2140 Pet Song',
     lines: [
-      'Pets, Pets, jump around!',
+      '2140 Pet, 2140 Pet, jump around!',
       "You're the happiest friend I've found!",
       'Dancing, playing, full of cheer,',
       "I'm so glad that you are here!",

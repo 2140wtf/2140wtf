@@ -112,7 +112,7 @@ export function ShovelButton({ drag, guideActionGlow }: ShovelButtonProps) {
       glowHex="#78716c"
       onClick={() => {
         if (!drag.anyPoop) {
-          toast({ title: 'Nothing to clean!', description: 'Your Pets hasn\'t made a mess.' });
+          toast({ title: 'Nothing to clean!', description: 'Your 2140 Pet hasn\'t made a mess.' });
         }
       }}
       onMouseDown={drag.anyPoop ? drag.onMouseDown : undefined}
