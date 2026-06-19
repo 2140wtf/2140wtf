@@ -3,11 +3,12 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { getExtraKindDef } from '@/lib/extraKinds';
 import { sidebarItemIcon } from '@/lib/sidebarItems';
 
-import { LandingPage } from './LandingPage';
+import Index from './Index';
 
 // All other pages are lazy-loaded so they don't bloat the index chunk.
 // HomePage renders exactly ONE page at a time, so only that page's chunk is loaded.
 const PAGE_LOADERS: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
+  'feed': lazy(() => import('./Index').then(m => ({ default: m.default }))),
   'notifications': lazy(() => import('./NotificationsPage').then(m => ({ default: m.NotificationsPage }))),
   'search': lazy(() => import('./SearchPage').then(m => ({ default: m.SearchPage }))),
   'trends': lazy(() => import('./TrendsPage').then(m => ({ default: m.TrendsPage }))),
@@ -32,17 +33,14 @@ const LazyKindFeedPage = lazy(() => import('./KindFeedPage').then(m => ({ defaul
 
 function KindFeedWrapper({ itemId }: { itemId: string }) {
   const def = getExtraKindDef(itemId);
-  if (!def) return <LandingPage />;
+  if (!def) return <Index />;
   return <LazyKindFeedPage kind={def.kind} title={def.label} icon={sidebarItemIcon(itemId, 'size-5')} />;
 }
 
 /**
  * Renders the page component configured as the homepage.
- * Falls back to the 2140 branded landing page if the configured homePage is
- * invalid or the default "feed".
- *
- * This component is rendered inside MainLayout's Suspense boundary,
- * so lazy components will show the page skeleton while loading.
+ * Defaults to the Nostr feed (Index). Any invalid or unmapped homePage config
+ * also falls back to the feed.
  */
 export function HomePage() {
   const { config } = useAppContext();
@@ -59,6 +57,6 @@ export function HomePage() {
     return <PageComponent />;
   }
 
-  // Default: 2140 branded landing page
-  return <LandingPage />;
+  // Default: Nostr feed
+  return <Index />;
 }
