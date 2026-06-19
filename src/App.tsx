@@ -42,7 +42,7 @@ const queryClient = new QueryClient({
 
 /** Hardcoded fallback values. Always provides every required field. */
 const hardcodedConfig: AppConfig = {
-  appName: "Ditto",
+  appName: "2140.wtf",
   appId: "ditto",
   shareOrigin: import.meta.env.VITE_SHARE_ORIGIN || undefined,
   homePage: "feed",
