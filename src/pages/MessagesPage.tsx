@@ -42,7 +42,10 @@ export function MessagesPage() {
     joinFromWelcome,
   } = useGroupChatContext();
   const { unreadGroups } = useGroupChatHasUnread();
-  const unreadGroupIds = unreadGroups.map(({ group }) => group.nostrGroupId);
+  const unreadGroupCounts = useMemo(
+    () => Object.fromEntries(unreadGroups.map(({ group, unreadCount }) => [group.nostrGroupId, unreadCount])),
+    [unreadGroups],
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
 
@@ -171,7 +174,7 @@ export function MessagesPage() {
                 <GroupList
                   groups={groups}
                   selectedGroupId={null}
-                  unreadGroupIds={unreadGroupIds}
+                  unreadCounts={unreadGroupCounts}
                   onSelectGroup={(groupId) => navigate(`/groups?g=${encodeURIComponent(groupId)}`)}
                   onCreateClick={() => setCreateOpen(true)}
                   className="border-r-0 bg-transparent"

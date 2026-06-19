@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { nip19 } from 'nostr-tools';
-import { Crown, UserMinus, Shield, Ban, UserPlus } from 'lucide-react';
+import { Crown, UserMinus, Shield, Ban, UserPlus, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/getDisplayName';
 import type { GroupChatGroup } from '@/lib/groupChatService';
@@ -25,7 +26,8 @@ function MemberAvatar({ pubkey }: { pubkey: string }) {
   const metadata = author.data?.metadata;
   const displayName = getDisplayName(metadata) || pubkey.slice(0, 8);
   return (
-    <Avatar className="size-6 shrink-0">
+    <Avatar className="size-7 shrink-0">
+      <AvatarImage src={metadata?.picture} alt={displayName} />
       <AvatarFallback className="bg-muted text-[10px]">
         {displayName[0]?.toUpperCase()}
       </AvatarFallback>
@@ -93,13 +95,18 @@ export function GroupMemberPanel({
       {isAdmin && (
         <div className="p-3 border-b space-y-2">
           <div className="flex gap-1.5">
-            <Input
-              value={invitePubkey}
-              onChange={(e) => setInvitePubkey(e.target.value)}
-              placeholder="npub or hex pubkey"
-              className="h-8 text-xs"
-              onKeyDown={(e) => e.key === 'Enter' && void handleInvite()}
-            />
+            <div className="relative flex-1">
+              <Input
+                value={invitePubkey}
+                onChange={(e) => setInvitePubkey(e.target.value)}
+                placeholder="npub or hex pubkey"
+                className="h-8 text-xs pr-8"
+                onKeyDown={(e) => e.key === 'Enter' && void handleInvite()}
+              />
+              {isValidInvite && (
+                <Check className="absolute right-2 top-1/2 -translate-y-1/2 size-3.5 text-success" />
+              )}
+            </div>
             <Button
               size="icon"
               className="size-8 shrink-0"
@@ -114,7 +121,7 @@ export function GroupMemberPanel({
       )}
 
       <ScrollArea className="flex-1">
-        <div className="p-1.5 space-y-0.5">
+        <div className="p-2 space-y-0.5">
           {members.map((member) => {
             const isSelf = member.pubkey === currentUserPubkey;
             return (
@@ -124,18 +131,29 @@ export function GroupMemberPanel({
               >
                 <MemberAvatar pubkey={member.pubkey} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">
-                    {isSelf ? 'You' : <MemberName pubkey={member.pubkey} fallback={member.pubkey.slice(0, 8)} />}
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-xs font-medium truncate">
+                      {isSelf ? 'You' : <MemberName pubkey={member.pubkey} fallback={member.pubkey.slice(0, 8)} />}
+                    </div>
+                    {member.role === 'admin' && (
+                      <Badge
+                        variant="secondary"
+                        className="px-1 py-0 h-4 text-[9px] gap-0.5 bg-amber-500/10 text-amber-600 hover:bg-amber-500/10"
+                      >
+                        <Crown className="size-2.5" />
+                        Admin
+                      </Badge>
+                    )}
+                    {isSelf && member.role !== 'admin' && (
+                      <Badge variant="secondary" className="px-1 py-0 h-4 text-[9px]">
+                        You
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate font-mono">
                     {member.pubkey.slice(0, 10)}…
                   </div>
                 </div>
-                {member.role === 'admin' && (
-                  <span title="Admin" className="shrink-0">
-                    <Crown className="size-3 text-amber-500" aria-label="Admin" />
-                  </span>
-                )}
                 {isAdmin && !isSelf && (
                   <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100">
                     {member.role !== 'admin' && (
