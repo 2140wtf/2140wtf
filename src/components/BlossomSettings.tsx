@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { APP_BLOSSOM_SERVERS } from '@/lib/appBlossom';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ export function BlossomSettings() {
   const { config, updateConfig } = useAppContext();
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const publishBlossomListEnabled = isEnabled('publishBlossomList');
   const { toast } = useToast();
 
   const [servers, setServers] = useState<string[]>(config.blossomServerMetadata.servers);
@@ -113,6 +116,13 @@ export function BlossomSettings() {
   };
 
   const publishKind10063 = (serverList: string[]) => {
+    if (!publishBlossomListEnabled) {
+      toast({
+        title: 'Blossom publishing disabled',
+        description: 'Turn on “Publish Blossom servers” in Settings → Privacy & Publishing to sync your servers.',
+      });
+      return;
+    }
     const tags = serverList.map((url) => ['server', url]);
 
     publishEvent(
