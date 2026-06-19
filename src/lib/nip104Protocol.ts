@@ -17,9 +17,9 @@ import {
   getPublicKey,
   generateSecretKey,
   finalizeEvent,
-  verifyEvent,
   nip44,
 } from 'nostr-tools';
+import { verifyEvent } from 'nostr-tools/pure';
 import { isNostrId } from './nostrId';
 import type { UnsignedEvent } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -229,7 +229,7 @@ export async function unwrapWelcomeEvent(
 
   let sigValid = false;
   try {
-    sigValid = verifyEvent(giftWrapEvent as Parameters<typeof verifyEvent>[0]);
+    sigValid = verifyEvent(giftWrapEvent);
   } catch {
     sigValid = false;
   }
@@ -249,7 +249,7 @@ export async function unwrapWelcomeEvent(
 
     let innerSigValid = false;
     try {
-      innerSigValid = verifyEvent(ev as Parameters<typeof verifyEvent>[0]);
+      innerSigValid = verifyEvent(ev);
     } catch {
       innerSigValid = false;
     }
@@ -314,7 +314,7 @@ export function parseApplicationMessage(json: string): MLSApplicationMessage | n
 
     let sigValid = false;
     try {
-      sigValid = verifyEvent(ev as Parameters<typeof verifyEvent>[0]);
+      sigValid = verifyEvent(ev);
     } catch {
       sigValid = false;
     }

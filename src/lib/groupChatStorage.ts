@@ -42,6 +42,8 @@ export interface StoredGroup {
 export interface StoredGroupSecrets {
   exporterSecret: string;
   rootSecret?: string;
+  /** Map of epoch -> rootSecret for epochs the member has received via Welcome. */
+  epochRootSecrets?: Record<number, string>;
 }
 
 function key(userPubkey: string, ...parts: string[]): string {
@@ -109,9 +111,19 @@ function validateStoredGroupSecrets(s: unknown): StoredGroupSecrets | null {
   const secrets = s as Partial<StoredGroupSecrets>;
   if (!isHex64(secrets.exporterSecret)) return null;
   if (secrets.rootSecret !== undefined && !isHex64(secrets.rootSecret)) return null;
+  const epochRootSecrets: Record<number, string> = {};
+  if (secrets.epochRootSecrets && typeof secrets.epochRootSecrets === 'object') {
+    for (const [epoch, root] of Object.entries(secrets.epochRootSecrets)) {
+      const epochNum = Number(epoch);
+      if (Number.isFinite(epochNum) && isHex64(root)) {
+        epochRootSecrets[epochNum] = root;
+      }
+    }
+  }
   return {
     exporterSecret: secrets.exporterSecret,
     rootSecret: secrets.rootSecret,
+    ...(Object.keys(epochRootSecrets).length > 0 ? { epochRootSecrets } : {}),
   };
 }
 
