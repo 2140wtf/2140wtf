@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 /**
  * usePetsItemUse Hook
  * 
@@ -23,7 +24,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -116,7 +117,7 @@ interface ItemCooldownEntry {
 export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItemUseResult {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
   
   // Fetch profile if not provided
@@ -167,7 +168,7 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       return null;
     }
     
-    const events = await nostr.query([{
+    const events = await queryPetsRelay(nostr, [{
       kinds: [KIND_PETS_STATE],
       authors: [user.pubkey],
       '#d': [profile.currentCompanion],

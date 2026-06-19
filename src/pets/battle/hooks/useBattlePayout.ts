@@ -3,9 +3,9 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import {
   KIND_BLOBBONAUT_PROFILE,
   parseBlobbonautEvent,
@@ -38,7 +38,7 @@ export function useBattlePayout(
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation<BattlePayoutResult, Error, BattlePayoutRequest>({
     mutationFn: async ({ amount, mode }) => {
@@ -50,7 +50,7 @@ export function useBattlePayout(
         throw new Error('Real sats payout is coming soon.');
       }
 
-      const prev = await fetchFreshEvent(nostr, {
+      const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
         authors: [user.pubkey],
       });

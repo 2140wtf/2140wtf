@@ -11,7 +11,7 @@ import { Download, Share2, Loader2, X } from 'lucide-react';
 
 import { PetsPolaroidCard } from './PetsPolaroidCard';
 import { useUploadFile } from '@/hooks/useUploadFile';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
@@ -48,7 +48,7 @@ export function PetsPhotoModal({
 
   const { user } = useCurrentUser();
   const { mutateAsync: uploadFile } = useUploadFile();
-  const { mutateAsync: createEvent } = useNostrPublish();
+  const { mutateAsync: createEvent } = usePetsNostrPublish();
 
   const generateImage = useCallback(async (): Promise<string | null> => {
     if (!polaroidRef.current) return null;

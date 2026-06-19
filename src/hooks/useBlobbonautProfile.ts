@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -91,7 +92,7 @@ export function useBlobbonautProfile() {
         '#d': dValues,
       };
       
-      const events = await nostr.query([filter], { signal });
+      const events = await queryPetsRelay(nostr, [filter], { signal });
       
       // Filter to valid events
       const validEvents = events.filter(isValidBlobbonautEvent);

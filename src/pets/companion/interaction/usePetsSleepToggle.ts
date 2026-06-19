@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 /**
  * usePetsSleepToggle — Standalone sleep/wake toggle for the companion.
  *
@@ -15,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -39,7 +40,7 @@ export interface UsePetsSleepToggleResult {
 export function usePetsSleepToggle(): UsePetsSleepToggleResult {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
   const { profile } = useBlobbonautProfile();
 
@@ -52,7 +53,7 @@ export function usePetsSleepToggle(): UsePetsSleepToggleResult {
     pubkey: string,
     dTag: string,
   ): Promise<PetsCompanion | null> => {
-    const events = await nostr.query([{
+    const events = await queryPetsRelay(nostr, [{
       kinds: [KIND_PETS_STATE],
       authors: [pubkey],
       '#d': [dTag],

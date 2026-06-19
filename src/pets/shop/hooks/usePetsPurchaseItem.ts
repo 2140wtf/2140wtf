@@ -2,8 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
 
 import type { PurchaseRequest } from '../types/shop.types';
@@ -27,7 +27,7 @@ import { getShopItemById } from '../lib/pets-shop-items';
 export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -83,7 +83,7 @@ export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
       const storageValues = createStorageTags(newStorage).map(tag => tag[1]);
       
       // Fetch fresh profile from relays to avoid stale-read overwrites
-      const prev = await fetchFreshEvent(nostr, {
+      const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
         authors: [user.pubkey],
       });

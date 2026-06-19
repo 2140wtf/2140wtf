@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 /**
  * usePetsCareActivity - Hook for registering care activity and updating streaks
  * 
@@ -22,7 +23,7 @@ import { useMutation } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import {
@@ -66,7 +67,7 @@ export function usePetsCareActivity({
 }: UsePetsCareActivityParams) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   
   // Track if we've already registered activity this session to avoid duplicate calls
   // This is a performance optimization - the actual idempotency is handled by day comparison
@@ -83,7 +84,7 @@ export function usePetsCareActivity({
       }
 
       // Fetch fresh companion from relays (read-modify-write pattern)
-      const freshEvents = await nostr.query([{
+      const freshEvents = await queryPetsRelay(nostr, [{
         kinds: [KIND_PETS_STATE],
         authors: [user.pubkey],
         '#d': [companion.d],
