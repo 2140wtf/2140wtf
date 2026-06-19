@@ -4,6 +4,7 @@ import { useNostr } from '@nostrify/react';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 interface PublishStatusParams {
   /** The status text. Empty string clears the status. */
@@ -23,10 +24,12 @@ export function usePublishStatus() {
   const { nostr } = useNostr();
   const { mutateAsync: createEvent } = useNostrPublish();
   const { user } = useCurrentUser();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async ({ status, url }: PublishStatusParams) => {
       if (!user?.pubkey) return;
+      if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       // Fetch the previous event to preserve published_at (addressable event convention)
       const prev = await fetchFreshEvent(nostr, {

@@ -15,6 +15,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
 
 const ART_KIND = 30402;
@@ -43,6 +44,7 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
@@ -105,6 +107,13 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
 
   const handleSubmit = async () => {
     if (!canPublish || !user) return;
+    if (!isEnabled('marketplace')) {
+      toast({
+        title: 'Marketplace publishing disabled',
+        description: 'Turn on “Marketplace listings” in Settings → Privacy & Publishing to publish art listings.',
+      });
+      return;
+    }
 
     const priceValue = price.trim();
     if (priceValue && isNaN(Number(priceValue))) {

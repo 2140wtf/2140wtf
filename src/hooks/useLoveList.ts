@@ -5,6 +5,7 @@ import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { useNostrStorage } from './useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { isNostrId } from '@/lib/nostrId';
 import { getStorageKey } from '@/lib/storageKey';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -93,6 +94,7 @@ export function useLoveList() {
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const { store } = useNostrStorage();
   const cacheKey = getLoveCacheKey(config.appId);
 
@@ -138,6 +140,7 @@ export function useLoveList() {
   /** Shared read-modify-write cycle for add/remove. */
   async function mutateLoveList(targetPubkey: string, action: 'add' | 'remove'): Promise<void> {
     if (!user) throw new Error('User is not logged in');
+    if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
     // ① Fetch the freshest kind 15683 (local store acts as a data-loss floor).
     const prev = await fetchFreshEvent(

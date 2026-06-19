@@ -15,6 +15,7 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { resizeImage } from '@/lib/resizeImage';
 import { extractHashtags } from '@/lib/hashtag';
 import { cn } from '@/lib/utils';
@@ -94,6 +95,7 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { config } = useAppContext();
+  const { isEnabled } = usePublishPreferences();
   const imageQuality = config.imageQuality;
 
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -187,6 +189,13 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
 
   const handleSubmit = async () => {
     if (!canPublish || !user) return;
+    if (!isEnabled('photos')) {
+      toast({
+        title: 'Photos publishing disabled',
+        description: 'Turn on “Photos” in Settings → Privacy & Publishing to publish photos.',
+      });
+      return;
+    }
 
     try {
       const tags: string[][] = [];

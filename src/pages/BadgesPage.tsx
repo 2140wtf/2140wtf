@@ -77,6 +77,7 @@ import { useProfileBadges } from "@/hooks/useProfileBadges";
 import { useRemoveBadge } from "@/hooks/useRemoveBadge";
 import { useReorderBadges } from "@/hooks/useReorderBadges";
 import { useToast } from "@/hooks/useToast";
+import { usePublishPreferences } from "@/hooks/usePublishPreferences";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { BADGE_AWARD_KIND, BADGE_DEFINITION_KIND, getBadgeATag } from "@/lib/badgeUtils";
 import { deduplicateEvents } from "@/lib/deduplicateEvents";
@@ -763,11 +764,13 @@ function CreatedBadgeRow({
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const [awardOpen, setAwardOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
+      if (!isEnabled('badges')) throw new Error('Badge publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const badgeATag = `${BADGE_DEFINITION_KIND}:${badge.event.pubkey}:${badge.badge.identifier}`;
 
       // Query all award events (kind 8) the user published for this badge
@@ -906,6 +909,7 @@ function EditBadgeForm({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -942,6 +946,10 @@ function EditBadgeForm({
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) return;
+    if (!isEnabled('badges')) {
+      toast({ title: 'Badge publishing disabled', description: 'Turn on “Badge events” in Settings → Privacy & Publishing to update badges.' });
+      return;
+    }
     setIsSaving(true);
     try {
       const newTags: string[][] = [];
@@ -977,6 +985,7 @@ function EditBadgeForm({
     queryClient,
     toast,
     onClose,
+    isEnabled,
   ]);
 
   return (

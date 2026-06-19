@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { useRoadstrEvents } from '@/hooks/useRoadstrEvents';
 import { ROADSTR_EVENT_TYPES } from '@/components/roadstr/roadstrTypes';
@@ -19,6 +20,7 @@ export function RoadstrWidget(): React.JSX.Element {
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [permissionState, setPermissionState] = useState<'idle' | 'loading' | 'denied' | 'error'>('idle');
@@ -69,6 +71,10 @@ export function RoadstrWidget(): React.JSX.Element {
 
   const handleConfirm = useCallback(
     (report: typeof activeReports[number], status: 'still_there' | 'no_longer_there') => {
+      if (!isEnabled('roadstr')) {
+        toast({ title: 'Roadstr publishing disabled', description: 'Turn on “Roadstr check-ins” in Settings → Privacy & Publishing to confirm reports.' });
+        return;
+      }
       const typeLabel = ROADSTR_EVENT_TYPES[report.type].label.toLowerCase();
       const tags = [
         ['e', report.id],
@@ -98,7 +104,7 @@ export function RoadstrWidget(): React.JSX.Element {
         },
       );
     },
-    [publishEvent, toast],
+    [publishEvent, toast, isEnabled],
   );
 
   if (permissionState === 'loading' || isLoading) {

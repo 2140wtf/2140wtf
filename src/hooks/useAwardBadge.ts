@@ -3,6 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { BADGE_AWARD_KIND } from '@/lib/badgeUtils';
 
 /**
@@ -12,10 +13,12 @@ export function useAwardBadge() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async ({ aTag, recipientPubkeys }: { aTag: string; recipientPubkeys: string[] }) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('badges')) throw new Error('Badge publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       if (recipientPubkeys.length === 0) throw new Error('Must specify at least one recipient');
 
       const tags: string[][] = [

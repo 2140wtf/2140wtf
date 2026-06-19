@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import {
   PAYMENT_TARGETS_KIND,
   parsePaymentTargets,
@@ -57,10 +58,12 @@ export function useUpdatePaymentTargets() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async (targets: PaymentTarget[]) => {
       if (!user) throw new Error('You must be logged in.');
+      if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       const prev = await fetchFreshEvent(nostr, {
         kinds: [PAYMENT_TARGETS_KIND],

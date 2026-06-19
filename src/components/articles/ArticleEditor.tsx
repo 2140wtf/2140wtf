@@ -45,6 +45,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useDrafts, type Draft } from '@/hooks/useDrafts';
 import { usePublishedArticles } from '@/hooks/usePublishedArticles';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { saveDraft as saveLocalDraft, deleteDraftBySlug, deleteLocalDraftById, getLocalDrafts } from '@/lib/localDrafts';
@@ -70,6 +71,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { drafts: relayDrafts, isLoading: isDraftsLoading, saveDraft: saveRelayDraft, isSaving: isSyncingToRelay, deleteDraft: deleteRelayDraft, isDeleting } = useDrafts();
   const { articles: publishedArticles } = usePublishedArticles();
+  const { isEnabled } = usePublishPreferences();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -333,6 +335,13 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
   /** Perform the actual publish (called directly or after overwrite confirmation). */
   const doPublish = useCallback(() => {
     if (!user) return;
+    if (!isEnabled('articles')) {
+      toast({
+        title: 'Articles publishing disabled',
+        description: 'Turn on “Articles” in Settings → Privacy & Publishing to publish articles.',
+      });
+      return;
+    }
 
     // Use original published_at when editing, current time for new articles
     const publishedAtTimestamp =
@@ -407,6 +416,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
     isEditMode,
     originalPublishedAt,
     navigate,
+    isEnabled,
   ]);
 
   const handlePublish = useCallback(async () => {
