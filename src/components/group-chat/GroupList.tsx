@@ -1,5 +1,4 @@
-import { Users, Plus, MessageSquarePlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { MessageSquarePlus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
@@ -11,7 +10,6 @@ interface GroupListProps {
   selectedGroupId: string | null;
   unreadCounts?: Record<string, number>;
   onSelectGroup: (groupId: string) => void;
-  onCreateClick: () => void;
   className?: string;
 }
 
@@ -20,41 +18,21 @@ export function GroupList({
   selectedGroupId,
   unreadCounts = {},
   onSelectGroup,
-  onCreateClick,
   className,
 }: GroupListProps) {
   return (
     <div className={cn('flex flex-col h-full border-r bg-muted/30', className)}>
-      <div className="p-3 border-b flex items-center justify-between">
-        <h2 className="font-semibold text-sm">Private Groups</h2>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          aria-label="Create group"
-          onClick={onCreateClick}
-        >
-          <Plus className="size-4" />
-        </Button>
-      </div>
-
       <ScrollArea className="flex-1">
         {groups.length === 0 ? (
           <div className="p-4">
-            <div className="border border-dashed rounded-xl p-5 text-center space-y-3 bg-background/50">
+            <div className="border border-dashed rounded-xl p-5 text-center space-y-2 bg-background/50">
               <div className="mx-auto size-10 rounded-full bg-muted flex items-center justify-center">
                 <MessageSquarePlus className="size-5 text-muted-foreground" />
               </div>
-              <div>
-                <p className="text-sm font-medium">No groups yet</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Create an encrypted group or join one with a Welcome event.
-                </p>
-              </div>
-              <Button size="sm" variant="outline" className="w-full" onClick={onCreateClick}>
-                <Users className="size-3.5 mr-1.5" />
-                Create group
-              </Button>
+              <p className="text-sm font-medium">No groups yet</p>
+              <p className="text-xs text-muted-foreground">
+                Create or join a group to start chatting.
+              </p>
             </div>
           </div>
         ) : (
