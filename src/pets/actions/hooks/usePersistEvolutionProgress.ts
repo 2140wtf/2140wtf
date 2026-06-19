@@ -69,7 +69,7 @@ export function usePersistEvolutionProgress(
       });
 
       if (!prev) {
-        console.warn('[PersistEvolution] No 2140 Pet event found for d-tag:', companionD);
+        console.warn('[PersistEvolution] No 2140.wtf Pet event found for d-tag:', companionD);
         return;
       }
 

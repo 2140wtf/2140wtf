@@ -157,8 +157,8 @@ export function usePetsSleepToggle(): UsePetsSleepToggleResult {
       toast({
         title: isCurrentlySleeping ? 'Woke up!' : 'Resting...',
         description: isCurrentlySleeping
-          ? 'Your 2140 Pet is now awake and active!'
-          : 'Your 2140 Pet is taking a rest.',
+          ? 'Your 2140.wtf Pet is now awake and active!'
+          : 'Your 2140.wtf Pet is taking a rest.',
       });
 
       // Track daily mission progress (only when putting to sleep)
