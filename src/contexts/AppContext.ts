@@ -241,6 +241,8 @@ export interface AppConfig {
   feedSettings: FeedSettings;
   /** Ordered list of sidebar item IDs (built-in + extra-kind). */
   sidebarOrder: string[];
+  /** Version counter used to reset sidebarOrder to the latest default when it changes. */
+  sidebarOrderVersion: number;
   /** NIP-85 stats pubkey source (hex format) */
   nip85StatsPubkey: string;
   /**

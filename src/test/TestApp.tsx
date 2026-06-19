@@ -98,6 +98,7 @@ export function TestApp({ children }: TestAppProps) {
       feedIncludeGroups: false,
     },
     sidebarOrder: [],
+    sidebarOrderVersion: 1,
     nip85StatsPubkey:
       "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
     blossomServerMetadata: {
