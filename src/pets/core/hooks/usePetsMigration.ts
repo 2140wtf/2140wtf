@@ -7,22 +7,22 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import {
-  KIND_BLOBBI_STATE,
+  KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
-  BLOBBI_ECOSYSTEM_NAMESPACE,
+  PETS_ECOSYSTEM_NAMESPACE,
   buildMigrationTags,
   deriveMigrationPetId,
-  getCanonicalBlobbiD,
-  isValidBlobbiEvent,
+  getCanonicalPetsD,
+  isValidPetsEvent,
   migratePetInHas,
   updateBlobbonautTags,
-  parseBlobbiEvent,
+  parsePetsEvent,
   parseStorageTags,
   findCanonicalEquivalent,
-  type BlobbiCompanion,
+  type PetsCompanion,
   type BlobbonautProfile,
   type StorageItem,
-} from '../lib/blobbi';
+} from '../lib/pets';
 
 import { fetchFreshBlobbonautProfile } from '../lib/fetchFreshBlobbonautProfile';
 
@@ -32,10 +32,10 @@ import { fetchFreshBlobbonautProfile } from '../lib/fetchFreshBlobbonautProfile'
 export interface MigrationResult {
   /** The new canonical d-tag */
   canonicalD: string;
-  /** The published canonical Blobbi event */
+  /** The published canonical Pets event */
   event: NostrEvent;
-  /** The parsed canonical BlobbiCompanion */
-  companion: BlobbiCompanion;
+  /** The parsed canonical PetsCompanion */
+  companion: PetsCompanion;
   /** The updated profile event */
   profileEvent: NostrEvent;
   /** The updated profile tags (canonical has, current_companion, etc.) */
@@ -49,7 +49,7 @@ export interface MigrationResult {
  */
 export interface EnsureCanonicalOptions {
   /** The companion to check/migrate */
-  companion: BlobbiCompanion;
+  companion: PetsCompanion;
   /** The user's profile */
   profile: BlobbonautProfile;
   /** Callback to update the profile event in query cache */
@@ -61,13 +61,13 @@ export interface EnsureCanonicalOptions {
 }
 
 /**
- * Result of ensureCanonicalBlobbiBeforeAction.
+ * Result of ensureCanonicalPetsBeforeAction.
  */
 export interface EnsureCanonicalResult {
   /** Whether the companion was migrated */
   wasMigrated: boolean;
   /** The canonical companion (either the original or the migrated one) */
-  companion: BlobbiCompanion;
+  companion: PetsCompanion;
   /** The canonical event tags to use for the action */
   allTags: string[][];
   /** The event content to use */
@@ -91,17 +91,17 @@ export interface EnsureCanonicalResult {
 }
 
 /**
- * Hook providing centralized migration logic for Blobbi companions.
+ * Hook providing centralized migration logic for Pets companions.
  * 
- * This hook should be used by all action handlers to ensure legacy Blobbis
+ * This hook should be used by all action handlers to ensure legacy Petss
  * are automatically migrated before any interaction.
  * 
  * Usage:
  * ```ts
- * const { ensureCanonicalBlobbiBeforeAction } = useBlobbiMigration();
+ * const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
  * 
  * const handleFeed = async () => {
- *   const result = await ensureCanonicalBlobbiBeforeAction({
+ *   const result = await ensureCanonicalPetsBeforeAction({
  *     companion,
  *     profile,
  *     updateProfileEvent,
@@ -112,18 +112,18 @@ export interface EnsureCanonicalResult {
  *   if (!result) return; // Migration failed
  *   
  *   // Continue with the action using result.companion and result.allTags
- *   const newTags = updateBlobbiTags(result.allTags, { ... });
+ *   const newTags = updatePetsTags(result.allTags, { ... });
  *   // ... publish event
  * };
  * ```
  */
-export function useBlobbiMigration() {
+export function usePetsMigration() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   
   /**
-   * Migrate a legacy Blobbi to canonical format.
+   * Migrate a legacy Pets to canonical format.
    * 
    * This function:
    * 1. Generates a canonical d-tag
@@ -133,7 +133,7 @@ export function useBlobbiMigration() {
    * 5. Updates the Blobbonaut profile (kind 11125)
    * 6. Updates local state (query cache, localStorage)
    */
-  const migrateLegacyBlobbi = useCallback(async (
+  const migrateLegacyPets = useCallback(async (
     options: EnsureCanonicalOptions
   ): Promise<MigrationResult | null> => {
     const {
@@ -145,33 +145,33 @@ export function useBlobbiMigration() {
     } = options;
     
     if (!user?.pubkey) {
-      console.error('[Blobbi Migration] No user pubkey');
+      console.error('[Pets Migration] No user pubkey');
       return null;
     }
     
-    console.log('[Blobbi Migration] Starting migration for:', companion.d);
+    console.log('[Pets Migration] Starting migration for:', companion.d);
     
     try {
       // Derive deterministic canonical d-tag from legacy identity.
       // Same (pubkey, legacyD) always produces the same canonicalD, making
       // the entire migration chain (d → seed → visuals) stable.
       const newPetId = deriveMigrationPetId(user.pubkey, companion.d);
-      const canonicalD = getCanonicalBlobbiD(user.pubkey, newPetId);
+      const canonicalD = getCanonicalPetsD(user.pubkey, newPetId);
       
       // Build migration tags (preserves name, stage, stats, generates seed if missing)
       const migrationTags = buildMigrationTags(companion.event, newPetId, user.pubkey);
       
-      console.log('[Blobbi Migration] Publishing canonical event with d:', canonicalD);
+      console.log('[Pets Migration] Publishing canonical event with d:', canonicalD);
       
-      // Publish the canonical Blobbi state
+      // Publish the canonical Pets state
       const canonicalEvent = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
-        content: companion.event.content || `${companion.name} is a ${companion.stage} Blobbi.`,
+        kind: KIND_PETS_STATE,
+        content: companion.event.content || `${companion.name} is a ${companion.stage} Pets.`,
         tags: migrationTags,
       });
       
       // Parse the new event to get the canonical companion
-      const canonicalCompanion = parseBlobbiEvent(canonicalEvent);
+      const canonicalCompanion = parsePetsEvent(canonicalEvent);
       if (!canonicalCompanion) {
         throw new Error('Failed to parse migrated event');
       }
@@ -190,7 +190,7 @@ export function useBlobbiMigration() {
       
       const profileTags = updateBlobbonautTags(profile.allTags, profileUpdates);
       
-      console.log('[Blobbi Migration] Publishing updated profile');
+      console.log('[Pets Migration] Publishing updated profile');
       
       const profileEvent = await publishEvent({
         kind: KIND_BLOBBONAUT_PROFILE,
@@ -206,7 +206,7 @@ export function useBlobbiMigration() {
       
       // Update localStorage selection if it was pointing to legacy d
       if (updateStoredSelectedD) {
-        console.log('[Blobbi Migration] Updating localStorage selection:', canonicalD);
+        console.log('[Pets Migration] Updating localStorage selection:', canonicalD);
         updateStoredSelectedD(canonicalD);
       }
       
@@ -215,7 +215,7 @@ export function useBlobbiMigration() {
         description: `${companion.name} has been migrated to the new format.`,
       });
       
-      console.log('[Blobbi Migration] Migration complete:', {
+      console.log('[Pets Migration] Migration complete:', {
         legacyD: companion.d,
         canonicalD,
       });
@@ -233,7 +233,7 @@ export function useBlobbiMigration() {
         profileStorage: migratedStorage,
       };
     } catch (error) {
-      console.error('[Blobbi Migration] Migration failed:', error);
+      console.error('[Pets Migration] Migration failed:', error);
       toast({
         title: 'Migration failed',
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -250,37 +250,37 @@ export function useBlobbiMigration() {
   const fetchFreshCompanion = useCallback(async (
     pubkey: string,
     dTag: string,
-  ): Promise<BlobbiCompanion | null> => {
+  ): Promise<PetsCompanion | null> => {
     const events = await nostr.query([{
-      kinds: [KIND_BLOBBI_STATE],
+      kinds: [KIND_PETS_STATE],
       authors: [pubkey],
       '#d': [dTag],
     }]);
 
     const validEvents = events
-      .filter(isValidBlobbiEvent)
+      .filter(isValidPetsEvent)
       .sort((a, b) => b.created_at - a.created_at);
 
     if (validEvents.length === 0) return null;
-    return parseBlobbiEvent(validEvents[0]) ?? null;
+    return parsePetsEvent(validEvents[0]) ?? null;
   }, [nostr]);
 
   /**
    * Fetch all companions for a user from relays, parse and deduplicate by d-tag.
-   * Used to find existing canonical equivalents before migrating a legacy Blobbi.
+   * Used to find existing canonical equivalents before migrating a legacy Pets.
    */
   const fetchAllCompanions = useCallback(async (
     pubkey: string,
-  ): Promise<BlobbiCompanion[]> => {
+  ): Promise<PetsCompanion[]> => {
     const events = await nostr.query([{
-      kinds: [KIND_BLOBBI_STATE],
+      kinds: [KIND_PETS_STATE],
       authors: [pubkey],
-      '#b': [BLOBBI_ECOSYSTEM_NAMESPACE],
+      '#b': [PETS_ECOSYSTEM_NAMESPACE],
     }]);
 
-    // Deduplicate by d-tag (newest wins), same logic as useBlobbisCollection
+    // Deduplicate by d-tag (newest wins), same logic as usePetssCollection
     const eventsByD = new Map<string, NostrEvent>();
-    for (const event of events.filter(isValidBlobbiEvent)) {
+    for (const event of events.filter(isValidPetsEvent)) {
       const dTag = event.tags.find(([name]) => name === 'd')?.[1];
       if (!dTag) continue;
       const existing = eventsByD.get(dTag);
@@ -289,16 +289,16 @@ export function useBlobbiMigration() {
       }
     }
 
-    const companions: BlobbiCompanion[] = [];
+    const companions: PetsCompanion[] = [];
     for (const event of eventsByD.values()) {
-      const parsed = parseBlobbiEvent(event);
+      const parsed = parsePetsEvent(event);
       if (parsed) companions.push(parsed);
     }
     return companions;
   }, [nostr]);
 
   /**
-   * Ensure a Blobbi is in canonical format before performing an action.
+   * Ensure a Pets is in canonical format before performing an action.
    * 
    * CRITICAL: This fetches fresh data from relays (read-modify-write pattern)
    * instead of using potentially stale cache data. This prevents state resets
@@ -306,21 +306,21 @@ export function useBlobbiMigration() {
    * 
    * If the companion is legacy, it checks for an existing canonical equivalent
    * (by normalized name) before migrating. This prevents creating duplicate
-   * canonical events when interacting with a legacy Blobbi multiple times.
+   * canonical events when interacting with a legacy Pets multiple times.
    * 
    * Returns the canonical companion to use for the action.
    * 
    * Flow:
    * 1. Fetch fresh companion + profile from relays
-   * 2. Check if Blobbi is legacy
+   * 2. Check if Pets is legacy
    * 3. If legacy: look for existing canonical equivalent by name
    * 4. If found: reuse it (no migration needed)
    * 5. If not found: migrate to canonical format
-   * 6. Return the resolved canonical Blobbi with fresh data
+   * 6. Return the resolved canonical Pets with fresh data
    * 
    * All interaction handlers should call this before publishing events.
    */
-  const ensureCanonicalBlobbiBeforeAction = useCallback(async (
+  const ensureCanonicalPetsBeforeAction = useCallback(async (
     options: EnsureCanonicalOptions
   ): Promise<EnsureCanonicalResult | null> => {
     if (!user?.pubkey) return null;
@@ -339,16 +339,16 @@ export function useBlobbiMigration() {
     
     // Check if the companion needs migration
     if (companion.isLegacy) {
-      console.log('[Blobbi Migration] Legacy companion detected, checking for existing canonical equivalent');
+      console.log('[Pets Migration] Legacy companion detected, checking for existing canonical equivalent');
       
       // Check if a canonical equivalent already exists (by migrated_from tag,
       // name+base_color, or name-only fallback). This prevents duplicate migrations
-      // when interacting with a legacy Blobbi that was already migrated.
+      // when interacting with a legacy Pets that was already migrated.
       const allCompanions = await fetchAllCompanions(user.pubkey);
       const existing = findCanonicalEquivalent(companion, allCompanions);
       
       if (existing) {
-        console.log('[Blobbi Migration] Found existing canonical equivalent:', existing.d, '— skipping migration');
+        console.log('[Pets Migration] Found existing canonical equivalent:', existing.d, '— skipping migration');
         
         // Update profile.has and current_companion to point to the canonical version
         // (in case profile still references the legacy d-tag)
@@ -401,11 +401,11 @@ export function useBlobbiMigration() {
         };
       }
       
-      console.log('[Blobbi Migration] No canonical equivalent found, migrating');
+      console.log('[Pets Migration] No canonical equivalent found, migrating');
       
       // Use fresh data in migration options
       const migrationOptions = { ...options, companion, profile };
-      const migrationResult = await migrateLegacyBlobbi(migrationOptions);
+      const migrationResult = await migrateLegacyPets(migrationOptions);
       
       if (!migrationResult) {
         // Migration failed, cannot proceed with action
@@ -436,12 +436,12 @@ export function useBlobbiMigration() {
       profileEvent: profile.event,
       profileStorage: profile.storage,
     };
-  }, [user?.pubkey, nostr, fetchFreshCompanion, fetchAllCompanions, migrateLegacyBlobbi, publishEvent]);
+  }, [user?.pubkey, nostr, fetchFreshCompanion, fetchAllCompanions, migrateLegacyPets, publishEvent]);
   
   return {
-    /** Migrate a legacy Blobbi to canonical format */
-    migrateLegacyBlobbi,
-    /** Ensure a Blobbi is canonical before an action, migrating if necessary */
-    ensureCanonicalBlobbiBeforeAction,
+    /** Migrate a legacy Pets to canonical format */
+    migrateLegacyPets,
+    /** Ensure a Pets is canonical before an action, migrating if necessary */
+    ensureCanonicalPetsBeforeAction,
   };
 }

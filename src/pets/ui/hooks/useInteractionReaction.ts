@@ -1,7 +1,7 @@
 /**
  * useInteractionReaction — Temporary visual reward reactions for care actions.
  *
- * Manages a short-lived reaction that overrides the Blobbi's facial expression
+ * Manages a short-lived reaction that overrides the Pets's facial expression
  * and triggers particle overlays (sparkles, bubbles, hearts) for a fixed
  * duration after a care action succeeds.
  *
@@ -16,7 +16,7 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import type { BlobbiEmotion } from '../lib/emotion-types';
+import type { PetsEmotion } from '../lib/emotion-types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,8 +41,8 @@ interface ActiveReaction {
   type: InteractionReactionType;
   phase: ReactionPhase;
   /** Emotion override for the status reaction system. */
-  emotion: BlobbiEmotion | null;
-  /** CSS class to add to the Blobbi animation container. */
+  emotion: PetsEmotion | null;
+  /** CSS class to add to the Pets animation container. */
   bodyAnimation: string | null;
   /** Whether to show sparkle particles. */
   sparkles: boolean;
@@ -55,7 +55,7 @@ interface ActiveReaction {
 /** Public state returned by the hook. */
 export interface InteractionReactionState {
   /** Current emotion override (null = no override, status system drives). */
-  emotionOverride: BlobbiEmotion | null;
+  emotionOverride: PetsEmotion | null;
   /** CSS animation class for the body container. */
   bodyAnimation: string | null;
   /** Show sparkle overlay. */
@@ -139,7 +139,7 @@ function buildReaction(type: InteractionReactionType, phase: ReactionPhase): Act
       };
 
     case 'clean':
-      // Sparkles around Blobbi
+      // Sparkles around Pets
       return {
         type, phase,
         emotion: null,
@@ -149,7 +149,7 @@ function buildReaction(type: InteractionReactionType, phase: ReactionPhase): Act
 
     case 'clean_complete':
       if (phase === 'primary') {
-        // Phase 1: bubbles cover Blobbi
+        // Phase 1: bubbles cover Pets
         return {
           type, phase,
           emotion: null,

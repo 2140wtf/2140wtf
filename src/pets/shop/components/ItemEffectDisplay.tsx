@@ -1,7 +1,7 @@
 /**
  * ItemEffectDisplay
  * 
- * Shared component for displaying item effects consistently across all Blobbi UIs.
+ * Shared component for displaying item effects consistently across all Pets UIs.
  * This is the single source of truth for how item effects are rendered.
  */
 
@@ -81,7 +81,7 @@ function formatStatValue(value: number): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * Displays item effects in a consistent format across all Blobbi UIs.
+ * Displays item effects in a consistent format across all Pets UIs.
  */
 export function ItemEffectDisplay({
   effect,

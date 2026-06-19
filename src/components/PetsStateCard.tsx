@@ -1,43 +1,43 @@
 import { useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { BlobbiStageVisual, type BlobbiLookMode } from '@/blobbi/ui/BlobbiStageVisual';
-import { parseBlobbiEvent } from '@/blobbi/core/lib/blobbi';
-import { calculateProjectedDecay } from '@/blobbi/core/hooks/useProjectedBlobbiState';
-import { useBlobbiInteractions } from '@/blobbi/core/hooks/useBlobbiInteractions';
-import { resolveStatusRecipe, attenuateRecipeForFeed, EMPTY_RECIPE } from '@/blobbi/ui/lib/status-reactions';
-import { buildSleepingRecipe } from '@/blobbi/ui/lib/recipe';
-import { ReactionSparkles, ReactionBubbles } from '@/blobbi/ui/ReactionOverlays';
-import { FloatingSocialHearts } from '@/blobbi/ui/FloatingSocialHearts';
-import type { InteractionReactionState } from '@/blobbi/ui/hooks/useInteractionReaction';
+import { PetsStageVisual, type PetsLookMode } from '@/pets/ui/PetsStageVisual';
+import { parsePetsEvent } from '@/pets/core/lib/pets';
+import { calculateProjectedDecay } from '@/pets/core/hooks/useProjectedPetsState';
+import { usePetsInteractions } from '@/pets/core/hooks/usePetsInteractions';
+import { resolveStatusRecipe, attenuateRecipeForFeed, EMPTY_RECIPE } from '@/pets/ui/lib/status-reactions';
+import { buildSleepingRecipe } from '@/pets/ui/lib/recipe';
+import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
+import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
+import type { InteractionReactionState } from '@/pets/ui/hooks/useInteractionReaction';
 import { cn } from '@/lib/utils';
 
-interface BlobbiStateCardProps {
+interface PetsStateCardProps {
   event: NostrEvent;
   /** Controls eye tracking behavior. Default: 'forward' (eyes look straight ahead). */
-  lookMode?: BlobbiLookMode;
+  lookMode?: PetsLookMode;
   /** Temporary interaction reaction state (body animation, emotion override, particle overlays). */
   interactionReaction?: InteractionReactionState;
 }
 
-export function BlobbiStateCard({ event, lookMode = 'forward', interactionReaction }: BlobbiStateCardProps) {
-  const companion = useMemo(() => parseBlobbiEvent(event), [event]);
+export function PetsStateCard({ event, lookMode = 'forward', interactionReaction }: PetsStateCardProps) {
+  const companion = useMemo(() => parsePetsEvent(event), [event]);
 
   const isSleeping = companion?.state === 'sleeping';
   const isEgg = companion?.stage === 'egg';
 
-  // Fetch kind 1124 interactions targeting this Blobbi.
+  // Fetch kind 1124 interactions targeting this Pets.
   // Disabled for eggs: they do not participate in the social stat-loss/care flow.
   // Not gated on socialOpen: past interactions must still affect projected
   // status even after the owner disables social. The hook is disabled when
   // companion is null (invalid event) and returns an empty array.
-  const { interactions } = useBlobbiInteractions(isEgg ? null : (companion ?? null));
+  const { interactions } = usePetsInteractions(isEgg ? null : (companion ?? null));
 
   // ── Project stats forward in time, then resolve visual recipe ──
   // Feed cards show a snapshot, not a live ticker, so we call the pure
   // calculateProjectedDecay() once per render instead of using the
-  // interval-based useProjectedBlobbiState hook.  This gives us the
-  // same decay math the room view uses (applyBlobbiDecay under the
+  // interval-based useProjectedPetsState hook.  This gives us the
+  // same decay math the room view uses (applyPetsDecay under the
   // hood) without any per-card setInterval overhead.
   //
   // When social interactions are available, they are layered on top
@@ -66,7 +66,7 @@ export function BlobbiStateCard({ event, lookMode = 'forward', interactionReacti
 
   return (
     <div className="flex flex-col items-center py-4">
-      {/* Blobbi visual — reflects current condition */}
+      {/* Pets visual — reflects current condition */}
       <div className="relative">
         <div className="absolute inset-0 -m-8 bg-primary/5 rounded-full blur-3xl" />
         <div
@@ -75,7 +75,7 @@ export function BlobbiStateCard({ event, lookMode = 'forward', interactionReacti
             reactionActive && interactionReaction?.bodyAnimation,
           )}
         >
-          <BlobbiStageVisual
+          <PetsStageVisual
             companion={companion}
             size="lg"
             animated={!isSleeping}

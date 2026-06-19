@@ -3,7 +3,7 @@
  * This type contains only the properties needed for rendering the egg graphic,
  * making the module self-contained and portable.
  */
-export type EggVisualBlobbi = {
+export type EggVisualPets = {
   tags?: string[][];
   baseColor?: string;
   secondaryColor?: string;

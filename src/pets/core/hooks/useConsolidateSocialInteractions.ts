@@ -5,7 +5,7 @@
  * into the canonical kind 31124 state. After successful consolidation:
  *   - Canonical stats include the consumed social effects
  *   - The social checkpoint advances past the consumed interactions
- *   - The `blobbi-interactions` query is invalidated (checkpoint change
+ *   - The `pets-interactions` query is invalidated (checkpoint change
  *     shifts the query key, so subsequent fetches return only new events)
  *
  * This is the write counterpart to the read-only `applySocialInteractions`.
@@ -21,16 +21,16 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { BlobbiCompanion } from '../lib/blobbi';
-import { KIND_BLOBBI_STATE, updateBlobbiTags, statsToTagUpdates } from '../lib/blobbi';
-import { applyBlobbiDecay } from '../lib/blobbi-decay';
-import { consolidateSocialInteractions } from '../lib/blobbi-social-projection';
+import type { PetsCompanion } from '../lib/pets';
+import { KIND_PETS_STATE, updatePetsTags, statsToTagUpdates } from '../lib/pets';
+import { applyPetsDecay } from '../lib/pets-decay';
+import { consolidateSocialInteractions } from '../lib/pets-social-projection';
 import {
   resolveSocialCheckpoint,
   serializeSocialCheckpoint,
-  type BlobbiInteraction,
+  type PetsInteraction,
   type SocialCheckpoint,
-} from '../lib/blobbi-interaction';
+} from '../lib/pets-interaction';
 
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 
@@ -38,9 +38,9 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 
 interface ConsolidateParams {
   /**
-   * The canonical Blobbi companion (fresh from `ensureCanonicalBeforeAction`).
+   * The canonical Pets companion (fresh from `ensureCanonicalBeforeAction`).
    */
-  companion: BlobbiCompanion;
+  companion: PetsCompanion;
   /**
    * Fresh content string from the canonical event (preserves evolution, etc.).
    */
@@ -51,9 +51,9 @@ interface ConsolidateParams {
   allTags: string[][];
   /**
    * Pending interactions to consume — must be sorted ascending by
-   * `created_at` + id tie-break (as returned by `useBlobbiInteractions`).
+   * `created_at` + id tie-break (as returned by `usePetsInteractions`).
    */
-  interactions: readonly BlobbiInteraction[];
+  interactions: readonly PetsInteraction[];
 }
 
 interface ConsolidateResult {
@@ -74,7 +74,7 @@ interface UseConsolidateSocialInteractionsReturn {
  * Hook that provides a consolidation function for the owner to consume
  * pending social interactions into canonical 31124 state.
  *
- * @param updateCompanionEvent - Cache updater from `useBlobbisCollection`
+ * @param updateCompanionEvent - Cache updater from `usePetssCollection`
  */
 export function useConsolidateSocialInteractions(
   updateCompanionEvent: (event: import('@nostrify/nostrify').NostrEvent) => void,
@@ -95,7 +95,7 @@ export function useConsolidateSocialInteractions(
       const now = Math.floor(Date.now() / 1000);
 
       // ── Step 1: Apply accumulated decay to canonical stats ──
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: companion.stage,
         state: companion.state,
         stats: companion.stats,
@@ -133,12 +133,12 @@ export function useConsolidateSocialInteractions(
       const newContent = serializeSocialCheckpoint(content, newCheckpoint);
 
       // ── Step 6: Build updated tags with consolidated stats ──
-      const newTags = updateBlobbiTags(allTags, statsToTagUpdates(result.stats, now));
+      const newTags = updatePetsTags(allTags, statsToTagUpdates(result.stats, now));
 
       // ── Step 7: Publish the new 31124 ──
       const prev = companion.event;
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: newContent,
         tags: newTags,
         prev,
@@ -153,7 +153,7 @@ export function useConsolidateSocialInteractions(
       // fresh fetch with the new `since` filter.
       const coordinate = `31124:${companion.event.pubkey}:${companion.d}`;
       queryClient.invalidateQueries({
-        queryKey: ['blobbi-interactions', coordinate],
+        queryKey: ['pets-interactions', coordinate],
       });
 
       return { consumedCount: result.consumedCount };

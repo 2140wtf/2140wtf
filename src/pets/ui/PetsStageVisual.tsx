@@ -1,50 +1,50 @@
 /**
- * BlobbiStageVisual - Stage-aware visual component for Blobbi
+ * PetsStageVisual - Stage-aware visual component for Pets
  *
- * Routes to the appropriate visual component based on the Blobbi's life stage:
- *   - egg   → BlobbiEggVisual
- *   - baby  → BlobbiBabyVisual
- *   - adult → BlobbiAdultVisual
+ * Routes to the appropriate visual component based on the Pets's life stage:
+ *   - egg   → PetsEggVisual
+ *   - baby  → PetsBabyVisual
+ *   - adult → PetsAdultVisual
  *
- * This component is the single entry point for rendering any Blobbi visually.
+ * This component is the single entry point for rendering any Pets visually.
  * It passes through visual recipe props to the stage-specific components.
  */
 
 import { useMemo } from 'react';
 
-import { BlobbiEggVisual, type BlobbiEggSize, type EggStatusEffects, type EggTourVisualState } from './BlobbiEggVisual';
-import { BlobbiBabyVisual } from './BlobbiBabyVisual';
-import { BlobbiAdultVisual } from './BlobbiAdultVisual';
+import { PetsEggVisual, type PetsEggSize, type EggStatusEffects, type EggTourVisualState } from './PetsEggVisual';
+import { PetsBabyVisual } from './PetsBabyVisual';
+import { PetsAdultVisual } from './PetsAdultVisual';
 import { FloatingMusicNotes } from './FloatingMusicNotes';
-import { blobbiCompanionToBlobbi } from './lib/adapters';
+import { petsCompanionToPets } from './lib/adapters';
 import { cn } from '@/lib/utils';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
-import type { BlobbiLookMode } from './lib/useBlobbiEyes';
-import type { BlobbiEmotion } from './lib/emotion-types';
-import type { BlobbiVisualRecipe } from './lib/recipe';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { PetsLookMode } from './lib/usePetsEyes';
+import type { PetsEmotion } from './lib/emotion-types';
+import type { PetsVisualRecipe } from './lib/recipe';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
 
-export type { BlobbiLookMode };
+export type { PetsLookMode };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type BlobbiVisualSize = 'sm' | 'md' | 'lg';
+export type PetsVisualSize = 'sm' | 'md' | 'lg';
 
-export type BlobbiReaction = 'idle' | 'listening' | 'swaying' | 'singing' | 'happy';
+export type PetsReaction = 'idle' | 'listening' | 'swaying' | 'singing' | 'happy';
 
-export interface BlobbiStageVisualProps {
-  companion: BlobbiCompanion;
-  size?: BlobbiVisualSize;
+export interface PetsStageVisualProps {
+  companion: PetsCompanion;
+  size?: PetsVisualSize;
   animated?: boolean;
-  reaction?: BlobbiReaction;
-  lookMode?: BlobbiLookMode;
+  reaction?: PetsReaction;
+  lookMode?: PetsLookMode;
   disableBlink?: boolean;
   /** Pre-resolved visual recipe. Takes precedence over `emotion`. */
-  recipe?: BlobbiVisualRecipe;
+  recipe?: PetsVisualRecipe;
   /** Label for the recipe (CSS class names). Required when `recipe` is provided. */
   recipeLabel?: string;
   /** Named emotion preset (convenience path). Ignored when `recipe` is provided. */
-  emotion?: BlobbiEmotion;
+  emotion?: PetsEmotion;
   /**
    * Body-level visual effects — for manual/external use only.
    * Status-reaction body effects are already in the recipe.
@@ -59,7 +59,7 @@ export interface BlobbiStageVisualProps {
 
 // ─── Size Configuration ───────────────────────────────────────────────────────
 
-const SIZE_CONFIG: Record<BlobbiVisualSize, string> = {
+const SIZE_CONFIG: Record<PetsVisualSize, string> = {
   sm: 'size-14',
   md: 'size-24',
   lg: 'size-40',
@@ -67,7 +67,7 @@ const SIZE_CONFIG: Record<BlobbiVisualSize, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BlobbiStageVisual({
+export function PetsStageVisual({
   companion,
   size = 'md',
   animated = false,
@@ -81,14 +81,14 @@ export function BlobbiStageVisual({
   tourVisualState,
   onTourEggClick,
   className,
-}: BlobbiStageVisualProps) {
+}: PetsStageVisualProps) {
   const { stage } = companion;
   const isSleeping = companion.state === 'sleeping';
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
 
-  const blobbiForVisual = useMemo(
-    () => (stage === 'baby' || stage === 'adult' ? blobbiCompanionToBlobbi(companion) : null),
+  const petsForVisual = useMemo(
+    () => (stage === 'baby' || stage === 'adult' ? petsCompanionToPets(companion) : null),
     [companion, stage]
   );
 
@@ -109,9 +109,9 @@ export function BlobbiStageVisual({
 
     return (
       <div className={cn('relative', containerClass, className)}>
-        <BlobbiEggVisual
+        <PetsEggVisual
           companion={companion}
-          size={size as BlobbiEggSize}
+          size={size as PetsEggSize}
           animated={animated}
           reaction={effectiveReaction}
           statusEffects={eggStatusEffects}
@@ -124,11 +124,11 @@ export function BlobbiStageVisual({
     );
   }
 
-  if (stage === 'baby' && blobbiForVisual) {
+  if (stage === 'baby' && petsForVisual) {
     return (
       <div className={cn('relative', containerClass, className)}>
-        <BlobbiBabyVisual
-          blobbi={blobbiForVisual}
+        <PetsBabyVisual
+          pets={petsForVisual}
           reaction={effectiveReaction}
           lookMode={lookMode}
           disableBlink={disableBlink}
@@ -143,11 +143,11 @@ export function BlobbiStageVisual({
     );
   }
 
-  if (stage === 'adult' && blobbiForVisual) {
+  if (stage === 'adult' && petsForVisual) {
     return (
       <div className={cn('relative', containerClass, className)}>
-        <BlobbiAdultVisual
-          blobbi={blobbiForVisual}
+        <PetsAdultVisual
+          pets={petsForVisual}
           reaction={effectiveReaction}
           lookMode={lookMode}
           disableBlink={disableBlink}

@@ -213,11 +213,19 @@ export function useOnchainZap(
 
       tags.push(['alt', `Bitcoin zap: ${amountSats.toLocaleString()} sats`]);
 
-      const event = await publishEvent({
-        kind: 8333,
-        content: comment,
-        tags,
-      });
+      let event: NostrEvent | undefined;
+      try {
+        event = await publishEvent({
+          kind: 8333,
+          content: comment,
+          tags,
+        });
+      } catch (err) {
+        // The Bitcoin transaction already broadcast — the kind 8333 is a
+        // best-effort attestation. Surface the failure but don't roll back
+        // the success state.
+        console.warn('Failed to publish kind 8333 zap event:', err);
+      }
 
       return { txid, amountSats, fee, event };
     },
@@ -266,7 +274,10 @@ export function useOnchainZap(
   return {
     zap: mutation.mutate,
     zapAsync: mutation.mutateAsync,
-    isZapping,
+    // Use `mutation.isPending` so the UI disables the instant the mutation is
+    // invoked, before the async `mutationFn` has had a chance to set the
+    // local `isZapping` state. This closes a small double-submit window.
+    isZapping: mutation.isPending || isZapping,
     progress,
     canZap: !!user && user.pubkey !== target.pubkey && canSignPsbt,
     /** Whether the logged-in user has a PSBT-capable signer. */

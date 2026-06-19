@@ -1,0 +1,36 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer glow blob -->
+  <path d="M 100 55 C 135 55 155 80 155 110 C 155 145 130 165 100 165 C 65 165 45 140 45 110 C 45 75 70 55 100 55 Z" fill="url(#liquidblobBody)" stroke="url(#liquidblobCyan)" stroke-width="2" opacity="0.9"/>
+
+  <!-- Inner liquid core -->
+  <path d="M 100 70 C 125 70 140 88 140 110 C 140 135 120 150 100 150 C 75 150 60 132 60 110 C 60 85 80 70 100 70 Z" fill="url(#liquidblobCore)" opacity="0.8"/>
+
+  <!-- Sleeping eyes -->
+  <path d="M 76 106 Q 82 110 88 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 112 106 Q 118 110 124 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Mouth -->
+  <path d="M 94 124 Q 100 128 106 124" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Sleep zzz -->
+  <text x="140" y="75" fill="url(#liquidblobCyan)" font-family="monospace" font-size="10" opacity="0.6">Z</text>
+  <text x="150" y="62" fill="url(#liquidblobCyan)" font-family="monospace" font-size="8" opacity="0.4">z</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#0891b2"/>
+      <stop offset="50%" stop-color="#0e7490"/>
+      <stop offset="100%" stop-color="#164e63"/>
+    </radialGradient>
+    <radialGradient id="liquidblobCore" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="70%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <linearGradient id="liquidblobCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+</svg>

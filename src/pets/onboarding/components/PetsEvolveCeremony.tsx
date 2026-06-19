@@ -1,10 +1,10 @@
 /**
- * BlobbiEvolveCeremony - Immersive evolution experience (baby -> adult)
+ * PetsEvolveCeremony - Immersive evolution experience (baby -> adult)
  *
  * Flow:
- *   1. Full-screen dark backdrop with baby blobbi centered, pulsing glow + spiraling particles
+ *   1. Full-screen dark backdrop with baby pets centered, pulsing glow + spiraling particles
  *   2. Screen flash — evolution mutation fires
- *   3. Flash clears — adult blobbi revealed with sparkles + radiant glow
+ *   3. Flash clears — adult pets revealed with sparkles + radiant glow
  *   4. Brief dialog, then fade to white and complete
  */
 
@@ -13,8 +13,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 import { useTypewriter } from '../hooks/useTypewriter';
 import { hexToRgb, buildRevealGradient } from '../lib/ceremony-colors';
@@ -29,8 +29,8 @@ type EvolvePhase =
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface BlobbiEvolveCeremonyProps {
-  companion: BlobbiCompanion;
+interface PetsEvolveCeremonyProps {
+  companion: PetsCompanion;
   /** Fires the actual evolve mutation (baby -> adult). */
   onEvolve: () => Promise<void>;
   /** Called when the animation is complete and the overlay should close. */
@@ -39,11 +39,11 @@ interface BlobbiEvolveCeremonyProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BlobbiEvolveCeremony({
+export function PetsEvolveCeremony({
   companion,
   onEvolve,
   onComplete,
-}: BlobbiEvolveCeremonyProps) {
+}: PetsEvolveCeremonyProps) {
   const [phase, setPhase] = useState<EvolvePhase>('gather');
   const [showFlash, setShowFlash] = useState(false);
   const [adultVisible, setAdultVisible] = useState(false);
@@ -65,7 +65,7 @@ export function BlobbiEvolveCeremony({
   const typewriter2 = useTypewriter(line2, typewriter1.done);
 
   // Build adult companion for visual preview (same visual traits, stage=adult)
-  const adultCompanion = useMemo((): BlobbiCompanion => ({
+  const adultCompanion = useMemo((): PetsCompanion => ({
     ...companion,
     stage: 'adult',
     state: 'active' as const,
@@ -183,7 +183,7 @@ export function BlobbiEvolveCeremony({
         </div>
       )}
 
-      {/* ── Baby blobbi (gather phase) ── */}
+      {/* ── Baby pets (gather phase) ── */}
       {showBaby && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ paddingBottom: '10%' }}>
           {/* Pulsing glow behind baby */}
@@ -199,7 +199,7 @@ export function BlobbiEvolveCeremony({
           />
 
           <div className="relative">
-            <BlobbiStageVisual
+            <PetsStageVisual
               companion={companion}
               size="lg"
               animated
@@ -220,7 +220,7 @@ export function BlobbiEvolveCeremony({
         />
       )}
 
-      {/* ── Adult blobbi revealed with sparkles ── */}
+      {/* ── Adult pets revealed with sparkles ── */}
       {showAdult && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ paddingBottom: '18%' }}>
           {/* Rotating radiant glow */}
@@ -349,12 +349,12 @@ export function BlobbiEvolveCeremony({
             );
           })}
 
-          {/* The adult blobbi */}
+          {/* The adult pets */}
           <div className={cn(
             'relative transition-opacity duration-150',
             adultVisible ? 'opacity-100' : 'opacity-0',
           )}>
-            <BlobbiStageVisual
+            <PetsStageVisual
               companion={adultCompanion}
               size="lg"
               animated
@@ -406,7 +406,7 @@ export function BlobbiEvolveCeremony({
           className="absolute inset-0 bg-white pointer-events-none"
           style={{
             zIndex: 90,
-            animation: 'blobbi-fade-to-white 2s ease-in forwards',
+            animation: 'pets-fade-to-white 2s ease-in forwards',
           }}
         />
       )}

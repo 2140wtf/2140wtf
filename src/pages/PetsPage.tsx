@@ -7,20 +7,20 @@ import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, The
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useProjectedBlobbiState } from '@/blobbi/core/hooks/useProjectedBlobbiState';
-import { useBlobbiInteractions } from '@/blobbi/core/hooks/useBlobbiInteractions';
-import { useBlobbiActivityHistory } from '@/blobbi/core/hooks/useBlobbiActivityHistory';
-import { useCanonicalSync } from '@/blobbi/core/hooks/useCanonicalSync';
-import { getShopItemById } from '@/blobbi/shop/lib/blobbi-shop-items';
+import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
+import { usePetsInteractions } from '@/pets/core/hooks/usePetsInteractions';
+import { usePetsActivityHistory } from '@/pets/core/hooks/usePetsActivityHistory';
+import { useCanonicalSync } from '@/pets/core/hooks/useCanonicalSync';
+import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import { timeAgo } from '@/lib/timeAgo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
-import { useBlobbisCollection } from '@/blobbi/core/hooks/useBlobbisCollection';
+import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useNostr } from '@nostrify/react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { useBlobbiMigration } from '@/blobbi/core/hooks/useBlobbiMigration';
+import { usePetsMigration } from '@/pets/core/hooks/usePetsMigration';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { toast } from '@/hooks/useToast';
 
@@ -33,12 +33,12 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
 import { TabButton } from '@/components/TabButton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
-import { BlobbiHatchingCeremony } from '@/blobbi/onboarding/components/BlobbiHatchingCeremony';
-import { BlobbiEvolveCeremony } from '@/blobbi/onboarding/components/BlobbiEvolveCeremony';
-import { BlobbiPhotoModal } from '@/blobbi/ui/BlobbiPhotoModal';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
+import { PetsHatchingCeremony } from '@/pets/onboarding/components/PetsHatchingCeremony';
+import { PetsEvolveCeremony } from '@/pets/onboarding/components/PetsEvolveCeremony';
+import { PetsPhotoModal } from '@/pets/ui/PetsPhotoModal';
 
-import { useBlobbiCompanionData } from '@/blobbi/companion/hooks/useBlobbiCompanionData';
+import { usePetsCompanionData } from '@/pets/companion/hooks/usePetsCompanionData';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 
 import { openUrl } from '@/lib/downloadFile';
@@ -46,32 +46,32 @@ import { cn } from '@/lib/utils';
 import { getProfileUrl } from '@/lib/profileUrl';
 
 import {
-  KIND_BLOBBI_STATE,
+  KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
-  updateBlobbiTags,
+  updatePetsTags,
   updateBlobbonautTags,
   statsToTagUpdates,
   filterMigratedLegacyCompanions,
-  type BlobbiCompanion,
-  type BlobbiStats,
+  type PetsCompanion,
+  type PetsStats,
   type BlobbonautProfile,
   type StorageItem,
-} from '@/blobbi/core/lib/blobbi';
+} from '@/pets/core/lib/pets';
 
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { getBlobbiStatDisplayState } from '@/blobbi/core/lib/blobbi-segments';
-import { useSeedIdentitySync } from '@/blobbi/core/hooks/useSeedIdentitySync';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
+import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
-import { getLiveShopItems } from '@/blobbi/shop/lib/blobbi-shop-items';
+import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
 
 import {
   PlayMusicModal,
   InlineMusicPlayer,
   InlineSingCard,
-  useBlobbiUseInventoryItem,
-  useBlobbiHatch,
-  useBlobbiEvolve,
-  useBlobbiDirectAction,
+  usePetsUseInventoryItem,
+  usePetsHatch,
+  usePetsEvolve,
+  usePetsDirectAction,
   useStartIncubation,
   useStopIncubation,
   useStartEvolution,
@@ -95,27 +95,27 @@ import {
   type DirectAction,
   type InlineActivityState,
   type SelectedTrack,
-  type BlobbiReactionState,
+  type PetsReactionState,
   type StartIncubationMode,
-} from '@/blobbi/actions';
-import { BlobbiOnboardingFlow } from '@/blobbi/onboarding';
-import { useBlobbiActionsRegistration, type UseItemFunction } from '@/blobbi/companion/interaction';
-import { getAllNeeds } from '@/blobbi/companion/interaction/needDetection';
-import { BlobbiDevEditor, useBlobbiDevUpdate, type BlobbiDevUpdates, BlobbiEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/blobbi/dev';
-import { useStatusReaction } from '@/blobbi/ui/hooks/useStatusReaction';
-import { buildSleepingRecipe } from '@/blobbi/ui/lib/recipe';
-import { playMunchSound } from '@/blobbi/ui/lib/munchSound';
+} from '@/pets/actions';
+import { PetsOnboardingFlow } from '@/pets/onboarding';
+import { usePetsActionsRegistration, type UseItemFunction } from '@/pets/companion/interaction';
+import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
+import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
+import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
+import { buildSleepingRecipe } from '@/pets/ui/lib/recipe';
+import { playMunchSound } from '@/pets/ui/lib/munchSound';
 import {
-  BlobbiRoomShell,
-  BlobbiRoomHero,
-  BlobbiRoomStage,
-  BlobbiRoomStatusHud,
-  BlobbiRoomEditor,
-  BlobbiRoomEditorTrigger,
+  PetsRoomShell,
+  PetsRoomHero,
+  PetsRoomStage,
+  PetsRoomStatusHud,
+  PetsRoomEditor,
+  PetsRoomEditorTrigger,
   ItemCarousel,
   RoomActionButton,
   ShovelButton,
-  type BlobbiRoomId,
+  type PetsRoomId,
   type CarouselEntry,
   type PoopState,
   type ShovelDrag,
@@ -125,32 +125,32 @@ import {
   DEFAULT_ROOM_ORDER,
   OVERFEED_THRESHOLD,
   OVERFEED_CHANCE,
-} from '@/blobbi/rooms';
-import { ROOM_BOTTOM_BAR_CLASS } from '@/blobbi/rooms/lib/room-layout';
-import { type RoomLayout, type RoomLayoutsContent, parseRoomLayoutsContent, getEffectiveRoomLayout } from '@/blobbi/rooms/lib/room-layout-schema';
-import { parseRoomFurnitureContent, type FurniturePlacement, type RoomFurnitureContent } from '@/blobbi/rooms/lib/room-furniture-schema';
-import { getEffectiveRoomFurniture } from '@/blobbi/rooms/lib/room-furniture-effective';
-import { RoomFurnitureEditor, RoomFurnitureEditorTrigger } from '@/blobbi/rooms/components/RoomFurnitureEditor';
-import { serializeProfileContent } from '@/blobbi/core/lib/missions';
-import { fetchFreshBlobbonautProfile } from '@/blobbi/core/lib/fetchFreshBlobbonautProfile';
-import { buildGuideTarget, getGuideRoomDirection, type GuideTarget } from '@/blobbi/rooms/lib/stat-guide-config';
-import { getActionEmotion, SEVERITY_THRESHOLDS } from '@/blobbi/ui/lib/status-reactions';
-import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/blobbi/ui/hooks/useInteractionReaction';
-import { useFoodDrag, type UseFoodDragReturn } from '@/blobbi/rooms/hooks/useFoodDrag';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotions';
+} from '@/pets/rooms';
+import { ROOM_BOTTOM_BAR_CLASS } from '@/pets/rooms/lib/room-layout';
+import { type RoomLayout, type RoomLayoutsContent, parseRoomLayoutsContent, getEffectiveRoomLayout } from '@/pets/rooms/lib/room-layout-schema';
+import { parseRoomFurnitureContent, type FurniturePlacement, type RoomFurnitureContent } from '@/pets/rooms/lib/room-furniture-schema';
+import { getEffectiveRoomFurniture } from '@/pets/rooms/lib/room-furniture-effective';
+import { RoomFurnitureEditor, RoomFurnitureEditorTrigger } from '@/pets/rooms/components/RoomFurnitureEditor';
+import { serializeProfileContent } from '@/pets/core/lib/missions';
+import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { buildGuideTarget, getGuideRoomDirection, type GuideTarget } from '@/pets/rooms/lib/stat-guide-config';
+import { getActionEmotion, SEVERITY_THRESHOLDS } from '@/pets/ui/lib/status-reactions';
+import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/pets/ui/hooks/useInteractionReaction';
+import { useFoodDrag, type UseFoodDragReturn } from '@/pets/rooms/hooks/useFoodDrag';
+import type { PetsEmotion } from '@/pets/ui/lib/emotions';
 
 
 
 /**
- * Get the localStorage key for the selected Blobbi.
- * User-scoped: blobbi:selected:d:<pubkey>
+ * Get the localStorage key for the selected Pets.
+ * User-scoped: pets:selected:d:<pubkey>
  */
-function getSelectedBlobbiKey(pubkey: string): string {
-  return `blobbi:selected:d:${pubkey}`;
+function getSelectedPetsKey(pubkey: string): string {
+  return `pets:selected:d:${pubkey}`;
 }
 
 /** Enable debug logging in development only */
-const DEBUG_BLOBBI = import.meta.env.DEV;
+const DEBUG_PETS = import.meta.env.DEV;
 
 /** Stat keys checked for the companion selector care badge (excludes energy). */
 const CARE_BADGE_STATS = ['hunger', 'happiness', 'hygiene', 'health'] as const;
@@ -164,11 +164,11 @@ const CARE_BADGE_STATS = ['hunger', 'happiness', 'hygiene', 'health'] as const;
  *
  * Eggs always return `protected` from the helper, so they never show a badge.
  */
-function companionNeedsCare(companion: BlobbiCompanion): boolean {
+function companionNeedsCare(companion: PetsCompanion): boolean {
   let attentionCount = 0;
   for (const stat of CARE_BADGE_STATS) {
     const value = companion.stats[stat] ?? 100;
-    const { careState } = getBlobbiStatDisplayState({ stage: companion.stage, stat, value });
+    const { careState } = getPetsStatDisplayState({ stage: companion.stage, stat, value });
     if (careState === 'urgent') return true;
     if (careState === 'attention') attentionCount++;
   }
@@ -179,14 +179,14 @@ function companionNeedsCare(companion: BlobbiCompanion): boolean {
 
 // ─── Page Component ───────────────────────────────────────────────────────────
 
-export function BlobbiPage() {
+export function PetsPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
 
   useLayoutOptions({ hasSubHeader: true, noOverscroll: true });
 
   useSeoMeta({
-    title: `Blobbi | ${config.appName}`,
+    title: `Pets | ${config.appName}`,
     description: 'Care for your virtual pet companion on Nostr',
   });
 
@@ -194,7 +194,7 @@ export function BlobbiPage() {
     return <LoggedOutState />;
   }
 
-  return <BlobbiContent />;
+  return <PetsContent />;
 }
 
 // ─── Logged Out State ─────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ function LoggedOutState() {
         <div className="size-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-10 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold">Blobbi</h1>
+        <h1 className="text-2xl font-bold">Pets</h1>
         <p className="text-muted-foreground">
           Log in with your Nostr account to care for your virtual pet companion.
         </p>
@@ -218,11 +218,11 @@ function LoggedOutState() {
 
 // ─── Main Content ─────────────────────────────────────────────────────────────
 
-function BlobbiContent() {
+function PetsContent() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
-  const { ensureCanonicalBlobbiBeforeAction } = useBlobbiMigration();
+  const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
   
   const {
     profile,
@@ -238,19 +238,19 @@ function BlobbiContent() {
     invalidateProfile,
   });
   
-  // STEP 1: Fetch ALL the user's Blobbi events from relays (author is source of truth).
-  // No dList needed — useBlobbisCollection() without args queries by author + ecosystem tag.
-  // This ensures blobbis are never invisible due to a stale profile.has[] list.
+  // STEP 1: Fetch ALL the user's Pets events from relays (author is source of truth).
+  // No dList needed — usePetssCollection() without args queries by author + ecosystem tag.
+  // This ensures petss are never invisible due to a stale profile.has[] list.
   const {
     companions,
     isLoading: collectionLoading,
     isFetching: collectionFetching,
     invalidate: invalidateCollection,
     updateCompanionEvent,
-  } = useBlobbisCollection();
+  } = usePetssCollection();
   
   // STEP 2: Filter out legacy companions that have been migrated to canonical format.
-  // A legacy Blobbi is hidden when a canonical Blobbi with the same name exists AND
+  // A legacy Pets is hidden when a canonical Pets with the same name exists AND
   // the legacy d-tag is no longer in profile.has (confirming migration occurred).
   const filteredCompanions = useMemo(() => {
     if (!profile) return companions;
@@ -258,7 +258,7 @@ function BlobbiContent() {
   }, [companions, profile]);
 
   const filteredCompanionsByD = useMemo(() => {
-    const record: Record<string, BlobbiCompanion> = {};
+    const record: Record<string, PetsCompanion> = {};
     for (const c of filteredCompanions) {
       record[c.d] = c;
     }
@@ -270,26 +270,26 @@ function BlobbiContent() {
   useSeedIdentitySync(filteredCompanions, updateCompanionEvent);
 
   // STEP 4: localStorage for UI selection (user-scoped key)
-  const localStorageKey = user?.pubkey ? getSelectedBlobbiKey(user.pubkey) : 'blobbi:selected:d:none';
+  const localStorageKey = user?.pubkey ? getSelectedPetsKey(user.pubkey) : 'pets:selected:d:none';
   const [storedSelectedD, setStoredSelectedD] = useLocalStorage<string | null>(localStorageKey, null);
   
-  // State for showing the adoption flow (for "Adopt another Blobbi")
+  // State for showing the adoption flow (for "Adopt another Pets")
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
   
   // STEP 5: Selection Priority
   // 1) localStorage selection (if valid and exists in collection) - USER SELECTION ALWAYS WINS
   // 2) first item from profile.has that exists in companionsByD - preferred ordering
-  // 3) first companion in the collection (covers blobbis missing from profile.has)
+  // 3) first companion in the collection (covers petss missing from profile.has)
   // 4) undefined (show selector)
   //
   // CRITICAL: Default selection must NEVER overwrite localStorage.
-  // User selection persists only via handleSelectBlobbi, not via this computed value.
+  // User selection persists only via handleSelectPets, not via this computed value.
   const selectedD = useMemo(() => {
     // Priority 1: localStorage selection (if it exists in filtered collection)
     // USER SELECTION ALWAYS WINS - this is the authoritative source
     if (storedSelectedD && filteredCompanionsByD[storedSelectedD]) {
-      if (DEBUG_BLOBBI) {
-        console.log('[BlobbiPage] selectedD: using localStorage selection:', storedSelectedD);
+      if (DEBUG_PETS) {
+        console.log('[PetsPage] selectedD: using localStorage selection:', storedSelectedD);
       }
       return storedSelectedD;
     }
@@ -299,8 +299,8 @@ function BlobbiContent() {
     if (profile) {
       for (const d of profile.has) {
         if (filteredCompanionsByD[d]) {
-          if (DEBUG_BLOBBI) {
-            console.log('[BlobbiPage] selectedD: using default from profile.has:', d, 
+          if (DEBUG_PETS) {
+            console.log('[PetsPage] selectedD: using default from profile.has:', d, 
               '(storedSelectedD was:', storedSelectedD, 
               storedSelectedD ? (filteredCompanionsByD[storedSelectedD] ? 'exists' : 'NOT in filteredCompanionsByD') : 'null', ')');
           }
@@ -312,15 +312,15 @@ function BlobbiContent() {
     // Priority 3: First companion in the filtered collection
     if (filteredCompanions.length > 0) {
       const firstD = filteredCompanions[0].d;
-      if (DEBUG_BLOBBI) {
-        console.log('[BlobbiPage] selectedD: using first companion from collection:', firstD);
+      if (DEBUG_PETS) {
+        console.log('[PetsPage] selectedD: using first companion from collection:', firstD);
       }
       return firstD;
     }
     
     // Priority 4: No valid selection
-    if (DEBUG_BLOBBI) {
-      console.log('[BlobbiPage] selectedD: no valid selection available');
+    if (DEBUG_PETS) {
+      console.log('[PetsPage] selectedD: no valid selection available');
     }
     return undefined;
   }, [profile, storedSelectedD, filteredCompanionsByD, filteredCompanions]);
@@ -331,15 +331,15 @@ function BlobbiContent() {
   // - Query refetches  
   // - Race conditions where storedSelectedD is not yet in filteredCompanionsByD
   //
-  // User selections are only persisted via handleSelectBlobbi (line ~232).
+  // User selections are only persisted via handleSelectPets (line ~232).
   
   // Get the selected companion from the filtered collection
   const companion = selectedD ? filteredCompanionsByD[selectedD] ?? null : null;
   
-  // Debug log to confirm which Blobbi is rendered (dev only)
+  // Debug log to confirm which Pets is rendered (dev only)
   useEffect(() => {
-    if (DEBUG_BLOBBI && companion) {
-      console.log('[Blobbi UI]', {
+    if (DEBUG_PETS && companion) {
+      console.log('[Pets UI]', {
         selectedD,
         name: companion.name,
         stage: companion.stage,
@@ -355,11 +355,11 @@ function BlobbiContent() {
   
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   
-  // Handler for selecting a Blobbi from the selector
+  // Handler for selecting a Pets from the selector
   // This is the ONLY place where user selection is persisted to localStorage
-  const handleSelectBlobbi = useCallback((d: string) => {
-    if (DEBUG_BLOBBI) {
-      console.log('[BlobbiPage] handleSelectBlobbi: user selected:', d, '(previous storedSelectedD was:', storedSelectedD, ')');
+  const handleSelectPets = useCallback((d: string) => {
+    if (DEBUG_PETS) {
+      console.log('[PetsPage] handleSelectPets: user selected:', d, '(previous storedSelectedD was:', storedSelectedD, ')');
     }
     setStoredSelectedD(d);
   }, [setStoredSelectedD, storedSelectedD]);
@@ -369,14 +369,14 @@ function BlobbiContent() {
   const ensureCanonicalBeforeAction = useCallback(async () => {
     if (!companion || !profile) return null;
     
-    return ensureCanonicalBlobbiBeforeAction({
+    return ensureCanonicalPetsBeforeAction({
       companion,
       profile,
       updateProfileEvent,
       updateCompanionEvent,
       updateStoredSelectedD: setStoredSelectedD,
     });
-  }, [companion, profile, ensureCanonicalBlobbiBeforeAction, updateProfileEvent, updateCompanionEvent, setStoredSelectedD]);
+  }, [companion, profile, ensureCanonicalPetsBeforeAction, updateProfileEvent, updateCompanionEvent, setStoredSelectedD]);
   
   // ─── Rest Action (with automatic legacy migration) ───
   // Operates on the page-selected `companion` (not profile.currentCompanion).
@@ -398,7 +398,7 @@ function BlobbiContent() {
 
       // Apply accumulated decay before the state change
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -410,7 +410,7 @@ function BlobbiContent() {
       // Get streak updates (putting to sleep/waking counts as care activity)
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
 
-      const newTags = updateBlobbiTags(canonical.allTags, {
+      const newTags = updatePetsTags(canonical.allTags, {
         state: newState,
         ...statsToTagUpdates(decayResult.stats, now),
         ...streakUpdates,
@@ -418,7 +418,7 @@ function BlobbiContent() {
 
       const prev = canonical.companion.event;
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: canonical.content,
         tags: newTags,
         prev,
@@ -429,8 +429,8 @@ function BlobbiContent() {
       toast({
         title: isCurrentlySleeping ? 'Woke up!' : 'Resting...',
         description: isCurrentlySleeping
-          ? 'Your Blobbi is now awake and active!'
-          : 'Your Blobbi is taking a rest.',
+          ? 'Your Pets is now awake and active!'
+          : 'Your Pets is taking a rest.',
       });
 
       // Track daily mission progress for sleep action (only when putting to sleep)
@@ -450,7 +450,7 @@ function BlobbiContent() {
   }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
   
   // ─── Use Inventory Item Hook ───
-  const { mutateAsync: executeUseItem, isPending: isUsingItem } = useBlobbiUseInventoryItem({
+  const { mutateAsync: executeUseItem, isPending: isUsingItem } = usePetsUseInventoryItem({
     companion,
     profile,
     ensureCanonicalBeforeAction,
@@ -463,8 +463,8 @@ function BlobbiContent() {
     await executeUseItem({ itemId, action });
   }, [executeUseItem]);
   
-  // ─── Blobbi Actions Registration ───
-  // Register item use functionality with the global context so BlobbiCompanionLayer can use it
+  // ─── Pets Actions Registration ───
+  // Register item use functionality with the global context so PetsCompanionLayer can use it
   const useItemForContext = useMemo<UseItemFunction | null>(() => {
     // Only provide the function when companion and profile are available
     if (!companion || !profile) return null;
@@ -485,18 +485,18 @@ function BlobbiContent() {
     };
   }, [executeUseItem, companion, profile]);
   
-  // Register with the global BlobbiActionsContext
-  useBlobbiActionsRegistration(useItemForContext, isUsingItem);
+  // Register with the global PetsActionsContext
+  usePetsActionsRegistration(useItemForContext, isUsingItem);
   
   // ─── Stage Transition Hooks ───
-  const { isPending: isHatching } = useBlobbiHatch({
+  const { isPending: isHatching } = usePetsHatch({
     companion,
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
   });
   
-  const { mutateAsync: executeEvolve, isPending: isEvolving } = useBlobbiEvolve({
+  const { mutateAsync: executeEvolve, isPending: isEvolving } = usePetsEvolve({
     companion,
     profile,
     ensureCanonicalBeforeAction,
@@ -509,7 +509,7 @@ function BlobbiContent() {
   }, [executeEvolve]);
   
   // ─── Direct Action Hook ───
-  const { mutateAsync: executeDirectAction, isPending: isDirectActionPending } = useBlobbiDirectAction({
+  const { mutateAsync: executeDirectAction, isPending: isDirectActionPending } = usePetsDirectAction({
     companion,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
@@ -521,7 +521,7 @@ function BlobbiContent() {
   }, [executeDirectAction]);
   
   // ─── DEV ONLY: State Editor Hook ───
-  const { mutateAsync: executeDevUpdate, isPending: isDevUpdating } = useBlobbiDevUpdate({
+  const { mutateAsync: executeDevUpdate, isPending: isDevUpdating } = usePetsDevUpdate({
     companion,
     updateCompanionEvent,
   });
@@ -530,7 +530,7 @@ function BlobbiContent() {
   const [showDevEditor, setShowDevEditor] = useState(false);
   
   // Handler for dev editor apply
-  const handleDevEditorApply = useCallback(async (updates: BlobbiDevUpdates) => {
+  const handleDevEditorApply = useCallback(async (updates: PetsDevUpdates) => {
     await executeDevUpdate(updates);
   }, [executeDevUpdate]);
   
@@ -550,8 +550,8 @@ function BlobbiContent() {
   }, [profileLoading, profile, collectionLoading, collectionFetching, companions.length, selectedD, companion]);
   
   // Debug log page state decisions
-  if (DEBUG_BLOBBI) {
-    console.log('[BlobbiPage] State decision:', {
+  if (DEBUG_PETS) {
+    console.log('[PetsPage] State decision:', {
       pageState,
       profileLoading,
       hasProfile: !!profile,
@@ -567,7 +567,7 @@ function BlobbiContent() {
   
   // ─── Hatching Ceremony State ───
   // The ceremony creates eggs in the background which updates profile data.
-  // Without this flag, BlobbiPage would immediately fall through to the
+  // Without this flag, PetsPage would immediately fall through to the
   // dashboard the moment the egg appears in has[]. The flag keeps the
   // ceremony mounted until it calls onComplete.
   //
@@ -577,8 +577,8 @@ function BlobbiContent() {
   //
   // Ceremony decision tree:
   // 1. No profile → ceremony (brand new user, creates profile + egg)
-  // 2. Profile exists but no blobbis found on relays → ceremony (creates egg)
-  // 3. Profile with blobbis → inspect companion stages, then:
+  // 2. Profile exists but no petss found on relays → ceremony (creates egg)
+  // 3. Profile with petss → inspect companion stages, then:
   //    a. Any baby/adult exists → skip ceremony (dashboard)
   //    b. Only eggs exist → ceremony with existingCompanion (reuses egg)
   //    c. No companions resolved → ceremony (creates egg)
@@ -588,7 +588,7 @@ function BlobbiContent() {
   const [ceremonyCheckDone, setCeremonyCheckDone] = useState(false);
   // Locks the egg chosen for the ceremony so a page refresh mid-animation
   // doesn't switch to a different egg or create a new one.
-  const ceremonyEggRef = useRef<BlobbiCompanion | null>(null);
+  const ceremonyEggRef = useRef<PetsCompanion | null>(null);
   
   // Cases that definitely need ceremony (no need to wait for companions)
   const definitelyNeedsCeremony = !profile;
@@ -612,15 +612,15 @@ function BlobbiContent() {
     if (!pendingCeremonyCheck || !companionDataReady || ceremonyInProgress) return;
     
     const eggs = companions.filter(c => c.stage === 'egg');
-    const hasHatchedBlobbi = companions.some(c => c.stage === 'baby' || c.stage === 'adult');
+    const hasHatchedPets = companions.some(c => c.stage === 'baby' || c.stage === 'adult');
     
     // Mark check as done so this effect doesn't re-fire.
     setCeremonyCheckDone(true);
     
-    if (hasHatchedBlobbi) {
-      // User already has a hatched blobbi — skip ceremony entirely.
+    if (hasHatchedPets) {
+      // User already has a hatched pets — skip ceremony entirely.
       // Auto-fix the onboardingDone flag if it was missing.
-      if (DEBUG_BLOBBI) console.log('[BlobbiPage] Skipping ceremony: user has hatched blobbi');
+      if (DEBUG_PETS) console.log('[PetsPage] Skipping ceremony: user has hatched pets');
       if (profile && !profile.onboardingDone && user?.pubkey) {
         fetchFreshEvent(nostr, {
           kinds: [KIND_BLOBBONAUT_PROFILE],
@@ -628,7 +628,7 @@ function BlobbiContent() {
         }).then(prev => {
           if (!prev) return;
           const updatedTags = updateBlobbonautTags(prev.tags, {
-            blobbi_onboarding_done: 'true',
+            pets_onboarding_done: 'true',
           });
           return publishEvent({
             kind: KIND_BLOBBONAUT_PROFILE,
@@ -641,18 +641,18 @@ function BlobbiContent() {
             updateProfileEvent(event);
             invalidateProfile();
           }
-        }).catch(err => console.error('[BlobbiPage] Failed to auto-fix onboardingDone:', err));
+        }).catch(err => console.error('[PetsPage] Failed to auto-fix onboardingDone:', err));
       }
     } else if (eggs.length > 0) {
       // User has only eggs — reuse one for the ceremony (don't create a new one).
       // Pick a random egg if multiple exist.
       const egg = eggs.length === 1 ? eggs[0] : eggs[Math.floor(Math.random() * eggs.length)];
       ceremonyEggRef.current = egg;
-      if (DEBUG_BLOBBI) console.log('[BlobbiPage] Starting ceremony with existing egg:', egg.d);
+      if (DEBUG_PETS) console.log('[PetsPage] Starting ceremony with existing egg:', egg.d);
       setCeremonyInProgress(true);
     } else {
-      // No blobbi events found on relays — treat as new user
-      if (DEBUG_BLOBBI) console.log('[BlobbiPage] Starting ceremony: no companions found');
+      // No pets events found on relays — treat as new user
+      if (DEBUG_PETS) console.log('[PetsPage] Starting ceremony: no companions found');
       setCeremonyInProgress(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -665,7 +665,7 @@ function BlobbiContent() {
   
   // ─── CASE A2: Waiting for companions to decide about ceremony ───
   if (pendingCeremonyCheck && !companionDataReady && !ceremonyInProgress) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: loading (waiting for companions to decide ceremony)');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: loading (waiting for companions to decide ceremony)');
     return <DashboardLoadingState />;
   }
   
@@ -676,10 +676,10 @@ function BlobbiContent() {
   // (which has `relative z-0`) and covers the entire app shell including the
   // RightSidebar — matching the subsequent hatch ceremony portal at z-[100].
   if (ceremonyInProgress) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: hatching ceremony');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: hatching ceremony');
     return createPortal(
       <div className="fixed inset-0 z-[100] bg-background">
-        <BlobbiOnboardingFlow
+        <PetsOnboardingFlow
           profile={profile ?? null}
           updateProfileEvent={updateProfileEvent}
           updateCompanionEvent={updateCompanionEvent}
@@ -701,13 +701,13 @@ function BlobbiContent() {
   
   // ─── CASE D: Companions still loading ───
   if (collectionLoading) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: loading companions');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: loading companions');
     return <DashboardLoadingState />;
   }
   
   // ─── CASE E: Companions not yet resolved (fetching) ───
   if (collectionFetching && companions.length === 0) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: syncing pets from relays');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: syncing pets from relays');
     return (
       <DashboardShell>
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
@@ -715,7 +715,7 @@ function BlobbiContent() {
             <div className="size-24 rounded-3xl bg-muted/50 flex items-center justify-center">
               <RefreshCw className="size-12 text-muted-foreground animate-spin" />
             </div>
-            <h1 className="text-2xl font-bold">Syncing your Blobbi...</h1>
+            <h1 className="text-2xl font-bold">Syncing your Pets...</h1>
             <p className="text-muted-foreground">
               Fetching your pet data from relays...
             </p>
@@ -725,10 +725,10 @@ function BlobbiContent() {
     );
   }
   
-  // ─── CASE F: No blobbi events found on relays ───
+  // ─── CASE F: No pets events found on relays ───
   // This shouldn't normally happen after the ceremony check, but handle gracefully
   if (companions.length === 0) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: pets not found error');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: pets not found error');
     return (
       <DashboardShell>
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
@@ -738,7 +738,7 @@ function BlobbiContent() {
             </div>
             <h1 className="text-2xl font-bold">Pet Data Not Found</h1>
             <p className="text-muted-foreground">
-              No Blobbi data could be loaded from relays.
+              No Pets data could be loaded from relays.
               This may be a sync issue - try refreshing the page.
             </p>
             <Button
@@ -760,12 +760,12 @@ function BlobbiContent() {
   // ─── CASE G/H: No valid selection or companion not resolved ───
   // Show selector to pick which pet to display
   if (!selectedD || !companion) {
-    if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: pet selector');
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: pet selector');
     return (
       <>
-        <BlobbiSelectorPage
+        <PetsSelectorPage
           companions={filteredCompanions}
-          onSelect={handleSelectBlobbi}
+          onSelect={handleSelectPets}
           isLoading={companionFetching}
           onAdopt={() => setShowAdoptionFlow(true)}
           currentCompanion={profile?.currentCompanion}
@@ -774,7 +774,7 @@ function BlobbiContent() {
         {/* Adoption Flow Modal */}
         <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            <BlobbiOnboardingFlow
+            <PetsOnboardingFlow
               profile={profile}
               updateProfileEvent={updateProfileEvent}
               updateCompanionEvent={updateCompanionEvent}
@@ -791,15 +791,15 @@ function BlobbiContent() {
   }
   
   // ─── CASE I: Everything ready - show dashboard ───
-  // At this point: companion is BlobbiCompanion, selectedD is string (narrowed by Case H guard)
-  // Note: Item use registration is handled by useBlobbiActionsRegistration hook above
-  if (DEBUG_BLOBBI) console.log('[BlobbiPage] Showing: dashboard');
+  // At this point: companion is PetsCompanion, selectedD is string (narrowed by Case H guard)
+  // Note: Item use registration is handled by usePetsActionsRegistration hook above
+  if (DEBUG_PETS) console.log('[PetsPage] Showing: dashboard');
   return (
-    <BlobbiDashboard
+    <PetsDashboard
       companion={companion}
       companions={filteredCompanions}
       selectedD={selectedD}
-      onSelectBlobbi={handleSelectBlobbi}
+      onSelectPets={handleSelectPets}
       onRest={handleRest}
       onUseItem={handleUseItem}
       onDirectAction={handleDirectAction}
@@ -831,9 +831,10 @@ function BlobbiContent() {
 
 interface DashboardShellProps {
   children: React.ReactNode;
+  className?: string;
 }
 
-function DashboardShell({ children }: DashboardShellProps) {
+function DashboardShell({ children, className }: DashboardShellProps) {
   return (
     <main className={cn(
       'flex flex-col overflow-hidden bg-background',
@@ -841,6 +842,7 @@ function DashboardShell({ children }: DashboardShellProps) {
       'max-sidebar:fixed max-sidebar:inset-0 max-sidebar:top-mobile-bar max-sidebar:z-0',
       // Desktop: normal flow within the center column
       'sidebar:h-dvh',
+      className,
     )}>
       <div className="mx-auto w-full max-w-2xl lg:max-w-3xl flex-1 min-h-0 flex flex-col">
         {children}
@@ -854,13 +856,13 @@ function DashboardShell({ children }: DashboardShellProps) {
 /** Which drawer is open; 'none' = room view visible */
 type DashboardDrawer = 'none' | 'missions' | 'activity' | 'more';
 
-// ─── Main Blobbi Dashboard ────────────────────────────────────────────────────
+// ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
-interface BlobbiDashboardProps {
-  companion: BlobbiCompanion;
-  companions: BlobbiCompanion[];
+interface PetsDashboardProps {
+  companion: PetsCompanion;
+  companions: PetsCompanion[];
   selectedD: string;
-  onSelectBlobbi: (d: string) => void;
+  onSelectPets: (d: string) => void;
   onRest: () => void;
   onUseItem: (itemId: string, action: InventoryAction) => Promise<void>;
   onDirectAction: (action: DirectAction) => Promise<void>;
@@ -882,7 +884,7 @@ interface BlobbiDashboardProps {
   setStoredSelectedD: (d: string) => void;
   // Incubation helpers
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
@@ -893,15 +895,15 @@ interface BlobbiDashboardProps {
   // DEV ONLY: State editor props
   showDevEditor: boolean;
   setShowDevEditor: (show: boolean) => void;
-  onDevEditorApply: (updates: BlobbiDevUpdates) => Promise<void>;
+  onDevEditorApply: (updates: PetsDevUpdates) => Promise<void>;
   isDevUpdating: boolean;
 }
 
-function BlobbiDashboard({
+function PetsDashboard({
   companion,
   companions,
   selectedD,
-  onSelectBlobbi,
+  onSelectPets,
   onRest,
   onUseItem,
   onDirectAction,
@@ -925,8 +927,8 @@ function BlobbiDashboard({
   setShowDevEditor,
   onDevEditorApply,
   isDevUpdating,
-}: BlobbiDashboardProps) {
-  // Layout options (hasSubHeader, noOverscroll) set at BlobbiPage level
+}: PetsDashboardProps) {
+  // Layout options (hasSubHeader, noOverscroll) set at PetsPage level
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   
@@ -938,16 +940,16 @@ function BlobbiDashboard({
 
   // ─── Room Navigation ───
   // Persisted room: only written on user-driven room changes (sleep override is UI-only).
-  const roomStorageKey = `blobbi:room:${user?.pubkey ?? 'anon'}:${companion.d}`;
+  const roomStorageKey = `pets:room:${user?.pubkey ?? 'anon'}:${companion.d}`;
   const roomDefault = isValidRoomId(profile?.room) ? profile.room : DEFAULT_INITIAL_ROOM;
-  const [storedRoom, setStoredRoom] = useLocalStorage<BlobbiRoomId>(roomStorageKey, roomDefault);
+  const [storedRoom, setStoredRoom] = useLocalStorage<PetsRoomId>(roomStorageKey, roomDefault);
   // Effective room: sleeping temporarily forces 'rest'; waking up returns to storedRoom.
-  const currentRoom: BlobbiRoomId = isSleeping ? 'rest' : isValidRoomId(storedRoom) ? storedRoom : DEFAULT_INITIAL_ROOM;
+  const currentRoom: PetsRoomId = isSleeping ? 'rest' : isValidRoomId(storedRoom) ? storedRoom : DEFAULT_INITIAL_ROOM;
   const poopStateRef = useRef<PoopState | null>(null);
 
     // ─── Interaction Activity ───
   // Disabled for eggs: they do not participate in social stat-loss/care flow.
-  const { interactions, isLoading: interactionsLoading } = useBlobbiInteractions(isEgg ? null : companion);
+  const { interactions, isLoading: interactionsLoading } = usePetsInteractions(isEgg ? null : companion);
 
   // Interaction reaction layer — temporary visual rewards for care actions.
   // Produces emotion overrides, body animations, and particle overlays.
@@ -985,13 +987,13 @@ function BlobbiDashboard({
         return;
       }
 
-      const newTags = updateBlobbiTags(canonical.allTags, {
+      const newTags = updatePetsTags(canonical.allTags, {
         social: open ? 'open' : 'closed',
       });
 
       const prev = canonical.companion.event;
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: canonical.content,
         tags: newTags,
         prev,
@@ -1002,8 +1004,8 @@ function BlobbiDashboard({
       toast({
         title: open ? 'Social interactions enabled' : 'Social interactions disabled',
         description: open
-          ? 'Other people can now care for this Blobbi.'
-          : 'Only you can interact with this Blobbi.',
+          ? 'Other people can now care for this Pets.'
+          : 'Only you can interact with this Pets.',
       });
     } catch (error) {
       console.error('Failed to toggle social permission:', error);
@@ -1116,7 +1118,7 @@ function BlobbiDashboard({
     setIsRoomEditorOpen(true);
   }, [handleCloseFurnitureEditor]);
 
-  const handleSaveRoomLayout = useCallback(async (roomId: BlobbiRoomId, layout: RoomLayout) => {
+  const handleSaveRoomLayout = useCallback(async (roomId: PetsRoomId, layout: RoomLayout) => {
     if (!user?.pubkey) return;
     setIsSavingLayout(true);
     try {
@@ -1151,7 +1153,7 @@ function BlobbiDashboard({
   const [guideTarget, setGuideTarget] = useState<GuideTarget | null>(null);
 
   // Start a guide: build the target and set state
-  const handleGuide = useCallback((stat: keyof BlobbiStats) => {
+  const handleGuide = useCallback((stat: keyof PetsStats) => {
     setGuideTarget(buildGuideTarget(stat, currentRoom));
   }, [currentRoom]);
 
@@ -1185,9 +1187,9 @@ function BlobbiDashboard({
     setActiveDrawer(prev => prev === drawer ? 'none' : drawer);
   }, []);
   
-  // Build naddr for linking to the Blobbi's detail page
-  const blobbiNaddr = useMemo(() => nip19.naddrEncode({
-    kind: KIND_BLOBBI_STATE,
+  // Build naddr for linking to the Pets's detail page
+  const petsNaddr = useMemo(() => nip19.naddrEncode({
+    kind: KIND_PETS_STATE,
     pubkey: companion.event.pubkey,
     identifier: companion.d,
   }), [companion.event.pubkey, companion.d]);
@@ -1201,15 +1203,15 @@ function BlobbiDashboard({
     return Array.from(stages);
   }, [companions]);
   
-  // Check if this Blobbi is currently the active floating companion
+  // Check if this Pets is currently the active floating companion
   // If so, we hide the visual here to avoid duplication (one floating, one in-page)
-  const { companion: activeCompanion } = useBlobbiCompanionData();
+  const { companion: activeCompanion } = usePetsCompanionData();
   const isActiveFloatingCompanion = activeCompanion?.d === companion.d;
   
   // Projected state with decay applied (UI-only, recalculates every 60s).
   // Owner surfaces use decay-only — social effects are incorporated via
   // explicit consolidation, not pre-applied projection.
-  const projectedState = useProjectedBlobbiState(companion);
+  const projectedState = useProjectedPetsState(companion);
 
   // Clear sleep guide after companion actually enters sleeping state
   useEffect(() => {
@@ -1239,12 +1241,12 @@ function BlobbiDashboard({
   const devEmotionOverride = useEffectiveEmotion();
   
   // Temporary action override used by drag-to-feed / chewing flow.
-  const [actionOverrideEmotion, setActionOverrideEmotion] = useState<BlobbiEmotion | null>(null);
+  const [actionOverrideEmotion, setActionOverrideEmotion] = useState<PetsEmotion | null>(null);
 
   // Music/sing override — persistent while the activity is active (not auto-clearing).
   // Separate from interactionReaction because music is a duration-based activity,
   // not a short reward reaction.
-  const [musicOverrideEmotion, setMusicOverrideEmotion] = useState<BlobbiEmotion | null>(null);
+  const [musicOverrideEmotion, setMusicOverrideEmotion] = useState<PetsEmotion | null>(null);
   
   // Status-based automatic reactions (recipe-first pipeline).
   // Uses projected stats (with decay applied) for accurate reactions.
@@ -1282,7 +1284,7 @@ function BlobbiDashboard({
   
   // Final recipe: dev override uses named emotion; status system uses resolved recipe
   const hasDevOverride = isLocalhostDev() && devEmotionOverride !== 'neutral';
-  const effectiveEmotion: BlobbiEmotion = hasDevOverride ? devEmotionOverride : 'neutral';
+  const effectiveEmotion: PetsEmotion = hasDevOverride ? devEmotionOverride : 'neutral';
   
   // Adoption flow modal state
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
@@ -1295,8 +1297,8 @@ function BlobbiDashboard({
   // Inline activity state - only one activity can be active at a time
   const [inlineActivity, setInlineActivity] = useState<InlineActivityState>(createNoActivity());
   
-  // Blobbi reaction state - drives visual reactions to activities
-  const [blobbiReaction, setBlobbiReaction] = useState<BlobbiReactionState>('idle');
+  // Pets reaction state - drives visual reactions to activities
+  const [petsReaction, setPetsReaction] = useState<PetsReactionState>('idle');
   
   // State detection for tasks
   // Note: isEvolving prop = mutation pending state, isEvolvingState = companion in evolving state
@@ -1355,13 +1357,13 @@ function BlobbiDashboard({
   });
   
   // ─── Set as Companion ───
-  // Determines if this Blobbi is currently set as the user's companion
+  // Determines if this Pets is currently set as the user's companion
   const isCurrentCompanion = profile?.currentCompanion === companion.d;
   
   // State for tracking companion update in progress
   const [isUpdatingCompanion, setIsUpdatingCompanion] = useState(false);
   
-  // Check if this Blobbi can be set as companion (must be baby or adult, not egg)
+  // Check if this Pets can be set as companion (must be baby or adult, not egg)
   const canBeCompanion = companion.stage === 'egg' || companion.stage === 'baby' || companion.stage === 'adult';
   
   // Handler for toggling the current companion
@@ -1372,7 +1374,7 @@ function BlobbiDashboard({
     if (!isCurrentCompanion && !canBeCompanion) {
       toast({
         title: 'Cannot set as companion',
-        description: 'Only hatched Blobbis (baby or adult) can be set as your companion.',
+        description: 'Only hatched Petss (baby or adult) can be set as your companion.',
         variant: 'destructive',
       });
       return;
@@ -1504,29 +1506,29 @@ function BlobbiDashboard({
   // Handle closing inline activities
   const handleCloseInlineActivity = () => {
     setInlineActivity(createNoActivity());
-    setBlobbiReaction('idle');
+    setPetsReaction('idle');
     setMusicOverrideEmotion(null);
   };
   
-  // Handle music playback state changes (for Blobbi reaction)
+  // Handle music playback state changes (for Pets reaction)
   const handleMusicPlaybackStart = () => {
-    setBlobbiReaction('listening');
+    setPetsReaction('listening');
     setMusicOverrideEmotion(getActionEmotion('music'));
   };
   
   const handleMusicPlaybackStop = () => {
-    setBlobbiReaction('idle');
+    setPetsReaction('idle');
     setMusicOverrideEmotion(null);
   };
   
-  // Handle sing recording state changes (for Blobbi reaction)
+  // Handle sing recording state changes (for Pets reaction)
   const handleSingRecordingStart = () => {
-    setBlobbiReaction('singing');
+    setPetsReaction('singing');
     setMusicOverrideEmotion(getActionEmotion('sing'));
   };
   
   const handleSingRecordingStop = () => {
-    setBlobbiReaction('idle');
+    setPetsReaction('idle');
     setMusicOverrideEmotion(null);
   };
   
@@ -1575,12 +1577,12 @@ function BlobbiDashboard({
         const currentXP = canonical.companion.experience ?? 0;
         const newXP = applyXPGain(currentXP, xpToAdd);
 
-        const newTags = updateBlobbiTags(canonical.allTags, {
+        const newTags = updatePetsTags(canonical.allTags, {
           experience: newXP.toString(),
         });
 
         const event = await publishEvent({
-          kind: KIND_BLOBBI_STATE,
+          kind: KIND_PETS_STATE,
           content: canonical.content,
           tags: newTags,
           prev: canonical.companion.event,
@@ -1605,7 +1607,7 @@ function BlobbiDashboard({
   // Handle tap-based item use.
   // Non-food actions use this path from room bars, and the fridge still uses it for food for now.
   // Triggers a temporary interaction reaction based on the action type.
-  // For 'clean' actions, detects whether the Blobbi was visibly dirty before
+  // For 'clean' actions, detects whether the Pets was visibly dirty before
   // the action and uses 'clean_complete' if the dirt was fully removed.
   const handleUseItemFromTab = useCallback((itemId: string) => {
     const action = getActionForItem(itemId);
@@ -1752,7 +1754,7 @@ function BlobbiDashboard({
     // text above the head.
     //
     // The crumb origin is read from the actual chewing-mouth element
-    // (marked with data-blobbi-mouth) so crumbs align with the real
+    // (marked with data-pets-mouth) so crumbs align with the real
     // mouth regardless of adult variant.  Falls back to the visual
     // bounding box ratio when the marker is absent (e.g. Owli/beak).
     //
@@ -1762,13 +1764,13 @@ function BlobbiDashboard({
     // mouth (or no marker at all) because React 18 batches setState.
     //
     // Reward text: always anchored above the head via the visual rect.
-    const el = document.querySelector<HTMLElement>('[data-blobbi-visual]');
+    const el = document.querySelector<HTMLElement>('[data-pets-visual]');
     if (el) {
       requestAnimationFrame(() => {
         if (!isActive()) return;
 
         const r = el.getBoundingClientRect();
-        const mouthEl = el.querySelector<SVGElement>('[data-blobbi-mouth]');
+        const mouthEl = el.querySelector<SVGElement>('[data-pets-mouth]');
         let crumbOriginX: number;
         let crumbOriginY: number;
         if (mouthEl) {
@@ -1884,7 +1886,7 @@ function BlobbiDashboard({
     }
   }, [companion.stats.hunger, handleUseItemFromTab]);
 
-  // Ref for BlobbiRoomShell to expose its internal shovel-drag state.
+  // Ref for PetsRoomShell to expose its internal shovel-drag state.
   // KitchenBar reads this to wire up the ShovelButton.
   const shovelDragRef = useRef<ShovelDrag | null>(null);
   
@@ -1959,8 +1961,8 @@ function BlobbiDashboard({
                   companions={companions}
                   selectedD={selectedD}
                   profile={profile}
-                  blobbiNaddr={blobbiNaddr}
-                  onSelectBlobbi={onSelectBlobbi}
+                  petsNaddr={petsNaddr}
+                  onSelectPets={onSelectPets}
                   onAdopt={() => setShowAdoptionFlow(true)}
                   onDevOpenEditor={() => setShowDevEditor(true)}
                   onDevOpenEmotionPanel={() => setShowEmotionPanel(true)}
@@ -1986,17 +1988,17 @@ function BlobbiDashboard({
               <span className="text-sm">Activity</span>
             </span>
           </TabButton>
-          <TabButton label="Blobbis" active={activeDrawer === 'more'} onClick={() => toggleDrawer('more')} className="translate-y-0">
+          <TabButton label="Petss" active={activeDrawer === 'more'} onClick={() => toggleDrawer('more')} className="translate-y-0">
             <span className="flex items-center gap-1.5">
               <Egg className="size-4" />
-              <span className="text-sm">Blobbis</span>
+              <span className="text-sm">Petss</span>
             </span>
           </TabButton>
         </SubHeaderBar>
       </div>
 
       {/* ─── Room View (always visible behind drawer) ─── */}
-      <BlobbiRoomShell
+      <PetsRoomShell
         roomId={currentRoom}
         onChangeRoom={(room) => {
           if (isSleeping) {
@@ -2022,13 +2024,13 @@ function BlobbiDashboard({
         furnitureActiveLayer={furnitureActiveLayer}
         onFurnitureBackgroundClick={handleFurnitureBackgroundClick}
         editorSlot={
-          <BlobbiRoomEditorTrigger onClick={handleOpenRoomEditor} />
+          <PetsRoomEditorTrigger onClick={handleOpenRoomEditor} />
         }
         editorSlotLeft={
           <RoomFurnitureEditorTrigger onClick={handleOpenFurnitureEditor} />
         }
         editorOverlay={isRoomEditorOpen ? (
-          <BlobbiRoomEditor
+          <PetsRoomEditor
             roomId={currentRoom}
             currentLayout={currentRoomLayout}
             onSave={handleSaveRoomLayout}
@@ -2112,7 +2114,7 @@ function BlobbiDashboard({
           </div>
         ) : undefined}
         hero={
-          <BlobbiRoomHero
+          <PetsRoomHero
             companion={companion}
             isActiveFloatingCompanion={isActiveFloatingCompanion}
             isUpdatingCompanion={isUpdatingCompanion}
@@ -2121,7 +2123,7 @@ function BlobbiDashboard({
         }
         stageOverlay={
           !isActiveFloatingCompanion ? (
-            <BlobbiRoomStage
+            <PetsRoomStage
               companion={companion}
               currentStats={currentStats}
               isSleeping={isSleeping}
@@ -2130,7 +2132,7 @@ function BlobbiDashboard({
               statusRecipeLabel={statusRecipeLabel}
               effectiveEmotion={effectiveEmotion}
               hasDevOverride={hasDevOverride}
-              blobbiReaction={blobbiReaction}
+              petsReaction={petsReaction}
               interactionReaction={isEgg ? undefined : interactionReaction}
               stageRef={stageRef}
             />
@@ -2138,7 +2140,7 @@ function BlobbiDashboard({
         }
         statusHud={
           !isActiveFloatingCompanion ? (
-            <BlobbiRoomStatusHud
+            <PetsRoomStatusHud
               companion={companion}
               currentStats={currentStats}
               onGuide={handleGuide}
@@ -2201,14 +2203,14 @@ function BlobbiDashboard({
             guideHighlightId={guideHighlightId}
             guideActionGlow={guideActionGlow}
             foodDragHook={foodDragHook}
-            carouselKeyPrefix={`blobbi:carousel:${user?.pubkey ?? 'anon'}:${companion.d}`}
+            carouselKeyPrefix={`pets:carousel:${user?.pubkey ?? 'anon'}:${companion.d}`}
             setShowFridge={setShowFridge}
             foodItems={foodItems}
             handleFeedItem={handleFeedItem}
             shovelDragRef={shovelDragRef}
           />
         )}
-      </BlobbiRoomShell>
+      </PetsRoomShell>
 
       {/* ─── Food drag ghost overlay ─── */}
       {foodDragHook.drag && (
@@ -2248,8 +2250,8 @@ function BlobbiDashboard({
         isLoading={isDirectActionPending}
       />
       
-      {/* Blobbi Photo Modal */}
-      <BlobbiPhotoModal
+      {/* Pets Photo Modal */}
+      <PetsPhotoModal
         open={showPhotoModal}
         onOpenChange={setShowPhotoModal}
         companion={companion}
@@ -2259,7 +2261,7 @@ function BlobbiDashboard({
       {/* Hatch Ceremony — portaled to document.body to escape center column stacking context */}
       {showHatchCeremony && createPortal(
         <div className="fixed inset-0 z-[100] bg-background">
-          <BlobbiHatchingCeremony
+          <PetsHatchingCeremony
             profile={profile}
             updateProfileEvent={updateProfileEvent}
             updateCompanionEvent={updateCompanionEvent}
@@ -2276,7 +2278,7 @@ function BlobbiDashboard({
       {/* Evolve Ceremony — portaled to document.body like the hatch ceremony */}
       {showEvolveCeremony && createPortal(
         <div className="fixed inset-0 z-[100] bg-background">
-          <BlobbiEvolveCeremony
+          <PetsEvolveCeremony
             companion={companion}
             onEvolve={onEvolve}
             onComplete={() => setShowEvolveCeremony(false)}
@@ -2288,7 +2290,7 @@ function BlobbiDashboard({
       {/* Adoption Flow Modal */}
       <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-          <BlobbiOnboardingFlow
+          <PetsOnboardingFlow
             profile={profile}
             updateProfileEvent={updateProfileEvent}
             updateCompanionEvent={updateCompanionEvent}
@@ -2303,7 +2305,7 @@ function BlobbiDashboard({
       
       {/* DEV ONLY: State Editor */}
       {import.meta.env.DEV && (
-        <BlobbiDevEditor
+        <PetsDevEditor
           isOpen={showDevEditor}
           onClose={() => setShowDevEditor(false)}
           companion={companion}
@@ -2318,7 +2320,7 @@ function BlobbiDashboard({
       
       {/* DEV ONLY: Emotion Tester */}
       {import.meta.env.DEV && (
-        <BlobbiEmotionPanel
+        <PetsEmotionPanel
           isOpen={showEmotionPanel}
           onClose={() => setShowEmotionPanel(false)}
         />
@@ -2330,10 +2332,10 @@ function BlobbiDashboard({
 // ─── Room Bottom Bar ──────────────────────────────────────────────────────────
 
 interface RoomBottomBarProps {
-  room: BlobbiRoomId;
-  companion: BlobbiCompanion;
+  room: PetsRoomId;
+  companion: PetsCompanion;
   /** Projected stats (decay-applied) matching what the stat rings display. */
-  currentStats: BlobbiStats;
+  currentStats: PetsStats;
   profile: BlobbonautProfile | null;
   isEgg: boolean;
   isSleeping: boolean;
@@ -2358,7 +2360,7 @@ interface RoomBottomBarProps {
   guideActionGlow?: string | null;
   /** Food drag hook for drag-to-feed in the kitchen. */
   foodDragHook?: UseFoodDragReturn;
-  /** localStorage key prefix for carousel focus persistence (pubkey:blobbiD). */
+  /** localStorage key prefix for carousel focus persistence (pubkey:petsD). */
   carouselKeyPrefix: string;
   // ── Kitchen-specific (passed through to KitchenBar) ──
   /** Open/close fridge overlay (rendered at shell level via roomOverlay). */
@@ -2367,7 +2369,7 @@ interface RoomBottomBarProps {
   foodItems?: Array<ReturnType<typeof getLiveShopItems>[number] & { statChanges: ReturnType<typeof previewStatChangesWithSegments> }>;
   /** Feed handler with overfeed-poop logic. */
   handleFeedItem?: (itemId: string) => void;
-  /** Shovel drag ref exposed by BlobbiRoomShell. */
+  /** Shovel drag ref exposed by PetsRoomShell. */
   shovelDragRef?: React.MutableRefObject<ShovelDrag | null>;
 }
 
@@ -2642,7 +2644,7 @@ function CareBar({
     return carouselEntries[0]?.meta ?? 'hygiene';
   });
 
-  // Sync focusedMeta when storedFocusId changes after mount (e.g. Blobbi switch).
+  // Sync focusedMeta when storedFocusId changes after mount (e.g. Pets switch).
   useEffect(() => {
     if (!storedFocusId) return;
     const stored = carouselEntries.find(e => e.id === storedFocusId);
@@ -2998,7 +3000,7 @@ function MissionsTabContent({
             {!dailyMissions.isLoading && dailyMissions.noMissionsAvailable && (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <Egg className="size-6 text-muted-foreground/30" />
-                <p className="text-xs text-muted-foreground">Hatch your Blobbi to unlock daily bounties</p>
+                <p className="text-xs text-muted-foreground">Hatch your Pets to unlock daily bounties</p>
               </div>
             )}
 
@@ -3058,7 +3060,6 @@ function QuestTaskIcon({ taskId, completed }: { taskId: string; completed: boole
   const icon = (() => {
     switch (taskId) {
       case 'create_themes': return <Sparkles className={iconClass} />;
-      case 'color_moments': return <Droplets className={iconClass} />;
       case 'create_posts': return <Target className={iconClass} />;
       case 'interactions': return <Heart className={iconClass} />;
       case 'edit_profile': return <Wrench className={iconClass} />;
@@ -3106,12 +3107,12 @@ function DailyMissionIcon({ action, complete }: { action: string; complete: bool
 // ─── More Tab Content ─────────────────────────────────────────────────────────
 
 interface MoreTabContentProps {
-  companion: BlobbiCompanion;
-  companions: BlobbiCompanion[];
+  companion: PetsCompanion;
+  companions: PetsCompanion[];
   selectedD: string;
   profile: BlobbonautProfile | null;
-  blobbiNaddr: string;
-  onSelectBlobbi: (d: string) => void;
+  petsNaddr: string;
+  onSelectPets: (d: string) => void;
   onAdopt: () => void;
   onDevOpenEditor: () => void;
   onDevOpenEmotionPanel: () => void;
@@ -3125,8 +3126,8 @@ function MoreTabContent({
   companions,
   selectedD,
   profile,
-  blobbiNaddr,
-  onSelectBlobbi,
+  petsNaddr,
+  onSelectPets,
   onAdopt,
   onDevOpenEditor,
   onDevOpenEmotionPanel,
@@ -3138,7 +3139,7 @@ function MoreTabContent({
 
   return (
     <div className="flex flex-col items-center h-full min-h-[210px] px-3 sm:px-4">
-      {/* ── Blobbi grid ── */}
+      {/* ── Pets grid ── */}
       <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 py-3">
         {companions.map((c) => {
           const isSelected = c.d === selectedD;
@@ -3146,7 +3147,7 @@ function MoreTabContent({
           return (
             <button
               key={c.d}
-              onClick={() => onSelectBlobbi(c.d)}
+              onClick={() => onSelectPets(c.d)}
               className={cn(
                 'flex flex-col items-center gap-1 transition-all duration-200',
                 'hover:-translate-y-1 hover:scale-105 active:scale-95',
@@ -3157,7 +3158,7 @@ function MoreTabContent({
                   'rounded-full p-1 transition-all',
                   isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : '',
                 )}>
-                  <BlobbiStageVisual
+                  <PetsStageVisual
                     companion={c}
                     size="sm"
                     recipe={c.state === 'sleeping' ? buildSleepingRecipe() : undefined}
@@ -3203,7 +3204,7 @@ function MoreTabContent({
 
       {/* ── Quick actions row ── */}
       <div className="flex items-center justify-center gap-6 pt-1">
-        <Link to={`/${blobbiNaddr}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+        <Link to={`/${petsNaddr}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
           <ExternalLink className="size-5" />
           <span className="text-[10px]">View</span>
         </Link>
@@ -3253,8 +3254,8 @@ const STAT_DISPLAY: Record<string, { label: string; icon: string }> = {
 };
 
 interface ActivityTabContentProps {
-  companion: BlobbiCompanion;
-  projectedStats: BlobbiStats;
+  companion: PetsCompanion;
+  projectedStats: PetsStats;
   socialOpen: boolean;
   onToggleSocial: (open: boolean) => Promise<void>;
   isSocialToggling: boolean;
@@ -3263,12 +3264,12 @@ interface ActivityTabContentProps {
 
 function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSocial, isSocialToggling, isEgg }: ActivityTabContentProps) {
   // Fetch recent unconsolidated interactions for the "Recent help" section.
-  const { interactions: recentHelp, isLoading } = useBlobbiActivityHistory(isEgg ? null : companion);
+  const { interactions: recentHelp, isLoading } = usePetsActivityHistory(isEgg ? null : companion);
 
   // Compute current needs from projected stats.
   const needs = useMemo(() => getAllNeeds(projectedStats), [projectedStats]);
 
-  const socialToggleId = 'blobbi-social-toggle';
+  const socialToggleId = 'pets-social-toggle';
 
   return (
     <div className="px-4 sm:px-6 space-y-4">
@@ -3314,7 +3315,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
         <div className="flex items-center gap-2.5 rounded-lg border border-dashed p-3">
           <Egg className="size-4 shrink-0 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Social care settings will unlock after your Blobbi hatches.
+            Social care settings will unlock after your Pets hatches.
           </p>
         </div>
       ) : (
@@ -3322,7 +3323,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
           <label htmlFor={socialToggleId} className="flex items-center gap-2.5 cursor-pointer select-none min-w-0">
             <Users className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
-              <p className="text-sm font-medium leading-tight">Allow others to care for this Blobbi</p>
+              <p className="text-sm font-medium leading-tight">Allow others to care for this Pets</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {socialOpen ? 'Anyone can feed, play, and clean.' : 'Only you can interact.'}
               </p>
@@ -3333,7 +3334,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
             checked={socialOpen}
             onCheckedChange={onToggleSocial}
             disabled={isSocialToggling}
-            aria-label="Allow other people to care for this Blobbi"
+            aria-label="Allow other people to care for this Pets"
           />
         </div>
       )}
@@ -3402,24 +3403,24 @@ function CaretakerLink({ pubkey }: { pubkey: string }) {
   );
 }
 
-// ─── Blobbi Selector Page ─────────────────────────────────────────────────────
+// ─── Pets Selector Page ─────────────────────────────────────────────────────
 
-interface BlobbiSelectorPageProps {
-  companions: BlobbiCompanion[];
+interface PetsSelectorPageProps {
+  companions: PetsCompanion[];
   onSelect: (d: string) => void;
   isLoading?: boolean;
   onAdopt?: () => void;
   currentCompanion?: string;
 }
 
-function BlobbiSelectorPage({ companions, onSelect, isLoading, onAdopt, currentCompanion }: BlobbiSelectorPageProps) {
+function PetsSelectorPage({ companions, onSelect, isLoading, onAdopt, currentCompanion }: PetsSelectorPageProps) {
   return (
     <DashboardShell>
       <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
           <Egg className="size-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">Choose Your Blobbi</h1>
+            <h1 className="text-lg font-semibold">Choose Your Pets</h1>
             <p className="text-xs text-muted-foreground">Select a companion to care for</p>
           </div>
         </div>
@@ -3436,7 +3437,7 @@ function BlobbiSelectorPage({ companions, onSelect, isLoading, onAdopt, currentC
                 className="flex flex-col items-center gap-1.5 transition-all duration-200 hover:-translate-y-1 hover:scale-105 active:scale-95"
               >
                 <div className="relative">
-                  <BlobbiStageVisual companion={c} size="sm" />
+                  <PetsStageVisual companion={c} size="sm" />
                   {isCompanion && (
                     <div className="absolute -bottom-0.5 -right-0.5 size-5 rounded-full bg-background ring-2 ring-background flex items-center justify-center">
                       <Footprints className="size-3 text-emerald-500" />

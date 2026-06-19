@@ -1,13 +1,13 @@
 /**
- * BlobbiHatchingCeremony - Immersive hatching experience for every new egg
+ * PetsHatchingCeremony - Immersive hatching experience for every new egg
  *
  * Flow:
  *   1. Dark screen, egg silently created in background
  *   2. Huge breathing egg appears. No text. No UI.
  *   3. Click egg 4 times through crack stages with intensifying shakes
  *   4. Final click -> egg bursts into light, actual hatch mutation fires
- *   5. Flash clears -> hatched baby blobbi revealed center screen with glow/sparkles
- *   6. Typewriter dialog appears below blobbi (click to complete line / advance)
+ *   5. Flash clears -> hatched baby pets revealed center screen with glow/sparkles
+ *   6. Typewriter dialog appears below pets (click to complete line / advance)
  *   7. Naming prompt, then ceremony complete
  */
 
@@ -22,29 +22,29 @@ import { toast } from '@/hooks/useToast';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { fetchFreshBlobbonautProfile } from '@/blobbi/core/lib/fetchFreshBlobbonautProfile';
+import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
 
 import {
-  KIND_BLOBBI_STATE,
+  KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
   INITIAL_BLOBBONAUT_COINS,
   STAT_MAX,
   buildBlobbonautTags,
   updateBlobbonautTags,
-  updateBlobbiTags,
+  updatePetsTags,
   type BlobbonautProfile,
-  type BlobbiCompanion,
-} from '@/blobbi/core/lib/blobbi';
+  type PetsCompanion,
+} from '@/pets/core/lib/pets';
 
 import {
   generateEggPreview,
   previewToEventTags,
-  previewToBlobbiCompanion,
-  type BlobbiEggPreview,
-} from '../lib/blobbi-preview';
+  previewToPetsCompanion,
+  type PetsEggPreview,
+} from '../lib/pets-preview';
 
 import { useTypewriter } from '../hooks/useTypewriter';
 import { buildRevealGradient } from '../lib/ceremony-colors';
@@ -67,7 +67,7 @@ type CeremonyPhase =
   | 'crack_2'
   | 'crack_3'
   | 'hatching'    // egg burst + hatch mutation
-  | 'reveal'      // flash clearing, baby blobbi fading in with glow
+  | 'reveal'      // flash clearing, baby pets fading in with glow
   | 'dialog'      // typewriter dialog lines
   | 'naming'
   | 'complete';
@@ -79,7 +79,7 @@ const setupInFlightFor = new Set<string>();
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface BlobbiHatchingCeremonyProps {
+interface PetsHatchingCeremonyProps {
   profile: BlobbonautProfile | null;
   updateProfileEvent: (event: NostrEvent) => void;
   updateCompanionEvent: (event: NostrEvent) => void;
@@ -88,14 +88,14 @@ interface BlobbiHatchingCeremonyProps {
   setStoredSelectedD: (d: string) => void;
   onComplete?: () => void;
   /** If provided, skip egg creation and start from the cracking phase with this existing egg. */
-  existingCompanion?: BlobbiCompanion | null;
+  existingCompanion?: PetsCompanion | null;
   /** If true, only create the egg and skip the hatching ceremony. The egg stays an egg. */
   eggOnly?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BlobbiHatchingCeremony({
+export function PetsHatchingCeremony({
   profile,
   updateProfileEvent,
   updateCompanionEvent,
@@ -105,7 +105,7 @@ export function BlobbiHatchingCeremony({
   onComplete,
   existingCompanion,
   eggOnly = false,
-}: BlobbiHatchingCeremonyProps) {
+}: PetsHatchingCeremonyProps) {
   const isExistingEgg = !!existingCompanion;
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -114,13 +114,13 @@ export function BlobbiHatchingCeremony({
 
   // ── Core state ──
   const [phase, setPhase] = useState<CeremonyPhase>('loading');
-  const [preview, setPreview] = useState<BlobbiEggPreview | null>(null);
+  const [preview, setPreview] = useState<PetsEggPreview | null>(null);
   const [name, setName] = useState(existingCompanion?.name ?? '');
   const [isNaming, setIsNaming] = useState(false);
   const [eggVisible, setEggVisible] = useState(false);
 
   // Reveal phase state
-  const [blobbiVisible, setBlobbiVisible] = useState(false);
+  const [petsVisible, setPetsVisible] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
   const [, setShowRevealGlow] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
@@ -146,13 +146,13 @@ export function BlobbiHatchingCeremony({
 
   // ── Companion visuals ──
   const eggCompanion = useMemo(
-    () => preview ? previewToBlobbiCompanion(preview) : null,
+    () => preview ? previewToPetsCompanion(preview) : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [preview?.d],
   );
 
   // Baby companion (same visual data but stage=baby)
-  const babyCompanion = useMemo((): BlobbiCompanion | null => {
+  const babyCompanion = useMemo((): PetsCompanion | null => {
     if (!eggCompanion) return null;
     return { ...eggCompanion, stage: 'baby', state: 'active' as const, progressionState: 'evolving' as const };
   }, [eggCompanion]);
@@ -174,7 +174,7 @@ export function BlobbiHatchingCeremony({
     setupAttempted.current = true;
 
     // Build a minimal preview from the existing companion
-    const fakePreview: BlobbiEggPreview = {
+    const fakePreview: PetsEggPreview = {
       d: existingCompanion.d,
       petId: existingCompanion.d,
       ownerPubkey: user?.pubkey ?? '',
@@ -255,8 +255,8 @@ export function BlobbiHatchingCeremony({
         eggTagsRef.current = eggTags;
 
         const eggEvent = await publishEvent({
-          kind: KIND_BLOBBI_STATE,
-          content: 'A new Blobbi egg!',
+          kind: KIND_PETS_STATE,
+          content: 'A new Pets egg!',
           tags: eggTags,
           created_at: eggPreview.createdAt,
         });
@@ -312,7 +312,7 @@ export function BlobbiHatchingCeremony({
         console.error('[HatchingCeremony] Setup failed:', error);
         toast({
           title: 'Something went wrong',
-          description: 'Failed to set up your Blobbi. Please try again.',
+          description: 'Failed to set up your Pets. Please try again.',
           variant: 'destructive',
         });
       } finally {
@@ -385,7 +385,7 @@ export function BlobbiHatchingCeremony({
     const now = Math.floor(Date.now() / 1000);
     const nowStr = now.toString();
 
-    const babyTags = updateBlobbiTags(tags, {
+    const babyTags = updatePetsTags(tags, {
       stage: 'baby',
       state: 'active',
       progression_state: 'evolving',
@@ -401,8 +401,8 @@ export function BlobbiHatchingCeremony({
 
     const babyName = previewRef.current?.name ?? 'Egg';
     const event = await publishEvent({
-      kind: KIND_BLOBBI_STATE,
-      content: `${babyName} is a baby Blobbi.`,
+      kind: KIND_PETS_STATE,
+      content: `${babyName} is a baby Pets.`,
       tags: babyTags,
     });
 
@@ -440,10 +440,10 @@ export function BlobbiHatchingCeremony({
         setShowRevealGlow(true);
         setPhase('reveal');
 
-        // Fade in blobbi
-        setTimeout(() => setBlobbiVisible(true), 400);
+        // Fade in pets
+        setTimeout(() => setPetsVisible(true), 400);
 
-        // After blobbi settles, start dialog
+        // After pets settles, start dialog
         setTimeout(() => {
           setPhase('dialog');
           setDialogLineIndex(0);
@@ -489,10 +489,10 @@ export function BlobbiHatchingCeremony({
       // Update egg/baby name if changed
       const currentTags = eggTagsRef.current;
       if (currentTags && finalName !== (previewRef.current?.name ?? 'Egg')) {
-        const namedTags = updateBlobbiTags(currentTags, { name: finalName });
+        const namedTags = updatePetsTags(currentTags, { name: finalName });
         const event = await publishEvent({
-          kind: KIND_BLOBBI_STATE,
-          content: `${finalName} is a baby Blobbi.`,
+          kind: KIND_PETS_STATE,
+          content: `${finalName} is a baby Pets.`,
           tags: namedTags,
         });
         updateCompanionEvent(event);
@@ -505,7 +505,7 @@ export function BlobbiHatchingCeremony({
         const baseEvent = freshProfile?.event ?? currentProfile.event;
         
         const updatedTags = updateBlobbonautTags(baseEvent.tags, {
-          blobbi_onboarding_done: 'true',
+          pets_onboarding_done: 'true',
         });
         const profileEvent = await publishEvent({
           kind: KIND_BLOBBONAUT_PROFILE,
@@ -543,7 +543,7 @@ export function BlobbiHatchingCeremony({
       console.error('[HatchingCeremony] Naming failed:', error);
       toast({
         title: 'Failed to save name',
-        description: 'Your Blobbi was created, but the name could not be saved.',
+        description: 'Your Pets was created, but the name could not be saved.',
         variant: 'destructive',
       });
       setFadeOut(true);
@@ -609,7 +609,7 @@ export function BlobbiHatchingCeremony({
         />
       )}
 
-      {/* ── Vignette shadow for reveal phase — adds depth so blobbi pops ── */}
+      {/* ── Vignette shadow for reveal phase — adds depth so pets pops ── */}
       {showBaby && (
         <div
           className="absolute inset-0 pointer-events-none"
@@ -659,7 +659,7 @@ export function BlobbiHatchingCeremony({
                 opacity: phase === 'crack_3' ? 0.5 : phase === 'crack_2' ? 0.35 : phase === 'crack_1' ? 0.25 : 0.15,
               }}
             />
-            <BlobbiStageVisual
+            <PetsStageVisual
               companion={eggCompanion}
               size="lg"
               animated
@@ -678,7 +678,7 @@ export function BlobbiHatchingCeremony({
         />
       )}
 
-      {/* ── Hatched baby blobbi with golden incandescence ── */}
+      {/* ── Hatched baby pets with golden incandescence ── */}
       {showBaby && babyCompanion && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
           style={{ paddingBottom: '18%' }}
@@ -686,7 +686,7 @@ export function BlobbiHatchingCeremony({
           {/* Rotating golden incandescence */}
           <div className={cn(
             'absolute animate-onboard-golden-fadein',
-            blobbiVisible ? '' : 'opacity-0',
+            petsVisible ? '' : 'opacity-0',
           )}>
             <div
               className="animate-onboard-golden-rotate"
@@ -710,11 +710,11 @@ export function BlobbiHatchingCeremony({
             />
           </div>
 
-          {/* Bright white-gold shine directly behind blobbi */}
+          {/* Bright white-gold shine directly behind pets */}
           <div
             className={cn(
               'absolute rounded-full transition-opacity duration-1000',
-              blobbiVisible ? 'opacity-100' : 'opacity-0',
+              petsVisible ? 'opacity-100' : 'opacity-0',
             )}
             style={{
               width: 320,
@@ -727,7 +727,7 @@ export function BlobbiHatchingCeremony({
           <div
             className={cn(
               'absolute rounded-full transition-opacity [transition-duration:2000ms]',
-              blobbiVisible ? 'opacity-100' : 'opacity-0',
+              petsVisible ? 'opacity-100' : 'opacity-0',
             )}
             style={{
               width: 700,
@@ -831,12 +831,12 @@ export function BlobbiHatchingCeremony({
             );
           })}
 
-          {/* The baby blobbi */}
+          {/* The baby pets */}
           <div className={cn(
             'relative transition-opacity duration-1000',
-            blobbiVisible ? 'opacity-100' : 'opacity-0',
+            petsVisible ? 'opacity-100' : 'opacity-0',
           )}>
-            <BlobbiStageVisual
+            <PetsStageVisual
               companion={babyCompanion}
               size="lg"
               animated
@@ -973,7 +973,7 @@ export function BlobbiHatchingCeremony({
           className="absolute inset-0 bg-white pointer-events-none"
           style={{
             zIndex: 90,
-            animation: 'blobbi-fade-to-white 2s ease-in forwards',
+            animation: 'pets-fade-to-white 2s ease-in forwards',
           }}
         />
       )}

@@ -1,7 +1,7 @@
 /**
- * BlobbiAdoptionStep - "Ready to adopt?" step of onboarding
+ * PetsAdoptionStep - "Ready to adopt?" step of onboarding
  * 
- * Shows after profile creation, asking if the user wants to adopt their first Blobbi.
+ * Shows after profile creation, asking if the user wants to adopt their first Pets.
  * This is shown when the user has a profile but no pets yet.
  */
 
@@ -9,17 +9,17 @@ import { Egg, ArrowRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
-interface BlobbiAdoptionStepProps {
+interface PetsAdoptionStepProps {
   /** User's Blobbonaut name */
   blobbonautName: string | undefined;
   /** Called when user wants to start the adoption preview */
   onStartAdoption: () => void;
 }
 
-export function BlobbiAdoptionStep({
+export function PetsAdoptionStep({
   blobbonautName,
   onStartAdoption,
-}: BlobbiAdoptionStepProps) {
+}: PetsAdoptionStepProps) {
   const displayName = blobbonautName || 'Blobbonaut';
   
   return (
@@ -37,14 +37,14 @@ export function BlobbiAdoptionStep({
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
             Your Blobbonaut profile is ready. Now it's time for the exciting part - 
-            adopting your very first Blobbi!
+            adopting your very first Pets!
           </p>
         </div>
         
         {/* Call to Action */}
         <div className="space-y-3 w-full mt-4">
           <p className="text-lg font-medium">
-            Ready to adopt your first Blobbi?
+            Ready to adopt your first Pets?
           </p>
           
           <Button

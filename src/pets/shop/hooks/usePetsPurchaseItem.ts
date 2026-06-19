@@ -7,16 +7,16 @@ import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { toast } from '@/hooks/useToast';
 
 import type { PurchaseRequest } from '../types/shop.types';
-import type { BlobbonautProfile, StorageItem } from '@/blobbi/core/lib/blobbi';
+import type { BlobbonautProfile, StorageItem } from '@/pets/core/lib/pets';
 import {
   KIND_BLOBBONAUT_PROFILE,
   updateBlobbonautTags,
   createStorageTags,
-} from '@/blobbi/core/lib/blobbi';
-import { getShopItemById } from '../lib/blobbi-shop-items';
+} from '@/pets/core/lib/pets';
+import { getShopItemById } from '../lib/pets-shop-items';
 
 /**
- * Hook to purchase items from the Blobbi Shop.
+ * Hook to purchase items from the Pets Shop.
  * 
  * Handles:
  * - Coin deduction
@@ -24,7 +24,7 @@ import { getShopItemById } from '../lib/blobbi-shop-items';
  * - Atomic profile update (coins + storage in single event)
  * - Optimistic updates and error handling
  */
-export function useBlobbiPurchaseItem(currentProfile: BlobbonautProfile | null) {
+export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();

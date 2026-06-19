@@ -1,23 +1,23 @@
 /**
- * mouthAnchor — Static lookup for Blobbi mouth position ratios.
+ * mouthAnchor — Static lookup for Pets mouth position ratios.
  *
  * Returns normalized x/y ratios (0–1) relative to the companion container,
  * already accounting for the internal +0.12 translateY shift applied by
- * BlobbiCompanionVisual.
+ * PetsCompanionVisual.
  *
  * Used to position the vomit drop spawn point at the actual mouth.
  */
 
-import { ADULT_FORMS, type AdultForm } from '@/blobbi/adult-blobbi/types/adult.types';
+import { ADULT_FORMS, type AdultForm } from '@/pets/adult-pets/types/adult.types';
 
-// ─── Internal visual wrapper shift (BlobbiCompanionVisual translateY) ────────
+// ─── Internal visual wrapper shift (PetsCompanionVisual translateY) ────────
 const VISUAL_Y_OFFSET = 0.12;
 
 // ─── Baby mouth: controlY = 68 in 100×100 viewBox ───────────────────────────
 const BABY_MOUTH_Y_RATIO = 68 / 100 + VISUAL_Y_OFFSET;
 
 // ─── Adult mouths: controlY values in 200×200 viewBox ────────────────────────
-const ADULT_MOUTH_Y_RATIO: Record<AdultForm, number> = {
+const ADULT_MOUTH_Y_RATIO: Partial<Record<AdultForm, number>> = {
   bloomi: 128 / 200 + VISUAL_Y_OFFSET,
   breezy: 120 / 200 + VISUAL_Y_OFFSET,
   cacti: 126 / 200 + VISUAL_Y_OFFSET,
@@ -34,6 +34,9 @@ const ADULT_MOUTH_Y_RATIO: Record<AdultForm, number> = {
   rocky: 123 / 200 + VISUAL_Y_OFFSET,
   rosey: 106 / 200 + VISUAL_Y_OFFSET,
   starri: 125 / 200 + VISUAL_Y_OFFSET,
+  glitchfox: 122 / 200 + VISUAL_Y_OFFSET,
+  biomechmoth: 92 / 200 + VISUAL_Y_OFFSET,
+  liquidblob: 125 / 200 + VISUAL_Y_OFFSET,
 };
 
 const ADULT_FORMS_SET: ReadonlySet<string> = new Set(ADULT_FORMS);
@@ -44,12 +47,12 @@ export interface MouthAnchorRatios {
 }
 
 /**
- * Get the mouth anchor ratios for a given Blobbi stage and optional adult type.
+ * Get the mouth anchor ratios for a given Pets stage and optional adult type.
  *
  * The returned ratios are multiplied by `config.size` and added to
  * `renderedPosition` to get viewport-pixel coordinates of the mouth.
  */
-export function getBlobbiMouthAnchor(
+export function getPetsMouthAnchor(
   stage: 'egg' | 'baby' | 'adult',
   adultType?: string,
 ): MouthAnchorRatios {
@@ -58,7 +61,10 @@ export function getBlobbiMouthAnchor(
   }
 
   if (stage === 'adult' && adultType && ADULT_FORMS_SET.has(adultType)) {
-    return { xRatio: 0.5, yRatio: ADULT_MOUTH_Y_RATIO[adultType as AdultForm] };
+    const ratio = ADULT_MOUTH_Y_RATIO[adultType as AdultForm];
+    if (ratio !== undefined) {
+      return { xRatio: 0.5, yRatio: ratio };
+    }
   }
 
   // Fallback for egg or unknown adult type

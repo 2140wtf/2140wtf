@@ -5,7 +5,7 @@
  *  ├─ Live Now horizontal strip (live-only) ──────┤
  *  ├─ Videos (kind 21) grid ──────────────────────┤
  *  ├─ Shorts (kind 22) — inline snap-scroll ──────┤
- *  │  (exactly like VinesFeedPage, within column) │
+ *  │  (snap-scroll short-form player, within column) │
  *  └──────────────────────────────────────────────┘
  *
  * Global: sort:hot (ditto relay, limit 8/page)
@@ -58,8 +58,8 @@ import { getEffectiveStreamStatus } from "@/lib/streamStatus";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
 
-// Reuse the real VineCard — no re-implementation
-import { VineCard } from "@/pages/VinesFeedPage";
+// Reuse the real short-form video card from the extracted component.
+import { ShortVideoCard } from "@/components/ShortVideoCard";
 
 const videosDef = getExtraKindDef("videos")!;
 
@@ -692,7 +692,7 @@ function ShortThumb({
   );
 }
 
-// ── Shorts full-screen player (VineCard) with back-to-grid button ─────────────
+// ── Shorts full-screen player (ShortVideoCard) with back-to-grid button ───────
 
 function ShortsPlayer({
   events,
@@ -769,7 +769,7 @@ function ShortsPlayer({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, activeIndex, events.length]);
 
-  // Same structure as VinesFeedPage: PageHeader + snap container, filling the feed column
+  // PageHeader + snap container, filling the feed column
   return (
     <div className="flex-1 min-w-0 flex flex-col">
       <PageHeader
@@ -779,10 +779,10 @@ function ShortsPlayer({
         alwaysShowBack
       />
 
-      {/* Snap-scroll VineCard column — identical sizing to VinesFeedPage */}
+      {/* Snap-scroll short-form video column */}
       <div
         ref={containerRef}
-        className="vine-slide-height sidebar:h-[calc(100vh-3rem)] snap-y snap-mandatory overflow-y-scroll"
+        className="short-video-slide-height sidebar:h-[calc(100vh-3rem)] snap-y snap-mandatory overflow-y-scroll"
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -792,9 +792,9 @@ function ShortsPlayer({
         {events.map((event, i) => (
           <div
             key={event.id}
-            className="w-full vine-slide-height sidebar:h-[calc(100vh-3rem)] snap-start snap-always flex-shrink-0"
+            className="w-full short-video-slide-height sidebar:h-[calc(100vh-3rem)] snap-start snap-always flex-shrink-0"
           >
-            <VineCard
+            <ShortVideoCard
               event={event}
               isActive={i === activeIndex}
               isNearActive={Math.abs(i - activeIndex) <= 1}
@@ -932,7 +932,7 @@ export function VideosFeedPage() {
   const handleRefresh = usePageRefresh(['feed']);
 
   // When the shorts player is open, render it directly as the page root —
-  // same flex-1 column that VinesFeedPage uses, fully replacing the feed UI.
+  // Flex-1 column that fully replaces the feed UI when the shorts player is open.
   if (shortsPlayerIndex !== null) {
     return (
       <ShortsPlayer

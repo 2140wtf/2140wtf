@@ -1,6 +1,6 @@
-# Blobbi Egg Visual System
+# Pets Egg Visual System
 
-A self-contained module for rendering Blobbi eggs with special marks, animations, and validation utilities.
+A self-contained module for rendering Pets eggs with special marks, animations, and validation utilities.
 
 ## Features
 
@@ -50,7 +50,7 @@ function MyComponent() {
 
   return (
     <div style={{ width: '200px', height: '250px' }}>
-      <EggGraphic blobbi={egg} animated={true} warmth={50} />
+      <EggGraphic pets={egg} animated={true} warmth={50} />
     </div>
   );
 }
@@ -67,7 +67,7 @@ const fancyEgg = {
   lifeStage: 'egg',
 };
 
-<EggGraphic blobbi={fancyEgg} animated={true} cracking={false} />
+<EggGraphic pets={fancyEgg} animated={true} cracking={false} />
 ```
 
 ### Divine Egg
@@ -84,7 +84,7 @@ const divineEgg = {
   ],
 };
 
-<EggGraphic blobbi={divineEgg} animated={true} />
+<EggGraphic pets={divineEgg} animated={true} />
 ```
 
 ## API Reference
@@ -94,17 +94,17 @@ const divineEgg = {
 Main component for rendering eggs.
 
 **Props:**
-- `blobbi?: EggVisualBlobbi` - Egg data object
+- `pets?: EggVisualPets` - Egg data object
 - `sizeVariant?: 'tiny' | 'small' | 'medium' | 'large'` - Internal scaling (default: 'medium')
 - `className?: string` - Additional CSS classes
 - `animated?: boolean` - Enable animations (default: false)
 - `cracking?: boolean` - Show cracking effect (default: false)
 - `warmth?: number` - Temperature 0-100 (default: 50) - controls glow effect intensity
 
-### `EggVisualBlobbi` Type
+### `EggVisualPets` Type
 
 ```typescript
-type EggVisualBlobbi = {
+type EggVisualPets = {
   tags?: string[][];           // Nostr tags for metadata
   baseColor?: string;           // Primary egg color (hex)
   secondaryColor?: string;      // Secondary color for patterns (hex)
@@ -186,8 +186,8 @@ src/egg/
 ├── hooks/
 │   └── useSpecialMark.ts        # Special mark state management
 ├── lib/
-│   ├── blobbi-egg-validation.ts # Validation utilities
-│   ├── blobbi-divine-utils.ts   # Divine theme utilities
+│   ├── pets-egg-validation.ts # Validation utilities
+│   ├── pets-divine-utils.ts   # Divine theme utilities
 │   ├── special-marks-utils.ts   # Special marks utilities
 │   └── cn.ts                    # Class name utility
 ├── types/
@@ -221,7 +221,7 @@ The module includes inline fallback styles for critical layout properties. It wi
 
 ```tsx
 <EggGraphic
-  blobbi={myEgg}
+  pets={myEgg}
   className="my-custom-egg-wrapper"
   animated={true}
 />
@@ -242,4 +242,4 @@ The module imports `./styles/egg-animations.css` automatically. To customize ani
 
 ## License
 
-This module is part of the Blobbi project.
+This module is part of the Pets project.

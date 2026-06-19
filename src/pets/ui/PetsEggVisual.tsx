@@ -1,11 +1,11 @@
 /**
- * BlobbiEggVisual - Reusable component for rendering Blobbi eggs
+ * PetsEggVisual - Reusable component for rendering Pets eggs
  * 
- * This component is the UI integration point between the Blobbi domain model
+ * This component is the UI integration point between the Pets domain model
  * and the EggGraphic visual module.
  * 
  * Rendering flow:
- *   BlobbiCompanion → toEggGraphicVisualBlobbi() → EggGraphic
+ *   PetsCompanion → toEggGraphicVisualPets() → EggGraphic
  * 
  * The adapter is the ONLY translation boundary - this component should not
  * contain any domain-to-visual mapping logic.
@@ -13,23 +13,23 @@
 
 import { useMemo } from 'react';
 
-import { EggGraphic, type EggReactionState, type EggStatusEffects, type EggTourVisualState } from '@/blobbi/egg';
-import { toEggGraphicVisualBlobbi } from '@/blobbi/core/lib/blobbi-egg-adapter';
+import { EggGraphic, type EggReactionState, type EggStatusEffects, type EggTourVisualState } from '@/pets/egg';
+import { toEggGraphicVisualPets } from '@/pets/core/lib/pets-egg-adapter';
 import { cn } from '@/lib/utils';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type BlobbiEggSize = 'sm' | 'md' | 'lg';
+export type PetsEggSize = 'sm' | 'md' | 'lg';
 
 // Re-export for convenience
-export type { EggReactionState, EggStatusEffects, EggTourVisualState } from '@/blobbi/egg';
+export type { EggReactionState, EggStatusEffects, EggTourVisualState } from '@/pets/egg';
 
-export interface BlobbiEggVisualProps {
-  /** The Blobbi companion data from parseBlobbiEvent */
-  companion: BlobbiCompanion;
+export interface PetsEggVisualProps {
+  /** The Pets companion data from parsePetsEvent */
+  companion: PetsCompanion;
   /** Size variant: sm (48px), md (96px), lg (160px) */
-  size?: BlobbiEggSize;
+  size?: PetsEggSize;
   /** Enable ambient animations (glow, particles) */
   animated?: boolean;
   /** Reaction state for music/sing animations */
@@ -54,7 +54,7 @@ export interface BlobbiEggVisualProps {
  * - md: Standard display, selector cards
  * - lg: Hero/main display, prominent visuals
  */
-const SIZE_CONFIG: Record<BlobbiEggSize, { container: string; sizeVariant: 'tiny' | 'small' | 'medium' | 'large' }> = {
+const SIZE_CONFIG: Record<PetsEggSize, { container: string; sizeVariant: 'tiny' | 'small' | 'medium' | 'large' }> = {
   sm: { container: 'size-14', sizeVariant: 'small' },
   md: { container: 'size-24', sizeVariant: 'medium' },
   lg: { container: 'size-40', sizeVariant: 'large' },
@@ -63,12 +63,12 @@ const SIZE_CONFIG: Record<BlobbiEggSize, { container: string; sizeVariant: 'tiny
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * Renders a Blobbi egg using the EggGraphic visual module.
+ * Renders a Pets egg using the EggGraphic visual module.
  * 
  * Uses the adapter as the ONLY translation boundary between
- * Blobbi domain data and EggGraphic rendering.
+ * Pets domain data and EggGraphic rendering.
  */
-export function BlobbiEggVisual({
+export function PetsEggVisual({
   companion,
   size = 'md',
   animated = false,
@@ -77,11 +77,11 @@ export function BlobbiEggVisual({
   tourVisualState,
   onTourEggClick,
   className,
-}: BlobbiEggVisualProps) {
+}: PetsEggVisualProps) {
   // Memoize adapter output to avoid unnecessary re-renders
   // Use companion.d and visual traits as dependencies to ensure re-render on preview change
   const eggVisual = useMemo(
-    () => toEggGraphicVisualBlobbi(companion),
+    () => toEggGraphicVisualPets(companion),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- d and visual traits are the stable identity
     [companion.d, companion.visualTraits.baseColor, companion.visualTraits.secondaryColor]
   );
@@ -104,7 +104,7 @@ export function BlobbiEggVisual({
       )}
     >
       <EggGraphic
-        blobbi={eggVisual}
+        pets={eggVisual}
         sizeVariant={config.sizeVariant}
         animated={animated && !isSleeping}
         reaction={effectiveReaction}

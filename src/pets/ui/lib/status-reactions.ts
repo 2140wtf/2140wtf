@@ -1,7 +1,7 @@
 /**
- * Status-Based Reaction System for Blobbi — Part-Priority Architecture
+ * Status-Based Reaction System for Pets — Part-Priority Architecture
  *
- * Resolves current Blobbi stats directly into a final BlobbiVisualRecipe
+ * Resolves current Pets stats directly into a final PetsVisualRecipe
  * by picking each facial/body part independently based on priority rules.
  *
  * Instead of selecting a single "winning" emotion preset and applying it
@@ -23,14 +23,14 @@
  * part definitions — the part-priority system just picks *which* preset
  * contributes each part, rather than using one preset for everything.
  *
- * Consumers receive one final BlobbiVisualRecipe and pass it to
+ * Consumers receive one final PetsVisualRecipe and pass it to
  * applyVisualRecipe(). No separate body effects channel is needed.
  */
 
-import type { BlobbiStats } from '@/blobbi/core/types/blobbi';
-import type { BlobbiEmotion } from './emotion-types';
+import type { PetsStats } from '@/pets/core/types/pets';
+import type { PetsEmotion } from './emotion-types';
 import type {
-  BlobbiVisualRecipe,
+  PetsVisualRecipe,
   EyeRecipe,
   MouthRecipe,
   EyebrowRecipe,
@@ -42,14 +42,14 @@ import type {
 
 /**
  * Severity levels based on stat value thresholds.
- * Determines how urgently Blobbi needs to react.
+ * Determines how urgently Pets needs to react.
  */
 export type StatSeverity = 'normal' | 'warning' | 'high' | 'critical';
 
 /**
  * A stat that can trigger automatic reactions.
  */
-export type ReactiveStat = keyof BlobbiStats;
+export type ReactiveStat = keyof PetsStats;
 
 /**
  * Configuration for how a stat maps to reactions (legacy).
@@ -61,9 +61,9 @@ export interface StatReactionConfig {
   /** Priority (lower = higher priority, checked first) */
   priority: number;
   /** Emotion to show at warning/high severity */
-  normalReaction: BlobbiEmotion;
+  normalReaction: PetsEmotion;
   /** Emotion to show at critical severity (can be different) */
-  criticalReaction?: BlobbiEmotion;
+  criticalReaction?: PetsEmotion;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface StatAnalysis {
   stat: ReactiveStat;
   value: number;
   severity: StatSeverity;
-  reaction: BlobbiEmotion;
+  reaction: PetsEmotion;
   priority: number;
   /** Probability (0-1) that this reaction should trigger */
   triggerProbability: number;
@@ -97,11 +97,11 @@ export interface StatusReactionTiming {
  * Result of resolving the best reaction to show based on current stats.
  *
  * @deprecated Use `resolveStatusRecipe()` instead, which resolves stats
- * directly into a fully-resolved BlobbiVisualRecipe.
+ * directly into a fully-resolved PetsVisualRecipe.
  */
 export interface StatusReactionResult {
   /** The emotion to display (null = stay at default) */
-  emotion: BlobbiEmotion | null;
+  emotion: PetsEmotion | null;
   /** The stat that triggered this reaction (null if default) */
   triggeringStat: ReactiveStat | null;
   /** Severity of the triggering stat */
@@ -122,7 +122,7 @@ export interface StatusReactionResult {
  */
 export interface StatusRecipeResult {
   /** The fully resolved visual recipe (empty object = neutral) */
-  recipe: BlobbiVisualRecipe;
+  recipe: PetsVisualRecipe;
   /** Human-readable label for the resolved state (for CSS classes, debugging) */
   label: string;
   /** The highest-priority stat that contributed to this recipe */
@@ -239,7 +239,7 @@ export function analyzeStat(
  * Analyze all stats and return sorted by priority (highest priority first).
  * Only includes stats that are below normal threshold.
  */
-export function analyzeAllStats(stats: BlobbiStats): StatAnalysis[] {
+export function analyzeAllStats(stats: PetsStats): StatAnalysis[] {
   const analyses: StatAnalysis[] = [];
 
   for (const config of STAT_REACTION_CONFIGS) {
@@ -259,7 +259,7 @@ export function analyzeAllStats(stats: BlobbiStats): StatAnalysis[] {
  * @deprecated Use `resolveStatusRecipe()` instead.
  */
 export function resolveStatusReaction(
-  stats: BlobbiStats,
+  stats: PetsStats,
   forceCheck = false,
   timing: StatusReactionTiming = DEFAULT_TIMING
 ): StatusReactionResult {
@@ -290,15 +290,15 @@ export function resolveStatusReaction(
 /**
  * Check if an emotion is a status-based reaction.
  */
-export function isStatusReaction(emotion: BlobbiEmotion): boolean {
-  const statusEmotions: BlobbiEmotion[] = ['sleepy', 'hungry', 'boring', 'dizzy'];
+export function isStatusReaction(emotion: PetsEmotion): boolean {
+  const statusEmotions: PetsEmotion[] = ['sleepy', 'hungry', 'boring', 'dizzy'];
   return statusEmotions.includes(emotion);
 }
 
 /**
  * Get the default/neutral emotion when no status reactions are active.
  */
-export function getDefaultEmotion(): BlobbiEmotion {
+export function getDefaultEmotion(): PetsEmotion {
   return 'neutral';
 }
 
@@ -425,7 +425,7 @@ const HEALTH_PARTS: PartContributionResolver = (severity) => {
  *
  * Mouth behavior:
  *   Hunger alone should NOT produce a round "O" mouth — that reads as
- *   surprise, not hunger. Instead we use a soft smile (the Blobbi's natural
+ *   surprise, not hunger. Instead we use a soft smile (the Pets's natural
  *   expression, slightly scaled down) which pairs naturally with hopeful
  *   eyes and drool. The round mouth only appears if another stat with
  *   higher mouth priority (e.g. health-critical) contributes it.
@@ -759,7 +759,7 @@ const STAT_LABEL_MAP: Record<ReactiveStat, string> = {
  * Used for neutral state to avoid creating new {} references on every call,
  * which would cause downstream React.memo comparators to see false positives.
  */
-export const EMPTY_RECIPE: BlobbiVisualRecipe = Object.freeze({});
+export const EMPTY_RECIPE: PetsVisualRecipe = Object.freeze({});
 
 /** Shared stable neutral result to avoid reference churn. */
 const NEUTRAL_STATUS_RESULT: StatusRecipeResult = Object.freeze({
@@ -769,7 +769,7 @@ const NEUTRAL_STATUS_RESULT: StatusRecipeResult = Object.freeze({
   severity: null,
 });
 
-export function resolveStatusRecipe(stats: BlobbiStats): StatusRecipeResult {
+export function resolveStatusRecipe(stats: PetsStats): StatusRecipeResult {
   // 1. Compute severity for each stat
   const lowStats = new Map<ReactiveStat, StatSeverity>();
   const contributions = new Map<ReactiveStat, StatPartContributions>();
@@ -797,7 +797,7 @@ export function resolveStatusRecipe(stats: BlobbiStats): StatusRecipeResult {
   const eyes = pickPart(contributions, EYES_PRIORITY, 'eyes');
 
   // Mouth has a special rule: critical health overrides normal priority.
-  // When Blobbi is severely unwell (dizzy), the face should read "urgent/sick"
+  // When Pets is severely unwell (dizzy), the face should read "urgent/sick"
   // not "sleepy", even if energy is also low. This ensures the dizzy round
   // mouth appears in severe multi-stat scenarios like "health critical + tired".
   let mouth: MouthRecipe | undefined;
@@ -815,7 +815,7 @@ export function resolveStatusRecipe(stats: BlobbiStats): StatusRecipeResult {
   const bodyEffects = mergeAllBodyEffects(contributions);
 
   // 5. Assemble
-  const recipe: BlobbiVisualRecipe = {};
+  const recipe: PetsVisualRecipe = {};
   if (eyes) recipe.eyes = eyes;
   if (mouth) recipe.mouth = mouth;
   if (eyebrows) recipe.eyebrows = eyebrows;
@@ -861,7 +861,7 @@ export type ActionType =
  * Mapping of actions to the emotions they trigger.
  * These are temporary emotions that override status reactions while the action is happening.
  */
-export const ACTION_EMOTION_MAP: Record<ActionType, BlobbiEmotion> = {
+export const ACTION_EMOTION_MAP: Record<ActionType, PetsEmotion> = {
   feed: 'happy',
   play: 'excited',
   clean: 'surprised',
@@ -873,7 +873,7 @@ export const ACTION_EMOTION_MAP: Record<ActionType, BlobbiEmotion> = {
 /**
  * Get the emotion for a specific action type.
  */
-export function getActionEmotion(action: ActionType): BlobbiEmotion {
+export function getActionEmotion(action: ActionType): PetsEmotion {
   return ACTION_EMOTION_MAP[action];
 }
 
@@ -882,7 +882,7 @@ export function getActionEmotion(action: ActionType): BlobbiEmotion {
 /**
  * Produce a lighter version of a visual recipe suitable for feed cards.
  *
- * Feed Blobbis are rendered at a smaller size (size-48/56 vs size-64+) and
+ * Feed Petss are rendered at a smaller size (size-48/56 vs size-64+) and
  * need to remain readable at a glance. This function keeps all facial parts
  * (eyes, mouth, eyebrows) and extras untouched — they are already sized
  * relative to the SVG viewBox — but reduces body-effect particle counts
@@ -891,7 +891,7 @@ export function getActionEmotion(action: ActionType): BlobbiEmotion {
  * The input recipe is produced by the same `resolveStatusRecipe()` used
  * by the room view, so thresholds and priorities are identical.
  */
-export function attenuateRecipeForFeed(recipe: BlobbiVisualRecipe): BlobbiVisualRecipe {
+export function attenuateRecipeForFeed(recipe: PetsVisualRecipe): PetsVisualRecipe {
   // Empty / no body effects → return as-is (stable reference path)
   if (!recipe.bodyEffects) return recipe;
 

@@ -62,7 +62,7 @@ export function ItemCarousel({
   });
   const count = items.length;
 
-  // Realign when initialItemId changes after mount (e.g. Blobbi switch causes
+  // Realign when initialItemId changes after mount (e.g. Pets switch causes
   // useLocalStorage to re-read a different key).
   useEffect(() => {
     if (!initialItemId) return;

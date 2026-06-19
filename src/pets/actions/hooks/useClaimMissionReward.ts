@@ -21,10 +21,10 @@ import {
   KIND_BLOBBONAUT_PROFILE,
   updateBlobbonautTags,
   parseBlobbonautEvent,
-} from '@/blobbi/core/lib/blobbi';
-import { buildXpTagUpdates } from '@/blobbi/core/lib/progression';
-import { serializeProfileContent } from '@/blobbi/core/lib/missions';
-import type { MissionsContent } from '@/blobbi/core/lib/missions';
+} from '@/pets/core/lib/pets';
+import { buildXpTagUpdates } from '@/pets/core/lib/progression';
+import { serializeProfileContent } from '@/pets/core/lib/missions';
+import type { MissionsContent } from '@/pets/core/lib/missions';
 import { totalDailyXp } from '../lib/daily-missions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

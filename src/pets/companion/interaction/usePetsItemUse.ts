@@ -1,19 +1,19 @@
 /**
- * useBlobbiItemUse Hook
+ * usePetsItemUse Hook
  * 
- * Shared hook that provides real Blobbi item-use logic that can work
- * both inside and outside of BlobbiPage.
+ * Shared hook that provides real Pets item-use logic that can work
+ * both inside and outside of PetsPage.
  * 
  * This hook:
  * - Fetches companion and profile data if not provided
- * - Uses the same item-use logic as BlobbiPage (useBlobbiUseInventoryItem)
+ * - Uses the same item-use logic as PetsPage (usePetsUseInventoryItem)
  * - Works as a standalone hook or can be passed cached data
  * - Provides retry protection and cooldown
  * 
  * Architecture:
- * - BlobbiCompanionLayer uses this hook directly as a fallback when 
- *   BlobbiPage is not mounted
- * - BlobbiPage registers its own item-use function (which has better cache access)
+ * - PetsCompanionLayer uses this hook directly as a fallback when 
+ *   PetsPage is not mounted
+ * - PetsPage registers its own item-use function (which has better cache access)
  * - Both use the same underlying mutation logic
  */
 
@@ -27,15 +27,15 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { BlobbiCompanion, BlobbonautProfile } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-  parseBlobbiEvent,
-  isValidBlobbiEvent,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { getShopItemById } from '@/blobbi/shop/lib/blobbi-shop-items';
+  KIND_PETS_STATE,
+  updatePetsTags,
+  parsePetsEvent,
+  isValidPetsEvent,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import {
   applyItemEffects,
   canUseAction,
@@ -47,13 +47,13 @@ import {
   hasHygieneEffectForEgg,
   type InventoryAction,
   ACTION_METADATA,
-} from '@/blobbi/actions/lib/blobbi-action-utils';
-import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '@/blobbi/actions/lib/daily-mission-tracker';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
-import { getStreakTagUpdates } from '@/blobbi/actions/lib/blobbi-streak';
-import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/blobbi/core/lib/blobbi-interaction';
+} from '@/pets/actions/lib/pets-action-utils';
+import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '@/pets/actions/lib/daily-mission-tracker';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
+import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
+import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
-import type { UseItemFunction } from './BlobbiActionsContextDef';
+import type { UseItemFunction } from './PetsActionsContextDef';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -65,19 +65,19 @@ const ITEM_USE_SUCCESS_COOLDOWN_MS = 500;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface UseBlobbiItemUseOptions {
+export interface UsePetsItemUseOptions {
   /** 
    * Override companion - if provided, skip fetching.
-   * Useful when called from BlobbiPage which already has the data.
+   * Useful when called from PetsPage which already has the data.
    */
-  companion?: BlobbiCompanion | null;
+  companion?: PetsCompanion | null;
   /** 
    * Override profile - if provided, skip fetching.
    */
   profile?: BlobbonautProfile | null;
 }
 
-export interface UseBlobbiItemUseResult {
+export interface UsePetsItemUseResult {
   /** The item use function - same signature as UseItemFunction */
   useItem: UseItemFunction;
   /** Whether item use is available (companion and profile loaded) */
@@ -100,20 +100,20 @@ interface ItemCooldownEntry {
 // ─── Hook Implementation ──────────────────────────────────────────────────────
 
 /**
- * Shared Blobbi item-use hook that works anywhere.
+ * Shared Pets item-use hook that works anywhere.
  * 
  * This is the "real" item-use logic extracted to be usable from:
- * - BlobbiCompanionLayer (floating companion)
- * - BlobbiPage (main dashboard)
+ * - PetsCompanionLayer (floating companion)
+ * - PetsPage (main dashboard)
  * - Any other location
  * 
  * Features:
  * - Fetches companion/profile data if not provided
- * - Identical item-use logic to useBlobbiUseInventoryItem
+ * - Identical item-use logic to usePetsUseInventoryItem
  * - Built-in per-item cooldown/retry protection
  * - Works as a direct hook or registered in context
  */
-export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlobbiItemUseResult {
+export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItemUseResult {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -157,7 +157,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
   
   // Fetch current companion based on profile's currentCompanion
   // This is fetched on-demand when needed, not kept in state
-  const fetchCurrentCompanion = useCallback(async (): Promise<BlobbiCompanion | null> => {
+  const fetchCurrentCompanion = useCallback(async (): Promise<PetsCompanion | null> => {
     // If companion was provided via options, use that
     if (options.companion !== undefined) {
       return options.companion ?? null;
@@ -168,18 +168,18 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
     }
     
     const events = await nostr.query([{
-      kinds: [KIND_BLOBBI_STATE],
+      kinds: [KIND_PETS_STATE],
       authors: [user.pubkey],
       '#d': [profile.currentCompanion],
     }]);
     
     const validEvents = events
-      .filter(isValidBlobbiEvent)
+      .filter(isValidPetsEvent)
       .sort((a, b) => b.created_at - a.created_at);
     
     if (validEvents.length === 0) return null;
     
-    return parseBlobbiEvent(validEvents[0]) ?? null;
+    return parsePetsEvent(validEvents[0]) ?? null;
   }, [nostr, user?.pubkey, profile?.currentCompanion, options.companion]);
   
   // Update companion in query cache - optimistic update for immediate UI refresh
@@ -187,20 +187,20 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
     if (!user?.pubkey || !profile?.currentCompanion) return;
     
     // Parse the new event to get the updated companion
-    const parsed = parseBlobbiEvent(event);
+    const parsed = parsePetsEvent(event);
     if (!parsed) {
       // Fallback to invalidation if parsing fails
       queryClient.invalidateQueries({ 
-        queryKey: ['blobbi-collection', user.pubkey] 
+        queryKey: ['pets-collection', user.pubkey] 
       });
       return;
     }
     
-    // Optimistically update the blobbi-collection cache
+    // Optimistically update the pets-collection cache
     // This ensures the companion layer sees the update immediately
-    queryClient.setQueryData<{ companionsByD: Record<string, BlobbiCompanion>; companions: BlobbiCompanion[] } | undefined>(
+    queryClient.setQueryData<{ companionsByD: Record<string, PetsCompanion>; companions: PetsCompanion[] } | undefined>(
       // Use partial key match - React Query will find any matching query
-      ['blobbi-collection', user.pubkey],
+      ['pets-collection', user.pubkey],
       (prev) => {
         if (!prev) return prev;
         
@@ -222,7 +222,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
     
     // Also invalidate to trigger background refetch (ensures consistency)
     queryClient.invalidateQueries({ 
-      queryKey: ['blobbi-collection', user.pubkey] 
+      queryKey: ['pets-collection', user.pubkey] 
     });
   }, [queryClient, user?.pubkey, profile?.currentCompanion]);
   
@@ -286,7 +286,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
       
       // ─── Apply Accumulated Decay First ───
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: companion.stage,
         state: companion.state,
         stats: companion.stats,
@@ -348,7 +348,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
         statsChanged.health = (currentStats.health ?? 0) - (statsAfterDecay.health ?? 0);
       }
       
-      // ─── Update Blobbi State Event (kind 31124) ───
+      // ─── Update Pets State Event (kind 31124) ───
       const nowStr = now.toString();
       
       // If incubating or evolving, increment the interaction counter in evolution missions
@@ -370,30 +370,30 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
       // Get streak updates (will only update if needed based on day)
       const streakUpdates = getStreakTagUpdates(companion) ?? {};
       
-      const blobbiTags = updateBlobbiTags(updatedTags, {
+      const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
         last_interaction: nowStr,
         last_decay_at: nowStr,
       });
       
-      const blobbiEvent = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+      const petsEvent = await publishEvent({
+        kind: KIND_PETS_STATE,
         content,
-        tags: blobbiTags,
+        tags: petsTags,
         prev: companion.event,
       });
       
-      updateCompanionInCache(blobbiEvent);
+      updateCompanionInCache(petsEvent);
 
       // ─── Emit kind 1124 interaction event (best-effort, fire-and-forget) ───
-      // ownerPubkey comes from the target Blobbi event, not the logged-in user,
+      // ownerPubkey comes from the target Pets event, not the logged-in user,
       // so the tags remain correct if this path is later reused for non-owner interactions.
       const interactionAction = INTERNAL_TO_INTERACTION_ACTION[action];
       if (interactionAction && companion) {
         emitInteractionEvent(publishEvent, {
           ownerPubkey: companion.event.pubkey,
-          blobbiDTag: companion.d,
+          petsDTag: companion.d,
           action: interactionAction,
           source: 'companion',
           itemId,
@@ -402,13 +402,13 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
       
       // ─── Invalidate Queries ───
       // Items are free to use — no storage decrement needed.
-      queryClient.invalidateQueries({ queryKey: ['blobbi-collection', user.pubkey] });
+      queryClient.invalidateQueries({ queryKey: ['pets-collection', user.pubkey] });
 
       // Invalidate interactions query so social projection reflects the new 1124.
       {
         const coordinate = `31124:${companion.event.pubkey}:${companion.d}`;
         queryClient.invalidateQueries({
-          queryKey: ['blobbi-interactions', coordinate],
+          queryKey: ['pets-interactions', coordinate],
         });
       }
       
@@ -420,7 +420,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
       
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${shopItem?.name ?? 'item'} on your Blobbi.`,
+        description: `Used ${shopItem?.name ?? 'item'} on your Pets.`,
       });
       
       // Track daily mission progress
@@ -446,7 +446,7 @@ export function useBlobbiItemUse(options: UseBlobbiItemUseOptions = {}): UseBlob
     // Check cooldown first
     if (isItemOnCooldown(itemId)) {
       if (import.meta.env.DEV) {
-        console.log('[useBlobbiItemUse] Item on cooldown, skipping:', itemId);
+        console.log('[usePetsItemUse] Item on cooldown, skipping:', itemId);
       }
       return {
         success: false,

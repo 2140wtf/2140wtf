@@ -251,28 +251,51 @@ function FeedTabsSection() {
   const [communityDomain, setCommunityDomain] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [community, setCommunity] = useState<{ domain: string; userCount: number; label: string } | null>(() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'community'));
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'community'));
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [showDittoFeed, setShowDittoFeed] = useState(() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
-    return stored !== null ? stored === 'true' : true; // Default to true
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
+      return stored !== null ? stored === 'true' : true; // Default to true
+    } catch {
+      return true;
+    }
   });
 
   const [showGlobalFeed, setShowGlobalFeed] = useState(() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
-    return stored !== null ? stored === 'true' : false; // Default to false
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
+      return stored !== null ? stored === 'true' : false; // Default to false
+    } catch {
+      return false;
+    }
   });
 
   const [showCommunityFeed, setShowCommunityFeed] = useState(() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showCommunityFeed'));
-    return stored !== null ? stored === 'true' : false; // Default to false
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showCommunityFeed'));
+      return stored !== null ? stored === 'true' : false; // Default to false
+    } catch {
+      return false;
+    }
   });
+
+  const safeSetItem = (key: string, value: string) => {
+    try { localStorage.setItem(key, value); } catch { /* ignore */ }
+  };
+  const safeRemoveItem = (key: string) => {
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+  };
 
   const handleToggleDittoFeed = async (checked: boolean) => {
     setShowDittoFeed(checked);
-    localStorage.setItem(getStorageKey(config.appId, 'showDittoFeed'), String(checked));
+    safeSetItem(getStorageKey(config.appId, 'showDittoFeed'), String(checked));
     toast({
       title: checked ? `${config.appName} feed enabled` : `${config.appName} feed disabled`,
       description: checked
@@ -283,7 +306,7 @@ function FeedTabsSection() {
 
   const handleToggleGlobalFeed = async (checked: boolean) => {
     setShowGlobalFeed(checked);
-    localStorage.setItem(getStorageKey(config.appId, 'showGlobalFeed'), String(checked));
+    safeSetItem(getStorageKey(config.appId, 'showGlobalFeed'), String(checked));
     if (user) {
       await updateSettings.mutateAsync({ showGlobalFeed: checked });
     }
@@ -297,7 +320,7 @@ function FeedTabsSection() {
 
   const handleToggleCommunityFeed = async (checked: boolean) => {
     setShowCommunityFeed(checked);
-    localStorage.setItem(getStorageKey(config.appId, 'showCommunityFeed'), String(checked));
+    safeSetItem(getStorageKey(config.appId, 'showCommunityFeed'), String(checked));
     if (user) {
       await updateSettings.mutateAsync({ showCommunityFeed: checked });
     }
@@ -352,14 +375,14 @@ function FeedTabsSection() {
       // Store in localStorage (single community only)
       const newCommunity = { domain, userCount, label };
       setCommunity(newCommunity);
-      localStorage.setItem(getStorageKey(config.appId, 'community'), JSON.stringify(newCommunity));
+      safeSetItem(getStorageKey(config.appId, 'community'), JSON.stringify(newCommunity));
       
       // Store the actual JSON data for later use
-      localStorage.setItem(getStorageKey(config.appId, 'communityData'), JSON.stringify(data));
+      safeSetItem(getStorageKey(config.appId, 'communityData'), JSON.stringify(data));
 
       // Auto-enable the Community feed tab
       setShowCommunityFeed(true);
-      localStorage.setItem(getStorageKey(config.appId, 'showCommunityFeed'), 'true');
+      safeSetItem(getStorageKey(config.appId, 'showCommunityFeed'), 'true');
 
       // Sync to encrypted settings
       if (user) {
@@ -389,12 +412,12 @@ function FeedTabsSection() {
 
   const handleRemoveCommunity = async () => {
     setCommunity(null);
-    localStorage.removeItem(getStorageKey(config.appId, 'community'));
-    localStorage.removeItem(getStorageKey(config.appId, 'communityData'));
+    safeRemoveItem(getStorageKey(config.appId, 'community'));
+    safeRemoveItem(getStorageKey(config.appId, 'communityData'));
     
     // Also disable the community feed tab
     setShowCommunityFeed(false);
-    localStorage.setItem(getStorageKey(config.appId, 'showCommunityFeed'), 'false');
+    safeSetItem(getStorageKey(config.appId, 'showCommunityFeed'), 'false');
 
     if (user) {
       await updateSettings.mutateAsync({ communityData: undefined, showCommunityFeed: false });
@@ -509,7 +532,7 @@ function FeedTabsSection() {
         {!community ? (
           <div className="flex gap-2">
             <Input
-              placeholder="ditto.pub"
+              placeholder="2140.wtf"
               value={communityDomain}
               onChange={(e) => setCommunityDomain(e.target.value)}
               onKeyDown={(e) => {

@@ -1,7 +1,7 @@
 /**
- * Blobbi Decay System
+ * Pets Decay System
  * 
- * This module implements the continuous proportional decay system for Blobbi stats.
+ * This module implements the continuous proportional decay system for Pets stats.
  * 
  * Key principles:
  * - Pure, deterministic calculation based on elapsed time
@@ -10,21 +10,21 @@
  * - Stage-specific decay rates and health modifiers
  * - Persisted state is the source of truth
  * 
- * @see docs/blobbi/decay-system.md for full documentation
+ * @see docs/pets/decay-system.md for full documentation
  */
 
-import type { BlobbiStage, BlobbiState, BlobbiStats } from './blobbi';
-import { STAT_MIN, STAT_MAX } from './blobbi';
+import type { PetsStage, PetsState, PetsStats } from './pets';
+import { STAT_MIN, STAT_MAX } from './pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * Result of applying decay to a Blobbi.
+ * Result of applying decay to a Pets.
  * Contains updated stats and metadata about the calculation.
  */
 export interface DecayResult {
   /** Updated stats after decay (clamped to 0-100) */
-  stats: BlobbiStats;
+  stats: PetsStats;
   /** Elapsed time in seconds that was used for decay calculation */
   elapsedSeconds: number;
   /** The timestamp that should be set as the new last_decay_at */
@@ -33,15 +33,15 @@ export interface DecayResult {
 
 /**
  * Input parameters for decay calculation.
- * Uses the persisted Blobbi state as source of truth.
+ * Uses the persisted Pets state as source of truth.
  */
 export interface DecayInput {
   /** Current life stage */
-  stage: BlobbiStage;
+  stage: PetsStage;
   /** Current activity state (awake/sleeping) */
-  state: BlobbiState;
+  state: PetsState;
   /** Current stats from persisted state */
-  stats: Partial<BlobbiStats>;
+  stats: Partial<PetsStats>;
   /** Unix timestamp of last decay application */
   lastDecayAt: number | undefined;
   /** Current unix timestamp (defaults to now) */
@@ -141,7 +141,7 @@ const ADULT_SLEEP_ENERGY_REGEN = 35.0;
 
 /**
  * Warning thresholds by stage.
- * Warning = stat below this value indicates the Blobbi needs attention.
+ * Warning = stat below this value indicates the Pets needs attention.
  */
 export const WARNING_THRESHOLDS = {
   egg: {
@@ -204,7 +204,7 @@ function clamp(value: number): number {
 /**
  * Get stat value with fallback to 100 (full).
  */
-function getStat(stats: Partial<BlobbiStats>, key: keyof BlobbiStats): number {
+function getStat(stats: Partial<PetsStats>, key: keyof PetsStats): number {
   return stats[key] ?? 100;
 }
 
@@ -243,9 +243,9 @@ function roundDelta(delta: number): number {
  * Hunger and energy are fixed at 100.
  */
 function calculateEggDecay(
-  stats: Partial<BlobbiStats>,
+  stats: Partial<PetsStats>,
   _elapsedHours: number
-): BlobbiStats {
+): PetsStats {
   // Eggs do not decay — all stats remain fixed until hatching.
   return {
     hunger: 100,
@@ -260,10 +260,10 @@ function calculateEggDecay(
  * Calculate baby stage decay.
  */
 function calculateBabyDecay(
-  stats: Partial<BlobbiStats>,
-  state: BlobbiState,
+  stats: Partial<PetsStats>,
+  state: PetsState,
   elapsedHours: number
-): BlobbiStats {
+): PetsStats {
   const isSleeping = state === 'sleeping';
 
   // Sleep modifiers: reduce stat drain, boost energy regen, shelter health.
@@ -324,10 +324,10 @@ function calculateBabyDecay(
  * Calculate adult stage decay.
  */
 function calculateAdultDecay(
-  stats: Partial<BlobbiStats>,
-  state: BlobbiState,
+  stats: Partial<PetsStats>,
+  state: PetsState,
   elapsedHours: number
-): BlobbiStats {
+): PetsStats {
   const isSleeping = state === 'sleeping';
 
   // Sleep modifiers: reduce stat drain, boost energy regen, shelter health.
@@ -387,7 +387,7 @@ function calculateAdultDecay(
 // ─── Main Decay Function ──────────────────────────────────────────────────────
 
 /**
- * Apply decay to a Blobbi based on elapsed time since last decay.
+ * Apply decay to a Pets based on elapsed time since last decay.
  * 
  * This is a pure, deterministic function that:
  * 1. Calculates elapsed time from lastDecayAt to now
@@ -399,7 +399,7 @@ function calculateAdultDecay(
  * @param input - Decay input parameters from persisted state
  * @returns DecayResult with updated stats and new decay timestamp
  */
-export function applyBlobbiDecay(input: DecayInput): DecayResult {
+export function applyPetsDecay(input: DecayInput): DecayResult {
   const now = input.now ?? Math.floor(Date.now() / 1000);
   const lastDecayAt = input.lastDecayAt ?? now;
   
@@ -423,7 +423,7 @@ export function applyBlobbiDecay(input: DecayInput): DecayResult {
   }
   
   // Apply stage-specific decay
-  let newStats: BlobbiStats;
+  let newStats: PetsStats;
   switch (input.stage) {
     case 'egg':
       newStats = calculateEggDecay(input.stats, elapsedHours);
@@ -452,8 +452,8 @@ export function applyBlobbiDecay(input: DecayInput): DecayResult {
  * Check if a stat is at warning level for the given stage.
  */
 export function isStatAtWarning(
-  stage: BlobbiStage,
-  stat: keyof BlobbiStats,
+  stage: PetsStage,
+  stat: keyof PetsStats,
   value: number
 ): boolean {
   const thresholds = WARNING_THRESHOLDS[stage];
@@ -466,8 +466,8 @@ export function isStatAtWarning(
  * Check if a stat is at critical level for the given stage.
  */
 export function isStatAtCritical(
-  stage: BlobbiStage,
-  stat: keyof BlobbiStats,
+  stage: PetsStage,
+  stat: keyof PetsStats,
   value: number
 ): boolean {
   const thresholds = CRITICAL_THRESHOLDS[stage];
@@ -481,8 +481,8 @@ export function isStatAtCritical(
  * @returns 'critical' | 'warning' | 'normal'
  */
 export function getStatStatus(
-  stage: BlobbiStage,
-  stat: keyof BlobbiStats,
+  stage: PetsStage,
+  stat: keyof PetsStats,
   value: number
 ): 'critical' | 'warning' | 'normal' {
   if (isStatAtCritical(stage, stat, value)) return 'critical';
@@ -494,16 +494,16 @@ export function getStatStatus(
  * Get all stats that are at warning or critical level.
  */
 export function getStatsNeedingAttention(
-  stage: BlobbiStage,
-  stats: Partial<BlobbiStats>
-): Array<{ stat: keyof BlobbiStats; value: number; status: 'warning' | 'critical' }> {
-  const results: Array<{ stat: keyof BlobbiStats; value: number; status: 'warning' | 'critical' }> = [];
+  stage: PetsStage,
+  stats: Partial<PetsStats>
+): Array<{ stat: keyof PetsStats; value: number; status: 'warning' | 'critical' }> {
+  const results: Array<{ stat: keyof PetsStats; value: number; status: 'warning' | 'critical' }> = [];
   
-  const statKeys: (keyof BlobbiStats)[] = ['hunger', 'happiness', 'health', 'hygiene', 'energy'];
+  const statKeys: (keyof PetsStats)[] = ['hunger', 'happiness', 'health', 'hygiene', 'energy'];
   
   // For eggs, only check relevant stats
   const relevantStats = stage === 'egg' 
-    ? ['health', 'hygiene', 'happiness'] as (keyof BlobbiStats)[]
+    ? ['health', 'hygiene', 'happiness'] as (keyof PetsStats)[]
     : statKeys;
   
   for (const stat of relevantStats) {
@@ -530,7 +530,7 @@ export const STAT_VISIBILITY_THRESHOLD = 70;
  * Eggs only show health, hygiene, happiness.
  * Baby/adult show all stats.
  */
-export function getVisibleStats(stage: BlobbiStage): (keyof BlobbiStats)[] {
+export function getVisibleStats(stage: PetsStage): (keyof PetsStats)[] {
   if (stage === 'egg') {
     return ['health', 'hygiene', 'happiness'];
   }
@@ -542,9 +542,9 @@ export function getVisibleStats(stage: BlobbiStage): (keyof BlobbiStats)[] {
  * Stats at or above STAT_VISIBILITY_THRESHOLD are filtered out.
  */
 export function getVisibleStatsWithValues(
-  stage: BlobbiStage,
-  stats: Partial<BlobbiStats>
-): Array<{ stat: keyof BlobbiStats; value: number; status: 'critical' | 'warning' | 'normal' }> {
+  stage: PetsStage,
+  stats: Partial<PetsStats>
+): Array<{ stat: keyof PetsStats; value: number; status: 'critical' | 'warning' | 'normal' }> {
   const visibleStats = getVisibleStats(stage);
   return visibleStats
     .map(stat => ({

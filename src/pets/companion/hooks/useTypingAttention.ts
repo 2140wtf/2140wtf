@@ -2,7 +2,7 @@
  * useTypingAttention Hook
  * 
  * Detects when the user is typing in a focused text field inside a modal/dialog,
- * and provides a caret-aware attention target for Blobbi to observe the typing location.
+ * and provides a caret-aware attention target for Pets to observe the typing location.
  * 
  * Caret tracking priority:
  * 1. Best effort: Real caret position via native APIs
@@ -296,7 +296,7 @@ function computeCaretPosition(element: Element): Position {
   }
   
   // Fallback 1: Right typing region (better than center for text entry)
-  // This makes Blobbi look at "where the typing is happening"
+  // This makes Pets look at "where the typing is happening"
   const rightRegion = getRightTypingRegion(element);
   const rect = element.getBoundingClientRect();
   

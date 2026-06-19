@@ -1,17 +1,17 @@
 /**
  * EmotionDevContext
  * 
- * DEV-ONLY context for testing emotions on Blobbies.
+ * DEV-ONLY context for testing emotions on Petses.
  * This context:
  * - Only works in development mode
- * - Does NOT modify real Blobbi state
+ * - Does NOT modify real Pets state
  * - Does NOT publish events
  * - Does NOT persist anywhere
  * - Is purely for visual testing/debugging
  */
 
 import { useState, useCallback, type ReactNode } from 'react';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotions';
+import type { PetsEmotion } from '@/pets/ui/lib/emotions';
 import { isLocalhostDev } from './index';
 import { EmotionDevContext, type EmotionDevContextValue } from './useEmotionDev';
 
@@ -26,9 +26,9 @@ interface EmotionDevProviderProps {
  * Only functional in development mode.
  */
 export function EmotionDevProvider({ children }: EmotionDevProviderProps) {
-  const [devEmotion, setDevEmotionState] = useState<BlobbiEmotion | null>(null);
+  const [devEmotion, setDevEmotionState] = useState<PetsEmotion | null>(null);
   
-  const setDevEmotion = useCallback((emotion: BlobbiEmotion | null) => {
+  const setDevEmotion = useCallback((emotion: PetsEmotion | null) => {
     // Only allow in localhost development
     if (!isLocalhostDev()) return;
     setDevEmotionState(emotion);

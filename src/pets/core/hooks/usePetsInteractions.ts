@@ -1,17 +1,17 @@
 /**
- * Hook for fetching kind 1124 Blobbi interaction events.
+ * Hook for fetching kind 1124 Pets interaction events.
  *
  * Read-only: does not mutate canonical state, does not consolidate,
  * does not apply stat effects. Returns parsed interactions sorted
  * deterministically (ascending created_at, id tie-break) for the
- * selected Blobbi.
+ * selected Pets.
  *
  * Checkpoint-aware via `resolveSocialCheckpoint()`: clients always apply
  * a bounded recency window (currently 6 hours). If a valid social checkpoint
  * exists in the 31124 content and is more recent than the window floor,
  * that checkpoint is used as the `since` bound instead.
  *
- * Relay-side fetching is capped by `BLOBBI_INTERACTIONS_LIMIT` (currently 30)
+ * Relay-side fetching is capped by `PETS_INTERACTIONS_LIMIT` (currently 30)
  * to keep projection and consolidation bounded even for high-volume pets.
  */
 
@@ -20,14 +20,14 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { NostrFilter } from '@nostrify/nostrify';
-import type { BlobbiCompanion } from '../lib/blobbi';
+import type { PetsCompanion } from '../lib/pets';
 import {
-  KIND_BLOBBI_INTERACTION,
+  KIND_PETS_INTERACTION,
   parseInteractionEvent,
   sortInteractionEvents,
   resolveSocialCheckpoint,
-  type BlobbiInteraction,
-} from '../lib/blobbi-interaction';
+  type PetsInteraction,
+} from '../lib/pets-interaction';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,13 +37,13 @@ import {
  * Hard relay-side cap regardless of checkpoint state. Combined with the
  * recency window, this ensures O(30) processing even for high-volume pets.
  */
-const BLOBBI_INTERACTIONS_LIMIT = 30;
+const PETS_INTERACTIONS_LIMIT = 30;
 
 /**
  * Maximum recency window (in seconds) for social interaction queries.
  *
  * Even if the checkpoint is older, we never look back further than this.
- * Interactions older than 6 hours are considered stale — the Blobbi's stats
+ * Interactions older than 6 hours are considered stale — the Pets's stats
  * will have decayed further since then, making old care less meaningful.
  *
  * This is intentional product behavior: social care addresses *current* needs,
@@ -53,9 +53,9 @@ const MAX_SOCIAL_WINDOW_SECONDS = 6 * 60 * 60; // 6 hours
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export interface UseBlobbiInteractionsResult {
+export interface UsePetsInteractionsResult {
   /** Parsed interactions in deterministic order (ascending created_at, id tie-break) */
-  interactions: BlobbiInteraction[];
+  interactions: PetsInteraction[];
   /** True only while the initial load is in progress with no cached data */
   isLoading: boolean;
   /** True when the query encountered an error */
@@ -63,16 +63,16 @@ export interface UseBlobbiInteractionsResult {
 }
 
 /**
- * Fetch and parse kind 1124 interaction events for a Blobbi.
+ * Fetch and parse kind 1124 interaction events for a Pets.
  *
- * @param companion - The current Blobbi companion, or null when none is selected.
+ * @param companion - The current Pets companion, or null when none is selected.
  */
-export function useBlobbiInteractions(
-  companion: BlobbiCompanion | null,
-): UseBlobbiInteractionsResult {
+export function usePetsInteractions(
+  companion: PetsCompanion | null,
+): UsePetsInteractionsResult {
   const { nostr } = useNostr();
 
-  // Derive the `a` coordinate for the target Blobbi.
+  // Derive the `a` coordinate for the target Pets.
   // Uses the event author (owner pubkey) — not the logged-in user — so the
   // coordinate is correct regardless of who is viewing.
   const coordinate = useMemo(() => {
@@ -90,7 +90,7 @@ export function useBlobbiInteractions(
 
   const query = useQuery({
     queryKey: [
-      'blobbi-interactions',
+      'pets-interactions',
       coordinate,
       resolved.valid ? resolved.checkpoint.processed_until : 0,
       resolved.valid ? resolved.checkpoint.last_event_id : '',
@@ -106,9 +106,9 @@ export function useBlobbiInteractions(
         : windowFloor;
 
       const filter: NostrFilter = {
-        kinds: [KIND_BLOBBI_INTERACTION],
+        kinds: [KIND_PETS_INTERACTION],
         '#a': [coordinate],
-        limit: BLOBBI_INTERACTIONS_LIMIT,
+        limit: PETS_INTERACTIONS_LIMIT,
         since,
       };
 
@@ -120,7 +120,7 @@ export function useBlobbiInteractions(
       // events were also processed here, the effect would be double-applied
       // by the social projection/consolidation pipeline.
       const ownerPubkey = companion!.event.pubkey;
-      const parsed: BlobbiInteraction[] = [];
+      const parsed: PetsInteraction[] = [];
       for (const event of sortInteractionEvents(events)) {
         if (event.pubkey === ownerPubkey) continue;
         const interaction = parseInteractionEvent(event);

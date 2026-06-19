@@ -47,7 +47,7 @@ import {
 // ─── Icon Mapping ─────────────────────────────────────────────────────────────
 
 const BAR_ITEM_ICONS: Record<BarItemId, React.ReactNode> = {
-  blobbies: <Egg className="size-4" />,
+  petses: <Egg className="size-4" />,
   missions: <Target className="size-4" />,
   items: <Package className="size-4" />,
   take_photo: <Camera className="size-4" />,

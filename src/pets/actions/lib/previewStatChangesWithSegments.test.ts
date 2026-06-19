@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { previewStatChangesWithSegments, type StatChangeWithSegments } from './blobbi-action-utils';
+import { previewStatChangesWithSegments, type StatChangeWithSegments } from './pets-action-utils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

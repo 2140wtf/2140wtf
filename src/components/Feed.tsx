@@ -8,6 +8,7 @@ import { LandingHero } from '@/components/LandingHero';
 import { NoteCard } from '@/components/NoteCard';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { FeedEmptyState } from '@/components/FeedEmptyState';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Heart, Loader2, MapPin } from 'lucide-react';
 import LoginDialog from '@/components/auth/LoginDialog';
@@ -48,7 +49,7 @@ type FeedTab = CoreFeedTab | string; // string = saved feed id
 interface FeedProps {
   /** Override the kinds list instead of using feed settings. */
   kinds?: number[];
-  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }`). */
+  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }` for mini-apps). */
   tagFilters?: Record<string, string[]>;
   /** Header element rendered above the tabs (e.g. back-arrow + title). */
   header?: React.ReactNode;
@@ -63,9 +64,17 @@ interface FeedProps {
    * render it before Follows. Used by the client feed page.
    */
   globalFirst?: boolean;
+  /** Render items in a two-column grid (used for visual feeds like Art). */
+  grid?: boolean;
+  /** Optional keyword filter applied client-side to the rendered items. */
+  searchQuery?: string;
+  /** Poll-type filter: all, zap-only (kind 6969), or regular (kind 1068). */
+  pollFilter?: 'all' | 'zap' | 'regular';
+  /** Render an explicit "Load more" button instead of infinite scroll. */
+  showLoadMoreButton?: boolean;
 }
 
-export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, feedId = 'home', globalFirst }: FeedProps = {}) {
+export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, feedId = 'home', globalFirst, grid, searchQuery, pollFilter, showLoadMoreButton }: FeedProps = {}) {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const { muteItems } = useMuteList();
@@ -79,18 +88,30 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
   // Tab settings from localStorage
   const showGlobalFeed = (() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
-    return stored !== null ? stored === 'true' : false;
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
   })();
 
   const showDittoFeed = (() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
-    return stored !== null ? stored === 'true' : true;
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
+      return stored !== null ? stored === 'true' : true;
+    } catch {
+      return true;
+    }
   })();
 
   const showCommunityFeed = (() => {
-    const stored = localStorage.getItem(getStorageKey(config.appId, 'showCommunityFeed'));
-    return stored !== null ? stored === 'true' : false;
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showCommunityFeed'));
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
   })();
 
   const communityLabel = (() => {
@@ -114,6 +135,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // (and clamped back to Follows) when the Love List is empty or still loading.
   const hasLovedPeople = !!user && (lovedPubkeys?.length ?? 0) > 0;
 
+  // Kind-specific pages only support Follows + Global. Saved feeds, hashtags,
+  // and geotags are also hidden on kind-specific pages and for logged-out users.
+  const isKindSpecificPage = !!kinds;
+  const showSavedFeedTabs = user && !isKindSpecificPage && !tagFilters;
+
   // Kind-specific pages only support Follows + Global. Clamp any other
   // persisted tab (e.g. 'ditto', 'communities') back to the appropriate default.
   // Logged-out users must land on 'global' since 'follows' requires a user.
@@ -121,6 +147,15 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     // 'loved' is only valid on the home feed while the Love List is non-empty.
     if (rawActiveTab === 'loved' && (kinds || !hasLovedPeople)) {
       return user ? 'follows' : 'global';
+    }
+    // Saved feeds, hashtags, and geotags are only available on the home feed
+    // and only while the extra-tabs row is shown. Clamp a persisted saved-feed
+    // id back to a visible tab when the tabs are hidden.
+    const isSavedFeed = savedFeeds.some((f) => f.id === rawActiveTab);
+    const isHashtag = rawActiveTab.startsWith('hashtag:');
+    const isGeotag = rawActiveTab.startsWith('geotag:');
+    if (!showSavedFeedTabs && (isSavedFeed || isHashtag || isGeotag)) {
+      return globalFirst ? 'global' : (user ? 'follows' : 'global');
     }
     if (!kinds) return rawActiveTab; // Home feed: no clamping
     if (rawActiveTab === 'global') return 'global';
@@ -256,14 +291,35 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     `${user?.pubkey ?? ''}:${useDittoQuery ? 'ditto' : activeTab}`,
   );
 
+  // Apply optional client-side keyword search and poll-type filter.
+  const visibleItems = useMemo(() => {
+    let items = feedItems;
+    if (pollFilter && pollFilter !== 'all') {
+      items = items.filter((item) => {
+        const kind = item.event.kind;
+        if (pollFilter === 'zap') return kind === 6969;
+        if (pollFilter === 'regular') return kind === 1068;
+        return true;
+      });
+    }
+    if (!searchQuery?.trim()) return items;
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      const event = item.event;
+      if (event.content?.toLowerCase().includes(q)) return true;
+      for (const tag of event.tags) {
+        const tagName = tag[0];
+        if ((tagName === 'option' || tagName === 'poll_option') && tag[2]?.toLowerCase().includes(q)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [feedItems, searchQuery, pollFilter]);
+
   // Show skeletons while loading, but not if the curator list query errored
   // (that would leave logged-out users staring at infinite skeletons).
   const showSkeleton = (isPending || (isLoading && !rawData)) && !(useDittoQuery && isCuratorError);
-
-  // Kind-specific pages (e.g. Development, WebXDC) only show Follows + Global tabs.
-  // Extra tabs (Ditto, Community, saved feeds, hashtags) are only for the home feed.
-  const isKindSpecificPage = !!kinds;
-  const showSavedFeedTabs = user && !isKindSpecificPage && !tagFilters;
 
   // Distinguish the empty-state cases so the message + CTAs match the cause:
   //   - Follows tab with zero follows → "follow some people" (no retry).
@@ -400,35 +456,105 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
         <SavedFeedContent feed={activeSavedFeed} />
       ) : (
         <PullToRefresh onRefresh={handleRefresh}>
-          {feedItems.length > 0 ? (
-            <div>
-              {feedItems.map((item: FeedItem) => (
-                <NoteCard
-                  key={feedItemKey(item)}
-                  event={item.event}
-                  repostedBy={item.repostedBy}
-                  repostEvent={item.repostEvent}
-                  reactedBy={item.reactedBy}
-                  zappedBy={item.zappedBy}
-                  profileZapRecipient={item.profileZapRecipient}
-                />
-              ))}
-              {hasNextPage && (
-                <div ref={scrollRef} className="py-4">
-                  {isFetchingNextPage && (
-                    <div className="flex justify-center">
-                      <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          {visibleItems.length > 0 ? (
+            grid ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                {visibleItems.map((item: FeedItem) => (
+                  <NoteCard
+                    key={feedItemKey(item)}
+                    event={item.event}
+                    repostedBy={item.repostedBy}
+                    repostEvent={item.repostEvent}
+                    reactedBy={item.reactedBy}
+                    zappedBy={item.zappedBy}
+                    profileZapRecipient={item.profileZapRecipient}
+                    className="border rounded-lg"
+                  />
+                ))}
+                {hasNextPage && (
+                  <div ref={scrollRef} className={cn("col-span-full py-4", showLoadMoreButton && "flex justify-center")}>
+                    {showLoadMoreButton ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                      >
+                        {isFetchingNextPage ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin mr-1.5" />
+                            Loading…
+                          </>
+                        ) : (
+                          'Load more'
+                        )}
+                      </Button>
+                    ) : (
+                      isFetchingNextPage && (
+                        <div className="flex justify-center">
+                          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                {visibleItems.map((item: FeedItem) => (
+                  <NoteCard
+                    key={feedItemKey(item)}
+                    event={item.event}
+                    repostedBy={item.repostedBy}
+                    repostEvent={item.repostEvent}
+                    reactedBy={item.reactedBy}
+                    zappedBy={item.zappedBy}
+                    profileZapRecipient={item.profileZapRecipient}
+                  />
+                ))}
+                {hasNextPage && (
+                  <div ref={scrollRef} className={cn("py-4", showLoadMoreButton && "flex justify-center")}>
+                    {showLoadMoreButton ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchNextPage()}
+                        disabled={isFetchingNextPage}
+                      >
+                        {isFetchingNextPage ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin mr-1.5" />
+                            Loading…
+                          </>
+                        ) : (
+                          'Load more'
+                        )}
+                      </Button>
+                    ) : (
+                      isFetchingNextPage && (
+                        <div className="flex justify-center">
+                          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            )
           ) : showSkeleton ? (
-            <div className="divide-y divide-border">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <NoteCardSkeleton key={i} />
-              ))}
-            </div>
+            grid ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <NoteCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <NoteCardSkeleton key={i} />
+                ))}
+              </div>
+            )
           ) : (
             <FeedEmptyState {...emptyProps} />
           )}

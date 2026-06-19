@@ -20,17 +20,17 @@ import { Heart } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProfileHoverCard } from '@/components/ProfileHoverCard';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmojiFrame } from '@/components/letter/StationeryBackground';
+import { EmojiFrame } from '@/components/EmojiFrame';
 import { useAuthor } from '@/hooks/useAuthor';
 import { loveListPubkeys } from '@/hooks/useLoveList';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
-import { FONT_OPTIONS, FRAME_PRESETS } from '@/lib/letterTypes';
-import { ensureLetterFonts } from '@/lib/letterUtils';
+import { FRAME_PRESETS } from '@/lib/themeTypes';
+import { FONT_OPTIONS, ensureLetterFonts } from '@/lib/fonts';
 import { cn } from '@/lib/utils';
 
-/** The default letter font (Fredoka) — same as kind 8211 letters. */
+/** The default display font (Fredoka) used for the Love List card. */
 const LETTER_FONT = FONT_OPTIONS[0].family;
 
 /** How many loved ones to write on the sheet before "+N more". */
@@ -54,9 +54,7 @@ const WAX_BACKGROUND = `
 `;
 
 /**
- * Wax splat blob behind the seal — the same path the letter send animation
- * (SendAnimation.tsx) stamps onto envelopes, so love lists and letters share
- * one distinct splat. ViewBox 0 0 84 84.
+ * Wax splat blob behind the seal. ViewBox 0 0 84 84.
  */
 const WAX_SPLAT_PATH =
   'M42 3 C50 2, 58 7, 64 13 C69 18, 76 24, 78 33 C80 41, 82 48, 77 56 C73 62, 66 70, 56 73 C48 76, 40 78, 32 74 C24 71, 14 66, 9 58 C5 50, 2 42, 4 34 C6 26, 12 18, 19 12 C26 6, 34 4, 42 3 Z';

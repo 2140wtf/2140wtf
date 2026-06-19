@@ -1,5 +1,5 @@
 /**
- * Blobbi Egg Visual System - Demo Component
+ * Pets Egg Visual System - Demo Component
  *
  * This component demonstrates the EggGraphic component with various configurations.
  * Use this to verify the module works after copying to a new project.
@@ -9,14 +9,14 @@
 
 import React, { useState } from 'react';
 import { EggGraphic } from '../components/EggGraphic';
-import type { EggVisualBlobbi } from '../types/egg.types';
+import type { EggVisualPets } from '../types/egg.types';
 
 export const EggGraphicDemo: React.FC = () => {
   const [animated, setAnimated] = useState(true);
   const [cracking, setCracking] = useState(false);
 
   // Demo eggs with different configurations
-  const demoEggs: Array<{ name: string; egg: EggVisualBlobbi }> = [
+  const demoEggs: Array<{ name: string; egg: EggVisualPets }> = [
     {
       name: 'Basic Common Egg',
       egg: {
@@ -82,7 +82,7 @@ export const EggGraphicDemo: React.FC = () => {
     <div style={{ padding: '2rem', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}>
-          Blobbi Egg Visual System Demo
+          Pets Egg Visual System Demo
         </h1>
 
         <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
@@ -140,7 +140,7 @@ export const EggGraphicDemo: React.FC = () => {
                   position: 'relative',
                 }}
               >
-                <EggGraphic blobbi={egg} animated={animated} cracking={cracking} />
+                <EggGraphic pets={egg} animated={animated} cracking={cracking} />
               </div>
 
               {/* Egg properties */}
@@ -191,7 +191,7 @@ const myEgg = {
 };
 
 <EggGraphic 
-  blobbi={myEgg} 
+  pets={myEgg} 
   animated={true}
   cracking={false}
   warmth={50}  // fallback warmth for glow effect

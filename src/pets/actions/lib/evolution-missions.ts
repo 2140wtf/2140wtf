@@ -11,7 +11,7 @@
  *   - Are NOT deterministically seeded — the full set is always used
  */
 
-import type { Mission, TallyMission, EventMission } from '@/blobbi/core/lib/missions';
+import type { Mission, TallyMission, EventMission } from '@/pets/core/lib/missions';
 
 // ─── Shared Helpers ──────────────────────────────────────────────────────────
 
@@ -59,19 +59,9 @@ export const HATCH_MISSIONS: readonly EvolutionMissionDefinition[] = [
     actionLabel: 'Create Theme',
   },
   {
-    id: 'color_moment',
-    title: 'Color Moment',
-    description: 'Share a color moment on espy',
-    target: 1,
-    tracking: 'event',
-    action: 'external_link',
-    actionTarget: 'https://espy.you/',
-    actionLabel: 'Open espy',
-  },
-  {
     id: 'interactions',
-    title: 'Interact with Blobbi',
-    description: 'Care for your Blobbi 7 times',
+    title: 'Interact with Pets',
+    description: 'Care for your Pets 7 times',
     target: 7,
     tracking: 'tally',
   },
@@ -91,19 +81,9 @@ export const EVOLVE_MISSIONS: readonly EvolutionMissionDefinition[] = [
     actionLabel: 'Create Theme',
   },
   {
-    id: 'color_moments',
-    title: 'Color Moments',
-    description: 'Share 3 color moments on espy',
-    target: 3,
-    tracking: 'event',
-    action: 'external_link',
-    actionTarget: 'https://espy.you/',
-    actionLabel: 'Open espy',
-  },
-  {
     id: 'interactions',
-    title: 'Interact with Blobbi',
-    description: 'Care for your Blobbi 21 times',
+    title: 'Interact with Pets',
+    description: 'Care for your Pets 21 times',
     target: 21,
     tracking: 'tally',
   },
@@ -181,9 +161,6 @@ export const EVOLVE_REQUIRED_INTERACTIONS = 21;
 
 /** Required themes for evolve task */
 export const EVOLVE_REQUIRED_THEMES = 3;
-
-/** Required color moments for evolve task */
-export const EVOLVE_REQUIRED_COLOR_MOMENTS = 3;
 
 /** Stat threshold for evolve dynamic task (all stats >= 80) */
 export const EVOLVE_STAT_THRESHOLD = 80;

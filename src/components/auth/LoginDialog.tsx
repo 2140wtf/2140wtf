@@ -328,6 +328,8 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       if (validateNsec(cred.nsec)) {
         executeLogin(cred.nsec);
       }
+    }).catch(() => {
+      // Credential retrieval is best-effort; ignore failures.
     });
 
     return () => { cancelled = true; };

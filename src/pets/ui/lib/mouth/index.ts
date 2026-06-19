@@ -1,5 +1,5 @@
 /**
- * Blobbi Mouth System
+ * Pets Mouth System
  * 
  * Canonical owner of all mouth-related logic:
  * - Detection (marker-based + regex fallback)

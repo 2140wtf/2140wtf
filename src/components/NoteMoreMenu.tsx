@@ -358,7 +358,11 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
 
   const handleBookmark = () => {
     impactLight();
-    toggleBookmark.mutate(event.id);
+    toggleBookmark.mutate(event.id, {
+      onError: () => {
+        toast({ title: 'Failed to update bookmark', variant: 'destructive' });
+      },
+    });
     close();
   };
 

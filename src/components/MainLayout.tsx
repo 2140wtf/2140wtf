@@ -1,4 +1,4 @@
-import { Suspense, useState, useMemo, useCallback, useRef, lazy } from 'react';
+import { Suspense, useState, useMemo, useCallback, useEffect, useRef, lazy } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { LeftSidebar } from '@/components/LeftSidebar';
 import { MobileTopBar } from '@/components/MobileTopBar';
@@ -42,6 +42,12 @@ function MainLayoutInner() {
   const { config } = useAppContext();
   const { hidden: navHidden } = useScrollDirection(scrollContainer);
   const location = useLocation();
+
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const autoCollapseLeft = ['/prediction-markets', '/videos'].some((p) => location.pathname.startsWith(p));
+  useEffect(() => {
+    setLeftCollapsed(autoCollapseLeft);
+  }, [autoCollapseLeft]);
   return (
     <CenterColumnContext.Provider value={centerColumnEl}>
     <DrawerContext.Provider value={openDrawer}>
@@ -58,7 +64,7 @@ function MainLayoutInner() {
       {/* Main layout - three column on desktop */}
       <div className={cn("flex justify-center mx-auto max-w-[1200px]", wrapperClassName)}>
         {/* Desktop left sidebar - hidden below sidebar breakpoint */}
-        <LeftSidebar />
+        <LeftSidebar collapsed={leftCollapsed} onToggleCollapse={() => setLeftCollapsed((v) => !v)} />
 
         {/* Main content + right sidebar: inside Suspense so the left sidebar persists while lazy pages load */}
         <Suspense fallback={<PageSkeleton />}>
@@ -70,7 +76,12 @@ function MainLayoutInner() {
               content underneath. Only active below the sidebar breakpoint. */}
           <div
             ref={(el) => { centerColumnRef.current = el; setCenterColumnEl(el); }}
-            className={cn("relative z-0 flex-1 min-w-0 sidebar:border-l sidebar:border-r border-border bg-background/85", !hideTopBar && "-mt-mobile-bar", !noMaxWidth && "sidebar:max-w-[600px]", !noOverscroll && "pb-overscroll")}
+            className={cn(
+              "relative z-0 flex-1 min-w-0 sidebar:border-l sidebar:border-r border-border bg-background/85",
+              !hideTopBar && "-mt-mobile-bar",
+              !noMaxWidth && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
+              !noOverscroll && "pb-overscroll",
+            )}
           >
             <ErrorBoundary
               sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}

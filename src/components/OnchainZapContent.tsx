@@ -36,6 +36,9 @@ import type { BitcoinRecipientOverride } from '@/hooks/useOnchainZap';
 
 const USD_PRESETS = [1, 5, 10, 25, 100];
 
+/** Bitcoin dust limit in satoshis. Outputs below this are dropped by relay policy. */
+const DUST_LIMIT_SATS = 546;
+
 const FEE_SPEED_LABELS: Record<OnchainFeeSpeed, string> = {
   fastest: '~10 min',
   halfHour: '~30 min',
@@ -201,6 +204,16 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   const totalSats = amountSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
   const showBalance = insufficient || (amountSats > 0 && totalBalance === 0);
+
+  // Warn when the transaction will have no change output because the leftover
+  // is below the dust limit. In that case the leftover sats become extra fee
+  // rather than returning as change.
+  const noChangeDust = useMemo(() => {
+    if (!utxos?.length || !currentFeeRate || amountSats <= 0 || totalBalance <= 0) return false;
+    const feeWithChange = estimateFee(utxos.length, 2, currentFeeRate);
+    const change = totalBalance - amountSats - feeWithChange;
+    return change > 0 && change <= DUST_LIMIT_SATS;
+  }, [utxos, currentFeeRate, amountSats, totalBalance]);
 
   // Auto-adjust fee speed when the amount changes, unless the user has
   // already picked a speed manually. Aim for a fee below 40% of the amount
@@ -403,6 +416,18 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
       {/* Error */}
       {error && (
         <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      {/* No-change dust warning: leftover below the dust limit will be
+          swallowed by the fee instead of returning as change. */}
+      {noChangeDust && (
+        <Alert className="border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="text-xs">
+            This zap leaves less than the dust limit, so there will be no change
+            output. The remaining sats will be added to the network fee.
+          </AlertDescription>
+        </Alert>
       )}
 
       <Button

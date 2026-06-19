@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { generateUUID } from '@/lib/uuid';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { useFollowPacks } from './useFollowPacks';
@@ -223,7 +224,7 @@ export function useUserLists() {
   const createList = useMutation({
     mutationFn: async ({ title, description, pubkeys = [] }: { title: string; description?: string; pubkeys?: string[] }) => {
       if (!user) throw new Error('Must be logged in');
-      const id = crypto.randomUUID();
+      const id = generateUUID();
       const tags: string[][] = [
         ['d', id],
         ['title', title.trim()],

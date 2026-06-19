@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { useSeoMeta } from '@unhead/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Zap, AtSign, MessageCircle, Quote, Loader2, Award, Mail } from 'lucide-react';
+import { Zap, AtSign, MessageCircle, Quote, Loader2, Award } from 'lucide-react';
 import { RepostIcon } from '@/components/icons/RepostIcon';
 import { Link, useNavigate } from 'react-router-dom';
 import { PullToRefresh } from '@/components/PullToRefresh';
@@ -36,11 +36,6 @@ import { ReactionEmoji, EmojifiedText } from '@/components/CustomEmoji';
 import { useBadgeDefinitions } from '@/hooks/useBadgeDefinitions';
 import { AcceptBadgeButton } from '@/components/AcceptBadgeButton';
 import { BADGE_DEFINITION_KIND, parseBadgeATag, unslugify } from '@/lib/badgeUtils';
-import { LETTER_KIND, type Letter } from '@/lib/letterTypes';
-import { EnvelopeCard } from '@/components/letter/EnvelopeCard';
-import { LetterDetailSheet } from '@/components/letter/LetterDetailSheet';
-import { InkPenIcon } from '@/components/icons/InkPenIcon';
-import { Button } from '@/components/ui/button';
 import { BadgeThumbnail } from '@/components/BadgeThumbnail';
 import { BadgeContent } from '@/components/BadgeContent';
 import type { BadgeData } from '@/lib/parseBadgeDefinition';
@@ -76,8 +71,6 @@ const NOTIFICATION_KIND_NOUNS: Record<number, string> = {
   15683: 'Love List',
   2473: 'bird detection',
   12473: 'Birdex',
-  3367: 'color moment',
-  7516: 'found log',
   15128: 'nsite',
   16767: 'theme',
   10008: 'profile badges',
@@ -102,15 +95,14 @@ const NOTIFICATION_KIND_NOUNS: Record<number, string> = {
   31923: 'calendar event',
   32267: 'Zapstore app',
   34139: 'playlist',
-  34236: 'divine',
   34550: 'community',
   35128: 'nsite',
   36767: 'theme',
   36787: 'track',
-  37381: 'Magic deck',
-  37516: 'treasure',
   30621: 'constellation',
   39089: 'follow pack',
+  1315: 'road event',
+  1316: 'road event confirmation',
 };
 
 /** Get a bare noun label for a kind number, defaulting to "post". */
@@ -310,8 +302,6 @@ function GroupedNotificationView({ group }: { group: GroupedNotificationItem }) 
       return solo
         ? <BadgeAwardNotification item={group.actors[0]} isNew={group.isNew} />
         : <BadgeAwardNotificationGroup group={group} />;
-    case LETTER_KIND:
-      return <LetterNotification item={group.actors[0]} isNew={group.isNew} />;
     case 9802:
       return solo
         ? <HighlightNotification item={group.actors[0]} isNew={group.isNew} />
@@ -803,73 +793,6 @@ function CommentNotification({ item, isNew }: { item: NotificationItem; isNew: b
       </div>
       <NoteCard event={item.event} className="border-0" />
     </NotificationWrapper>
-  );
-}
-
-// ──────────────────────────────────────
-// Letter Notification (kind 8211, always standalone)
-// ──────────────────────────────────────
-function LetterNotification({ item, isNew }: { item: NotificationItem; isNew: boolean }) {
-  const navigate = useNavigate();
-  const [showDetail, setShowDetail] = useState(false);
-
-  const letter = useMemo<Letter>(() => ({
-    event: item.event,
-    sender: item.event.pubkey,
-    recipient: item.event.tags.find(([name]) => name === 'p')?.[1] ?? '',
-    decrypted: false,
-    timestamp: item.event.created_at,
-  }), [item.event]);
-
-  return (
-    <>
-      <NotificationWrapper isNew={isNew}>
-        <div className="px-4 pt-3">
-          <NotificationHeader
-            actorPubkey={item.event.pubkey}
-            icon={<Mail className="size-4 text-primary" />}
-            action="sent you a letter"
-          />
-        </div>
-        <div className="flex flex-col items-center gap-3 px-4 pb-4 pt-2">
-          <div className="w-[280px]">
-            <EnvelopeCard
-              letter={letter}
-              mode="inbox"
-              index={0}
-              onClick={() => setShowDetail(true)}
-              minimal
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full px-5 h-9 text-sm font-medium gap-1.5 hover:bg-primary hover:text-primary-foreground transition-colors"
-              onClick={() => navigate('/letters')}
-            >
-              <Mail className="size-3.5" />
-              View all letters
-            </Button>
-            <Button
-              variant="default"
-              className="rounded-full px-5 h-9 text-sm font-medium gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent"
-              onClick={() => navigate(`/letters/compose?to=${nip19.npubEncode(item.event.pubkey)}`)}
-            >
-              <InkPenIcon className="size-3.5" strokeWidth={2} />
-              Reply
-            </Button>
-          </div>
-        </div>
-        <LetterDetailSheet
-          letter={showDetail ? letter : null}
-          onClose={() => setShowDetail(false)}
-          onReply={(npub) => {
-            setShowDetail(false);
-            navigate(`/letters/compose?to=${npub}`);
-          }}
-        />
-      </NotificationWrapper>
-    </>
   );
 }
 

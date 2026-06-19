@@ -1,4 +1,4 @@
-// src/blobbi/actions/hooks/useAudioPlayback.ts
+// src/pets/actions/hooks/useAudioPlayback.ts
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 

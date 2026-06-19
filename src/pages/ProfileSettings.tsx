@@ -10,7 +10,7 @@ import { useNostrLogin } from '@nostrify/react/login';
 import { saveNsec } from '@/lib/credentialManager';
 import { useLayoutOptions, useNavHidden } from '@/contexts/LayoutContext';
 import { cn } from '@/lib/utils';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -422,9 +422,20 @@ function SortableFieldRow({ id, index, type, accept, valuePlaceholder, isUploadi
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ProfileSettings() {
+  const { hash } = useLocation();
   const { user, metadata, event } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
+
+  // Scroll to the donations section when navigating from the profile menu.
+  useEffect(() => {
+    if (hash === '#donations') {
+      const el = document.getElementById('donations');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [hash]);
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { toast } = useToast();
@@ -887,7 +898,7 @@ export function ProfileSettings() {
           {/* Accept Donations — NIP-A3 payment targets (kind 10133). Self-
               contained: publishes its own event with its own save button,
               independent of the kind-0 profile form above. */}
-          <div className="border-t pt-5">
+          <div id="donations" className="border-t pt-5 scroll-mt-24">
             <PaymentTargetsEditor ref={paymentTargetsRef} />
           </div>
 

@@ -231,10 +231,10 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
                     {currentParticipants} watching
                   </span>
                 )}
-                {starts && (
+                {starts && !Number.isNaN(parseInt(starts, 10)) && (
                   <span className="flex items-center gap-1">
                     <Clock className="size-3.5" />
-                    {formatDateTime(parseInt(starts))}
+                    {formatDateTime(parseInt(starts, 10))}
                   </span>
                 )}
               </div>

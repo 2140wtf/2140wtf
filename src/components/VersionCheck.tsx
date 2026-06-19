@@ -53,8 +53,14 @@ export function VersionCheck() {
     if (!currentVersion) return;
 
     const storageKey = getStorageKey(config.appId, 'app-version');
-    const storedVersion = localStorage.getItem(storageKey);
-    localStorage.setItem(storageKey, currentVersion);
+    let storedVersion: string | null = null;
+    try {
+      storedVersion = localStorage.getItem(storageKey);
+      localStorage.setItem(storageKey, currentVersion);
+    } catch {
+      // localStorage may be unavailable (private mode, quota); continue without version toast.
+      return;
+    }
 
     if (storedVersion && storedVersion !== currentVersion) {
       // Show the toast immediately, then enrich it with a changelog excerpt.
@@ -80,6 +86,8 @@ export function VersionCheck() {
             ),
           });
         }
+      }).catch(() => {
+        // Changelog excerpt is optional; keep the basic toast.
       });
     }
   }, [config.appId]);

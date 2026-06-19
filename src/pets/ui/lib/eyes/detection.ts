@@ -1,11 +1,11 @@
 /**
- * Blobbi Eye System - Detection Module
+ * Pets Eye System - Detection Module
  *
  * This module provides functions for detecting and extracting eye data from SVG content.
  * It is the single source of truth for eye detection logic.
  *
  * Detection strategies (in order of preference):
- * 1. Processed SVG: Look for blobbi-eye groups with data attributes
+ * 1. Processed SVG: Look for pets-eye groups with data attributes
  * 2. Raw SVG: Parse circle/ellipse elements to identify eyes by color/gradient patterns
  */
 
@@ -79,7 +79,7 @@ interface RawEyeGroup {
  * @returns Array of detected eye positions
  */
 export function detectEyePositions(svgText: string): EyePosition[] {
-  // First try to find processed blobbi-eye groups
+  // First try to find processed pets-eye groups
   const processedEyes = detectFromProcessedSvg(svgText);
   if (processedEyes.length > 0) {
     return processedEyes;
@@ -101,7 +101,7 @@ export function detectEyePositions(svgText: string): EyePosition[] {
 export function extractProcessedEyes(svgText: string): ProcessedEyeData[] {
   const eyes: ProcessedEyeData[] = [];
 
-  // Look for blobbi-blink groups which contain all the metadata
+  // Look for pets-blink groups which contain all the metadata
   const blinkGroupRegex = new RegExp(
     `<g[^>]*class="[^"]*${EYE_CLASSES.blink}[^"]*"[^>]*>`,
     'g'
@@ -112,7 +112,7 @@ export function extractProcessedEyes(svgText: string): ProcessedEyeData[] {
     const groupTag = match[0];
 
     // Extract side from class
-    const sideMatch = groupTag.match(/blobbi-blink-(left|right)/);
+    const sideMatch = groupTag.match(/pets-blink-(left|right)/);
     if (!sideMatch) continue;
     const side = sideMatch[1] as EyeSide;
 
@@ -148,7 +148,7 @@ export function extractProcessedEyes(svgText: string): ProcessedEyeData[] {
         eyeWhiteRy: eyeWhiteRy ?? undefined,
       },
       side,
-      clipId: clipId || `blobbi-blink-clip-${side}`,
+      clipId: clipId || `pets-blink-clip-${side}`,
       clipTop: clipTop ?? cy - radius,
       clipHeight: clipHeight ?? radius * 2,
     });
@@ -160,27 +160,27 @@ export function extractProcessedEyes(svgText: string): ProcessedEyeData[] {
 // ─── Detection from Processed SVG ─────────────────────────────────────────────
 
 /**
- * Detect eyes from processed SVG (with blobbi-eye groups).
+ * Detect eyes from processed SVG (with pets-eye groups).
  * 
- * Supports both old structure (.blobbi-eye contains pupils directly)
- * and new structure (.blobbi-eye > .blobbi-eye-gaze contains pupils).
+ * Supports both old structure (.pets-eye contains pupils directly)
+ * and new structure (.pets-eye > .pets-eye-gaze contains pupils).
  */
 function detectFromProcessedSvg(svgText: string): EyePosition[] {
   const eyes: EyePosition[] = [];
 
-  // Look for blobbi-eye groups - flexible matching for class attribute order
-  // Matches: class="blobbi-eye blobbi-eye-left" or class="blobbi-eye-left blobbi-eye" etc.
-  const eyeGroupRegex = /class="[^"]*blobbi-eye-(left|right)[^"]*"/g;
+  // Look for pets-eye groups - flexible matching for class attribute order
+  // Matches: class="pets-eye pets-eye-left" or class="pets-eye-left pets-eye" etc.
+  const eyeGroupRegex = /class="[^"]*pets-eye-(left|right)[^"]*"/g;
   let match;
   const processedSides = new Set<string>();
 
   while ((match = eyeGroupRegex.exec(svgText)) !== null) {
     const side = match[1] as EyeSide;
     
-    // Skip if we already processed this side (may match both .blobbi-eye and .blobbi-eye-gaze)
-    // Only process the first match per side (should be the .blobbi-eye group)
+    // Skip if we already processed this side (may match both .pets-eye and .pets-eye-gaze)
+    // Only process the first match per side (should be the .pets-eye group)
     const classContent = match[0];
-    const isGazeGroup = classContent.includes('blobbi-eye-gaze');
+    const isGazeGroup = classContent.includes('pets-eye-gaze');
     if (isGazeGroup || processedSides.has(side)) continue;
     processedSides.add(side);
 
@@ -189,8 +189,8 @@ function detectFromProcessedSvg(svgText: string): EyePosition[] {
     const beforeMatch = svgText.slice(0, match.index);
     
     // More flexible matching: data attributes can be in any order
-    // Find the nearest blobbi-blink group opening tag before this
-    const blinkGroupStart = beforeMatch.lastIndexOf('blobbi-blink');
+    // Find the nearest pets-blink group opening tag before this
+    const blinkGroupStart = beforeMatch.lastIndexOf('pets-blink');
     if (blinkGroupStart === -1) continue;
     
     // Extract the full opening tag of the blink group
@@ -414,7 +414,7 @@ function isEyeWhiteElement(element: string, radius: number): boolean {
  */
 function isPupilElement(element: string): boolean {
   // Check for explicit pupil marker (used by flat-fill forms after eyeColor replacement)
-  if (element.includes('data-blobbi-pupil')) return true;
+  if (element.includes('data-pets-pupil')) return true;
 
   // Check for pupil gradient
   if (/fill="url\(#[^"]*[Pp]upil[^"]*\)"/.test(element)) {

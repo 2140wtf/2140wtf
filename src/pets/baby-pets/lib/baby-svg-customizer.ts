@@ -1,12 +1,12 @@
 /**
- * Baby Blobbi SVG Customizer
+ * Baby Pets SVG Customizer
  *
  * Handles applying colors and customizations to baby SVG content.
- * Uses shared utilities from blobbi/ui/lib/svg for common operations.
+ * Uses shared utilities from pets/ui/lib/svg for common operations.
  */
 
-import { Blobbi } from '@/blobbi/core/types/blobbi';
-import { lightenColor, uniquifySvgIds, ensureSvgFillsContainer } from '@/blobbi/ui/lib/svg';
+import { Pets } from '@/pets/core/types/pets';
+import { lightenColor, uniquifySvgIds, ensureSvgFillsContainer } from '@/pets/ui/lib/svg';
 import { BabySvgCustomization } from '../types/baby.types';
 
 /**
@@ -14,8 +14,8 @@ import { BabySvgCustomization } from '../types/baby.types';
  * 
  * @param svgText - The SVG content to customize
  * @param customization - Color customization options
- * @param isSleeping - Whether the Blobbi is sleeping (affects eye rendering)
- * @param instanceId - Optional unique ID to prevent gradient ID collisions when multiple Blobbis are rendered
+ * @param isSleeping - Whether the Pets is sleeping (affects eye rendering)
+ * @param instanceId - Optional unique ID to prevent gradient ID collisions when multiple Petss are rendered
  */
 export function customizeBabySvg(
   svgText: string, 
@@ -49,7 +49,7 @@ export function customizeBabySvg(
     modifiedSvg = applyEyeColor(modifiedSvg, customization.eyeColor);
   }
 
-  // Make all IDs unique to prevent collisions when multiple Blobbis are rendered
+  // Make all IDs unique to prevent collisions when multiple Petss are rendered
   if (instanceId) {
     modifiedSvg = uniquifySvgIds(modifiedSvg, instanceId);
   }
@@ -61,7 +61,7 @@ export function customizeBabySvg(
  * Apply body gradient customization
  */
 function applyBodyGradient(svgText: string, customization: BabySvgCustomization): string {
-  const bodyGradientRegex = /<radialGradient[^>]*id=["']blobbiBodyGradient["'][^>]*>([\s\S]*?)<\/radialGradient>/;
+  const bodyGradientRegex = /<radialGradient[^>]*id=["']petsBodyGradient["'][^>]*>([\s\S]*?)<\/radialGradient>/;
   const bodyGradientMatch = svgText.match(bodyGradientRegex);
 
   if (!bodyGradientMatch || !customization.baseColor) {
@@ -72,14 +72,14 @@ function applyBodyGradient(svgText: string, customization: BabySvgCustomization)
 
   if (customization.secondaryColor) {
     // Both base_color and secondary_color are present
-    newGradient = `<radialGradient id="blobbiBodyGradient" cx="0.3" cy="0.25">
+    newGradient = `<radialGradient id="petsBodyGradient" cx="0.3" cy="0.25">
       <stop offset="0%" style="stop-color:${customization.secondaryColor}"/>
       <stop offset="60%" style="stop-color:${lightenColor(customization.secondaryColor, 20)}"/>
       <stop offset="100%" style="stop-color:${customization.baseColor}"/>
     </radialGradient>`;
   } else {
     // Only base_color is present
-    newGradient = `<radialGradient id="blobbiBodyGradient" cx="0.3" cy="0.25">
+    newGradient = `<radialGradient id="petsBodyGradient" cx="0.3" cy="0.25">
       <stop offset="0%" style="stop-color:${lightenColor(customization.baseColor, 40)}"/>
       <stop offset="60%" style="stop-color:${lightenColor(customization.baseColor, 20)}"/>
       <stop offset="100%" style="stop-color:${customization.baseColor}"/>
@@ -93,14 +93,14 @@ function applyBodyGradient(svgText: string, customization: BabySvgCustomization)
  * Apply eye color customization
  */
 function applyEyeColor(svgText: string, eyeColor: string): string {
-  const eyeGradientRegex = /<radialGradient[^>]*id=["']blobbiPupilGradient["'][^>]*>([\s\S]*?)<\/radialGradient>/;
+  const eyeGradientRegex = /<radialGradient[^>]*id=["']petsPupilGradient["'][^>]*>([\s\S]*?)<\/radialGradient>/;
   const eyeGradientMatch = svgText.match(eyeGradientRegex);
 
   if (!eyeGradientMatch) {
     return svgText;
   }
 
-  const newEyeGradient = `<radialGradient id="blobbiPupilGradient" cx="0.3" cy="0.3">
+  const newEyeGradient = `<radialGradient id="petsPupilGradient" cx="0.3" cy="0.3">
     <stop offset="0%" style="stop-color:${lightenColor(eyeColor, 30)}"/>
     <stop offset="100%" style="stop-color:${eyeColor}"/>
   </radialGradient>`;
@@ -109,22 +109,22 @@ function applyEyeColor(svgText: string, eyeColor: string): string {
 }
 
 /**
- * Convenience function to customize baby SVG from a Blobbi instance.
+ * Convenience function to customize baby SVG from a Pets instance.
  * 
- * Uses the Blobbi's ID to uniquify SVG IDs, preventing gradient collisions
- * when multiple Blobbis are rendered on the same page.
+ * Uses the Pets's ID to uniquify SVG IDs, preventing gradient collisions
+ * when multiple Petss are rendered on the same page.
  */
-export function customizeBabySvgFromBlobbi(
+export function customizeBabySvgFromPets(
   svgText: string,
-  blobbi: Blobbi,
+  pets: Pets,
   isSleeping: boolean = false
 ): string {
   const customization: BabySvgCustomization = {
-    baseColor: blobbi.baseColor,
-    secondaryColor: blobbi.secondaryColor,
-    eyeColor: blobbi.eyeColor,
+    baseColor: pets.baseColor,
+    secondaryColor: pets.secondaryColor,
+    eyeColor: pets.eyeColor,
   };
 
-  // Pass blobbi.id to uniquify gradient IDs and prevent collisions
-  return customizeBabySvg(svgText, customization, isSleeping, blobbi.id);
+  // Pass pets.id to uniquify gradient IDs and prevent collisions
+  return customizeBabySvg(svgText, customization, isSleeping, pets.id);
 }

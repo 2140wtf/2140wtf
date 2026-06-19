@@ -1,8 +1,8 @@
 /**
- * BlobbiRoomStatusHud — Compact horizontal stat indicators for the room HUD.
+ * PetsRoomStatusHud — Compact horizontal stat indicators for the room HUD.
  *
  * Renders as a row of segmented ring stat icons near the top of the room,
- * absolutely positioned so it does not affect the Blobbi stage layout.
+ * absolutely positioned so it does not affect the Pets stage layout.
  * Keeps stat guide click behavior, glow animations, and care-state badges.
  */
 
@@ -11,14 +11,14 @@ import {
   Utensils, Gamepad2, Heart, Droplets, Zap, AlertTriangle,
 } from 'lucide-react';
 
-import { SegmentedRing } from '@/blobbi/ui/StatIndicator';
-import { getVisibleStats } from '@/blobbi/core/lib/blobbi-decay';
-import { getBlobbiStatDisplayState } from '@/blobbi/core/lib/blobbi-segments';
+import { SegmentedRing } from '@/pets/ui/StatIndicator';
+import { getVisibleStats } from '@/pets/core/lib/pets-decay';
+import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
 import { cn } from '@/lib/utils';
 import { ROOM_CONTROL_SURFACE_SUBTLE } from '../lib/room-layout';
 
-import type { CareState } from '@/blobbi/core/lib/blobbi-segments';
-import type { BlobbiCompanion, BlobbiStats } from '@/blobbi/core/lib/blobbi';
+import type { CareState } from '@/pets/core/lib/pets-segments';
+import type { PetsCompanion, PetsStats } from '@/pets/core/lib/pets';
 
 // ─── Colour maps ──────────────────────────────────────────────────────────────
 
@@ -51,8 +51,8 @@ const STAT_ICON_MAP: Record<string, React.ComponentType<{ className?: string; st
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-export interface BlobbiRoomStatusHudProps {
-  companion: BlobbiCompanion;
+export interface PetsRoomStatusHudProps {
+  companion: PetsCompanion;
   currentStats: {
     hunger: number;
     happiness: number;
@@ -61,7 +61,7 @@ export interface BlobbiRoomStatusHudProps {
     energy: number;
   };
   /** Called when the user taps any stat icon to start the guide. */
-  onGuide?: (stat: keyof BlobbiStats) => void;
+  onGuide?: (stat: keyof PetsStats) => void;
 }
 
 // ─── Arc offset helper ────────────────────────────────────────────────────────
@@ -78,15 +78,15 @@ function getArcOffset(index: number, count: number): number {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BlobbiRoomStatusHud({
+export function PetsRoomStatusHud({
   companion,
   currentStats,
   onGuide,
-}: BlobbiRoomStatusHudProps) {
+}: PetsRoomStatusHudProps) {
   const allStats = useMemo(() =>
     getVisibleStats(companion.stage).map(stat => {
       const value = currentStats[stat] ?? 100;
-      const display = getBlobbiStatDisplayState({ stage: companion.stage, stat: stat as keyof BlobbiStats, value });
+      const display = getPetsStatDisplayState({ stage: companion.stage, stat: stat as keyof PetsStats, value });
       return {
         stat,
         value,
@@ -112,7 +112,7 @@ export function BlobbiRoomStatusHud({
           <button
             type="button"
             className={cn('transition-transform duration-200 active:scale-90', onGuide && 'cursor-pointer')}
-            onClick={onGuide ? () => onGuide(s.stat as keyof BlobbiStats) : undefined}
+            onClick={onGuide ? () => onGuide(s.stat as keyof PetsStats) : undefined}
           >
             <StatIndicator
               stat={s.stat}

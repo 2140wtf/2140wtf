@@ -1,5 +1,5 @@
 /**
- * BlobbiCompanionLayer — Global orchestration layer for the companion.
+ * PetsCompanionLayer — Global orchestration layer for the companion.
  *
  * This component is the top-level coordinator. It is NOT a visual component.
  * It wires together:
@@ -9,39 +9,39 @@
  *   - Item use with temporary emotion overrides
  *
  * Visual rendering is delegated entirely to:
- *   BlobbiCompanion → BlobbiCompanionVisual → MemoizedBlobbiVisual → Visual → SvgRenderer
+ *   PetsCompanion → PetsCompanionVisual → MemoizedPetsVisual → Visual → SvgRenderer
  *
  * This file should be placed at the app root level (renders a fixed overlay).
  */
 
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react';
 
-import { useBlobbiCompanion } from '../hooks/useBlobbiCompanion';
+import { usePetsCompanion } from '../hooks/usePetsCompanion';
 import { useCompanionItemReaction } from '../hooks/useCompanionItemReaction';
 import { useActionEmotionOverride } from '../hooks/useActionEmotionOverride';
 import { useOverstimulationReaction } from '../hooks/useOverstimulationReaction';
 import { useShakeReaction } from '../hooks/useShakeReaction';
 import { createShakeTracker, recordSample, computeShakeResult, resetTracker } from '../core/shakeDetection';
-import { BlobbiCompanion } from './BlobbiCompanion';
+import { PetsCompanion } from './PetsCompanion';
 import { VomitSplat } from './VomitSplat';
 import { OverstimulationBlockOverlay } from './OverstimulationBlockOverlay';
 import { DebugGroundOverlay } from './DebugGroundOverlay';
 import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 import { calculateGroundY } from '../utils/movement';
-import { getBlobbiMouthAnchor } from '../utils/mouthAnchor';
-import { useStatusReaction } from '@/blobbi/ui/hooks/useStatusReaction';
-import { buildSleepingRecipe } from '@/blobbi/ui/lib/recipe';
-import type { ActionType } from '@/blobbi/ui/lib/status-reactions';
+import { getPetsMouthAnchor } from '../utils/mouthAnchor';
+import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
+import { buildSleepingRecipe } from '@/pets/ui/lib/recipe';
+import type { ActionType } from '@/pets/ui/lib/status-reactions';
 import {
   useCompanionActionMenu,
-  useBlobbiActions,
+  usePetsActions,
   CompanionActionMenu,
   HangingItems,
   CATEGORY_TO_ACTION,
   type CompanionItem,
   type ItemLandedData,
 } from '../interaction';
-import { useBlobbiSleepToggle } from '../interaction/useBlobbiSleepToggle';
+import { usePetsSleepToggle } from '../interaction/usePetsSleepToggle';
 import type { Position } from '../types/companion.types';
 
 /** Set to true to show debug ground-contact lines. */
@@ -55,7 +55,7 @@ interface SplatData {
   landY: number;
 }
 
-export function BlobbiCompanionLayer() {
+export function PetsCompanionLayer() {
   const {
     companion,
     isVisible,
@@ -72,13 +72,13 @@ export function BlobbiCompanionLayer() {
     updateDrag,
     endDrag,
     triggerAttention,
-  } = useBlobbiCompanion();
+  } = usePetsCompanion();
 
   const config = DEFAULT_COMPANION_CONFIG;
 
   // ── Rendered position tracking ─────────────────────────────────────────────
   // Tracks the actual visual position (including entry/float offsets) so
-  // the action menu and hanging items can position relative to Blobbi.
+  // the action menu and hanging items can position relative to Pets.
   const [renderedPosition, setRenderedPosition] = useState<Position>(motion.position);
 
   const handlePositionUpdate = useCallback((position: Position) => {
@@ -141,10 +141,10 @@ export function BlobbiCompanionLayer() {
     useItem: contextUseItem,
     canUseItems,
     isItemOnCooldown,
-  } = useBlobbiActions();
+  } = usePetsActions();
 
-  // Standalone sleep/wake toggle — works without BlobbiPage mounted
-  const { toggleSleep } = useBlobbiSleepToggle();
+  // Standalone sleep/wake toggle — works without PetsPage mounted
+  const { toggleSleep } = usePetsSleepToggle();
 
   // ── Item use with emotion override ─────────────────────────────────────────
 
@@ -209,12 +209,12 @@ export function BlobbiCompanionLayer() {
     if (!vomitEvent || vomitEvent.id === lastVomitId.current || !companion) return;
     lastVomitId.current = vomitEvent.id;
 
-    // Compute spawn position (Blobbi's mouth area)
-    const mouth = getBlobbiMouthAnchor(companion.stage, companion.adultType);
+    // Compute spawn position (Pets's mouth area)
+    const mouth = getPetsMouthAnchor(companion.stage, companion.adultType);
     const spawnX = renderedPosition.x + config.size * mouth.xRatio;
     const spawnY = renderedPosition.y + config.size * mouth.yRatio;
 
-    // Land about 20px below Blobbi's container bottom, clamped to viewport floor
+    // Land about 20px below Pets's container bottom, clamped to viewport floor
     const floorLimit = viewport.height - config.padding.bottom;
     const landX = spawnX + (Math.random() * 30 - 15);
     const landY = Math.min(renderedPosition.y + config.size + 20, floorLimit);
@@ -400,7 +400,7 @@ export function BlobbiCompanionLayer() {
         ))}
 
         <div className="pointer-events-auto">
-          <BlobbiCompanion
+          <PetsCompanion
             companion={companion}
             state={state}
             motion={motion}

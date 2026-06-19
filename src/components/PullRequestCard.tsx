@@ -4,14 +4,12 @@ import {
 	GitBranch,
 	GitCommit,
 	GitPullRequest,
-	Wand2,
 } from "lucide-react";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { openUrl } from "@/lib/downloadFile";
 
 interface PullRequestCardProps {
 	event: NostrEvent;
@@ -31,15 +29,11 @@ export function PullRequestCard({
 	const cloneUrls = event.tags
 		.filter(([n]) => n === "clone")
 		.map(([, v]) => v);
-	const hasShakespeare = event.tags.some(
-		([n, v]) => n === "t" && v === "shakespeare",
-	);
 	const commitTip = event.tags.find(([n]) => n === "c")?.[1];
 	const mergeBase = event.tags.find(([n]) => n === "merge-base")?.[1];
 	const labels = event.tags
 		.filter(([n]) => n === "t")
-		.map(([, v]) => v)
-		.filter((t) => t !== "shakespeare");
+		.map(([, v]) => v);
 
 	const title =
 		subject || event.content.split("\n")[0]?.trim() || "Pull Request";
@@ -52,10 +46,6 @@ export function PullRequestCard({
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};
-
-	const shakespeareUrl = cloneUrls[0]
-		? `https://shakespeare.diy/clone?url=${encodeURIComponent(cloneUrls[0])}`
-		: "https://shakespeare.diy";
 
 	return (
 		<div className="mt-2 space-y-3">
@@ -135,21 +125,8 @@ export function PullRequestCard({
 					)}
 
 					{/* Action buttons */}
-					<div className="flex flex-wrap gap-2">
-						{hasShakespeare && (
-							<button
-								type="button"
-								className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-								onClick={(e) => {
-									e.stopPropagation();
-									openUrl(shakespeareUrl);
-								}}
-							>
-								<Wand2 className="size-3" />
-								Edit with Shakespeare
-							</button>
-						)}
-						{!hasShakespeare && cloneUrls[0] && (
+					{cloneUrls[0] && (
+						<div className="flex flex-wrap gap-2">
 							<button
 								type="button"
 								className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary/60"
@@ -161,8 +138,8 @@ export function PullRequestCard({
 								<Copy className="size-3" />
 								{copied ? "Copied!" : "Copy Clone URL"}
 							</button>
-						)}
-					</div>
+						</div>
+					)}
 				</div>
 			</div>
 

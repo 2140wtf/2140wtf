@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useSecureLocalStorage } from '@/hooks/useSecureLocalStorage';
 import { useToast } from '@/hooks/useToast';
+import { redactSecrets } from '@/lib/redactSecrets';
 import { LN } from '@getalby/sdk';
 
 export interface NWCConnection {
@@ -17,6 +18,48 @@ export interface NWCInfo {
   network?: string;
   methods?: string[];
   notifications?: string[];
+}
+
+export interface NwcUriParts {
+  connectionString: string;
+  pubkey: string;
+  relay: string;
+  secret?: string;
+}
+
+/**
+ * Validate a Nostr Wallet Connect URI.
+ *
+ * Accepts both `nostr+walletconnect://` and `nostrwalletconnect://`. Requires
+ * the query string to contain non-empty `pubkey` and `relay` parameters. The
+ * secret is parsed but never returned in error messages — callers must run any
+ * error text through {@link redactSecrets} before displaying it.
+ */
+export function validateNwcUri(rawUri: string): NwcUriParts | null {
+  const uri = rawUri.trim();
+  if (!uri) return null;
+  let protocol: string;
+  try {
+    protocol = uri.split('://')[0]?.toLowerCase() || '';
+  } catch {
+    return null;
+  }
+  if (protocol !== 'nostr+walletconnect' && protocol !== 'nostrwalletconnect') {
+    return null;
+  }
+  // Reject obvious junk while avoiding logging the secret-bearing URI.
+  if (uri.length < 10 || uri.length > 4000) return null;
+
+  const queryIndex = uri.indexOf('?');
+  if (queryIndex === -1) return null;
+  const params = new URLSearchParams(uri.slice(queryIndex + 1));
+  const pubkey = params.get('pubkey')?.trim();
+  const relay = params.get('relay')?.trim();
+  const secret = params.get('secret')?.trim();
+  if (!pubkey || pubkey.length === 0) return null;
+  if (!relay || relay.length === 0) return null;
+
+  return { connectionString: uri, pubkey, relay, secret };
 }
 
 export function useNWCInternal(userPubkey?: string) {
@@ -36,20 +79,7 @@ export function useNWCInternal(userPubkey?: string) {
 
   // Add new connection
   const addConnection = async (uri: string, alias?: string): Promise<boolean> => {
-    const parseNWCUri = (uri: string): { connectionString: string } | null => {
-      try {
-        if (!uri.startsWith('nostr+walletconnect://') && !uri.startsWith('nostrwalletconnect://')) {
-          console.error('Invalid NWC URI protocol:', { protocol: uri.split('://')[0] });
-          return null;
-        }
-        return { connectionString: uri };
-      } catch (error) {
-        console.error('Failed to parse NWC URI:', error);
-        return null;
-      }
-    };
-
-    const parsed = parseNWCUri(uri);
+    const parsed = validateNwcUri(uri);
     if (!parsed) {
       toast({
         title: 'Invalid NWC URI',
@@ -118,8 +148,9 @@ export function useNWCInternal(userPubkey?: string) {
 
       return true;
     } catch (error) {
-      console.error('NWC connection failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const rawMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('NWC connection failed:', redactSecrets(rawMessage));
+      const errorMessage = redactSecrets(rawMessage);
 
       toast({
         title: 'Connection failed',
@@ -176,10 +207,28 @@ export function useNWCInternal(userPubkey?: string) {
 
     let client: LN;
     try {
-      client = new LN(connection.connectionString);
+      let clientTimeoutId: NodeJS.Timeout | undefined;
+      const clientPromise = new Promise<LN>((resolve, reject) => {
+        try {
+          resolve(new LN(connection.connectionString));
+        } catch (error) {
+          reject(error);
+        }
+      });
+      const clientTimeoutPromise = new Promise<never>((_, reject) => {
+        clientTimeoutId = setTimeout(() => reject(new Error('NWC client creation timeout')), 5000);
+      });
+      try {
+        client = await Promise.race([clientPromise, clientTimeoutPromise]);
+        if (clientTimeoutId) clearTimeout(clientTimeoutId);
+      } catch (error) {
+        if (clientTimeoutId) clearTimeout(clientTimeoutId);
+        throw error;
+      }
     } catch (error) {
-      console.error('Failed to create NWC client:', error);
-      throw new Error(`Failed to create NWC client: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Failed to create NWC client:', redactSecrets(rawMessage));
+      throw new Error(`Failed to create NWC client: ${redactSecrets(rawMessage)}`);
     }
 
     try {
@@ -199,17 +248,19 @@ export function useNWCInternal(userPubkey?: string) {
         throw error;
       }
     } catch (error) {
-      console.error('NWC payment failed:', error);
-
       if (error instanceof Error) {
-        if (error.message.includes('timeout')) {
+        console.error('NWC payment failed:', redactSecrets(error.message));
+        // Avoid echoing the secret connection string back to the user if the
+        // SDK ever includes it in an error message.
+        const safeMessage = redactSecrets(error.message);
+        if (safeMessage.includes('timeout')) {
           throw new Error('Payment timed out. Please try again.');
-        } else if (error.message.includes('insufficient')) {
+        } else if (safeMessage.includes('insufficient')) {
           throw new Error('Insufficient balance in connected wallet.');
-        } else if (error.message.includes('invalid')) {
+        } else if (safeMessage.includes('invalid')) {
           throw new Error('Invalid invoice or connection. Please check your wallet.');
         } else {
-          throw new Error(`Payment failed: ${error.message}`);
+          throw new Error(`Payment failed: ${safeMessage}`);
         }
       }
 

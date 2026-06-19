@@ -1,5 +1,5 @@
 /**
- * Social Projection — apply kind 1124 interactions to projected Blobbi stats.
+ * Social Projection — apply kind 1124 interactions to projected Pets stats.
  *
  * Pure function pipeline: takes already-decayed stats and a sorted list of
  * parsed interactions, returns socially-adjusted stats for display.
@@ -15,14 +15,14 @@
  *     is applied. Otherwise a small fallback effect per action is used.
  *   - All stats are clamped to [STAT_MIN, STAT_MAX] after each interaction.
  *
- * @module blobbi-social-projection
+ * @module pets-social-projection
  */
 
-import type { BlobbiStats } from './blobbi';
-import { STAT_MIN, STAT_MAX } from './blobbi';
-import type { BlobbiInteraction, InteractionAction, SocialCheckpoint } from './blobbi-interaction';
-import { getShopItemById } from '@/blobbi/shop/lib/blobbi-shop-items';
-import type { ItemEffect } from '@/blobbi/shop/types/shop.types';
+import type { PetsStats } from './pets';
+import { STAT_MIN, STAT_MAX } from './pets';
+import type { PetsInteraction, InteractionAction, SocialCheckpoint } from './pets-interaction';
+import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
+import type { ItemEffect } from '@/pets/shop/types/shop.types';
 
 // ─── Fallback Effects ─────────────────────────────────────────────────────────
 
@@ -59,13 +59,13 @@ const FALLBACK_EFFECTS: Record<InteractionAction, ItemEffect> = {
  *                       the Nostr `since` inclusive boundary.
  *                       When absent (no prior consolidation), all interactions
  *                       in the array are processed.
- * @returns A new `BlobbiStats` object with social effects applied.
+ * @returns A new `PetsStats` object with social effects applied.
  */
 export function applySocialInteractions(
-  baseStats: BlobbiStats,
-  interactions: readonly BlobbiInteraction[],
+  baseStats: PetsStats,
+  interactions: readonly PetsInteraction[],
   checkpoint?: SocialCheckpoint,
-): BlobbiStats {
+): PetsStats {
   return consolidateSocialInteractions(baseStats, interactions, checkpoint).stats;
 }
 
@@ -76,11 +76,11 @@ export function applySocialInteractions(
  */
 export interface ConsolidationResult {
   /** New stats after applying all valid interactions */
-  stats: BlobbiStats;
+  stats: PetsStats;
   /** Number of interactions that were actually applied (after dedup) */
   consumedCount: number;
   /** The last interaction that was actually applied, or `undefined` if none were consumed */
-  lastConsumed: BlobbiInteraction | undefined;
+  lastConsumed: PetsInteraction | undefined;
 }
 
 /**
@@ -98,8 +98,8 @@ export interface ConsolidationResult {
  * @returns Consolidation result with new stats and consumed interaction info.
  */
 export function consolidateSocialInteractions(
-  baseStats: BlobbiStats,
-  interactions: readonly BlobbiInteraction[],
+  baseStats: PetsStats,
+  interactions: readonly PetsInteraction[],
   checkpoint?: SocialCheckpoint,
 ): ConsolidationResult {
   if (interactions.length === 0) {
@@ -107,7 +107,7 @@ export function consolidateSocialInteractions(
   }
 
   // Mutable working copy
-  const stats: BlobbiStats = { ...baseStats };
+  const stats: PetsStats = { ...baseStats };
 
   // Dedup set — general relay-duplicate safety net (same role as in
   // applySocialInteractions). Boundary event is already filtered upstream.
@@ -117,7 +117,7 @@ export function consolidateSocialInteractions(
   }
 
   let consumedCount = 0;
-  let lastConsumed: BlobbiInteraction | undefined;
+  let lastConsumed: PetsInteraction | undefined;
 
   for (const ix of interactions) {
     // ── Dedup (also handles checkpoint boundary) ──
@@ -146,7 +146,7 @@ export function consolidateSocialInteractions(
  *   1. Shop item effect (when `itemId` is present and resolves to a known item)
  *   2. Fallback per-action effect
  */
-function resolveEffect(ix: BlobbiInteraction): ItemEffect {
+function resolveEffect(ix: PetsInteraction): ItemEffect {
   if (ix.itemId) {
     const item = getShopItemById(ix.itemId);
     if (item?.effect) return item.effect;
@@ -155,7 +155,7 @@ function resolveEffect(ix: BlobbiInteraction): ItemEffect {
 }
 
 /** Apply an `ItemEffect` to mutable stats, clamping each field. */
-function applyEffect(stats: BlobbiStats, effect: ItemEffect): void {
+function applyEffect(stats: PetsStats, effect: ItemEffect): void {
   if (effect.hunger !== undefined) {
     stats.hunger = clamp(stats.hunger + effect.hunger);
   }

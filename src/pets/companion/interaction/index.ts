@@ -1,10 +1,10 @@
 /**
  * Companion Interaction Module
  * 
- * Provides the action menu and item interaction system for the Blobbi companion.
+ * Provides the action menu and item interaction system for the Pets companion.
  * 
  * Components:
- * - CompanionActionMenu: Radial action buttons around Blobbi
+ * - CompanionActionMenu: Radial action buttons around Pets
  * - HangingItems: Items displayed as hanging elements from the top of screen
  * 
  * Hooks:
@@ -13,11 +13,11 @@
  * - useCompanionItemUse: Item use with success/failure handling
  * 
  * Context:
- * - BlobbiActionsContext: Provides item use functionality from parent
+ * - PetsActionsContext: Provides item use functionality from parent
  * 
  * Future extensions:
- * - Drag items to Blobbi
- * - Blobbi reactions to items
+ * - Drag items to Pets
+ * - Pets reactions to items
  * - Auto-use urgent items
  */
 
@@ -58,28 +58,28 @@ export {
 export type {
   UseItemResult as ContextUseItemResult,
   UseItemFunction,
-  BlobbiActionsContextValue,
-} from './BlobbiActionsContext';
+  PetsActionsContextValue,
+} from './PetsActionsContext';
 
 // Shared item use hook types
 export type {
-  UseBlobbiItemUseOptions,
-  UseBlobbiItemUseResult,
-} from './useBlobbiItemUse';
+  UsePetsItemUseOptions,
+  UsePetsItemUseResult,
+} from './usePetsItemUse';
 
 // Hooks
 export { useCompanionActionMenu } from './useCompanionActionMenu';
 export { useClickDetection } from './useClickDetection';
 export { useCompanionItemUse } from './useCompanionItemUse';
-export { useBlobbiItemUse } from './useBlobbiItemUse';
+export { usePetsItemUse } from './usePetsItemUse';
 
 // Context
 export {
-  BlobbiActionsContext,
-  useBlobbiActions,
-  useBlobbiActionsRegistration,
-} from './BlobbiActionsContext';
-export { BlobbiActionsProvider } from './BlobbiActionsProvider';
+  PetsActionsContext,
+  usePetsActions,
+  usePetsActionsRegistration,
+} from './PetsActionsContext';
+export { PetsActionsProvider } from './PetsActionsProvider';
 
 // Components
 export { CompanionActionMenu } from './CompanionActionMenu';

@@ -167,10 +167,6 @@ function isDeprecatedFollowSet(event: NostrEvent): boolean {
 export function shouldHideFeedEvent(event: NostrEvent): boolean {
   // Deprecated kind 30000 follow sets
   if (isDeprecatedFollowSet(event)) return true;
-  // Unlisted magic decks (kind 37381)
-  if (event.kind === 37381 && event.tags.some(([n, v]) => n === 't' && v === 'unlisted')) return true;
-  // Hidden treasures (kind 37516)
-  if (event.kind === 37516 && event.tags.some(([n, v]) => n === 't' && v === 'hidden')) return true;
   // Emoji packs (kind 30030) without at least one valid emoji tag
   if (event.kind === 30030 && !event.tags.some(([n, sc, url]) => n === 'emoji' && sc && url)) return true;
   // Bird detections (kind 2473) without a Wikidata entity reference — the NIP
@@ -323,7 +319,7 @@ export async function buildFeedItems(
         queueMissing(targetId, { type: 'zap', event: ev, recipientPubkey });
       }
     } else {
-      // Direct post — kind 1, 1068, 34236, etc.
+      // Direct post — kind 1, 1068, etc.
       items.push({ event: ev, sortTimestamp: ev.created_at });
     }
   }

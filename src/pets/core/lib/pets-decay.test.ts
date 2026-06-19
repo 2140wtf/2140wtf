@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
 
-import { applyBlobbiDecay } from './blobbi-decay';
-import type { BlobbiStats } from './blobbi';
+import { applyPetsDecay } from './pets-decay';
+import type { PetsStats } from './pets';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const FULL_STATS: BlobbiStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
+const FULL_STATS: PetsStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
 
 /** Create a DecayInput with sensible defaults. */
 function decay(overrides: {
   stage?: 'egg' | 'baby' | 'adult';
   state?: 'active' | 'sleeping' | 'hibernating';
-  stats?: Partial<BlobbiStats>;
+  stats?: Partial<PetsStats>;
   elapsedSeconds: number;
 }) {
   const now = 1_000_000;
-  return applyBlobbiDecay({
+  return applyPetsDecay({
     stage: overrides.stage ?? 'baby',
     state: overrides.state ?? 'active',
     stats: overrides.stats ?? FULL_STATS,

@@ -1,7 +1,7 @@
 /**
- * BlobbiEmotionPanel
+ * PetsEmotionPanel
  * 
- * DEV-ONLY panel for testing Blobbi emotions.
+ * DEV-ONLY panel for testing Pets emotions.
  * Allows selecting different emotions to preview how they look.
  */
 
@@ -11,11 +11,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useEmotionDev } from './useEmotionDev';
 import { isLocalhostDev } from './index';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotions';
+import type { PetsEmotion } from '@/pets/ui/lib/emotions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface BlobbiEmotionPanelProps {
+interface PetsEmotionPanelProps {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -25,11 +25,11 @@ interface BlobbiEmotionPanelProps {
 /**
  * Emotion options for the dev panel.
  * 
- * NOTE: The base/default Blobbi expression is visually "happy" (smiling mouth).
+ * NOTE: The base/default Pets expression is visually "happy" (smiling mouth).
  * The 'neutral' internal key keeps this default - we label it "Default (Happy)"
  * in the UI to accurately reflect what the user sees.
  */
-const EMOTIONS: Array<{ value: BlobbiEmotion; label: string; emoji: string }> = [
+const EMOTIONS: Array<{ value: PetsEmotion; label: string; emoji: string }> = [
   { value: 'neutral', label: 'Default', emoji: '😊' },
   { value: 'sad', label: 'Sad', emoji: '😢' },
   { value: 'boring', label: 'Boring', emoji: '😑' },
@@ -49,7 +49,7 @@ const EMOTIONS: Array<{ value: BlobbiEmotion; label: string; emoji: string }> = 
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function BlobbiEmotionPanel({ isOpen, onClose }: BlobbiEmotionPanelProps) {
+export function PetsEmotionPanel({ isOpen, onClose }: PetsEmotionPanelProps) {
   const { devEmotion, setDevEmotion, clearDevEmotion } = useEmotionDev();
   
   // Don't render outside localhost development
@@ -57,7 +57,7 @@ export function BlobbiEmotionPanel({ isOpen, onClose }: BlobbiEmotionPanelProps)
     return null;
   }
   
-  const handleSelectEmotion = (emotion: BlobbiEmotion) => {
+  const handleSelectEmotion = (emotion: PetsEmotion) => {
     if (emotion === 'neutral') {
       clearDevEmotion();
     } else {
@@ -79,7 +79,7 @@ export function BlobbiEmotionPanel({ isOpen, onClose }: BlobbiEmotionPanelProps)
         
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Select an emotion to preview how it looks on your Blobbi.
+            Select an emotion to preview how it looks on your Pets.
             The default expression is already happy-looking (smiling).
             This is a dev-only tool and doesn't affect real state.
           </p>
@@ -117,7 +117,7 @@ export function BlobbiEmotionPanel({ isOpen, onClose }: BlobbiEmotionPanelProps)
           
           <div className="text-xs text-muted-foreground/70 bg-muted/50 rounded-md p-2">
             <strong>Note:</strong> This panel is only visible in development mode.
-            The emotion override applies to the dashboard Blobbi and the floating companion.
+            The emotion override applies to the dashboard Pets and the floating companion.
           </div>
         </div>
       </DialogContent>

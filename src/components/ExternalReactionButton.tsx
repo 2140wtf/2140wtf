@@ -39,7 +39,7 @@ interface ExternalReactionButtonProps {
   content: ExternalContent;
   /** Icon size class (default "size-5"). */
   iconSize?: string;
-  /** Display count from an external source (e.g. Bluesky like count). Falls back to the Nostr reaction count. */
+  /** Display count from an external source. Falls back to the Nostr reaction count. */
   count?: number;
   /** Extra class names on the trigger button. */
   className?: string;

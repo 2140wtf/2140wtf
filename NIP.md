@@ -23,16 +23,18 @@ These event kinds were created by community contributors and are supported by Di
 | 3367  | Color Moment           | Color palette post expressing a mood                             | [NIP](https://gitlab.com/chad.curtis/espy/-/blob/main/NIP.md)                            |
 | 4223  | Weather Reading        | Sensor readings from a weather station                           | [Draft NIP](https://github.com/nostr-protocol/nips/pull/2163)                            |
 | 7516  | Found Log              | Log entry recording a user finding a geocache                    | [NIP-GC](https://gitlab.com/chad.curtis/treasures/-/blob/main/NIP-GC.md)                 |
-| 8211  | Encrypted Letter       | Encrypted personal letter with visual stationery                 | [NIP](https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md)                            |
-| 1124  | Blobbi Social Interaction | Immutable interaction log for Blobbi social interactions       | See [Blobbi Social Interaction](#kind-1124-blobbi-social-interaction) below                |
+| 8211  | Encrypted Letter (deprecated in Ditto) | Encrypted personal letter with visual stationery | [NIP](https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md) |
+| 1124  | Pets Social Interaction | Immutable interaction log for Pets social interactions       | See [Pets Social Interaction](#kind-1124-pets-social-interaction) below                |
 | 10133 | Payment Targets        | Donation endpoints (Bitcoin, Lightning, Monero, …) per RFC-8905 | [NIP-A3](https://github.com/ATXMJ/nips/blob/main/A3.md); see [Kind 10133](#kind-10133-payment-targets-nip-a3) below |
 | 11125 | Blobbonaut Profile     | Owner profile with coins, achievements, and inventory            | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
-| 14919 | Blobbi Interaction     | Individual pet interaction (feed, play, clean, etc.)             | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
-| 14920 | Blobbi Breeding        | Breeding event between two adult Blobbis                         | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
-| 14921 | Blobbi Record          | Immutable lifecycle record (birth, evolution, adoption)          | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
+| 14919 | Pets Interaction     | Individual pet interaction (feed, play, clean, etc.)             | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
+| 14920 | Pets Breeding        | Breeding event between two adult Petss                         | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
+| 14921 | Pets Record          | Immutable lifecycle record (birth, evolution, adoption)          | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 16158 | Weather Station        | Weather station metadata (location, sensors, connectivity)       | [Draft NIP](https://github.com/nostr-protocol/nips/pull/2163)                            |
-| 31124 | Blobbi Pet State       | Current state of a virtual Blobbi pet (addressable)              | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
+| 31124 | Pets Pet State       | Current state of a virtual Pets pet (addressable)              | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 33863 | Fundraiser             | Self-authored Bitcoin fundraising campaign                       | See [Kind 33863: Fundraiser](#kind-33863-fundraiser) below                                |
+| 1315  | Roadstr Report         | Road event report (police, accident, hazard, traffic jam, etc.)  | See [Roadstr](#roadstr) below                                                             |
+| 1316  | Roadstr Confirmation   | Confirmation or denial of a Roadstr report                       | See [Roadstr](#roadstr) below                                                             |
 | 37516 | Geocache               | Geocache listing for real-world treasure hunting                 | [NIP-GC](https://gitlab.com/chad.curtis/treasures/-/blob/main/NIP-GC.md)                 |
 | 36787 | Music Track            | Addressable event for a music audio file with metadata           | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
 | 34139 | Music Playlist         | Ordered list of music track references (also used for albums)    | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
@@ -583,13 +585,9 @@ Birdstar merges Birdsong Spotter (a bird-by-ear checklist) and Starpoint (an int
 
 NIP-GC defines geocaching on Nostr. Kind 37516 (addressable) is a geocache listing with location (geohash), difficulty/terrain scores, size, and type. Kind 7516 is a found log recording a successful visit. The spec also covers comment logs (kind 1111 via NIP-22), verified finds with cryptographic proof (kind 7517), and cache retirement.
 
-### Personal Letters (Kind 8211)
+### Private Messaging
 
-**Author:** Chad Curtis
-**Spec:** https://gitlab.com/chad.curtis/lief/-/blob/main/NIP.md
-**App:** https://lief.to
-
-NIP-44 encrypted personal letters with visual stationery, hand-drawn stickers, decorative frames, and custom fonts. Letters render as 5:4 landscape postcards. The privacy model is intentionally postcard-like: sender/recipient metadata is visible, content is encrypted.
+Ditto uses **NIP-17** (kind 14 private direct messages wrapped in kind 1059 gift wraps) for private messaging. The legacy kind 8211 "Encrypted Letter" feature has been removed from Ditto's UI and will no longer be rendered or published.
 
 ### Weather Station (Kinds 4223, 16158)
 
@@ -600,12 +598,12 @@ NIP-44 encrypted personal letters with visual stationery, hand-drawn stickers, d
 
 Kind 16158 (replaceable) describes a weather station's configuration: name, geohash location, elevation, power source, connectivity, and sensor inventory. Kind 4223 (regular) carries individual sensor readings as 3-parameter tags `[sensor_type, value, model]`, enabling historical queries and cross-station comparison. Each station has its own keypair.
 
-### Blobbi Virtual Pet (Kinds 31124, 14919, 14920, 14921, 11125)
+### Pets Virtual Pet (Kinds 31124, 14919, 14920, 14921, 11125)
 
 **Author:** Danifra
 **Spec:** https://github.com/Danidfra/nostr-pet/blob/production/NIP.md
 **App:** https://nostr-pet.vercel.app
-**See also:** [Blobbi tag schema](docs/blobbi/blobbi-tag-schema.md) (Ditto-specific integration details)
+**See also:** [Pets tag schema](docs/pets/pets-tag-schema.md) (Ditto-specific integration details)
 
 NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds the current pet state across three stages (egg, baby, adult) with stats, appearance, and personality traits. Kind 14919 logs individual interactions, kind 14920 records breeding events, kind 14921 stores immutable lifecycle records, and kind 11125 (replaceable) holds the owner's profile with coins, achievements, and inventory.
 
@@ -659,7 +657,7 @@ The `content` of kind 11125 MAY include a `room_layouts` field for per-room visu
 | Field     | Type | Description |
 |-----------|------|-------------|
 | `v`       | `1`  | Schema version. MUST be `1`. |
-| `by_room` | `Partial<Record<BlobbiRoomId, RoomLayout>>` | Per-room layouts keyed by room ID. |
+| `by_room` | `Partial<Record<PetsRoomId, RoomLayout>>` | Per-room layouts keyed by room ID. |
 
 **`RoomLayout` shape:** `{ wall: RoomSurfaceLayout, floor: RoomSurfaceLayout }`
 
@@ -704,7 +702,7 @@ The `content` of kind 11125 MAY include a `room_furniture` field for per-room de
 | Field     | Type | Description |
 |-----------|------|-------------|
 | `v`       | `1`  | Schema version. MUST be `1`. |
-| `by_room` | `Partial<Record<BlobbiRoomId, FurniturePlacement[]>>` | Per-room placement arrays keyed by room ID. |
+| `by_room` | `Partial<Record<PetsRoomId, FurniturePlacement[]>>` | Per-room placement arrays keyed by room ID. |
 
 **`FurniturePlacement` fields:**
 
@@ -713,7 +711,7 @@ The `content` of kind 11125 MAY include a `room_furniture` field for per-room de
 | `id`      | Yes      | Namespaced furniture ID. MUST match `/^[a-z][a-z0-9]*:[a-z][a-z0-9-]*$/` (e.g. `official:plant-small`). |
 | `x`       | Yes      | Horizontal position, normalized 0–1 (0 = left edge, 1 = right edge). Clamped to [0, 1]. |
 | `y`       | Yes      | Vertical position, normalized 0–1 (0 = top of room, 1 = bottom). Clamped to [0, 1]. |
-| `layer`   | Yes      | Rendering layer: `back` (wall-mounted), `floor` (behind Blobbi), or `front` (in front of Blobbi). |
+| `layer`   | Yes      | Rendering layer: `back` (wall-mounted), `floor` (behind Pets), or `front` (in front of Pets). |
 | `scale`   | No       | Size multiplier. Clamped to [0.5, 2.0]. Default `1`. |
 | `flip`    | No       | Horizontal mirror. Boolean. Default `false`. |
 | `variant` | No       | Named variant string (1–32 chars), validated against the item's definition at render time. |
@@ -731,9 +729,9 @@ The `content` of kind 11125 MAY include a `room_furniture` field for per-room de
 
 Clients MUST fall back to built-in defaults for any room without a valid furniture entry.
 
-#### Kind 1124: Blobbi Social Interaction
+#### Kind 1124: Pets Social Interaction
 
-Immutable, regular (non-replaceable) event that logs a single interaction with a Blobbi. These events form an append-only interaction log. They do **not** directly mutate the canonical kind 31124 state — the owner's client consolidates pending interactions into canonical stats via a checkpoint-based system.
+Immutable, regular (non-replaceable) event that logs a single interaction with a Pets. These events form an append-only interaction log. They do **not** directly mutate the canonical kind 31124 state — the owner's client consolidates pending interactions into canonical stats via a checkpoint-based system.
 
 **Event structure:**
 
@@ -742,13 +740,13 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
   "kind": 1124,
   "content": "",
   "tags": [
-    ["a", "31124:<owner-pubkey>:<blobbi-d-tag>"],
+    ["a", "31124:<owner-pubkey>:<pets-d-tag>"],
     ["p", "<owner-pubkey>"],
     ["action", "feed"],
-    ["source", "blobbi-page"],
-    ["blobbi", "<short-id>"],
+    ["source", "pets-page"],
+    ["2140pets", "<short-id>"],
     ["item", "<item-id>"],
-    ["alt", "Blobbi interaction: feed"]
+    ["alt", "Pets interaction: feed"]
   ]
 }
 ```
@@ -759,16 +757,16 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
 
 | Tag      | Description                                                                     |
 |----------|---------------------------------------------------------------------------------|
-| `a`      | Coordinate of the target Blobbi: `31124:<owner-pubkey>:<blobbi-d-tag>`          |
-| `p`      | Owner pubkey of the target Blobbi                                               |
+| `a`      | Coordinate of the target Pets: `31124:<owner-pubkey>:<pets-d-tag>`          |
+| `p`      | Owner pubkey of the target Pets                                               |
 | `action` | Interaction action. Values: `feed`, `play`, `clean`, `medicate`, `boost`        |
-| `source` | UI surface that originated the interaction (e.g. `blobbi-page`, `companion`)    |
+| `source` | UI surface that originated the interaction (e.g. `pets-page`, `companion`)    |
 
 **Optional tags:**
 
 | Tag      | Description                                                        |
 |----------|--------------------------------------------------------------------|
-| `blobbi` | Short Blobbi identifier (10-hex petId extracted from canonical d-tag) |
+| `pets` | Short Pets identifier (10-hex petId extracted from canonical d-tag) |
 | `item`   | Shop item ID used in the interaction, when applicable              |
 | `client` | Client identifier (added automatically by the publishing hook)     |
 
@@ -776,11 +774,11 @@ Immutable, regular (non-replaceable) event that logs a single interaction with a
 
 | Action     | Description                              |
 |------------|------------------------------------------|
-| `feed`     | Feeding the Blobbi                       |
-| `play`     | Playing with the Blobbi (includes music and singing) |
-| `clean`    | Cleaning the Blobbi                      |
-| `medicate` | Administering medicine to the Blobbi     |
-| `boost`    | Recharging the Blobbi's energy           |
+| `feed`     | Feeding the Pets                       |
+| `play`     | Playing with the Pets (includes music and singing) |
+| `clean`    | Cleaning the Pets                      |
+| `medicate` | Administering medicine to the Pets     |
+| `boost`    | Recharging the Pets's energy           |
 
 The `pet` action is reserved for a future version.
 
@@ -938,6 +936,25 @@ Ditto **does** support donating to a campaign from inside the app:
 - The "raised" headline on the campaign card is fetched directly from the on-chain `w` address (cumulative `funded_txo_sum` from the configured Esplora endpoint, default mempool.space). Donations count regardless of whether the donor published a Nostr receipt; the number does not regress when the beneficiary spends from the address. Silent-payment-only campaigns show no aggregate.
 
 Ditto does NOT consult `agora.moderation` labels for surfacing decisions — every parseable kind 33863 event renders.
+
+---
+
+## Roadstr
+
+**Author:** Juraj Bednár  
+**Spec:** https://github.com/jooray/roadstr/blob/main/nips/roadstr.md  
+**App:** https://github.com/jooray/roadstr
+
+Roadstr is a decentralized road-event reporting system — “Waze without the centralized tracking”. Drivers publish signed Nostr events for police checks, speed cameras, accidents, traffic jams, road closures, hazards, and more.
+
+### Kinds
+
+- **Kind 1315 — Road event report.** A regular event tagging the location with `lat`, `lon`, and multi-precision `g` (geohash) tags. The `t` tag carries the event type string (`police`, `speed_camera`, `traffic_jam`, `accident`, `road_closure`, `construction`, `hazard`, `road_condition`, `pothole`, `fog`, `ice`, `animal`, `other`). An optional human comment may be placed in `content`.
+- **Kind 1316 — Road event confirmation.** A regular event referencing a kind 1315 report via an `e` tag and a `status` tag of either `still_there` or `no_longer_there`. Confirmations extend or shorten the report’s effective display lifetime.
+
+### Ditto implementation notes
+
+Ditto renders Roadstr reports on a dedicated `/roadstr` map page and in feeds/cards/detail pages. The map queries kinds 1315 and 1316 by the geohash cells covering the current viewport, computes each report’s effective expiry from its type TTL and any confirmations, and only displays active markers. Users can also publish new kind 1315 reports from the map page using the current device location.
 
 ---
 

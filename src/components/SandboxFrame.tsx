@@ -166,7 +166,7 @@ async function handleFetchRequest(
  * A cross-origin iframe is blocked from most capability APIs unless the
  * parent explicitly delegates them via `allow="…"`. We grant every
  * directive that a general-purpose web app might legitimately use so
- * nsites and webxdc apps can access media, sensors, downloads, etc.
+ * nsites and mini-apps can access media, sensors, downloads, etc.
  *
  * **Deliberately omitted** — capabilities whose UX or security guarantees
  * make them unsafe to expose to untrusted third-party content:
@@ -391,7 +391,7 @@ export const SandboxFrame = forwardRef<SandboxFrameHandle, SandboxFrameProps>(
         // - allow-forms / allow-modals / allow-popups(+escape-sandbox) /
         //   allow-downloads: normal web-app affordances (form submission,
         //   alert/confirm/prompt, opening links in new tabs, exporting files)
-        //   that webxdc/nsite content may legitimately rely on.
+        //   that mini-app/nsite content may legitimately rely on.
         // Notably omitted: allow-top-navigation (prevents window.top.location
         // phishing redirects) and allow-pointer-lock / allow-presentation /
         // allow-orientation-lock (unused niche capabilities).

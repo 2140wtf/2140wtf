@@ -1,10 +1,10 @@
-import { ReactNode, useLayoutEffect, useEffect, useRef } from 'react';
+import { ReactNode, useLayoutEffect, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme } from '@/contexts/AppContext';
-import { builtinThemes, buildThemeCssFromCore, resolveTheme, resolveThemeConfig, type ThemeConfig, type ThemesConfig } from '@/themes';
+import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfig, type ThemeConfig, type ThemesConfig } from '@/themes';
 import { AppConfigSchema } from '@/lib/schemas';
 import { loadAndApplyFont, loadAndApplyTitleFont } from '@/lib/fontLoader';
-import { hslToRgb, parseHsl, rgbToHex } from '@/lib/colorUtils';
+
 import { z } from 'zod';
 
 interface AppProviderProps {
@@ -88,7 +88,7 @@ export function AppProvider(props: AppProviderProps) {
   useApplyTheme(config.theme, config.customTheme, config.themes);
   useApplyFonts(config.theme, config.customTheme, config.themes);
   useApplyBackground(config.theme, config.customTheme, config.themes);
-  useApplyFavicon(config.theme, config.customTheme, config.themes);
+  useApplyFavicon();
 
   return (
     <AppContext.Provider value={appContextValue}>
@@ -111,11 +111,11 @@ function useApplyTheme(theme: Theme, customTheme: ThemeConfig | undefined, theme
       let css: string;
 
       if (resolved === 'custom') {
-        // Use custom theme colors, falling back to dark if not yet set
-        const colors = customTheme?.colors ?? builtinThemes.dark;
-        css = buildThemeCssFromCore(colors);
+        // Use custom theme config, falling back to dark if not yet set
+        const config = customTheme ?? { colors: builtinThemes.dark };
+        css = buildThemeCssFromConfig(config);
       } else {
-        css = buildThemeCssFromCore(resolveThemeConfig(resolved, themes).colors);
+        css = buildThemeCssFromConfig(resolveThemeConfig(resolved, themes));
       }
 
       let el = document.getElementById('theme-vars') as HTMLStyleElement | null;
@@ -179,12 +179,15 @@ const BG_STYLE_ID = 'theme-background';
 /**
  * Hook to apply or remove a background image when the theme config changes.
  * Supports backgrounds from custom themes and configured light/dark themes.
+ * When backgroundOpacity is < 1, the image is rendered on a `body::before`
+ * pseudo-element so opacity only affects the image, not the body background color.
  */
 function useApplyBackground(theme: Theme, customTheme: ThemeConfig | undefined, themes: ThemesConfig | undefined) {
   const resolved = resolveTheme(theme);
   const activeConfig = resolved === 'custom' ? customTheme : resolveThemeConfig(resolved, themes);
   const bgUrl = activeConfig?.background?.url;
   const bgMode = activeConfig?.background?.mode ?? 'cover';
+  const bgOpacity = activeConfig?.backgroundOpacity ?? 1;
 
   useEffect(() => {
     let style = document.getElementById(BG_STYLE_ID) as HTMLStyleElement | null;
@@ -201,7 +204,13 @@ function useApplyBackground(theme: Theme, customTheme: ThemeConfig | undefined, 
     }
 
     let css: string;
-    if (bgMode === 'tile') {
+    if (bgOpacity < 1) {
+      // Render the image behind content with adjustable opacity.
+      const baseProps = bgMode === 'tile'
+        ? `background-image: url("${bgUrl}"); background-repeat: repeat; background-size: auto;`
+        : `background-image: url("${bgUrl}"); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: fixed;`;
+      css = `body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; ${baseProps} opacity: ${bgOpacity}; }`;
+    } else if (bgMode === 'tile') {
       css = `body { background-image: url("${bgUrl}"); background-repeat: repeat; background-size: auto; }`;
     } else {
       css = `body { background-image: url("${bgUrl}"); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: fixed; }`;
@@ -212,83 +221,16 @@ function useApplyBackground(theme: Theme, customTheme: ThemeConfig | undefined, 
     return () => {
       document.getElementById(BG_STYLE_ID)?.remove();
     };
-  }, [theme, bgUrl, bgMode]);
+  }, [theme, bgUrl, bgMode, bgOpacity]);
 }
 
-/**
- * Hook to dynamically recolor the favicon to match the current primary color.
- * Uses the same mask approach as DittoLogo: loads the SVG, draws it as a mask
- * on a canvas filled with the primary color, and sets the result as the favicon.
- */
-function useApplyFavicon(theme: Theme, customTheme: ThemeConfig | undefined, themes: ThemesConfig | undefined) {
-  const resolved = resolveTheme(theme);
-  const colors = resolved === 'custom'
-    ? (customTheme?.colors ?? builtinThemes.dark)
-    : resolveThemeConfig(resolved, themes).colors;
-  const primary = colors.primary;
-
-  // Cache the loaded SVG blob URL across renders.
-  const svgBlobUrlRef = useRef<string | null>(null);
-
+/** Keep the favicon pointing at the 2140 logo. */
+function useApplyFavicon() {
   useEffect(() => {
-    let cancelled = false;
-
-    async function updateFavicon() {
-      // Load the SVG once and cache it as a blob URL for canvas use.
-      if (!svgBlobUrlRef.current) {
-        try {
-          const resp = await fetch('/logo.svg');
-          const text = await resp.text();
-          const blob = new Blob([text], { type: 'image/svg+xml' });
-          svgBlobUrlRef.current = URL.createObjectURL(blob);
-        } catch {
-          return; // Silently fail if SVG can't be loaded
-        }
-      }
-
-      if (cancelled) return;
-
-      const size = 128;
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const img = new Image();
-      img.src = svgBlobUrlRef.current!;
-
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject();
-      });
-
-      if (cancelled) return;
-
-      // Fill the canvas with the primary color.
-      const { h, s, l } = parseHsl(primary);
-      const [r, g, b] = hslToRgb(h, s, l);
-      ctx.fillStyle = rgbToHex(r, g, b);
-      ctx.fillRect(0, 0, size, size);
-
-      // Use the SVG as a mask (destination-in keeps only the logo shape).
-      ctx.globalCompositeOperation = 'destination-in';
-      ctx.drawImage(img, 0, 0, size, size);
-
-      const dataUrl = canvas.toDataURL('image/png');
-
-      // Update the favicon link element.
-      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-      if (link) {
-        link.type = 'image/png';
-        link.href = dataUrl;
-      }
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link && !link.href.endsWith('/logo.jpg')) {
+      link.type = 'image/jpeg';
+      link.href = '/logo.jpg';
     }
-
-    updateFavicon();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [primary]);
+  }, []);
 }

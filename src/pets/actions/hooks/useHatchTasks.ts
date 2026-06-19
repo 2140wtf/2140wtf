@@ -1,9 +1,9 @@
-// src/blobbi/actions/hooks/useHatchTasks.ts
+// src/pets/actions/hooks/useHatchTasks.ts
 
 /**
  * Hook to compute hatch task progress.
  *
- * Progress is stored in the kind 31124 Blobbi event content JSON (per-Blobbi).
+ * Progress is stored in the kind 31124 Pets event content JSON (per-Pets).
  * - Interactions: TallyMission tracked via `trackEvolutionMissionTally`
  * - Event-based tasks: EventMission, backfilled from retroactive Nostr queries
  *
@@ -18,9 +18,9 @@ import { useNostr } from '@nostrify/react';
 import type { NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
-import type { Mission } from '@/blobbi/core/lib/missions';
-import { missionProgress, isEventMission } from '@/blobbi/core/lib/missions';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { Mission } from '@/pets/core/lib/missions';
+import { missionProgress, isEventMission } from '@/pets/core/lib/missions';
 import {
   trackEvolutionMissionEvent,
   readEvolutionFromStorage,
@@ -40,8 +40,6 @@ import {
 
 /** Kind for theme definition events */
 export const KIND_THEME_DEFINITION = 36767;
-/** Kind for color moment events (espy.you) */
-export const KIND_COLOR_MOMENT = 3367;
 /** Kind for profile metadata */
 export const KIND_PROFILE_METADATA = 0;
 
@@ -103,10 +101,10 @@ export interface HatchTasksResult {
 /**
  * Hook to compute hatch task progress from evolution missions + Nostr event backfill.
  *
- * @param companion - The Blobbi companion (must be incubating)
+ * @param companion - The Pets companion (must be incubating)
  */
 export function useHatchTasks(
-  companion: BlobbiCompanion | null,
+  companion: PetsCompanion | null,
 ): HatchTasksResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -145,7 +143,7 @@ export function useHatchTasks(
   // Safety net: if the companion is incubating but evolution[] is empty
   // (e.g. persist didn't fire, old content format), re-populate from
   // the static definitions so tally tracking works immediately.
-  // Scoped by pubkey:d so switching Blobbis re-runs the check.
+  // Scoped by pubkey:d so switching Petss re-runs the check.
   const ensuredRef = useRef<string | null>(null);
   useEffect(() => {
     const ensureKey = `${pubkey}:${companionD}`;
@@ -174,14 +172,12 @@ export function useHatchTasks(
 
       const filters: NostrFilter[] = [
         { kinds: [KIND_THEME_DEFINITION], authors: [pubkey], limit: 1 },
-        { kinds: [KIND_COLOR_MOMENT], authors: [pubkey], limit: 1 },
       ];
 
       const events = await nostr.query(filters);
 
       return {
         themeEvents: events.filter(e => e.kind === KIND_THEME_DEFINITION),
-        colorMomentEvents: events.filter(e => e.kind === KIND_COLOR_MOMENT),
       };
     },
     enabled: !!pubkey && isIncubating,
@@ -194,7 +190,6 @@ export function useHatchTasks(
     if (!data) return {} as Record<string, number>;
     return {
       create_theme: data.themeEvents.length,
-      color_moment: data.colorMomentEvents.length,
     };
   }, [data]);
 
@@ -215,12 +210,7 @@ export function useHatchTasks(
         trackEvolutionMissionEvent('create_theme', event.id, pubkey, companionD);
       }
     }
-    for (const event of data.colorMomentEvents) {
-      const m = findEvolutionMission(current, 'color_moment');
-      if (m && isEventMission(m) && !m.events.includes(event.id)) {
-        trackEvolutionMissionEvent('color_moment', event.id, pubkey, companionD);
-      }
-    }
+
   }, [data, pubkey, companionD, evolution]);
 
   // ─── Build task view models ───
