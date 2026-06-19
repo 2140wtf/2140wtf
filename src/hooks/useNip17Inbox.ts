@@ -1,5 +1,5 @@
 import { useNostr } from '@nostrify/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -124,6 +124,32 @@ export function useNip17Inbox() {
     };
   }, [nostr, user]);
 
+  const addMessage = useCallback((message: Nip17Message) => {
+    if (!user) return;
+    const participants = getNip17Participants(message, user.pubkey);
+    const id = computeNip17ConversationId([user.pubkey, ...participants]);
+
+    setConversations((prev) => {
+      const existing = prev.get(id);
+      if (existing?.messages.some((m) => m.id === message.id)) {
+        return prev;
+      }
+
+      const messages = existing ? [...existing.messages, message] : [message];
+      messages.sort((a, b) => a.createdAt - b.createdAt);
+
+      const next = new Map(prev);
+      next.set(id, {
+        id,
+        participants,
+        messages,
+        lastMessageAt: messages[messages.length - 1]?.createdAt ?? message.createdAt,
+        subject: message.subject ?? existing?.subject,
+      });
+      return next;
+    });
+  }, [user]);
+
   const conversationList = useMemo(
     () =>
       Array.from(conversations.values()).sort(
@@ -132,5 +158,5 @@ export function useNip17Inbox() {
     [conversations],
   );
 
-  return { conversations: conversationList, isLoading };
+  return { conversations: conversationList, isLoading, addMessage };
 }

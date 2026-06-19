@@ -16,7 +16,7 @@ import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
-import { computeNip17ConversationId } from '@/lib/nip17';
+import { computeNip17ConversationId, parseNip17Rumor } from '@/lib/nip17';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,7 @@ export function MessageThreadPage() {
   const navigate = useNavigate();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const { conversations, isLoading } = useDmInbox();
+  const { conversations, isLoading, addMessage } = useDmInbox();
   const { sendMessage, isPending } = useNip17SendMessage();
   const { markConversationRead } = useDmReadCursors();
   const { toast } = useToast();
@@ -96,7 +96,11 @@ export function MessageThreadPage() {
     if (!content || isPending) return;
 
     try {
-      await sendMessage({ recipientPubkey, content });
+      const { rumor } = await sendMessage({ recipientPubkey, content });
+      const parsed = parseNip17Rumor(rumor, rumor.id);
+      if (parsed) {
+        addMessage(parsed);
+      }
       setDraft('');
     } catch (error) {
       toast({
