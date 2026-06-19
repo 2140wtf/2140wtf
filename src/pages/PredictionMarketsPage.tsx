@@ -195,6 +195,11 @@ function MarketDetailDialog({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <h3 className="text-sm font-semibold">Market chart</h3>
+            <PredictionMarketChart market={market} />
+          </div>
+
           <div className="space-y-3 pt-2">
             <h3 className="text-sm font-semibold">Outcomes</h3>
             {market.outcomes.map((outcome) => {
@@ -226,11 +231,6 @@ function MarketDetailDialog({
             Trade on ₿AO MARKETS
             <ExternalLink className="size-4 ml-2" />
           </Button>
-
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Market chart</h3>
-            <PredictionMarketChart market={market} />
-          </div>
 
         </div>
       </DialogContent>

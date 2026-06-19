@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -309,15 +310,36 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
                 color: 'var(--2140-fg)',
               }}
             />
+            <defs>
+              {series.map((key, idx) => {
+                const color = outcomeColor(market.outcomes[idx], idx);
+                return (
+                  <linearGradient key={key} id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+            {series.map((key) => (
+              <Area
+                key={`area-${key}`}
+                type="stepAfter"
+                dataKey={key}
+                stroke="none"
+                fill={`url(#fill-${key})`}
+                isAnimationActive={false}
+              />
+            ))}
             {series.map((key, idx) => {
               const color = outcomeColor(market.outcomes[idx], idx);
               return (
                 <Line
-                  key={key}
+                  key={`line-${key}`}
                   type="stepAfter"
                   dataKey={key}
                   stroke={color}
-                  strokeWidth={2}
+                  strokeWidth={2.5}
                   dot={false}
                   isAnimationActive={false}
                 />
