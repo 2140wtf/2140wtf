@@ -1,7 +1,7 @@
 /**
  * Mouth Detection
  * 
- * Detects the mouth position from Blobbi SVG content.
+ * Detects the mouth position from Pets SVG content.
  * Uses two strategies:
  * 1. Primary: Look for <!-- Mouth --> marker and extract elements
  * 2. Fallback: Regex-based Q-curve path matching
@@ -246,14 +246,14 @@ function replaceMouthGlobal(svgText: string, newMouthSvg: string): string {
  * the new mouth SVG. No morphing, transitioning, or interpolation.
  * 
  * Searches for mouth elements in this order:
- * 1. Self-closing elements with `blobbi-mouth` class (path, ellipse)
- * 2. Open/close elements with `blobbi-mouth` class (animated paths)
+ * 1. Self-closing elements with `pets-mouth` class (path, ellipse)
+ * 2. Open/close elements with `pets-mouth` class (animated paths)
  * 3. Fallback: Q-curve path patterns (original SVG mouth)
  */
 export function replaceCurrentMouth(svgText: string, newMouthSvg: string): string {
-  // Match any self-closing element with blobbi-mouth class
+  // Match any self-closing element with pets-mouth class
   // Handles <path .../>, <ellipse .../>, etc.
-  const classMouthRegex = /<(?:path|ellipse)[^>]*class="[^"]*blobbi-mouth[^"]*"[^>]*\/>/g;
+  const classMouthRegex = /<(?:path|ellipse)[^>]*class="[^"]*pets-mouth[^"]*"[^>]*\/>/g;
   
   const matches = svgText.match(classMouthRegex);
   if (matches && matches.length > 0) {
@@ -267,9 +267,9 @@ export function replaceCurrentMouth(svgText: string, newMouthSvg: string): strin
     });
   }
   
-  // Also match blobbi-mouth elements with children (non-self-closing, e.g. animated paths/ellipses)
-  // Pattern: <path|ellipse class="...blobbi-mouth..." ...>...</path|ellipse>
-  const openCloseMouthRegex = /<(path|ellipse)[^>]*class="[^"]*blobbi-mouth[^"]*"[^>]*>[\s\S]*?<\/\1>/g;
+  // Also match pets-mouth elements with children (non-self-closing, e.g. animated paths/ellipses)
+  // Pattern: <path|ellipse class="...pets-mouth..." ...>...</path|ellipse>
+  const openCloseMouthRegex = /<(path|ellipse)[^>]*class="[^"]*pets-mouth[^"]*"[^>]*>[\s\S]*?<\/\1>/g;
   const openCloseMatches = svgText.match(openCloseMouthRegex);
   if (openCloseMatches && openCloseMatches.length > 0) {
     let replaced = false;

@@ -1,5 +1,5 @@
 /**
- * useShakeReaction — Blobbi gets dizzy (and optionally nauseous) when shaken.
+ * useShakeReaction — Pets gets dizzy (and optionally nauseous) when shaken.
  *
  * Produces a live visual reaction while the user is actively shaking,
  * and sustains the dizzy state after release for a duration proportional
@@ -23,15 +23,15 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { toast } from '@/hooks/useToast';
-import type { BlobbiVisualRecipe } from '@/blobbi/ui/lib/recipe';
-import { resolveVisualRecipe } from '@/blobbi/ui/lib/recipe';
+import type { PetsVisualRecipe } from '@/pets/ui/lib/recipe';
+import { resolveVisualRecipe } from '@/pets/ui/lib/recipe';
 import type { ShakeResult } from '../core/shakeDetection';
 
 // ─── Profile & Defaults ──────────────────────────────────────────────────────
 
 export interface ShakeReactionProfile {
-  dizzy: { recipe: BlobbiVisualRecipe; label: string };
-  nauseated: { recipe: BlobbiVisualRecipe; label: string };
+  dizzy: { recipe: PetsVisualRecipe; label: string };
+  nauseated: { recipe: PetsVisualRecipe; label: string };
   nauseaFillColor: string;
   nauseaBottomOpacity?: number;
   nauseaEdgeOpacity?: number;
@@ -76,7 +76,7 @@ const VOMIT_DURATION_MS = 1500;
 
 export type ShakeReactionPhase = 'idle' | 'shaking' | 'dizzy' | 'vomiting' | 'recovering';
 
-/** Emitted once each time Blobbi vomits. Consumers should react to id changes. */
+/** Emitted once each time Pets vomits. Consumers should react to id changes. */
 export interface VomitEvent {
   id: number;
   intensity: number;
@@ -85,7 +85,7 @@ export interface VomitEvent {
 export interface UseShakeReactionResult {
   phase: ShakeReactionPhase;
   nauseaLevel: number;
-  recipe: BlobbiVisualRecipe | null;
+  recipe: PetsVisualRecipe | null;
   recipeLabel: string | null;
   /** Non-null when a vomit event fires. New object ref on each trigger. */
   vomitEvent: VomitEvent | null;
@@ -291,7 +291,7 @@ export function useShakeReaction({
           toasted.current = true;
           toast({
             title: 'Careful\u2026',
-            description: 'Blobbi is feeling sick!',
+            description: 'Your 2140 pet is feeling sick!',
           });
         }
       }
@@ -415,7 +415,7 @@ export function useShakeReaction({
     const p = prof.current;
 
     if (visLevel > 0 && cycleHadNausea) {
-      const recipe: BlobbiVisualRecipe = {
+      const recipe: PetsVisualRecipe = {
         ...p.nauseated.recipe,
         bodyEffects: {
           ...p.nauseated.recipe.bodyEffects,

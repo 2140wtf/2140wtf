@@ -24,6 +24,7 @@ test:
       when: never
     - when: always
   script:
+    - npm ci
     - npm run test
 
 deploy-nsite:
@@ -44,8 +45,10 @@ deploy-nsite:
     - npx vite build -l error --mode nsite
     - cp dist/index.html dist/404.html
 
-    # Download nsyte binary
+    # Download nsyte binary and verify its SHA-256 digest
+    - NSYTE_SHA256="8289ff33790332186124174cd647581ee604ada72e6cd202279e0087bf2bebdf"
     - curl -fsSL "https://github.com/sandwichfarm/nsyte/releases/download/${NSYTE_VERSION}/nsyte-linux" -o /usr/local/bin/nsyte
+    - echo "${NSYTE_SHA256}  /usr/local/bin/nsyte" | sha256sum -c -
     - chmod +x /usr/local/bin/nsyte
 
     # Deploy to nsite via nsyte using the nbunksec credential
@@ -131,9 +134,11 @@ build-apk:
     - node --version
     - npm --version
 
-    # Install Android SDK command-line tools
+    # Install Android SDK command-line tools (pin version + verify SHA-256)
+    - CMDTOOLS_SHA256="2d2d50857e4eb553af5a6dc3ad507a17adf43d115264b1afc116f95c92e5e258"
     - mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
     - curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o cmdline-tools.zip
+    - echo "${CMDTOOLS_SHA256}  cmdline-tools.zip" | sha256sum -c -
     - unzip -q cmdline-tools.zip -d $ANDROID_SDK_ROOT/cmdline-tools
     - mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
     - export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
@@ -333,7 +338,7 @@ publish-zapstore:
     RELAY_URLS: "wss://relay.zapstore.dev,wss://relay.ditto.pub,wss://relay.dreamith.to,wss://relay.primal.net"
     BLOSSOM_URL: "https://blossom.ditto.pub"
   script:
-    - go install github.com/zapstore/zsp@latest
+    - go install github.com/zapstore/zsp@v0.4.11
 
     # Restore the persistent NIP-46 client key so the bunker recognizes us across CI runs.
     # zsp stores client keys at ~/.config/zsp/bunker-keys/<bunker-pubkey>.key

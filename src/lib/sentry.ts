@@ -1,4 +1,4 @@
-import type { Event as SentryEvent } from '@sentry/core';
+import { redactSensitiveData } from '@/lib/redactSecrets';
 
 /** Subset of the Sentry API surface we actually use. */
 interface SentryLike {
@@ -70,34 +70,7 @@ export async function initializeSentry(dsn: string): Promise<void> {
       release: import.meta.env.VERSION,
       // Censor sensitive data before sending to Sentry
       beforeSend(event) {
-        // Regex to match Nostr nsec private keys
-        const NSEC_REGEX = /nsec1[023456789acdefghjklmnpqrstuvwxyz]{58}/g;
-
-        /** Recursively censors sensitive values in any value (string, object, array, etc.) */
-        function censorSensitiveData(value: unknown): unknown {
-          if (typeof value === 'string') {
-            return value
-              .replace(NSEC_REGEX, 'nsec1**********************************************************');
-          }
-          if (Array.isArray(value)) {
-            return value.map(censorSensitiveData);
-          }
-          if (value && typeof value === 'object') {
-            const result: Record<string, unknown> = {};
-            for (const [key, val] of Object.entries(value)) {
-              result[key] = censorSensitiveData(val);
-            }
-            return result;
-          }
-          return value;
-        }
-
-        /** Censors sensitive values from Sentry events before sending */
-        function censorSensitiveValues<T extends SentryEvent>(event: T): T | null {
-          return censorSensitiveData(event) as T;
-        }
-
-        return censorSensitiveValues(event);
+        return redactSensitiveData(event) as typeof event;
       },
     });
 

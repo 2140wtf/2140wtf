@@ -50,7 +50,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'What is {appName}?',
         answer: [
           '{appName} is a social media platform built on Nostr \u2014 a new kind of open, decentralized network. Think of {appName} as the app you\'re using right now to connect with people, post, and discover content.',
-          'Because {appName} is built on Nostr, your account isn\'t locked to this site. You own your identity and can take it to any other Nostr app. Learn more at [soapbox.pub/ditto](https://soapbox.pub/ditto).',
+          'Because {appName} is built on Nostr, your account isn\'t locked to this site. You own your identity and can take it to any other Nostr app.',
         ],
       },
       {
@@ -58,7 +58,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'What is Nostr?',
         answer: [
           'Nostr is a new kind of social network where **you** own your account, not a company. Think of it like email \u2014 you can use different apps, but your identity stays the same. Nobody can ban you from the entire network.',
-          'Everything you post, every person you follow, and your entire identity is portable. You can take it with you anywhere. To learn more, check out [Nostr 101](https://soapbox.pub/blog/nostr101).',
+          'Everything you post, every person you follow, and your entire identity is portable. You can take it with you anywhere.',
         ],
       },
       {
@@ -82,7 +82,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'What happens if I lose my secret key?',
         answer: [
           '**There is no "forgot password" button.** No company stores your key or can reset it for you. If you lose it, your account is gone forever.',
-          'This is the tradeoff for true ownership \u2014 nobody can take your account away, but nobody can recover it either. **Save your secret key somewhere safe right now.** For tips on keeping your key safe, read [Managing Your Nostr Keys](https://soapbox.pub/blog/managing-nostr-keys).',
+          'This is the tradeoff for true ownership \u2014 nobody can take your account away, but nobody can recover it either. **Save your secret key somewhere safe right now.**',
         ],
       },
       {
@@ -90,7 +90,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'Can I save my secret key in my phone\'s password manager?',
         answer: [
           'Yes! You can save it in your device\'s password manager (like iCloud Keychain, 1Password, or Bitwarden). On iPhone, if you save it correctly in Passwords, you can even use Face ID or Touch ID to log in.',
-          'For a full guide on the best ways to store and manage your keys, check out [Managing Your Nostr Keys](https://soapbox.pub/blog/managing-nostr-keys).',
+          'For a full guide on the best ways to store and manage your keys, use your device\'s password manager or another trusted secure storage method.',
         ],
       },
       {
@@ -121,7 +121,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'Can I download this on the App Store or Google Play?',
         answer: [
           'This site works as a web app right from your browser \u2014 no download needed! You can also "Add to Home Screen" on your phone to get an app-like experience.',
-          'On Android, you can download {appName} from [Zap Store](https://zapstore.dev/apps/pub.ditto.app), a community-driven app store for the Nostr ecosystem. iOS support is planned for the future \u2014 stay tuned!',
+          'On Android, you can download Nostr apps from [Zap Store](https://zapstore.dev/), a community-driven app store for the Nostr ecosystem. iOS support is planned for the future \u2014 stay tuned!',
         ],
       },
       {
@@ -136,7 +136,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         id: 'nostr-app-store',
         question: 'Is there a Nostr-specific app store?',
         answer: [
-          'Yes! [Zap Store](https://zapstore.dev/) is a community-driven app store built specifically for the Nostr ecosystem. You can discover and download Nostr apps, and the apps are verified by the community rather than a corporation. {appName} is listed there \u2014 [get it on Zap Store](https://zapstore.dev/apps/pub.ditto.app).',
+          'Yes! [Zap Store](https://zapstore.dev/) is a community-driven app store built specifically for the Nostr ecosystem. You can discover and download Nostr apps, and the apps are verified by the community rather than a corporation.',
           'You can also browse a directory of Nostr apps at [nostrapps.com](https://nostrapps.com/).',
         ],
       },
@@ -291,16 +291,16 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'How is this different from Instagram, X, or Facebook?',
         answer: [
           'On traditional social media, a company owns your account, controls what you see, and can delete your profile at any time.',
-          'On Nostr, **you** own your identity. No company can lock you out, shadowban you, or shut down your account. Your followers, your posts, and your identity belong to you \u2014 not a corporation. We take this seriously \u2014 read our [ethics pledge](https://soapbox.pub/ethics) to see what we stand for.',
+          'On Nostr, **you** own your identity. No company can lock you out, shadowban you, or shut down your account. Your followers, your posts, and your identity belong to you \u2014 not a corporation.',
         ],
       },
       {
-        id: 'vs-mastodon-bluesky',
-        question: 'How is this different from Mastodon or Bluesky?',
+        id: 'vs-mastodon',
+        question: 'How is this different from Mastodon?',
         answer: [
-          'Mastodon and Bluesky are also alternatives to Big Tech, but they work very differently from Nostr. On Mastodon, your account is tied to a specific server \u2014 if that server shuts down or bans you, you lose your account and have to start over. On Bluesky, the network is technically decentralized but in practice almost everyone depends on a single company (bsky.social), which can block entire servers.',
+          'Mastodon is also an alternative to Big Tech, but it works very differently from Nostr. On Mastodon, your account is tied to a specific server \u2014 if that server shuts down or bans you, you lose your account and have to start over.',
           'Nostr is different because your identity is a cryptographic key that **you** control. It\'s not tied to any server, company, or app. No one can delete your account, and you can switch between apps freely while keeping your followers and posts.',
-          'The good news is you don\'t have to choose just one \u2014 bridges like Mostr let you follow people across all three networks. For a deeper comparison, check out [Nostr vs. Fediverse vs. Bluesky](https://soapbox.pub/blog/comparing-protocols).',
+          'The good news is you don\'t have to choose just one \u2014 bridges like Mostr let you follow people across networks.',
         ],
       },
       {
@@ -308,7 +308,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'What does "decentralized" actually mean?',
         answer: [
           'It means there\'s no single company or server running everything. Nostr is a network of independent relays and apps, all speaking the same language.',
-          'If one relay goes down or kicks you off, your account still works everywhere else. It\'s like the difference between one company owning all the roads vs. having thousands of independent roads anyone can build and use. For more on why this matters, read [The Future Is Decentralized](https://soapbox.pub/blog/future-is-decentralized).',
+          'If one relay goes down or kicks you off, your account still works everywhere else. It\'s like the difference between one company owning all the roads vs. having thousands of independent roads anyone can build and use.',
         ],
       },
       {
@@ -324,7 +324,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'What does "open source" mean, and why does it matter?',
         answer: [
           'Open source means the code that powers this app is publicly available for anyone to read, verify, and improve. There are no hidden algorithms, no secret data collection, and no backdoors.',
-          'Anyone can check exactly what the software does. It\'s the digital equivalent of a restaurant with a glass kitchen \u2014 nothing to hide. You can browse the [{appName} source code](https://gitlab.com/soapbox-pub/ditto) yourself, or if you want to try editing {appName}, you can jump right in with [Shakespeare](https://shakespeare.diy/clone?url=https%3A%2F%2Fgitlab.com%2Fsoapbox-pub%2Fditto.git).',
+          'Anyone can check exactly what the software does. It\'s the digital equivalent of a restaurant with a glass kitchen \u2014 nothing to hide.'
         ],
       },
       {
@@ -332,15 +332,15 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         question: 'Can I self-host {appName}?',
         answer: [
           'Yes! Because {appName} is open source, anyone can run their own instance. You get full control over your server, your data, and your community.',
-          'If you\'re interested, check out the [self-hosting guide](https://about.ditto.pub/self-hosting) to get started.',
+          'If you\'re interested, check out the project documentation to get started.'
         ],
       },
       {
         id: 'who-made-this',
         question: 'Who made this?',
         answer: [
-          'This platform is built by [Soapbox](https://soapbox.pub), a team of developers who believe social media should be owned by its users, not corporations.',
-          'Soapbox builds open-source tools for the Nostr ecosystem, including {appName} (the server that powers this site). You can learn more about the team and their mission at [soapbox.pub](https://soapbox.pub).',
+          'This platform is built by the 2140.wtf collective, a group of developers and artists who believe social media should be owned by its users, not corporations.',
+          '2140.wtf builds open-source tools for the Nostr and Bitcoin ecosystems, including this app.',
         ],
       },
     ],

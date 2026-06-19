@@ -6,14 +6,14 @@
  * No persistence -- purely local React state.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import { ROOM_FLOOR_RATIO } from './room-layout-schema';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface PoopInstance {
   id: string;
-  room: BlobbiRoomId;
+  room: PetsRoomId;
   source: 'overfeed' | 'time';
   createdAt: number;
   position: { bottom: number; left: number };
@@ -108,7 +108,7 @@ export function addPoop(
   ];
 }
 
-export function getPoopsInRoom(poops: PoopInstance[], room: BlobbiRoomId): PoopInstance[] {
+export function getPoopsInRoom(poops: PoopInstance[], room: PetsRoomId): PoopInstance[] {
   return poops.filter(p => p.room === room);
 }
 

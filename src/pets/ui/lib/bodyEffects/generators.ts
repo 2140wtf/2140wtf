@@ -59,7 +59,7 @@ function sanitizeSvgColor(color: string, fallback = '#000'): string {
  * Detect the body element from the SVG and extract full bounding box.
  *
  * Strategy order:
- *   0. Explicit `data-blobbi-body="true"` marker (any element type)
+ *   0. Explicit `data-pets-body="true"` marker (any element type)
  *   1. `<path>` with body gradient fill (legacy fallback)
  *   2. `<path>` after a "Body" comment (legacy fallback)
  *
@@ -69,7 +69,7 @@ function sanitizeSvgColor(color: string, fallback = '#000'): string {
  */
 export function detectBodyPath(svgText: string): BodyPathInfo | null {
   // Strategy 0: explicit marker on any element type
-  const markerMatch = svgText.match(/<(path|circle|ellipse|rect)\s([^>]*data-blobbi-body="true"[^>]*)\/>/);
+  const markerMatch = svgText.match(/<(path|circle|ellipse|rect)\s([^>]*data-pets-body="true"[^>]*)\/>/);
   if (markerMatch) {
     const tag = markerMatch[1];
     const attrs = markerMatch[2];
@@ -412,7 +412,7 @@ export function generateDirtMarks(config: DirtMarksConfig): string {
 
   // Render smudge blobs
   smudges.forEach((s, i) => {
-    parts.push(`<g class="blobbi-mud-smudge blobbi-mud-smudge-${i}">${smudgePath(s)}</g>`);
+    parts.push(`<g class="pets-mud-smudge pets-mud-smudge-${i}">${smudgePath(s)}</g>`);
   });
 
   // Dusty patches — very large, ultra-low-opacity circles for overall "grimy tint"
@@ -424,7 +424,7 @@ export function generateDirtMarks(config: DirtMarksConfig): string {
     const dustOpacity = (0.08 * intensity).toFixed(2);
 
     parts.push(`<circle
-      class="blobbi-dust-patch"
+      class="pets-dust-patch"
       cx="${((s0.x + s1.x) / 2).toFixed(1)}"
       cy="${((s0.y + s1.y) / 2 + dustR * 0.3).toFixed(1)}"
       r="${dustR}"
@@ -488,7 +488,7 @@ export function generateDustParticles(config: DirtMarksConfig): string {
 
   motes.forEach((m, i) => {
     particles.push(`<circle
-      class="blobbi-grime-mote blobbi-grime-mote-${i}"
+      class="pets-grime-mote pets-grime-mote-${i}"
       cx="${m.x.toFixed(1)}"
       cy="${m.y.toFixed(1)}"
       r="${m.r.toFixed(1)}"
@@ -572,7 +572,7 @@ function wispLinePath(
 }
 
 /**
- * Generate animated odor wisps around the Blobbi.
+ * Generate animated odor wisps around the Pets.
  *
  * Each wisp group consists of:
  *   1. A wavy "stink line" — the primary read for "smell"
@@ -602,7 +602,7 @@ export function generateStinkClouds(config: StinkCloudsConfig): string {
   wisps.forEach((w, i) => {
     const linePath = wispLinePath(w.x, w.y, w.drift, scale);
 
-    clouds.push(`<g class="blobbi-odor-wisp blobbi-odor-wisp-${i}" opacity="0">
+    clouds.push(`<g class="pets-odor-wisp pets-odor-wisp-${i}" opacity="0">
       <!-- Wavy stink line -->
       <path
         d="${linePath}"
@@ -694,7 +694,7 @@ const ADULT_FLY_ORBITS: FlyOrbit[] = [
 ];
 
 /**
- * Generate tiny buzzing flies orbiting near the Blobbi.
+ * Generate tiny buzzing flies orbiting near the Pets.
  * Each fly is a small dot that follows an elliptical path.
  * Classic Tamagotchi dirty indicator.
  */
@@ -713,7 +713,7 @@ function generateFlies(config: StinkCloudsConfig): string {
       A ${orbit.rx} ${orbit.ry} 0 1 1 ${orbit.cx + orbit.rx} ${orbit.cy}
       A ${orbit.rx} ${orbit.ry} 0 1 1 ${orbit.cx - orbit.rx} ${orbit.cy} Z`;
 
-    flies.push(`<g class="blobbi-fly blobbi-fly-${i}">
+    flies.push(`<g class="pets-fly pets-fly-${i}">
       <circle r="${flyR}" fill="${SMELL_COLORS.fly}" opacity="0.75">
         <animateMotion
           path="${orbitPath}"
@@ -737,7 +737,7 @@ function generateFlies(config: StinkCloudsConfig): string {
  * 
  * @param bodyPath - Detected body path info
  * @param config - Effect configuration (color, duration)
- * @param idSuffix - Unique suffix for clip/gradient IDs (prevents collisions when multiple Blobbis render)
+ * @param idSuffix - Unique suffix for clip/gradient IDs (prevents collisions when multiple Petss render)
  */
 export function generateAngerRiseEffect(
   bodyPath: BodyPathInfo,
@@ -750,8 +750,8 @@ export function generateAngerRiseEffect(
   const safeColor = sanitizeSvgColor(config.color);
   
   const suffix = idSuffix ?? Math.random().toString(36).slice(2, 8);
-  const clipId = `blobbi-anger-clip-${suffix}`;
-  const gradientId = `blobbi-anger-gradient-${suffix}`;
+  const clipId = `pets-anger-clip-${suffix}`;
+  const gradientId = `pets-anger-gradient-${suffix}`;
   
   // When `level` is provided, render a static gradient at that offset (0–1)
   // instead of using the SMIL rise animation. This lets external systems
@@ -831,7 +831,7 @@ export function generateAngerRiseEffect(
 
   const overlay = `
     <rect 
-      class="blobbi-anger-rise"
+      class="pets-anger-rise"
       x="${rectX}" y="${minY}" 
       width="${rectW}" height="${bodyHeight}"
       fill="url(#${gradientId})"

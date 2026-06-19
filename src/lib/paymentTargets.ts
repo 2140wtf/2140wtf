@@ -36,8 +36,6 @@ export type PaymentTargetType =
   | 'bitcoin'
   | 'lightning'
   | 'monero'
-  | 'ethereum'
-  | 'nano'
   | 'cashme'
   | 'venmo'
   | 'revolut';
@@ -114,16 +112,6 @@ function isMoneroAuthority(s: string): boolean {
   return /^[48][0-9A-Za-z]{94,105}$/.test(v);
 }
 
-/** EVM hex address. */
-function isEthereumAuthority(s: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(s.trim());
-}
-
-/** Nano address: `nano_` + 60 base32 chars. */
-function isNanoAuthority(s: string): boolean {
-  return /^(nano|xrb)_[13][13-9a-km-uw-z]{59}$/.test(s.trim());
-}
-
 /** Loose handle/username check for custodial apps (Cash App, Venmo, Revolut). */
 function isHandle(s: string): boolean {
   const v = s.trim().replace(/^[$@]/, '');
@@ -164,26 +152,6 @@ export const PAYMENT_METHODS: Record<PaymentTargetType, PaymentMethodDef> = {
     validate: isMoneroAuthority,
     uri: (a) => `monero:${a.trim()}`,
     placeholder: '4… (Monero address)',
-  },
-  ethereum: {
-    type: 'ethereum',
-    label: 'Ethereum',
-    short: 'ETH',
-    symbol: 'Ξ',
-    kind: 'generic',
-    validate: isEthereumAuthority,
-    uri: (a) => `ethereum:${a.trim()}`,
-    placeholder: '0x… (Ethereum address)',
-  },
-  nano: {
-    type: 'nano',
-    label: 'Nano',
-    short: 'XNO',
-    symbol: 'Ӿ',
-    kind: 'generic',
-    validate: isNanoAuthority,
-    uri: (a) => `nano:${a.trim()}`,
-    placeholder: 'nano_… (Nano address)',
   },
   cashme: {
     type: 'cashme',

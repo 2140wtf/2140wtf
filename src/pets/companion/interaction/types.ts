@@ -4,11 +4,11 @@
  * Type definitions for the companion action menu and item interaction system.
  * Designed to be easily extensible for future features like:
  * - Item falling animation
- * - Dragging items to Blobbi
- * - Blobbi reactions to items
+ * - Dragging items to Pets
+ * - Pets reactions to items
  */
 
-import type { ShopItemCategory, ItemEffect } from '@/blobbi/shop/types/shop.types';
+import type { ShopItemCategory, ItemEffect } from '@/pets/shop/types/shop.types';
 
 // ─── Menu Actions ─────────────────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ export type CompanionMenuAction =
   | 'play'      // Toy items -> affects happiness
   | 'medicine'  // Medicine items -> affects health
   | 'clean'     // Hygiene items -> affects hygiene
-  | 'sleep';    // Special action -> put Blobbi to sleep
+  | 'sleep';    // Special action -> put Pets to sleep
 
 /**
  * Metadata for each menu action button.

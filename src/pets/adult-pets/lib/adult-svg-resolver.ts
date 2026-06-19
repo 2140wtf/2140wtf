@@ -1,11 +1,11 @@
 /**
- * Adult Blobbi SVG Resolver
+ * Adult Pets SVG Resolver
  * 
  * Handles loading and resolving adult stage SVG assets.
  * Each adult form has its own folder with base and sleeping variants.
  */
 
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
+import type { Pets } from '@/pets/core/types/pets';
 import { 
   type AdultForm, 
   type AdultSvgResolverOptions,
@@ -44,35 +44,35 @@ export function getAdultSvgByVariant(
 }
 
 /**
- * Resolve adult Blobbi SVG content.
+ * Resolve adult Pets SVG content.
  * 
- * Determines the correct form from blobbi data (evolutionForm or seed-derived),
+ * Determines the correct form from pets data (evolutionForm or seed-derived),
  * then returns the appropriate SVG based on sleeping state.
  */
 export function resolveAdultSvg(
-  blobbi: Blobbi, 
+  pets: Pets, 
   options: AdultSvgResolverOptions = {}
 ): string {
   const { isSleeping = false } = options;
   
-  if (blobbi.lifeStage !== 'adult') {
-    console.warn('resolveAdultSvg called with non-adult Blobbi');
+  if (pets.lifeStage !== 'adult') {
+    console.warn('resolveAdultSvg called with non-adult Pets');
     return getFallbackAdultSvg(getDefaultAdultForm());
   }
   
-  const form = resolveAdultForm(blobbi);
+  const form = resolveAdultForm(pets);
   return isSleeping ? getAdultSleepingSvg(form) : getAdultBaseSvg(form);
 }
 
 /**
- * Resolve adult form from Blobbi and return both form and SVG
+ * Resolve adult form from Pets and return both form and SVG
  */
 export function resolveAdultSvgWithForm(
-  blobbi: Blobbi,
+  pets: Pets,
   options: AdultSvgResolverOptions = {}
 ): { form: AdultForm; svg: string } {
   const { isSleeping = false } = options;
-  const form = resolveAdultForm(blobbi);
+  const form = resolveAdultForm(pets);
   const svg = isSleeping ? getAdultSleepingSvg(form) : getAdultBaseSvg(form);
   return { form, svg };
 }

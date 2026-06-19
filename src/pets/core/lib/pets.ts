@@ -1,19 +1,19 @@
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { ADULT_FORMS, type AdultForm, deriveAdultFormFromSeed } from '@/blobbi/adult-blobbi/types/adult.types';
+import { ADULT_FORMS, type AdultForm, deriveAdultFormFromSeed } from '@/pets/adult-pets/types/adult.types';
 
-import { validateAndRepairBlobbiTags } from './blobbi-tag-schema';
+import { validateAndRepairPetsTags } from './pets-tag-schema';
 import { applyColorGuardrails, hexToHsl, hslToHex } from './color-guardrails';
 import type { Mission } from './missions';
 import { parseEvolutionContent } from './missions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const BLOBBI_ECOSYSTEM_NAMESPACE = 'blobbi:ecosystem:v1';
+export const PETS_ECOSYSTEM_NAMESPACE = 'pets:ecosystem:v1';
 
-export const KIND_BLOBBI_STATE = 31124;
+export const KIND_PETS_STATE = 31124;
 export const KIND_BLOBBONAUT_PROFILE = 11125;
 
 /** @deprecated Legacy kind for Blobbonaut profiles. Use KIND_BLOBBONAUT_PROFILE (11125) instead. */
@@ -27,7 +27,7 @@ export const BLOBBONAUT_PROFILE_KINDS = [KIND_BLOBBONAUT_PROFILE, KIND_BLOBBONAU
 /**
  * Minimum stat value - stats can never go below this.
  * The minimum of 1 (instead of 0) ensures:
- * - Blobbi is never in an unrecoverable state
+ * - Pets is never in an unrecoverable state
  * - Visual feedback shows critical state without being "dead"
  * - Recovery is always possible with any healing item
  */
@@ -59,10 +59,10 @@ export const DEFAULT_INCUBATION_TIME = 345600;
 export const INITIAL_BLOBBONAUT_COINS = 200;
 
 /** Cost to reroll/generate another egg preview during onboarding */
-export const BLOBBI_PREVIEW_REROLL_COST = 10;
+export const PETS_PREVIEW_REROLL_COST = 10;
 
-/** Cost to adopt a Blobbi from the preview */
-export const BLOBBI_ADOPTION_COST = 100;
+/** Cost to adopt a Pets from the preview */
+export const PETS_ADOPTION_COST = 100;
 
 // ─── Date/Time Utilities ──────────────────────────────────────────────────────
 
@@ -98,19 +98,19 @@ export function getDaysDifference(dayA: string, dayB: string): number {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type BlobbiStage = 'egg' | 'baby' | 'adult';
-export type BlobbiState = 'active' | 'sleeping' | 'hibernating';
+export type PetsStage = 'egg' | 'baby' | 'adult';
+export type PetsState = 'active' | 'sleeping' | 'hibernating';
 
 /**
- * Progression process state — orthogonal to BlobbiState.
+ * Progression process state — orthogonal to PetsState.
  * 
  * 'none'       — no progression process active
  * 'incubating' — egg is being incubated (hatch tasks)
  * 'evolving'   — baby is being evolved (evolve tasks)
  */
-export type BlobbiProgressionState = 'none' | 'incubating' | 'evolving';
+export type PetsProgressionState = 'none' | 'incubating' | 'evolving';
 
-export interface BlobbiStats {
+export interface PetsStats {
   hunger: number;
   happiness: number;
   health: number;
@@ -121,13 +121,13 @@ export interface BlobbiStats {
 // ─── Visual Traits Types ──────────────────────────────────────────────────────
 
 /**
- * Visual traits for a Blobbi, derived from seed or legacy tags.
+ * Visual traits for a Pets, derived from seed or legacy tags.
  * 
  * This interface is designed to be directly consumable by the EggGraphic module.
  * All color values are canonical CSS hex colors.
  * All categorical values match the EggGraphic vocabulary.
  */
-export interface BlobbiVisualTraits {
+export interface PetsVisualTraits {
   /** Primary/base color - hex value (e.g., "#F59E0B") */
   baseColor: string;
   /** Secondary/accent color - hex value */
@@ -135,21 +135,31 @@ export interface BlobbiVisualTraits {
   /** Eye color - hex value */
   eyeColor: string;
   /** Pattern type: 'solid' | 'spotted' | 'striped' | 'gradient' */
-  pattern: BlobbiPattern;
+  pattern: PetsPattern;
   /** Special marking: 'none' | 'star' | 'heart' | 'sparkle' | 'blush' */
-  specialMark: BlobbiSpecialMark;
+  specialMark: PetsSpecialMark;
   /** Size category: 'small' | 'medium' | 'large' */
-  size: BlobbiSize;
+  size: PetsSize;
+  /** Cypherpunk 2140 archetype class */
+  archetype: PetsArchetype;
+  /** Cypherpunk 2140 special ability */
+  specialAbility: PetsSpecialAbility;
 }
 
 /** Pattern types supported by EggGraphic */
-export type BlobbiPattern = 'solid' | 'spotted' | 'striped' | 'gradient';
+export type PetsPattern = 'solid' | 'spotted' | 'striped' | 'gradient';
 
 /** Special marks supported by EggGraphic */
-export type BlobbiSpecialMark = 'none' | 'star' | 'heart' | 'sparkle' | 'blush';
+export type PetsSpecialMark = 'none' | 'star' | 'heart' | 'sparkle' | 'blush';
 
 /** Size categories supported by EggGraphic */
-export type BlobbiSize = 'small' | 'medium' | 'large';
+export type PetsSize = 'small' | 'medium' | 'large';
+
+/** Cypherpunk 2140 archetype classes */
+export type PetsArchetype = 'ghost' | 'runner' | 'netrunner' | 'drone' | 'construct' | 'cipher';
+
+/** Cypherpunk 2140 special abilities */
+export type PetsSpecialAbility = 'glitch-step' | 'overclock' | 'firewall' | 'synesthesia' | 'recursion' | 'mirror-self';
 
 /**
  * @deprecated Legacy palette — no longer used for seed-based generation.
@@ -157,7 +167,7 @@ export type BlobbiSize = 'small' | 'medium' | 'large';
  * through applyColorGuardrails(). Kept only as a historical reference of
  * colors that existing events may have stored in explicit tags.
  */
-export const BLOBBI_BASE_COLORS: readonly string[] = [
+export const PETS_BASE_COLORS: readonly string[] = [
   '#F59E0B', // Amber/Gold
   '#55C4A2', // Teal
   '#60A5FA', // Sky Blue
@@ -170,8 +180,8 @@ export const BLOBBI_BASE_COLORS: readonly string[] = [
   '#FB923C', // Orange
 ] as const;
 
-/** @deprecated See BLOBBI_BASE_COLORS. */
-export const BLOBBI_SECONDARY_COLORS: readonly string[] = [
+/** @deprecated See PETS_BASE_COLORS. */
+export const PETS_SECONDARY_COLORS: readonly string[] = [
   '#FCD34D', // Light Gold
   '#6EE7B7', // Light Teal
   '#93C5FD', // Light Blue
@@ -184,8 +194,8 @@ export const BLOBBI_SECONDARY_COLORS: readonly string[] = [
   '#FDBA74', // Light Orange
 ] as const;
 
-/** @deprecated See BLOBBI_BASE_COLORS. */
-export const BLOBBI_EYE_COLORS: readonly string[] = [
+/** @deprecated See PETS_BASE_COLORS. */
+export const PETS_EYE_COLORS: readonly string[] = [
   '#1F2937', // Dark Gray (default)
   '#7C3AED', // Violet
   '#059669', // Emerald
@@ -197,7 +207,7 @@ export const BLOBBI_EYE_COLORS: readonly string[] = [
 ] as const;
 
 /** Available patterns - EggGraphic compatible */
-export const BLOBBI_PATTERNS: readonly BlobbiPattern[] = [
+export const PETS_PATTERNS: readonly PetsPattern[] = [
   'solid',
   'spotted',
   'striped',
@@ -205,7 +215,7 @@ export const BLOBBI_PATTERNS: readonly BlobbiPattern[] = [
 ] as const;
 
 /** Available special marks - EggGraphic compatible */
-export const BLOBBI_SPECIAL_MARKS: readonly BlobbiSpecialMark[] = [
+export const PETS_SPECIAL_MARKS: readonly PetsSpecialMark[] = [
   'none',
   'star',
   'heart',
@@ -214,35 +224,57 @@ export const BLOBBI_SPECIAL_MARKS: readonly BlobbiSpecialMark[] = [
 ] as const;
 
 /** Available sizes - EggGraphic compatible */
-export const BLOBBI_SIZES: readonly BlobbiSize[] = [
+export const PETS_SIZES: readonly PetsSize[] = [
   'small',
   'medium',
   'large',
 ] as const;
 
+/** Cypherpunk 2140 archetype classes */
+export const PETS_ARCHETYPES: readonly PetsArchetype[] = [
+  'ghost',
+  'runner',
+  'netrunner',
+  'drone',
+  'construct',
+  'cipher',
+] as const;
+
+/** Cypherpunk 2140 special abilities */
+export const PETS_SPECIAL_ABILITIES: readonly PetsSpecialAbility[] = [
+  'glitch-step',
+  'overclock',
+  'firewall',
+  'synesthesia',
+  'recursion',
+  'mirror-self',
+] as const;
+
 /** Default visual traits when seed is missing */
-export const DEFAULT_VISUAL_TRAITS: BlobbiVisualTraits = {
+export const DEFAULT_VISUAL_TRAITS: PetsVisualTraits = {
   baseColor: '#F59E0B',
   secondaryColor: '#FCD34D',
   eyeColor: '#1F2937',
   pattern: 'solid',
   specialMark: 'none',
   size: 'medium',
+  archetype: 'runner',
+  specialAbility: 'glitch-step',
 } as const;
 
 /**
- * Parsed task progress stored in Blobbi event tags.
+ * Parsed task progress stored in Pets event tags.
  * Format: ["task", "name:value"]
  */
-export interface BlobbiTaskProgress {
+export interface PetsTaskProgress {
   name: string;
   value: number;
 }
 
 /**
- * Parsed representation of a Kind 31124 Blobbi Current State event.
+ * Parsed representation of a Kind 31124 Pets Current State event.
  */
-export interface BlobbiCompanion {
+export interface PetsCompanion {
   /** Original event for republishing */
   event: NostrEvent;
   /** The d tag value */
@@ -250,15 +282,15 @@ export interface BlobbiCompanion {
   /** Display name */
   name: string;
   /** Lifecycle stage */
-  stage: BlobbiStage;
+  stage: PetsStage;
   /** Activity state (active, sleeping, hibernating — never progression) */
-  state: BlobbiState;
+  state: PetsState;
   /** Progression process state (none, incubating, evolving — orthogonal to state) */
-  progressionState: BlobbiProgressionState;
+  progressionState: PetsProgressionState;
   /** Deterministic identity seed (64-char hex) */
   seed: string | undefined;
   /** Visual traits (derived from seed or legacy tags) */
-  visualTraits: BlobbiVisualTraits;
+  visualTraits: PetsVisualTraits;
   /** Whether this is a legacy event that needs migration */
   isLegacy: boolean;
   /** Whether stored mirror tags differ from seed-derived identity and need republishing */
@@ -268,12 +300,12 @@ export interface BlobbiCompanion {
   /** Timestamp used for stat decay checkpoint (unix seconds) */
   lastDecayAt: number | undefined;
   /** Stats (0-100) */
-  stats: Partial<BlobbiStats>;
+  stats: Partial<PetsStats>;
   /** Generation number */
   generation: number | undefined;
   /** Breeding eligibility */
   breedingReady: boolean;
-  /** Whether external users can interact with this Blobbi (social tag = "open") */
+  /** Whether external users can interact with this Pets (social tag = "open") */
   socialOpen: boolean;
   /** Total XP */
   experience: number | undefined;
@@ -304,10 +336,10 @@ export interface BlobbiCompanion {
   /** Timestamp when current progression (incubating/evolving) started (unix seconds) */
   progressionStartedAt: number | undefined;
   /** Task progress cache (source of truth is computed from Nostr events) */
-  tasks: BlobbiTaskProgress[];
+  tasks: PetsTaskProgress[];
   /** Completed task names */
   tasksCompleted: string[];
-  /** Evolution missions parsed from 31124 content JSON (per-Blobbi progression) */
+  /** Evolution missions parsed from 31124 content JSON (per-Pets progression) */
   evolution: Mission[];
   /** All tags preserved for republishing */
   allTags: string[][];
@@ -330,13 +362,13 @@ export interface BlobbonautProfile {
   event: NostrEvent;
   /** The d tag value */
   d: string;
-  /** Currently selected companion Blobbi d-tag */
+  /** Currently selected companion Pets d-tag */
   currentCompanion: string | undefined;
   /** Whether onboarding/tutorial is complete */
   onboardingDone: boolean;
   /** Display name for the Blobbonaut */
   name: string | undefined;
-  /** List of owned Blobbi d-tags */
+  /** List of owned Pets d-tags */
   has: string[];
   /** In-game currency balance */
   coins: number;
@@ -382,23 +414,23 @@ export function generatePetId10(): string {
  * makes the entire migration chain deterministic: petId → canonicalD → seed →
  * visual traits.
  *
- * Formula: sha256("blobbi:migration:v1|" + pubkey + ":" + legacyD).slice(0, 10)
+ * Formula: sha256("pets:migration:v1|" + pubkey + ":" + legacyD).slice(0, 10)
  *
  * Only used during legacy → canonical migration. New egg creation still uses
  * the random generatePetId10().
  */
 export function deriveMigrationPetId(pubkey: string, legacyD: string): string {
-  const input = `blobbi:migration:v1|${pubkey}:${legacyD}`;
+  const input = `pets:migration:v1|${pubkey}:${legacyD}`;
   const hashBytes = sha256(new TextEncoder().encode(input));
   return bytesToHex(hashBytes).slice(0, 10);
 }
 
 /**
- * Get the canonical d-tag for a Blobbi (Kind 31124).
- * Format: blobbi-{ownerPubkeyPrefix12}-{petId10}
+ * Get the canonical d-tag for a Pets (Kind 31124).
+ * Format: 2140pets-{ownerPubkeyPrefix12}-{petId10}
  */
-export function getCanonicalBlobbiD(pubkey: string, petId: string): string {
-  return `blobbi-${getPubkeyPrefix12(pubkey)}-${petId}`;
+export function getCanonicalPetsD(pubkey: string, petId: string): string {
+  return `2140pets-${getPubkeyPrefix12(pubkey)}-${petId}`;
 }
 
 /**
@@ -410,14 +442,14 @@ export function getCanonicalBlobbonautD(pubkey: string): string {
 }
 
 /**
- * Derive the Blobbi seed using sha256.
- * seed = sha256("blobbi:v1|" + pubkey + ":" + d + ":" + createdAt)
+ * Derive the Pets seed using sha256.
+ * seed = sha256("pets:v1|" + pubkey + ":" + d + ":" + createdAt)
  * 
  * This is the raw derivation function. Use getOrDeriveSeed() when working with events
  * to ensure existing seeds are never recomputed.
  */
-export function deriveBlobbiSeedV1(pubkey: string, d: string, createdAt: number): string {
-  const input = `blobbi:v1|${pubkey}:${d}:${createdAt}`;
+export function derivePetsSeedV1(pubkey: string, d: string, createdAt: number): string {
+  const input = `pets:v1|${pubkey}:${d}:${createdAt}`;
   const hashBytes = sha256(new TextEncoder().encode(input));
   return bytesToHex(hashBytes);
 }
@@ -426,7 +458,7 @@ export function deriveBlobbiSeedV1(pubkey: string, d: string, createdAt: number)
  * Get the seed from an existing event, or derive it if not present.
  * Per spec: Clients MUST NOT recompute the seed if a seed tag already exists.
  * 
- * @param event - The Blobbi event to get/derive seed from
+ * @param event - The Pets event to get/derive seed from
  * @returns The existing seed or a newly derived one
  */
 export function getOrDeriveSeed(event: NostrEvent): string {
@@ -440,7 +472,7 @@ export function getOrDeriveSeed(event: NostrEvent): string {
     throw new Error('Cannot derive seed: event missing d tag');
   }
   
-  return deriveBlobbiSeedV1(event.pubkey, d, event.created_at);
+  return derivePetsSeedV1(event.pubkey, d, event.created_at);
 }
 
 // ─── Tag Parsing Utilities ────────────────────────────────────────────────────
@@ -542,21 +574,21 @@ export function isLegacyBlobbonautD(d: string): boolean {
 }
 
 /**
- * Check if a Blobbi d-tag is in canonical format.
- * Canonical: blobbi-{12 lowercase hex}-{10 lowercase hex}
+ * Check if a Pets d-tag is in canonical format.
+ * Canonical: 2140pets-{12 lowercase hex}-{10 lowercase hex}
  * Per spec: petId MUST be 10 lowercase hex characters
  */
-export function isCanonicalBlobbiD(d: string): boolean {
-  return /^blobbi-[0-9a-f]{12}-[0-9a-f]{10}$/.test(d);
+export function isCanonicalPetsD(d: string): boolean {
+  return /^2140pets-[0-9a-f]{12}-[0-9a-f]{10}$/.test(d);
 }
 
 /**
- * Check if a Blobbi d-tag is a legacy format (e.g., blobbi-puck, blobbi-fluffy).
+ * Check if a Pets d-tag is a legacy format (e.g., pets-puck, pets-fluffy).
  */
-export function isLegacyBlobbiD(d: string): boolean {
-  // Legacy: blobbi-{name} where name is NOT the canonical format
-  if (!d.startsWith('blobbi-')) return false;
-  if (isCanonicalBlobbiD(d)) return false;
+export function isLegacyPetsD(d: string): boolean {
+  // Legacy: pets-{name} where name is NOT the canonical format
+  if (!d.startsWith('pets-')) return false;
+  if (isCanonicalPetsD(d)) return false;
   return true;
 }
 
@@ -571,7 +603,8 @@ export function isLegacyBlobbiD(d: string): boolean {
  * - [24..32] special_mark
  * - [32..40] size
  * - [40..48] adult_type
- * - [48..64] reserved
+ * - [48..56] archetype
+ * - [56..64] special_ability
  */
 
 /**
@@ -633,7 +666,7 @@ export function deriveBaseColorFromSeed(seed: string): string {
  * This ensures the base/secondary pair always produces a good 3D body
  * gradient regardless of the base color.
  *
- * @param seed - The Blobbi seed (64-char hex)
+ * @param seed - The Pets seed (64-char hex)
  * @param baseHex - The already-resolved base color (after guardrails)
  */
 export function deriveSecondaryColorFromSeed(seed: string, baseHex?: string): string {
@@ -688,30 +721,46 @@ export function deriveEyeColorFromSeed(seed: string): string {
 /**
  * Derive pattern from seed.
  */
-export function derivePatternFromSeed(seed: string): BlobbiPattern {
-  const index = deriveIndexFromSeed(seed, 16, BLOBBI_PATTERNS.length);
-  return BLOBBI_PATTERNS[index];
+export function derivePatternFromSeed(seed: string): PetsPattern {
+  const index = deriveIndexFromSeed(seed, 16, PETS_PATTERNS.length);
+  return PETS_PATTERNS[index];
 }
 
 /**
  * Derive special mark from seed.
  */
-export function deriveSpecialMarkFromSeed(seed: string): BlobbiSpecialMark {
-  const index = deriveIndexFromSeed(seed, 24, BLOBBI_SPECIAL_MARKS.length);
-  return BLOBBI_SPECIAL_MARKS[index];
+export function deriveSpecialMarkFromSeed(seed: string): PetsSpecialMark {
+  const index = deriveIndexFromSeed(seed, 24, PETS_SPECIAL_MARKS.length);
+  return PETS_SPECIAL_MARKS[index];
 }
 
 /**
  * Derive size from seed.
  */
-export function deriveSizeFromSeed(seed: string): BlobbiSize {
-  const index = deriveIndexFromSeed(seed, 32, BLOBBI_SIZES.length);
-  return BLOBBI_SIZES[index];
+export function deriveSizeFromSeed(seed: string): PetsSize {
+  const index = deriveIndexFromSeed(seed, 32, PETS_SIZES.length);
+  return PETS_SIZES[index];
+}
+
+/**
+ * Derive Cypherpunk 2140 archetype from seed.
+ */
+export function deriveArchetypeFromSeed(seed: string): PetsArchetype {
+  const index = deriveIndexFromSeed(seed, 48, PETS_ARCHETYPES.length);
+  return PETS_ARCHETYPES[index];
+}
+
+/**
+ * Derive Cypherpunk 2140 special ability from seed.
+ */
+export function deriveSpecialAbilityFromSeed(seed: string): PetsSpecialAbility {
+  const index = deriveIndexFromSeed(seed, 56, PETS_SPECIAL_ABILITIES.length);
+  return PETS_SPECIAL_ABILITIES[index];
 }
 
 // ─── Temporary Adult-Type Compatibility ───────────────────────────────────────
 //
-// TEMPORARY: Seed adjustment for existing adult Blobbies whose stored adult_type
+// TEMPORARY: Seed adjustment for existing adult Petses whose stored adult_type
 // does not match the seed-derived adult_type. During the compatibility window,
 // we mutate the seed so it produces the stored adult_type, then recompute the
 // full visual identity from the adjusted seed.
@@ -754,7 +803,7 @@ export function adjustSeedForAdultType(seed: string, targetForm: AdultForm): str
   // Direct computation: deriveAdultFormFromSeed reads seed[40..48] as a
   // hex integer and takes `% ADULT_FORMS.length`. So any 8-hex-char value
   // whose parseInt % length === targetIndex works. The simplest is the
-  // target index itself (always < 16, which is < ADULT_FORMS.length).
+  // target index itself (always < ADULT_FORMS.length).
   const candidate = targetIndex.toString(16).padStart(8, '0');
   return prefix + candidate + suffix;
 }
@@ -763,30 +812,50 @@ export function adjustSeedForAdultType(seed: string, targetForm: AdultForm): str
  * Validate and normalize a pattern value from a tag.
  * Returns undefined if invalid, allowing fallback to seed derivation.
  */
-function normalizePatternTag(value: string | undefined): BlobbiPattern | undefined {
+function normalizePatternTag(value: string | undefined): PetsPattern | undefined {
   if (!value) return undefined;
-  const normalized = value.toLowerCase() as BlobbiPattern;
-  return BLOBBI_PATTERNS.includes(normalized) ? normalized : undefined;
+  const normalized = value.toLowerCase() as PetsPattern;
+  return PETS_PATTERNS.includes(normalized) ? normalized : undefined;
 }
 
 /**
  * Validate and normalize a special mark value from a tag.
  * Returns undefined if invalid, allowing fallback to seed derivation.
  */
-function normalizeSpecialMarkTag(value: string | undefined): BlobbiSpecialMark | undefined {
+function normalizeSpecialMarkTag(value: string | undefined): PetsSpecialMark | undefined {
   if (!value) return undefined;
-  const normalized = value.toLowerCase() as BlobbiSpecialMark;
-  return BLOBBI_SPECIAL_MARKS.includes(normalized) ? normalized : undefined;
+  const normalized = value.toLowerCase() as PetsSpecialMark;
+  return PETS_SPECIAL_MARKS.includes(normalized) ? normalized : undefined;
 }
 
 /**
  * Validate and normalize a size value from a tag.
  * Returns undefined if invalid, allowing fallback to seed derivation.
  */
-function normalizeSizeTag(value: string | undefined): BlobbiSize | undefined {
+function normalizeSizeTag(value: string | undefined): PetsSize | undefined {
   if (!value) return undefined;
-  const normalized = value.toLowerCase() as BlobbiSize;
-  return BLOBBI_SIZES.includes(normalized) ? normalized : undefined;
+  const normalized = value.toLowerCase() as PetsSize;
+  return PETS_SIZES.includes(normalized) ? normalized : undefined;
+}
+
+/**
+ * Validate and normalize an archetype value from a tag.
+ * Returns undefined if invalid, allowing fallback to seed derivation.
+ */
+function normalizeArchetypeTag(value: string | undefined): PetsArchetype | undefined {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase() as PetsArchetype;
+  return PETS_ARCHETYPES.includes(normalized) ? normalized : undefined;
+}
+
+/**
+ * Validate and normalize a special ability value from a tag.
+ * Returns undefined if invalid, allowing fallback to seed derivation.
+ */
+function normalizeSpecialAbilityTag(value: string | undefined): PetsSpecialAbility | undefined {
+  if (!value) return undefined;
+  const normalized = value.toLowerCase() as PetsSpecialAbility;
+  return PETS_SPECIAL_ABILITIES.includes(normalized) ? normalized : undefined;
 }
 
 /**
@@ -829,7 +898,7 @@ function normalizeHexColor(value: string | undefined): string | undefined {
 export function deriveVisualTraits(
   tags: string[][],
   seed: string | undefined
-): BlobbiVisualTraits {
+): PetsVisualTraits {
   const hasSeed = seed && seed.length === 64;
   
   // Seed is the canonical source of truth for the entire visual identity.
@@ -845,6 +914,8 @@ export function deriveVisualTraits(
   const tagPattern = normalizePatternTag(getTagValue(tags, 'pattern'));
   const tagSpecialMark = normalizeSpecialMarkTag(getTagValue(tags, 'special_mark'));
   const tagSize = normalizeSizeTag(getTagValue(tags, 'size'));
+  const tagArchetype = normalizeArchetypeTag(getTagValue(tags, 'archetype'));
+  const tagSpecialAbility = normalizeSpecialAbilityTag(getTagValue(tags, 'special_ability'));
   const resolvedBaseColor = tagBaseColor ?? DEFAULT_VISUAL_TRAITS.baseColor;
   return {
     baseColor: resolvedBaseColor,
@@ -853,6 +924,8 @@ export function deriveVisualTraits(
     pattern: tagPattern ?? DEFAULT_VISUAL_TRAITS.pattern,
     specialMark: tagSpecialMark ?? DEFAULT_VISUAL_TRAITS.specialMark,
     size: tagSize ?? DEFAULT_VISUAL_TRAITS.size,
+    archetype: tagArchetype ?? DEFAULT_VISUAL_TRAITS.archetype,
+    specialAbility: tagSpecialAbility ?? DEFAULT_VISUAL_TRAITS.specialAbility,
   };
 }
 
@@ -864,7 +937,7 @@ export function deriveVisualTraits(
  * with color guardrails applied. All call sites that need seed-derived
  * visual traits should use this to guarantee consistency.
  */
-export function deriveSeedIdentity(seed: string): BlobbiVisualTraits {
+export function deriveSeedIdentity(seed: string): PetsVisualTraits {
   const rawBase = deriveBaseColorFromSeed(seed);
   const rawEye = deriveEyeColorFromSeed(seed);
   const colors = applyColorGuardrails({
@@ -877,21 +950,23 @@ export function deriveSeedIdentity(seed: string): BlobbiVisualTraits {
     pattern: derivePatternFromSeed(seed),
     specialMark: deriveSpecialMarkFromSeed(seed),
     size: deriveSizeFromSeed(seed),
+    archetype: deriveArchetypeFromSeed(seed),
+    specialAbility: deriveSpecialAbilityFromSeed(seed),
   };
 }
 
 // ─── Legacy Event Detection ───────────────────────────────────────────────────
 
 /**
- * Check if a Blobbi event is a legacy event that needs migration.
+ * Check if a Pets event is a legacy event that needs migration.
  * 
- * A Blobbi is considered legacy if ANY of the following is true:
+ * A Pets is considered legacy if ANY of the following is true:
  * - the d tag is not in canonical format
  * - the seed tag is missing
  * - the name tag is missing and must be derived from d
  * - visual traits exist but seed does not
  * 
- * Canonical Blobbi events must always contain:
+ * Canonical Pets events must always contain:
  * - canonical d
  * - seed
  * - name
@@ -900,14 +975,14 @@ export function deriveSeedIdentity(seed: string): BlobbiVisualTraits {
  * - stats
  * - ecosystem tag
  */
-export function isLegacyBlobbiEvent(event: NostrEvent): boolean {
+export function isLegacyPetsEvent(event: NostrEvent): boolean {
   const tags = event.tags;
   const d = getTagValue(tags, 'd');
   
   if (!d) return true;
   
   // Check if d-tag is not canonical
-  if (!isCanonicalBlobbiD(d)) {
+  if (!isCanonicalPetsD(d)) {
     return true;
   }
   
@@ -938,10 +1013,10 @@ export function isLegacyBlobbiEvent(event: NostrEvent): boolean {
 }
 
 /**
- * Check if a parsed BlobbiCompanion needs migration.
- * This is a convenience wrapper around isLegacyBlobbiEvent.
+ * Check if a parsed PetsCompanion needs migration.
+ * This is a convenience wrapper around isLegacyPetsEvent.
  */
-export function companionNeedsMigration(companion: BlobbiCompanion): boolean {
+export function companionNeedsMigration(companion: PetsCompanion): boolean {
   return companion.isLegacy;
 }
 
@@ -996,11 +1071,11 @@ export function eventNeedsSeedIdentitySync(tags: string[][]): boolean {
 // ─── Event Validation ─────────────────────────────────────────────────────────
 
 /**
- * Validate that an event has the required tags for a valid Blobbi state (Kind 31124).
- * Required: d, b (blobbi:ecosystem:v1), stage, state, last_interaction
+ * Validate that an event has the required tags for a valid Pets state (Kind 31124).
+ * Required: d, b (pets:ecosystem:v1), stage, state, last_interaction
  */
-export function isValidBlobbiEvent(event: NostrEvent): boolean {
-  if (event.kind !== KIND_BLOBBI_STATE) return false;
+export function isValidPetsEvent(event: NostrEvent): boolean {
+  if (event.kind !== KIND_PETS_STATE) return false;
   
   const d = getTagValue(event.tags, 'd');
   const b = getTagValue(event.tags, 'b');
@@ -1009,7 +1084,7 @@ export function isValidBlobbiEvent(event: NostrEvent): boolean {
   const lastInteraction = getTagValue(event.tags, 'last_interaction');
   
   if (!d) return false;
-  if (b !== BLOBBI_ECOSYSTEM_NAMESPACE) return false;
+  if (b !== PETS_ECOSYSTEM_NAMESPACE) return false;
   if (!stage || !['egg', 'baby', 'adult'].includes(stage)) return false;
   // Accept both new states (active/sleeping/hibernating) and legacy states (incubating/evolving)
   // for backwards compatibility during migration
@@ -1022,7 +1097,7 @@ export function isValidBlobbiEvent(event: NostrEvent): boolean {
 /**
  * Validate that an event has the required tags for a valid Blobbonaut profile.
  * Accepts both current kind (11125) and legacy kind (31125) for migration support.
- * Required: d, b (blobbi:ecosystem:v1)
+ * Required: d, b (pets:ecosystem:v1)
  */
 export function isValidBlobbonautEvent(event: NostrEvent): boolean {
   // Accept both current and legacy kinds
@@ -1034,7 +1109,7 @@ export function isValidBlobbonautEvent(event: NostrEvent): boolean {
   const b = getTagValue(event.tags, 'b');
   
   if (!d) return false;
-  if (b !== BLOBBI_ECOSYSTEM_NAMESPACE) return false;
+  if (b !== PETS_ECOSYSTEM_NAMESPACE) return false;
   
   return true;
 }
@@ -1051,10 +1126,10 @@ export function isLegacyBlobbonautKind(event: NostrEvent): boolean {
 
 /**
  * Derive a display name from a legacy d-tag.
- * Legacy format: blobbi-{name} (e.g., "blobbi-puck" → "Puck")
+ * Legacy format: pets-{name} (e.g., "pets-puck" → "Puck")
  * 
  * @param d - The d-tag value
- * @returns The derived name with first letter capitalized, or "Unnamed Blobbi" if not derivable
+ * @returns The derived name with first letter capitalized, or "Unnamed Pets" if not derivable
  */
 /**
  * Capitalize each word in a string.
@@ -1071,31 +1146,31 @@ function capitalizeWords(str: string): string {
  * Derive a display name from a legacy d-tag.
  * 
  * Transformation rules:
- * 1. Remove "blobbi-" prefix
+ * 1. Remove "pets-" prefix
  * 2. Replace "-" and "_" with spaces
  * 3. Trim whitespace
  * 4. Capitalize words in a human-friendly way
- * 5. Fallback to "Unnamed Blobbi" if result is empty
+ * 5. Fallback to "Unnamed Pets" if result is empty
  * 
- * @example "blobbi-puck" -> "Puck"
- * @example "blobbi-mr-cool" -> "Mr Cool"
- * @example "blobbi_blue" -> "Blue"
- * @example "blobbi-" -> "Unnamed Blobbi"
+ * @example "pets-puck" -> "Puck"
+ * @example "pets-mr-cool" -> "Mr Cool"
+ * @example "pets_blue" -> "Blue"
+ * @example "pets-" -> "Unnamed Pets"
  */
 export function deriveNameFromLegacyD(d: string): string {
-  if (!d.startsWith('blobbi-')) {
-    return 'Unnamed Blobbi';
+  if (!d.startsWith('pets-')) {
+    return 'Unnamed Pets';
   }
   
   // Remove prefix and normalize separators
   const rawName = d
-    .replace('blobbi-', '')
+    .replace('pets-', '')
     .replace(/[-_]/g, ' ')
     .trim();
   
   // If nothing meaningful remains, return fallback
   if (!rawName || rawName.length === 0) {
-    return 'Unnamed Blobbi';
+    return 'Unnamed Pets';
   }
   
   // Capitalize words for human-friendly display
@@ -1103,7 +1178,7 @@ export function deriveNameFromLegacyD(d: string): string {
 }
 
 /**
- * Parse a Kind 31124 Blobbi Current State event into a structured object.
+ * Parse a Kind 31124 Pets Current State event into a structured object.
  * Returns undefined if the event is invalid.
  * 
  * This function is the SINGLE SOURCE OF TRUTH for resolving:
@@ -1116,21 +1191,21 @@ export function deriveNameFromLegacyD(d: string): string {
  * 
  * Name resolution priority:
  * 1. Use `name` tag if present
- * 2. Derive from legacy d-tag format (blobbi-{name})
- * 3. Fall back to "Unnamed Blobbi"
+ * 2. Derive from legacy d-tag format (pets-{name})
+ * 3. Fall back to "Unnamed Pets"
  * 
  * Visual trait priority:
  * 1. Use explicit visual tags if valid (legacy compatibility)
  * 2. Derive deterministically from seed
  * 3. Use safe defaults if seed is missing
  */
-export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined {
-  if (!isValidBlobbiEvent(event)) return undefined;
+export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
+  if (!isValidPetsEvent(event)) return undefined;
   
   const tags = event.tags;
   const d = getTagValue(tags, 'd')!;
   const nameTag = getTagValue(tags, 'name');
-  const stage = getTagValue(tags, 'stage') as BlobbiStage;
+  const stage = getTagValue(tags, 'stage') as PetsStage;
   const rawState = getTagValue(tags, 'state')!;
   const seed = getTagValue(tags, 'seed');
   
@@ -1138,23 +1213,23 @@ export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined
   // New model: progression lives in progression_state tag.
   // Old model: progression lived in the state tag ('incubating', 'evolving').
   // On read we normalise both into the new model.
-  const progressionStateTag = getTagValue(tags, 'progression_state') as BlobbiProgressionState | undefined;
+  const progressionStateTag = getTagValue(tags, 'progression_state') as PetsProgressionState | undefined;
   
-  let state: BlobbiState;
-  let progressionState: BlobbiProgressionState;
+  let state: PetsState;
+  let progressionState: PetsProgressionState;
   
   if (progressionStateTag) {
     // New-format event: progression_state tag is authoritative
-    state = rawState as BlobbiState;
+    state = rawState as PetsState;
     progressionState = progressionStateTag;
   } else if (rawState === 'incubating' || rawState === 'evolving') {
     // Legacy event: progression was stored in state tag.
     // Normalise: move it to progressionState, set activity state to 'active'.
     state = 'active';
-    progressionState = rawState as BlobbiProgressionState;
+    progressionState = rawState as PetsProgressionState;
   } else {
     // No progression
-    state = rawState as BlobbiState;
+    state = rawState as PetsState;
     progressionState = 'none';
   }
   
@@ -1185,7 +1260,7 @@ export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined
   const visualTraits = deriveVisualTraits(tags, effectiveSeed);
   
   // Check if this is a legacy event that needs migration
-  const isLegacy = isLegacyBlobbiEvent(event);
+  const isLegacy = isLegacyPetsEvent(event);
   
   // Check if stored mirror tags need syncing with seed-derived values
   // Uses the effective seed (which may be adjusted during compat window)
@@ -1196,7 +1271,7 @@ export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined
   );
   
   if (import.meta.env.DEV) {
-    console.log('[Blobbi]', {
+    console.log('[Pets]', {
       d: d.length > 30 ? `${d.slice(0, 20)}...` : d,
       name,
       isLegacy,
@@ -1207,7 +1282,7 @@ export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined
   }
   
   // Parse task progress tags: ["task", "name:value"]
-  const tasks: BlobbiTaskProgress[] = [];
+  const tasks: PetsTaskProgress[] = [];
   for (const tag of tags) {
     if (tag[0] === 'task' && tag[1]) {
       const [taskName, taskValue] = tag[1].split(':');
@@ -1225,7 +1300,7 @@ export function parseBlobbiEvent(event: NostrEvent): BlobbiCompanion | undefined
     }
   }
   
-  // Parse evolution missions from 31124 content JSON (per-Blobbi)
+  // Parse evolution missions from 31124 content JSON (per-Pets)
   const evolution = parseEvolutionContent(event.content);
 
   return {
@@ -1292,7 +1367,7 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     event,
     d,
     currentCompanion: getTagValue(tags, 'current_companion'),
-    onboardingDone: parseBooleanTag(tags, 'blobbi_onboarding_done', false)
+    onboardingDone: parseBooleanTag(tags, 'pets_onboarding_done', false)
       || parseBooleanTag(tags, 'onboarding_done', false),
     name: getTagValue(tags, 'name'),
     has: getTagValues(tags, 'has'),
@@ -1316,14 +1391,14 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
 export function buildBlobbonautTags(pubkey: string): string[][] {
   return [
     ['d', getCanonicalBlobbonautD(pubkey)],
-    ['b', BLOBBI_ECOSYSTEM_NAMESPACE],
-    ['blobbi_onboarding_done', 'false'],
+    ['b', PETS_ECOSYSTEM_NAMESPACE],
+    ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
   ];
 }
 
 /**
- * Build tags for a new Blobbi egg (Kind 31124).
+ * Build tags for a new Pets egg (Kind 31124).
  * Includes required and recommended tags for a new egg.
  * 
  * Visual traits are derived from the seed and explicitly stored
@@ -1335,16 +1410,16 @@ export function buildEggTags(
   createdAt: number,
   name = 'Egg'
 ): string[][] {
-  const d = getCanonicalBlobbiD(pubkey, petId);
-  const seed = deriveBlobbiSeedV1(pubkey, d, createdAt);
+  const d = getCanonicalPetsD(pubkey, petId);
+  const seed = derivePetsSeedV1(pubkey, d, createdAt);
   const now = createdAt.toString();
   
   // Derive visual traits from seed for explicit storage (tags mirror the seed).
-  const { baseColor, secondaryColor, eyeColor, pattern, specialMark, size } = deriveSeedIdentity(seed);
+  const { baseColor, secondaryColor, eyeColor, pattern, specialMark, size, archetype, specialAbility } = deriveSeedIdentity(seed);
   
   return [
     ['d', d],
-    ['b', BLOBBI_ECOSYSTEM_NAMESPACE],
+    ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['name', name],
     ['stage', 'egg'],
     ['state', 'active'],
@@ -1370,18 +1445,20 @@ export function buildEggTags(
     ['pattern', pattern],
     ['special_mark', specialMark],
     ['size', size],
+    ['archetype', archetype],
+    ['special_ability', specialAbility],
   ];
 }
 
 // ─── Managed Tag Sets (Separated by Kind) ─────────────────────────────────────
 
 /**
- * Tags managed by the client for Kind 31124 (Blobbi State).
+ * Tags managed by the client for Kind 31124 (Pets State).
  * These tags are controlled by the application and may be overwritten.
  * 
- * @see blobbi-tag-schema.ts for the complete canonical schema documentation
+ * @see pets-tag-schema.ts for the complete canonical schema documentation
  */
-export const MANAGED_BLOBBI_STATE_TAG_NAMES = new Set([
+export const MANAGED_PETS_STATE_TAG_NAMES = new Set([
   // System / metadata tags
   'd', 'b',
   // Core identity tags
@@ -1406,10 +1483,12 @@ export const MANAGED_BLOBBI_STATE_TAG_NAMES = new Set([
   'adult_type',
   // Extension tags (for themes/crossovers)
   'theme', 'crossover_app',
+  // Cypherpunk 2140 theme extension tags
+  'archetype', 'special_ability',
 ]);
 
 /**
- * Visual trait tags that are part of the canonical Blobbi format.
+ * Visual trait tags that are part of the canonical Pets format.
  * These tags ensure deterministic visual rendering across clients.
  * 
  * Note: While seed is the ultimate source of truth for visual generation,
@@ -1422,13 +1501,15 @@ export const VISUAL_TRAIT_TAG_NAMES = [
   'pattern',
   'special_mark',
   'size',
+  'archetype',
+  'special_ability',
 ] as const;
 
 /**
  * Deprecated tags that should be removed when republishing events.
  * These tags were part of earlier designs but are no longer used.
  * 
- * - t: Topic tag (blobbi) - no longer needed, the app adds the client tag automatically
+ * - t: Topic tag (pets) - no longer needed, the app adds the client tag automatically
  * - client: Client tag - no longer needed, the app adds this automatically via useNostrPublish
  * - shell_integrity: Eggs now use the standard health stat instead
  * - egg_temperature: Eggs now rely on warmth prop fallback; not part of active stat model
@@ -1439,7 +1520,7 @@ export const VISUAL_TRAIT_TAG_NAMES = [
  * - start_incubation: Obsolete; replaced by progression_started_at
  * - interact_6_progress: Legacy interaction tracking; replaced by ["task", "interactions:N"]
  */
-export const DEPRECATED_BLOBBI_TAG_NAMES = new Set([
+export const DEPRECATED_PETS_TAG_NAMES = new Set([
   't',
   'client',
   'shell_integrity',
@@ -1457,14 +1538,14 @@ export const DEPRECATED_BLOBBI_TAG_NAMES = new Set([
  * These tags are controlled by the application and may be overwritten.
  */
 export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
-  'd', 'b', 'name', 'current_companion', 'blobbi_onboarding_done', 'onboarding_done', 'has', 'storage',
+  'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage',
   // Progression tags
   'xp', 'level',
   // Room persistence
   'room',
   // Legacy player progress tags (preserved for compatibility)
-  'coins', 'petting_level', 'pettingLevel', 'lifetime_blobbis', 'lifetimeBlobbis',
-  'starter_blobbi', 'starterBlobbi', 'favorite_blobbi', 'favoriteBlobbi',
+  'coins', 'petting_level', 'pettingLevel', 'lifetime_petss', 'lifetimePetss',
+  'starter_pets', 'starterPets', 'favorite_pets', 'favoritePets',
 ]);
 
 /**
@@ -1472,7 +1553,7 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
  * @deprecated Use kind-specific sets instead
  */
 const MANAGED_TAG_NAMES = new Set([
-  ...MANAGED_BLOBBI_STATE_TAG_NAMES,
+  ...MANAGED_PETS_STATE_TAG_NAMES,
   ...MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES,
 ]);
 
@@ -1498,7 +1579,7 @@ export function mergeTagsForRepublish(
   
   // Start with existing unknown tags (tags we don't manage and that aren't deprecated)
   const unknownTags = existingTags.filter(tag => 
-    !MANAGED_TAG_NAMES.has(tag[0]) && !DEPRECATED_BLOBBI_TAG_NAMES.has(tag[0])
+    !MANAGED_TAG_NAMES.has(tag[0]) && !DEPRECATED_PETS_TAG_NAMES.has(tag[0])
   );
   
   // Collect all new tags in order
@@ -1522,7 +1603,7 @@ export function mergeTagsForRepublish(
  * the canonical values from deriveSeedIdentity(). For adult-stage events,
  * also syncs adult_type. If no seed is found the tags are returned unchanged.
  *
- * This is called inside mergeBlobbiStateTagsForRepublish so that every
+ * This is called inside mergePetsStateTagsForRepublish so that every
  * republish automatically backfills correct mirror tags.
  */
 function syncMirrorTagsToSeed(tags: string[][]): string[][] {
@@ -1533,6 +1614,7 @@ function syncMirrorTagsToSeed(tags: string[][]): string[][] {
   const MIRROR_TAG_NAMES = new Set([
     'base_color', 'secondary_color', 'eye_color',
     'pattern', 'special_mark', 'size',
+    'archetype', 'special_ability',
   ]);
 
   const stage = getTagValue(tags, 'stage');
@@ -1551,6 +1633,8 @@ function syncMirrorTagsToSeed(tags: string[][]): string[][] {
     ['pattern', canonical.pattern],
     ['special_mark', canonical.specialMark],
     ['size', canonical.size],
+    ['archetype', canonical.archetype],
+    ['special_ability', canonical.specialAbility],
   );
 
   if (stage === 'adult') {
@@ -1561,10 +1645,10 @@ function syncMirrorTagsToSeed(tags: string[][]): string[][] {
 }
 
 /**
- * Build the stat + timestamp tag updates for a Blobbi state publish.
+ * Build the stat + timestamp tag updates for a Pets state publish.
  * Serializes all 5 stats to strings and sets both decay/interaction timestamps.
  */
-export function statsToTagUpdates(stats: BlobbiStats, now: number): Record<string, string> {
+export function statsToTagUpdates(stats: PetsStats, now: number): Record<string, string> {
   const nowStr = now.toString();
   return {
     hunger: stats.hunger.toString(),
@@ -1578,18 +1662,18 @@ export function statsToTagUpdates(stats: BlobbiStats, now: number): Record<strin
 }
 
 /**
- * Update specific tags in a Blobbi event while preserving unknown tags.
- * Uses MANAGED_BLOBBI_STATE_TAG_NAMES for Kind 31124.
+ * Update specific tags in a Pets event while preserving unknown tags.
+ * Uses MANAGED_PETS_STATE_TAG_NAMES for Kind 31124.
  */
-export function updateBlobbiTags(
+export function updatePetsTags(
   existingTags: string[][],
   updates: Record<string, string | string[]>
 ): string[][] {
-  return mergeBlobbiStateTagsForRepublish(existingTags, updates);
+  return mergePetsStateTagsForRepublish(existingTags, updates);
 }
 
 /**
- * Merge tags for republishing a Kind 31124 Blobbi State event.
+ * Merge tags for republishing a Kind 31124 Pets State event.
  * Preserves unknown tags, applies updates to managed tags, and validates the result.
  * 
  * This function automatically:
@@ -1604,7 +1688,7 @@ export function updateBlobbiTags(
  * @param options - Optional configuration
  * @returns Validated and repaired tag array
  */
-export function mergeBlobbiStateTagsForRepublish(
+export function mergePetsStateTagsForRepublish(
   existingTags: string[][],
   updates: Record<string, string | string[]>,
   options?: {
@@ -1618,7 +1702,7 @@ export function mergeBlobbiStateTagsForRepublish(
   // Preserve existing managed tags that aren't being updated
   for (const tag of existingTags) {
     const name = tag[0];
-    if (MANAGED_BLOBBI_STATE_TAG_NAMES.has(name) && !updateKeys.has(name)) {
+    if (MANAGED_PETS_STATE_TAG_NAMES.has(name) && !updateKeys.has(name)) {
       newTags.push(tag);
     }
   }
@@ -1636,8 +1720,8 @@ export function mergeBlobbiStateTagsForRepublish(
   
   // Preserve unknown tags (tags not managed by us), excluding deprecated tags
   const unknownTags = existingTags.filter(tag => 
-    !MANAGED_BLOBBI_STATE_TAG_NAMES.has(tag[0]) && 
-    !DEPRECATED_BLOBBI_TAG_NAMES.has(tag[0])
+    !MANAGED_PETS_STATE_TAG_NAMES.has(tag[0]) && 
+    !DEPRECATED_PETS_TAG_NAMES.has(tag[0])
   );
   
   let mergedTags = [...newTags, ...unknownTags];
@@ -1654,16 +1738,16 @@ export function mergeBlobbiStateTagsForRepublish(
   
   // Validate and repair the final tag set
   // Use existingTags as the recovery source for missing required tags
-  const result = validateAndRepairBlobbiTags(mergedTags, existingTags);
+  const result = validateAndRepairPetsTags(mergedTags, existingTags);
   
   // Log repairs in development
   if (import.meta.env.DEV && result.repaired) {
-    console.log('[Blobbi] Tag repairs applied:', result.repairs);
+    console.log('[Pets] Tag repairs applied:', result.repairs);
   }
   
   // Log errors (these are non-fatal but should be monitored)
   if (result.errors.length > 0) {
-    console.warn('[Blobbi] Tag validation errors:', result.errors);
+    console.warn('[Pets] Tag validation errors:', result.errors);
   }
   
   return result.tags;
@@ -1756,10 +1840,10 @@ export function profileNeedsPettingLevelNormalization(profile: BlobbonautProfile
 
 /**
  * Check if a profile uses the legacy `onboarding_done` tag instead of the
- * new `blobbi_onboarding_done` tag. Returns true if migration is needed.
+ * new `pets_onboarding_done` tag. Returns true if migration is needed.
  */
 export function profileNeedsOnboardingTagMigration(profile: BlobbonautProfile): boolean {
-  const hasNewTag = profile.allTags.some(([name]) => name === 'blobbi_onboarding_done');
+  const hasNewTag = profile.allTags.some(([name]) => name === 'pets_onboarding_done');
   const hasOldTag = profile.allTags.some(([name]) => name === 'onboarding_done');
   // Needs migration if: has old tag but not the new one
   return !hasNewTag && hasOldTag;
@@ -1769,7 +1853,7 @@ export function profileNeedsOnboardingTagMigration(profile: BlobbonautProfile): 
  * Build updated tags for normalizing a profile.
  * Handles:
  * - Adding pettingLevel: 0 if missing
- * - Migrating onboarding_done → blobbi_onboarding_done
+ * - Migrating onboarding_done → pets_onboarding_done
  *
  * Preserves all existing tags except the ones being migrated.
  */
@@ -1783,12 +1867,12 @@ export function buildNormalizedProfileTags(profile: BlobbonautProfile): string[]
     changed = true;
   }
 
-  // Migrate onboarding_done → blobbi_onboarding_done
+  // Migrate onboarding_done → pets_onboarding_done
   if (profileNeedsOnboardingTagMigration(profile)) {
     const oldValue = tags.find(([name]) => name === 'onboarding_done')?.[1] ?? 'false';
     // Remove old tag, add new tag
     tags = tags.filter(([name]) => name !== 'onboarding_done');
-    tags = updateBlobbonautTags(tags, { blobbi_onboarding_done: oldValue });
+    tags = updateBlobbonautTags(tags, { pets_onboarding_done: oldValue });
     changed = true;
   }
 
@@ -1821,7 +1905,7 @@ export function getBlobbonautQueryDValues(pubkey: string): string[] {
 // ─── Legacy Migration Helpers ─────────────────────────────────────────────────
 
 /**
- * Build tags for migrating a legacy Blobbi pet to canonical format.
+ * Build tags for migrating a legacy Pets pet to canonical format.
  * 
  * Migration preserves:
  * - seed (existing or derived once)
@@ -1840,7 +1924,7 @@ export function buildMigrationTags(
   newPetId: string,
   pubkey: string
 ): string[][] {
-  const canonicalD = getCanonicalBlobbiD(pubkey, newPetId);
+  const canonicalD = getCanonicalPetsD(pubkey, newPetId);
   const legacyTags = legacyEvent.tags;
   
   // Get or derive seed - use legacy event's created_at for consistency
@@ -1848,7 +1932,7 @@ export function buildMigrationTags(
   const existingSeed = getTagValue(legacyTags, 'seed');
   const seed = existingSeed && existingSeed.length === 64
     ? existingSeed
-    : deriveBlobbiSeedV1(pubkey, canonicalD, legacyEvent.created_at);
+    : derivePetsSeedV1(pubkey, canonicalD, legacyEvent.created_at);
   
   const now = Math.floor(Date.now() / 1000).toString();
   
@@ -1856,7 +1940,7 @@ export function buildMigrationTags(
   const legacyD = getTagValue(legacyTags, 'd');
   const newTags: string[][] = [
     ['d', canonicalD],
-    ['b', BLOBBI_ECOSYSTEM_NAMESPACE],
+    ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['seed', seed],
   ];
   
@@ -1869,12 +1953,12 @@ export function buildMigrationTags(
   
   // Preserve name with priority: name tag > legacy d-tag derived > fallback
   const nameTag = getTagValue(legacyTags, 'name');
-  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed Blobbi');
+  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed Pets');
   newTags.push(['name', resolvedName]);
   
   // Preserve all persistent tags from the legacy event
   // This includes: state, stats, progression, social, personality, evolution, and extension tags
-  // Per blobbi-tag-schema.md: Do NOT invent values for tags that don't exist
+  // Per pets-tag-schema.md: Do NOT invent values for tags that don't exist
   const persistentTagNames = [
     // State/lifecycle tags
     'stage',
@@ -1939,6 +2023,8 @@ export function buildMigrationTags(
   newTags.push(['pattern', visualTraits.pattern]);
   newTags.push(['special_mark', visualTraits.specialMark]);
   newTags.push(['size', visualTraits.size]);
+  newTags.push(['archetype', visualTraits.archetype]);
+  newTags.push(['special_ability', visualTraits.specialAbility]);
   
   // Update timestamps
   newTags.push(['last_interaction', now]);
@@ -1952,9 +2038,9 @@ export function buildMigrationTags(
   // Preserve truly unknown tags for forward compatibility
   // (tags not in managed set AND not in visual trait set AND not deprecated)
   const knownTagNames = new Set([
-    ...MANAGED_BLOBBI_STATE_TAG_NAMES,
+    ...MANAGED_PETS_STATE_TAG_NAMES,
     ...VISUAL_TRAIT_TAG_NAMES,
-    ...DEPRECATED_BLOBBI_TAG_NAMES,
+    ...DEPRECATED_PETS_TAG_NAMES,
   ]);
   const unknownTags = legacyTags.filter(tag => !knownTagNames.has(tag[0]));
   
@@ -1963,7 +2049,7 @@ export function buildMigrationTags(
   // ─── Validate and Repair Tags ───
   // Use the tag integrity guard to ensure all required tags are present
   // and deprecated tags are removed
-  const repairResult = validateAndRepairBlobbiTags(assembledTags, legacyTags);
+  const repairResult = validateAndRepairPetsTags(assembledTags, legacyTags);
   
   if (import.meta.env.DEV) {
     if (repairResult.repaired) {
@@ -1978,10 +2064,10 @@ export function buildMigrationTags(
 }
 
 /**
- * Check if a Blobbi needs migration to canonical format.
+ * Check if a Pets needs migration to canonical format.
  */
 export function needsCanonicalMigration(d: string): boolean {
-  return isLegacyBlobbiD(d);
+  return isLegacyPetsD(d);
 }
 
 /**
@@ -2013,10 +2099,10 @@ export function migratePetInHas(
 // ─── Legacy / Canonical Deduplication ──────────────────────────────────────────
 
 /**
- * Normalize a Blobbi name for equivalence comparison.
+ * Normalize a Pets name for equivalence comparison.
  * Lowercases and trims whitespace so "Jack", "jack", and " Jack " all match.
  */
-export function normalizeBlobbiName(name: string): string {
+export function normalizePetsName(name: string): string {
   return name.trim().toLowerCase();
 }
 
@@ -2035,7 +2121,7 @@ export function normalizeBlobbiName(name: string): string {
  *    and only applies to genuinely old legacy events with no visual tags.
  */
 function isCanonicalEquivalentToLegacy(
-  canonical: BlobbiCompanion,
+  canonical: PetsCompanion,
   legacyD: string,
   legacyName: string,
   legacyBaseColor: string | undefined,
@@ -2047,7 +2133,7 @@ function isCanonicalEquivalentToLegacy(
   // Priority 2: name + base_color (both must be present and equal)
   const canonicalBaseColor = getTagValue(canonical.event.tags, 'base_color');
   if (
-    normalizeBlobbiName(canonical.name) === legacyName &&
+    normalizePetsName(canonical.name) === legacyName &&
     legacyBaseColor !== undefined &&
     canonicalBaseColor !== undefined &&
     legacyBaseColor.toUpperCase() === canonicalBaseColor.toUpperCase()
@@ -2057,7 +2143,7 @@ function isCanonicalEquivalentToLegacy(
 
   // Priority 3: name-only when legacy has no base_color to compare
   if (
-    normalizeBlobbiName(canonical.name) === legacyName &&
+    normalizePetsName(canonical.name) === legacyName &&
     legacyBaseColor === undefined
   ) {
     return true;
@@ -2085,14 +2171,14 @@ function isCanonicalEquivalentToLegacy(
  * kept — no heuristic (name, color, etc.) grouping is applied.
  *
  * @param companions - All parsed companions (legacy + canonical)
- * @param profileHas - The profile.has array of owned Blobbi d-tags
+ * @param profileHas - The profile.has array of owned Pets d-tags
  * @returns Filtered companions with migrated legacy entries and canonical
  *          duplicates removed
  */
 export function filterMigratedLegacyCompanions(
-  companions: BlobbiCompanion[],
+  companions: PetsCompanion[],
   profileHas: string[],
-): BlobbiCompanion[] {
+): PetsCompanion[] {
   // Collect canonical companions for equivalence checks
   const canonicals = companions.filter((c) => !c.isLegacy);
 
@@ -2109,7 +2195,7 @@ export function filterMigratedLegacyCompanions(
     if (hasSet.has(c.d)) return true;
 
     // Check if any canonical companion is equivalent to this legacy one
-    const legacyName = normalizeBlobbiName(c.name);
+    const legacyName = normalizePetsName(c.name);
     const legacyBaseColor = getTagValue(c.event.tags, 'base_color');
 
     const hasEquivalent = canonicals.some((canonical) =>
@@ -2141,7 +2227,7 @@ export function filterMigratedLegacyCompanions(
  * Collapse canonical companions that were duplicated by a migration race.
  *
  * Two canonical companions are considered duplicates of the same logical
- * Blobbi if and only if both carry a `migrated_from` tag with the same
+ * Pets if and only if both carry a `migrated_from` tag with the same
  * value. For each such group the companion with the newest `created_at`
  * is kept; ties are broken by d-tag lexicographic order (deterministic).
  *
@@ -2149,12 +2235,12 @@ export function filterMigratedLegacyCompanions(
  * no heuristic grouping (name, color, etc.) is applied.
  */
 function collapseCanonicalDuplicates(
-  canonicals: BlobbiCompanion[],
-): BlobbiCompanion[] {
+  canonicals: PetsCompanion[],
+): PetsCompanion[] {
   // Companions without migrated_from — always kept
-  const ungrouped: BlobbiCompanion[] = [];
+  const ungrouped: PetsCompanion[] = [];
   // Group canonical companions by migrated_from value
-  const groups = new Map<string, BlobbiCompanion[]>();
+  const groups = new Map<string, PetsCompanion[]>();
 
   for (const c of canonicals) {
     const migratedFrom = getTagValue(c.event.tags, 'migrated_from');
@@ -2171,7 +2257,7 @@ function collapseCanonicalDuplicates(
   }
 
   // Pick the winner from each group: newest created_at, tie-break on d-tag
-  const winners: BlobbiCompanion[] = [...ungrouped];
+  const winners: PetsCompanion[] = [...ungrouped];
   for (const group of groups.values()) {
     let best = group[0];
     for (let i = 1; i < group.length; i++) {
@@ -2206,12 +2292,12 @@ function collapseCanonicalDuplicates(
  * @returns The best matching canonical companion, or undefined
  */
 export function findCanonicalEquivalent(
-  legacy: BlobbiCompanion,
-  companions: BlobbiCompanion[],
-): BlobbiCompanion | undefined {
-  const legacyName = normalizeBlobbiName(legacy.name);
+  legacy: PetsCompanion,
+  companions: PetsCompanion[],
+): PetsCompanion | undefined {
+  const legacyName = normalizePetsName(legacy.name);
   const legacyBaseColor = getTagValue(legacy.event.tags, 'base_color');
-  let best: BlobbiCompanion | undefined;
+  let best: PetsCompanion | undefined;
 
   for (const c of companions) {
     if (c.isLegacy) continue;
@@ -2227,12 +2313,12 @@ export function findCanonicalEquivalent(
 
 // ─── LocalStorage Cache Types ─────────────────────────────────────────────────
 
-export interface BlobbiBootCache {
+export interface PetsBootCache {
   /** The user's pubkey this cache belongs to */
   pubkey: string;
   profile: BlobbonautProfile | null;
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   cachedAt: number;
 }
 
-export const BLOBBI_CACHE_KEY = 'blobbi:boot-cache';
+export const PETS_CACHE_KEY = 'pets:boot-cache';

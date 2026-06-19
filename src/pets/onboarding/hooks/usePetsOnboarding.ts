@@ -1,5 +1,5 @@
 /**
- * useBlobbiOnboarding - Hook to manage Blobbi onboarding flow
+ * usePetsOnboarding - Hook to manage Pets onboarding flow
  * 
  * This hook orchestrates the entire onboarding process:
  * 1. Auto profile creation (using kind 0 name, no user input needed)
@@ -9,7 +9,7 @@
  * CRITICAL: The initial step is derived from the profile state, not hardcoded.
  * This ensures correct behavior on page refresh.
  * 
- * Profile creation is automatic - when the user enters Blobbi for the first time,
+ * Profile creation is automatic - when the user enters Pets for the first time,
  * the profile is created using their kind 0 display_name/name, falling back to
  * "Blobbonaut" if no name is available. This eliminates the need for a manual
  * name entry step.
@@ -23,32 +23,32 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import { fetchFreshBlobbonautProfile } from '@/blobbi/core/lib/fetchFreshBlobbonautProfile';
+import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
 
 import {
-  KIND_BLOBBI_STATE,
+  KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
   INITIAL_BLOBBONAUT_COINS,
-  BLOBBI_PREVIEW_REROLL_COST,
-  BLOBBI_ADOPTION_COST,
+  PETS_PREVIEW_REROLL_COST,
+  PETS_ADOPTION_COST,
   buildBlobbonautTags,
   updateBlobbonautTags,
   type BlobbonautProfile,
-} from '@/blobbi/core/lib/blobbi';
+} from '@/pets/core/lib/pets';
 
 import {
   generateEggPreview,
   updatePreviewName,
   previewToEventTags,
-  type BlobbiEggPreview,
-} from '../lib/blobbi-preview';
+  type PetsEggPreview,
+} from '../lib/pets-preview';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** 
  * Onboarding steps:
  * - 'creating-profile': Auto-creating profile (no user input needed)
- * - 'adoption-question': Ask if user wants to adopt a Blobbi
+ * - 'adoption-question': Ask if user wants to adopt a Pets
  * - 'preview': Show egg preview with reroll/adopt options
  */
 export type OnboardingStep = 'creating-profile' | 'adoption-question' | 'preview';
@@ -61,7 +61,7 @@ export interface OnboardingState {
   /** Which specific action is processing */
   actionInProgress: 'create-profile' | 'reroll' | 'adopt' | null;
   /** Current preview (null until preview step) */
-  preview: BlobbiEggPreview | null;
+  preview: PetsEggPreview | null;
   /** Whether the current preview is the first (free) one */
   isFirstPreview: boolean;
   /** Temporary coins for preview phase (before profile exists) */
@@ -81,7 +81,7 @@ export interface OnboardingActions {
   adoptPreview: () => Promise<void>;
 }
 
-export interface UseBlobbiOnboardingResult {
+export interface UsePetsOnboardingResult {
   /** Current onboarding state */
   state: OnboardingState;
   /** Actions to control onboarding */
@@ -102,7 +102,7 @@ export interface UseBlobbiOnboardingResult {
  * - Profile exists, no pets → 'adoption-question'
  * - Profile exists with pets → should not be in onboarding at all
  * 
- * Adoption-only mode (for "Adopt another Blobbi"):
+ * Adoption-only mode (for "Adopt another Pets"):
  * - Profile must exist → 'preview' (skip straight to egg preview)
  * - No profile → error case, should not happen
  */
@@ -125,7 +125,7 @@ function deriveInitialStep(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-interface UseBlobbiOnboardingOptions {
+interface UsePetsOnboardingOptions {
   /** Current profile (null if doesn't exist) */
   profile: BlobbonautProfile | null;
   /** Called to update profile event in cache after publishing */
@@ -142,13 +142,13 @@ interface UseBlobbiOnboardingOptions {
   onComplete?: () => void;
   /** 
    * If true, skip profile creation and adoption question, go directly to preview.
-   * Use this for "Adopt another Blobbi" flow for existing users.
+   * Use this for "Adopt another Pets" flow for existing users.
    * Requires profile to be non-null.
    */
   adoptionOnly?: boolean;
 }
 
-export function useBlobbiOnboarding({
+export function usePetsOnboarding({
   profile,
   updateProfileEvent,
   updateCompanionEvent,
@@ -157,7 +157,7 @@ export function useBlobbiOnboarding({
   setStoredSelectedD,
   onComplete,
   adoptionOnly = false,
-}: UseBlobbiOnboardingOptions): UseBlobbiOnboardingResult {
+}: UsePetsOnboardingOptions): UsePetsOnboardingResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -181,7 +181,7 @@ export function useBlobbiOnboarding({
   const [actionInProgress, setActionInProgress] = useState<'create-profile' | 'reroll' | 'adopt' | null>(null);
   
   // For adoption-only mode, generate preview immediately
-  const [preview, setPreview] = useState<BlobbiEggPreview | null>(() => {
+  const [preview, setPreview] = useState<PetsEggPreview | null>(() => {
     if (adoptionOnly && profile && user?.pubkey) {
       // Generate initial preview for adoption-only mode
       return generateEggPreview(user.pubkey, 'Egg');
@@ -199,14 +199,14 @@ export function useBlobbiOnboarding({
   useEffect(() => {
     // Skip sync logic in adoptionOnly mode - step is explicitly controlled
     if (adoptionOnly) {
-      console.log('[useBlobbiOnboarding] adoptionOnly mode - skipping auto-sync');
+      console.log('[usePetsOnboarding] adoptionOnly mode - skipping auto-sync');
       return;
     }
     
     const correctStep = deriveInitialStep(profile, false);
     
     // Debug log
-    console.log('[useBlobbiOnboarding] State sync check:', {
+    console.log('[usePetsOnboarding] State sync check:', {
       hasProfile: !!profile,
       profileName: profile?.name,
       profileHasLength: profile?.has?.length ?? 0,
@@ -217,7 +217,7 @@ export function useBlobbiOnboarding({
     // Case 1: Step is 'creating-profile' but profile exists → move to 'adoption-question'
     // This handles profile loading from cache/relay after initial render
     if (step === 'creating-profile' && profile) {
-      console.log('[useBlobbiOnboarding] Profile loaded, moving to adoption-question');
+      console.log('[usePetsOnboarding] Profile loaded, moving to adoption-question');
       setStep('adoption-question');
       setBlobbonautName(profile.name);
       return;
@@ -226,7 +226,7 @@ export function useBlobbiOnboarding({
     // Case 2: Step is 'adoption-question' but no profile → move back to 'creating-profile'
     // This handles edge cases where profile becomes null (shouldn't happen normally)
     if (step === 'adoption-question' && !profile) {
-      console.log('[useBlobbiOnboarding] Profile lost, moving back to creating-profile');
+      console.log('[usePetsOnboarding] Profile lost, moving back to creating-profile');
       setStep('creating-profile');
       setBlobbonautName(undefined);
       return;
@@ -235,7 +235,7 @@ export function useBlobbiOnboarding({
     // Case 3: Step is 'preview' but no profile → move back to 'creating-profile'
     // User somehow got to preview without a profile (shouldn't happen)
     if (step === 'preview' && !profile) {
-      console.log('[useBlobbiOnboarding] No profile in preview step, moving back to creating-profile');
+      console.log('[usePetsOnboarding] No profile in preview step, moving back to creating-profile');
       setStep('creating-profile');
       setPreview(null);
       setBlobbonautName(undefined);
@@ -279,7 +279,7 @@ export function useBlobbiOnboarding({
     // Determine the name to use: kind 0 name or fallback
     const name = suggestedName || 'Blobbonaut';
     
-    console.log('[useBlobbiOnboarding] Auto-creating profile with name:', name);
+    console.log('[usePetsOnboarding] Auto-creating profile with name:', name);
     
     const createProfileAsync = async () => {
       setIsProcessing(true);
@@ -305,7 +305,7 @@ export function useBlobbiOnboarding({
         invalidateProfile();
         
         toast({
-          title: 'Welcome to Blobbi!',
+          title: 'Welcome to Pets!',
           description: `Your profile has been created, ${name}!`,
         });
         
@@ -359,10 +359,10 @@ export function useBlobbiOnboarding({
     if (!user?.pubkey || !profile) return;
     
     // Check if can afford
-    if (coins < BLOBBI_PREVIEW_REROLL_COST) {
+    if (coins < PETS_PREVIEW_REROLL_COST) {
       toast({
         title: 'Not enough coins',
-        description: `You need ${BLOBBI_PREVIEW_REROLL_COST} coins to try another.`,
+        description: `You need ${PETS_PREVIEW_REROLL_COST} coins to try another.`,
         variant: 'destructive',
       });
       return;
@@ -377,7 +377,7 @@ export function useBlobbiOnboarding({
       const baseEvent = freshProfile?.event ?? profile.event;
       
       // First, deduct coins from profile
-      const newCoins = coins - BLOBBI_PREVIEW_REROLL_COST;
+      const newCoins = coins - PETS_PREVIEW_REROLL_COST;
       const updatedTags = updateBlobbonautTags(baseEvent.tags, {
         coins: newCoins.toString(),
       });
@@ -434,16 +434,16 @@ export function useBlobbiOnboarding({
   }, [user?.pubkey, nostr, profile, coins, preview?.name, publishEvent, updateProfileEvent, invalidateProfile]);
   
   /**
-   * Adopt the current preview - costs coins and creates the Blobbi event
+   * Adopt the current preview - costs coins and creates the Pets event
    */
   const adoptPreview = useCallback(async () => {
     if (!user?.pubkey || !profile || !preview) return;
     
     // Check if can afford
-    if (coins < BLOBBI_ADOPTION_COST) {
+    if (coins < PETS_ADOPTION_COST) {
       toast({
         title: 'Not enough coins',
-        description: `You need ${BLOBBI_ADOPTION_COST} coins to adopt.`,
+        description: `You need ${PETS_ADOPTION_COST} coins to adopt.`,
         variant: 'destructive',
       });
       return;
@@ -453,12 +453,12 @@ export function useBlobbiOnboarding({
     setActionInProgress('adopt');
     
     try {
-      // 1. Publish the Blobbi egg event using exact preview data
+      // 1. Publish the Pets egg event using exact preview data
       const eggTags = previewToEventTags(preview);
       
       const eggEvent = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
-        content: 'A new Blobbi egg!',
+        kind: KIND_PETS_STATE,
+        content: 'A new Pets egg!',
         tags: eggTags,
         created_at: preview.createdAt,
       });
@@ -466,15 +466,15 @@ export function useBlobbiOnboarding({
       updateCompanionEvent(eggEvent);
       
       // 2. Update profile: deduct coins, add to has list
-      // NOTE: We do NOT set current_companion here because the adopted Blobbi
+      // NOTE: We do NOT set current_companion here because the adopted Pets
       // is still an egg. The companion mechanic only becomes available after hatching.
       // Eggs should never be auto-assigned as the floating companion.
-      // NOTE: blobbi_onboarding_done is NOT set here — adoption alone does not
+      // NOTE: pets_onboarding_done is NOT set here — adoption alone does not
       // complete onboarding. It is set when the first-hatch tour finishes.
       const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
       const baseEvent = freshProfile?.event ?? profile.event;
       
-      const newCoins = coins - BLOBBI_ADOPTION_COST;
+      const newCoins = coins - PETS_ADOPTION_COST;
       const newHas = [...(freshProfile?.has ?? profile.has), preview.d];
       
       const profileUpdates: Record<string, string | string[]> = {
@@ -493,7 +493,7 @@ export function useBlobbiOnboarding({
       
       updateProfileEvent(profileEvent);
       
-      // 3. Set localStorage selection to the new Blobbi
+      // 3. Set localStorage selection to the new Pets
       setStoredSelectedD(preview.d);
       
       // 4. Invalidate queries
@@ -508,7 +508,7 @@ export function useBlobbiOnboarding({
       // 5. Complete onboarding
       onComplete?.();
     } catch (error) {
-      console.error('Failed to adopt Blobbi:', error);
+      console.error('Failed to adopt Pets:', error);
       toast({
         title: 'Failed to adopt',
         description: error instanceof Error ? error.message : 'Unknown error',

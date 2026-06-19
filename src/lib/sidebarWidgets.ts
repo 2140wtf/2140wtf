@@ -2,9 +2,7 @@ import type { ComponentType } from 'react';
 import {
   TrendingUp,
   Flame,
-  Egg,
   SmilePlus,
-  Bot,
   Camera,
   Music,
   CalendarDays,
@@ -12,7 +10,6 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
-import { BlueskyIcon } from '@/components/icons/BlueskyIcon';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,17 +78,6 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     href: '/wikipedia',
   },
   {
-    id: 'bluesky',
-    label: 'Bluesky',
-    description: 'Trending posts from Bluesky',
-    icon: BlueskyIcon,
-    defaultHeight: 400,
-    minHeight: 250,
-    maxHeight: 700,
-    category: 'discovery',
-    href: '/bluesky',
-  },
-  {
     id: 'nostr-clients',
     label: 'Nostr Clients',
     description: 'Distinct authors per client over the last 30 days',
@@ -102,19 +88,19 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: 'discovery',
     href: '/trends',
   },
+  {
+    id: 'prediction-markets',
+    label: 'Prediction Markets',
+    description: 'Kind 38000 prediction markets from BAO',
+    icon: BarChart3,
+    defaultHeight: 360,
+    minHeight: 250,
+    maxHeight: 650,
+    category: 'discovery',
+    href: '/prediction-markets',
+  },
 
   // Personal
-  {
-    id: 'blobbi',
-    label: 'Blobbi',
-    description: 'Your virtual pet companion',
-    icon: Egg,
-    defaultHeight: 350,
-    minHeight: 200,
-    maxHeight: 500,
-    category: 'personal',
-    href: '/blobbi',
-  },
   {
     id: 'status',
     label: 'Status',
@@ -126,19 +112,6 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     category: 'personal',
     href: '/profile',
   },
-  {
-    id: 'ai-chat',
-    label: 'AI Chat',
-    description: 'Chat with Shakespeare AI',
-    icon: Bot,
-    defaultHeight: 300,
-    minHeight: 200,
-    maxHeight: 700,
-    category: 'personal',
-    href: '/ai-chat',
-    fillHeight: true,
-  },
-
   // Content feeds
   {
     id: 'feed:photos',

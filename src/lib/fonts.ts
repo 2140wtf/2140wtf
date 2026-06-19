@@ -286,3 +286,51 @@ export async function loadBundledFont(family: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Hand-picked font options used by theme-derived cards (e.g. Love List).
+ * Each entry maps a value key to a display label and CSS font-family string.
+ */
+export const FONT_OPTIONS = [
+  { value: 'fredoka',     label: 'Fredoka',     family: 'Fredoka Variable, Fredoka, sans-serif' },
+  { value: 'nunito',      label: 'Nunito',      family: 'Nunito Variable, Nunito, sans-serif' },
+  { value: 'playfair',   label: 'Playfair',   family: 'Playfair Display Variable, Playfair Display, serif' },
+  { value: 'caveat',     label: 'Caveat',     family: 'Caveat, cursive' },
+  { value: 'pacifico',   label: 'Pacifico',   family: 'Pacifico, cursive' },
+  { value: 'pirata',     label: 'Pirata',     family: 'Pirata One, cursive' },
+  { value: 'marker',     label: 'Marker',     family: 'Permanent Marker, cursive' },
+  { value: 'typewriter', label: 'Typewriter', family: 'Special Elite, cursive' },
+  { value: 'creepster',  label: 'Creepster',  family: 'Creepster, cursive' },
+  { value: 'pixel',      label: 'Pixel',      family: 'Silkscreen, monospace' },
+  { value: 'mono',       label: 'Mono',       family: 'ui-monospace, monospace' },
+];
+
+/**
+ * Resolve the effective font-family string for a theme card.
+ *
+ * If the user has selected a non-default font, that takes priority.
+ * Otherwise the stationery's themeFont is used.
+ * Falls back to the default font if neither is set.
+ */
+export function resolveFont(
+  selectedFamily: string,
+  themeFont: string | undefined,
+): string {
+  const defaultFamily = FONT_OPTIONS[0].family;
+  const rawFont = selectedFamily !== defaultFamily ? selectedFamily : themeFont;
+  if (!rawFont) return defaultFamily;
+  return rawFont.includes(',') ? rawFont : `${rawFont}, ${defaultFamily}`;
+}
+
+/**
+ * Ensure all bundled fonts referenced in a CSS font-family string are loaded.
+ * Parses the comma-separated list, strips quotes/whitespace, and calls
+ * loadBundledFont for each segment. No-ops for already-loaded or unknown fonts.
+ */
+export function ensureLetterFonts(cssFontFamily: string | undefined): void {
+  if (!cssFontFamily) return;
+  const families = cssFontFamily.split(',').map((s) => s.trim().replace(/^["']|["']$/g, ''));
+  for (const family of families) {
+    if (family) loadBundledFont(family);
+  }
+}

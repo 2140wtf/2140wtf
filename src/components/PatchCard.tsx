@@ -1,6 +1,5 @@
 import type { NostrEvent } from "@nostrify/nostrify";
-import { FileText, GitCommit, User, Wand2 } from "lucide-react";
-import { openUrl } from "@/lib/downloadFile";
+import { FileText, GitCommit, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface PatchCardProps {
@@ -61,9 +60,6 @@ export function PatchCard({ event, preview = true }: PatchCardProps) {
 	const isRevision = event.tags.some(
 		([n, v]) => n === "t" && v === "root-revision",
 	);
-	const hasShakespeare = event.tags.some(
-		([n, v]) => n === "t" && v === "shakespeare",
-	);
 	const repoTag = event.tags.find(([n]) => n === "a")?.[1];
 	const repoName = repoTag?.split(":")[2] ?? "";
 	const commitId = event.tags.find(([n]) => n === "commit")?.[1];
@@ -73,7 +69,7 @@ export function PatchCard({ event, preview = true }: PatchCardProps) {
 		.filter(([n]) => n === "t")
 		.map(([, v]) => v)
 		.filter(
-			(t) => t !== "root" && t !== "root-revision" && t !== "shakespeare",
+			(t) => t !== "root" && t !== "root-revision",
 		);
 
 	return (
@@ -135,20 +131,7 @@ export function PatchCard({ event, preview = true }: PatchCardProps) {
 						</div>
 					)}
 
-					{/* Shakespeare action */}
-					{hasShakespeare && (
-						<button
-							type="button"
-							className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-							onClick={(e) => {
-								e.stopPropagation();
-								openUrl("https://shakespeare.diy");
-							}}
-						>
-							<Wand2 className="size-3" />
-							Edit with Shakespeare
-						</button>
-					)}
+
 				</div>
 			</div>
 

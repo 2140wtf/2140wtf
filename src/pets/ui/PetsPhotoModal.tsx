@@ -1,5 +1,5 @@
 /**
- * BlobbiPhotoModal - Fullscreen photo overlay
+ * PetsPhotoModal - Fullscreen photo overlay
  *
  * Simple blurred overlay with the polaroid photo centered,
  * and download/share buttons below. Tap outside to close.
@@ -9,20 +9,20 @@ import { useState, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Download, Share2, Loader2, X } from 'lucide-react';
 
-import { BlobbiPolaroidCard } from './BlobbiPolaroidCard';
+import { PetsPolaroidCard } from './PetsPolaroidCard';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
 import { cn } from '@/lib/utils';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import { Capacitor } from '@capacitor/core';
 
-export interface BlobbiPhotoModalProps {
+export interface PetsPhotoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  companion: BlobbiCompanion;
+  companion: PetsCompanion;
 }
 
 function dataUrlToFile(dataUrl: string, filename: string): File {
@@ -37,11 +37,11 @@ function dataUrlToFile(dataUrl: string, filename: string): File {
   return new File([u8arr], filename, { type: mime });
 }
 
-export function BlobbiPhotoModal({
+export function PetsPhotoModal({
   open,
   onOpenChange,
   companion,
-}: BlobbiPhotoModalProps) {
+}: PetsPhotoModalProps) {
   const polaroidRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -60,7 +60,7 @@ export function BlobbiPhotoModal({
         skipFonts: true,
       });
     } catch (error) {
-      console.error('[BlobbiPhoto] Failed to generate image:', error);
+      console.error('[PetsPhoto] Failed to generate image:', error);
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to capture photo.' });
       return null;
     }
@@ -114,10 +114,10 @@ export function BlobbiPhotoModal({
         tags: [['imeta', ...imetaFields]],
       });
 
-      toast({ title: 'Posted!', description: 'Your Blobbi photo has been shared.' });
+      toast({ title: 'Posted!', description: 'Your Pets photo has been shared.' });
       onOpenChange(false);
     } catch (error) {
-      console.error('[BlobbiPhoto] Failed to share:', error);
+      console.error('[PetsPhoto] Failed to share:', error);
       toast({ variant: 'destructive', title: 'Failed to post', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setIsSharing(false);
@@ -146,7 +146,7 @@ export function BlobbiPhotoModal({
 
       {/* Polaroid card */}
       <div className="relative z-10 animate-in fade-in zoom-in-95 duration-200">
-        <BlobbiPolaroidCard
+        <PetsPolaroidCard
           ref={polaroidRef}
           companion={companion}
           showStage

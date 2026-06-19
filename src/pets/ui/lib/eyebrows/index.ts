@@ -1,5 +1,5 @@
 /**
- * Blobbi Eyebrow System
+ * Pets Eyebrow System
  * 
  * Canonical owner of all eyebrow-related logic:
  * - Generation (straight, curved, per-eye overrides)
@@ -12,7 +12,7 @@
 export type {
   EyebrowConfig,
   AnimatedEyebrowsConfig,
-  BlobbiVariant,
+  PetsVariant,
 } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────

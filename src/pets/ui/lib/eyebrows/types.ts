@@ -8,9 +8,9 @@ import type { EyePosition } from '../eyes';
 export type { EyePosition };
 
 /**
- * Blobbi variant for variant-specific adjustments.
+ * Pets variant for variant-specific adjustments.
  */
-export type BlobbiVariant = 'baby' | 'adult';
+export type PetsVariant = 'baby' | 'adult';
 
 /**
  * Configuration for eyebrow generation.

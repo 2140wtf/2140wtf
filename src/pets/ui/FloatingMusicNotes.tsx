@@ -1,7 +1,7 @@
 /**
  * FloatingMusicNotes - Animated music emoji overlay
  * 
- * Renders floating ♪ ♫ ♬ symbols around the Blobbi when music is playing.
+ * Renders floating ♪ ♫ ♬ symbols around the Pets when music is playing.
  * Uses CSS animations for smooth, performant floating effect.
  */
 
@@ -34,9 +34,9 @@ const NOTE_CONFIGS = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * Renders floating music note emojis around the Blobbi.
+ * Renders floating music note emojis around the Pets.
  * 
- * Position this component as an overlay on the Blobbi container.
+ * Position this component as an overlay on the Pets container.
  * Notes float upward and fade out, creating a gentle music visualization.
  */
 export function FloatingMusicNotes({ active, className }: FloatingMusicNotesProps) {

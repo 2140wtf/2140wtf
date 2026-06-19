@@ -1,52 +1,52 @@
 /**
- * BlobbiActionsContext - Consumer Hooks
+ * PetsActionsContext - Consumer Hooks
  *
- * Contains the heavy consumer hooks (useBlobbiActions, useBlobbiActionsRegistration)
- * that depend on useBlobbiItemUse and the full Blobbi action system.
+ * Contains the heavy consumer hooks (usePetsActions, usePetsActionsRegistration)
+ * that depend on usePetsItemUse and the full Pets action system.
  *
- * The lightweight provider component lives in BlobbiActionsProvider.tsx so it
- * can be imported at the app root without pulling in ~450K of Blobbi code.
+ * The lightweight provider component lives in PetsActionsProvider.tsx so it
+ * can be imported at the app root without pulling in ~450K of Pets code.
  *
- * Re-exports everything from BlobbiActionsProvider.tsx for backward compatibility.
+ * Re-exports everything from PetsActionsProvider.tsx for backward compatibility.
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useBlobbiItemUse } from './useBlobbiItemUse';
+import { usePetsItemUse } from './usePetsItemUse';
 import {
-  BlobbiActionsContext,
+  PetsActionsContext,
   type UseItemFunction,
   type UseItemResult,
-  type BlobbiActionsContextValue,
-  type BlobbiActionsContextInternal,
-} from './BlobbiActionsContextDef';
+  type PetsActionsContextValue,
+  type PetsActionsContextInternal,
+} from './PetsActionsContextDef';
 
 // Re-export types and context from the def module for backward compatibility
 export {
-  BlobbiActionsContext,
+  PetsActionsContext,
   type UseItemFunction,
   type UseItemResult,
-  type BlobbiActionsContextValue,
-  type BlobbiActionsContextInternal,
+  type PetsActionsContextValue,
+  type PetsActionsContextInternal,
 };
 
 // ─── Consumer Hook ────────────────────────────────────────────────────────────
 
 /**
- * Hook to access Blobbi actions from any component (e.g., BlobbiCompanionLayer).
+ * Hook to access Pets actions from any component (e.g., PetsCompanionLayer).
  * 
  * Returns the context value with item-use functionality.
  * Uses:
- * 1. Registered function from BlobbiPage (if available) - better cache access
- * 2. Built-in useBlobbiItemUse hook as fallback - works anywhere
+ * 1. Registered function from PetsPage (if available) - better cache access
+ * 2. Built-in usePetsItemUse hook as fallback - works anywhere
  * 
  * Uses subscription pattern to only re-render when necessary.
  */
-export function useBlobbiActions(): BlobbiActionsContextValue {
-  const context = useContext(BlobbiActionsContext);
+export function usePetsActions(): PetsActionsContextValue {
+  const context = useContext(PetsActionsContext);
   
   // Built-in fallback item use hook
-  const fallbackItemUse = useBlobbiItemUse();
+  const fallbackItemUse = usePetsItemUse();
   
   // Force re-render counter (only used when registration changes)
   const [, forceUpdate] = useState(0);
@@ -60,13 +60,13 @@ export function useBlobbiActions(): BlobbiActionsContextValue {
   }, [context]);
   
   // Create stable useItem function that:
-  // 1. Uses registered function if available (from BlobbiPage)
+  // 1. Uses registered function if available (from PetsPage)
   // 2. Falls back to built-in hook if no registration
   const useItem = useCallback<UseItemFunction>(async (itemId, action) => {
-    // Try registered function first (from BlobbiPage)
+    // Try registered function first (from PetsPage)
     if (context?.registerRef.current) {
       if (import.meta.env.DEV) {
-        console.log('[BlobbiActions] Using registered item-use function');
+        console.log('[PetsActions] Using registered item-use function');
       }
       return context.registerRef.current(itemId, action);
     }
@@ -74,17 +74,17 @@ export function useBlobbiActions(): BlobbiActionsContextValue {
     // Check if fallback can handle it
     if (!fallbackItemUse.canUseItems) {
       if (import.meta.env.DEV) {
-        console.warn('[BlobbiActions] Cannot use items - no companion selected');
+        console.warn('[PetsActions] Cannot use items - no companion selected');
       }
       return {
         success: false,
-        error: 'No companion selected. Please select a Blobbi as your companion first.',
+        error: 'No companion selected. Please select a Pets as your companion first.',
       };
     }
     
     // Use fallback
     if (import.meta.env.DEV) {
-      console.log('[BlobbiActions] Using fallback item-use hook');
+      console.log('[PetsActions] Using fallback item-use hook');
     }
     return fallbackItemUse.useItem(itemId, action);
   }, [context, fallbackItemUse]);
@@ -110,21 +110,21 @@ export function useBlobbiActions(): BlobbiActionsContextValue {
 // ─── Registration Hook ────────────────────────────────────────────────────────
 
 /**
- * Hook for BlobbiPage to register its item-use function.
+ * Hook for PetsPage to register its item-use function.
  * 
- * Call this in BlobbiPage with the current useItem function and isUsingItem state.
+ * Call this in PetsPage with the current useItem function and isUsingItem state.
  * The registration will be automatically cleaned up on unmount.
  * 
- * When registered, BlobbiPage's item-use function takes priority over the fallback.
- * This is preferred when on /blobbi because BlobbiPage has better cache access.
+ * When registered, PetsPage's item-use function takes priority over the fallback.
+ * This is preferred when on /pets because PetsPage has better cache access.
  * 
  * Uses refs to avoid triggering re-renders in consumers on every prop change.
  */
-export function useBlobbiActionsRegistration(
+export function usePetsActionsRegistration(
   useItemFn: UseItemFunction | null,
   isUsingItem: boolean
 ): void {
-  const context = useContext(BlobbiActionsContext);
+  const context = useContext(PetsActionsContext);
   
   // Track previous values to detect actual changes
   const prevCanUseRef = useRef<boolean>(false);
@@ -148,7 +148,7 @@ export function useBlobbiActionsRegistration(
   useEffect(() => {
     if (!context) {
       if (import.meta.env.DEV) {
-        console.warn('[BlobbiActions] Cannot register - BlobbiActionsProvider not found');
+        console.warn('[PetsActions] Cannot register - PetsActionsProvider not found');
       }
       return;
     }
@@ -166,7 +166,7 @@ export function useBlobbiActionsRegistration(
       context.notifyUpdate();
       
       if (import.meta.env.DEV) {
-        console.log('[BlobbiActions] Registration changed:', { canUseItems, isUsingItem });
+        console.log('[PetsActions] Registration changed:', { canUseItems, isUsingItem });
       }
     }
   }, [context, useItemFn, stableUseItem, isUsingItem]);
@@ -181,7 +181,7 @@ export function useBlobbiActionsRegistration(
         context.notifyUpdate();
         
         if (import.meta.env.DEV) {
-          console.log('[BlobbiActions] Unregistered on unmount');
+          console.log('[PetsActions] Unregistered on unmount');
         }
       }
     };

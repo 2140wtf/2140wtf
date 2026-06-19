@@ -1,4 +1,4 @@
-// src/blobbi/actions/hooks/useActiveTaskProcess.ts
+// src/pets/actions/hooks/useActiveTaskProcess.ts
 
 /**
  * Central abstraction for the active task process (hatch or evolve).
@@ -17,7 +17,7 @@
  */
 
 import { useMemo } from 'react';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { HatchTask, HatchTasksResult } from './useHatchTasks';
 import type { EvolveTasksResult } from './useEvolveTasks';
 import { HATCH_REQUIRED_INTERACTIONS } from './useHatchTasks';
@@ -132,7 +132,7 @@ export function filterDynamicTasks(tasks: HatchTask[]): HatchTask[] {
  * ```
  */
 export function useActiveTaskProcess(
-  companion: BlobbiCompanion | null,
+  companion: PetsCompanion | null,
   hatchTasks: HatchTasksResult,
   evolveTasks: EvolveTasksResult
 ): ActiveTaskProcessResult {

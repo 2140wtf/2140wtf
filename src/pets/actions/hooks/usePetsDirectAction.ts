@@ -1,4 +1,4 @@
-// src/blobbi/actions/hooks/useBlobbiDirectAction.ts
+// src/pets/actions/hooks/usePetsDirectAction.ts
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -6,24 +6,24 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
+  KIND_PETS_STATE,
+  updatePetsTags,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
 import {
   clampStat,
   applyStat,
   DIRECT_ACTION_METADATA,
   type DirectAction,
-} from '../lib/blobbi-action-utils';
+} from '../lib/pets-action-utils';
 import { trackMultipleDailyMissionActions, trackEvolutionMissionTally, readEvolutionFromStorage } from '../lib/daily-mission-tracker';
 import type { DailyMissionAction } from '../lib/daily-missions';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
-import { getStreakTagUpdates } from '../lib/blobbi-streak';
-import { calculateActionXP, applyXPGain, formatXPGain } from '../lib/blobbi-xp';
-import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/blobbi/core/lib/blobbi-interaction';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
+import { getStreakTagUpdates } from '../lib/pets-streak';
+import { calculateActionXP, applyXPGain, formatXPGain } from '../lib/pets-xp';
+import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
 // Import NostrEvent type
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -55,25 +55,25 @@ export interface DirectActionResult {
 }
 
 /**
- * Parameters for the useBlobbiDirectAction hook
+ * Parameters for the usePetsDirectAction hook
  */
-export interface UseBlobbiDirectActionParams {
-  companion: BlobbiCompanion | null;
+export interface UsePetsDirectActionParams {
+  companion: PetsCompanion | null;
   /** Called after ensuring companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
-  /** UI surface originating the interaction (used for kind 1124 source tag). Defaults to 'blobbi-page'. */
+  /** UI surface originating the interaction (used for kind 1124 source tag). Defaults to 'pets-page'. */
   interactionSource?: string;
 }
 
 /**
- * Hook to execute a direct action on a Blobbi companion.
+ * Hook to execute a direct action on a Pets companion.
  * Direct actions (play_music, sing) don't require selecting an item.
  * They directly affect happiness stat.
  * 
@@ -82,15 +82,15 @@ export interface UseBlobbiDirectActionParams {
  * 2. Ensures canonical format before action
  * 3. Applies accumulated decay
  * 4. Applies happiness boost
- * 5. Updates Blobbi state (kind 31124)
+ * 5. Updates Pets state (kind 31124)
  * 6. Invalidates relevant queries
  */
-export function useBlobbiDirectAction({
+export function usePetsDirectAction({
   companion,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  interactionSource = 'blobbi-page',
-}: UseBlobbiDirectActionParams) {
+  interactionSource = 'pets-page',
+}: UsePetsDirectActionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const queryClient = useQueryClient();
@@ -115,7 +115,7 @@ export function useBlobbiDirectAction({
       // ─── Apply Accumulated Decay First ───
       // CRITICAL: Use canonical.companion for decay calculations, not the stale outer companion
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -149,7 +149,7 @@ export function useBlobbiDirectAction({
         statsUpdate.energy = clampStat(statsAfterDecay.energy).toString();
       }
 
-      // ─── Update Blobbi State Event (kind 31124) ───
+      // ─── Update Pets State Event (kind 31124) ───
       const nowStr = now.toString();
       
       // If incubating or evolving, increment the interaction counter in evolution missions
@@ -179,7 +179,7 @@ export function useBlobbiDirectAction({
       const currentXP = canonical.companion.experience ?? 0;
       const newXP = applyXPGain(currentXP, xpGained);
       
-      const blobbiTags = updateBlobbiTags(updatedTags, {
+      const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
         experience: newXP.toString(),
@@ -187,23 +187,23 @@ export function useBlobbiDirectAction({
         last_decay_at: nowStr,
       });
 
-      const blobbiEvent = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+      const petsEvent = await publishEvent({
+        kind: KIND_PETS_STATE,
         content,
-        tags: blobbiTags,
+        tags: petsTags,
         prev: canonical.companion.event,
       });
 
-      updateCompanionEvent(blobbiEvent);
+      updateCompanionEvent(petsEvent);
 
       // ─── Emit kind 1124 interaction event (best-effort, fire-and-forget) ───
-      // ownerPubkey comes from the target Blobbi event, not the logged-in user,
+      // ownerPubkey comes from the target Pets event, not the logged-in user,
       // so the tags remain correct if this path is later reused for non-owner interactions.
       const interactionAction = INTERNAL_TO_INTERACTION_ACTION[action];
       if (interactionAction) {
         emitInteractionEvent(publishEvent, {
           ownerPubkey: canonical.companion.event.pubkey,
-          blobbiDTag: canonical.companion.d,
+          petsDTag: canonical.companion.d,
           action: interactionAction,
           source: interactionSource,
         });
@@ -215,7 +215,7 @@ export function useBlobbiDirectAction({
         // This invalidation ensures eventual consistency for the projection.
         const coordinate = `31124:${canonical.companion.event.pubkey}:${canonical.companion.d}`;
         queryClient.invalidateQueries({
-          queryKey: ['blobbi-interactions', coordinate],
+          queryKey: ['pets-interactions', coordinate],
         });
       }
 
@@ -231,7 +231,7 @@ export function useBlobbiDirectAction({
       const xpText = formatXPGain(xpGained);
       toast({
         title: `${actionMeta.label} complete!`,
-        description: `Your Blobbi's happiness increased by ${happinessChange}! ${xpText}`,
+        description: `Your Pets's happiness increased by ${happinessChange}! ${xpText}`,
       });
 
       // Track daily mission progress

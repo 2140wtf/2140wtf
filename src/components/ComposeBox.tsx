@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Paperclip, Smile, AlertTriangle, X, Loader2, Mic, Square, Sticker, BarChart3, Plus, ChevronLeft } from 'lucide-react';
+import { Paperclip, Smile, AlertTriangle, X, Loader2, Mic, Square, Sticker, BarChart3, Plus, ChevronLeft, Zap, ImageIcon } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { encode as blurhashEncode } from 'blurhash';
 import { useNostr } from '@nostrify/react';
@@ -36,7 +36,9 @@ import { tryNeventEncode } from '@/lib/safeNip19';
 import { useAppContext } from '@/hooks/useAppContext';
 import type { EventStats } from '@/hooks/useTrending';
 import { cn } from '@/lib/utils';
+import { canZap } from '@/lib/canZap';
 import { notificationSuccess } from '@/lib/haptics';
+import { generateUUID } from '@/lib/uuid';
 import { extractVideoUrls, extractAudioUrls, IMETA_MEDIA_URL_REGEX, IMETA_MEDIA_URL_TEST_REGEX, mimeFromExt } from '@/lib/mediaUrls';
 
 /** Lazy-loaded EmojiPicker — keeps emoji-mart + its data out of the main bundle. */
@@ -244,6 +246,9 @@ export function ComposeBox({
   ]);
   const [pollType, setPollType] = useState<'singlechoice' | 'multiplechoice'>('singlechoice');
   const [pollDuration, setPollDuration] = useState<7 | 3 | 1 | 0>(7);
+  const [pollFlavor, setPollFlavor] = useState<'free' | 'zap'>('zap');
+  const [zapMin, setZapMin] = useState('');
+  const [zapMax, setZapMax] = useState('');
   const [removedEmbeds, setRemovedEmbeds] = useState<Set<string>>(new Set());
   /** Maps uploaded file URLs to their NIP-94 tags (grouped per upload). */
   const [uploadedFileGroups, setUploadedFileGroups] = useState<Map<string, string[][]>>(new Map());
@@ -271,6 +276,9 @@ export function ComposeBox({
     setPollOptions([{ id: pollOptionId(), label: '' }, { id: pollOptionId(), label: '' }]);
     setPollType('singlechoice');
     setPollDuration(7);
+    setPollFlavor('zap');
+    setZapMin('');
+    setZapMax('');
     setRemovedEmbeds(new Set());
     setUploadedFileGroups(new Map());
     setWebxdcUuids(new Map());
@@ -636,7 +644,7 @@ export function ComposeBox({
 
       // For .xdc files, generate a UUID and extract manifest metadata
       if (isXdc) {
-        const uuid = crypto.randomUUID();
+        const uuid = generateUUID();
         setWebxdcUuids((prev) => new Map(prev).set(url, uuid));
 
         // Extract name and icon from the .xdc archive
@@ -1103,12 +1111,54 @@ export function ComposeBox({
     if (!finalContent || filledOptions.length < 2 || !user || isPollPending) return;
 
     const tags: string[][] = [];
-    for (const opt of filledOptions) {
-      tags.push(['option', opt.id, opt.label.trim()]);
-    }
-    tags.push(['polltype', pollType]);
-    if (pollDuration > 0) {
-      tags.push(['endsAt', String(Math.floor(Date.now() / 1000) + pollDuration * 86_400)]);
+    const now = Math.floor(Date.now() / 1000);
+
+    if (pollFlavor === 'zap') {
+      // NIP-69 zap poll.
+      if (!canZap(metadata)) {
+        toast({
+          title: 'Lightning address required',
+          description: 'Add a lightning address (lud16) to your profile to create zap polls.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const primaryRelay = config.relayMetadata.relays[0]?.url;
+      if (!primaryRelay) {
+        toast({ title: 'Error', description: 'No primary relay configured.', variant: 'destructive' });
+        return;
+      }
+
+      tags.push(['p', user.pubkey, primaryRelay]);
+      filledOptions.forEach((opt, idx) => {
+        tags.push(['poll_option', String(idx), opt.label.trim()]);
+      });
+
+      const minSats = zapMin.trim() ? parseInt(zapMin.trim(), 10) : undefined;
+      const maxSats = zapMax.trim() ? parseInt(zapMax.trim(), 10) : undefined;
+      if (minSats !== undefined && Number.isFinite(minSats) && minSats > 0) {
+        tags.push(['value_minimum', String(minSats)]);
+      }
+      if (maxSats !== undefined && Number.isFinite(maxSats) && maxSats > 0) {
+        tags.push(['value_maximum', String(maxSats)]);
+      }
+      if (minSats !== undefined && maxSats !== undefined && minSats > maxSats) {
+        toast({ title: 'Error', description: 'Minimum sats cannot exceed maximum sats.', variant: 'destructive' });
+        return;
+      }
+      if (pollDuration > 0) {
+        tags.push(['closed_at', String(now + pollDuration * 86_400)]);
+      }
+    } else {
+      // NIP-88 free poll.
+      for (const opt of filledOptions) {
+        tags.push(['option', opt.id, opt.label.trim()]);
+      }
+      tags.push(['polltype', pollType]);
+      if (pollDuration > 0) {
+        tags.push(['endsAt', String(now + pollDuration * 86_400)]);
+      }
     }
 
     // NIP-92: Add imeta tags for media URLs in content
@@ -1127,14 +1177,18 @@ export function ComposeBox({
       }
     }
 
-    tags.push(['alt', `Poll: ${finalContent}`]);
+    tags.push(['alt', pollFlavor === 'zap' ? `Zap poll: ${finalContent}` : `Poll: ${finalContent}`]);
 
     try {
-      await createEvent({ kind: 1068, content: finalContent, tags });
+      await createEvent({
+        kind: pollFlavor === 'zap' ? 6969 : 1068,
+        content: finalContent,
+        tags,
+      });
       resetComposeState();
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       notificationSuccess();
-      toast({ title: 'Poll published!' });
+      toast({ title: pollFlavor === 'zap' ? 'Zap poll published!' : 'Poll published!' });
       onSuccess?.();
     } catch {
       toast({ title: 'Error', description: 'Failed to publish poll.', variant: 'destructive' });
@@ -1142,7 +1196,15 @@ export function ComposeBox({
   };
 
   const pollFilledCount = pollOptions.filter((o) => o.label.trim()).length;
-  const isPollValid = content.trim().length > 0 && pollFilledCount >= 2;
+  const parsedZapMin = zapMin.trim() ? parseInt(zapMin.trim(), 10) : undefined;
+  const parsedZapMax = zapMax.trim() ? parseInt(zapMax.trim(), 10) : undefined;
+  const isPollValid =
+    content.trim().length > 0 &&
+    pollFilledCount >= 2 &&
+    (pollFlavor !== 'zap' || canZap(metadata)) &&
+    (parsedZapMin === undefined || Number.isFinite(parsedZapMin)) &&
+    (parsedZapMax === undefined || Number.isFinite(parsedZapMax)) &&
+    (parsedZapMin === undefined || parsedZapMax === undefined || parsedZapMin <= parsedZapMax);
 
   const isExpanded = forceExpanded || expanded || content.length > 0 || !compact;
 
@@ -1315,23 +1377,105 @@ export function ComposeBox({
               )}
             </div>
 
-            {/* Settings row — pill toggles */}
+            {/* Poll flavor selector */}
             <div className="flex flex-wrap gap-2 pt-0.5">
-              {(['singlechoice', 'multiplechoice'] as const).map((t) => (
+              {(['zap', 'free'] as const).map((f) => (
                 <button
-                  key={t}
+                  key={f}
                   type="button"
-                  onClick={() => setPollType(t)}
+                  onClick={() => {
+                    setPollFlavor(f);
+                    if (f === 'zap') setPollType('singlechoice');
+                  }}
                   className={cn(
-                    'text-xs px-2.5 py-1 rounded-full border transition-colors',
-                    pollType === t
+                    'inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                    pollFlavor === f
                       ? 'border-primary bg-primary/10 text-primary font-medium'
                       : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30',
                   )}
                 >
-                  {t === 'singlechoice' ? 'Single choice' : 'Multiple choice'}
+                  {f === 'zap' ? (
+                    <>
+                      <Zap className="size-3" />
+                      Zap to vote
+                    </>
+                  ) : (
+                    <>
+                      <BarChart3 className="size-3" />
+                      Free vote
+                    </>
+                  )}
                 </button>
               ))}
+            </div>
+
+            {/* Add image to poll question */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || !user}
+              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-border text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-40"
+            >
+              {isUploading ? <Loader2 className="size-3 animate-spin" /> : <ImageIcon className="size-3" />}
+              Add image
+            </button>
+
+            {/* Zap poll amount limits */}
+            {pollFlavor === 'zap' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  placeholder="Min sats"
+                  value={zapMin}
+                  onChange={(e) => setZapMin(e.target.value)}
+                  className="w-28 bg-secondary/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  placeholder="Max sats"
+                  value={zapMax}
+                  onChange={(e) => setZapMax(e.target.value)}
+                  className="w-28 bg-secondary/40 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground"
+                />
+                {!canZap(metadata) && (
+                  <span className="text-xs text-destructive">
+                    Add a lightning address to create zap polls.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Settings row — pill toggles */}
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {pollFlavor !== 'zap' ? (
+                <>
+                  {(['singlechoice', 'multiplechoice'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setPollType(t)}
+                      className={cn(
+                        'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                        pollType === t
+                          ? 'border-primary bg-primary/10 text-primary font-medium'
+                          : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30',
+                      )}
+                    >
+                      {t === 'singlechoice' ? 'Single choice' : 'Multiple choice'}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-border text-muted-foreground">
+                  <Zap className="size-3" />
+                  Single choice · vote with sats
+                </span>
+              )}
               <div className="w-px bg-border self-stretch mx-0.5" />
               {([1, 3, 7, 0] as const).map((d) => (
                 <button
@@ -1587,7 +1731,7 @@ export function ComposeBox({
                     className="rounded-full px-5 font-bold"
                     size="sm"
                   >
-                    {isPollPending ? 'Publishing...' : 'Publish poll'}
+                    {isPollPending ? 'Publishing...' : pollFlavor === 'zap' ? 'Publish zap poll' : 'Publish poll'}
                   </Button>
                 ) : (
                   <Button

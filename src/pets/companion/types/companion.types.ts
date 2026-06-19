@@ -1,12 +1,12 @@
 /**
- * Blobbi Companion Type Definitions
+ * Pets Companion Type Definitions
  * 
  * Core types for the companion system. Keep these generic and
  * decoupled from app-specific concerns.
  */
 
-import type { BlobbiVisualTraits, BlobbiStats } from '@/blobbi/core/lib/blobbi';
-import type { BlobbiState } from '@/blobbi/core/types/blobbi';
+import type { PetsVisualTraits, PetsStats } from '@/pets/core/lib/pets';
+import type { PetsState } from '@/pets/core/types/pets';
 
 // ─── Companion State Machine ──────────────────────────────────────────────────
 
@@ -174,13 +174,13 @@ export interface CompanionData {
   /** Current stage */
   stage: 'egg' | 'baby' | 'adult';
   /** Visual traits for rendering */
-  visualTraits: BlobbiVisualTraits;
+  visualTraits: PetsVisualTraits;
   /** Current energy level (0-100) - affects walking speed */
   energy: number;
   /** Current stats for status-based visual reactions */
-  stats: BlobbiStats;
+  stats: PetsStats;
   /** Current companion state (e.g., 'sleeping') */
-  state?: BlobbiState;
+  state?: PetsState;
   /** Adult evolution form type (e.g., 'catti', 'pupp', 'buni') - only for adults */
   adultType?: string;
   /** Deterministic seed for deriving traits */
@@ -233,7 +233,7 @@ export interface CompanionConfig {
     /** Probability of entering mouse-follow mode (0-1) */
     mouseFollowChance: number;
   };
-  /** Observation target behavior - Blobbi notices something and walks toward it */
+  /** Observation target behavior - Pets notices something and walks toward it */
   observation: {
     /** Probability of starting observation when deciding next action (0-1) */
     chance: number;
@@ -269,7 +269,7 @@ export interface CompanionConfig {
     // ── Fall entry (from top) ──
     /** Duration of the "stuck" phase showing just the tiny butt (ms) */
     stuckDuration: number;
-    /** How much of Blobbi is visible when stuck (0-1, 0.15 = tiny butt showing) */
+    /** How much of Pets is visible when stuck (0-1, 0.15 = tiny butt showing) */
     stuckVisibleAmount: number;
     /** Duration of first pull attempt (ms) */
     pull1Duration: number;
@@ -295,7 +295,7 @@ export interface CompanionConfig {
     // ── Rise entry (from bottom) ──
     /** Duration of the rising phase until eyes visible (ms) */
     riseDuration: number;
-    /** How much of Blobbi is visible when stopping to inspect (0-1, 0.6 = 60% visible) */
+    /** How much of Pets is visible when stopping to inspect (0-1, 0.6 = 60% visible) */
     riseVisibleAmount: number;
     /** Duration of each inspection look (ms) */
     inspectionLookDuration: number;

@@ -58,6 +58,17 @@ export function useInitialSync() {
   });
   const syncAttempted = useRef(false);
 
+  // Capture the config timestamps in refs so the main sync effect can compare
+  // against the values at the moment it starts without depending on them.
+  // This prevents the effect from re-running when this very effect updates them.
+  const relayUpdatedAtRef = useRef(config.relayMetadata.updatedAt);
+  const blossomUpdatedAtRef = useRef(config.blossomServerMetadata.updatedAt);
+
+  useEffect(() => {
+    relayUpdatedAtRef.current = config.relayMetadata.updatedAt;
+    blossomUpdatedAtRef.current = config.blossomServerMetadata.updatedAt;
+  });
+
   const markSyncComplete = useCallback(() => {
     if (!user) return;
     try {
@@ -89,6 +100,8 @@ export function useInitialSync() {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+    let cancelled = false;
+    let completeTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const doSync = async () => {
       let foundSettings = false;
@@ -127,12 +140,15 @@ export function useInitialSync() {
               .catch(() => []),
           ]);
 
+        // Abort if the component unmounted or the account changed while fetching.
+        if (cancelled) return;
+
         // Apply relay list if found
         if (relayEvents.length > 0) {
           const event = relayEvents[0];
           // Seed into cache so NostrSync can read it without re-fetching
           queryClient.setQueryData(["relayList", user.pubkey], event);
-          if (event.created_at > config.relayMetadata.updatedAt) {
+          if (event.created_at > relayUpdatedAtRef.current) {
             const fetchedRelays = event.tags
               .filter(([name]) => name === "r")
               .map(([, url, marker]) => ({
@@ -159,7 +175,7 @@ export function useInitialSync() {
           const event = blossomServerEvents[0];
           // Seed into cache so NostrSync can read it without re-fetching
           queryClient.setQueryData(["blossomServerList", user.pubkey], event);
-          if (event.created_at > config.blossomServerMetadata.updatedAt) {
+          if (event.created_at > blossomUpdatedAtRef.current) {
             const fetchedServers = parseBlossomServerList(event);
 
             if (fetchedServers.length > 0) {
@@ -199,6 +215,9 @@ export function useInitialSync() {
             const parsed = (
               result.success ? result.data : {}
             ) as EncryptedSettings;
+
+            // Abort if the component unmounted or the account changed while decrypting.
+            if (cancelled) return;
 
             // Apply decrypted settings to local config (same logic as NostrSync)
             updateConfig((current) => {
@@ -276,6 +295,11 @@ export function useInitialSync() {
             foundSettings = true;
           }
         }
+
+        // If the component unmounted or the account changed while we were
+        // awaiting network/decryption, don't write stale state.
+        if (cancelled) return;
+
         // Seed mute list cache if found
         if (muteEvents.length > 0) {
           const muteEvent = muteEvents[0];
@@ -344,10 +368,13 @@ export function useInitialSync() {
 
       clearTimeout(timeout);
 
+      if (cancelled) return;
+
       if (foundSettings) {
         setPhase("found");
         // Auto-complete after a brief moment so user sees the success state
-        setTimeout(() => {
+        completeTimeout = setTimeout(() => {
+          if (cancelled) return;
           markSyncComplete();
           setPhase("complete");
         }, 1200);
@@ -359,15 +386,15 @@ export function useInitialSync() {
     doSync();
 
     return () => {
+      cancelled = true;
       clearTimeout(timeout);
+      if (completeTimeout) clearTimeout(completeTimeout);
       controller.abort();
     };
   }, [
     user,
     nostr,
     config.appId,
-    config.relayMetadata.updatedAt,
-    config.blossomServerMetadata.updatedAt,
     updateConfig,
     queryClient,
     markSyncComplete,

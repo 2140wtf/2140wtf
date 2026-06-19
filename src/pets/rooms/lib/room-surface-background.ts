@@ -1,7 +1,7 @@
 /**
  * Room Surface Background — shared CSS background generator.
  *
- * Used by BlobbiRoomShell (actual room), RoomPreviewCard, and PatternSwatch
+ * Used by PetsRoomShell (actual room), RoomPreviewCard, and PatternSwatch
  * to ensure consistent rendering between preview and live room.
  *
  * Security: only operates on validated hex colors and numeric angle/variant.
@@ -105,6 +105,76 @@ export function getSurfaceBackground(surface: RoomSurfaceLayout, scale = 1): str
       return c2
         ? `linear-gradient(${angle || 135}deg, ${c1} 0%, ${c2} 100%)`
         : c1;
+
+    case 'circuit': {
+      // PCB-style trace grid with glowing nodes
+      const baseSize = Math.round(28 * scale);
+      const trace = Math.max(1, Math.round(2 * scale));
+      const traceColor = c2 ? `${c2}40` : `${c1}60`;
+      const nodeColor = c2 ?? c1;
+      return [
+        c1,
+        `repeating-linear-gradient(0deg, ${traceColor} 0px, ${traceColor} ${trace}px, transparent ${trace}px, transparent ${baseSize}px)`,
+        `repeating-linear-gradient(90deg, ${traceColor} 0px, ${traceColor} ${trace}px, transparent ${trace}px, transparent ${baseSize}px)`,
+        `radial-gradient(circle ${Math.max(2, 3 * scale)}px at ${baseSize / 2}px ${baseSize / 2}px, ${nodeColor} 0px, transparent ${Math.max(3, 5 * scale)}px)`,
+        `radial-gradient(circle ${Math.max(2, 3 * scale)}px at 0px 0px, ${nodeColor} 0px, transparent ${Math.max(3, 5 * scale)}px)`,
+      ].join(', ');
+    }
+
+    case 'hexgrid': {
+      // Honeycomb/hex mesh pattern
+      const hexSize = Math.round(24 * scale);
+      const hexLine = Math.max(1, Math.round(1.5 * scale));
+      const hexColor = c2 ? `${c2}50` : `${c1}70`;
+      return [
+        c1,
+        `repeating-linear-gradient(90deg, ${hexColor} 0px, ${hexColor} ${hexLine}px, transparent ${hexLine}px, transparent ${hexSize}px)`,
+        `repeating-linear-gradient(30deg, ${hexColor} 0px, ${hexColor} ${hexLine}px, transparent ${hexLine}px, transparent ${hexSize}px)`,
+        `repeating-linear-gradient(-30deg, ${hexColor} 0px, ${hexColor} ${hexLine}px, transparent ${hexLine}px, transparent ${hexSize}px)`,
+      ].join(', ');
+    }
+
+    case 'scanlines': {
+      // CRT-style horizontal scanlines
+      const lineSize = Math.round(4 * scale);
+      const gapSize = Math.round(8 * scale);
+      const lineColor = c2 ? `${c2}30` : `${c1}40`;
+      return `repeating-linear-gradient(0deg, ${c1} 0px, ${c1} ${lineSize}px, ${lineColor} ${lineSize}px, ${lineColor} ${lineSize + gapSize}px)`;
+    }
+
+    case 'metal': {
+      // Brushed metal floor with horizontal grain
+      const grainSize = Math.round(3 * scale);
+      const grainColor = c2 ? `${c2}35` : `${c1}50`;
+      return [
+        `linear-gradient(${angle || 180}deg, ${c1} 0%, ${c2 ?? c1} 100%)`,
+        `repeating-linear-gradient(${angle || 0}deg, transparent 0px, transparent ${grainSize}px, ${grainColor} ${grainSize}px, ${grainColor} ${grainSize * 2}px)`,
+      ].join(', ');
+    }
+
+    case 'glass': {
+      // Reflective glass tiles with grid lines
+      const tile = Math.round(32 * scale);
+      const grout = Math.max(1, Math.round(2 * scale));
+      const groutColor = c2 ? `${c2}50` : '#ffffff20';
+      return [
+        `linear-gradient(${angle || 180}deg, ${c1} 0%, ${c2 ?? c1} 100%)`,
+        `repeating-linear-gradient(0deg, ${groutColor} 0px, ${groutColor} ${grout}px, transparent ${grout}px, transparent ${tile}px)`,
+        `repeating-linear-gradient(90deg, ${groutColor} 0px, ${groutColor} ${grout}px, transparent ${grout}px, transparent ${tile}px)`,
+      ].join(', ');
+    }
+
+    case 'holo': {
+      // Holographic shimmer grid
+      const grid = Math.round(20 * scale);
+      const line = Math.max(1, Math.round(1 * scale));
+      const lineColor = c2 ? `${c2}40` : `${c1}60`;
+      return [
+        `linear-gradient(${angle || 135}deg, ${c1} 0%, ${c2 ?? c1} 100%)`,
+        `repeating-linear-gradient(0deg, ${lineColor} 0px, ${lineColor} ${line}px, transparent ${line}px, transparent ${grid}px)`,
+        `repeating-linear-gradient(90deg, ${lineColor} 0px, ${lineColor} ${line}px, transparent ${line}px, transparent ${grid}px)`,
+      ].join(', ');
+    }
 
     default:
       return c1;

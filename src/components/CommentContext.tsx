@@ -3,16 +3,14 @@ import { type ReactNode, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import {
-  Award, BarChart3, Bird, Bitcoin, BookOpen, Camera, Clapperboard, Egg, FileText, Film,
-  GitBranch, GitPullRequest, HandHeart, Heart, Mail, MapPin, MessageSquare, Mic, Music,
-  Package, Palette, PartyPopper, Podcast, Quote, Radio, Rocket, SmilePlus, Sparkles,
+  Award, BarChart3, Bird, Bitcoin, BookOpen, Camera, Egg, FileText, Film,
+  GitBranch, GitPullRequest, HandHeart, Heart, Mail, MapPin, MessageSquare, Mic, Music, Navigation,
+  Package, PartyPopper, Podcast, Quote, Radio, Rocket, SmilePlus, Sparkles,
   Stars, UserCheck, Users, Vote, Zap,
 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { BitcoinTxPreview, BitcoinAddressPreview } from '@/components/BitcoinContentHeader';
-import { CardsIcon } from '@/components/icons/CardsIcon';
-import { ChestIcon } from '@/components/icons/ChestIcon';
 import { RepostIcon } from '@/components/icons/RepostIcon';
 import { EmbeddedNote } from '@/components/EmbeddedNote';
 import { EmbeddedNaddr } from '@/components/EmbeddedNaddr';
@@ -28,13 +26,10 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useBookInfo } from '@/hooks/useBookInfo';
 import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
-import { useScryfallCard } from '@/hooks/useScryfallCard';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { getCountryInfo } from '@/lib/countries';
-import { extractGathererCard, type GathererCard } from '@/lib/linkEmbed';
 import { isNostrId } from '@/lib/nostrId';
 import { parseAddr } from '@/lib/parseAddr';
-import { cardPrimaryImage } from '@/lib/scryfall';
 import { getZapAmountSats, getZapSenderPubkey } from '@/lib/zapHelpers';
 
 
@@ -129,14 +124,11 @@ const KIND_LABELS: Record<number, string> = {
   1068: 'a poll',
   1111: 'a comment',
   1222: 'a voice message',
-  8211: 'a letter',
   15683: 'a Love List',
   1617: 'a patch',
   1618: 'a pull request',
   2473: 'a bird detection',
   12473: 'a Birdex',
-  3367: 'a color moment',
-  7516: 'a found log',
   15128: 'an nsite',
   16767: 'a theme',
   10008: 'profile badges',
@@ -159,21 +151,23 @@ const KIND_LABELS: Record<number, string> = {
   31990: 'an app',
   32267: 'a Zapstore app',
   34139: 'a playlist',
-  34236: 'a divine',
   34550: 'a community',
   35128: 'an nsite',
   36767: 'a theme',
   36787: 'a track',
-  37381: 'a Magic deck',
-  37516: 'a treasure',
   30000: 'a follow set',
   30621: 'a constellation',
   39089: 'a follow pack',
   9735: 'a zap',
   9802: 'a highlight',
   8333: 'a zap',
-  31124: 'a Blobbi',
+  31124: 'a Pets',
   33863: 'a fundraiser',
+  1315: 'a road event',
+  1316: 'a road event confirmation',
+  443: 'a key package',
+  444: 'a welcome message',
+  445: 'a group event',
 };
 
 /** Kind-specific icons — matches sidebar and NoteCard icons. */
@@ -192,7 +186,6 @@ const KIND_ICONS: Partial<Record<number, React.ComponentType<{ className?: strin
   1068: BarChart3,
   1222: Mic,
   1617: FileText,
-  8211: Mail,
   15683: Heart,
   1618: GitPullRequest,
   15128: Rocket,
@@ -210,18 +203,13 @@ const KIND_ICONS: Partial<Record<number, React.ComponentType<{ className?: strin
   30617: GitBranch,
   31990: Package,
   32267: Package,
-  34236: Clapperboard,
   36767: Sparkles,
   16767: Sparkles,
   36787: Music,
   34139: Music,
-  37381: CardsIcon,
-  37516: ChestIcon,
-  7516: ChestIcon,
   3: UserCheck,
   30000: Users,
   39089: PartyPopper,
-  3367: Palette,
   9735: Zap,
   9802: Quote,
   8333: Zap,
@@ -230,6 +218,9 @@ const KIND_ICONS: Partial<Record<number, React.ComponentType<{ className?: strin
   12473: Bird,
   30621: Stars,
   33863: HandHeart,
+  1315: Navigation,
+  1316: Navigation,
+  445: Users,
 };
 
 /**
@@ -269,8 +260,6 @@ const KIND_SUFFIXES: Partial<Record<number, string>> = {
   16767: 'theme',
   30000: 'follow set',
   39089: 'follow pack',
-  37381: 'deck',
-  37516: 'treasure',
   30621: 'constellation',
   34550: 'community',
   30054: 'episode',
@@ -960,13 +949,7 @@ function ExternalCommentContext({ root, className }: { root: CommentRoot; classN
   }
 
   // URL identifiers get special treatment — show page title with favicon.
-  // Gatherer URLs are routed to a Scryfall-backed renderer that shows the
-  // actual card name instead of the raw URL.
   if (identifier.startsWith('http://') || identifier.startsWith('https://')) {
-    const gathererCard = extractGathererCard(identifier);
-    if (gathererCard) {
-      return <GathererCardCommentContext card={gathererCard} url={identifier} className={className} />;
-    }
     return <UrlCommentContext url={identifier} className={className} />;
   }
 
@@ -1161,84 +1144,6 @@ function IsbnCommentContext({ identifier, className }: { identifier: string; cla
   );
 }
 
-/**
- * Comment context for gatherer.wizards.com URLs — resolves the URL to a
- * Magic: The Gathering card via Scryfall and shows the card's real name
- * (e.g. "Xenagos, God of Revels") instead of the raw URL.
- */
-function GathererCardCommentContext({
-  card,
-  url,
-  className,
-}: {
-  card: GathererCard;
-  url: string;
-  className?: string;
-}) {
-  const lookup = useMemo(() => (
-    card.kind === 'multiverse'
-      ? { kind: 'multiverse' as const, multiverseId: card.multiverseId }
-      : { kind: 'set' as const, set: card.set, number: card.number, lang: card.lang }
-  ), [card]);
-  const { data: scryCard, isLoading } = useScryfallCard(lookup);
-  const link = `/i/${encodeURIComponent(url)}`;
-
-  const displayText = scryCard?.name ?? 'Magic card';
-  const coverUrl = scryCard ? cardPrimaryImage(scryCard, 'small') : undefined;
-
-  return (
-    <CommentContextRow prefix="Commenting on" className={className} loading={isLoading}>
-      <HoverCard openDelay={300} closeDelay={150}>
-        <HoverCardTrigger asChild>
-          <Link
-            to={link}
-            className="inline-flex items-center gap-1 text-primary hover:underline truncate cursor-pointer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <CardsIcon className="size-3.5 shrink-0" />
-            {displayText}
-          </Link>
-        </HoverCardTrigger>
-        <HoverCardContent
-          side="bottom"
-          align="start"
-          sideOffset={4}
-          className="w-72 p-0 rounded-2xl shadow-lg"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center gap-3 px-4 py-3">
-            {coverUrl ? (
-              <img
-                src={coverUrl}
-                alt={scryCard?.name ?? 'Magic card'}
-                className="w-9 h-12 rounded object-cover shrink-0"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-9 h-12 rounded bg-secondary flex items-center justify-center shrink-0">
-                <CardsIcon className="size-4 text-muted-foreground/40" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <CardsIcon className="size-3 shrink-0" />
-                <span>Magic Card</span>
-              </div>
-              <p className="text-sm font-medium truncate mt-0.5">
-                {scryCard?.name ?? 'Unknown card'}
-              </p>
-              {scryCard?.set_name && (
-                <p className="text-xs text-muted-foreground truncate">
-                  {scryCard.set_name}
-                </p>
-              )}
-            </div>
-          </div>
-        </HoverCardContent>
-      </HoverCard>
-    </CommentContextRow>
-  );
-}
 
 /** Comment context for Bitcoin transaction identifiers — shows icon, truncated txid, and hover preview. */
 function BitcoinTxCommentContext({ identifier, className }: { identifier: string; className?: string }) {

@@ -1,0 +1,48 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wings back -->
+  <g opacity="0.85">
+    <path d="M 100 110 C 70 70 30 60 25 100 C 30 140 70 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+    <path d="M 100 110 C 130 70 170 60 175 100 C 170 140 130 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+  </g>
+
+  <!-- Body -->
+  <ellipse cx="100" cy="115" rx="18" ry="28" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <circle cx="100" cy="82" r="14" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Antennae -->
+  <path d="M 92 72 Q 80 50 70 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 108 72 Q 120 50 130 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="70" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
+  <circle cx="130" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
+
+  <!-- Sleeping eyes -->
+  <path d="M 88 82 Q 92 85 96 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+  <path d="M 104 82 Q 108 85 112 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Mouth -->
+  <path d="M 96 90 Q 100 93 104 90" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Sleep zzz -->
+  <text x="130" y="55" fill="url(#biomechmothAmber)" font-family="monospace" font-size="10" opacity="0.5">Z</text>
+  <text x="140" y="42" fill="url(#biomechmothAmber)" font-family="monospace" font-size="8" opacity="0.35">z</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="70%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="biomechmothAmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+</svg>

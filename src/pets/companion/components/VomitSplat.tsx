@@ -1,6 +1,6 @@
 /**
  * VomitSplat — Renders a vomit drop that falls from a spawn point to
- * near Blobbi, then becomes a persistent puddle until the user clicks it.
+ * near Pets, then becomes a persistent puddle until the user clicks it.
  *
  * Lifecycle:
  *   1. "falling" — CSS-animated drop from (spawnX, spawnY) to (landX, landY)

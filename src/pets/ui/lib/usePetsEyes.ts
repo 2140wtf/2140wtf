@@ -1,8 +1,8 @@
 /**
- * useBlobbiEyes - Hook for Blobbi eye animations
+ * usePetsEyes - Hook for Pets eye animations
  *
  * Real-time mouse tracking:
- * - Pupils ALWAYS follow the mouse cursor (via .blobbi-eye-gaze groups)
+ * - Pupils ALWAYS follow the mouse cursor (via .pets-eye-gaze groups)
  * - Instant response using SVG transform attribute
  * - No CSS transitions (they cause delayed updates)
  * - Eye whites do NOT move - only pupils track
@@ -11,7 +11,7 @@
  * - Random intervals between 2-5 seconds
  * - Fast close (~80ms), short pause (~100ms), slower open (~120ms)
  * - Occasional double blinks (20% chance)
- * - Blink affects WHOLE eye (via .blobbi-blink groups)
+ * - Blink affects WHOLE eye (via .pets-blink groups)
  * - Disabled when sleeping
  *
  * Architecture:
@@ -20,14 +20,14 @@
  * - Direct SVG attribute manipulation (not style.transform)
  * - Element caching with automatic refresh on SVG changes
  * - Separate groups:
- *   - .blobbi-eye: CSS animations (like sleepy wake-glance)
- *   - .blobbi-eye-gaze: translate(x y) for mouse/gaze tracking
- *   - .blobbi-blink: clip-path for blinking
+ *   - .pets-eye: CSS animations (like sleepy wake-glance)
+ *   - .pets-eye-gaze: translate(x y) for mouse/gaze tracking
+ *   - .pets-blink: clip-path for blinking
  */
 
 import { useEffect, useRef } from 'react';
 
-import type { BlobbiLookMode, EyePosition } from './types';
+import type { PetsLookMode, EyePosition } from './types';
 import {
   DEFAULT_EYE_MAX_MOVEMENT,
   EYE_VERTICAL_SCALE,
@@ -42,15 +42,15 @@ import {
 import { EYE_CLASSES, EYE_DATA_ATTRS } from './eyes/types';
 
 // Re-export types for backwards compatibility
-export type { BlobbiLookMode, EyePosition };
+export type { PetsLookMode, EyePosition };
 
-export interface UseBlobbiEyesOptions {
-  /** Whether the Blobbi is sleeping (disables animation) */
+export interface UsePetsEyesOptions {
+  /** Whether the Pets is sleeping (disables animation) */
   isSleeping?: boolean;
   /** Maximum eye movement in pixels (default: 2) */
   maxMovement?: number;
   /** Controls eye tracking behavior (default: 'follow-pointer') */
-  lookMode?: BlobbiLookMode;
+  lookMode?: PetsLookMode;
   /** Disable blinking animation (for photo/export mode) */
   disableBlink?: boolean;
   /**
@@ -62,7 +62,7 @@ export interface UseBlobbiEyesOptions {
 
 // ─── Global Mouse Position ────────────────────────────────────────────────────
 
-// Store mouse position globally so all Blobbi instances share one listener
+// Store mouse position globally so all Pets instances share one listener
 let globalMouseX = 0;
 let globalMouseY = 0;
 let mouseListenerAttached = false;
@@ -438,9 +438,9 @@ function runWakeUpAnimation(
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useBlobbiEyes(
+export function usePetsEyes(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  options: UseBlobbiEyesOptions = {}
+  options: UsePetsEyesOptions = {}
 ): void {
   const { isSleeping = false, maxMovement = DEFAULT_EYE_MAX_MOVEMENT, lookMode = 'follow-pointer', disableBlink = false, disableTracking = false } = options;
 
@@ -482,7 +482,7 @@ export function useBlobbiEyes(
       // to the closed position in the SVG string, so no clip-path reset is
       // needed here. Clearing the caches ensures the awake animation loop
       // won't run stale operations, and fresh caching will happen naturally
-      // when Blobbi wakes up and the effect re-runs.
+      // when Pets wakes up and the effect re-runs.
       leftGazeRef.current = [];
       rightGazeRef.current = [];
       leftBlinkRef.current = [];
@@ -494,7 +494,7 @@ export function useBlobbiEyes(
 
       // ── Sleep entry animation ─────────────────────────────────────────
       // Only animate on a genuine awake→sleep transition, not on mount or
-      // refresh when Blobbi is already sleeping.
+      // refresh when Pets is already sleeping.
       let cancelSleepAnimation: (() => void) | null = null;
       const isTransition = !wasSleepingRef.current;
       wasSleepingRef.current = true;
@@ -513,7 +513,7 @@ export function useBlobbiEyes(
 
     // ── Wake-up transition detection ───────────────────────────────────
     // Only animate on a genuine sleeping→awake transition, not on mount or
-    // refresh when Blobbi is already awake.
+    // refresh when Pets is already awake.
     const isWakeTransition = wasSleepingRef.current;
     wasSleepingRef.current = false;
 
@@ -608,7 +608,7 @@ export function useBlobbiEyes(
         let eyeY = 0;
 
         if (lookMode === 'follow-pointer') {
-          // Get Blobbi center position
+          // Get Pets center position
           const rect = containerRef.current.getBoundingClientRect();
           const centerX = rect.left + rect.width / 2;
           const centerY = rect.top + rect.height / 2;
@@ -628,7 +628,7 @@ export function useBlobbiEyes(
 
         // ─── Apply Tracking Transform (pupils only) ──────────────────────────
         // Only translate - no scale here. Eye whites stay fixed.
-        // Gaze groups are the innermost layer, separate from the CSS animation layer (.blobbi-eye)
+        // Gaze groups are the innermost layer, separate from the CSS animation layer (.pets-eye)
         // so we can safely apply transforms without conflicting with emotion animations.
         const trackingTransform = `translate(${eyeX} ${eyeY})`;
 

@@ -1,5 +1,5 @@
 /**
- * useBlobbiEntryAnimation Hook
+ * usePetsEntryAnimation Hook
  * 
  * Manages the vertical entry animation state machine based on sidebar navigation.
  * 
@@ -35,7 +35,7 @@ import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 import { generateInspectionOrder } from '../utils/animation';
 import { getEntryDirection } from '../utils/sidebarNavigation';
 
-interface UseBlobbiEntryAnimationOptions {
+interface UsePetsEntryAnimationOptions {
   /** Whether to start/run the entry animation */
   isActive: boolean;
   /** Current route pathname - changes trigger entry animation */
@@ -52,16 +52,16 @@ interface UseBlobbiEntryAnimationOptions {
   onStart: (entryType: EntryType) => void;
 }
 
-interface UseBlobbiEntryAnimationResult {
+interface UsePetsEntryAnimationResult {
   /** Current entry state */
   entryState: EntryState;
   /** Whether entry animation is currently playing */
   isEntering: boolean;
-  /** Whether Blobbi is permanently stuck (needs user drag to resolve) */
+  /** Whether Pets is permanently stuck (needs user drag to resolve) */
   isPermanentlyStuck: boolean;
   /** Whether entry was resolved from stuck_permanent (vs natural completion) */
   wasResolvedFromStuck: boolean;
-  /** Whether Blobbi should be hidden (during route transition delay) */
+  /** Whether Pets should be hidden (during route transition delay) */
   isHiddenForTransition: boolean;
   /** Current inspection direction (for eye control) */
   currentInspectionDirection: InspectionDirection | null;
@@ -91,7 +91,7 @@ function createInitialEntryState(): EntryState {
 /**
  * Hook to manage the vertical entry animation sequence.
  */
-export function useBlobbiEntryAnimation({
+export function usePetsEntryAnimation({
   isActive,
   pathname,
   sidebarOrder,
@@ -99,7 +99,7 @@ export function useBlobbiEntryAnimation({
   companionId,
   onComplete,
   onStart,
-}: UseBlobbiEntryAnimationOptions): UseBlobbiEntryAnimationResult {
+}: UsePetsEntryAnimationOptions): UsePetsEntryAnimationResult {
   const config = DEFAULT_COMPANION_CONFIG;
   const entryConfig = config.entry;
   

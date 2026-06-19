@@ -1,7 +1,7 @@
 /**
- * Automatic canonical sync for the owner's selected Blobbi.
+ * Automatic canonical sync for the owner's selected Pets.
  *
- * When the owner opens /blobbi (or switches selected companion), this hook
+ * When the owner opens /pets (or switches selected companion), this hook
  * performs a one-shot sync that:
  *
  *   1. Persists accumulated decay into canonical kind 31124 stats
@@ -11,7 +11,7 @@
  * This replaces the manual "Apply pending care" button. The sync runs at
  * most once per companion selection (guarded by a ref keyed on d-tag).
  *
- * **Sleeping Blobbis are handled correctly.** The pure `applyBlobbiDecay`
+ * **Sleeping Petss are handled correctly.** The pure `applyPetsDecay`
  * function already applies sleep-regime rates (20% stat decay, energy regen,
  * zero base health decay). The sync never changes the `state` tag — no
  * auto-wake is performed.
@@ -27,16 +27,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { BlobbiCompanion } from '../lib/blobbi';
-import { KIND_BLOBBI_STATE, updateBlobbiTags, statsToTagUpdates } from '../lib/blobbi';
-import { applyBlobbiDecay } from '../lib/blobbi-decay';
-import { consolidateSocialInteractions } from '../lib/blobbi-social-projection';
+import type { PetsCompanion } from '../lib/pets';
+import { KIND_PETS_STATE, updatePetsTags, statsToTagUpdates } from '../lib/pets';
+import { applyPetsDecay } from '../lib/pets-decay';
+import { consolidateSocialInteractions } from '../lib/pets-social-projection';
 import {
   resolveSocialCheckpoint,
   serializeSocialCheckpoint,
-  type BlobbiInteraction,
+  type PetsInteraction,
   type SocialCheckpoint,
-} from '../lib/blobbi-interaction';
+} from '../lib/pets-interaction';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 
 // ─── Minimum elapsed time before a decay-only sync is worth publishing ───────
@@ -53,22 +53,22 @@ interface UseCanonicalSyncParams {
    * The currently selected companion parsed from the owner's 31124 event.
    * The hook reads canonical tags/content from `companion.event`.
    */
-  companion: BlobbiCompanion | null;
+  companion: PetsCompanion | null;
   /**
-   * Pending social interactions for this companion (from useBlobbiInteractions).
+   * Pending social interactions for this companion (from usePetsInteractions).
    * Must be sorted ascending by `created_at` with id tie-break.
    */
-  interactions: readonly BlobbiInteraction[];
+  interactions: readonly PetsInteraction[];
   /** Whether the interactions query is still loading (initial fetch). */
   interactionsLoading: boolean;
-  /** Cache updater from useBlobbisCollection. */
+  /** Cache updater from usePetssCollection. */
   updateCompanionEvent: (event: NostrEvent) => void;
   /**
    * The ensureCanonicalBeforeAction helper that returns fresh canonical
    * data (auto-migrating legacy pets if needed).
    */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
@@ -83,7 +83,7 @@ interface UseCanonicalSyncParams {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 /**
- * Automatically sync canonical Blobbi state when the owner views /blobbi.
+ * Automatically sync canonical Pets state when the owner views /pets.
  *
  * Runs once per companion selection. Waits for interactions to be loaded
  * so decay and social consolidation can happen in a single publish.
@@ -107,8 +107,8 @@ export function useCanonicalSync({
 
   // Stable callback that performs the actual sync.
   const performSync = useCallback(async (
-    comp: BlobbiCompanion,
-    pendingInteractions: readonly BlobbiInteraction[],
+    comp: PetsCompanion,
+    pendingInteractions: readonly PetsInteraction[],
   ) => {
     if (syncInProgressRef.current) return;
     syncInProgressRef.current = true;
@@ -117,7 +117,7 @@ export function useCanonicalSync({
       const now = Math.floor(Date.now() / 1000);
 
       // ── Step 1: Apply accumulated decay to canonical stats ──
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: comp.stage,
         state: comp.state,
         stats: comp.stats,
@@ -155,7 +155,7 @@ export function useCanonicalSync({
       // This handles the edge case where canonical data changed between the
       // initial check and the fresh fetch (e.g. another device published).
       const freshNow = Math.floor(Date.now() / 1000);
-      const freshDecay = applyBlobbiDecay({
+      const freshDecay = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -195,11 +195,11 @@ export function useCanonicalSync({
       }
 
       // ── Step 5: Build tags and publish ──
-      const newTags = updateBlobbiTags(canonical.allTags, statsToTagUpdates(publishStats, freshNow));
+      const newTags = updatePetsTags(canonical.allTags, statsToTagUpdates(publishStats, freshNow));
 
       const prev = canonical.companion.event;
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: publishContent,
         tags: newTags,
         prev,
@@ -211,7 +211,7 @@ export function useCanonicalSync({
       // Invalidate interactions query so it refetches with the new checkpoint
       const coordinate = `31124:${comp.event.pubkey}:${comp.d}`;
       queryClient.invalidateQueries({
-        queryKey: ['blobbi-interactions', coordinate],
+        queryKey: ['pets-interactions', coordinate],
       });
 
       // ── Step 7: Notify caller about social consolidation for visual feedback ──

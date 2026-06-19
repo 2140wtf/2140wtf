@@ -1,34 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, Bird, Droplets, ExternalLink, FileText, Globe, MapPin, MessageCircle, Package, Play, Repeat2, Share2, Stars, User, Users, Wind } from 'lucide-react';
+import { BookOpen, Bird, Droplets, ExternalLink, FileText, Globe, MapPin, Package, Play, Stars, User, Users, Wind } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ExternalFavicon } from '@/components/ExternalFavicon';
-import { ExternalReactionButton } from '@/components/ExternalReactionButton';
 import { LinkEmbed } from '@/components/LinkEmbed';
-import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
-import { BlueskyIcon } from '@/components/icons/BlueskyIcon';
 import { BitcoinTxPreview, BitcoinAddressPreview } from '@/components/BitcoinContentHeader';
 import { BirdSongPlayer } from '@/components/BirdSongPlayer';
-import { CardsIcon } from '@/components/icons/CardsIcon';
-import { extractYouTubeId, extractWikipediaTitle, extractWikidataId, extractBlueskyPost, extractGathererCard, type GathererCard } from '@/lib/linkEmbed';
-import { GathererCardHeader } from '@/components/GathererCardHeader';
-import { useScryfallCard } from '@/hooks/useScryfallCard';
-import { cardPrimaryImage } from '@/lib/scryfall';
+import { extractYouTubeId, extractWikipediaTitle, extractWikidataId } from '@/lib/linkEmbed';
 import { parseExternalUri, formatIsbn } from '@/lib/externalContent';
-import { shareOrCopy } from '@/lib/share';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
-import { useBlueskyPost } from '@/hooks/useBlueskyPost';
 import { useBookInfo } from '@/hooks/useBookInfo';
 import { useAddrEvent } from '@/hooks/useEvent';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useWeather } from '@/hooks/useWeather';
-import { useToast } from '@/hooks/useToast';
-import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { getCountryInfo, getWikipediaTitle } from '@/lib/countries';
 import { useWikipediaSummary } from '@/hooks/useWikipediaSummary';
 import { useWikidataEntity } from '@/hooks/useWikidataEntity';
@@ -36,7 +25,6 @@ import { useBirdSong } from '@/hooks/useBirdSong';
 import { EXTRA_KINDS } from '@/lib/extraKinds';
 import { getKindLabel } from '@/lib/kindLabels';
 import { CONTENT_KIND_ICONS } from '@/lib/sidebarItems';
-import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Full-size content headers (used on /i/ page)
@@ -45,23 +33,12 @@ import { cn } from '@/lib/utils';
 export function UrlContentHeader({ url }: { url: string }) {
   const wikiTitle = useMemo(() => extractWikipediaTitle(url), [url]);
   const wikidataId = useMemo(() => extractWikidataId(url), [url]);
-  const blueskyPost = useMemo(() => extractBlueskyPost(url), [url]);
-  const gathererCard = useMemo(() => extractGathererCard(url), [url]);
-
   if (wikiTitle) {
     return <WikipediaArticleHeader title={wikiTitle} url={url} />;
   }
 
   if (wikidataId) {
     return <WikidataEntityHeader id={wikidataId} url={url} />;
-  }
-
-  if (blueskyPost) {
-    return <BlueskyPostHeader author={blueskyPost.author} rkey={blueskyPost.rkey} url={url} />;
-  }
-
-  if (gathererCard) {
-    return <GathererCardHeader card={gathererCard} url={url} />;
   }
 
   return <LinkEmbed url={url} showActions={false} />;
@@ -99,254 +76,6 @@ function WikidataEntityHeader({ id, url }: { id: string; url: string }) {
   }
 
   return <LinkEmbed url={url} showActions={false} />;
-}
-
-// ---------------------------------------------------------------------------
-// Bluesky post header (full feed-style, like a thread top post)
-// ---------------------------------------------------------------------------
-
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function blueskyTimeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d`;
-  const months = Math.floor(days / 30);
-  return `${months}mo`;
-}
-
-function BlueskyPostHeader({ author, rkey, url }: { author: string; rkey: string; url: string }) {
-  const { data: post, isLoading, isError } = useBlueskyPost(author, rkey);
-  const { toast } = useToast();
-  const shareOrigin = useShareOrigin();
-
-  const profileUrl = `/i/${encodeURIComponent(`https://bsky.app/profile/${post?.handle ?? author}`)}`;
-  const externalContent = useMemo(() => parseExternalUri(url), [url]);
-
-  const [shareOpen, setShareOpen] = useState(false);
-  const [commentOpen, setCommentOpen] = useState(false);
-
-  const handleComment = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCommentOpen(true);
-  }, []);
-
-  const handleRepost = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShareOpen(true);
-  }, []);
-
-  const handleShare = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const fullUrl = `${shareOrigin}/i/${encodeURIComponent(url)}`;
-    const result = await shareOrCopy(fullUrl);
-    if (result === 'copied') {
-      toast({ title: 'Link copied' });
-    }
-  }, [url, toast, shareOrigin]);
-
-  if (isLoading) {
-    return (
-      <div className="py-3">
-        <div className="flex gap-3">
-          <Skeleton className="size-11 rounded-full shrink-0" />
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-3.5 w-20" />
-            </div>
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-4/5" />
-            <div className="flex gap-6 pt-1">
-              <Skeleton className="h-4 w-10" />
-              <Skeleton className="h-4 w-10" />
-              <Skeleton className="h-4 w-10" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError || !post) {
-    return <LinkEmbed url={url} showActions={false} />;
-  }
-
-  return (
-    <>
-      <article className="py-1">
-        <div className="flex gap-3">
-          {/* Avatar */}
-          <Link to={profileUrl} className="shrink-0">
-            {post.avatar ? (
-              <img
-                src={post.avatar}
-                alt=""
-                className="size-11 rounded-full object-cover"
-                loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : (
-              <div className="size-11 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white text-sm font-bold">
-                {(post.displayName ?? post.handle).charAt(0).toUpperCase()}
-              </div>
-            )}
-          </Link>
-
-          {/* Body */}
-          <div className="flex-1 min-w-0">
-            {/* Author info */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Link to={profileUrl} className="font-semibold text-[15px] truncate leading-tight hover:underline">
-                {post.displayName ?? post.handle}
-              </Link>
-              <Link to={profileUrl} className="text-muted-foreground text-sm truncate leading-tight hover:underline">
-                @{post.handle}
-              </Link>
-              <span className="text-muted-foreground text-sm shrink-0">&middot;</span>
-              <span className="text-muted-foreground text-sm shrink-0">
-                {blueskyTimeAgo(post.createdAt)}
-              </span>
-            </div>
-
-            {/* Post text */}
-            {post.text && (
-              <p className="mt-1 text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                {post.text}
-              </p>
-            )}
-
-            {/* Image embeds */}
-            {post.images && post.images.length > 0 && (
-              <div
-                className={cn(
-                  'mt-3 rounded-xl overflow-hidden border border-border',
-                  post.images.length === 1 && 'grid grid-cols-1',
-                  post.images.length === 2 && 'grid grid-cols-2 gap-0.5',
-                  post.images.length === 3 && 'grid grid-cols-2 gap-0.5',
-                  post.images.length >= 4 && 'grid grid-cols-2 gap-0.5',
-                )}
-              >
-                {post.images.slice(0, 4).map((img, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      'relative overflow-hidden bg-secondary',
-                      post.images!.length === 1 ? 'aspect-video' : 'aspect-square',
-                      post.images!.length === 3 && i === 0 && 'row-span-2 aspect-auto',
-                    )}
-                  >
-                    <img
-                      src={img.thumb}
-                      alt={img.alt || ''}
-                      loading="lazy"
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* External link embed */}
-            {post.external && post.external.thumb && (
-              <div className="mt-3 rounded-xl border border-border overflow-hidden bg-secondary/30">
-                <div className="aspect-[2/1] overflow-hidden bg-secondary">
-                  <img
-                    src={post.external.thumb}
-                    alt=""
-                    loading="lazy"
-                    className="w-full h-full object-cover"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                </div>
-                {post.external.title && (
-                  <div className="px-3 py-2.5">
-                    <p className="text-sm font-semibold leading-tight line-clamp-2">{post.external.title}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-5 mt-3 -ml-2">
-              <button
-                type="button"
-                onClick={handleComment}
-                className="inline-flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-sky-500 hover:bg-sky-500/10 transition-colors"
-                title="Comment"
-              >
-                <MessageCircle className="size-[18px]" />
-                {post.replyCount > 0 && <span className="text-sm tabular-nums">{formatCount(post.replyCount)}</span>}
-              </button>
-              <button
-                type="button"
-                onClick={handleRepost}
-                className="inline-flex items-center gap-1.5 p-2 rounded-full text-muted-foreground hover:text-green-500 hover:bg-green-500/10 transition-colors"
-                title="Share to feed"
-              >
-                <Repeat2 className="size-[18px]" />
-                {post.repostCount > 0 && <span className="text-sm tabular-nums">{formatCount(post.repostCount)}</span>}
-              </button>
-              <ExternalReactionButton content={externalContent} iconSize="size-[18px]" count={post.likeCount} />
-              <button
-                type="button"
-                onClick={handleShare}
-                className="inline-flex items-center p-2 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                title="Share link"
-              >
-                <Share2 className="size-[18px]" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Bluesky source link */}
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <BlueskyIcon className="size-3.5 text-sky-500" />
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground transition-colors hover:underline"
-          >
-            View on Bluesky
-          </a>
-          <ExternalLink className="size-3" />
-        </div>
-      </article>
-
-      {/* Comment compose modal */}
-      {commentOpen && (
-        <ReplyComposeModal
-          open={commentOpen}
-          onOpenChange={setCommentOpen}
-          event={new URL(url)}
-        />
-      )}
-
-      {/* Share compose modal */}
-      {shareOpen && (
-        <ReplyComposeModal
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          initialContent={url}
-          title="Share to feed"
-        />
-      )}
-    </>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -836,12 +565,6 @@ export function ExternalContentPreview({ identifier }: { identifier: string }) {
 
   switch (content.type) {
     case 'url': {
-      // Route Gatherer URLs to a Scryfall-backed compact preview that shows
-      // the real card name and art instead of the raw page's oEmbed data.
-      const gathererCard = extractGathererCard(content.value);
-      if (gathererCard) {
-        return <GathererCardPreview card={gathererCard} url={content.value} link={link} />;
-      }
       return <UrlPreview url={content.value} link={link} />;
     }
     case 'isbn':
@@ -994,79 +717,6 @@ function BookPreview({ isbn, link }: { isbn: string; link: string }) {
   );
 }
 
-/**
- * Compact preview for a Magic: The Gathering card linked via gatherer.wizards.com.
- * Fetches the real card from Scryfall and shows its art + name + set name in
- * the same px-4 py-3 row shape used by BookPreview and the other compact variants.
- */
-function GathererCardPreview({ card, url, link }: { card: GathererCard; url: string; link: string }) {
-  const lookup = useMemo(() => (
-    card.kind === 'multiverse'
-      ? { kind: 'multiverse' as const, multiverseId: card.multiverseId }
-      : { kind: 'set' as const, set: card.set, number: card.number, lang: card.lang }
-  ), [card]);
-  const { data: scryCard, isLoading } = useScryfallCard(lookup);
-
-  if (isLoading) {
-    return (
-      <div className="px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-9 h-12 rounded-md shrink-0" />
-          <div className="flex-1 min-w-0 space-y-1.5">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const coverUrl = scryCard ? cardPrimaryImage(scryCard, 'small') : undefined;
-
-  let fallbackHost: string;
-  try {
-    fallbackHost = new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    fallbackHost = url;
-  }
-
-  return (
-    <Link
-      to={link}
-      className="flex items-center gap-3 px-4 py-3 border-b border-border hover:bg-secondary/30 transition-colors"
-    >
-      {coverUrl ? (
-        <img
-          src={coverUrl}
-          alt={scryCard?.name ?? 'Magic card'}
-          className="w-9 h-12 rounded-md object-cover shrink-0 shadow-sm"
-          loading="lazy"
-        />
-      ) : (
-        <div className="w-9 h-12 rounded-md bg-secondary flex items-center justify-center shrink-0">
-          <CardsIcon className="size-4 text-muted-foreground/40" />
-        </div>
-      )}
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CardsIcon className="size-3 shrink-0" />
-          <span>Magic Card</span>
-        </div>
-        <p className="text-sm font-medium truncate mt-0.5">
-          {scryCard?.name ?? fallbackHost}
-        </p>
-        {scryCard?.set_name && (
-          <p className="text-xs text-muted-foreground truncate">
-            {scryCard.set_name}
-          </p>
-        )}
-      </div>
-
-      <ExternalLink className="size-4 text-muted-foreground shrink-0" />
-    </Link>
-  );
-}
 
 function CountryPreview({ code, link }: { code: string; link: string }) {
   const info = getCountryInfo(code);
@@ -1224,7 +874,7 @@ export function ProfilePreview({ pubkey }: { pubkey: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Addressable event preview (vines, music, articles, etc.)
+// Addressable event preview (music, articles, etc.)
 // ---------------------------------------------------------------------------
 
 /** Extract a thumbnail URL from an addressable event's tags. */
@@ -1237,7 +887,7 @@ function extractThumbnail(tags: string[][]): string | undefined {
   const imageTag = tags.find(([n]) => n === 'image' || n === 'thumb')?.[1];
   if (imageTag) return imageTag;
 
-  // 3. imeta tag (used by vines / kind 34236)
+  // 3. imeta tag (used by video events)
   const imetaTag = tags.find(([n]) => n === 'imeta');
   if (imetaTag) {
     for (let i = 1; i < imetaTag.length; i++) {

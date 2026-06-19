@@ -5,27 +5,12 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
 import { getThemedQRColors } from '@/lib/qrColors';
+import { parseBolt11Amount } from '@/lib/bolt11';
 import { cn } from '@/lib/utils';
 
 interface LightningInvoiceCardProps {
   invoice: string;
   className?: string;
-}
-
-/** Parse the sats amount from a BOLT11 invoice's human-readable part. */
-function parseBolt11Amount(bolt11: string): number | null {
-  const match = bolt11.toLowerCase().match(/^ln\w+?(\d+)([munp]?)1/);
-  if (!match) return null;
-  const value = parseInt(match[1], 10);
-  if (isNaN(value)) return null;
-  const multiplier = match[2];
-  switch (multiplier) {
-    case 'm': return value * 100_000;     // milli-BTC → sats
-    case 'u': return value * 100;         // micro-BTC → sats
-    case 'n': return value / 10;          // nano-BTC → sats
-    case 'p': return value / 10_000;      // pico-BTC → sats
-    default:  return value * 100_000_000; // BTC → sats
-  }
 }
 
 /** Format sats with thousands separator. */

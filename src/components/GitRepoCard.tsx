@@ -1,5 +1,5 @@
 import type { NostrEvent } from "@nostrify/nostrify";
-import { BookMarked, Copy, Check, ExternalLink, Globe, Wand2 } from "lucide-react";
+import { BookMarked, Copy, Check, Globe } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { openUrl } from "@/lib/downloadFile";
@@ -20,7 +20,7 @@ function getFaviconUrl(webUrl: string): string | undefined {
 	}
 }
 
-/** Renders a NIP-34 kind 30617 event. Shakespeare apps show as app cards; others as repo cards. */
+/** Renders a NIP-34 kind 30617 event as a repo card. */
 export function GitRepoCard({ event }: GitRepoCardProps) {
 	const name = event.tags.find(([n]) => n === "name")?.[1];
 	const description = event.tags.find(([n]) => n === "description")?.[1];
@@ -28,18 +28,14 @@ export function GitRepoCard({ event }: GitRepoCardProps) {
 	const isPersonalFork = event.tags.some(
 		([n, v]) => n === "t" && v === "personal-fork",
 	);
-	const hasShakespeare = event.tags.some(
-		([n, v]) => n === "t" && v === "shakespeare",
-	);
 	const dTag = event.tags.find(([n]) => n === "d")?.[1] ?? "";
+
+	const hasWeb = !!webUrls[0];
+	const faviconUrl = hasWeb ? getFaviconUrl(webUrls[0]) : undefined;
 
 	// Nostr clone URI (nostr://npub/relay/identifier)
 	const nostrUri = NostrURI.fromEvent(event);
 	const nostrCloneUrl = nostrUri.toString();
-
-	// Shakespeare + web URL = this is a deployed application, not a repo
-	const isApp = hasShakespeare && !!webUrls[0];
-	const faviconUrl = isApp ? getFaviconUrl(webUrls[0]) : undefined;
 
 	const displayName = name || dTag;
 
@@ -52,14 +48,12 @@ export function GitRepoCard({ event }: GitRepoCardProps) {
 		setTimeout(() => setCopied(false), 2000);
 	};
 
-	const shakespeareUrl = `https://shakespeare.diy/clone?url=${encodeURIComponent(nostrCloneUrl)}`;
-
 	return (
 		<div className="mt-2 rounded-2xl border border-border overflow-hidden">
 			<div className="px-3.5 py-3 space-y-2">
 				{/* Name + fork badge */}
 				<div className="flex items-center gap-2 min-w-0">
-					{isApp && faviconUrl && !faviconError ? (
+					{hasWeb && faviconUrl && !faviconError ? (
 						<img
 							src={faviconUrl}
 							alt=""
@@ -109,46 +103,19 @@ export function GitRepoCard({ event }: GitRepoCardProps) {
 				</div>
 
 				{/* Action buttons */}
-				{(hasShakespeare || isApp || webUrls[0]) && (
+				{hasWeb && (
 					<div className="flex flex-wrap gap-2 pt-0.5">
-						{hasShakespeare && (
-							<button
-								type="button"
-								className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-								onClick={(e) => {
-									e.stopPropagation();
-									openUrl(shakespeareUrl);
-								}}
-							>
-								<Wand2 className="size-3" />
-								Edit with Shakespeare
-							</button>
-						)}
-						{isApp ? (
-							<button
-								type="button"
-								className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary/60"
-								onClick={(e) => {
-									e.stopPropagation();
-									openUrl(webUrls[0]);
-								}}
-							>
-								<ExternalLink className="size-3" />
-								Open App
-							</button>
-						) : webUrls[0] ? (
-							<button
-								type="button"
-								className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary/60"
-								onClick={(e) => {
-									e.stopPropagation();
-									openUrl(webUrls[0]);
-								}}
-							>
-								<Globe className="size-3" />
-								Browse Repository
-							</button>
-						) : null}
+						<button
+							type="button"
+							className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary/60"
+							onClick={(e) => {
+								e.stopPropagation();
+								openUrl(webUrls[0]);
+							}}
+						>
+							<Globe className="size-3" />
+							Browse Repository
+						</button>
 					</div>
 				)}
 			</div>

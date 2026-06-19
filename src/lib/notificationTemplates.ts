@@ -59,12 +59,6 @@ export const NOTIFICATION_TEMPLATES: NotificationTemplate[] = [
     body: 'You received a new badge.',
   },
   {
-    id: 'letters',
-    kinds: [8211],
-    title: '{{author_name}} sent you a letter!',
-    body: 'You have a new letter waiting for you.',
-  },
-  {
     id: 'highlights',
     kinds: [9802],
     title: '{{author_name}} highlighted your post!',

@@ -1,8 +1,8 @@
 /**
- * SVG ID Utilities for Blobbi
+ * SVG ID Utilities for Pets
  *
  * Handles uniquification of SVG IDs to prevent collisions when
- * multiple Blobbis are rendered on the same page.
+ * multiple Petss are rendered on the same page.
  *
  * Used by:
  * - Baby SVG customizer
@@ -11,7 +11,7 @@
 
 /**
  * Make all SVG definition IDs unique by prefixing with an instance ID.
- * This prevents gradient ID collisions when multiple Blobbis are rendered on the same page.
+ * This prevents gradient ID collisions when multiple Petss are rendered on the same page.
  *
  * Updates both:
  * - Definition IDs: id="gradientName" → id="prefix_gradientName"
@@ -19,14 +19,14 @@
  * - xlink:href and href references
  *
  * @param svgText - The SVG content to process
- * @param instanceId - Unique identifier for this Blobbi instance
+ * @param instanceId - Unique identifier for this Pets instance
  * @returns SVG content with uniquified IDs
  */
 export function uniquifySvgIds(svgText: string, instanceId: string): string {
   // Generate a unique prefix from the full instance ID
   // Sanitize to only allow valid SVG ID characters (letters, numbers, underscore, hyphen)
-  // Note: instanceId format is "blobbi-{pubkeyPrefix12}-{petId10}" so we need the full ID
-  // to distinguish between Blobbis owned by the same user
+  // Note: instanceId format is "pets-{pubkeyPrefix12}-{petId10}" so we need the full ID
+  // to distinguish between Petss owned by the same user
   const prefix = `b_${instanceId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
   // Find all IDs defined in the SVG (in defs, gradients, clipPaths, etc.)

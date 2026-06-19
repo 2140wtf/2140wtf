@@ -1,5 +1,5 @@
 /**
- * Centralized validation logic for Blobbi egg properties based on blobbi-egg.md specification
+ * Centralized validation logic for Pets egg properties based on pets-egg.md specification
  */
 
 // Base color options from the specification
@@ -34,7 +34,7 @@ export const VALID_SIZES = {
   legendary: ['tiny'],
 } as const;
 
-// Pattern options - must match domain model (BlobbiPattern in blobbi.ts)
+// Pattern options - must match domain model (PetsPattern in pets.ts)
 export const VALID_PATTERNS = ['solid', 'spotted', 'striped', 'gradient'] as const;
 
 // Egg status options from the specification
@@ -118,7 +118,7 @@ export const ALL_VALID_EYE_COLORS = [
  * Validates if a color is a valid CSS hex color.
  * 
  * NOTE: We accept any valid hex color format, not just the hardcoded palette.
- * The palette enforcement happens at the domain level (deriveVisualTraits in blobbi.ts).
+ * The palette enforcement happens at the domain level (deriveVisualTraits in pets.ts).
  * The EggGraphic module should render whatever valid hex color is provided.
  * 
  * Accepts:
@@ -192,7 +192,7 @@ const MERGED_BASE_COLORS_BY_RARITY: Record<Rarity, readonly string[]> = {
  * Returns null if the color is not in the palette (e.g., custom domain colors).
  * 
  * NOTE: This only works for colors in the legacy specification palettes.
- * Colors from the domain model (BLOBBI_BASE_COLORS in blobbi.ts) will return null.
+ * Colors from the domain model (PETS_BASE_COLORS in pets.ts) will return null.
  */
 export function getColorRarity(
   color: string,

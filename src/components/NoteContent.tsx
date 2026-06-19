@@ -517,7 +517,7 @@ export function NoteContent({
     // the content string. Without this, those attachments would be silently dropped.
     // Only scan for text note kinds — other kinds (DMs, calendar events, etc.) may use
     // imeta tags for different purposes.
-    const TEXT_NOTE_KINDS = new Set([1, 11, 1111]);
+    const TEXT_NOTE_KINDS = new Set([1, 11, 1111, 1068, 6969]);
     if (TEXT_NOTE_KINDS.has(event.kind)) {
       const contentMediaUrls = new Set(
         result.filter((t): t is { type: 'media-embed'; url: string } => t.type === 'media-embed').map((t) => t.url),

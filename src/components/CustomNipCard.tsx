@@ -1,6 +1,5 @@
 import type { NostrEvent } from "@nostrify/nostrify";
-import { FileCode, Wand2 } from "lucide-react";
-import { openUrl } from "@/lib/downloadFile";
+import { FileCode } from "lucide-react";
 import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 
@@ -63,9 +62,6 @@ export function CustomNipCard({ event, preview = true }: CustomNipCardProps) {
 	const title = event.tags.find(([n]) => n === "title")?.[1];
 	const dTag = event.tags.find(([n]) => n === "d")?.[1] ?? "";
 	const relatedKinds = event.tags.filter(([n]) => n === "k").map(([, v]) => v);
-	const hasShakespeare = event.tags.some(
-		([n, v]) => n === "t" && v === "shakespeare",
-	);
 	const contentPreview = preview
 		? extractFirstParagraph(event.content, 200)
 		: "";
@@ -113,20 +109,7 @@ export function CustomNipCard({ event, preview = true }: CustomNipCardProps) {
 						</div>
 					)}
 
-					{/* Shakespeare action */}
-					{hasShakespeare && (
-						<button
-							type="button"
-							className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-							onClick={(e) => {
-								e.stopPropagation();
-								openUrl("https://shakespeare.diy");
-							}}
-						>
-							<Wand2 className="size-3" />
-							Edit with Shakespeare
-						</button>
-					)}
+
 				</div>
 			</div>
 

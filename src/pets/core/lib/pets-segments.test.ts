@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 
-import { getBlobbiStatDisplayState } from './blobbi-segments';
-import type { CareState, StatDisplayState } from './blobbi-segments';
+import { getPetsStatDisplayState } from './pets-segments';
+import type { CareState, StatDisplayState } from './pets-segments';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Shorthand to call the helper with a given stage + value (stat doesn't affect logic). */
 function get(stage: 'egg' | 'baby' | 'adult', value: number): StatDisplayState {
-  return getBlobbiStatDisplayState({ stage, stat: 'hunger', value });
+  return getPetsStatDisplayState({ stage, stat: 'hunger', value });
 }
 
 /** Assert care-state and all derived flags in one call. */
@@ -230,7 +230,7 @@ describe('stat key does not affect logic', () => {
   const stats = ['hunger', 'happiness', 'health', 'hygiene', 'energy'] as const;
 
   it.each(stats)('stat "%s" produces same result for baby at value 50', (stat) => {
-    const r = getBlobbiStatDisplayState({ stage: 'baby', stat, value: 50 });
+    const r = getPetsStatDisplayState({ stage: 'baby', stat, value: 50 });
     expect(r.careState).toBe('attention');
     expect(r.filled).toBe(2);
   });

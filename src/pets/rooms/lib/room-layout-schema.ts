@@ -11,16 +11,16 @@
  * - Malformed data falls back to defaults; never throws.
  */
 
-import { type BlobbiRoomId, isValidRoomId } from './room-config';
+import { type PetsRoomId, isValidRoomId } from './room-config';
 
 // ─── Style & Variant Enums ────────────────────────────────────────────────────
 
 /** Wall surface styles */
-export const WALL_STYLES = ['solid', 'stripes', 'dots', 'gradient'] as const;
+export const WALL_STYLES = ['solid', 'stripes', 'dots', 'gradient', 'circuit', 'hexgrid', 'scanlines'] as const;
 export type WallStyle = typeof WALL_STYLES[number];
 
 /** Floor surface styles */
-export const FLOOR_STYLES = ['solid', 'wood', 'tile', 'carpet'] as const;
+export const FLOOR_STYLES = ['solid', 'wood', 'tile', 'carpet', 'metal', 'glass', 'holo'] as const;
 export type FloorStyle = typeof FLOOR_STYLES[number];
 
 /** Surface variants (shared by wall and floor) */
@@ -47,7 +47,7 @@ export interface RoomLayout {
 /** Top-level content key shape */
 export interface RoomLayoutsContent {
   v: 1;
-  by_room: Partial<Record<BlobbiRoomId, RoomLayout>>;
+  by_room: Partial<Record<PetsRoomId, RoomLayout>>;
 }
 
 // ─── Room Stage Constants ─────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ export const ROOM_FLOOR_RATIO = 0.28;
  *
  * Coordinate model:
  *   - The ground line is at `top: (1 - ROOM_FLOOR_RATIO) * 100%` of the shell.
- *   - The Blobbi container is positioned so its TOP edge is at the ground line,
+ *   - The Pets container is positioned so its TOP edge is at the ground line,
  *     then shifted UP by `100% - bodyBottomInset` of its own height.
  *   - Result: the visible body bottom sits at the ground line.
  *
@@ -81,6 +81,7 @@ const ADULT_BODY_BOTTOM_INSET: Record<string, number> = {
   droppi:  16,   // body bottom ≈ y=168 → 16% gap
   flammi:  14,   // body bottom ≈ y=172 → 14% gap
   froggi:  15,   // body bottom ≈ y=170 → 15% gap
+  glitchfox: 18, // body bottom ≈ y=165 → 17.5% gap (angular, narrow base)
   leafy:   12,   // body bottom ≈ y=176 → 12% gap (stems extend low)
   mushie:  15,   // body bottom ≈ y=170 → 15% gap
   owli:    16,   // body bottom ≈ y=168 → 16% gap
@@ -88,6 +89,8 @@ const ADULT_BODY_BOTTOM_INSET: Record<string, number> = {
   rocky:   10,   // body bottom ≈ y=180 → 10% gap (wide base)
   rosey:   13,   // body bottom ≈ y=174 → 13% gap
   starri:  16,   // body bottom ≈ y=168 → 16% gap
+  biomechmoth: 20, // body bottom ≈ y=160 → 20% gap (floating wings)
+  liquidblob: 17, // body bottom ≈ y=165 → 17.5% gap (dripping base)
 };
 
 const DEFAULT_ADULT_INSET = 15;
@@ -95,7 +98,7 @@ const BABY_BODY_BOTTOM_INSET = 12;   // viewBox 0 0 100 100, body bottom ≈ y=8
 const EGG_BODY_BOTTOM_INSET = 0;     // CSS div fills 100% height, no SVG whitespace
 
 /**
- * Get the body-bottom inset for a Blobbi as a CSS percentage string.
+ * Get the body-bottom inset for a Pets as a CSS percentage string.
  *
  * This represents the fraction of the visual container that is empty below the
  * visible body. Used to compute the upward shift needed so the body bottom
@@ -104,7 +107,7 @@ const EGG_BODY_BOTTOM_INSET = 0;     // CSS div fills 100% height, no SVG whites
  * @param stage - 'egg' | 'baby' | 'adult'
  * @param adultForm - The adult form ID (e.g., 'bloomi', 'rocky'). Only used when stage === 'adult'.
  */
-export function getBlobbiBodyBottomInset(stage: string, adultForm?: string): number {
+export function getPetsBodyBottomInset(stage: string, adultForm?: string): number {
   switch (stage) {
     case 'egg':
       return EGG_BODY_BOTTOM_INSET;

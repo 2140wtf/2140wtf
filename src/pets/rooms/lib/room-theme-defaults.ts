@@ -15,7 +15,7 @@
  * Saved rooms preserve exact user-selected colors and are never affected.
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { RoomLayout } from './room-layout-schema';
 import { DEFAULT_ROOM_LAYOUTS } from './room-layout-defaults';
 
@@ -92,7 +92,7 @@ function readThemeColors(): ThemeColors | null {
  * Generate theme-aware room defaults based on the active CSS theme.
  * Returns static fallback if theme colors cannot be read.
  */
-export function getThemeRoomDefaults(): Record<BlobbiRoomId, RoomLayout> {
+export function getThemeRoomDefaults(): Record<PetsRoomId, RoomLayout> {
   const theme = readThemeColors();
   if (!theme) return DEFAULT_ROOM_LAYOUTS;
 

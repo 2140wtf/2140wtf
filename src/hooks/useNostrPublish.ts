@@ -17,6 +17,12 @@ export type EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig'> & {
    * equal to `created_at` so the two always match on first publish.
    */
   prev?: NostrEvent;
+  /**
+   * Optional explicit relay set. When provided, the signed event is published
+   * only to these relays via `nostr.group()`. Otherwise the event is published
+   * to the global effective relay pool.
+   */
+  relays?: string[];
 };
 
 /** Returns true if the kind falls in a replaceable or addressable range. */
@@ -63,8 +69,8 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
       if (user) {
-        // Extract `prev` before building the event — it's not part of the Nostr event schema.
-        const { prev, ...template } = t;
+        // Extract `prev` and `relays` before building the event — they're not part of the Nostr event schema.
+        const { prev, relays, ...template } = t;
         const tags = [...(template.tags ?? [])];
 
         // Add the NIP-89 client tag if it doesn't exist
@@ -77,7 +83,10 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
 
         // Handle published_at for replaceable/addressable events (NIP-24)
         if (isReplaceableKind(template.kind) && !tags.some(([name]) => name === "published_at")) {
-          if (prev) {
+          // Only reuse `prev` when it matches the kind being published; otherwise
+          // we could copy `published_at` (or other coordinate metadata) from the
+          // wrong replaceable event.
+          if (prev && prev.kind === template.kind) {
             // Preserve published_at from the previous event if it had one
             const oldTag = prev.tags.find(([name]) => name === "published_at");
             if (oldTag) {
@@ -102,7 +111,11 @@ export function useNostrPublish(): UseMutationResult<NostrEvent> {
           );
         }
 
-        await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+        if (relays && relays.length > 0) {
+          await nostr.group(relays).event(event, { signal: AbortSignal.timeout(5000) });
+        } else {
+          await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+        }
 
         // NIP-65: For reply events (kind 1 and 1111), also send to the
         // inbox (read) relays of tagged users so they receive the reply.

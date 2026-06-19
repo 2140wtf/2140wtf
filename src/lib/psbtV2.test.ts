@@ -209,6 +209,24 @@ describe('encodePsbtV2 / parsePsbtV2', () => {
     ).toThrow(/32 bytes/i);
   });
 
+  it('rejects empty input sets', () => {
+    expect(() =>
+      encodePsbtV2({
+        inputs: [],
+        outputs: [{ type: 'script', amount: 1n, script: SENDER_SCRIPT }],
+      }),
+    ).toThrow(/at least one input/i);
+  });
+
+  it('rejects empty output sets', () => {
+    expect(() =>
+      encodePsbtV2({
+        inputs: [{ txid: TXID_A, vout: 0, witnessUtxo: { amount: 1n, script: SENDER_SCRIPT } }],
+        outputs: [],
+      }),
+    ).toThrow(/at least one output/i);
+  });
+
   it('rejects SP outputs with the wrong scan/spend key length', () => {
     expect(() =>
       encodePsbtV2({

@@ -6,7 +6,7 @@ import { nip19 } from 'nostr-tools';
 import { Award, HandHeart, Image, MessageSquareOff } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-const BlobbiStateCard = lazy(() => import('@/components/BlobbiStateCard').then(m => ({ default: m.BlobbiStateCard })));
+const PetsStateCard = lazy(() => import('@/components/PetsStateCard').then(m => ({ default: m.PetsStateCard })));
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -123,9 +123,9 @@ function EmbeddedNaddrInner({ addr, className, disableHoverCards }: EmbeddedNadd
     return <EmbeddedProfileBadgesCard event={event} className={className} />;
   }
 
-  // Blobbi state events render the pet visual inline
+  // Pets state events render the pet visual inline
   if (event.kind === 31124) {
-    return <EmbeddedBlobbiCard event={event} className={className} disableHoverCards={disableHoverCards} />;
+    return <EmbeddedPetsCard event={event} className={className} disableHoverCards={disableHoverCards} />;
   }
 
   // Kind 33863 Fundraiser/Campaign — compact card with banner + title +
@@ -458,8 +458,8 @@ function EmbeddedNaddrCard({ event, className, disableHoverCards }: { event: Nos
   );
 }
 
-/** Embedded card for kind 31124 Blobbi state events — renders the pet visual inline. */
-function EmbeddedBlobbiCard({ event, className, disableHoverCards }: { event: NostrEvent; className?: string; disableHoverCards?: boolean }) {
+/** Embedded card for kind 31124 Pets state events — renders the pet visual inline. */
+function EmbeddedPetsCard({ event, className, disableHoverCards }: { event: NostrEvent; className?: string; disableHoverCards?: boolean }) {
   const naddrId = useMemo(() => {
     const dTag = event.tags.find(([n]) => n === 'd')?.[1] ?? '';
     return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: dTag });
@@ -474,7 +474,7 @@ function EmbeddedBlobbiCard({ event, className, disableHoverCards }: { event: No
       disableHoverCards={disableHoverCards}
     >
       <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
-        <BlobbiStateCard event={event} />
+        <PetsStateCard event={event} />
       </Suspense>
     </EmbeddedCardShell>
   );

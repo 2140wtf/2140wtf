@@ -1,5 +1,5 @@
 /**
- * useBlobbiAttention Hook
+ * usePetsAttention Hook
  * 
  * Manages attention events for the companion - allowing the companion to
  * react to UI changes like modals, dialogs, sheets, and other overlay elements.
@@ -23,7 +23,7 @@ import type { AttentionTarget, AttentionPriority, Position } from '../types/comp
 import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 import { useTypingAttention } from './useTypingAttention';
 
-interface UseBlobbiAttentionOptions {
+interface UsePetsAttentionOptions {
   /** Whether attention system should be active */
   isActive: boolean;
   /** Callback when a new attention target is triggered */
@@ -32,7 +32,7 @@ interface UseBlobbiAttentionOptions {
   onAttentionEnd?: (targetId: string) => void;
 }
 
-interface UseBlobbiAttentionResult {
+interface UsePetsAttentionResult {
   /** Current attention target, if any (includes typing attention) */
   currentAttention: AttentionTarget | null;
   /** Manually trigger attention to a position */
@@ -127,11 +127,11 @@ function generateAttentionId(): string {
 /**
  * Hook to manage companion attention to UI changes.
  */
-export function useBlobbiAttention({
+export function usePetsAttention({
   isActive,
   onAttentionStart,
   onAttentionEnd,
-}: UseBlobbiAttentionOptions): UseBlobbiAttentionResult {
+}: UsePetsAttentionOptions): UsePetsAttentionResult {
   const [uiAttention, setUiAttention] = useState<AttentionTarget | null>(null);
   /** Ref mirror of uiAttention — lets triggerAttention read fresh state without
    *  capturing it in its closure (keeps the callback referentially stable). */
@@ -411,12 +411,12 @@ export function useBlobbiAttention({
    * Typing attention:
    * - Created dynamically from typingTarget (caret position)
    * - Uses 'high' priority to override generic modal attention
-   * - Keeps Blobbi focused on the typing location, not just the modal center
+   * - Keeps Pets focused on the typing location, not just the modal center
    * - Releases after 4s idle timeout
    */
   const currentAttention = useMemo((): AttentionTarget | null => {
     // Typing attention takes priority over UI attention
-    // This keeps Blobbi focused on the caret while typing
+    // This keeps Pets focused on the caret while typing
     if (isTypingInModal && typingTarget) {
       return {
         id: 'typing-attention',

@@ -70,7 +70,7 @@ export function EventsFeedPage() {
   // Flatten, deduplicate, filter muted, then sort: future events first
   const feedItems = useMemo(() => {
     if (!rawData?.pages) return [];
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
     const now = Math.floor(Date.now() / 1000);
 
     const items = (
@@ -78,14 +78,44 @@ export function EventsFeedPage() {
     )
       .flatMap((page) => page.items)
       .filter((item) => {
-        if (seen.has(item.event.id)) return false;
-        seen.add(item.event.id);
+        if (seenIds.has(item.event.id)) return false;
+        seenIds.add(item.event.id);
         if (muteItems.length > 0 && isEventMuted(item.event, muteItems))
           return false;
         return true;
       });
 
-    return items.sort((a, b) => {
+    // Calendar events can be published as both kind 31922 (date-based) and
+    // kind 31923 (time-based) with the same d-tag. Keep one per author+d-tag,
+    // preferring the time-based (31923) version and otherwise the newest one.
+    const byCalendarCoord = new Map<string, { event: NostrEvent; repostedBy?: string }>();
+    for (const item of items) {
+      const dTag = getTag(item.event.tags, 'd');
+      if (!dTag) continue;
+      const key = `${item.event.pubkey}:${dTag}`;
+      const existing = byCalendarCoord.get(key);
+      if (!existing) {
+        byCalendarCoord.set(key, item);
+      } else if (
+        item.event.kind === 31923 && existing.event.kind !== 31923
+      ) {
+        byCalendarCoord.set(key, item);
+      } else if (
+        item.event.kind === existing.event.kind &&
+        item.event.created_at > existing.event.created_at
+      ) {
+        byCalendarCoord.set(key, item);
+      }
+    }
+
+    const deduped = items.filter((item) => {
+      const dTag = getTag(item.event.tags, 'd');
+      if (!dTag) return true;
+      const key = `${item.event.pubkey}:${dTag}`;
+      return byCalendarCoord.get(key) === item;
+    });
+
+    return deduped.sort((a, b) => {
       const aStart = parseInt(getTag(a.event.tags, "start") ?? "0", 10);
       const bStart = parseInt(getTag(b.event.tags, "start") ?? "0", 10);
       const aFuture = aStart >= now;

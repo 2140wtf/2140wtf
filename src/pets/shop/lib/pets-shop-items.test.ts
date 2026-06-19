@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 
-import { getShopItemById } from './blobbi-shop-items';
-import { applyItemEffects } from '@/blobbi/actions/lib/blobbi-action-utils';
-import { DIRECT_ACTION_HAPPINESS_EFFECTS } from '@/blobbi/actions/hooks/useBlobbiDirectAction';
-import type { BlobbiStats } from '@/blobbi/core/lib/blobbi';
+import { getShopItemById } from './pets-shop-items';
+import { applyItemEffects } from '@/pets/actions/lib/pets-action-utils';
+import { DIRECT_ACTION_HAPPINESS_EFFECTS } from '@/pets/actions/hooks/usePetsDirectAction';
+import type { PetsStats } from '@/pets/core/lib/pets';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const FULL: BlobbiStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
-const LOW: BlobbiStats = { hunger: 25, happiness: 25, health: 25, hygiene: 25, energy: 25 };
+const FULL: PetsStats = { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 };
+const LOW: PetsStats = { hunger: 25, happiness: 25, health: 25, hygiene: 25, energy: 25 };
 
 function effectOf(id: string) {
   const item = getShopItemById(id);

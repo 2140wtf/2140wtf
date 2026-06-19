@@ -1,13 +1,13 @@
 /**
- * BlobbiActionsContextDef
+ * PetsActionsContextDef
  *
- * Lightweight context definition and types for the Blobbi actions system.
+ * Lightweight context definition and types for the Pets actions system.
  * Separated from the provider component to avoid react-refresh warnings.
  */
 
 import { createContext } from 'react';
 
-import type { InventoryAction } from '@/blobbi/actions/lib/blobbi-action-utils';
+import type { InventoryAction } from '@/pets/actions/lib/pets-action-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,12 +32,12 @@ export type UseItemFunction = (
 ) => Promise<UseItemResult>;
 
 /**
- * Context value for Blobbi actions (consumer side).
+ * Context value for Pets actions (consumer side).
  */
-export interface BlobbiActionsContextValue {
+export interface PetsActionsContextValue {
   /**
    * Use an item on the current companion.
-   * Works even without BlobbiPage registration (uses fallback).
+   * Works even without PetsPage registration (uses fallback).
    */
   useItem: UseItemFunction;
 
@@ -57,8 +57,8 @@ export interface BlobbiActionsContextValue {
 /**
  * Internal context value (includes registration functions).
  */
-export interface BlobbiActionsContextInternal {
-  /** Register item-use functionality (called by BlobbiPage) */
+export interface PetsActionsContextInternal {
+  /** Register item-use functionality (called by PetsPage) */
   registerRef: React.MutableRefObject<UseItemFunction | null>;
   /** Whether items can currently be used (via registration) */
   canUseItemsRegisteredRef: React.MutableRefObject<boolean>;
@@ -72,4 +72,4 @@ export interface BlobbiActionsContextInternal {
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
-export const BlobbiActionsContext = createContext<BlobbiActionsContextInternal | null>(null);
+export const PetsActionsContext = createContext<PetsActionsContextInternal | null>(null);

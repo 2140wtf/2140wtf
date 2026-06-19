@@ -14,7 +14,7 @@ import { isNostrId } from '@/lib/nostrId';
 
 interface StreamPostsOptions {
   includeReplies: boolean;
-  mediaType: 'all' | 'images' | 'videos' | 'vines' | 'none';
+  mediaType: 'all' | 'images' | 'videos' | 'none';
   language?: string;
   /** Protocol strings to pass as protocol: search terms. Defaults to ['nostr']. */
   protocols?: string[];
@@ -113,12 +113,7 @@ function filterEvent(
       case 'videos':
         if (!hasVideos) return false;
         break;
-      case 'vines':
-        // Vines are kinds 22/34236; kind 1 posts aren't vines — filter them out
-        // (streaming for vines uses kind 22/34236 in streamFilter, so kind 1 events
-        // that slip through from cache should be rejected)
-        if (event.kind === 1 || event.kind === 1111) return false;
-        break;
+
       case 'none':
         if (hasImages || hasVideos) return false;
         break;
@@ -133,7 +128,6 @@ const PAGE_SIZE = 40;
 
 /**
  * Stream posts using a direct relay connection.
- * When mediaType is 'vines', streams kind 34236 events instead of kind 1.
  * Includes extra kinds the user has enabled in feed settings.
  * Other filters are applied client-side via useMemo.
  */
@@ -214,7 +208,7 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
   }, [options.authorPubkeys]);
 
   // These mediaTypes query dedicated event kinds rather than filtering kind 1
-  const isDedicatedKindQuery = !options.kindsOverride && (options.mediaType === 'vines' || options.mediaType === 'images' || options.mediaType === 'videos');
+  const isDedicatedKindQuery = !options.kindsOverride && (options.mediaType === 'images' || options.mediaType === 'videos');
 
   const enabledKinds = getEnabledFeedKinds(feedSettings);
   const kindsKey = [...enabledKinds].sort().join(',');
@@ -234,8 +228,6 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
     let kinds: number[];
     if (options.kindsOverride && options.kindsOverride.length > 0) {
       kinds = [...options.kindsOverride];
-    } else if (options.mediaType === 'vines') {
-      kinds = [22, 34236];           // shorts + vines
     } else if (options.mediaType === 'videos') {
       kinds = [21, 22, ...enabledKinds.filter((k) => !isRepostKind(k))];
     } else if (options.mediaType === 'images') {

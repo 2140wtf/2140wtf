@@ -44,7 +44,7 @@ export function calculateFloatAnimation(time: number, isMoving: boolean): FloatO
     // Multiple frequencies create a bouncy, charming walk
     const t = time / 1000; // Convert to seconds for easier frequency tuning
     
-    // Vertical bob oscillates symmetrically around zero so Blobbi's base
+    // Vertical bob oscillates symmetrically around zero so Pets's base
     // stays anchored to the ground line. The original baseLift = -2 was
     // removed because it biased the offset permanently upward.
     const primaryBob = Math.sin(t * 12) * 2;     // Reduced from *3: less vertical energy
@@ -142,7 +142,7 @@ export interface VerticalEntryConfig {
   // ── Fall entry ──
   /** Squash amount during landing (0-1, 0.15 = 15% compression) */
   landingSquash: number;
-  /** How much of Blobbi is visible when stuck (0-1, 0.15 = tiny butt showing) */
+  /** How much of Pets is visible when stuck (0-1, 0.15 = tiny butt showing) */
   stuckVisibleAmount: number;
   /** How far down the first pull goes (0-1) */
   pull1DropAmount: number;
@@ -150,7 +150,7 @@ export interface VerticalEntryConfig {
   pull2DropAmount: number;
   
   // ── Rise entry ──
-  /** How much of Blobbi is visible when stopping to inspect (0-1, 0.65 = 65% visible) */
+  /** How much of Pets is visible when stopping to inspect (0-1, 0.65 = 65% visible) */
   riseVisibleAmount: number;
 }
 
@@ -158,7 +158,7 @@ export interface VerticalEntryConfig {
  * Calculate the FALL entry animation (from top of screen).
  * 
  * Used when navigating DOWN the sidebar order.
- * Blobbi appears stuck at the top with just a tiny butt showing,
+ * Pets appears stuck at the top with just a tiny butt showing,
  * does 2 vertical pull attempts, then either falls or stays permanently stuck.
  * 
  * Normal flow (~80%):
@@ -294,7 +294,7 @@ export function calculateFallEntryAnimation(
     
     case 'stuck_permanent': {
       // Truly stuck - waiting for user to drag and rescue
-      // Add a wiggle/struggle animation to indicate Blobbi needs help
+      // Add a wiggle/struggle animation to indicate Pets needs help
       const stuckElapsed = Date.now() - entryState.phaseStartTime;
       const t = stuckElapsed / 1000; // Convert to seconds
       
@@ -408,7 +408,7 @@ function easeInOutCubic(t: number): number {
  * Calculate the RISE entry animation (from bottom of screen).
  * 
  * Used when navigating UP the sidebar order.
- * Blobbi rises cautiously from below, stops to inspect, then fully enters.
+ * Pets rises cautiously from below, stops to inspect, then fully enters.
  * 
  * Phases:
  * 1. RISING: Slowly rising until eyes are visible

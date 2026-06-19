@@ -5,11 +5,12 @@ import type { NostrFilter } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from './useCurrentUser';
+import { useUploadFile } from './useUploadFile';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { buildBlossomBackupTag, createBackupFile, fetchEncryptedBackup, parseBlossomBackupTag } from '@/lib/encryptedBackup';
 import type { Theme, FeedSettings, ContentWarningPolicy, SavedFeed, WidgetConfig } from '@/contexts/AppContext';
 import type { ThemeConfig } from '@/themes';
 import type { ContentFilter } from './useContentFilters';
-import type { LetterPreferences } from '@/lib/letterTypes';
 import { EncryptedSettingsSchema } from '@/lib/schemas';
 
 /**
@@ -111,8 +112,6 @@ export interface EncryptedSettings {
   currencyDisplay?: 'usd' | 'sats';
   /** Saved feed tabs created from the search page. */
   savedFeeds?: SavedFeed[];
-  /** Letter preferences (stationery, font, frame, closing, signature, inbox filters) */
-  letterPreferences?: LetterPreferences;
 }
 
 /**
@@ -123,6 +122,7 @@ export function useEncryptedSettings() {
   const { config } = useAppContext();
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { mutateAsync: uploadFile } = useUploadFile();
   const queryClient = useQueryClient();
 
 
@@ -161,12 +161,26 @@ export function useEncryptedSettings() {
       if (!event || !user) return null;
 
       // Decrypt the content
-      if (!event.content || !user.signer.nip44) {
+      if (!user.signer.nip44) {
         return null;
       }
 
       try {
-        const decrypted = await user.signer.nip44.decrypt(user.pubkey, event.content);
+        let ciphertext: string | null = event.content || null;
+
+        // Fallback to Blossom backup when the event content is empty.
+        if (!ciphertext) {
+          const backup = parseBlossomBackupTag(event.tags);
+          if (backup) {
+            ciphertext = await fetchEncryptedBackup(backup.url, backup.hash);
+          }
+        }
+
+        if (!ciphertext) {
+          return null;
+        }
+
+        const decrypted = await user.signer.nip44.decrypt(user.pubkey, ciphertext);
         const json = JSON.parse(decrypted);
         const result = EncryptedSettingsSchema.safeParse(json);
         if (!result.success) {
@@ -209,12 +223,23 @@ export function useEncryptedSettings() {
           authors: [user.pubkey],
           '#d': [`${config.appId}/metadata`],
         });
-        if (freshEvent?.content) {
+        if (freshEvent) {
           try {
-            const decrypted = await user.signer.nip44.decrypt(user.pubkey, freshEvent.content);
-            const json = JSON.parse(decrypted);
-            const result = EncryptedSettingsSchema.safeParse(json);
-            currentSettings = result.success ? (result.data as EncryptedSettings) : (json ?? {}) as EncryptedSettings;
+            let ciphertext: string | null = freshEvent.content || null;
+            if (!ciphertext) {
+              const backup = parseBlossomBackupTag(freshEvent.tags);
+              if (backup) {
+                ciphertext = await fetchEncryptedBackup(backup.url, backup.hash);
+              }
+            }
+            if (ciphertext) {
+              const decrypted = await user.signer.nip44.decrypt(user.pubkey, ciphertext);
+              const json = JSON.parse(decrypted);
+              const result = EncryptedSettingsSchema.safeParse(json);
+              currentSettings = result.success ? (result.data as EncryptedSettings) : (json ?? {}) as EncryptedSettings;
+            } else {
+              currentSettings = settings.data ?? {};
+            }
           } catch {
             currentSettings = settings.data ?? {};
           }
@@ -235,15 +260,30 @@ export function useEncryptedSettings() {
       const plaintext = JSON.stringify(updatedSettings);
       const encrypted = await user.signer.nip44.encrypt(user.pubkey, plaintext);
 
+      // Build tags; try to upload a redundant Blossom backup in the background.
+      const tags: string[][] = [
+        ['d', `${config.appId}/metadata`],
+        ['title', `${config.appName} Metadata`],
+        ['client', config.appName, ...(config.client ? [config.client] : [])],
+      ];
+
+      try {
+        const backupFile = createBackupFile(encrypted);
+        const uploadTags = await uploadFile(backupFile);
+        const url = uploadTags[0]?.[1];
+        if (url) {
+          tags.push(buildBlossomBackupTag(url, encrypted));
+        }
+      } catch (error) {
+        // Backup is best-effort; the primary encrypted content is still published below.
+        console.warn('Failed to upload encrypted settings backup:', error);
+      }
+
       // Sign the event
       const unsignedEvent = {
         kind: 30078,
         content: encrypted,
-        tags: [
-          ['d', `${config.appId}/metadata`],
-          ['title', `${config.appName} Metadata`],
-          ['client', config.appName, ...(config.client ? [config.client] : [])],
-        ],
+        tags,
         created_at: Math.floor(Date.now() / 1000),
       };
 

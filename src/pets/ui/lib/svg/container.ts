@@ -1,5 +1,5 @@
 /**
- * SVG Container Utilities for Blobbi
+ * SVG Container Utilities for Pets
  *
  * Handles SVG viewport and sizing adjustments.
  *

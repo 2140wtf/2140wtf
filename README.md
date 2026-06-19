@@ -13,7 +13,7 @@ Made by [Soapbox](https://soapbox.pub).
 ## Features
 
 - **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events
-- **Infinite Content Types** -- Text notes, articles, short-form videos (Divines), live streams, polls, follow packs, color moments, magic decks, geocaching, and Webxdc mini-apps
+- **Infinite Content Types** -- Text notes, articles, short-form videos (Divines), live streams, polls, follow packs, geocaching, and mini-apps
 - **Lightning Payments** -- Zap posts and profiles with sats via Nostr Wallet Connect (NWC) or WebLN
 - **Comments** -- Comment on anything: posts, URLs, profiles, hashtags, books, and more (NIP-22)
 - **Self-Hosting** -- Builds to static HTML/JS/CSS. Deploy anywhere -- GitHub Pages, Netlify, Vercel, a VPS, or a Raspberry Pi
@@ -87,7 +87,7 @@ Use an alternate config file path with: `DITTO_CONFIG_FILE=./my-config.json npm 
 
 For self-hosted instances:
 
-- Replace `public/logo.svg` and `public/logo.png` with your logo
+- Replace `public/logo.png` with your logo, then run `npm run icons` to regenerate all branded assets
 - Update the app name in `index.html` and `public/manifest.webmanifest`
 - Replace `public/og-image.jpg` for social sharing previews
 - Set default relays and upload servers in `ditto.json`

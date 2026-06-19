@@ -1,9 +1,9 @@
-// src/blobbi/actions/lib/blobbi-activity-state.ts
+// src/pets/actions/lib/pets-activity-state.ts
 
 import type { SelectedTrack } from '../components/PlayMusicModal';
 
 /**
- * Types of inline activities that can be displayed in BlobbiPage
+ * Types of inline activities that can be displayed in PetsPage
  */
 export type InlineActivityType = 'none' | 'music' | 'sing';
 
@@ -42,13 +42,13 @@ export type InlineActivityState =
   | SingActivityState;
 
 /**
- * Blobbi reaction state - indicates how Blobbi should visually react
+ * Pets reaction state - indicates how Pets should visually react
  */
-export type BlobbiReactionState = 
+export type PetsReactionState = 
   | 'idle'           // No special reaction
-  | 'listening'      // Music is playing, Blobbi is listening
-  | 'swaying'        // Blobbi is swaying to music
-  | 'singing'        // User is singing, Blobbi is engaged
+  | 'listening'      // Music is playing, Pets is listening
+  | 'swaying'        // Pets is swaying to music
+  | 'singing'        // User is singing, Pets is engaged
   | 'happy';         // General happy reaction
 
 /**

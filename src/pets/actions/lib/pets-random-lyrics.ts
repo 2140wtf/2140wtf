@@ -1,8 +1,8 @@
-// src/blobbi/actions/lib/blobbi-random-lyrics.ts
+// src/pets/actions/lib/pets-random-lyrics.ts
 
 /**
  * Random lyrics for the Sing action.
- * These are fun, simple lyrics that users can sing to their Blobbi.
+ * These are fun, simple lyrics that users can sing to their Pets.
  */
 
 export interface LyricsEntry {
@@ -12,15 +12,15 @@ export interface LyricsEntry {
 }
 
 /**
- * Collection of placeholder lyrics for singing to a Blobbi.
+ * Collection of placeholder lyrics for singing to a Pets.
  * Simple, fun, and appropriate for all ages.
  */
-export const BLOBBI_LYRICS: LyricsEntry[] = [
+export const PETS_LYRICS: LyricsEntry[] = [
   {
     id: 'lullaby-1',
-    title: 'Blobbi Lullaby',
+    title: 'Pets Lullaby',
     lines: [
-      'Little Blobbi, close your eyes,',
+      'Little Pets, close your eyes,',
       'Dream of stars up in the skies.',
       'Safe and warm, you drift away,',
       "We'll play again another day.",
@@ -28,9 +28,9 @@ export const BLOBBI_LYRICS: LyricsEntry[] = [
   },
   {
     id: 'happy-song-1',
-    title: 'Happy Blobbi Song',
+    title: 'Happy Pets Song',
     lines: [
-      'Blobbi, Blobbi, jump around!',
+      'Pets, Pets, jump around!',
       "You're the happiest friend I've found!",
       'Dancing, playing, full of cheer,',
       "I'm so glad that you are here!",
@@ -102,15 +102,15 @@ export const BLOBBI_LYRICS: LyricsEntry[] = [
  * Get a random lyrics entry.
  */
 export function getRandomLyrics(): LyricsEntry {
-  const index = Math.floor(Math.random() * BLOBBI_LYRICS.length);
-  return BLOBBI_LYRICS[index];
+  const index = Math.floor(Math.random() * PETS_LYRICS.length);
+  return PETS_LYRICS[index];
 }
 
 /**
  * Get all available lyrics entries.
  */
 export function getAllLyrics(): LyricsEntry[] {
-  return BLOBBI_LYRICS;
+  return PETS_LYRICS;
 }
 
 /**

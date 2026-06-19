@@ -146,6 +146,10 @@ export function useLoveList() {
       { store },
     );
 
+    // Removing from a list that doesn't exist yet is a no-op; don't publish an
+    // empty event that could wipe state on a downstream consumer.
+    if (action === 'remove' && !prev) return;
+
     // ② Separate `p` tags from everything else (preserve unknown tags).
     const existingTags = prev?.tags ?? [];
     const pTags = existingTags.filter(([name]) => name === 'p');

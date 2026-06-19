@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-const TENOR_API_KEY = 'REDACTED-TENOR-KEY'; // Tenor public API key
+const TENOR_API_KEY = import.meta.env.VITE_TENOR_API_KEY ?? '';
 const TENOR_BASE_URL = 'https://tenor.googleapis.com/v2';
 const RESULTS_LIMIT = 30;
 
@@ -61,6 +61,10 @@ function mapTenorResult(result: TenorResult): GifResult {
 }
 
 async function fetchTenorSearch(query: string, pos?: string): Promise<{ results: GifResult[]; next: string }> {
+  if (!TENOR_API_KEY) {
+    throw new Error('Tenor API key is not configured (VITE_TENOR_API_KEY)');
+  }
+
   const params = new URLSearchParams({
     key: TENOR_API_KEY,
     q: query,
@@ -82,6 +86,10 @@ async function fetchTenorSearch(query: string, pos?: string): Promise<{ results:
 }
 
 async function fetchTenorTrending(pos?: string): Promise<{ results: GifResult[]; next: string }> {
+  if (!TENOR_API_KEY) {
+    throw new Error('Tenor API key is not configured (VITE_TENOR_API_KEY)');
+  }
+
   const params = new URLSearchParams({
     key: TENOR_API_KEY,
     limit: String(RESULTS_LIMIT),

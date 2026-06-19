@@ -69,7 +69,12 @@ function readAllowances(): NsiteAllowance[] {
 
 /** Write all allowances to localStorage and notify same-tab subscribers. */
 function writeAllowances(allowances: NsiteAllowance[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(allowances));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allowances));
+  } catch {
+    // localStorage may be unavailable (private mode, quota); skip persistence.
+    return;
+  }
   // The `storage` event only fires across tabs. Dispatch a custom event so
   // same-tab subscribers (e.g. NsitePermissionManager) also re-render.
   window.dispatchEvent(new Event('nsite-permissions-changed'));

@@ -1,7 +1,7 @@
 /**
- * Blobbi → EggGraphic Adapter
+ * Pets → EggGraphic Adapter
  * 
- * This module provides a translation layer between the Blobbi domain model
+ * This module provides a translation layer between the Pets domain model
  * and the portable EggGraphic visual module.
  * 
  * PURPOSE:
@@ -11,41 +11,41 @@
  * 
  * USAGE:
  * ```ts
- * const eggVisual = toEggGraphicVisualBlobbi(companion);
+ * const eggVisual = toEggGraphicVisualPets(companion);
  * // Pass eggVisual to EggGraphic component
  * ```
  */
 
-import type { EggVisualBlobbi } from '@/blobbi/egg';
+import type { EggVisualPets } from '@/pets/egg';
 import {
-  type BlobbiCompanion,
-  type BlobbiPattern,
-  type BlobbiSpecialMark,
-  type BlobbiStage,
+  type PetsCompanion,
+  type PetsPattern,
+  type PetsSpecialMark,
+  type PetsStage,
   getTagValue,
-} from './blobbi';
+} from './pets';
 
-// ─── Egg Module Types (derived from EggVisualBlobbi) ──────────────────────────
+// ─── Egg Module Types (derived from EggVisualPets) ──────────────────────────
 
 /** Life stage values accepted by EggGraphic */
-type EggLifeStage = NonNullable<EggVisualBlobbi['lifeStage']>;
+type EggLifeStage = NonNullable<EggVisualPets['lifeStage']>;
 
 /** Pattern values accepted by EggGraphic */
-type EggPattern = NonNullable<EggVisualBlobbi['pattern']>;
+type EggPattern = NonNullable<EggVisualPets['pattern']>;
 
 /** Special mark values accepted by EggGraphic */
-type EggSpecialMark = NonNullable<EggVisualBlobbi['specialMark']>;
+type EggSpecialMark = NonNullable<EggVisualPets['specialMark']>;
 
 /** Theme variant values accepted by EggGraphic */
-type EggThemeVariant = NonNullable<EggVisualBlobbi['themeVariant']>;
+type EggThemeVariant = NonNullable<EggVisualPets['themeVariant']>;
 
 // ─── Mapping Tables ───────────────────────────────────────────────────────────
 
 /**
- * Maps Blobbi pattern values to EggGraphic pattern values.
+ * Maps Pets pattern values to EggGraphic pattern values.
  * Explicit mapping allows vocabularies to diverge in the future.
  */
-const PATTERN_MAP: Record<BlobbiPattern, EggPattern> = {
+const PATTERN_MAP: Record<PetsPattern, EggPattern> = {
   'solid': 'solid',
   'spotted': 'spotted',
   'striped': 'striped',
@@ -53,9 +53,9 @@ const PATTERN_MAP: Record<BlobbiPattern, EggPattern> = {
 };
 
 /**
- * Maps Blobbi special mark values to EggGraphic special mark values.
+ * Maps Pets special mark values to EggGraphic special mark values.
  */
-const SPECIAL_MARK_MAP: Record<BlobbiSpecialMark, EggSpecialMark> = {
+const SPECIAL_MARK_MAP: Record<PetsSpecialMark, EggSpecialMark> = {
   'none': 'none',
   'star': 'star',
   'heart': 'heart',
@@ -64,9 +64,9 @@ const SPECIAL_MARK_MAP: Record<BlobbiSpecialMark, EggSpecialMark> = {
 };
 
 /**
- * Maps Blobbi stage values to EggGraphic life stage values.
+ * Maps Pets stage values to EggGraphic life stage values.
  */
-const LIFE_STAGE_MAP: Record<BlobbiStage, EggLifeStage> = {
+const LIFE_STAGE_MAP: Record<PetsStage, EggLifeStage> = {
   'egg': 'egg',
   'baby': 'baby',
   'adult': 'adult',
@@ -91,9 +91,9 @@ function extractCrossoverApp(allTags: string[][]): string | undefined {
 // ─── Main Adapter Function ────────────────────────────────────────────────────
 
 /**
- * Convert a BlobbiCompanion to EggVisualBlobbi for rendering.
+ * Convert a PetsCompanion to EggVisualPets for rendering.
  * 
- * This is the TRANSLATION BOUNDARY between the Blobbi domain model
+ * This is the TRANSLATION BOUNDARY between the Pets domain model
  * and the EggGraphic visual module.
  * 
  * The adapter:
@@ -102,14 +102,14 @@ function extractCrossoverApp(allTags: string[][]): string | undefined {
  * - Provides safe fallbacks for any missing/invalid data
  * - Does NOT leak app-specific assumptions into EggGraphic
  * 
- * @param companion - The parsed BlobbiCompanion from parseBlobbiEvent
+ * @param companion - The parsed PetsCompanion from parsePetsEvent
  * @param themeVariant - Optional theme variant override
- * @returns Visual data compatible with EggVisualBlobbi
+ * @returns Visual data compatible with EggVisualPets
  */
-export function toEggGraphicVisualBlobbi(
-  companion: BlobbiCompanion,
+export function toEggGraphicVisualPets(
+  companion: PetsCompanion,
   themeVariant: EggThemeVariant = DEFAULT_THEME_VARIANT
-): EggVisualBlobbi {
+): EggVisualPets {
   const { visualTraits, stage, allTags = [] } = companion;
   
   return {
@@ -138,12 +138,12 @@ export function toEggGraphicVisualBlobbi(
 }
 
 /**
- * Check if two EggVisualBlobbi configurations are visually equivalent.
+ * Check if two EggVisualPets configurations are visually equivalent.
  * Useful for memoization and avoiding unnecessary re-renders.
  */
 export function areEggGraphicVisualsEqual(
-  a: EggVisualBlobbi,
-  b: EggVisualBlobbi
+  a: EggVisualPets,
+  b: EggVisualPets
 ): boolean {
   return (
     a.baseColor === b.baseColor &&

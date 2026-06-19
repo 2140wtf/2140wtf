@@ -10,8 +10,6 @@ import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { parseChangelog } from '@/lib/changelog';
 import type { ChangelogCategory, ChangelogEntry } from '@/lib/changelog';
 
-const GITLAB_REPO = 'https://gitlab.com/soapbox-pub/ditto';
-
 /** Per-category icon + color used as inline list bullets. */
 const CATEGORY_STYLES: Record<ChangelogCategory, { icon: typeof Plus; colorClass: string }> = {
   Added:      { icon: Plus,        colorClass: 'text-emerald-600 dark:text-emerald-400' },
@@ -42,8 +40,8 @@ export function ChangelogPage() {
   useLayoutOptions({});
 
   useSeoMeta({
-    title: `Changelog | ${config.appName}`,
-    description: `What's new in ${config.appName}`,
+    title: `2140.wtf updates | ${config.appName}`,
+    description: `What's new from 2140.wtf`,
   });
 
   useEffect(() => {
@@ -61,7 +59,7 @@ export function ChangelogPage() {
 
   return (
     <main className="min-h-screen pb-16 sidebar:pb-0">
-      <PageHeader title="Changelog" icon={<ScrollText className="size-5" />} backTo="/settings" />
+      <PageHeader title="2140.wtf updates" icon={<ScrollText className="size-5" />} backTo="/settings" />
 
       <div className="px-4 pt-3 pb-8 space-y-4">
         {error ? (
@@ -72,7 +70,7 @@ export function ChangelogPage() {
           <p className="text-sm text-muted-foreground pt-4">No releases yet.</p>
         ) : (
           <>
-            {isPreRelease && latestVersion && <PreReleaseBanner latestVersion={latestVersion} />}
+            {isPreRelease && latestVersion && <PreReleaseBanner />}
 
             <LatestRelease entry={entries[0]} />
 
@@ -116,22 +114,12 @@ function LatestRelease({ entry }: { entry: ChangelogEntry }) {
   return (
     <div className="pt-2 pb-1 px-4">
       {/* Big centered version + date */}
-      <a
-        href={`${GITLAB_REPO}/-/releases/v${entry.version}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block text-center text-2xl font-bold tracking-tight hover:underline"
-      >
+      <span className="block text-center text-2xl font-bold tracking-tight">
         v{entry.version}
-      </a>
-      <a
-        href={`${GITLAB_REPO}/-/releases/v${entry.version}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
-      >
+      </span>
+      <span className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mt-1">
         {formatDate(entry.date)}
-      </a>
+      </span>
 
       {/* Items */}
       <div className="relative mt-4">
@@ -203,22 +191,12 @@ function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
     <div className="rounded-2xl border border-border overflow-hidden">
       {/* Version header */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <a
-          href={`${GITLAB_REPO}/-/releases/v${entry.version}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-semibold text-sm hover:underline"
-        >
+        <span className="font-semibold text-sm">
           v{entry.version}
-        </a>
-        <a
-          href={`${GITLAB_REPO}/-/releases/v${entry.version}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto"
-        >
+        </span>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto">
           <span>{formatDate(entry.date)}</span>
-        </a>
+        </span>
       </div>
 
       {/* Items */}
@@ -268,33 +246,21 @@ function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
 }
 
 /** Banner shown at the top of the changelog for untagged (pre-release) builds. */
-function PreReleaseBanner({ latestVersion }: { latestVersion: string }) {
+function PreReleaseBanner() {
   return (
     <div className="rounded-2xl border border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 space-y-1.5">
       <div className="flex items-center gap-2">
         <FlaskConical className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
         <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Pre-release build</span>
         {commitSha && buildDate && (
-          <a
-            href={`${GITLAB_REPO}/-/commit/${commitSha}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto text-[11px] text-amber-600/70 dark:text-amber-400/70 hover:text-amber-800 dark:hover:text-amber-300 transition-colors"
-          >
+          <span className="ml-auto text-[11px] text-amber-600/70 dark:text-amber-400/70">
             {formatDate(buildDate.split('T')[0])}
-          </a>
+          </span>
         )}
       </div>
       <p className="text-xs text-amber-700/80 dark:text-amber-400/70">
         This build contains changes not yet included in a release.{' '}
-        <a
-          href={`${GITLAB_REPO}/-/compare/v${latestVersion}...${commitSha || 'main'}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200 transition-colors"
-        >
-          View unreleased changes
-        </a>
+        View unreleased changes
       </p>
     </div>
   );

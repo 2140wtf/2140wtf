@@ -42,6 +42,9 @@ const VBYTES_PER_OUTPUT = 43;
 /** Estimated vBytes for transaction overhead (version, locktime, etc.). */
 const VBYTES_OVERHEAD = 10.5;
 
+/** Sanity cap for fee rate (sat/vB). Prevents accidental or malicious fee drains. */
+export const MAX_FEE_RATE_SATS_PER_VB = 10_000;
+
 /**
  * Strict 32-byte hex validator. Rejects anything that isn't exactly 64
  * lowercase-or-uppercase hex characters.
@@ -644,7 +647,11 @@ export async function broadcastTransaction(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Broadcast failed: ${body}`);
+    // Don't include the server response body in the user-facing error — it
+    // could contain the raw transaction hex or other wallet data in some
+    // Esplora/mempool configurations. Log it for debugging instead.
+    console.warn('Broadcast failed:', response.status, body);
+    throw new Error(`Broadcast failed (${response.status}). Please try again.`);
   }
 
   return response.text();
@@ -732,9 +739,20 @@ export function buildUnsignedPsbtMulti(
   utxos: UTXO[],
   feeRate: number,
 ): UnsignedPsbt {
+  if (!isValidPubkeyHex(senderPubkeyHex)) {
+    throw new Error('Invalid sender public key.');
+  }
+  if (!Number.isFinite(feeRate) || feeRate < 1 || feeRate > MAX_FEE_RATE_SATS_PER_VB) {
+    throw new Error(
+      `Fee rate must be between 1 and ${MAX_FEE_RATE_SATS_PER_VB} sat/vB. Got ${feeRate}.`,
+    );
+  }
   if (recipients.length === 0) throw new Error('At least one recipient is required.');
 
   for (const r of recipients) {
+    if (!validateBitcoinAddress(r.address)) {
+      throw new Error(`Invalid recipient Bitcoin address: ${r.address}`);
+    }
     if (!Number.isFinite(r.amountSats) || r.amountSats < DUST_LIMIT) {
       throw new Error(
         `Each recipient must receive at least ${DUST_LIMIT} sats (dust limit). Got ${r.amountSats}.`,
@@ -797,6 +815,83 @@ export function buildUnsignedPsbtMulti(
   return { psbtHex: hex.encode(tx.toPSBT()), fee };
 }
 
+/** Allowed sighash types for the local Taproot signer. */
+const ALLOWED_SIGHASH_TYPES = new Set<number>([
+  btc.SigHash.DEFAULT,
+  btc.SigHash.ALL,
+]);
+
+/**
+ * Inspect a PSBT before local signing.
+ *
+ * Rejects:
+ *   - empty input/output sets,
+ *   - inputs missing a witness UTXO or with zero/negative value,
+ *   - inputs that are not P2TR key-path spends owned by the expected pubkey,
+ *   - inputs that request a non-standard sighash (anything other than
+ *     SIGHASH_DEFAULT or SIGHASH_ALL),
+ *   - transactions whose outputs exceed their inputs (negative fee).
+ *
+ * This keeps the local signer from being tricked into signing a PSBT that
+ * spends someone else's UTXO, uses a weaker sighash, or is structurally
+ * invalid.
+ */
+function inspectPsbtForLocalSigning(
+  tx: btc.Transaction,
+  expectedPubkey: Uint8Array,
+): void {
+  if (tx.inputsLength === 0) {
+    throw new Error('PSBT has no inputs.');
+  }
+  if (tx.outputsLength === 0) {
+    throw new Error('PSBT has no outputs.');
+  }
+
+  let inputSum = 0n;
+  for (let i = 0; i < tx.inputsLength; i++) {
+    const inp = tx.getInput(i);
+    if (!inp.witnessUtxo) {
+      throw new Error(`PSBT input ${i} is missing its witness UTXO.`);
+    }
+    if (inp.witnessUtxo.amount <= 0n) {
+      throw new Error(`PSBT input ${i} has a zero or negative value.`);
+    }
+    if (!inp.witnessUtxo.script || inp.witnessUtxo.script.length === 0) {
+      throw new Error(`PSBT input ${i} has an empty prevout script.`);
+    }
+    if (!inp.tapInternalKey) {
+      throw new Error(`PSBT input ${i} is not a Taproot key-path spend.`);
+    }
+    if (!bytesEqual(inp.tapInternalKey, expectedPubkey)) {
+      throw new Error(`PSBT input ${i} is not owned by this signer.`);
+    }
+    if (inp.sighashType !== undefined && !ALLOWED_SIGHASH_TYPES.has(inp.sighashType)) {
+      throw new Error(`PSBT input ${i} requests a non-standard sighash type (${inp.sighashType}).`);
+    }
+    inputSum += inp.witnessUtxo.amount;
+  }
+
+  let outputSum = 0n;
+  for (let i = 0; i < tx.outputsLength; i++) {
+    const out = tx.getOutput(i);
+    const amount = out.amount ?? 0n;
+    if (amount < 0n) {
+      throw new Error(`PSBT output ${i} has a negative amount.`);
+    }
+    outputSum += amount;
+  }
+
+  if (outputSum > inputSum) {
+    throw new Error('PSBT outputs exceed inputs; transaction is invalid.');
+  }
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /**
  * Sign a PSBT locally using a raw private key (nsec).
  *
@@ -814,14 +909,27 @@ export function signPsbtLocal(psbtHex: string, privateKeyHex: string): string {
   const tx = btc.Transaction.fromPSBT(hexToBytes(psbtHex));
   const privKey = hexToBytes(privateKeyHex);
 
-  // `tx.sign` returns the number of inputs signed.
-  const signedCount = tx.sign(privKey);
+  try {
+    // Derive the x-only pubkey so we can verify every input is owned by this
+    // signer before any signature is produced.
+    const internalPubkey = btc.utils.pubSchnorr(privKey);
+    inspectPsbtForLocalSigning(tx, internalPubkey);
 
-  if (signedCount === 0) {
-    throw new Error('No inputs in this PSBT are owned by the signer.');
+    // `tx.sign` returns the number of inputs signed. We restrict the signer
+    // to SIGHASH_ALL so a malicious PSBT cannot trick us into signing with a
+    // weaker sighash (e.g. SIGHASH_NONE). DEFAULT is equivalent to ALL in
+    // @scure/btc-signer, so allow both.
+    const signedCount = tx.sign(privKey, [btc.SigHash.DEFAULT, btc.SigHash.ALL]);
+
+    if (signedCount === 0) {
+      throw new Error('No inputs in this PSBT are owned by the signer.');
+    }
+
+    return hex.encode(tx.toPSBT());
+  } finally {
+    // Best-effort wipe of the decoded private key from this stack frame.
+    privKey.fill(0);
   }
-
-  return hex.encode(tx.toPSBT());
 }
 
 /**
@@ -962,6 +1070,11 @@ export function buildUnsignedSilentPaymentPsbt(
   }
   if (!Number.isFinite(amountSats) || amountSats < 546) {
     throw new Error(`Silent payment send: amount must be at least 546 sats (got ${amountSats}).`);
+  }
+  if (!Number.isFinite(feeRate) || feeRate < 1 || feeRate > MAX_FEE_RATE_SATS_PER_VB) {
+    throw new Error(
+      `Silent payment send: fee rate must be between 1 and ${MAX_FEE_RATE_SATS_PER_VB} sat/vB. Got ${feeRate}.`,
+    );
   }
 
   // ── 1. Decode the silent payment address ──

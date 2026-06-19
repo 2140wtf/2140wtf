@@ -1,5 +1,5 @@
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { CoreThemeColors, ThemeConfig, ThemeFont, ThemeBackground } from '@/themes';
+import type { CoreThemeColors, ThemeConfig, ThemeFont, ThemeBackground, ThemeTokens } from '@/themes';
 import { hslStringToHex, hexToHslString, isValidHex } from '@/lib/colorUtils';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
@@ -133,6 +133,85 @@ function parseBackgroundTag(tags: string[][]): ThemeBackground | undefined {
   return bg;
 }
 
+// ─── Advanced Token Helpers ────────────────────────────────────────────
+
+/** All ThemeTokens keys that can be overridden via `tok` tags. */
+const TOKEN_KEYS: (keyof ThemeTokens)[] = [
+  'background',
+  'foreground',
+  'card',
+  'cardForeground',
+  'popover',
+  'popoverForeground',
+  'primary',
+  'primaryForeground',
+  'secondary',
+  'secondaryForeground',
+  'muted',
+  'mutedForeground',
+  'accent',
+  'accentForeground',
+  'destructive',
+  'destructiveForeground',
+  'border',
+  'input',
+  'ring',
+];
+
+/** Build `tok` tags from a partial ThemeTokens object. */
+function buildTokenTags(tokens: Partial<ThemeTokens> | undefined): string[][] {
+  if (!tokens) return [];
+  const tags: string[][] = [];
+  for (const key of TOKEN_KEYS) {
+    const value = tokens[key];
+    if (value) {
+      tags.push(['tok', key, hslStringToHex(value)]);
+    }
+  }
+  return tags;
+}
+
+/** Parse `tok` tags into a partial ThemeTokens object. */
+function parseTokenTags(tags: string[][]): Partial<ThemeTokens> {
+  const tokens: Partial<ThemeTokens> = {};
+  for (const tag of tags) {
+    if (tag[0] === 'tok' && tag[1] && tag[2]) {
+      const key = tag[1] as keyof ThemeTokens;
+      if (!TOKEN_KEYS.includes(key)) continue;
+      if (!isValidHex(tag[2])) continue;
+      tokens[key] = hexToHslString(tag[2]);
+    }
+  }
+  return tokens;
+}
+
+/** Build a `radius` tag when a custom radius is set. */
+function buildRadiusTag(radius: string | undefined): string[][] {
+  if (!radius) return [];
+  return [['radius', radius]];
+}
+
+/** Parse a `radius` tag. */
+function parseRadiusTag(tags: string[][]): string | undefined {
+  const tag = tags.find(([n]) => n === 'radius');
+  return tag?.[1];
+}
+
+/** Build a `bg-opacity` tag when a custom background opacity is set. */
+function buildBackgroundOpacityTag(opacity: number | undefined): string[][] {
+  if (opacity === undefined || opacity === null) return [];
+  return [['bg-opacity', String(opacity)]];
+}
+
+/** Parse a `bg-opacity` tag into a number in [0, 1]. */
+function parseBackgroundOpacityTag(tags: string[][]): number | undefined {
+  const tag = tags.find(([n]) => n === 'bg-opacity');
+  if (!tag?.[1]) return undefined;
+  const value = Number(tag[1]);
+  if (Number.isNaN(value)) return undefined;
+  return Math.max(0, Math.min(1, value));
+}
+
 // ─── Theme Definition (Kind 36767) ────────────────────────────────────
 
 export interface ThemeDefinition {
@@ -150,6 +229,12 @@ export interface ThemeDefinition {
   titleFont?: ThemeFont;
   /** Optional background */
   background?: ThemeBackground;
+  /** Advanced token overrides */
+  tokens?: Partial<ThemeTokens>;
+  /** Global border radius */
+  radius?: string;
+  /** Background image opacity */
+  backgroundOpacity?: number;
   /** The original Nostr event */
   event: NostrEvent;
 }
@@ -183,8 +268,11 @@ export function parseThemeDefinition(event: NostrEvent): ThemeDefinition | null 
 
   const { font, titleFont } = parseFontTags(event.tags);
   const background = parseBackgroundTag(event.tags);
+  const tokens = parseTokenTags(event.tags);
+  const radius = parseRadiusTag(event.tags);
+  const backgroundOpacity = parseBackgroundOpacityTag(event.tags);
 
-  return { identifier, title, description, colors, font, titleFont, background, event };
+  return { identifier, title, description, colors, font, titleFont, background, tokens, radius, backgroundOpacity, event };
 }
 
 /** Create tags for a kind 36767 theme definition event. */
@@ -199,6 +287,9 @@ export function buildThemeDefinitionTags(
     ...buildColorTags(themeConfig.colors),
     ...buildFontTags(themeConfig.font, themeConfig.titleFont),
     ...buildBackgroundTag(themeConfig.background),
+    ...buildTokenTags(themeConfig.tokens),
+    ...buildRadiusTag(themeConfig.radius),
+    ...buildBackgroundOpacityTag(themeConfig.backgroundOpacity),
     ['title', title],
     ['alt', `Custom theme: ${title}`],
     ['t', 'theme'],
@@ -233,6 +324,12 @@ export interface ActiveProfileTheme {
   background?: ThemeBackground;
   /** naddr-style reference to the source theme definition, if any */
   sourceRef?: string;
+  /** Advanced token overrides */
+  tokens?: Partial<ThemeTokens>;
+  /** Global border radius */
+  radius?: string;
+  /** Background image opacity */
+  backgroundOpacity?: number;
   /** The original Nostr event */
   event: NostrEvent;
 }
@@ -259,8 +356,11 @@ export function parseActiveProfileTheme(event: NostrEvent): ActiveProfileTheme |
   const { font, titleFont } = parseFontTags(event.tags);
   const background = parseBackgroundTag(event.tags);
   const sourceRef = event.tags.find(([n]) => n === 'a')?.[1];
+  const tokens = parseTokenTags(event.tags);
+  const radius = parseRadiusTag(event.tags);
+  const backgroundOpacity = parseBackgroundOpacityTag(event.tags);
 
-  return { colors, font, titleFont, background, sourceRef, event };
+  return { colors, font, titleFont, background, sourceRef, tokens, radius, backgroundOpacity, event };
 }
 
 /** Create tags for a kind 16767 active profile theme event. */
@@ -274,6 +374,9 @@ export function buildActiveThemeTags(
     ...buildColorTags(themeConfig.colors),
     ...buildFontTags(themeConfig.font, themeConfig.titleFont),
     ...buildBackgroundTag(themeConfig.background),
+    ...buildTokenTags(themeConfig.tokens),
+    ...buildRadiusTag(themeConfig.radius),
+    ...buildBackgroundOpacityTag(themeConfig.backgroundOpacity),
     ['alt', 'Active profile theme'],
   ];
   if (themeConfig.title) {

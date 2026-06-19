@@ -3,9 +3,9 @@ export interface ImetaEntry {
   url: string;
   thumbnail?: string;
   mime?: string;
-  /** Summary text (used as webxdc app name for webxdc attachments). */
+  /** Summary text (used as mini-app name for mini-app attachments). */
   summary?: string;
-  /** Webxdc session UUID — present when the attachment is a stateful webxdc app. */
+  /** Mini-app session UUID — present when the attachment is a stateful mini-app. */
   webxdc?: string;
   /** Pixel dimensions from NIP-94 `dim` tag, e.g. "1280x720". */
   dim?: string;

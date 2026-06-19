@@ -1,7 +1,7 @@
 /**
- * Blobbi Eye System - Type Definitions
+ * Pets Eye System - Type Definitions
  *
- * This module defines the official contract for the Blobbi eye structure.
+ * This module defines the official contract for the Pets eye structure.
  * All eye-related code should use these types for consistency.
  */
 
@@ -70,47 +70,47 @@ export interface ProcessedEyeData {
  */
 export const EYE_CLASSES = {
   // Blink groups (outer layer - controls eye closing)
-  blinkLeft: 'blobbi-blink-left',
-  blinkRight: 'blobbi-blink-right',
-  blink: 'blobbi-blink',
+  blinkLeft: 'pets-blink-left',
+  blinkRight: 'pets-blink-right',
+  blink: 'pets-blink',
 
   // Eye animation groups (middle layer - CSS animations like sleepy wake-glance)
-  eyeLeft: 'blobbi-eye-left',
-  eyeRight: 'blobbi-eye-right',
-  eye: 'blobbi-eye',
+  eyeLeft: 'pets-eye-left',
+  eyeRight: 'pets-eye-right',
+  eye: 'pets-eye',
 
   // Eye gaze groups (innermost layer - JS-controlled translate for gaze tracking)
-  // Nested inside .blobbi-eye so CSS animations and gaze transforms don't conflict
-  gazeLeft: 'blobbi-eye-gaze-left',
-  gazeRight: 'blobbi-eye-gaze-right',
-  gaze: 'blobbi-eye-gaze',
+  // Nested inside .pets-eye so CSS animations and gaze transforms don't conflict
+  gazeLeft: 'pets-eye-gaze-left',
+  gazeRight: 'pets-eye-gaze-right',
+  gaze: 'pets-eye-gaze',
 
   // Eyelid elements (behind eye, visible when closed)
-  eyelidLeft: 'blobbi-eyelid-left',
-  eyelidRight: 'blobbi-eyelid-right',
-  eyelid: 'blobbi-eyelid',
+  eyelidLeft: 'pets-eyelid-left',
+  eyelidRight: 'pets-eyelid-right',
+  eyelid: 'pets-eyelid',
 
   // Effect layers (for emotion effects that track with eye)
-  effectTrackLeft: 'blobbi-eye-effect-track-left',
-  effectTrackRight: 'blobbi-eye-effect-track-right',
+  effectTrackLeft: 'pets-eye-effect-track-left',
+  effectTrackRight: 'pets-eye-effect-track-right',
 
   // Effect layers (for emotion effects that stay fixed)
-  effectFixedLeft: 'blobbi-eye-effect-fixed-left',
-  effectFixedRight: 'blobbi-eye-effect-fixed-right',
+  effectFixedLeft: 'pets-eye-effect-fixed-left',
+  effectFixedRight: 'pets-eye-effect-fixed-right',
 
   // Clip path rectangles (generic class - side is determined by parent clipPath ID)
-  clipRect: 'blobbi-blink-clip-rect',
+  clipRect: 'pets-blink-clip-rect',
 
   // Specific element markers
-  pupil: 'blobbi-pupil',
-  highlight: 'blobbi-highlight',
+  pupil: 'pets-pupil',
+  highlight: 'pets-highlight',
 
   // Emotion-specific classes
-  sadHighlight: 'blobbi-sad-highlight',
-  sadWater: 'blobbi-sad-water',
-  starEye: 'blobbi-star-eye',
-  dizzySpiral: 'blobbi-dizzy-spiral',
-  closedEye: 'blobbi-closed-eye',
+  sadHighlight: 'pets-sad-highlight',
+  sadWater: 'pets-sad-water',
+  starEye: 'pets-star-eye',
+  dizzySpiral: 'pets-dizzy-spiral',
+  closedEye: 'pets-closed-eye',
 } as const;
 
 // ─── Eye Data Attributes ──────────────────────────────────────────────────────

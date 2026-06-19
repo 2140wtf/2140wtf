@@ -1,5 +1,5 @@
 /**
- * BlobbiCompanion
+ * PetsCompanion
  * 
  * The main companion component that handles rendering and interaction.
  * This includes the visual, positioning, dragging, and animations.
@@ -27,13 +27,13 @@ import {
   calculateRiseEntryAnimation,
   type VerticalEntryConfig,
 } from '../utils/animation';
-import { BlobbiCompanionVisual } from './BlobbiCompanionVisual';
+import { PetsCompanionVisual } from './PetsCompanionVisual';
 import { useClickDetection } from '../interaction';
-import type { BlobbiEmotion } from '@/blobbi/ui/lib/emotion-types';
-import type { BlobbiVisualRecipe } from '@/blobbi/ui/lib/recipe';
-import type { BodyEffectsSpec } from '@/blobbi/ui/lib/bodyEffects';
+import type { PetsEmotion } from '@/pets/ui/lib/emotion-types';
+import type { PetsVisualRecipe } from '@/pets/ui/lib/recipe';
+import type { BodyEffectsSpec } from '@/pets/ui/lib/bodyEffects';
 
-interface BlobbiCompanionProps {
+interface PetsCompanionProps {
   /** Companion data */
   companion: CompanionData;
   /** Current behavioral state */
@@ -62,14 +62,14 @@ interface BlobbiCompanionProps {
   onEndDrag: () => void;
   /** Click callback (when interaction is a click, not a drag) */
   onClick?: () => void;
-  /** When true, Blobbi ignores click interactions (overstimulation block). */
+  /** When true, Pets ignores click interactions (overstimulation block). */
   isClickBlocked?: boolean;
   /** Pre-resolved visual recipe. Takes precedence over `emotion`. */
-  recipe?: BlobbiVisualRecipe;
+  recipe?: PetsVisualRecipe;
   /** Label for the recipe (CSS class names). */
   recipeLabel?: string;
   /** Named emotion preset (convenience). Ignored when `recipe` is provided. */
-  emotion?: BlobbiEmotion;
+  emotion?: PetsEmotion;
   /**
    * Body-level visual effects — for manual/external use only.
    * Status-reaction body effects are already folded into the recipe.
@@ -87,7 +87,7 @@ interface BlobbiCompanionProps {
   onDragSample?: (position: Position) => void;
 }
 
-export function BlobbiCompanion({
+export function PetsCompanion({
   companion,
   state,
   motion,
@@ -110,7 +110,7 @@ export function BlobbiCompanion({
   onPositionUpdate,
   debugMode = false,
   onDragSample,
-}: BlobbiCompanionProps) {
+}: PetsCompanionProps) {
   const config = DEFAULT_COMPANION_CONFIG;
   const containerRef = useRef<HTMLDivElement>(null);
   const [animationTime, setAnimationTime] = useState(0);
@@ -212,7 +212,7 @@ export function BlobbiCompanion({
     : { x: 0, y: 0, rotation: 0 };
   
   // Report the final rendered position (base position + float offset)
-  // This is the actual visual position where Blobbi appears on screen
+  // This is the actual visual position where Pets appears on screen
   const renderedX = x + floatOffset.x;
   const renderedY = y + floatOffset.y;
   
@@ -223,13 +223,13 @@ export function BlobbiCompanion({
   }, [renderedX, renderedY, onPositionUpdate]);
   
   // Calculate ground proximity for shadow visibility
-  // groundPosition.y is where Blobbi should be when on the ground
+  // groundPosition.y is where Pets should be when on the ground
   // y is the current container position (top-left corner)
-  // When y > groundPosition.y, Blobbi is below ground (shouldn't happen)
-  // When y < groundPosition.y, Blobbi is above ground
+  // When y > groundPosition.y, Pets is below ground (shouldn't happen)
+  // When y < groundPosition.y, Pets is above ground
   const distanceFromGround = Math.max(0, groundPosition.y - y);
   
-  // Blobbi is "on ground" when:
+  // Pets is "on ground" when:
   // - Not in entry animation
   // - Not being dragged  
   // - Position is at or very near the ground position
@@ -289,7 +289,7 @@ export function BlobbiCompanion({
   return (
     <div
       ref={containerRef}
-      data-blobbi-companion
+      data-pets-companion
       className="select-none touch-none"
       style={{
         position: 'fixed',
@@ -308,7 +308,7 @@ export function BlobbiCompanion({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      <BlobbiCompanionVisual
+      <PetsCompanionVisual
         companion={companion}
         size={config.size}
         eyeOffsetRef={eyeOffsetRef}

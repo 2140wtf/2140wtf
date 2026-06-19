@@ -28,8 +28,8 @@ export function calculateMovementBounds(
  * Calculate the ground Y position (bottom of movement area).
  * 
  * This returns the Y position where the companion CONTAINER should be placed.
- * The visual alignment of the Blobbi body within the container is handled
- * separately in BlobbiCompanionVisual via a translateY transform.
+ * The visual alignment of the Pets body within the container is handled
+ * separately in PetsCompanionVisual via a translateY transform.
  */
 export function calculateGroundY(
   viewportHeight: number,

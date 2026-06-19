@@ -1,4 +1,4 @@
-// src/blobbi/actions/hooks/useBlobbiUseInventoryItem.ts
+// src/pets/actions/hooks/usePetsUseInventoryItem.ts
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -6,13 +6,13 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion, BlobbonautProfile } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { getShopItemById } from '@/blobbi/shop/lib/blobbi-shop-items';
+  KIND_PETS_STATE,
+  updatePetsTags,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import {
   applyItemEffects,
   canUseAction,
@@ -23,18 +23,18 @@ import {
   hasHygieneEffectForEgg,
   type InventoryAction,
   ACTION_METADATA,
-} from '../lib/blobbi-action-utils';
+} from '../lib/pets-action-utils';
 import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '../lib/daily-mission-tracker';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
-import { getStreakTagUpdates } from '../lib/blobbi-streak';
-import { calculateInventoryActionXP, applyXPGain, formatXPGain } from '../lib/blobbi-xp';
-import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/blobbi/core/lib/blobbi-interaction';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
+import { getStreakTagUpdates } from '../lib/pets-streak';
+import { calculateInventoryActionXP, applyXPGain, formatXPGain } from '../lib/pets-xp';
+import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
 // Import NostrEvent type
 import type { NostrEvent } from '@nostrify/nostrify';
 
 /**
- * Request payload for using an item on a Blobbi companion
+ * Request payload for using an item on a Pets companion
  */
 export interface UseItemRequest {
   itemId: string;
@@ -42,7 +42,7 @@ export interface UseItemRequest {
 }
 
 /**
- * Result of using an item on a Blobbi companion
+ * Result of using an item on a Pets companion
  */
 export interface UseItemResult {
   itemName: string;
@@ -53,32 +53,32 @@ export interface UseItemResult {
 }
 
 /**
- * Parameters for the useBlobbiUseInventoryItem hook
+ * Parameters for the usePetsUseInventoryItem hook
  */
-export interface UseBlobbiUseInventoryItemParams {
-  companion: BlobbiCompanion | null;
+export interface UsePetsUseInventoryItemParams {
+  companion: PetsCompanion | null;
   profile: BlobbonautProfile | null;
   /** Called after ensuring companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
-    companion: BlobbiCompanion;
+    companion: PetsCompanion;
     content: string;
     allTags: string[][];
     wasMigrated: boolean;
     /** Latest profile tags after migration */
     profileAllTags: string[][];
     /** Latest profile storage after migration */
-    profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+    profileStorage: import('@/pets/core/lib/pets').StorageItem[];
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
   /** Update profile event in local cache */
   updateProfileEvent: (event: NostrEvent) => void;
-  /** UI surface originating the interaction (used for kind 1124 source tag). Defaults to 'blobbi-page'. */
+  /** UI surface originating the interaction (used for kind 1124 source tag). Defaults to 'pets-page'. */
   interactionSource?: string;
 }
 
 /**
- * Hook to use an item on a Blobbi companion.
+ * Hook to use an item on a Pets companion.
  * 
  * Items are reusable abilities sourced from the shop catalog — no
  * inventory ownership or quantity is required.
@@ -86,17 +86,17 @@ export interface UseBlobbiUseInventoryItemParams {
  * This hook:
  * 1. Validates the companion and item compatibility
  * 2. Ensures canonical format before action
- * 3. Applies accumulated decay, then item effects to Blobbi stats
- * 4. Updates Blobbi state (kind 31124)
+ * 3. Applies accumulated decay, then item effects to Pets stats
+ * 4. Updates Pets state (kind 31124)
  */
-export function useBlobbiUseInventoryItem({
+export function usePetsUseInventoryItem({
   companion,
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
   updateProfileEvent: _updateProfileEvent,
-  interactionSource = 'blobbi-page',
-}: UseBlobbiUseInventoryItemParams) {
+  interactionSource = 'pets-page',
+}: UsePetsUseInventoryItemParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const queryClient = useQueryClient();
@@ -153,7 +153,7 @@ export function useBlobbiUseInventoryItem({
       // before any user interaction updates stats.
       // CRITICAL: Use canonical.companion for decay calculations, not the stale outer companion
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -165,14 +165,14 @@ export function useBlobbiUseInventoryItem({
       const statsAfterDecay = decayResult.stats;
       
       // ─── Validate Play Energy Requirements ───
-      // For play actions, validate the Blobbi has enough energy AFTER decay
+      // For play actions, validate the Pets has enough energy AFTER decay
       if (action === 'play') {
         const energyCost = Math.abs(shopItem.effect.energy ?? 0);
         const currentEnergy = statsAfterDecay.energy;
         
         if (energyCost > 0 && currentEnergy < energyCost) {
           throw new Error(
-            `Your Blobbi needs at least ${energyCost} energy to play with this toy (current: ${currentEnergy})`
+            `Your Pets needs at least ${energyCost} energy to play with this toy (current: ${currentEnergy})`
           );
         }
         
@@ -185,7 +185,7 @@ export function useBlobbiUseInventoryItem({
         
         if (!wouldGainHappiness && !wouldSpendEnergy) {
           throw new Error(
-            'Playing would have no effect - your Blobbi is already at maximum happiness and has no energy to spend'
+            'Playing would have no effect - your Pets is already at maximum happiness and has no energy to spend'
           );
         }
       }
@@ -242,7 +242,7 @@ export function useBlobbiUseInventoryItem({
         statsChanged.health = (currentStats.health ?? 0) - (statsAfterDecay.health ?? 0);
       }
 
-      // ─── Update Blobbi State Event (kind 31124) ───
+      // ─── Update Pets State Event (kind 31124) ───
       const nowStr = now.toString();
       
       // If incubating or evolving, increment the interaction counter in evolution missions
@@ -269,7 +269,7 @@ export function useBlobbiUseInventoryItem({
       const currentXP = canonical.companion.experience ?? 0;
       const newXP = applyXPGain(currentXP, xpGained);
       
-      const blobbiTags = updateBlobbiTags(updatedTags, {
+      const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
         experience: newXP.toString(),
@@ -277,23 +277,23 @@ export function useBlobbiUseInventoryItem({
         last_decay_at: nowStr,
       });
 
-      const blobbiEvent = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+      const petsEvent = await publishEvent({
+        kind: KIND_PETS_STATE,
         content,
-        tags: blobbiTags,
+        tags: petsTags,
         prev: canonical.companion.event,
       });
 
-      updateCompanionEvent(blobbiEvent);
+      updateCompanionEvent(petsEvent);
 
       // ─── Emit kind 1124 interaction event (best-effort, fire-and-forget) ───
-      // ownerPubkey comes from the target Blobbi event, not the logged-in user,
+      // ownerPubkey comes from the target Pets event, not the logged-in user,
       // so the tags remain correct if this path is later reused for non-owner interactions.
       const interactionAction = INTERNAL_TO_INTERACTION_ACTION[action];
       if (interactionAction) {
         emitInteractionEvent(publishEvent, {
           ownerPubkey: canonical.companion.event.pubkey,
-          blobbiDTag: canonical.companion.d,
+          petsDTag: canonical.companion.d,
           action: interactionAction,
           source: interactionSource,
           itemId,
@@ -306,7 +306,7 @@ export function useBlobbiUseInventoryItem({
       {
         const coordinate = `31124:${canonical.companion.event.pubkey}:${canonical.companion.d}`;
         queryClient.invalidateQueries({
-          queryKey: ['blobbi-interactions', coordinate],
+          queryKey: ['pets-interactions', coordinate],
         });
       }
 
@@ -323,7 +323,7 @@ export function useBlobbiUseInventoryItem({
       const xpText = formatXPGain(xpGained);
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${itemName} on your Blobbi. ${xpText}`,
+        description: `Used ${itemName} on your Pets. ${xpText}`,
       });
 
       // Track daily mission progress

@@ -24,8 +24,8 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
-import { KIND_BLOBBONAUT_PROFILE } from '@/blobbi/core/lib/blobbi';
-import { serializeProfileContent } from '@/blobbi/core/lib/missions';
+import { KIND_BLOBBONAUT_PROFILE } from '@/pets/core/lib/pets';
+import { serializeProfileContent } from '@/pets/core/lib/missions';
 import { readDailyFromStorage } from '../lib/daily-mission-tracker';
 import { areAllDailyComplete } from '../lib/daily-missions';
 
@@ -197,7 +197,7 @@ export function usePersistDailyProgress(
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (timerRef.current) clearTimeout(timerRef.current);
 
-      // Flush on unmount (SPA navigation away from /blobbi) if there's
+      // Flush on unmount (SPA navigation away from /pets) if there's
       // unsaved progress. Fire-and-forget — do not block navigation.
       if (dirtyRef.current) {
         persist().catch(() => {

@@ -1,7 +1,7 @@
-// src/blobbi/actions/hooks/useBlobbiStageTransition.ts
+// src/pets/actions/hooks/usePetsStageTransition.ts
 
 /**
- * Hooks for Blobbi stage transitions (hatch, evolve).
+ * Hooks for Pets stage transitions (hatch, evolve).
  * 
  * Both transitions follow the same decay pattern:
  * 1. Apply accumulated decay from `last_decay_at` to `now`
@@ -9,7 +9,7 @@
  * 3. Publish new event with decayed stats + new stage
  * 4. Reset `last_decay_at` to current timestamp
  * 
- * @see docs/blobbi/decay-system.md
+ * @see docs/pets/decay-system.md
  */
 
 import { useMutation } from '@tanstack/react-query';
@@ -19,29 +19,29 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion, BlobbonautProfile, BlobbiStage } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion, BlobbonautProfile, PetsStage } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
+  KIND_PETS_STATE,
   STAT_MAX,
-  updateBlobbiTags,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { validateAndRepairBlobbiTags } from '@/blobbi/core/lib/blobbi-tag-schema';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
+  updatePetsTags,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '../lib/evolution-missions';
 import { writeEvolutionToStorage, clearEvolutionFromStorage } from '../lib/daily-mission-tracker';
-import { getStreakTagUpdates } from '../lib/blobbi-streak';
+import { getStreakTagUpdates } from '../lib/pets-streak';
 
 // ─── Content Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Generate the content string for a Blobbi at a given stage.
+ * Generate the content string for a Pets at a given stage.
  * Now stores JSON with an optional evolution array.
  * Falls back to a descriptive JSON content when no evolution is active.
  */
-function generateBlobbiContent(_name: string, _stage: BlobbiStage): string {
+function generatePetsContent(_name: string, _stage: PetsStage): string {
   // Return empty JSON — evolution will be populated separately when needed.
-  // The old plain-text format ("Luna is an egg Blobbi.") is no longer used.
+  // The old plain-text format ("Luna is an egg Pets.") is no longer used.
   return JSON.stringify({});
 }
 
@@ -49,24 +49,24 @@ function generateBlobbiContent(_name: string, _stage: BlobbiStage): string {
 
 /**
  * Result of ensuring canonical companion before action.
- * This is the same interface used by useBlobbiUseInventoryItem.
+ * This is the same interface used by usePetsUseInventoryItem.
  */
 export interface CanonicalActionResult {
-  companion: BlobbiCompanion;
+  companion: PetsCompanion;
   content: string;
   allTags: string[][];
   wasMigrated: boolean;
   /** Latest profile tags after migration */
   profileAllTags: string[][];
   /** Latest profile storage after migration */
-  profileStorage: import('@/blobbi/core/lib/blobbi').StorageItem[];
+  profileStorage: import('@/pets/core/lib/pets').StorageItem[];
 }
 
 /**
  * Parameters for stage transition hooks.
  */
-export interface UseBlobbiStageTransitionParams {
-  companion: BlobbiCompanion | null;
+export interface UsePetsStageTransitionParams {
+  companion: PetsCompanion | null;
   profile: BlobbonautProfile | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<CanonicalActionResult | null>;
@@ -79,10 +79,10 @@ export interface UseBlobbiStageTransitionParams {
  */
 export interface StageTransitionResult {
   /** Previous stage before transition */
-  previousStage: BlobbiStage;
+  previousStage: PetsStage;
   /** New stage after transition */
-  newStage: BlobbiStage;
-  /** The Blobbi's name */
+  newStage: PetsStage;
+  /** The Pets's name */
   name: string;
   /** Stats after decay was applied (before any transition bonuses) */
   decayedStats: {
@@ -97,22 +97,22 @@ export interface StageTransitionResult {
 // ─── Hatch Hook ───────────────────────────────────────────────────────────────
 
 /**
- * Hook to hatch an egg into a baby Blobbi.
+ * Hook to hatch an egg into a baby Pets.
  * 
  * Transition: egg -> baby
  * 
  * Requirements:
- * - Blobbi must be in egg stage
+ * - Pets must be in egg stage
  * - Applies accumulated decay before transition
  * - Resets stats to healthy baby defaults (inherits health from egg)
  * - Sets last_decay_at to current timestamp
  */
-export function useBlobbiHatch({
+export function usePetsHatch({
   companion,
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-}: UseBlobbiStageTransitionParams) {
+}: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
 
@@ -145,7 +145,7 @@ export function useBlobbiHatch({
       // Per decay-system.md: Always apply accumulated decay from persisted state
       // before any stage transition.
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -172,7 +172,7 @@ export function useBlobbiHatch({
       // Get streak updates (hatching counts as care activity!)
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
       
-      const mergedTags = updateBlobbiTags(canonical.allTags, {
+      const mergedTags = updatePetsTags(canonical.allTags, {
         stage: 'baby',
         state: 'active', // Newly hatched babies are awake
         hunger: babyStats.hunger.toString(),
@@ -188,7 +188,7 @@ export function useBlobbiHatch({
       // ─── Validate and Repair Tags ───
       // Use the tag integrity guard to ensure all persistent tags are preserved
       // and task-related tags are properly cleaned up for stage transitions
-      const repairResult = validateAndRepairBlobbiTags(
+      const repairResult = validateAndRepairPetsTags(
         mergedTags,
         canonical.allTags,
         { cleanupTaskTags: true }
@@ -207,7 +207,7 @@ export function useBlobbiHatch({
       // Applied AFTER tag validation because cleanupTaskTags clears
       // progression tags. We set the new progression_state here so the
       // baby starts its evolution journey immediately.
-      const newTags = updateBlobbiTags(repairResult.tags, {
+      const newTags = updatePetsTags(repairResult.tags, {
         progression_state: 'evolving',
         progression_started_at: nowStr,
       });
@@ -216,13 +216,13 @@ export function useBlobbiHatch({
       // Baby auto-starts evolution, so seed the missions immediately.
       const evolveMissions = createEvolveMissions();
       const newContent = serializeEvolutionContent(
-        generateBlobbiContent(canonical.companion.name, 'baby'),
+        generatePetsContent(canonical.companion.name, 'baby'),
         evolveMissions,
       );
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: newContent,
         tags: newTags,
       });
@@ -245,7 +245,7 @@ export function useBlobbiHatch({
     onSuccess: ({ name }) => {
       toast({
         title: 'Your egg hatched!',
-        description: `${name} is now a baby Blobbi! Take good care of them.`,
+        description: `${name} is now a baby Pets! Take good care of them.`,
       });
     },
     onError: (error: Error) => {
@@ -261,22 +261,22 @@ export function useBlobbiHatch({
 // ─── Evolve Hook ──────────────────────────────────────────────────────────────
 
 /**
- * Hook to evolve a baby Blobbi into an adult.
+ * Hook to evolve a baby Pets into an adult.
  * 
  * Transition: baby -> adult
  * 
  * Requirements:
- * - Blobbi must be in baby stage
+ * - Pets must be in baby stage
  * - Applies accumulated decay before transition
  * - Preserves all stats (decay already applied)
  * - Sets last_decay_at to current timestamp
  */
-export function useBlobbiEvolve({
+export function usePetsEvolve({
   companion,
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-}: UseBlobbiStageTransitionParams) {
+}: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
 
@@ -300,9 +300,9 @@ export function useBlobbiEvolve({
           throw new Error('Eggs must hatch before they can evolve');
         }
         if (companion.stage === 'adult') {
-          throw new Error('This Blobbi is already fully evolved');
+          throw new Error('This Pets is already fully evolved');
         }
-        throw new Error('Only baby Blobbis can evolve');
+        throw new Error('Only baby Petss can evolve');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -315,7 +315,7 @@ export function useBlobbiEvolve({
       // Per decay-system.md: Always apply accumulated decay from persisted state
       // before any stage transition.
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: canonical.companion.stage,
         state: canonical.companion.state,
         stats: canonical.companion.stats,
@@ -337,7 +337,7 @@ export function useBlobbiEvolve({
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
       
       // Build the updated tags using the central merge function
-      const mergedTags = updateBlobbiTags(canonical.allTags, {
+      const mergedTags = updatePetsTags(canonical.allTags, {
         stage: 'adult',
         state: 'active', // Evolution completes with active state
         hunger: adultStats.hunger.toString(),
@@ -353,7 +353,7 @@ export function useBlobbiEvolve({
       // ─── Validate and Repair Tags ───
       // Use the tag integrity guard to ensure all persistent tags are preserved
       // and task-related tags are properly cleaned up for stage transitions
-      const repairResult = validateAndRepairBlobbiTags(
+      const repairResult = validateAndRepairPetsTags(
         mergedTags,
         canonical.allTags,
         { cleanupTaskTags: true }
@@ -369,19 +369,19 @@ export function useBlobbiEvolve({
       }
       
       // Ensure progression is cleared after evolve
-      const newTags = updateBlobbiTags(repairResult.tags, {
+      const newTags = updatePetsTags(repairResult.tags, {
         progression_state: 'none',
       });
 
       // ─── Clear evolution from 31124 content (progression complete) ───
       const newContent = serializeEvolutionContent(
-        generateBlobbiContent(canonical.companion.name, 'adult'),
+        generatePetsContent(canonical.companion.name, 'adult'),
         [],
       );
 
       // ─── Publish Event ───
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: newContent,
         tags: newTags,
       });

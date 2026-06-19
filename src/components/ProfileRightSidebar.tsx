@@ -29,7 +29,7 @@ import { WeatherStationCard } from '@/components/WeatherStationCard';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 /** Media-native kinds shown in the sidebar (excludes kind 1 text notes and kind 1111 comments). */
-const SIDEBAR_MEDIA_KINDS = [20, 21, 22, 34236, 36787, 34139, 30054, 30055];
+const SIDEBAR_MEDIA_KINDS = [20, 21, 22, 36787, 34139, 30054, 30055];
 
 /** Maximum number of media tiles shown in the sidebar. */
 const SIDEBAR_MEDIA_LIMIT = 9;
@@ -141,7 +141,7 @@ function extractMedia(events: NostrEvent[], cwPolicy: string): MediaItem[] {
     // Skip CW events entirely when policy is "hide"
     if (hasCW && cwPolicy === 'hide') continue;
 
-    // For media-native kinds (vines etc.), extract from imeta tags
+    // For media-native kinds (videos etc.), extract from imeta tags
     if (event.kind !== 1) {
       const { url, blurhash, dim, mime } = extractImetaFields(event);
       if (url && !seen.has(url)) {
@@ -168,7 +168,7 @@ function extractMedia(events: NostrEvent[], cwPolicy: string): MediaItem[] {
 }
 
 /** Event kinds that are inherently video content. */
-const VIDEO_KINDS = new Set([34236, 21, 22]);
+const VIDEO_KINDS = new Set([21, 22]);
 
 /** Detect whether a media item is a video using mime type, file extension, or event kind. */
 function isVideoItem(item: MediaItem): boolean {
