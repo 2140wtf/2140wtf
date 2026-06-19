@@ -47,6 +47,13 @@ export function AppProvider(props: AppProviderProps) {
           }
         }
 
+        // Reset sidebar order when the default version has changed.
+        const currentSidebarVersion = defaultConfig.sidebarOrderVersion ?? 0;
+        if ((result.sidebarOrderVersion ?? 0) < currentSidebarVersion) {
+          result.sidebarOrder = defaultConfig.sidebarOrder;
+          result.sidebarOrderVersion = currentSidebarVersion;
+        }
+
         // Migrate legacy blossomServers (string[]) to blossomServerMetadata
         if (!result.blossomServerMetadata) {
           const legacyServers = parsed.blossomServers;
