@@ -91,6 +91,7 @@ export function GroupMemberPanel({
             <Button
               size="icon"
               className="size-8 shrink-0"
+              aria-label="Invite member"
               disabled={isInviting || !invitePubkey.trim()}
               onClick={() => void handleInvite()}
             >
@@ -131,6 +132,7 @@ export function GroupMemberPanel({
                         variant="ghost"
                         className="size-6"
                         title="Promote to admin"
+                        aria-label="Promote to admin"
                         onClick={() => void onPromoteAdmin(member.pubkey)}
                       >
                         <Shield className="size-3" />
@@ -141,6 +143,7 @@ export function GroupMemberPanel({
                       variant="ghost"
                       className="size-6 text-destructive"
                       title="Remove"
+                      aria-label="Remove member"
                       onClick={() => void onRemoveMember(member.pubkey)}
                     >
                       <UserMinus className="size-3" />
@@ -150,6 +153,7 @@ export function GroupMemberPanel({
                       variant="ghost"
                       className="size-6 text-destructive"
                       title="Ban"
+                      aria-label="Ban member"
                       onClick={() => void onBanMember(member.pubkey)}
                     >
                       <Ban className="size-3" />

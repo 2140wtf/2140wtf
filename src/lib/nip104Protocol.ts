@@ -172,14 +172,14 @@ export function createKeyPackageEvent(
 }
 
 export function createWelcomeEvent(
-  senderPubkey: string,
+  senderPrivkey: Uint8Array,
   welcomeData: string,
   keyPackageEventId: string,
   groupRelays: string[],
 ): NostrEvent {
   const template: UnsignedEvent = {
-    pubkey: senderPubkey,
-    created_at: randomNow(),
+    pubkey: getPublicKey(senderPrivkey),
+    created_at: Math.floor(Date.now() / 1000),
     kind: KIND_WELCOME,
     tags: [
       ['e', keyPackageEventId],
@@ -187,7 +187,7 @@ export function createWelcomeEvent(
     ],
     content: welcomeData,
   };
-  return finalizeEvent(template, generateSecretKey()) as unknown as NostrEvent;
+  return finalizeEvent(template, senderPrivkey) as unknown as NostrEvent;
 }
 
 export async function wrapWelcomeEvent(
@@ -340,7 +340,7 @@ export async function createGroupEvent(
   const encryptedContent = nip44.encrypt(mlsMessage, conversationKey);
 
   const template: UnsignedEvent = {
-    created_at: randomNow(),
+    created_at: Math.floor(Date.now() / 1000),
     kind: KIND_GROUP,
     tags: [['h', nostrGroupId]],
     content: encryptedContent,

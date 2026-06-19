@@ -15,7 +15,7 @@ export function GroupList({ groups, selectedGroupId, onSelectGroup, onCreateClic
     <div className="flex flex-col h-full border-r bg-muted/30">
       <div className="p-3 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Private Groups</h2>
-        <Button size="icon" variant="ghost" className="size-7" onClick={onCreateClick}>
+        <Button size="icon" variant="ghost" className="size-7" aria-label="Create group" onClick={onCreateClick}>
           <Plus className="size-4" />
         </Button>
       </div>

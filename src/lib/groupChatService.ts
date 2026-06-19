@@ -390,6 +390,11 @@ export class GroupChatService {
       return { success: false, error: 'Sender is not a group member' };
     }
 
+    const appGroupId = appMessage.tags?.find(([n]) => n === 'h')?.[1];
+    if (appGroupId !== groupId) {
+      return { success: false, error: 'Application message is for a different group' };
+    }
+
     const message: StoredMessage = {
       id: event.id ?? secureRandomHex(16),
       nostrGroupId: groupId,
@@ -479,7 +484,7 @@ export class GroupChatService {
           metadata,
         });
         const welcomeEvent = createWelcomeEvent(
-          this.userPubkey,
+          this.userPrivkey,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -569,7 +574,7 @@ export class GroupChatService {
           }),
         });
         const welcomeEvent = createWelcomeEvent(
-          this.userPubkey,
+          this.userPrivkey,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -675,9 +680,12 @@ export class GroupChatService {
       return { success: false, error: 'Missing group secrets in Welcome' };
     }
 
-    const welcomeMembers = Array.isArray(wd.members)
+    let welcomeMembers = Array.isArray(wd.members)
       ? wd.members.filter((m): m is string => typeof m === 'string' && isNostrId(m))
-      : undefined;
+      : [];
+    if (!welcomeMembers.includes(this.userPubkey)) {
+      welcomeMembers = [...welcomeMembers, this.userPubkey];
+    }
 
     const stored: StoredGroup = {
       nostrGroupId: groupId,
@@ -685,9 +693,7 @@ export class GroupChatService {
       description: metadata.description,
       adminPubkeys: metadata.adminPubkeys,
       members:
-        welcomeMembers && welcomeMembers.length > 0
-          ? welcomeMembers
-          : (existing?.members ?? [this.userPubkey]),
+        welcomeMembers.length > 0 ? welcomeMembers : (existing?.members ?? [this.userPubkey]),
       relays: metadata.relays,
       epoch,
       exporterSecret,
