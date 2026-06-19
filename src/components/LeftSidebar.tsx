@@ -351,8 +351,8 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
                   <QrCode className="size-4 text-muted-foreground" />
                   <span>Share profile</span>
                 </button>
-                <button onClick={() => { setAccountPopoverOpen(false); navigate('/settings/profile#donations'); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium hover:bg-secondary/60 transition-colors">
-                  <Heart className="size-4 text-muted-foreground" />
+                <button onClick={() => { setAccountPopoverOpen(false); navigate('/settings/profile#donations'); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-orange-500 hover:text-orange-400 hover:bg-orange-500/10 transition-colors">
+                  <Heart className="size-4 text-orange-500" />
                   <span>Accept donations</span>
                 </button>
                 <button onClick={() => { setAccountPopoverOpen(false); setLoginDialogOpen(true); }} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium hover:bg-secondary/60 transition-colors">

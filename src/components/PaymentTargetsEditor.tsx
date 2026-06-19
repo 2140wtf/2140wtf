@@ -216,7 +216,7 @@ export const PaymentTargetsEditor = forwardRef<PaymentTargetsEditorHandle>(
                 type="button"
                 variant="outline"
                 disabled={availableMethods.length === 0}
-                className="w-full h-11 gap-2 border-dashed"
+                className="w-full h-11 gap-2 border-dashed text-orange-500 border-orange-500/50 hover:bg-orange-500/10 hover:text-orange-400"
               >
                 <Plus className="h-4 w-4" />
                 Add donation
