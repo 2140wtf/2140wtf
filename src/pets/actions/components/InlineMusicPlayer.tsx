@@ -239,8 +239,8 @@ export function InlineMusicPlayer({
         {/* Error message */}
         {hasError && playbackError && (
           <div className="px-3 pb-3">
-            <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              <AlertCircle className="size-4 mt-0.5 shrink-0" />
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-100 text-amber-950 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-800">
+              <AlertCircle className="size-4 mt-0.5 shrink-0 text-amber-800 dark:text-amber-200" />
               <p className="text-xs">{playbackError.message}</p>
             </div>
           </div>

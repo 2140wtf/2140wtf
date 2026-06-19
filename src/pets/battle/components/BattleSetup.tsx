@@ -145,8 +145,8 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
         </div>
 
         {isRealDisabled && (
-          <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700">
-            <Info className="size-4 shrink-0" />
+          <div className="flex items-start gap-2 rounded-lg bg-amber-100 border border-amber-200 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-100">
+            <Info className="size-4 shrink-0 text-amber-800 dark:text-amber-200" />
             <p>
               Your profile is in real-sats mode. Demo battle rewards are paused
               until real Cashu payouts are enabled.

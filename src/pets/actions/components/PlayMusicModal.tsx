@@ -180,10 +180,10 @@ export function PlayMusicModal({
             ))}
           </div>
           {error && (
-            <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <div className="mt-4 p-3 rounded-lg bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
               <div className="flex items-start gap-2">
-                <AlertCircle className="size-4 text-amber-500 mt-0.5 shrink-0" />
-                <p className="text-sm text-amber-600 dark:text-amber-400">{error}</p>
+                <AlertCircle className="size-4 text-amber-800 dark:text-amber-200 mt-0.5 shrink-0" />
+                <p className="text-sm text-amber-950 dark:text-amber-100">{error}</p>
               </div>
             </div>
           )}
