@@ -3,9 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrStorage } from '@/hooks/useNostrStorage';
 
 const DEFAULT_LIMIT = 1000;
+
+/** Popular public relays used as a last-resort fallback for poll votes. */
+const PUBLIC_FALLBACK_RELAYS = [
+  'wss://relay.damus.io/',
+  'wss://nos.lol/',
+];
 
 function normalizeUrl(url: string): string {
   return url.toLowerCase().replace(/\/+$/, '');
@@ -65,17 +72,20 @@ function getUntil(event: NostrEvent): number | undefined {
  * Queries the configured read relays first, then expands the search to:
  *   - relay hints embedded in the poll's `e`/`p` tags
  *   - the poll author's NIP-65 write relays
+ *   - the logged-in user's NIP-65 write relays
+ *   - a curated set of popular public relays
  *
- * This catches votes that were published to the author's preferred relays
- * rather than the user's default read set.
+ * This catches votes that were published to the author's or voter's preferred
+ * relays rather than the user's default read set.
  */
 export function usePollVotes(event: NostrEvent, kind: number) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
   const { store } = useNostrStorage();
 
   return useQuery<NostrEvent[]>({
-    queryKey: ['poll-votes', event.id, kind],
+    queryKey: ['poll-votes', event.id, kind, user?.pubkey ?? ''],
     queryFn: async ({ signal }) => {
       const filter: NostrFilter = {
         kinds: [kind],
@@ -90,13 +100,19 @@ export function usePollVotes(event: NostrEvent, kind: number) {
       // 1. Default read relays (batched + cached automatically).
       const defaultResults = await nostr.query([filter], { signal: querySignal });
 
-      // 2. Gather extra relays from hints and the author's NIP-65 list.
-      const extraRelays = new Set<string>(getRelayHints(event));
+      // 2. Gather extra relays from hints and NIP-65 lists.
+      const extraRelays = new Set<string>([
+        ...getRelayHints(event),
+        ...PUBLIC_FALLBACK_RELAYS,
+      ]);
+
+      const nip65Pubkeys = [event.pubkey];
+      if (user?.pubkey) nip65Pubkeys.push(user.pubkey);
 
       try {
         const relayListSignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
         const relayLists = await nostr.query(
-          [{ kinds: [10002], authors: [event.pubkey], limit: 1 }],
+          [{ kinds: [10002], authors: nip65Pubkeys, limit: nip65Pubkeys.length }],
           { signal: relayListSignal },
         );
         for (const rl of relayLists) {
