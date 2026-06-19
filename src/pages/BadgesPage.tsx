@@ -770,7 +770,7 @@ function CreatedBadgeRow({
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!isEnabled('badges')) throw new Error('Badge publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
+      if (!isEnabled('deleteRequests')) throw new Error('Delete requests are disabled. Turn them on in Settings → Privacy & Publishing.');
       const badgeATag = `${BADGE_DEFINITION_KIND}:${badge.event.pubkey}:${badge.badge.identifier}`;
 
       // Query all award events (kind 8) the user published for this badge

@@ -845,12 +845,23 @@ function FollowsStep({
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { store } = useNostrStorage();
+  const { isEnabled } = usePublishPreferences();
 
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
 
   const handleFollowAll = useCallback(async () => {
     if (!user) return;
+
+    if (!isEnabled('follows')) {
+      toast({
+        title: "Follows publishing disabled",
+        description:
+          "Turn on “Follows” in Settings → Privacy & Publishing to save your follow list.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Defensive guard: when this is the signup flow, only publish kind 3
     // if the active signer matches the freshly generated key. Without
@@ -905,7 +916,7 @@ function FollowsStep({
     } finally {
       setIsFollowing(false);
     }
-  }, [user, nostr, publishEvent, expectedPubkey, store]);
+  }, [user, nostr, publishEvent, expectedPubkey, store, isEnabled]);
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">

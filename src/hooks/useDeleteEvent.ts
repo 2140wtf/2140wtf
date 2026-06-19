@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
+import { useToast } from './useToast';
 import { isAddressableKind } from '@/lib/eventKinds';
 
 interface DeleteEventParams {
@@ -27,10 +29,19 @@ export function useDeleteEvent() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ eventId, eventKind, eventPubkey, eventDTag }: DeleteEventParams) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('deleteRequests')) {
+        toast({
+          title: 'Delete requests publishing disabled',
+          description: 'Turn on “Delete requests” in Settings → Privacy & Publishing to delete events.',
+        });
+        throw new Error('Delete requests publishing disabled');
+      }
 
       const tags: string[][] = [
         ['e', eventId],

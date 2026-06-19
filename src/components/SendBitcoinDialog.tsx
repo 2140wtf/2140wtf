@@ -520,24 +520,31 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       // When the recipient is a Nostr identity, publish a kind 8333 profile zap
       // attesting the send. Per NIP.md, omitting `e`/`a` targets the recipient's
       // profile (a tip to the pubkey, not a specific event).
-      if (recipient.pubkey && isEnabled('zaps')) {
-        setProgress('publishing');
-        try {
-          await publishEvent({
-            kind: 8333,
-            content: '',
-            tags: [
-              ['i', `bitcoin:tx:${txid}`],
-              ['p', recipient.pubkey],
-              ['amount', String(amountSats)],
-              ['alt', `On-chain zap: ${amountSats.toLocaleString()} sats`],
-            ],
+      if (recipient.pubkey) {
+        if (!isEnabled('zaps')) {
+          toast({
+            title: 'Zaps publishing disabled',
+            description: 'Turn on “Zaps” in Settings → Privacy & Publishing to publish zap receipts.',
           });
-        } catch (err) {
-          // The Bitcoin transaction already broadcast — the kind 8333 is a
-          // best-effort attestation. Surface the failure but don't blow up
-          // the success screen.
-          console.warn('Failed to publish kind 8333 zap event:', err);
+        } else {
+          setProgress('publishing');
+          try {
+            await publishEvent({
+              kind: 8333,
+              content: '',
+              tags: [
+                ['i', `bitcoin:tx:${txid}`],
+                ['p', recipient.pubkey],
+                ['amount', String(amountSats)],
+                ['alt', `On-chain zap: ${amountSats.toLocaleString()} sats`],
+              ],
+            });
+          } catch (err) {
+            // The Bitcoin transaction already broadcast — the kind 8333 is a
+            // best-effort attestation. Surface the failure but don't blow up
+            // the success screen.
+            console.warn('Failed to publish kind 8333 zap event:', err);
+          }
         }
       }
 

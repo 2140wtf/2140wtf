@@ -14,6 +14,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
 import { usePublishPreferences } from './usePublishPreferences';
+import { useToast } from './useToast';
 import {
   GroupChatService,
   type GroupChatGroup,
@@ -75,6 +76,7 @@ export function useGroupChat(): UseGroupChatReturn {
   const { logins } = useNostrLogin();
   const { config } = useAppContext();
   const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
 
   const privateKey = useMemo(
     () => extractPrivateKey(logins as unknown[], user?.pubkey),
@@ -280,7 +282,10 @@ export function useGroupChat(): UseGroupChatReturn {
     async (events?: NostrEvent[]) => {
       if (!events || events.length === 0) return;
       if (!isEnabled('directMessages')) {
-        console.error('[useGroupChat] Direct messages publishing disabled');
+        toast({
+          title: 'Group chat publishing disabled',
+          description: 'Turn on “Direct messages” in Settings → Privacy & Publishing to send group messages.',
+        });
         return;
       }
       for (const event of events) {
@@ -291,7 +296,7 @@ export function useGroupChat(): UseGroupChatReturn {
         }
       }
     },
-    [nostr, isEnabled],
+    [nostr, isEnabled, toast],
   );
 
   const createGroup = useCallback(
