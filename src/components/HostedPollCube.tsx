@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
@@ -11,18 +12,31 @@ interface HostedPollCubeProps {
 }
 
 /**
- * Render a BAO cube embed for any Nostr poll.
+ * Render a BAO cube embed for a Nostr poll.
  *
- * bao.markets can build a hosted, interactive 3D cube from the poll id alone
- * via `https://bao.markets/embed/cube/<poll-id>`. A custom kind:33889 design
- * event will be used when one exists; otherwise a default cube is generated.
+ * The cube design is resolved API-first (GET /v1/cube-designs/<pollId>) so the
+ * latest branding/wall images are used when available. If the API cannot be
+ * reached, we fall back to the deterministic `https://bao.markets/embed/cube/<poll-id>`
+ * URL, which renders a default BAO-branded cube for any poll.
  */
 export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
-  const embedUrl = useMemo(
-    () => sanitizeUrl(`https://bao.markets/embed/cube/${encodeURIComponent(pollId)}`),
-    [pollId],
-  );
+  const { data: design, isLoading } = useHostedCubeEmbed(pollId);
+  const embedUrl = sanitizeUrl(design?.embedUrl) ?? null;
+
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          'flex items-center justify-center rounded-xl border border-border bg-muted/30',
+          className,
+        )}
+        style={{ minHeight: 420 }}
+      >
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!embedUrl) {
     return (
@@ -33,7 +47,7 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
         )}
         style={{ minHeight: 420 }}
       >
-        Invalid poll id.
+        Could not resolve a cube embed URL for this poll.
       </div>
     );
   }
