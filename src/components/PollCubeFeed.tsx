@@ -94,7 +94,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
     return (
       <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-6 py-4', className)}>
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-80 w-full rounded-xl" />
+          <Skeleton key={i} className="h-[420px] w-full rounded-xl" />
         ))}
       </div>
     );
@@ -115,7 +115,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         {filteredPolls.map((poll) => (
           <div key={poll.id} className="flex flex-col gap-3">
-            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-80" />
+            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-[420px]" />
             <div className="text-center px-2">
               <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
             </div>
