@@ -161,7 +161,7 @@ export function PlayMusicModal({
             <div>
               <DialogTitle className="text-xl">Play Music</DialogTitle>
               <p className="text-sm text-muted-foreground">
-                Choose a track to play for your 2140.wtf Pet
+                Choose a track to play for your 2140 PET
               </p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export function PlayMusicModal({
               ) : (
                 <>
                   <Music className="size-4 mr-2" />
-                  Play for 2140.wtf Pets
+                  Play for 2140 PETS
                 </>
               )}
             </Button>
