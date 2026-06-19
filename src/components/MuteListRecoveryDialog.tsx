@@ -11,6 +11,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { setCachedMuteItems, parseMuteTags, type MuteListItem } from '@/hooks/useMuteList';
 import { cn } from '@/lib/utils';
 import { Check, Loader2, RotateCcw, ShieldOff, UserX, Hash, MessageSquareOff, AlertTriangle } from 'lucide-react';
@@ -306,6 +307,7 @@ function MuteHistoryContent({ onClose }: { onClose: () => void }) {
   const { config } = useAppContext();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -357,6 +359,10 @@ function MuteHistoryContent({ onClose }: { onClose: () => void }) {
   const summaries = parsedSnapshots.data;
 
   const handleRestore = async (event: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(event.id);
     try {
       // Re-publish the old event's content and tags with the current timestamp.

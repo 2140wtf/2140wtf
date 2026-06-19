@@ -17,6 +17,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
 import { NIP99_CLASSIFIED_KIND, type DeliveryMethod, type ListingFormat } from '@/lib/nip99';
 import { RelayPicker } from '@/components/RelayPicker';
@@ -51,6 +52,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
@@ -136,6 +138,13 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
 
   const handleSubmit = async () => {
     if (!canPublish || !user) return;
+    if (!isEnabled('marketplace')) {
+      toast({
+        title: 'Marketplace publishing disabled',
+        description: 'Turn on “Marketplace listings” in Settings → Privacy & Publishing to publish listings.',
+      });
+      return;
+    }
 
     const priceValue = price.trim();
     if (!priceValue || isNaN(Number(priceValue)) || Number(priceValue) < 0) {

@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { buildNip17GiftWraps, type Rumor } from '@/lib/nip17';
 import { extractReadRelays } from '@/lib/inboxRelays';
 import { extractDmRelays } from '@/hooks/useDmRelays';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 export interface SendNip17MessageOptions {
   recipientPubkey: string;
@@ -61,6 +62,7 @@ export function useNip17SendMessage() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const { isEnabled } = usePublishPreferences();
   const [isPending, setIsPending] = useState(false);
 
   const defaultRelays = useMemo(
@@ -72,6 +74,7 @@ export function useNip17SendMessage() {
     options: SendNip17MessageOptions,
   ): Promise<SendNip17MessageResult> => {
     if (!user) throw new Error('User not logged in');
+    if (!isEnabled('directMessages')) throw new Error('Direct messages are disabled. Turn them on in Settings → Privacy & Publishing.');
     if (!user.signer.nip44) throw new Error('Signer does not support NIP-44 encryption');
 
     setIsPending(true);

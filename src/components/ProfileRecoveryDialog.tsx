@@ -15,6 +15,7 @@ import { PeopleAvatarStack } from '@/components/PeopleAvatarStack';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { ACTIVE_THEME_KIND, parseActiveProfileTheme } from '@/lib/themeEvent';
 import { coreToTokens } from '@/themes';
 import { cn } from '@/lib/utils';
@@ -363,6 +364,7 @@ function ProfileHistoryTab({ onClose }: { onClose: () => void }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -387,6 +389,10 @@ function ProfileHistoryTab({ onClose }: { onClose: () => void }) {
   const currentProfileId = profileEvents[0]?.id;
 
   const handleRestore = async (event: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(event.id);
     try {
       await publishEvent({
@@ -447,6 +453,7 @@ function ThemeHistoryTab({ onClose }: { onClose: () => void }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -473,6 +480,10 @@ function ThemeHistoryTab({ onClose }: { onClose: () => void }) {
   const currentThemeId = themeEvents[0]?.id;
 
   const handleRestore = async (event: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(event.id);
     try {
       await publishEvent({
@@ -533,6 +544,7 @@ function FollowsHistoryTab({ onClose }: { onClose: () => void }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -557,6 +569,10 @@ function FollowsHistoryTab({ onClose }: { onClose: () => void }) {
   const currentFollowsId = followsEvents[0]?.id;
 
   const handleRestore = async (event: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(event.id);
     try {
       await publishEvent({

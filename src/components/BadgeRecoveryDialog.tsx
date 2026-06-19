@@ -13,6 +13,7 @@ import { parseProfileBadges } from '@/lib/parseProfileBadges';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { BADGE_PROFILE_KIND, BADGE_PROFILE_KIND_LEGACY, BADGE_DEFINITION_KIND } from '@/lib/badgeUtils';
 import { cn } from '@/lib/utils';
 import { Award, Check, Loader2, RotateCcw } from 'lucide-react';
@@ -215,6 +216,7 @@ function BadgeHistoryContent({ onClose }: { onClose: () => void }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -298,6 +300,10 @@ function BadgeHistoryContent({ onClose }: { onClose: () => void }) {
   const currentBadgeId = badgeEvents[0]?.id;
 
   const handleRestore = async (event: NostrEvent) => {
+    if (!isEnabled('recovery')) {
+      toast({ title: 'Recovery publishing disabled', description: 'Turn on “Recovery re-publish” in Settings → Privacy & Publishing to restore events.' });
+      return;
+    }
     setRestoringId(event.id);
     try {
       // Re-publish as kind 10008 (always write to the new kind),

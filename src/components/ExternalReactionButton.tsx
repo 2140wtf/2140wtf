@@ -7,6 +7,7 @@ import { QuickReactMenu } from '@/components/QuickReactMenu';
 import { ReactionEmoji } from '@/components/CustomEmoji';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import {
   useExternalUserReaction,
@@ -54,6 +55,7 @@ interface ExternalReactionButtonProps {
 export function ExternalReactionButton({ content, iconSize = 'size-5', count, className }: ExternalReactionButtonProps) {
   const { user } = useCurrentUser();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const identifier = content.value;
@@ -89,6 +91,10 @@ export function ExternalReactionButton({ content, iconSize = 'size-5', count, cl
   // Publish kind 17 reaction
   const handleReact = useCallback((emoji: string, emojiTag?: string[]) => {
     if (!user) return;
+    if (!isEnabled('reactions')) {
+      toast({ title: 'Reactions publishing disabled', description: 'Turn on “Reactions” in Settings → Privacy & Publishing to react.' });
+      return;
+    }
     impactLight();
 
     const tags: string[][] = [
@@ -121,7 +127,7 @@ export function ExternalReactionButton({ content, iconSize = 'size-5', count, cl
         },
       },
     );
-  }, [user, content, identifier, publishEvent, queryClient, toast]);
+  }, [user, content, identifier, publishEvent, queryClient, toast, isEnabled]);
 
   return (
     <Popover open={reactOpen} onOpenChange={(open) => {

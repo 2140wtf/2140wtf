@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useAppContext } from '@/hooks/useAppContext';
 import { notificationSuccess } from '@/lib/haptics';
 import {
@@ -98,6 +99,7 @@ export function useOnchainZapMany(
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
   const { config } = useAppContext();
   const { esploraApis } = config;
   const queryClient = useQueryClient();
@@ -232,7 +234,7 @@ export function useOnchainZapMany(
       ]);
 
       let publishedEvent: NostrEvent | null = null;
-      try {
+      if (isEnabled('zaps')) try {
         publishedEvent = await publishEvent({
           kind: 8333,
           content: comment,

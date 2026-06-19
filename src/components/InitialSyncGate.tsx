@@ -40,6 +40,7 @@ import { useEncryptedSettings, getLocalSettingsSync } from "@/hooks/useEncrypted
 import { type SyncPhase, useInitialSync } from "@/hooks/useInitialSync";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { usePublishPreferences } from "@/hooks/usePublishPreferences";
 import { useNostrStorage } from "@/hooks/useNostrStorage";
 import { OnboardingContext } from "@/hooks/useOnboarding";
 
@@ -617,6 +618,7 @@ function ProfileStep({
   const { mutateAsync: publishEvent, isPending: isPublishing } =
     useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
+  const { isEnabled } = usePublishPreferences();
   const pickInputRef = useRef<HTMLInputElement>(null);
   const pendingField = useRef<"picture" | "banner">("picture");
 
@@ -682,6 +684,16 @@ function ProfileStep({
 
   const handlePublishProfile = useCallback(async () => {
     if (!user) return;
+    if (!isEnabled('profile')) {
+      toast({
+        title: "Profile publishing disabled",
+        description:
+          "Turn on “Profile metadata” in Settings → Privacy & Publishing to publish your profile.",
+        variant: "destructive",
+      });
+      onNext();
+      return;
+    }
 
     // Defensive guard: when this is the signup flow, only publish kind 0 if
     // the active signer matches the freshly generated key. If the
@@ -723,7 +735,7 @@ function ProfileStep({
       }
     }
     onNext();
-  }, [user, profileData, publishEvent, queryClient, onNext, expectedPubkey]);
+  }, [user, profileData, publishEvent, queryClient, onNext, expectedPubkey, isEnabled]);
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">

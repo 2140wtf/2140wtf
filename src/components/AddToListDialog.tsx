@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUserLists } from '@/hooks/useUserLists';
 import { useFollowPacks } from '@/hooks/useFollowPacks';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
 import type { FollowPack } from '@/hooks/useFollowPacks';
@@ -40,6 +41,7 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
   const { lists, isLoading: listsLoading, addToList, createList, isInList } = useUserLists();
   const { data: followPacks = [], isLoading: packsLoading } = useFollowPacks();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
 
   const [newListName, setNewListName] = useState('');
@@ -73,6 +75,10 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
 
   /** Add pubkey to a Follow Pack (kind 39089). */
   const handleAddToPack = async (pack: FollowPack) => {
+    if (!isEnabled('lists')) {
+      toast({ title: 'Lists publishing disabled', description: 'Turn on “User lists” in Settings → Privacy & Publishing to add to packs.' });
+      return;
+    }
     if (pendingId) return;
     setPendingId(pack.id);
     try {
@@ -93,6 +99,10 @@ export function AddToListDialog({ pubkey, displayName, open, onOpenChange }: Add
   };
 
   const handleCreateAndAdd = async () => {
+    if (!isEnabled('lists')) {
+      toast({ title: 'Lists publishing disabled', description: 'Turn on “User lists” in Settings → Privacy & Publishing to create lists.' });
+      return;
+    }
     if (!newListName.trim() || creatingNew) return;
     setCreatingNew(true);
     try {

@@ -13,6 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { useToast } from '@/hooks/useToast';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,8 @@ export function LiveStreamChat({ aTag, className }: LiveStreamChatProps) {
   const queryClient = useQueryClient();
   const { user } = useCurrentUser();
   const { mutateAsync: createEvent, isPending: isSending } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const { toast } = useToast();
   const [message, setMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAutoScrollRef = useRef(true);
@@ -98,6 +102,10 @@ export function LiveStreamChat({ aTag, className }: LiveStreamChatProps) {
   const handleSend = async () => {
     const text = message.trim();
     if (!text || !user || isSending) return;
+    if (!isEnabled('liveChat')) {
+      toast({ title: 'Live chat publishing disabled', description: 'Turn on “Live chat” in Settings → Privacy & Publishing to send messages.' });
+      return;
+    }
 
     try {
       await createEvent({

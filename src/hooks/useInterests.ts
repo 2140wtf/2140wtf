@@ -9,12 +9,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 export function useInterests(tagName: 't' | 'g' = 't') {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
 
   const interestsQuery = useQuery({
     queryKey: ['interests', user?.pubkey],
@@ -52,6 +54,7 @@ export function useInterests(tagName: 't' | 'g' = 't') {
   const addInterest = useMutation({
     mutationFn: async (tag: string) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const normalized = tag.toLowerCase().replace(/^#/, '');
       if (!normalized) throw new Error('Empty tag');
 
@@ -81,6 +84,7 @@ export function useInterests(tagName: 't' | 'g' = 't') {
   const removeInterest = useMutation({
     mutationFn: async (tag: string) => {
       if (!user) throw new Error('Must be logged in');
+      if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const normalized = tag.toLowerCase().replace(/^#/, '');
 
       // Fetch the freshest kind 10015 from relays before mutating
