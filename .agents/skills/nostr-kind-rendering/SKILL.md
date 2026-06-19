@@ -1,11 +1,11 @@
 ---
 name: nostr-kind-rendering
-description: Add UI rendering for an event kind Ditto doesn't yet display — feed cards, detail pages, embedded previews, notifications, routes, feed-toggle registration, and the several kind-label maps (KIND_LABELS, KIND_HEADER_MAP, NOTIFICATION_KIND_NOUNS, CommentContext) that must stay in sync. Load when asked to "support / display / render" a NIP or kind number, when a kind renders blank or as "Kind 12345", or when quote embeds of a kind show "This event kind is not supported".
+description: Add UI rendering for an event kind 2140.wtf doesn't yet display — feed cards, detail pages, embedded previews, notifications, routes, feed-toggle registration, and the several kind-label maps (KIND_LABELS, KIND_HEADER_MAP, NOTIFICATION_KIND_NOUNS, CommentContext) that must stay in sync. Load when asked to "support / display / render" a NIP or kind number, when a kind renders blank or as "Kind 12345", or when quote embeds of a kind show "This event kind is not supported".
 ---
 
 # Nostr Kinds — UI Rendering Checklist
 
-Ditto's kind dispatch is **spread across many files** by design — feed cards, detail pages, embedded previews, notifications, and several kind-label maps each have their own rendering requirements. The central `KIND_LABELS` registry covers the easy cases, but most context-specific maps (grammar, icons, verbs) cannot be derived mechanically and must be updated manually.
+2140.wtf's kind dispatch is **spread across many files** by design — feed cards, detail pages, embedded previews, notifications, and several kind-label maps each have their own rendering requirements. The central `KIND_LABELS` registry covers the easy cases, but most context-specific maps (grammar, icons, verbs) cannot be derived mechanically and must be updated manually.
 
 **Missing any location causes visible bugs**: a kind might render blank in quote posts, show "Kind 12345" as a label, skip its action header, tombstone as "This event kind is not supported" in embeds, or — worst of all — have its content fed through the kind-1 tokenizer and auto-linkify URLs/hashtags that weren't authored by the event creator.
 
@@ -162,7 +162,7 @@ if (event.kind === 9802) {
 
 ### 11. `NIP.md` (custom kinds only)
 
-If the kind is a Ditto-custom kind or a Ditto-specific extension of an existing NIP, document it in `NIP.md` — see the **`nostr-kind-design`** skill for the format. Standard NIPs (like NIP-84, NIP-23) do not go in `NIP.md`.
+If the kind is a 2140.wtf-custom kind or a 2140.wtf-specific extension of an existing NIP, document it in `NIP.md` — see the **`nostr-kind-design`** skill for the format. Standard NIPs (like NIP-84, NIP-23) do not go in `NIP.md`.
 
 ## Validation
 

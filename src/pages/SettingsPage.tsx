@@ -24,7 +24,7 @@ const settingsSections: SettingsSection[] = [
   {
     id: 'privacy',
     label: 'Privacy & Publishing',
-    description: 'Control what Ditto publishes to Nostr on your behalf',
+    description: 'Control what 2140.wtf publishes to Nostr on your behalf',
     illustration: '/advanced-intro.png',
     path: '/settings/privacy',
     requiresAuth: true,

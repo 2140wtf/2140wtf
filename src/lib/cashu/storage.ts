@@ -962,7 +962,7 @@ export async function wipeAllAppData(_namespace?: string): Promise<WipeResult> {
   try {
     if (typeof indexedDB !== 'undefined') {
       // Close active connections first so deleteDatabase is not blocked.
-      // (Ditto does not use the source project's IndexedDB, so this is a no-op.)
+      // (2140.wtf does not use the source project's IndexedDB, so this is a no-op.)
       try { /* getDb().close(); */ } catch { /* ignore */ }
       let blocked = false;
       await new Promise<void>((resolve, reject) => {

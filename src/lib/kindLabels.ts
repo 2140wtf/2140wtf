@@ -7,7 +7,7 @@
  *
  * Sources:
  * - NIP README kinds table (https://github.com/nostr-protocol/nips)
- * - Ditto reference (https://about.ditto.pub/reference)
+ * - 2140.wtf reference (https://about.ditto.pub/reference)
  * - Existing codebase registries (consolidated)
  *
  * Labels are bare noun phrases (no articles, no verbs) so each consumer can
@@ -127,13 +127,13 @@ export const KIND_LABELS: Record<number, string> = {
   // Coinjoin
   2022: 'Coinjoin pool',
 
-  // Ditto custom kinds
+  // 2140.wtf custom kinds
   2473: 'Bird detection',
 
   // NIP-82 (Zapstore)
   3063: 'Zapstore asset',
 
-  // Ditto custom kinds
+  // 2140.wtf custom kinds
 
   // NIP-72
   4550: 'Community post approval',
@@ -226,7 +226,7 @@ export const KIND_LABELS: Record<number, string> = {
   // 2140 PETS
   11125: 'Blobbonaut profile',
 
-  // Ditto custom kinds
+  // 2140.wtf custom kinds
   12473: 'Birdex',
 
   // NIP-47 Wallet
@@ -243,7 +243,7 @@ export const KIND_LABELS: Record<number, string> = {
 
   // NIP-5A nsites
   15128: 'Nsite',
-  // Ditto custom — Love List ("1·LOVE" on a phone keypad)
+  // 2140.wtf custom — Love List ("1·LOVE" on a phone keypad)
   15683: 'Love list',
   // Weather station
   16158: 'Weather station',
@@ -333,7 +333,7 @@ export const KIND_LABELS: Record<number, string> = {
   // NIP-34 Git
   30617: 'Repository',
   30618: 'Repository state',
-  // Ditto custom kinds
+  // 2140.wtf custom kinds
   30621: 'Constellation',
   // NIP-54 Wiki
   30818: 'Wiki article',

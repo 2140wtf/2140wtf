@@ -402,7 +402,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     feedOnly: true,
     blurb: 'When someone permanently leaves Nostr, their Request to Vanish event signals the end of their identity on the network.',
   },
-  // Love Lists (feed-only — Ditto custom kind 15683, see NIP.md)
+  // Love Lists (feed-only — 2140.wtf custom kind 15683, see NIP.md)
   {
     kind: 15683,
     id: 'love-lists',
@@ -491,7 +491,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
   // Fundraisers — kind 33863 (addressable). Feed-only: opening a
   // campaign's naddr lands on PostDetailPage, which knows how to render
   // kind 33863 via CampaignContent. We don't host campaign creation or
-  // donation flows in Ditto — those belong to Agora — but we surface
+  // donation flows in 2140.wtf — those belong to Agora — but we surface
   // campaigns in feeds and threads.
   {
     kind: 33863,
@@ -505,7 +505,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     blurb: 'Fundraisers from across Nostr. Authored on Agora; readable from anywhere. Each campaign is self-hosted by its creator, with a Bitcoin wallet endpoint for donations.',
     sites: [{ url: 'https://agora.spot', name: 'Agora' }],
   },
-  // Birdstar (feed-only — external app, no Ditto page)
+  // Birdstar (feed-only — external app, no 2140.wtf page)
   {
     kind: 2473,
     id: 'bird-detections',

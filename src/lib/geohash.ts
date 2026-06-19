@@ -1,7 +1,7 @@
 /**
  * Minimal geohash encoder + neighbor helper.
  *
- * Only implements what Ditto needs for spatial Nostr queries (Roadstr, etc.):
+ * Only implements what 2140.wtf needs for spatial Nostr queries (Roadstr, etc.):
  * encoding a lat/lon to a geohash string and generating the 3x3 neighbor set
  * around a given hash. No decoding precision beyond bounding-box is exposed.
  */

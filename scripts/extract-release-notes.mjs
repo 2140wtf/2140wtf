@@ -25,7 +25,7 @@
  *   node scripts/extract-release-notes.mjs <version> [--summary] [--changelog <path>]
  *
  * --summary    Print only the summary paragraph (no headings, no bullets).
- *              Falls back to "Ditto vX.Y.Z" if the section has no summary.
+ *              Falls back to "2140.wtf vX.Y.Z" if the section has no summary.
  * --changelog  Path to the changelog file. Defaults to CHANGELOG.md.
  *
  * Exits 0 with the extracted text on stdout. Exits non-zero if the version is
@@ -128,7 +128,7 @@ if (!section) {
 
 if (summary) {
   const text = extractSummary(section);
-  stdout.write(text ?? `Ditto v${version}`);
+  stdout.write(text ?? `2140.wtf v${version}`);
   stdout.write('\n');
 } else {
   const body = trimBlankEdges(section).join('\n');
@@ -136,6 +136,6 @@ if (summary) {
     stdout.write(body);
     stdout.write('\n');
   } else {
-    stdout.write(`Ditto v${version}\n`);
+    stdout.write(`2140.wtf v${version}\n`);
   }
 }

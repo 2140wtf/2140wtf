@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 // ============================================================================
-// Shared IndexedDB database for Ditto's small key/value caches.
+// Shared IndexedDB database for 2140.wtf's small key/value caches.
 //
 // This "ditto" database holds simple per-domain key/value stores (currently
 // just the NIP-05 resolution cache). Callers should import `openDatabase()`
@@ -25,7 +25,7 @@ export const STORE = {
 let dbPromise: Promise<IDBPDatabase | null> | null = null;
 
 /**
- * Open (or reuse) the shared Ditto database.
+ * Open (or reuse) the shared 2140.wtf database.
  *
  * Returns `null` when IndexedDB is not available (e.g. iOS Lockdown Mode,
  * some private-browsing contexts).  The result is cached for the page

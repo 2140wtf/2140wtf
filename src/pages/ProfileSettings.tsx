@@ -969,7 +969,7 @@ function BackupKeySection() {
     </div>
   );
 
-  // Not applicable for extension / bunker logins — key isn't available in Ditto.
+  // Not applicable for extension / bunker logins — key isn't available in 2140.wtf.
   if (!current) return null;
 
   if (current.type === 'extension') {

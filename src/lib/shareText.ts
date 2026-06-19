@@ -1,9 +1,9 @@
 /**
- * Helpers for handling text shared into Ditto from another app's Share button.
+ * Helpers for handling text shared into 2140.wtf from another app's Share button.
  *
  * Shared text is rarely a clean URL — e.g. TikTok shares something like
  * "Check out this video! https://www.tiktok.com/@user/video/123 #fyp". These
- * helpers pull a usable URL out of that mess so the "View in Ditto" share
+ * helpers pull a usable URL out of that mess so the "View in 2140.wtf" share
  * target can route to the external-content comment page (/i/<url>).
  */
 

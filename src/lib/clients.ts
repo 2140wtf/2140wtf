@@ -9,7 +9,7 @@ export interface ClientDef {
 }
 
 export const CLIENTS: ClientDef[] = [
-  { tags: ['Ditto'], label: 'Ditto', color: 'hsl(221, 83%, 53%)' },
+  { tags: ['Ditto'], label: '2140.wtf', color: 'hsl(221, 83%, 53%)' },
   { tags: ['Agora'], label: 'Agora', color: 'hsl(25, 95%, 53%)' },
   { tags: ['Amethyst'], label: 'Amethyst', color: 'hsl(258, 70%, 55%)' },
   { tags: ['Primal Web', 'Primal Android'], label: 'Primal', color: 'hsl(348, 83%, 47%)' },
