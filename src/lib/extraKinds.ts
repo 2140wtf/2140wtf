@@ -463,13 +463,13 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
       },
     ],
   },
-  // 2140 pets (feed-only — dedicated page at /pets)
+  // 2140.wtf pets (feed-only — dedicated page at /pets)
   {
     kind: 31124,
     id: 'pets',
     feedKey: 'feedIncludePets',
-    label: '2140 pets',
-    description: '2140 pets virtual pet updates',
+    label: '2140.wtf pets',
+    description: '2140.wtf pets virtual pet updates',
     addressable: true,
     section: 'whimsy',
     feedOnly: true,

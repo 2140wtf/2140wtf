@@ -79,7 +79,7 @@ export function PetsEmotionPanel({ isOpen, onClose }: PetsEmotionPanelProps) {
         
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Select an emotion to preview how it looks on your 2140 Pet.
+            Select an emotion to preview how it looks on your 2140.wtf Pet.
             The default expression is already happy-looking (smiling).
             This is a dev-only tool and doesn't affect real state.
           </p>
