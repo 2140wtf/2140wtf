@@ -38,6 +38,9 @@ describe('useGroupChatHasUnread', () => {
       promoteAdmin: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
+      getMessagesForGroup: vi.fn((groupId: string) =>
+        [].filter((m: never) => (m as unknown as { nostrGroupId: string }).nostrGroupId === groupId)
+      ),
       isAdmin: false,
     });
   });
@@ -79,6 +82,11 @@ describe('useGroupChatHasUnread', () => {
       promoteAdmin: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
+      getMessagesForGroup: vi.fn((groupId: string) =>
+        [{
+          id: 'm1', nostrGroupId: 'g1', senderPubkey: viewerPubkey, content: 'hi', timestamp: 100, isOwn: true, epoch: 0,
+        }].filter((m) => m.nostrGroupId === groupId)
+      ),
       isAdmin: false,
     });
 
@@ -124,6 +132,12 @@ describe('useGroupChatHasUnread', () => {
       promoteAdmin: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
+      getMessagesForGroup: vi.fn((groupId: string) =>
+        [
+          { id: 'm1', nostrGroupId: 'g1', senderPubkey: otherPubkey, content: 'old', timestamp: 40, isOwn: false, epoch: 0 },
+          { id: 'm2', nostrGroupId: 'g1', senderPubkey: otherPubkey, content: 'new', timestamp: 60, isOwn: false, epoch: 0 },
+        ].filter((m) => m.nostrGroupId === groupId)
+      ),
       isAdmin: false,
     });
 
