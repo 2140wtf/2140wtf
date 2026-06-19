@@ -861,6 +861,25 @@ export function ThemeSelector({ builderOpen, onBuilderOpenChange, builderMode }:
 
   return (
     <div className="space-y-6">
+      {/* ── Auto-share toggle ── */}
+      {user && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="auto-share-theme-selector" className="flex flex-col gap-1 cursor-pointer">
+              <span className="text-sm font-medium">Sync theme with profile</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                Publish theme changes to your Nostr profile so others can see it.
+              </span>
+            </Label>
+            <Switch
+              id="auto-share-theme-selector"
+              checked={autoShareTheme}
+              onCheckedChange={setAutoShareTheme}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── My Themes ── */}
       <div className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
