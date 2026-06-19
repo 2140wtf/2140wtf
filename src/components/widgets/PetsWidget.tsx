@@ -217,7 +217,7 @@ export function PetsWidget() {
         <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-8 text-primary" />
         </div>
-        <span className="text-xs text-muted-foreground">Log in to hatch a 2140.wtf Pet</span>
+        <span className="text-xs text-muted-foreground">Log in to hatch a 2140 PET</span>
       </Link>
     );
   }
@@ -241,7 +241,7 @@ export function PetsWidget() {
         <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-8 text-primary" />
         </div>
-        <span className="text-sm font-medium text-primary">Hatch a 2140.wtf Pet</span>
+        <span className="text-sm font-medium text-primary">Hatch a 2140 PET</span>
         <span className="text-xs text-muted-foreground">Get your virtual pet companion</span>
       </Link>
     );
@@ -393,14 +393,14 @@ function PetsWidgetContent({
             <PopoverTrigger asChild>
               <button
                 className="size-7 rounded-full flex items-center justify-center transition-colors text-muted-foreground bg-muted/50 hover:bg-muted hover:text-foreground"
-                title="Switch 2140.wtf Pets"
+                title="Switch 2140 PETS"
               >
                 <ArrowLeftRight className="size-3.5" />
               </button>
             </PopoverTrigger>
             <PopoverContent side="left" align="start" className="w-auto p-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-muted-foreground">Switch 2140.wtf Pets</p>
+                <p className="text-xs font-medium text-muted-foreground">Switch 2140 PETS</p>
                 <button
                   onClick={() => setSwitcherOpen(false)}
                   aria-label="Close"

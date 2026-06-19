@@ -1,5 +1,5 @@
 /**
- * Daily Login Bonus for 2140.wtf Pets
+ * Daily Login Bonus for 2140 PETS
  *
  * Awards coins the first time a user opens the Pets page each local day.
  * Tracks last login day and consecutive streak on the Blobbonaut profile.

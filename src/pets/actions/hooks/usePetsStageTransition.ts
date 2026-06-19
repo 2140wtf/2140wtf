@@ -300,9 +300,9 @@ export function usePetsEvolve({
           throw new Error('Eggs must hatch before they can evolve');
         }
         if (companion.stage === 'adult') {
-          throw new Error('This 2140.wtf Pet is already fully evolved');
+          throw new Error('This 2140 PET is already fully evolved');
         }
-        throw new Error('Only baby 2140.wtf Pets can evolve');
+        throw new Error('Only baby 2140 PETS can evolve');
       }
 
       // ─── Ensure Canonical Before Action ───
