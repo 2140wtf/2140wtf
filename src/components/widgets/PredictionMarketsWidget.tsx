@@ -49,7 +49,7 @@ export function PredictionMarketsWidget() {
       <div className="space-y-3 p-1">
         <div className="flex items-center gap-2">
           <BarChart3 className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">Prediction Markets</h3>
+          <h3 className="text-sm font-semibold">₿AO MARKETS</h3>
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed">
@@ -77,7 +77,7 @@ export function PredictionMarketsWidget() {
     <div className="space-y-3 p-1">
       <div className="flex items-center gap-2">
         <BarChart3 className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">Prediction Markets</h3>
+        <h3 className="text-sm font-semibold">₿AO MARKETS</h3>
       </div>
 
       <div className="space-y-3">

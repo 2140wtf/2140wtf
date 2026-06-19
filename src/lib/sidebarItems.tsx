@@ -133,7 +133,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
-  { id: "prediction-markets", label: "Prediction Markets", path: "/prediction-markets", icon: BarChart3 },
+  { id: "prediction-markets", label: "₿AO MARKETS", path: "/prediction-markets", icon: BarChart3 },
   { id: "pets", label: "2140 PETS", path: "/pets", icon: Cat },
   { id: "market", label: "Store", path: "/market", icon: ShoppingBag },
   {
