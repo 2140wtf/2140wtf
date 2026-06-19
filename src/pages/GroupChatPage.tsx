@@ -349,15 +349,36 @@ export function GroupChatPage() {
         <SheetContent side="left" className="p-0 w-72">
           <SheetTitle className="sr-only">Private Groups</SheetTitle>
           <SheetDescription className="sr-only">Select a group to chat</SheetDescription>
-          <GroupList
-            groups={groups}
-            selectedGroupId={selectedGroup?.nostrGroupId ?? null}
-            unreadCounts={unreadCounts}
-            onSelectGroup={(groupId) => {
-              selectGroup(groupId);
-              setMobileListOpen(false);
-            }}
-          />
+          <div className="flex flex-col h-full">
+            <div className="px-4 pt-4 pb-2 border-b">
+              <h2 className="text-base font-semibold">Your groups</h2>
+              <p className="text-xs text-muted-foreground">Select a group to open it</p>
+            </div>
+            <div className="p-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                size="sm"
+                onClick={() => {
+                  setMobileListOpen(false);
+                  setCreateOpen(true);
+                }}
+              >
+                <Users className="size-4" />
+                New group
+              </Button>
+            </div>
+            <GroupList
+              groups={groups}
+              selectedGroupId={selectedGroup?.nostrGroupId ?? null}
+              unreadCounts={unreadCounts}
+              onSelectGroup={(groupId) => {
+                selectGroup(groupId);
+                setMobileListOpen(false);
+              }}
+              className="border-r-0 flex-1"
+            />
+          </div>
         </SheetContent>
       </Sheet>
 
