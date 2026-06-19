@@ -108,7 +108,6 @@ export async function syncCashuState(
   payload: CashuBackupPayload,
   user: BackupUser,
   relayUrls: string[],
-  dTag: string = BACKUP_D_TAG,
 ): Promise<string | null> {
   if (!user?.signer?.nip44?.encrypt) {
     devLog.warn('Cashu sync: signer does not support NIP-44');
@@ -127,7 +126,7 @@ export async function syncCashuState(
       kind: BACKUP_KIND,
       content,
       tags: [
-        ['d', dTag],
+        ['d', BACKUP_D_TAG],
         ['client', '2140'],
       ],
       created_at: Math.floor(Date.now() / 1000),
@@ -168,7 +167,6 @@ export async function syncCashuState(
 export async function restoreCashuState(
   user: BackupUser,
   relayUrls: string[],
-  dTag: string = BACKUP_D_TAG,
 ): Promise<CashuBackupPayload | null> {
   if (!user?.signer?.nip44?.decrypt) {
     devLog.warn('Cashu restore: signer does not support NIP-44');
@@ -187,7 +185,7 @@ export async function restoreCashuState(
       {
         kinds: [BACKUP_KIND],
         authors: [user.pubkey],
-        '#d': [dTag],
+        '#d': [BACKUP_D_TAG],
         limit: 20,
       },
       { maxWait: 15000 },
