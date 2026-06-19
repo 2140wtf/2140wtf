@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
@@ -107,7 +107,13 @@ import {
 } from '@/pets/actions';
 import { PetsOnboardingFlow } from '@/pets/onboarding';
 import { usePetsActionsRegistration, type UseItemFunction } from '@/pets/companion/interaction';
-import { getAdultBaseSvg, getAvailableAdultForms } from '@/pets/adult-pets';
+import { getAdultBaseSvg } from '@/pets/adult-pets';
+import {
+  BREED_CATEGORIES,
+  getCategoryMembers,
+  isAdultFormMember,
+  type PetsBreedCategory,
+} from '@/pets/core/lib/pet-categories';
 import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
 import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
 import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
@@ -224,23 +230,53 @@ function LoggedOutState() {
   );
 }
 
-// ─── No Pet State ─────────────────────────────────────────────────────────────
+// ─── Breed Category Picker ────────────────────────────────────────────────────
 
-function NoPetState({ onAdopt }: { onAdopt: () => void }) {
+function BreedCategoryPicker({
+  onSelectCategory,
+}: {
+  onSelectCategory: (category: PetsBreedCategory) => void;
+}) {
+  const iconMap: Record<PetsBreedCategory, ComponentType<{ className?: string }>> = {
+    '2140-pets': Sparkles,
+    'ditto-blobbi': Cat,
+    bao: Wallet,
+  };
+
   return (
     <main className="flex flex-col items-center justify-center p-6 gap-6 min-h-[60vh]">
-      <div className="flex flex-col items-center gap-3 text-center max-w-sm">
+      <div className="flex flex-col items-center gap-3 text-center max-w-md">
         <div className="size-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-10 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold">No 2140 PET yet</h1>
+        <h1 className="text-2xl font-bold">Choose your first companion</h1>
         <p className="text-muted-foreground">
-          Adopt your first companion to start testing. Nothing is published until you click Adopt.
+          Pick a breed category. You&apos;ll receive a random pet from that group.
         </p>
-        <Button onClick={onAdopt} className="mt-2">
-          <Plus className="size-4 mr-2" />
-          Adopt a 2140 PET
-        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl">
+        {BREED_CATEGORIES.map((cat) => {
+          const Icon = iconMap[cat.id];
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => onSelectCategory(cat.id)}
+              className={cn(
+                'flex flex-col items-center gap-3 rounded-2xl border p-5 text-center transition-colors',
+                'hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+              )}
+            >
+              <div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Icon className="size-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold">{cat.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{cat.description}</p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </main>
   );
@@ -305,6 +341,7 @@ function PetsContent() {
   
   // State for showing the adoption flow (for "Adopt another 2140 PET")
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
+  const [selectedBreedCategory, setSelectedBreedCategory] = useState<PetsBreedCategory | undefined>(undefined);
   
   // STEP 5: Selection Priority
   // 1) localStorage selection (if valid and exists in collection) - USER SELECTION ALWAYS WINS
@@ -747,8 +784,19 @@ function PetsContent() {
     if (DEBUG_PETS) console.log('[PetsPage] Showing: no profile adoption prompt');
     return (
       <>
-        <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />
-        <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+        <BreedCategoryPicker
+          onSelectCategory={(cat) => {
+            setSelectedBreedCategory(cat);
+            setShowAdoptionFlow(true);
+          }}
+        />
+        <Dialog
+          open={showAdoptionFlow}
+          onOpenChange={(open) => {
+            setShowAdoptionFlow(open);
+            if (!open) setSelectedBreedCategory(undefined);
+          }}
+        >
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
             <PetsOnboardingFlow
               profile={profile}
@@ -757,6 +805,7 @@ function PetsContent() {
               invalidateProfile={invalidateProfile}
               invalidateCompanion={invalidateCompanion}
               setStoredSelectedD={setStoredSelectedD}
+              breedCategory={selectedBreedCategory}
               adoptionOnly={true}
               onComplete={() => setShowAdoptionFlow(false)}
             />
@@ -799,8 +848,19 @@ function PetsContent() {
     if (DEBUG_PETS) console.log('[PetsPage] Showing: no pet adoption prompt');
     return (
       <>
-        <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />
-        <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+        <BreedCategoryPicker
+          onSelectCategory={(cat) => {
+            setSelectedBreedCategory(cat);
+            setShowAdoptionFlow(true);
+          }}
+        />
+        <Dialog
+          open={showAdoptionFlow}
+          onOpenChange={(open) => {
+            setShowAdoptionFlow(open);
+            if (!open) setSelectedBreedCategory(undefined);
+          }}
+        >
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
             <PetsOnboardingFlow
               profile={profile}
@@ -809,6 +869,7 @@ function PetsContent() {
               invalidateProfile={invalidateProfile}
               invalidateCompanion={invalidateCompanion}
               setStoredSelectedD={setStoredSelectedD}
+              breedCategory={selectedBreedCategory}
               adoptionOnly={true}
               onComplete={() => setShowAdoptionFlow(false)}
             />
@@ -3413,57 +3474,82 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
 
 // ─── Species Tab Content ──────────────────────────────────────────────────────
 
-const DESIGNED_SPECIES = new Set(['glitchfox', 'biomechmoth', 'liquidblob']);
-
-const SPECIES_PORTRAITS: Record<string, { label: string; src: string }> = {
-  glitchfox: { label: 'Glitch Fox', src: '/pets/species/glitch-fox.png' },
-  biomechmoth: { label: 'Bio-Mech Moth', src: '/pets/species/bio-mech-moth.png' },
-  liquidblob: { label: 'Liquid Blob', src: '/pets/species/liquid-blob.png' },
-};
-
-function formatSpeciesName(form: string): string {
-  return SPECIES_PORTRAITS[form]?.label ?? form.charAt(0).toUpperCase() + form.slice(1);
-}
-
 function SpeciesTabContent() {
-  const forms = getAvailableAdultForms();
+  const [activeCategory, setActiveCategory] = useState<PetsBreedCategory>('2140-pets');
+  const members = getCategoryMembers(activeCategory);
+
   return (
-    <div className="h-full min-h-[210px] px-3 sm:px-4">
-      <p className="text-xs text-muted-foreground text-center py-2">
-        Adult species your 2140 PET can evolve into. The three newest are highlighted.
+    <div className="h-full min-h-[210px] px-3 sm:px-4 space-y-3">
+      <div className="flex items-center justify-center gap-2 pt-2">
+        {BREED_CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            onClick={() => setActiveCategory(cat.id)}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+              activeCategory === cat.id
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-card/50 text-muted-foreground border-border hover:border-primary/60'
+            )}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        Adult species your 2140 PET can evolve into. Select a category above.
       </p>
+
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
-        {forms.map((form) => {
-          const portrait = SPECIES_PORTRAITS[form];
-          const svg = portrait ? undefined : getAdultBaseSvg(form);
-          const isDesigned = DESIGNED_SPECIES.has(form);
+        {members.map((member) => {
+          if (isAdultFormMember(member)) {
+            const svg = member.portraitSrc ? undefined : getAdultBaseSvg(member.form);
+            return (
+              <div
+                key={member.form}
+                className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
+              >
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
+                  {member.portraitSrc ? (
+                    <img
+                      src={member.portraitSrc}
+                      alt={member.label}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <img
+                      src={`data:image/svg+xml,${encodeURIComponent(svg ?? '')}`}
+                      alt={member.label}
+                      className="w-full h-full object-contain"
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {member.label}
+                </span>
+              </div>
+            );
+          }
+
           return (
             <div
-              key={form}
-              className={cn(
-                'flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50',
-                isDesigned && 'border-primary/60 bg-primary/5'
-              )}
+              key={member.id}
+              className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
             >
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
-                {portrait ? (
-                  <img
-                    src={portrait.src}
-                    alt={portrait.label}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <img
-                    src={`data:image/svg+xml,${encodeURIComponent(svg ?? '')}`}
-                    alt={formatSpeciesName(form)}
-                    className="w-full h-full object-contain"
-                    loading="lazy"
-                  />
-                )}
+                <img
+                  src={member.src}
+                  alt={member.label}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
               </div>
-              <span className={cn('text-[10px] font-medium', isDesigned ? 'text-primary' : 'text-muted-foreground')}>
-                {formatSpeciesName(form)}
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {member.label}
               </span>
             </div>
           );

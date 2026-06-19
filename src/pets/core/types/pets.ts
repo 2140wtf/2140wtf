@@ -1,5 +1,7 @@
 // src/types/pets.ts
 
+import type { PetsBreedCategory } from '@/pets/core/lib/pet-categories';
+
 /**
  * Minimal, clean Pets domain types for the new project.
  *
@@ -170,6 +172,19 @@ export interface Pets extends PetsVisualTraits {
   themeVariant?: string;
 
   /**
+   * Breed category selected when the pet was minted.
+   * Used to group pets in the Species tab and to pick the adult visual.
+   */
+  breedCategory?: PetsBreedCategory;
+
+  /**
+   * Category-specific asset identifier.
+   * Adult-form category = the AdultForm name.
+   * ₿AO category = the bao card id (e.g. "bao-05").
+   */
+  breedAsset?: string;
+
+  /**
    * Optional raw tags for Nostr-backed or metadata-driven rendering.
    */
   tags?: string[][];
@@ -232,6 +247,8 @@ export function createDefaultPets(overrides: Partial<Pets> = {}): Pets {
 
     crossoverApp: overrides.crossoverApp ?? null,
     themeVariant: overrides.themeVariant,
+    breedCategory: overrides.breedCategory,
+    breedAsset: overrides.breedAsset,
     tags: overrides.tags ?? [],
 
     egg: overrides.egg,

@@ -8,6 +8,7 @@ import { validateAndRepairPetsTags } from './pets-tag-schema';
 import { applyColorGuardrails, hexToHsl, hslToHex } from './color-guardrails';
 import type { Mission } from './missions';
 import { parseEvolutionContent } from './missions';
+import { BREED_CATEGORIES, type PetsBreedCategory } from './pet-categories';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -327,6 +328,10 @@ export interface PetsCompanion {
   startIncubation: number | undefined;
   /** Adult evolution form type (adult only) */
   adultType: string | undefined;
+  /** Breed category selected when the pet was minted. */
+  breedCategory?: PetsBreedCategory;
+  /** Category-specific asset identifier (adult form name or bao card id). */
+  breedAsset?: string;
   /** 
    * @deprecated Use progressionStartedAt instead.
    * Timestamp when current state (incubating/evolving) started (unix seconds).
@@ -1351,6 +1356,13 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
     adultType: stage === 'adult' && effectiveSeed && effectiveSeed.length === 64
       ? deriveAdultFormFromSeed(effectiveSeed)
       : getTagValue(tags, 'adult_type'),
+    breedCategory: (() => {
+      const raw = getTagValue(tags, 'breed_category');
+      return BREED_CATEGORIES.some((c) => c.id === raw)
+        ? (raw as PetsBreedCategory)
+        : undefined;
+    })(),
+    breedAsset: getTagValue(tags, 'breed_asset') ?? undefined,
     stateStartedAt: parseNumericTag(tags, 'state_started_at'),
     progressionStartedAt: parseNumericTag(tags, 'progression_started_at') ?? parseNumericTag(tags, 'state_started_at'),
     tasks,
