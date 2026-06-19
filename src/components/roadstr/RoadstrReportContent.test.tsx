@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { TestApp } from '@/test/TestApp';
@@ -53,79 +53,91 @@ function makeConfirmationEvent(overrides: Partial<NostrEvent> = {}): NostrEvent 
 }
 
 describe('RoadstrReportContent', () => {
-  it('renders the type label, coordinates, and comment', () => {
-    render(
-      <TestApp>
-        <RoadstrReportContent event={makeReportEvent()} />
-      </TestApp>,
-    );
+  it('renders the type label, coordinates, and comment', async () => {
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportContent event={makeReportEvent()} />
+        </TestApp>,
+      );
+    });
 
     expect(screen.getByText('Police')).toBeInTheDocument();
     expect(screen.getByText(/48\.85661, 2\.35222/)).toBeInTheDocument();
     expect(screen.getByText('Checking seatbelts')).toBeInTheDocument();
   });
 
-  it('shows an expired badge when the report is no longer active', () => {
-    render(
-      <TestApp>
-        <RoadstrReportContent
-          event={makeReportEvent()}
-          confirmations={[]}
-          now={NOW + 10 * 60 * 60}
-        />
-      </TestApp>,
-    );
+  it('shows an expired badge when the report is no longer active', async () => {
+    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue((NOW + 10 * 60 * 60) * 1000);
+
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportContent event={makeReportEvent()} confirmations={[]} />
+        </TestApp>,
+      );
+    });
 
     expect(screen.getByText('expired')).toBeInTheDocument();
+    dateSpy.mockRestore();
   });
 
-  it('shows confirmation counts in expanded mode', () => {
-    render(
-      <TestApp>
-        <RoadstrReportContent
-          event={makeReportEvent()}
-          confirmations={[
-            {
-              id: '22'.repeat(32),
-              pubkey: '33'.repeat(32),
-              createdAt: NOW + 300,
-              kind: 1316,
-              reportId: '00'.repeat(32),
-              status: 'still_there',
-              lat: 48.856614,
-              lon: 2.352222,
-              geohashes: ['u09t'],
-              event: makeConfirmationEvent(),
-            },
-          ]}
-          expanded
-        />
-      </TestApp>,
-    );
+  it('shows confirmation counts in expanded mode', async () => {
+    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrReportContent
+            event={makeReportEvent()}
+            confirmations={[
+              {
+                id: '22'.repeat(32),
+                pubkey: '33'.repeat(32),
+                createdAt: NOW + 300,
+                kind: 1316,
+                reportId: '00'.repeat(32),
+                status: 'still_there',
+                lat: 48.856614,
+                lon: 2.352222,
+                geohashes: ['u09t'],
+                event: makeConfirmationEvent(),
+              },
+            ]}
+            expanded
+          />
+        </TestApp>,
+      );
+    });
 
     expect(screen.getByText(/1 still there/)).toBeInTheDocument();
+    dateSpy.mockRestore();
   });
 });
 
 describe('RoadstrConfirmationContent', () => {
-  it('renders a still_there confirmation', () => {
-    render(
-      <TestApp>
-        <RoadstrConfirmationContent event={makeConfirmationEvent({ tags: [['e', '00'.repeat(32)], ['status', 'still_there']] })} />
-      </TestApp>,
-    );
+  it('renders a still_there confirmation', async () => {
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrConfirmationContent event={makeConfirmationEvent({ tags: [['e', '00'.repeat(32)], ['status', 'still_there']] })} />
+        </TestApp>,
+      );
+    });
 
     expect(screen.getByText('confirmed a road event')).toBeInTheDocument();
   });
 
-  it('renders a no_longer_there confirmation', () => {
-    render(
-      <TestApp>
-        <RoadstrConfirmationContent
-          event={makeConfirmationEvent({ tags: [['e', '00'.repeat(32)], ['status', 'no_longer_there']] })}
-        />
-      </TestApp>,
-    );
+  it('renders a no_longer_there confirmation', async () => {
+    await act(async () => {
+      render(
+        <TestApp>
+          <RoadstrConfirmationContent
+            event={makeConfirmationEvent({ tags: [['e', '00'.repeat(32)], ['status', 'no_longer_there']] })}
+          />
+        </TestApp>,
+      );
+    });
 
     expect(screen.getByText('marked a road event as gone')).toBeInTheDocument();
   });
