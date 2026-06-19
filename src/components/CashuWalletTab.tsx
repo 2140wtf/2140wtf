@@ -36,6 +36,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuWallet, type CashuWalletState, type CashuWalletActions } from '@/hooks/useCashuWallet';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
@@ -47,10 +48,12 @@ import {
 } from '@/lib/cashu/cashuBackup';
 import { DEFAULT_MINTS, normalizeMintUrl, deriveBaoCashuMnemonic, deriveBaoWalletKey } from '@/lib/cashu/cashu';
 import { devLog } from '@/lib/cashu/devLog';
+import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
 import type { Nip60WalletConfig } from '@/lib/cashu/cashuNip60';
 import type { Transaction } from '@/lib/cashu/storage';
 import type { NostrSigner } from '@nostrify/types';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
+import { nip19 } from 'nostr-tools';
 import { bytesToHex } from '@noble/curves/utils.js';
 
 interface CashuWalletTabProps {
@@ -629,6 +632,8 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
 
 function BaoWalletPanel({ wallet }: { wallet: CashuWalletState & CashuWalletActions }) {
   const { toast } = useToast();
+  const { user } = useCurrentUser();
+  const { config: appConfig } = useAppContext();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
@@ -670,9 +675,27 @@ function BaoWalletPanel({ wallet }: { wallet: CashuWalletState & CashuWalletActi
   };
 
   const handleFaucet = async () => {
+    if (!user?.pubkey) {
+      toast({ variant: 'destructive', title: 'Not logged in' });
+      return;
+    }
+    const faucetUrl = appConfig.baoSignetFaucetUrl?.trim();
+    if (!faucetUrl) {
+      toast({ title: 'Faucet not configured', description: 'Set VITE_BAO_FAUCET_URL to top up BAO demo sats.' });
+      return;
+    }
     setFaucetLoading(true);
     try {
-      toast({ title: 'Faucet not configured', description: 'Set VITE_BAO_MINT_URL and a faucet endpoint to top up BAO demo sats.' });
+      const npub = nip19.npubEncode(user.pubkey);
+      const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount: 200 });
+      if (result?.token) {
+        await wallet.receiveToken(result.token.trim());
+        toast({ title: 'Faucet top-up received', description: result.message ?? '+200 demo sats' });
+      } else {
+        toast({ variant: 'destructive', title: 'Faucet failed', description: result?.message ?? 'No token returned.' });
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: 'Faucet failed', description: e instanceof Error ? e.message : 'Unknown error' });
     } finally {
       setFaucetLoading(false);
     }
