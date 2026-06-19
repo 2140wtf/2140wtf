@@ -336,8 +336,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
                     getShowIndicator={(id) => {
                       if (id === 'notifications') return hasUnread;
-                      if (id === 'messages') return hasUnreadMessages.hasUnread;
-                      if (id === 'groups') return hasUnreadGroups;
+                      if (id === 'messages') return hasUnreadMessages.hasUnread || hasUnreadGroups;
                       return undefined;
                     }}
                     linkClassName="text-base"
@@ -399,8 +398,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                     getProfilePath={(id) => id === 'profile' ? userProfileUrl : undefined}
                     getShowIndicator={(id) => {
                       if (id === 'notifications') return hasUnread;
-                      if (id === 'messages') return hasUnreadMessages.hasUnread;
-                      if (id === 'groups') return hasUnreadGroups;
+                      if (id === 'messages') return hasUnreadMessages.hasUnread || hasUnreadGroups;
                       return undefined;
                     }}
                     linkClassName="text-base"
