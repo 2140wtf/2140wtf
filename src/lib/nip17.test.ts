@@ -10,7 +10,6 @@ import {
   createNip17Rumor,
   sealNip17Rumor,
   giftWrapNip17Seal,
-  unsealNip17Rumor,
   parseNip17Rumor,
   getNip17DmRelays,
   type Rumor,
