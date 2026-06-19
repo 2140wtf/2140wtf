@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { buildNip17GiftWraps, type Rumor } from '@/lib/nip17';
 import { extractReadRelays } from '@/lib/inboxRelays';
 import { extractDmRelays } from '@/hooks/useDmRelays';
+import { APP_RELAYS } from '@/lib/appRelays';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 
@@ -67,10 +68,16 @@ export function useNip17SendMessage() {
   const { toast } = useToast();
   const [isPending, setIsPending] = useState(false);
 
-  const defaultRelays = useMemo(
-    () => config.relayMetadata?.relays?.map((r) => r.url).filter((url): url is string => typeof url === 'string' && /^wss?:\/\//.test(url)) ?? [],
-    [config.relayMetadata],
-  );
+  const defaultRelays = useMemo(() => {
+    const configured =
+      config.relayMetadata?.relays
+        ?.map((r) => r.url)
+        .filter((url): url is string => typeof url === 'string' && /^wss?:\/\//.test(url)) ?? [];
+    const appDefaults = APP_RELAYS.relays
+      .map((r) => r.url)
+      .filter((url): url is string => typeof url === 'string' && /^wss?:\/\//.test(url));
+    return [...new Set([...configured, ...appDefaults])];
+  }, [config.relayMetadata]);
 
   const sendMessage = async (
     options: SendNip17MessageOptions,
