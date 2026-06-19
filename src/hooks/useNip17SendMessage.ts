@@ -119,10 +119,10 @@ export function useNip17SendMessage() {
 
           let relays = relaysByRecipient.get(pTag) ?? [];
           if (relays.length === 0) {
-            if (pTag === recipientPubkey) {
-              throw new Error('Recipient has no DM relays configured');
-            }
-            // Self-copy: fall back to default app relays so sent messages remain visible.
+            // Fall back to the app's default relays when the recipient (or the
+            // sender for the self-copy) has no DM/inbox relays configured.
+            // This keeps DMs working for users who haven't published a kind
+            // 10050 or NIP-65 relay list yet.
             relays = defaultRelays;
           }
 
