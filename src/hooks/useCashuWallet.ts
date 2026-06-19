@@ -82,6 +82,7 @@ import {
   NUTZAP_INFO_KIND,
   NUTZAP_KIND,
   type Nip60SyncApi,
+  type Nip60WalletConfig,
 } from '@/lib/cashu/cashuNip60';
 /* eslint-enable @typescript-eslint/no-unused-vars */
 import { createMintFetch, runWithAbortSignal } from '@/lib/cashu/cashuFetch';
@@ -394,15 +395,29 @@ export async function acquireMutex(mutexRef: { current: Promise<void> | null }):
   return release;
 }
 
+export interface UseCashuWalletOptions {
+  backupCashuState?: (payload: CashuBackupPayload) => Promise<string | null>;
+  restoreCashuState?: () => Promise<CashuBackupPayload | null>;
+  nip60Sync?: Nip60SyncApi;
+  defaultMints?: Array<{ name: string; url: string }>;
+  deriveWalletKey?: (seedPhrase: string) => { privkey: Uint8Array; pubkey: string };
+  walletLabel?: string;
+  /** Optional BAO wallet config to include in the combined kind:17375 event. */
+  baoWalletConfig?: Nip60WalletConfig;
+  /** Whether to publish the kind:17375 wallet config. Set to false for secondary wallets (e.g. BAO) when a combined config is published elsewhere. */
+  publishWalletConfig?: boolean;
+}
+
 export function useCashuWallet(
   externalSeed?: string,
-  backupCashuState?: (payload: CashuBackupPayload) => Promise<string | null>,
-  restoreCashuState?: () => Promise<CashuBackupPayload | null>,
-  nip60Sync?: Nip60SyncApi,
+  options?: UseCashuWalletOptions,
 ): CashuWalletState & CashuWalletActions {
   const { config } = useAppContext();
+  const defaultMints = useMemo(() => options?.defaultMints ?? DEFAULT_MINTS, [options?.defaultMints]);
+  const deriveWalletKey = useMemo(() => options?.deriveWalletKey ?? deriveNip60WalletKey, [options?.deriveWalletKey]);
+  const _walletLabel = options?.walletLabel ?? 'Cashu';
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
-  const [mintUrl, setMintUrlState] = useState<string>(DEFAULT_MINTS[0]?.url || '');
+  const [mintUrl, setMintUrlState] = useState<string>(defaultMints[0]?.url || '');
   const [customMints, setCustomMints] = useState<Array<{ name: string; url: string }>>([]);
 
   const [mintInfo, setMintInfo] = useState<any>(null);
@@ -437,12 +452,14 @@ export function useCashuWallet(
 
   const backupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const walletCacheRef = useRef<Map<string, CashuWallet>>(new Map());
-  const backupCashuStateRef = useRef(backupCashuState);
-  const restoreCashuStateRef = useRef(restoreCashuState);
-  const nip60SyncRef = useRef(nip60Sync);
-  useEffect(() => { backupCashuStateRef.current = backupCashuState; }, [backupCashuState]);
-  useEffect(() => { restoreCashuStateRef.current = restoreCashuState; }, [restoreCashuState]);
-  useEffect(() => { nip60SyncRef.current = nip60Sync; }, [nip60Sync]);
+  const backupCashuStateRef = useRef(options?.backupCashuState);
+  const restoreCashuStateRef = useRef(options?.restoreCashuState);
+  const nip60SyncRef = useRef(options?.nip60Sync);
+  const baoWalletConfigRef = useRef(options?.baoWalletConfig);
+  useEffect(() => { backupCashuStateRef.current = options?.backupCashuState; }, [options?.backupCashuState]);
+  useEffect(() => { restoreCashuStateRef.current = options?.restoreCashuState; }, [options?.restoreCashuState]);
+  useEffect(() => { nip60SyncRef.current = options?.nip60Sync; }, [options?.nip60Sync]);
+  useEffect(() => { baoWalletConfigRef.current = options?.baoWalletConfig; }, [options?.baoWalletConfig]);
   const nip60WalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const nip60RestoredRef = useRef(false);
   const processedNutzapIdsRef = useRef<Set<string>>(new Set());
@@ -656,8 +673,8 @@ export function useCashuWallet(
 
   // Combine default + custom mints (deduplicated by URL)
   const allMints = useMemo(
-    () => dedupeByKey([...DEFAULT_MINTS, ...customMints], (m) => normalizeMintUrl(m.url)!),
-    [customMints]
+    () => dedupeByKey([...defaultMints, ...customMints], (m) => normalizeMintUrl(m.url)!),
+    [customMints, defaultMints]
   );
   const allMintsRef = useRef(allMints);
   useEffect(() => { allMintsRef.current = allMints; }, [allMints]);
@@ -745,7 +762,7 @@ export function useCashuWallet(
   const triggerBackup = useCallback(async () => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
-    if (!backupCashuState || !encKey || !bip39Seed) {
+    if (!options?.backupCashuState || !encKey || !bip39Seed) {
       if (backupTimeoutRef.current) clearTimeout(backupTimeoutRef.current);
       backupTimeoutRef.current = null;
       return;
@@ -755,7 +772,7 @@ export function useCashuWallet(
       if (!mountedRef.current) return;
       void runBackup();
     }, 3000);
-  }, [backupCashuState, runBackup]);
+  }, [options?.backupCashuState, runBackup]);
 
   const flushPendingBackup = useCallback(async () => {
     if (backupTimeoutRef.current) {
@@ -877,7 +894,7 @@ export function useCashuWallet(
           nutzapKeyPairRef.current = null;
         }
         try {
-          nip60WalletKeyRef.current = deriveNip60WalletKey(trimmedSeed);
+          nip60WalletKeyRef.current = deriveWalletKey(trimmedSeed);
         } catch (e) {
           devLog.warn('Failed to derive NIP-60 wallet key:', e);
           nip60WalletKeyRef.current = null;
@@ -910,7 +927,7 @@ export function useCashuWallet(
             const loadedCustomMints = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
             const priorAllMints = allMintsRef.current;
             allMintsRef.current = dedupeByKey(
-              [...DEFAULT_MINTS, ...loadedCustomMints],
+              [...defaultMints, ...loadedCustomMints],
               (m) => normalizeMintUrl(m.url)!,
             );
             if (!nip60RestoredRef.current) {
@@ -930,9 +947,9 @@ export function useCashuWallet(
         const restoreFn = restoreCashuStateRef.current;
         if (restoreFn && key) {
           try {
-            // Use DEFAULT_MINTS + loaded custom mints directly (allMints state may be stale here)
+            // Use default mints + loaded custom mints directly (allMints state may be stale here)
             const loadedCustomMints = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
-            const knownMints = [...DEFAULT_MINTS, ...loadedCustomMints];
+            const knownMints = [...defaultMints, ...loadedCustomMints];
             const hasAnyProofs = await (async () => {
               for (const m of knownMints) {
                 const p = sanitizeProofs(await getProofsForMint(normalizeMintUrl(m.url)!, key, legacyEncKeyRef.current ?? undefined));
@@ -1116,7 +1133,7 @@ export function useCashuWallet(
       await publishNip60NutzapInfo();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allMints, nip60Sync]);
+  }, [allMints, options?.nip60Sync]);
 
   // Re-init wallet when mint or seed changes
   useEffect(() => {
@@ -1341,6 +1358,7 @@ export function useCashuWallet(
   }, [getNip60WalletSigner, syncNip60TokenForMint]);
 
   const syncNip60WalletConfig = useCallback(async (): Promise<void> => {
+    if (options?.publishWalletConfig === false) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const key = nip60WalletKeyRef.current;
@@ -1349,18 +1367,20 @@ export function useCashuWallet(
     try {
       const mints = allMintsRef.current.map((m) => m.url);
       const payload = buildWalletConfigPayload(key.privkey, mints);
-      const hash = computeContentHash(payload);
+      const baoConfig = baoWalletConfigRef.current;
+      const configs = baoConfig ? [payload, baoConfig] : payload;
+      const hash = computeContentHash(configs);
       const lastHash = await loadLastWalletConfigHash(encKey);
       if (hash === lastHash) return;
 
-      const event = await buildWalletConfigEvent(payload, sync.signer, { extraTags: [getClientTag()] });
+      const event = await buildWalletConfigEvent(configs, sync.signer, { extraTags: [getClientTag()] });
       if (!event) return;
       const id = await sync.publish(event);
       if (id) await saveLastWalletConfigHash(hash, encKey);
     } catch (e) {
       devLog.error('NIP-60 wallet config sync failed:', e);
     }
-  }, [getClientTag]);
+  }, [getClientTag, options?.publishWalletConfig]);
 
   const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
     const sync = nip60SyncRef.current;
@@ -1667,12 +1687,12 @@ export function useCashuWallet(
       return;
     }
     setCustomMints((prev) => {
-      const currentAll = [...DEFAULT_MINTS, ...prev];
+      const currentAll = [...defaultMints, ...prev];
       if (currentAll.some((m) => normalizeMintUrl(m.url)! === normalized)) return prev;
       return [...prev, { name: name.trim(), url: normalized }];
     });
     void triggerBackup();
-  }, [triggerBackup]);
+  }, [triggerBackup, defaultMints]);
 
   const removeCustomMint = useCallback((url: string) => {
     if (typeof url !== 'string') {
@@ -1685,7 +1705,7 @@ export function useCashuWallet(
       return;
     }
     // Guard: default mints cannot be "removed" — they live outside customMints
-    const isDefault = DEFAULT_MINTS.some(m => normalizeMintUrl(m.url)! === normalized);
+    const isDefault = defaultMints.some(m => normalizeMintUrl(m.url)! === normalized);
     if (isDefault) {
       devLog.warn('Cannot remove default mint:', normalized);
       setError('Default mints cannot be removed');
@@ -1726,7 +1746,7 @@ export function useCashuWallet(
         setWallet(null);
       }
     }
-  }, [mintUrl, allMints, triggerBackup]);
+  }, [mintUrl, allMints, triggerBackup, defaultMints]);
 
   const refreshTransactions = useCallback(async () => {
     const encKey = encKeyRef.current;
