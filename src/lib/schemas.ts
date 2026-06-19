@@ -348,6 +348,7 @@ export const EncryptedSettingsSchema = z.looseObject({
   notificationsEnabled: z.boolean().optional(),
   notificationStyle: z.enum(['push', 'persistent']).optional(),
   notificationsCursor: z.number().optional(),
+  dmReadCursors: z.record(z.string(), z.number()).optional(),
   notificationPreferences: z.object({
     reactions: z.boolean().optional(),
     reposts: z.boolean().optional(),
