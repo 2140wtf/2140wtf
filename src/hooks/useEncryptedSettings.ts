@@ -67,6 +67,8 @@ export interface EncryptedSettings {
   notificationStyle?: 'push' | 'persistent';
   /** Timestamp of last viewed notification (Unix timestamp in seconds) */
   notificationsCursor?: number;
+  /** Per-conversation DM read cursors (conversationId -> newest seen created_at). */
+  dmReadCursors?: Record<string, number>;
   /** Per-type notification preferences (all default to true/enabled) */
   notificationPreferences?: {
     reactions?: boolean;
