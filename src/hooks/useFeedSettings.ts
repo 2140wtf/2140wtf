@@ -9,7 +9,7 @@ import { useCallback, useMemo } from "react";
 
 /** Default sidebar order for fresh installs (system pages only). */
 const DEFAULT_SIDEBAR_ORDER = SIDEBAR_ITEMS
-  .filter((s) => ['feed', 'profile', 'wallet', 'search', 'prediction-markets', 'market', 'pets', 'messages', 'notifications', 'trends', 'bookmarks', 'settings', 'help', 'theme'].includes(s.id))
+  .filter((s) => ['feed', 'profile', 'wallet', 'search', 'prediction-markets', 'market', 'pets', 'messages', 'notifications', 'trends', 'bookmarks', 'settings', 'help', 'theme', 'polls', 'music'].includes(s.id))
   .map((s) => s.id);
 
 /** Map of legacy sidebar item IDs to their current replacements. */
