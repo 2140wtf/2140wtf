@@ -650,7 +650,6 @@ export function PetsHatchingCeremony({
               eggVisible && isEggPhase && 'animate-egg-onboard-breathe',
               isHatching && 'animate-egg-onboard-burst',
             )}
-            onClick={isEggPhase ? handleEggClick : undefined}
           >
             <div
               className="absolute -inset-12 rounded-full blur-2xl transition-opacity duration-1000"
@@ -665,6 +664,7 @@ export function PetsHatchingCeremony({
               animated
               className="size-56 sm:size-64 md:size-72"
               tourVisualState={tourVisualState}
+              onEggClick={handleEggClick}
             />
           </div>
         </div>

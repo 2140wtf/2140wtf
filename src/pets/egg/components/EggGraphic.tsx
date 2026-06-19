@@ -64,6 +64,8 @@ interface EggGraphicProps {
   tourVisualState?: EggTourVisualState;
   /** Callback when the egg is clicked during an interactive tour step */
   onTourEggClick?: () => void;
+  /** Generic click callback for any egg tap (non-tour consumers) */
+  onClick?: () => void;
 }
 
 /**
@@ -144,6 +146,7 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
   statusEffects,
   tourVisualState = 'idle',
   onTourEggClick,
+  onClick,
 }) => {
   // sizeVariant controls ONLY internal scaling/details, NOT layout dimensions
   // Parent container controls actual rendered width/height via slot
@@ -192,7 +195,8 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
     if (isTapWiggling || cracking) return; // Don't re-trigger during animation or cracking
     impactLight();
     setIsTapWiggling(true);
-  }, [isTapWiggling, cracking, onTourEggClick, tourVisualState]);
+    onClick?.();
+  }, [isTapWiggling, cracking, onTourEggClick, tourVisualState, onClick]);
 
   const handleWiggleEnd = useCallback(() => {
     setIsTapWiggling(false);

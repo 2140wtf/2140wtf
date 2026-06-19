@@ -40,6 +40,8 @@ export interface PetsEggVisualProps {
   tourVisualState?: EggTourVisualState;
   /** Callback when the egg is clicked during an interactive tour step */
   onTourEggClick?: () => void;
+  /** Generic click callback for any egg tap (non-tour consumers) */
+  onClick?: () => void;
   /** Additional CSS classes for the container */
   className?: string;
 }
@@ -76,6 +78,7 @@ export function PetsEggVisual({
   statusEffects,
   tourVisualState,
   onTourEggClick,
+  onClick,
   className,
 }: PetsEggVisualProps) {
   // Memoize adapter output to avoid unnecessary re-renders
@@ -111,6 +114,7 @@ export function PetsEggVisual({
         statusEffects={isSleeping ? undefined : statusEffects}
         tourVisualState={tourVisualState}
         onTourEggClick={onTourEggClick}
+        onClick={onClick}
       />
     </div>
   );
