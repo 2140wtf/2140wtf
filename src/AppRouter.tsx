@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AudioNavigationGuard } from "@/components/AudioNavigationGuard";
 import { BackButtonHandler } from "@/components/BackButtonHandler";
+import { InitialSyncGate } from "@/components/InitialSyncGate";
 import { DeepLinkHandler } from "@/components/DeepLinkHandler";
 import { HighlightSelectionButton } from "@/components/HighlightSelectionButton";
 import { MinimizedAudioBar } from "@/components/MinimizedAudioBar";
@@ -230,144 +231,146 @@ export function AppRouter() {
         <BackButtonHandler />
         <ScrollToTop />
         <HighlightSelectionButton />
-        <Routes>
-          {/* Auto-follow deep link: fullscreen immersive (no sidebars/nav) */}
-          <Route path="/follow/:npub" element={<FollowPage />} />
+        <InitialSyncGate>
+          <Routes>
+            {/* Auto-follow deep link: fullscreen immersive (no sidebars/nav) */}
+            <Route path="/follow/:npub" element={<FollowPage />} />
 
-          {/* All routes share the persistent MainLayout (sidebar + nav) */}
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/feed" element={<Index />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/trends" element={<TrendsPage />} />
-            <Route path="/profile" element={<ProfileRedirect />} />
-             <Route path="/t/:tag" element={<HashtagPage />} />
-             <Route path="/g/:geohash" element={<GeotagPage />} />
-            <Route path="/feed/:domain" element={<DomainFeedPage />} />
-            <Route path="/client/:name" element={<ClientFeedPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
-            <Route path="/settings/profile" element={<ProfileSettings />} />
-            <Route path="/settings/pets" element={<PetsSettingsPage />} />
-            <Route path="/settings/feed" element={<ContentSettingsPage />} />
-            <Route path="/settings/content" element={<ContentPage />} />
-            <Route path="/settings/wallet" element={<WalletSettingsPage />} />
-            <Route
-              path="/settings/notifications"
-              element={<NotificationSettings />}
-            />
-            <Route
-              path="/settings/advanced"
-              element={<AdvancedSettingsPage />}
-            />
-            <Route path="/settings/magic" element={<MagicSettingsPage />} />
-            <Route path="/settings/network" element={<NetworkSettingsPage />} />
-            <Route path="/lists" element={<UserListsPage />} />
-            <Route path="/events" element={<EventsFeedPage />} />
-            <Route path="/photos" element={<PhotosFeedPage />} />
-            <Route path="/videos" element={<VideosFeedPage />} />
-            {/* /streams redirects to /videos for backward compatibility */}
-            <Route
-              path="/streams"
-              element={<Navigate to="/videos" replace />}
-            />
-            <Route path="/music" element={<MusicPage />} />
-            <Route path="/podcasts" element={<PodcastsFeedPage />} />
-            <Route path="/polls" element={<PollsFeedPage />} />
-            <Route
-              path="/packs"
-              element={
-                <KindFeedPage
-                  kind={packsDef.kind}
-                  title={packsDef.label}
-                  icon={sidebarItemIcon("packs", "size-5")}
-                />
-              }
-            />
-            <Route path="/mini-apps" element={<WebxdcFeedPage />} />
-            <Route path="/webxdc" element={<Navigate to="/mini-apps" replace />} />
-            <Route path="/art" element={<ArtFeedPage />} />
-            <Route path="/articles/new" element={<ArticleEditorPage />} />
-            <Route path="/articles/edit/:naddr" element={<ArticleEditorPage />} />
-            <Route
-              path="/articles"
-              element={
-                <KindFeedPage
-                  kind={articlesDef.kind}
-                  title={articlesDef.label}
-                  icon={sidebarItemIcon("articles", "size-5")}
-                  fabHref="/articles/new"
-                />
-              }
-            />
-            <Route
-              path="/highlights"
-              element={
-                <KindFeedPage
-                  kind={highlightsDef.kind}
-                  title={highlightsDef.label}
-                  icon={sidebarItemIcon("highlights", "size-5")}
-                  showFAB={false}
-                />
-              }
-            />
-            <Route path="/emojis" element={<EmojiFeedPage />} />
-            <Route
-              path="/development"
-              element={
-                <KindFeedPage
-                  kind={[
-                    developmentDef.kind,
-                    ...(developmentDef.extraFeedKinds ?? []),
-                  ]}
-                  title={developmentDef.label}
-                  icon={sidebarItemIcon("development", "size-5")}
-                  showFAB={false}
-                />
-              }
-            />
-            <Route path="/themes" element={<ThemesPage />} />
-            <Route path="/wallet" element={<WalletPage />} />
-            <Route path="/btcmap" element={<BtcMapPage />} />
-            <Route path="/roadstr" element={<RoadstrPage />} />
-            <Route path="/market" element={<MarketPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-            <Route path="/messages/:npub" element={<MessageThreadPage />} />
-            <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
-            <Route path="/bookmarks" element={<BookmarksPage />} />
-            <Route path="/groups" element={<GroupChatPage />} />
+            {/* All routes share the persistent MainLayout (sidebar + nav) */}
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/feed" element={<Index />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/trends" element={<TrendsPage />} />
+              <Route path="/profile" element={<ProfileRedirect />} />
+               <Route path="/t/:tag" element={<HashtagPage />} />
+               <Route path="/g/:geohash" element={<GeotagPage />} />
+              <Route path="/feed/:domain" element={<DomainFeedPage />} />
+              <Route path="/client/:name" element={<ClientFeedPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/privacy" element={<PrivacySettingsPage />} />
+              <Route path="/settings/profile" element={<ProfileSettings />} />
+              <Route path="/settings/pets" element={<PetsSettingsPage />} />
+              <Route path="/settings/feed" element={<ContentSettingsPage />} />
+              <Route path="/settings/content" element={<ContentPage />} />
+              <Route path="/settings/wallet" element={<WalletSettingsPage />} />
+              <Route
+                path="/settings/notifications"
+                element={<NotificationSettings />}
+              />
+              <Route
+                path="/settings/advanced"
+                element={<AdvancedSettingsPage />}
+              />
+              <Route path="/settings/magic" element={<MagicSettingsPage />} />
+              <Route path="/settings/network" element={<NetworkSettingsPage />} />
+              <Route path="/lists" element={<UserListsPage />} />
+              <Route path="/events" element={<EventsFeedPage />} />
+              <Route path="/photos" element={<PhotosFeedPage />} />
+              <Route path="/videos" element={<VideosFeedPage />} />
+              {/* /streams redirects to /videos for backward compatibility */}
+              <Route
+                path="/streams"
+                element={<Navigate to="/videos" replace />}
+              />
+              <Route path="/music" element={<MusicPage />} />
+              <Route path="/podcasts" element={<PodcastsFeedPage />} />
+              <Route path="/polls" element={<PollsFeedPage />} />
+              <Route
+                path="/packs"
+                element={
+                  <KindFeedPage
+                    kind={packsDef.kind}
+                    title={packsDef.label}
+                    icon={sidebarItemIcon("packs", "size-5")}
+                  />
+                }
+              />
+              <Route path="/mini-apps" element={<WebxdcFeedPage />} />
+              <Route path="/webxdc" element={<Navigate to="/mini-apps" replace />} />
+              <Route path="/art" element={<ArtFeedPage />} />
+              <Route path="/articles/new" element={<ArticleEditorPage />} />
+              <Route path="/articles/edit/:naddr" element={<ArticleEditorPage />} />
+              <Route
+                path="/articles"
+                element={
+                  <KindFeedPage
+                    kind={articlesDef.kind}
+                    title={articlesDef.label}
+                    icon={sidebarItemIcon("articles", "size-5")}
+                    fabHref="/articles/new"
+                  />
+                }
+              />
+              <Route
+                path="/highlights"
+                element={
+                  <KindFeedPage
+                    kind={highlightsDef.kind}
+                    title={highlightsDef.label}
+                    icon={sidebarItemIcon("highlights", "size-5")}
+                    showFAB={false}
+                  />
+                }
+              />
+              <Route path="/emojis" element={<EmojiFeedPage />} />
+              <Route
+                path="/development"
+                element={
+                  <KindFeedPage
+                    kind={[
+                      developmentDef.kind,
+                      ...(developmentDef.extraFeedKinds ?? []),
+                    ]}
+                    title={developmentDef.label}
+                    icon={sidebarItemIcon("development", "size-5")}
+                    showFAB={false}
+                  />
+                }
+              />
+              <Route path="/themes" element={<ThemesPage />} />
+              <Route path="/wallet" element={<WalletPage />} />
+              <Route path="/btcmap" element={<BtcMapPage />} />
+              <Route path="/roadstr" element={<RoadstrPage />} />
+              <Route path="/market" element={<MarketPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/messages/:npub" element={<MessageThreadPage />} />
+              <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
+              <Route path="/bookmarks" element={<BookmarksPage />} />
+              <Route path="/groups" element={<GroupChatPage />} />
 
-            <Route path="/pets" element={<PetsPage />} />
-            <Route path="/pets/battle" element={<PetsBattlePage />} />
-            <Route path="/badges" element={<BadgesPage />} />
-            <Route path="/books" element={<BooksPage />} />
-            <Route path="/archive" element={<ArchivePage />} />
-            <Route path="/wikipedia" element={<WikipediaPage />} />
-            <Route path="/help" element={<HelpPage />} />
-            <Route path="/privacy" element={<PrivacyPolicyPage />} />
-            <Route path="/safety" element={<CSAEPolicyPage />} />
-            <Route path="/changelog" element={<ChangelogPage />} />
-            <Route path="/about" element={<LandingPage />} />
-            <Route path="/r/*" element={<RelayPage />} />
-            <Route
-              path="/settings/lists"
-              element={<Navigate to="/lists" replace />}
-            />
-            <Route path="/i/*" element={<ExternalContentPage />} />
+              <Route path="/pets" element={<PetsPage />} />
+              <Route path="/pets/battle" element={<PetsBattlePage />} />
+              <Route path="/badges" element={<BadgesPage />} />
+              <Route path="/books" element={<BooksPage />} />
+              <Route path="/archive" element={<ArchivePage />} />
+              <Route path="/wikipedia" element={<WikipediaPage />} />
+              <Route path="/help" element={<HelpPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/safety" element={<CSAEPolicyPage />} />
+              <Route path="/changelog" element={<ChangelogPage />} />
+              <Route path="/about" element={<LandingPage />} />
+              <Route path="/r/*" element={<RelayPage />} />
+              <Route
+                path="/settings/lists"
+                element={<Navigate to="/lists" replace />}
+              />
+              <Route path="/i/*" element={<ExternalContentPage />} />
 
-            {/* Landing route for content shared into Ditto from another app's
-                Share button (Android share targets). */}
-            <Route path="/share" element={<SharePage />} />
+              {/* Landing route for content shared into Ditto from another app's
+                  Share button (Android share targets). */}
+              <Route path="/share" element={<SharePage />} />
 
-            {/* Callback target for remote signers (e.g. Amber, Primal) after NIP-46 approval */}
-            <Route path="/remoteloginsuccess" element={<RemoteLoginSuccessPage />} />
-            {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
-            <Route path="/:nip19" element={<NIP19Page />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
+              {/* Callback target for remote signers (e.g. Amber, Primal) after NIP-46 approval */}
+              <Route path="/remoteloginsuccess" element={<RemoteLoginSuccessPage />} />
+              {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
+              <Route path="/:nip19" element={<NIP19Page />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </InitialSyncGate>
       </BrowserRouter>
     </AudioPlayerProvider>
   );
