@@ -1579,6 +1579,8 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   'room',
   // Cashu wallet mode
   'wallet_mode', 'cashu_mint_url',
+  // Battle reward daily cap
+  'battle_rewards_claimed_at',
   // Legacy player progress tags (preserved for compatibility)
   'coins', 'petting_level', 'pettingLevel', 'lifetime_petss', 'lifetimePetss',
   'starter_pets', 'starterPets', 'favorite_pets', 'favoritePets',
