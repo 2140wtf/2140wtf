@@ -8,7 +8,7 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 const CUBE_DESIGN_KIND = 33889;
 
-const CUBE_API_BASES = [
+const DEFAULT_CUBE_API_BASES = [
   'https://bao.markets/bao-api/v1',
   'https://relay.bao.network/bao-api/v1',
 ];
@@ -45,8 +45,12 @@ function defaultEmbedUrl(pollId: string): string {
   return `https://bao.markets/embed/cube/${encodeURIComponent(pollId)}`;
 }
 
-async function fetchCubeDesign(pollId: string, signal?: AbortSignal): Promise<CubeDesign | null> {
-  for (const base of CUBE_API_BASES) {
+async function fetchCubeDesign(
+  pollId: string,
+  bases: string[],
+  signal?: AbortSignal,
+): Promise<CubeDesign | null> {
+  for (const base of bases) {
     try {
       const res = await fetch(`${base}/cube-designs/${encodeURIComponent(pollId)}`, {
         signal,
@@ -78,13 +82,17 @@ export function useHostedCubeEmbed(pollId: string | undefined) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
 
+  const apiBases = config.baoApiUrl
+    ? [`${config.baoApiUrl.replace(/\/$/, '')}/v1`]
+    : DEFAULT_CUBE_API_BASES;
+
   return useQuery<CubeDesign | null>({
-    queryKey: ['hosted-cube-design', pollId],
+    queryKey: ['hosted-cube-design', pollId, config.baoApiUrl],
     queryFn: async ({ signal }) => {
       if (!pollId) return null;
 
       // 1. API-first lookup.
-      const design = await fetchCubeDesign(pollId, signal);
+      const design = await fetchCubeDesign(pollId, apiBases, signal);
       if (design) return design;
 
       // 2. Nostr kind:33889 fallback.
