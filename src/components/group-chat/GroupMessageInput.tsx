@@ -46,6 +46,7 @@ export function GroupMessageInput({ disabled, onSend }: GroupMessageInputProps) 
           onClick={() => void handleSend()}
           disabled={disabled || isSending || !draft.trim()}
           className="shrink-0"
+          aria-label="Send message"
         >
           <Send className="size-4" />
         </Button>
