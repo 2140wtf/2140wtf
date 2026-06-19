@@ -4,10 +4,12 @@ import { Crown, UserMinus, Shield, Ban, UserPlus, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/getDisplayName';
+import { NoMembersIllustration } from '@/components/group-chat/GroupEmptyIllustrations';
 import type { GroupChatGroup } from '@/lib/groupChatService';
 
 interface GroupMemberPanelProps {
@@ -66,8 +68,11 @@ export function GroupMemberPanel({
 
   if (!group) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground text-sm p-4">
-        Select a group to manage members.
+      <div className="h-full flex items-center justify-center p-4">
+        <Card className="max-w-xs w-full p-5 text-center space-y-3 border-dashed">
+          <NoMembersIllustration className="mx-auto size-16 text-primary/60" />
+          <p className="text-sm text-muted-foreground">Select a group to manage members.</p>
+        </Card>
       </div>
     );
   }
