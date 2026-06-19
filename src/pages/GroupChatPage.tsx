@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { LogIn, Lock, Menu, Shield, Users } from 'lucide-react';
+import { LogIn, Lock, LogOut, Menu, MessageSquarePlus, Shield, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Sheet,
   SheetContent,
@@ -23,7 +24,43 @@ import { GroupMessageInput } from '@/components/group-chat/GroupMessageInput';
 import { GroupMemberPanel } from '@/components/group-chat/GroupMemberPanel';
 import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
+import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
 import { toast } from '@/hooks/useToast';
+
+function GroupChatSkeleton() {
+  return (
+    <div className="flex-1 flex overflow-hidden">
+      <div className="w-64 shrink-0 hidden sm:flex flex-col gap-2 p-3 border-r bg-muted/30">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-2">
+            <Skeleton className="size-9 rounded-full" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-3/4" />
+              <Skeleton className="h-2.5 w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="px-4 py-3 border-b flex items-center gap-3">
+          <Skeleton className="size-8 rounded-full" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+        <div className="flex-1 p-4 space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={`flex gap-2 ${i % 2 === 0 ? '' : 'flex-row-reverse'}`}>
+              <Skeleton className="size-7 rounded-full" />
+              <Skeleton className="h-16 w-2/3 rounded-2xl" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function GroupChatPage() {
   const { config } = useAppContext();
@@ -51,7 +88,10 @@ export function GroupChatPage() {
   } = useGroupChatContext();
   const { markGroupRead, markAllGroupsRead } = useGroupChatReadCursors();
   const { unreadGroups } = useGroupChatHasUnread();
-  const unreadGroupIds = unreadGroups.map(({ group }) => group.nostrGroupId);
+  const unreadCounts = useMemo(
+    () => Object.fromEntries(unreadGroups.map(({ group, unreadCount }) => [group.nostrGroupId, unreadCount])),
+    [unreadGroups],
+  );
   const initialMarkReadDone = useRef(false);
 
   useEffect(() => {
@@ -63,7 +103,10 @@ export function GroupChatPage() {
 
   useEffect(() => {
     if (selectedGroup) {
-      markGroupRead(selectedGroup, messages.filter((m) => m.nostrGroupId === selectedGroup.nostrGroupId));
+      markGroupRead(
+        selectedGroup,
+        messages.filter((m) => m.nostrGroupId === selectedGroup.nostrGroupId),
+      );
     }
   }, [selectedGroup, messages, markGroupRead]);
 
@@ -95,8 +138,8 @@ export function GroupChatPage() {
     return (
       <div className="container max-w-2xl py-12">
         <Card className="p-8 text-center space-y-4">
-          <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-            <Lock className="size-6 text-muted-foreground" />
+          <div className="mx-auto w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+            <Lock className="size-7 text-muted-foreground" />
           </div>
           <h1 className="text-2xl font-bold">Private Groups</h1>
           <p className="text-muted-foreground">
@@ -169,7 +212,14 @@ export function GroupChatPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
-      <PageHeader title="Private Groups" icon={<Shield className="size-5" />}>
+      <PageHeader
+        title="Private Groups"
+        icon={
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <Shield className="size-5 text-primary" />
+          </div>
+        }
+      >
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -191,48 +241,56 @@ export function GroupChatPage() {
       </PageHeader>
 
       {isLoading && groups.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-          Loading groups…
-        </div>
+        <GroupChatSkeleton />
       ) : (
         <div className="flex-1 flex overflow-hidden">
           <div className="w-64 shrink-0 hidden sm:block">
             <GroupList
               groups={groups}
               selectedGroupId={selectedGroup?.nostrGroupId ?? null}
-              unreadGroupIds={unreadGroupIds}
+              unreadCounts={unreadCounts}
               onSelectGroup={selectGroup}
               onCreateClick={() => setCreateOpen(true)}
             />
           </div>
+
           <div className="flex-1 flex flex-col min-w-0">
             {selectedGroup ? (
               <>
-                <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/20">
-                  <div>
-                    <h2 className="font-semibold text-sm">{selectedGroup.name}</h2>
+                <div className="px-4 py-2.5 border-b flex items-center gap-3 bg-muted/20">
+                  <GroupAvatar
+                    groupId={selectedGroup.nostrGroupId}
+                    name={selectedGroup.name}
+                    className="size-9"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-semibold text-sm truncate">{selectedGroup.name}</h2>
                     {selectedGroup.description && (
-                      <p className="text-xs text-muted-foreground truncate max-w-md">
+                      <p
+                        className="text-xs text-muted-foreground truncate"
+                        title={selectedGroup.description}
+                      >
                         {selectedGroup.description}
                       </p>
                     )}
                   </div>
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="text-destructive"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-destructive shrink-0"
                     disabled={isAdmin && selectedGroup.adminPubkeys.length === 1}
                     title={
                       isAdmin && selectedGroup.adminPubkeys.length === 1
                         ? 'Transfer admin role before leaving'
                         : 'Leave group'
                     }
+                    aria-label="Leave group"
                     onClick={() => {
                       if (!window.confirm('Leave this group? Your local copy of the chat will be removed.')) return;
                       void leaveGroup(selectedGroup.nostrGroupId);
                     }}
                   >
-                    Leave
+                    <LogOut className="size-4" />
                   </Button>
                 </div>
                 <GroupMessageList
@@ -243,11 +301,26 @@ export function GroupChatPage() {
                 <GroupMessageInput disabled={isSending || !canUseGroupChat} onSend={handleSend} />
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-                Select or create a group to start chatting.
+              <div className="flex-1 flex items-center justify-center p-4">
+                <Card className="max-w-sm w-full p-6 text-center space-y-4 border-dashed">
+                  <div className="mx-auto size-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <MessageSquarePlus className="size-7 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold">Start a private group</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Select an existing group from the sidebar, or create a new encrypted group.
+                    </p>
+                  </div>
+                  <Button className="w-full" onClick={() => setCreateOpen(true)}>
+                    <Users className="size-4 mr-2" />
+                    Create group
+                  </Button>
+                </Card>
               </div>
             )}
           </div>
+
           <div className="shrink-0 hidden lg:block">
             <GroupMemberPanel
               group={selectedGroup}
@@ -270,7 +343,7 @@ export function GroupChatPage() {
           <GroupList
             groups={groups}
             selectedGroupId={selectedGroup?.nostrGroupId ?? null}
-            unreadGroupIds={unreadGroupIds}
+            unreadCounts={unreadCounts}
             onSelectGroup={(groupId) => {
               selectGroup(groupId);
               setMobileListOpen(false);
