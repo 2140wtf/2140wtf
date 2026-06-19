@@ -9,12 +9,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { useBaoMarketPriceHistory, type PricePoint } from '@/hooks/useBaoMarketPriceHistory';
+import { useBaoMarketPriceHistory, type PricePoint, type PriceHistoryRange } from '@/hooks/useBaoMarketPriceHistory';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
-type TimeRange = '1H' | '1D' | '1W' | '1M' | 'ALL';
+type TimeRange = PriceHistoryRange;
 
 const TIME_RANGES: TimeRange[] = ['1H', '1D', '1W', '1M', 'ALL'];
 
@@ -88,7 +88,14 @@ function aggregateHistory(
     for (const p of points) allTimes.push(p.time);
   }
 
-  const minTime = allTimes.length > 0 ? Math.min(...allTimes) : now - duration;
+  // If no outcome has any real price history, treat the chart as empty so the UI
+  // can show a friendly "no trades yet" state instead of a synthetic flat line.
+  const hasHistory = allTimes.length > 0;
+  if (!hasHistory) {
+    return { data: [], series: [], current: {} };
+  }
+
+  const minTime = Math.min(...allTimes);
   let startTime = range === 'ALL' ? minTime : Math.max(minTime, now - duration);
   const endTime = now;
 
@@ -161,8 +168,8 @@ interface PredictionMarketChartProps {
 }
 
 export function PredictionMarketChart({ market, className }: PredictionMarketChartProps) {
-  const { data: history = {}, isLoading, error } = useBaoMarketPriceHistory(market);
   const [range, setRange] = useState<TimeRange>('ALL');
+  const { data: history = {}, isLoading, error } = useBaoMarketPriceHistory(market, range);
 
   const { data, series, current } = useMemo(
     () => aggregateHistory(history, market.outcomes, range),
@@ -181,7 +188,7 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
           className,
         )}
       >
-        Could not load chart data from relay.
+        Could not load chart data.
       </div>
     );
   }
@@ -194,7 +201,7 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
           className,
         )}
       >
-        No chart data available.
+        No trades yet. Price history will appear once trading begins.
       </div>
     );
   }
