@@ -231,9 +231,13 @@ export class GroupChatService {
     return next;
   }
 
-  private persistGroup(group: StoredGroup): void {
+  private async persistGroup(group: StoredGroup): Promise<void> {
     this.groups.set(group.nostrGroupId, group);
     saveGroup(this.userPubkey, group);
+    const secrets = this.groupStates.get(group.nostrGroupId);
+    if (secrets) {
+      await saveGroupSecrets(this.userPubkey, group.nostrGroupId, secrets);
+    }
   }
 
   private persistMessages(groupId: string): void {
@@ -249,14 +253,40 @@ export class GroupChatService {
     return this.groupStates.get(groupId)?.rootSecret;
   }
 
-  private setSecrets(groupId: string, exporterSecret: string, rootSecret?: string): void {
-    this.groupStates.set(groupId, { exporterSecret, rootSecret });
+  private async getExporterSecretForEpoch(groupId: string, epoch: number): Promise<string | undefined> {
     const group = this.groups.get(groupId);
-    if (group) {
-      group.exporterSecret = exporterSecret;
-      group.rootSecret = rootSecret;
-      this.persistGroup(group);
+    const secrets = this.groupStates.get(groupId);
+    if (!group || !secrets) return undefined;
+
+    if (epoch === group.epoch) {
+      return secrets.exporterSecret;
     }
+
+    const cacheKey = `${groupId}:${epoch}`;
+    const cached = this.epochSecretCache.get(groupId)?.get(epoch);
+    if (cached) return cached;
+
+    if (secrets.rootSecret) {
+      try {
+        const derived = await deriveEpochSecret(secrets.rootSecret, epoch, groupId);
+        let groupCache = this.epochSecretCache.get(groupId);
+        if (!groupCache) {
+          groupCache = new Map();
+          this.epochSecretCache.set(groupId, groupCache);
+        }
+        groupCache.set(epoch, derived);
+        return derived;
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  private async setSecrets(groupId: string, exporterSecret: string, rootSecret?: string): Promise<void> {
+    const secrets: StoredGroupSecrets = { exporterSecret, rootSecret };
+    this.groupStates.set(groupId, secrets);
+    await saveGroupSecrets(this.userPubkey, groupId, secrets);
   }
 
   private isAdmin(group: StoredGroup): boolean {
