@@ -31,7 +31,7 @@ export default function PetsBattlePage() {
 
   useSeoMeta({
     title: 'Battle Arena | 2140 Pets',
-    description: 'Battle your 2140 Pets for BAO credits',
+    description: 'Battle your 2140 Pets for ₿AO credits',
   });
 
   useLayoutOptions({
