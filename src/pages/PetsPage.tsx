@@ -394,7 +394,7 @@ function PetsContent() {
     setStoredSelectedD(d);
   }, [setStoredSelectedD, storedSelectedD]);
 
-  // Toggle between demo (BAO coins) and real (Cashu sats) wallet mode.
+  // Toggle between demo (₿AO coins) and real (Cashu sats) wallet mode.
   // Always republish from a freshly fetched profile to avoid clobbering tags.
   const _handleWalletModeChange = useCallback(async (mode: 'demo' | 'real') => {
     if (!user?.pubkey || !profile) return;
@@ -639,7 +639,7 @@ function PetsContent() {
   // Cases that definitely need ceremony (no need to wait for companions)
   // NOTE: Auto-ceremony is disabled. Users must explicitly click Adopt to
   // create/publish a pet. This prevents new accounts from silently publishing
-  // a pet event to the BAO relay on their first visit to /pets.
+  // a pet event to the ₿AO relay on their first visit to /pets.
   const definitelyNeedsCeremony = false;
   // Whether we've finished loading enough data to make the decision
   const companionDataReady = !collectionLoading && (!collectionFetching || companions.length > 0);
@@ -2081,7 +2081,7 @@ function PetsDashboard({
               <span className="text-sm">Blobbi</span>
             </span>
           </TabButton>
-          <TabButton label="Baos" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-2">
+          <TabButton label="₿AOs" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-2">
             <span className="flex items-center gap-1.5">
               <Wallet className="size-4" />
               <span className="text-sm">Baos</span>
@@ -3370,7 +3370,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
             <TrendingUp className="size-4 text-amber-500" />
           </div>
           <p className="text-sm font-semibold">
-            {profile?.walletMode === 'demo' ? '(bao demo sats)' : 'Bitcoin'}
+            {profile?.walletMode === 'demo' ? '(₿AO demo sats)' : 'Bitcoin'}
           </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -3379,7 +3379,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Your open BAO orders accrue a daily BAO reward. More active sats
+          Your open ₿AO orders accrue a daily ₿AO reward. More active sats
           and a higher trader tier mean a larger reward, up to the daily cap.
         </p>
         <div className="flex items-center justify-between text-xs">
@@ -3391,7 +3391,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Daily reward</span>
           <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
-            {baoLoading ? '…' : `+${(baoReward?.coins ?? 0).toLocaleString()} BAO`}
+            {baoLoading ? '…' : `+${(baoReward?.coins ?? 0).toLocaleString()} ₿AO`}
           </span>
         </div>
         <Button
@@ -3402,7 +3402,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           onClick={() => claimBaoReward()}
         >
           {isClaimingBao && <Loader2 className="size-3 animate-spin mr-1.5" />}
-          {baoClaimedToday ? 'Claimed today' : baoReward?.claimable ? 'Claim BAO' : 'No open orders'}
+          {baoClaimedToday ? 'Claimed today' : baoReward?.claimable ? 'Claim ₿AO' : 'No open orders'}
         </Button>
       </div>
     </div>
@@ -3475,7 +3475,7 @@ function SpeciesTabContent() {
 
 const BAO_VARIATIONS = Array.from({ length: 21 }, (_, i) => ({
   id: i + 1,
-  name: `Bao #${i + 1}`,
+  name: `₿AO #${i + 1}`,
   src: `/pets/bao/bao-${String(i + 1).padStart(2, '0')}.png`,
 }));
 
