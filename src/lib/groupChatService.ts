@@ -551,14 +551,14 @@ export class GroupChatService {
   }
 
   async removeMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
-    return this.removeOrBanMember(groupId, pubkeyInput, false);
+    return this.withGroupLock(groupId, () => this.removeOrBanMemberLocked(groupId, pubkeyInput, false));
   }
 
   async banMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
-    return this.removeOrBanMember(groupId, pubkeyInput, true);
+    return this.withGroupLock(groupId, () => this.removeOrBanMemberLocked(groupId, pubkeyInput, true));
   }
 
-  private async removeOrBanMember(
+  private async removeOrBanMemberLocked(
     groupId: string,
     pubkeyInput: string,
     ban: boolean,
@@ -604,6 +604,7 @@ export class GroupChatService {
     this.setSecrets(groupId, newExporterSecret, newRootSecret);
 
     const events: NostrEvent[] = [];
+    let failedCount = 0;
     for (const remainingMember of group.members) {
       if (remainingMember === this.userPubkey) continue;
       try {
@@ -631,13 +632,14 @@ export class GroupChatService {
         const giftWrap = await wrapWelcomeEvent(welcomeEvent, remainingMember);
         events.push(giftWrap);
       } catch (err) {
+        failedCount++;
         console.error(`Failed to wrap rotation Welcome for ${remainingMember.slice(0, 8)}...`, err);
       }
     }
 
     this.persistGroup(group);
 
-    return { success: true, events };
+    return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
 
   async promoteAdmin(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
