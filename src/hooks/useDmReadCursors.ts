@@ -68,6 +68,7 @@ export function useDmReadCursors() {
 
   return {
     cursors,
+    setCursors,
     getCursor,
     setCursor,
     markConversationRead,
