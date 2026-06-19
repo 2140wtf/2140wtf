@@ -189,13 +189,253 @@ export function PrivacySettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Content */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Content you create
+            </CardTitle>
+            <CardDescription>
+              Notes, media, articles, polls, and live chat messages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="notes"
+              title="Notes & replies"
+              description="Publish text notes, replies, and voice messages (kinds 1, 1222, 1244)."
+            />
+            <ToggleRow
+              feature="photos"
+              title="Photos"
+              description="Publish picture posts (kind 20)."
+            />
+            <ToggleRow
+              feature="articles"
+              title="Articles"
+              description="Publish long-form articles (kind 30023)."
+            />
+            <ToggleRow
+              feature="polls"
+              title="Polls"
+              description="Publish polls and poll votes (kinds 1068, 6969, 1018)."
+            />
+            <ToggleRow
+              feature="liveChat"
+              title="Live chat"
+              description="Publish live stream chat messages (kind 1311)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Profile & lists */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Profile & lists
+            </CardTitle>
+            <CardDescription>
+              Metadata about you and the public lists you curate.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="profile"
+              title="Profile metadata"
+              description="Publish profile info, status, interests, payment targets, and profile tabs (kinds 0, 30315, 10015, 10133, 16769)."
+            />
+            <ToggleRow
+              feature="lists"
+              title="User lists"
+              description="Publish NIP-51 lists, love lists, and pinned notes (kinds 30000, 10001, 39089)."
+            />
+            <ToggleRow
+              feature="emojiPacks"
+              title="Emoji packs"
+              description="Publish custom emoji packs and emoji sets (kinds 30030, 10030)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Marketplace */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Marketplace
+            </CardTitle>
+            <CardDescription>
+              Product listings, shipping options, and sales.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ToggleRow
+              feature="marketplace"
+              title="Marketplace listings"
+              description="Publish product/art listings, shipping options, and sold updates (kinds 30018, 30017, 30040)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Badges */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Badges
+            </CardTitle>
+            <CardDescription>
+              Create, award, accept, and manage Nostr badges.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ToggleRow
+              feature="badges"
+              title="Badge events"
+              description="Publish badge definitions, awards, and accepted badge sets (kinds 30009, 8, 10008)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Events & messaging */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Events & messaging
+            </CardTitle>
+            <CardDescription>
+              Calendar RSVPs and private messages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="rsvp"
+              title="Calendar RSVPs"
+              description="Publish calendar event RSVPs (kind 31925)."
+            />
+            <ToggleRow
+              feature="directMessages"
+              title="Direct messages & group chat"
+              description="Publish NIP-17 DMs, gift wraps, and group chat messages (kinds 14, 13, 1059, 9)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Moderation */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Moderation
+            </CardTitle>
+            <CardDescription>
+              Reports and deletion requests.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="reports"
+              title="Reports"
+              description="Publish moderation reports and Roadstr reports (kinds 1984, 1315)."
+            />
+            <ToggleRow
+              feature="deleteRequests"
+              title="Delete requests"
+              description="Publish deletion requests for your own events (kind 5)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Roadstr */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Roadstr
+            </CardTitle>
+            <CardDescription>
+              Roadstr location check-ins.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ToggleRow
+              feature="roadstr"
+              title="Roadstr check-ins"
+              description="Publish Roadstr check-in events (kind 1316)."
+            />
+          </CardContent>
+        </Card>
+
+        {/* Apps & recovery */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              Apps & recovery
+            </CardTitle>
+            <CardDescription>
+              Webxdc apps and recovery re-publishes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="webxdc"
+              title="Webxdc apps"
+              description="Publish Webxdc app uploads and mini-app updates (kinds 1063, 4932)."
+            />
+            <ToggleRow
+              feature="recovery"
+              title="Recovery re-publish"
+              description="Re-publish events from recovery dialogs."
+            />
+          </CardContent>
+        </Card>
+
+        {/* App data */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Eye className="size-4 text-primary" />
+              App data
+            </CardTitle>
+            <CardDescription>
+              Drafts, encrypted settings, theme definitions, and push subscriptions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 divide-y">
+            <ToggleRow
+              feature="drafts"
+              title="Drafts"
+              description="Publish drafts to relays (kind 31234)."
+            />
+            <ToggleRow
+              feature="encryptedSettings"
+              title="Encrypted settings sync"
+              description="Publish encrypted app settings and Cashu backups (kind 30078)."
+            />
+            <ToggleRow
+              feature="themeDefinitions"
+              title="Theme definitions"
+              description="Publish custom theme definitions (kind 36767)."
+            />
+            <ToggleRow
+              feature="pushSubscriptions"
+              title="Push subscriptions"
+              description="Publish push-subscription RPC events (kind 25742)."
+            />
+          </CardContent>
+        </Card>
+
         {/* Disabled hint */}
         <div className="flex items-start gap-3 rounded-lg border border-dashed p-3 text-muted-foreground">
           <EyeOff className="size-4 shrink-0 mt-0.5" />
           <p className="text-xs leading-relaxed">
             When a category is turned off, the matching buttons and actions are
-            disabled and a tooltip points here. Profile edits, direct messages,
-            and account-deletion requests are not covered by these toggles.
+            disabled and a tooltip points here. Account-deletion requests (NIP-62)
+            are not covered by these toggles.
           </p>
         </div>
       </div>

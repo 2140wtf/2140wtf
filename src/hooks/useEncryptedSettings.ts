@@ -96,6 +96,27 @@ export interface EncryptedSettings {
     autoShareTheme?: boolean;
     publishRelayList?: boolean;
     publishBlossomList?: boolean;
+    notes?: boolean;
+    polls?: boolean;
+    photos?: boolean;
+    articles?: boolean;
+    marketplace?: boolean;
+    badges?: boolean;
+    profile?: boolean;
+    lists?: boolean;
+    rsvp?: boolean;
+    reports?: boolean;
+    roadstr?: boolean;
+    directMessages?: boolean;
+    webxdc?: boolean;
+    recovery?: boolean;
+    encryptedSettings?: boolean;
+    deleteRequests?: boolean;
+    drafts?: boolean;
+    emojiPacks?: boolean;
+    liveChat?: boolean;
+    themeDefinitions?: boolean;
+    pushSubscriptions?: boolean;
   };
   /** Last sync timestamp */
   lastSync?: number;
