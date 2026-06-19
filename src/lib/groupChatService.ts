@@ -30,11 +30,16 @@ import {
   loadGroups,
   loadMessages,
   saveGroup,
+  saveGroupSecrets,
+  loadGroupSecrets,
   saveMessages,
   deleteGroup,
+  deleteGroupSecrets,
   migrateLegacyGroupStorage,
+  extractLegacyGroupSecrets,
   type StoredGroup,
   type StoredMessage,
+  type StoredGroupSecrets,
 } from './groupChatStorage';
 import { isNostrId } from './nostrId';
 
@@ -173,8 +178,12 @@ export class GroupChatService {
 
   private groups: Map<string, StoredGroup> = new Map();
   private messages: Map<string, StoredMessage[]> = new Map();
-  private groupStates: Map<string, { exporterSecret: string; rootSecret?: string }> = new Map();
+  private groupStates: Map<string, StoredGroupSecrets> = new Map();
   private mutationLocks: Map<string, Promise<unknown>> = new Map();
+  private pendingWelcomes: Map<string, Map<number, { welcomeEvent: NostrEvent; wd: Record<string, unknown> }>> = new Map();
+  private pendingGroupEvents: Map<string, NostrEvent[]> = new Map();
+  private epochSecretCache: Map<string, Map<number, string>> = new Map();
+  private loadStatePromise: Promise<void>;
 
   constructor(userPubkey: string, userPrivkey: Uint8Array, defaultRelays: string[] = []) {
     this.userPubkey = userPubkey.toLowerCase();
@@ -187,19 +196,29 @@ export class GroupChatService {
     this.userPrivkey = userPrivkey;
     this.defaultRelays = defaultRelays.filter((r) => /^wss?:\/\//.test(r));
 
-    this.loadState();
+    this.loadStatePromise = this.loadStateAsync();
   }
 
-  private loadState(): void {
+  private async ensureLoaded(): Promise<void> {
+    return this.loadStatePromise;
+  }
+
+  private async loadStateAsync(): Promise<void> {
     migrateLegacyGroupStorage(this.userPubkey);
     const groups = loadGroups(this.userPubkey);
     for (const g of groups) {
       this.groups.set(g.nostrGroupId, g);
-      this.groupStates.set(g.nostrGroupId, {
-        exporterSecret: g.exporterSecret,
-        rootSecret: g.rootSecret,
-      });
       this.messages.set(g.nostrGroupId, loadMessages(this.userPubkey, g.nostrGroupId));
+      const legacySecrets = extractLegacyGroupSecrets(g as StoredGroup & Partial<StoredGroupSecrets>);
+      const secrets = (await loadGroupSecrets(this.userPubkey, g.nostrGroupId)) ?? legacySecrets;
+      if (secrets) {
+        this.groupStates.set(g.nostrGroupId, secrets);
+        if (legacySecrets) {
+          // Migrate legacy inline secrets to secure storage and strip from metadata.
+          await saveGroupSecrets(this.userPubkey, g.nostrGroupId, legacySecrets);
+          saveGroup(this.userPubkey, g);
+        }
+      }
     }
   }
 
