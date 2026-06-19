@@ -21,8 +21,8 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import { KIND_BLOBBONAUT_PROFILE } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
@@ -44,7 +44,7 @@ export function usePersistDailyProgress(
 ): void {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const publishingRef = useRef(false);
@@ -89,7 +89,7 @@ export function usePersistDailyProgress(
     publishingRef.current = true;
     try {
       // Fetch the fresh profile event from relays
-      const prev = await fetchFreshEvent(nostrRef.current, {
+      const prev = await fetchFreshPetsEvent(nostrRef.current, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
         authors: [pubkey],
       });

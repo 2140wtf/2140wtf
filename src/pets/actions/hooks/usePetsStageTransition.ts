@@ -16,7 +16,7 @@ import { useMutation } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion, BlobbonautProfile, PetsStage } from '@/pets/core/lib/pets';
@@ -114,7 +114,7 @@ export function usePetsHatch({
   updateCompanionEvent,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (): Promise<StageTransitionResult> => {
@@ -278,7 +278,7 @@ export function usePetsEvolve({
   updateCompanionEvent,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
 
   return useMutation({
     mutationFn: async (): Promise<StageTransitionResult> => {

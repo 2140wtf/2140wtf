@@ -17,7 +17,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
@@ -109,7 +109,7 @@ export function PetsHatchingCeremony({
   const isExistingEgg = !!existingCompanion;
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
 
   // ── Core state ──

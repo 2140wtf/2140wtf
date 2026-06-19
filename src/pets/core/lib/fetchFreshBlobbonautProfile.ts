@@ -1,3 +1,4 @@
+import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
 import type { NPool } from '@nostrify/nostrify';
 
 import {
@@ -30,7 +31,7 @@ export async function fetchFreshBlobbonautProfile(
 
   const signal = AbortSignal.timeout(10_000);
 
-  const events = await nostr.query([{
+  const events = await queryPetsRelay(nostr, [{
     kinds: [...BLOBBONAUT_PROFILE_KINDS],
     authors: [pubkey],
     '#d': dValues,

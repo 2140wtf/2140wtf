@@ -17,11 +17,11 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { useNostr } from '@nostrify/react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePetsMigration } from '@/pets/core/hooks/usePetsMigration';
-import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
 
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -222,12 +222,34 @@ function LoggedOutState() {
   );
 }
 
+// ─── No Pet State ─────────────────────────────────────────────────────────────
+
+function NoPetState({ onAdopt }: { onAdopt: () => void }) {
+  return (
+    <main className="flex flex-col items-center justify-center p-6 gap-6 min-h-[60vh]">
+      <div className="flex flex-col items-center gap-3 text-center max-w-sm">
+        <div className="size-20 rounded-3xl bg-primary/10 flex items-center justify-center">
+          <Egg className="size-10 text-primary" />
+        </div>
+        <h1 className="text-2xl font-bold">No 2140 PET yet</h1>
+        <p className="text-muted-foreground">
+          Adopt your first companion to start testing. Nothing is published until you click Adopt.
+        </p>
+        <Button onClick={onAdopt} className="mt-2">
+          <Plus className="size-4 mr-2" />
+          Adopt a 2140 PET
+        </Button>
+      </div>
+    </main>
+  );
+}
+
 // ─── Main Content ─────────────────────────────────────────────────────────────
 
 function PetsContent() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
+  const { mutateAsync: publishEvent, isPending: isPublishing } = usePetsNostrPublish();
   const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
   
   const {
@@ -613,7 +635,10 @@ function PetsContent() {
   const ceremonyEggRef = useRef<PetsCompanion | null>(null);
   
   // Cases that definitely need ceremony (no need to wait for companions)
-  const definitelyNeedsCeremony = !profile;
+  // NOTE: Auto-ceremony is disabled. Users must explicitly click Adopt to
+  // create/publish a pet. This prevents new accounts from silently publishing
+  // a pet event to the BAO relay on their first visit to /pets.
+  const definitelyNeedsCeremony = false;
   // Whether we've finished loading enough data to make the decision
   const companionDataReady = !collectionLoading && (!collectionFetching || companions.length > 0);
   // Cases where we must inspect actual companion stages before deciding.
@@ -623,11 +648,12 @@ function PetsContent() {
   const pendingCeremonyCheck = !definitelyNeedsCeremony && !!profile && !ceremonyCheckDone;
   
   // Auto-start ceremony for definite cases (no profile / no pets)
-  useEffect(() => {
-    if (definitelyNeedsCeremony && !profileLoading && !ceremonyInProgress) {
-      setCeremonyInProgress(true);
-    }
-  }, [definitelyNeedsCeremony, profileLoading, ceremonyInProgress]);
+  // Disabled — see `definitelyNeedsCeremony` comment above.
+  // useEffect(() => {
+  //   if (definitelyNeedsCeremony && !profileLoading && !ceremonyInProgress) {
+  //     setCeremonyInProgress(true);
+  //   }
+  // }, [definitelyNeedsCeremony, profileLoading, ceremonyInProgress]);
   
   // Resolve pending ceremony check once companions are loaded
   useEffect(() => {
@@ -644,7 +670,7 @@ function PetsContent() {
       // Auto-fix the onboardingDone flag if it was missing.
       if (DEBUG_PETS) console.log('[PetsPage] Skipping ceremony: user has hatched pets');
       if (profile && !profile.onboardingDone && user?.pubkey) {
-        fetchFreshEvent(nostr, {
+        fetchFreshPetsEvent(nostr, {
           kinds: [KIND_BLOBBONAUT_PROFILE],
           authors: [user.pubkey],
         }).then(prev => {
@@ -666,16 +692,13 @@ function PetsContent() {
         }).catch(err => console.error('[PetsPage] Failed to auto-fix onboardingDone:', err));
       }
     } else if (eggs.length > 0) {
-      // User has only eggs — reuse one for the ceremony (don't create a new one).
-      // Pick a random egg if multiple exist.
-      const egg = eggs.length === 1 ? eggs[0] : eggs[Math.floor(Math.random() * eggs.length)];
-      ceremonyEggRef.current = egg;
-      if (DEBUG_PETS) console.log('[PetsPage] Starting ceremony with existing egg:', egg.d);
-      setCeremonyInProgress(true);
+      // User has only eggs. Auto-hatching is disabled so testing stays manual;
+      // the egg can still be hatched from the Quests tab or dev tools.
+      if (DEBUG_PETS) console.log('[PetsPage] Skipping auto-ceremony: user has eggs only');
     } else {
-      // No pets events found on relays — treat as new user
-      if (DEBUG_PETS) console.log('[PetsPage] Starting ceremony: no companions found');
-      setCeremonyInProgress(true);
+      // No pets events found on relays — new user without a pet.
+      // Do not auto-start the ceremony; they can click Adopt when ready.
+      if (DEBUG_PETS) console.log('[PetsPage] Skipping auto-ceremony: no companions found');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCeremonyCheck, companionDataReady, ceremonyInProgress]);
@@ -716,9 +739,10 @@ function PetsContent() {
     );
   }
   
-  // After ceremony check, profile must exist
-  if (!profile) {
-    return <DashboardLoadingState />;
+  // After ceremony check, if the user has no profile/pet yet, show the empty
+  // adoption prompt instead of getting stuck on a loading spinner.
+  if (!profile && !profileLoading) {
+    return <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />;
   }
   
   // ─── CASE D: Companions still loading ───
@@ -748,35 +772,11 @@ function PetsContent() {
   }
   
   // ─── CASE F: No pets events found on relays ───
-  // This shouldn't normally happen after the ceremony check, but handle gracefully
-  if (companions.length === 0) {
-    if (DEBUG_PETS) console.log('[PetsPage] Showing: pets not found error');
-    return (
-      <DashboardShell>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-          <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-            <div className="size-24 rounded-3xl bg-amber-500/10 flex items-center justify-center">
-              <RefreshCw className="size-12 text-amber-500" />
-            </div>
-            <h1 className="text-2xl font-bold">Pet Data Not Found</h1>
-            <p className="text-muted-foreground">
-              No 2140 PETS data could be loaded from relays.
-              This may be a sync issue - try refreshing the page.
-            </p>
-            <Button
-              onClick={() => {
-                invalidateProfile();
-                invalidateCompanion();
-              }}
-              variant="outline"
-            >
-              <RefreshCw className="size-4 mr-2" />
-              Retry
-            </Button>
-          </div>
-        </div>
-      </DashboardShell>
-    );
+  // Show the adoption prompt instead of an error. The user can explicitly
+  // create their first pet; nothing is published automatically.
+  if (companions.length === 0 && !collectionLoading && !collectionFetching) {
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: no pet adoption prompt');
+    return <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />;
   }
   
   // ─── CASE G/H: No valid selection or companion not resolved ───

@@ -30,6 +30,14 @@ const settingsSections: SettingsSection[] = [
     requiresAuth: true,
   },
   {
+    id: 'pets',
+    label: 'Pets',
+    description: 'Preview companions, stages, and adult forms',
+    illustration: '/community-intro.png',
+    path: '/settings/pets',
+    requiresAuth: true,
+  },
+  {
     id: 'feed',
     label: 'Home Feed',
     description: 'Choose what types of posts appear in your home feed',
