@@ -6,7 +6,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { LandingFeedSection } from '@/components/LandingFeedSection';
+
 import { CalendarEventContent } from '@/components/CalendarEventContent';
 import { ClassifiedListingContent } from '@/components/ClassifiedListingContent';
 import { dedupeNip99Listings, isArtListing, NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
@@ -236,9 +236,6 @@ export function LandingPage() {
           )}
         </div>
       </section>
-
-      {/* Live Nostr feed preview */}
-      <LandingFeedSection />
 
       {/* Footer */}
       <footer className="px-4 py-12 text-sm text-[var(--2140-muted)]">
