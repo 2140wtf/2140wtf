@@ -2084,7 +2084,7 @@ function PetsDashboard({
           <TabButton label="₿AOs" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-2">
             <span className="flex items-center gap-1.5">
               <Wallet className="size-4" />
-              <span className="text-sm">Baos</span>
+              <span className="text-sm">₿AOs</span>
             </span>
           </TabButton>
         </SubHeaderBar>
