@@ -36,6 +36,7 @@ describe('useGroupChatHasUnread', () => {
       removeMember: vi.fn(),
       banMember: vi.fn(),
       promoteAdmin: vi.fn(),
+      updateGroupMetadata: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
       getMessagesForGroup: vi.fn((groupId: string) =>
@@ -80,6 +81,7 @@ describe('useGroupChatHasUnread', () => {
       removeMember: vi.fn(),
       banMember: vi.fn(),
       promoteAdmin: vi.fn(),
+      updateGroupMetadata: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
       getMessagesForGroup: vi.fn((groupId: string) =>
@@ -130,6 +132,7 @@ describe('useGroupChatHasUnread', () => {
       removeMember: vi.fn(),
       banMember: vi.fn(),
       promoteAdmin: vi.fn(),
+      updateGroupMetadata: vi.fn(),
       leaveGroup: vi.fn(),
       joinFromWelcome: vi.fn(),
       getMessagesForGroup: vi.fn((groupId: string) =>

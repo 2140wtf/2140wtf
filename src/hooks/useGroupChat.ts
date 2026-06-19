@@ -62,6 +62,7 @@ export interface UseGroupChatReturn {
   removeMember: (pubkey: string) => Promise<GroupOperationResult>;
   banMember: (pubkey: string) => Promise<GroupOperationResult>;
   promoteAdmin: (pubkey: string) => Promise<GroupOperationResult>;
+  updateGroupMetadata: (updates: { name?: string; description?: string }) => Promise<GroupOperationResult>;
   leaveGroup: (groupId: string) => Promise<GroupOperationResult>;
   joinFromWelcome: (giftWrapEvent: NostrEvent) => Promise<GroupOperationResult<GroupChatGroup>>;
   isAdmin: boolean;
@@ -436,6 +437,30 @@ export function useGroupChat(): UseGroupChatReturn {
     [service, selectedGroupId, refreshFromService],
   );
 
+  const updateGroupMetadata = useCallback(
+    async (updates: { name?: string; description?: string }) => {
+      if (!service || !selectedGroupId) {
+        return { success: false, error: 'No group selected' } as GroupOperationResult;
+      }
+      setError(null);
+      try {
+        const result = await service.updateGroupMetadata(selectedGroupId, updates);
+        if (result.success && result.events) {
+          await publishEvents(result.events);
+          refreshFromService();
+        } else {
+          setError(result.error ?? 'Failed to update group info');
+        }
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(message);
+        return { success: false, error: message } as GroupOperationResult;
+      }
+    },
+    [service, selectedGroupId, publishEvents, refreshFromService],
+  );
+
   const leaveGroup = useCallback(
     async (groupId: string) => {
       if (!service) {
@@ -512,6 +537,7 @@ export function useGroupChat(): UseGroupChatReturn {
     removeMember,
     banMember,
     promoteAdmin,
+    updateGroupMetadata,
     leaveGroup,
     joinFromWelcome,
     isAdmin,
