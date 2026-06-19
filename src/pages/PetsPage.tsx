@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ArrowLeftRight } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ArrowLeftRight, Cat } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -107,6 +107,7 @@ import {
 } from '@/pets/actions';
 import { PetsOnboardingFlow } from '@/pets/onboarding';
 import { usePetsActionsRegistration, type UseItemFunction } from '@/pets/companion/interaction';
+import { getAdultBaseSvg, getAvailableAdultForms } from '@/pets/adult-pets';
 import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
 import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
 import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
@@ -914,7 +915,7 @@ function DashboardShell({ children, className }: DashboardShellProps) {
 // ─── Dashboard Drawer Type ────────────────────────────────────────────────────
 
 /** Which drawer is open; 'none' = room view visible */
-type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'blobbi' | 'baos';
+type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'blobbi' | 'baos';
 
 // ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
@@ -2039,6 +2040,9 @@ function PetsDashboard({
                   updateProfileEvent={updateProfileEvent}
                 />
               )}
+              {activeDrawer === 'species' && (
+                <SpeciesTabContent />
+              )}
               {activeDrawer === 'baos' && (
                 <BaosTabContent />
               )}
@@ -2065,13 +2069,19 @@ function PetsDashboard({
               <span className="text-sm">Pets</span>
             </span>
           </TabButton>
-          <TabButton label="Blobbi" active={activeDrawer === 'blobbi'} onClick={() => toggleDrawer('blobbi')} className="translate-y-2">
+          <TabButton label="Species" active={activeDrawer === 'species'} onClick={() => toggleDrawer('species')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <Cat className="size-4" />
+              <span className="text-sm">Species</span>
+            </span>
+          </TabButton>
+          <TabButton label="Blobbi" active={activeDrawer === 'blobbi'} onClick={() => toggleDrawer('blobbi')} className="translate-y-0">
             <span className="flex items-center gap-1.5">
               <Sparkles className="size-4" />
               <span className="text-sm">Blobbi</span>
             </span>
           </TabButton>
-          <TabButton label="Baos" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-0">
+          <TabButton label="Baos" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-2">
             <span className="flex items-center gap-1.5">
               <Wallet className="size-4" />
               <span className="text-sm">Baos</span>
@@ -3394,6 +3404,52 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           {isClaimingBao && <Loader2 className="size-3 animate-spin mr-1.5" />}
           {baoClaimedToday ? 'Claimed today' : baoReward?.claimable ? 'Claim BAO' : 'No open orders'}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Species Tab Content ──────────────────────────────────────────────────────
+
+const DESIGNED_SPECIES = new Set(['glitchfox', 'biomechmoth', 'liquidblob']);
+
+function formatSpeciesName(form: string): string {
+  return form.charAt(0).toUpperCase() + form.slice(1);
+}
+
+function SpeciesTabContent() {
+  const forms = getAvailableAdultForms();
+  return (
+    <div className="h-full min-h-[210px] px-3 sm:px-4">
+      <p className="text-xs text-muted-foreground text-center py-2">
+        Adult species your 2140 PET can evolve into. The three newest are highlighted.
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
+        {forms.map((form) => {
+          const svg = getAdultBaseSvg(form);
+          const isDesigned = DESIGNED_SPECIES.has(form);
+          return (
+            <div
+              key={form}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50',
+                isDesigned && 'border-primary/60 bg-primary/5'
+              )}
+            >
+              <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
+                <img
+                  src={`data:image/svg+xml,${encodeURIComponent(svg)}`}
+                  alt={formatSpeciesName(form)}
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+              </div>
+              <span className={cn('text-[10px] font-medium', isDesigned ? 'text-primary' : 'text-muted-foreground')}>
+                {formatSpeciesName(form)}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
