@@ -19,6 +19,7 @@ import { useNsecPasteGuard } from "@/hooks/useNsecPasteGuard";
 import type { AppConfig } from "@/contexts/AppContext";
 import { NWCProvider } from "@/contexts/NWCContext";
 import { DmInboxProvider } from "@/contexts/DmInboxContext";
+import { GroupChatProvider } from "@/contexts/GroupChatContext";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
@@ -130,6 +131,7 @@ const hardcodedConfig: AppConfig = {
     "roadstr",
     "messages",
     "notifications",
+    "groups",
     "badges",
     "emojis",
     "themes",
@@ -212,9 +214,11 @@ export function App() {
                       <EmotionDevProvider>
                         <TooltipProvider>
                           <DmInboxProvider>
-                            <InitialSyncGate>
-                              <AppRouter />
-                            </InitialSyncGate>
+                            <GroupChatProvider>
+                              <InitialSyncGate>
+                                <AppRouter />
+                              </InitialSyncGate>
+                            </GroupChatProvider>
                           </DmInboxProvider>
                         </TooltipProvider>
                       </EmotionDevProvider>

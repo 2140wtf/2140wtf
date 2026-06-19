@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { LogIn, Lock, Menu, Shield, Users } from 'lucide-react';
@@ -12,7 +12,8 @@ import {
 import { PageHeader } from '@/components/PageHeader';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useGroupChat } from '@/hooks/useGroupChat';
+import { useGroupChatContext } from '@/hooks/useGroupChatContext';
+import { useGroupChatReadCursors } from '@/hooks/useGroupChatReadCursors';
 import { GroupList } from '@/components/group-chat/GroupList';
 import { GroupMessageList } from '@/components/group-chat/GroupMessageList';
 import { GroupMessageInput } from '@/components/group-chat/GroupMessageInput';
@@ -43,7 +44,22 @@ export function GroupChatPage() {
     leaveGroup,
     joinFromWelcome,
     isAdmin,
-  } = useGroupChat();
+  } = useGroupChatContext();
+  const { markGroupRead, markAllGroupsRead } = useGroupChatReadCursors();
+  const initialMarkReadDone = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading && groups.length > 0 && !initialMarkReadDone.current) {
+      initialMarkReadDone.current = true;
+      markAllGroupsRead(groups, (groupId) => messages.filter((m) => m.nostrGroupId === groupId));
+    }
+  }, [isLoading, groups, messages, markAllGroupsRead]);
+
+  useEffect(() => {
+    if (selectedGroup) {
+      markGroupRead(selectedGroup, messages.filter((m) => m.nostrGroupId === selectedGroup.nostrGroupId));
+    }
+  }, [selectedGroup, messages, markGroupRead]);
 
   useSeoMeta({
     title: `Private Groups | ${config.appName}`,

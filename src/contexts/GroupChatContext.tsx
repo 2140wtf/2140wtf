@@ -1,9 +1,6 @@
-import { createContext } from 'react';
-
-import { useGroupChat, type UseGroupChatReturn } from '@/hooks/useGroupChat';
+import { useGroupChat } from '@/hooks/useGroupChat';
+import { GroupChatContext } from '@/lib/groupChatContext';
 import { useGroupChatReadCursorsSync } from '@/hooks/useGroupChatReadCursorsSync';
-
-export const GroupChatContext = createContext<UseGroupChatReturn | null>(null);
 
 /**
  * Provides a single shared NIP-104 group-chat state for the whole app.

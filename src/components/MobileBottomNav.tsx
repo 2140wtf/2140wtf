@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Bell, Home, Search, User } from 'lucide-react';
+import { Bell, Home, Search, Shield, User } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { cn } from '@/lib/utils';
 import { selectionChanged } from '@/lib/haptics';
 import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
@@ -26,6 +27,7 @@ export function MobileBottomNav() {
   const queryClient = useQueryClient();
   const { user, metadata } = useCurrentUser();
   const hasUnread = useHasUnreadNotifications();
+  const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const { scrollContainer, noArcs } = useLayoutSnapshot();
   const { hidden } = useScrollDirection(scrollContainer);
   const profileUrl = useProfileUrl(user?.pubkey ?? '', metadata);
@@ -117,6 +119,26 @@ export function MobileBottomNav() {
                 )}
               </span>
               <span className="text-[10px] font-medium">Notifications</span>
+            </Link>
+          )}
+
+          {/* Groups */}
+          {user && (
+            <Link
+              to="/groups"
+              onClick={() => { selectionChanged(); setSearchOpen(false); }}
+              className={cn(
+                'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors',
+                location.pathname === '/groups' ? 'text-primary' : 'text-muted-foreground',
+              )}
+            >
+              <span className="relative">
+                <Shield className="size-5" />
+                {hasUnreadGroups && (
+                  <span className="absolute -top-1 right-0 size-2 bg-primary rounded-full" />
+                )}
+              </span>
+              <span className="text-[10px] font-medium">Groups</span>
             </Link>
           )}
 
