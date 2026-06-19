@@ -8,9 +8,34 @@ import { useCallback, useMemo } from "react";
 // ── Order computation ─────────────────────────────────────────────────────────
 
 /** Default sidebar order for fresh installs (system pages only). */
-const DEFAULT_SIDEBAR_ORDER = SIDEBAR_ITEMS
-  .filter((s) => ['feed', 'profile', 'wallet', 'search', 'prediction-markets', 'market', 'pets', 'messages', 'notifications', 'trends', 'bookmarks', 'settings', 'help', 'theme', 'polls', 'music'].includes(s.id))
-  .map((s) => s.id);
+const DEFAULT_SIDEBAR_ORDER = [
+  "search",
+  "feed",
+  "messages",
+  "pets",
+  "market",
+  "music",
+  "videos",
+  "photos",
+  "wallet",
+  "events",
+  "prediction-markets",
+  "polls",
+  SIDEBAR_DIVIDER_ID,
+  "profile",
+  "notifications",
+  "bookmarks",
+  "lists",
+  "badges",
+  "emojis",
+  "themes",
+  "btcmap",
+  "roadstr",
+  SIDEBAR_DIVIDER_ID,
+  "settings",
+  "help",
+  "about",
+];
 
 /** Map of legacy sidebar item IDs to their current replacements. */
 const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
