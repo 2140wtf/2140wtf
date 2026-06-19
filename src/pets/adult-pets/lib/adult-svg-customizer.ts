@@ -108,6 +108,40 @@ function buildPupilGradient(id: string, eyeColor: string): string {
     </radialGradient>`;
 }
 
+// ─── CSS Variable Color Injection ─────────────────────────────────────────────
+
+/**
+ * Inject CSS custom properties into an SVG that uses var(--baseColor),
+ * var(--secondaryColor), and/or var(--eyeColor).
+ *
+ * This lets new Open Design assets be recolored without string-replacing
+ * specific gradient IDs. A <style> block inside the SVG sets the variables
+ * on the :root scope of the shadow-like SVG document.
+ */
+function applyCssVariableColors(
+  svgText: string,
+  baseColor: string,
+  secondaryColor?: string,
+  eyeColor?: string,
+): string {
+  const hasVariables =
+    svgText.includes('var(--baseColor)') ||
+    svgText.includes('var(--secondaryColor)') ||
+    svgText.includes('var(--eyeColor)');
+
+  if (!hasVariables) return svgText;
+
+  const styleBlock = `<style>
+    :root {
+      --baseColor: ${baseColor};
+      --secondaryColor: ${secondaryColor ?? baseColor};
+      --eyeColor: ${eyeColor ?? secondaryColor ?? baseColor};
+    }
+  </style>`;
+
+  return svgText.replace(/(<svg[^>]*>)/, `$1\n  ${styleBlock}`);
+}
+
 // ─── Generic Gradient Replacer ────────────────────────────────────────────────
 
 /**
@@ -572,6 +606,45 @@ function customizePandi(svgText: string, baseColor: string, secondaryColor?: str
   return svg;
 }
 
+// ─── 2140 Pets Customizers ────────────────────────────────────────────────────
+
+/**
+ * Glitchfox: cyber-fox built on CSS variables. Use the Open Design palette
+ * as the fixed default so the species always reads as a glitchfox.
+ */
+function customizeGlitchfox(
+  svgText: string,
+  _baseColor: string,
+  _secondaryColor?: string,
+  _eyeColor?: string,
+): string {
+  return applyCssVariableColors(svgText, '#1a1a2e', '#d946ef', '#22d3ee');
+}
+
+/**
+ * Biomechmoth: mechanical pollinator built on CSS variables.
+ */
+function customizeBiomechmoth(
+  svgText: string,
+  _baseColor: string,
+  _secondaryColor?: string,
+  _eyeColor?: string,
+): string {
+  return applyCssVariableColors(svgText, '#2d1b4e', '#a855f7', '#c084fc');
+}
+
+/**
+ * Liquidblob: amorphous data-slime built on CSS variables.
+ */
+function customizeLiquidblob(
+  svgText: string,
+  _baseColor: string,
+  _secondaryColor?: string,
+  _eyeColor?: string,
+): string {
+  return applyCssVariableColors(svgText, '#0891b2', '#67e8f9', '#ecfeff');
+}
+
 const FORM_CUSTOMIZERS: Partial<Record<AdultForm, FormCustomizer>> = {
   bloomi: customizeBloomi,
   breezy: customizeBreezy,
@@ -582,13 +655,16 @@ const FORM_CUSTOMIZERS: Partial<Record<AdultForm, FormCustomizer>> = {
   droppi: customizeDroppi,
   flammi: customizeFlammi,
   froggi: customizeFroggi,
+  glitchfox: customizeGlitchfox,
   leafy: customizeLeafy,
+  liquidblob: customizeLiquidblob,
   mushie: customizeMushie,
   owli: customizeOwli,
   pandi: customizePandi,
   rocky: customizeRocky,
   rosey: customizeRosey,
   starri: customizeStarri,
+  biomechmoth: customizeBiomechmoth,
 };
 
 // ─── Main Customization ───────────────────────────────────────────────────────

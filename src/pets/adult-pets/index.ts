@@ -44,3 +44,23 @@ export {
   customizeAdultSvg,
   customizeAdultSvgFromPets,
 } from './lib/adult-svg-customizer';
+
+// ₿AO Pets
+export type {
+  BaoRecipe,
+  BaoRarity,
+  BaoPalette,
+  BaoAccessories,
+} from './lib/bao-recipe';
+
+export {
+  BAO_RECIPE,
+  getBaoRecipeById,
+  getBaoRarityColor,
+  compareBaoRarity,
+} from './lib/bao-recipe';
+
+export {
+  generateBaoSvg,
+  customizeBaoSvg,
+} from './lib/bao-svg';
