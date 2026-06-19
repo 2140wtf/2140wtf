@@ -60,6 +60,8 @@ export interface Nip60SyncApi {
 
 /** Encrypted wallet config payload stored in kind:17375 content. */
 export interface Nip60WalletConfig {
+  /** Wallet identifier. 'default' is the normal Cashu wallet; 'bao' is the BAO demo wallet. */
+  id?: string;
   /** Hex private key used for P2PK / Nutzaps. Not the Nostr identity key. */
   privkey: string;
   /** Normalized mint URLs. */
@@ -86,7 +88,10 @@ export interface Nip60HistoryContent {
 }
 
 export interface Nip60RestoreResult {
+  /** The default ('default') wallet config if present. */
   config: Nip60WalletConfig | null;
+  /** All wallet configs found in the newest kind:17375 event. */
+  configs: Nip60WalletConfig[];
   /** Latest unspent proofs grouped by normalized mint URL. */
   proofsByMint: Record<string, unknown[]>;
   /** Parsed history events (newest first). */
@@ -165,6 +170,7 @@ export function buildWalletConfigPayload(
 ): Nip60WalletConfig {
   const normalized = [...new Set(mints.map((m) => normalizeMintUrl(m)).filter(Boolean))] as string[];
   return {
+    id: 'default',
     privkey: bytesToHex(walletPrivkey),
     mints: normalized,
   };
@@ -285,16 +291,28 @@ function addPublishedAt(tags: string[][], publishedAt?: number): string[][] {
   return [...tags, ['published_at', String(publishedAt)]];
 }
 
-/** Build the encrypted kind:17375 wallet config event. */
+/** Build the encrypted kind:17375 wallet config event.
+ *  Accepts a single config or multiple wallet configs (e.g. default + BAO). */
 export async function buildWalletConfigEvent(
-  config: Nip60WalletConfig,
+  configs: Nip60WalletConfig | Nip60WalletConfig[],
   signer: Nip60Signer,
   opts?: { extraTags?: string[][]; publishedAt?: number; createdAt?: number },
 ): Promise<NostrEvent | null> {
-  const plaintext = JSON.stringify([
-    ['privkey', config.privkey],
-    ...config.mints.map((m): [string, string] => ['mint', m]),
-  ]);
+  const list = Array.isArray(configs) ? configs : [configs];
+  const entries: string[][] = [];
+  for (const config of list) {
+    const id = config.id ?? 'default';
+    if (id === 'default') {
+      entries.push(['privkey', config.privkey]);
+    } else {
+      entries.push(['privkey', id, config.privkey]);
+    }
+    for (const m of config.mints) {
+      const normalized = normalizeMintUrl(m);
+      if (normalized) entries.push(['mint', normalized]);
+    }
+  }
+  const plaintext = JSON.stringify(entries);
   const content = await signer.nip44Encrypt(signer.pubkey, plaintext);
   if (!content) return null;
   let tags = opts?.extraTags ? [...opts.extraTags] : [];
@@ -307,35 +325,50 @@ export async function buildWalletConfigEvent(
   });
 }
 
-/** Parse a decrypted kind:17375 event into a wallet config. */
+/** Parse a decrypted kind:17375 event into all wallet configs. */
+export async function parseWalletConfigEvents(
+  event: NostrEvent,
+  signer: Nip60Signer,
+): Promise<Nip60WalletConfig[]> {
+  if (event.kind !== WALLET_CONFIG_KIND) return [];
+  if (!verifyEvent(event)) return [];
+  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
+  if (!plaintext) return [];
+  try {
+    const parsed = JSON.parse(plaintext) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const entries = parsed as string[][];
+    const configs: Nip60WalletConfig[] = [];
+    let current: Nip60WalletConfig | null = null;
+    for (const entry of entries) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const [key, ...rest] = entry;
+      if (key === 'privkey') {
+        if (current && current.privkey.length === 64) configs.push(current);
+        if (rest.length === 1 && typeof rest[0] === 'string') {
+          current = { id: 'default', privkey: rest[0], mints: [] };
+        } else if (rest.length === 2 && typeof rest[0] === 'string' && typeof rest[1] === 'string') {
+          current = { id: rest[0], privkey: rest[1], mints: [] };
+        }
+      } else if (key === 'mint' && current && typeof rest[0] === 'string') {
+        const normalized = normalizeMintUrl(rest[0]);
+        if (normalized) current.mints.push(normalized);
+      }
+    }
+    if (current && current.privkey.length === 64) configs.push(current);
+    return configs.filter((c) => c.mints.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** Parse a decrypted kind:17375 event into the default wallet config. */
 export async function parseWalletConfigEvent(
   event: NostrEvent,
   signer: Nip60Signer,
 ): Promise<Nip60WalletConfig | null> {
-  if (event.kind !== WALLET_CONFIG_KIND) return null;
-  if (!verifyEvent(event)) return null;
-  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
-  if (!plaintext) return null;
-  try {
-    const parsed = JSON.parse(plaintext) as unknown;
-    if (!Array.isArray(parsed)) return null;
-    const entries = parsed as string[][];
-    let privkey: string | null = null;
-    const mints: string[] = [];
-    for (const entry of entries) {
-      if (!Array.isArray(entry) || entry.length < 2) continue;
-      const [key, value] = entry;
-      if (key === 'privkey' && typeof value === 'string') privkey = value;
-      if (key === 'mint' && typeof value === 'string') {
-        const normalized = normalizeMintUrl(value);
-        if (normalized) mints.push(normalized);
-      }
-    }
-    if (!privkey || privkey.length !== 64 || mints.length === 0) return null;
-    return { privkey, mints };
-  } catch {
-    return null;
-  }
+  const configs = await parseWalletConfigEvents(event, signer);
+  return configs.find((c) => (c.id ?? 'default') === 'default') ?? configs[0] ?? null;
 }
 
 /** Build a kind:7375 token event for a single mint's unspent proofs. */
@@ -674,7 +707,7 @@ export async function restoreNip60Wallet(
   configSigner: Nip60Signer,
   queryFn: (filter: NostrFilter) => Promise<NostrEvent[]>,
 ): Promise<Nip60RestoreResult> {
-  const result: Nip60RestoreResult = { config: null, proofsByMint: {}, history: [] };
+  const result: Nip60RestoreResult = { config: null, configs: [], proofsByMint: {}, history: [] };
   try {
     const [configEvents, tokenEvents, deletionEvents, historyEvents] = await Promise.all([
       queryFn({ kinds: [WALLET_CONFIG_KIND], authors: [configSigner.pubkey], limit: 5 }),
@@ -687,7 +720,8 @@ export async function restoreNip60Wallet(
       .filter((ev) => verifyEvent(ev))
       .sort((a, b) => b.created_at - a.created_at)[0];
     if (newestConfig) {
-      result.config = await parseWalletConfigEvent(newestConfig, configSigner);
+      result.configs = await parseWalletConfigEvents(newestConfig, configSigner);
+      result.config = result.configs.find((c) => (c.id ?? 'default') === 'default') ?? result.configs[0] ?? null;
     }
 
     const deletedIds = new Set<string>();
