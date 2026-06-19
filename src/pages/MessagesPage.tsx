@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Mail } from 'lucide-react';
@@ -8,8 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNip17Inbox } from '@/hooks/useNip17Inbox';
+import { useDmInbox } from '@/hooks/useDmInbox';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
+import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
@@ -20,11 +21,13 @@ import { cn } from '@/lib/utils';
 export function MessagesPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const { conversations, isLoading } = useNip17Inbox();
+  const { conversations, isLoading } = useDmInbox();
   const { markAllConversationsRead, getCursor } = useDmReadCursors();
+  const initialMarkReadDone = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && conversations.length > 0) {
+    if (!isLoading && conversations.length > 0 && !initialMarkReadDone.current) {
+      initialMarkReadDone.current = true;
       markAllConversationsRead(conversations);
     }
   }, [isLoading, conversations, markAllConversationsRead]);
@@ -89,7 +92,7 @@ function ConversationRow({
   conversation,
   unreadCount,
 }: {
-  conversation: ReturnType<typeof useNip17Inbox>['conversations'][number];
+  conversation: Nip17Conversation;
   unreadCount: number;
 }) {
   const { user } = useCurrentUser();
