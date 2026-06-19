@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Mail } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip17Inbox } from '@/hooks/useNip17Inbox';
+import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
@@ -20,6 +21,13 @@ export function MessagesPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { conversations, isLoading } = useNip17Inbox();
+  const { markAllConversationsRead, getCursor } = useDmReadCursors();
+
+  useEffect(() => {
+    if (!isLoading && conversations.length > 0) {
+      markAllConversationsRead(conversations);
+    }
+  }, [isLoading, conversations, markAllConversationsRead]);
 
   useSeoMeta({
     title: `Messages | ${config.appName}`,
@@ -52,16 +60,38 @@ export function MessagesPage() {
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {conversations.map((conversation) => (
-            <ConversationRow key={conversation.id} conversation={conversation} />
-          ))}
+          {conversations.map((conversation) => {
+            const cursor = getCursor(conversation.id);
+            const unreadCount = user
+              ? conversation.messages.reduce(
+                (count, message) =>
+                  message.sender === user.pubkey || message.createdAt <= cursor
+                    ? count
+                    : count + 1,
+                0,
+              )
+              : 0;
+            return (
+              <ConversationRow
+                key={conversation.id}
+                conversation={conversation}
+                unreadCount={unreadCount}
+              />
+            );
+          })}
         </div>
       )}
     </main>
   );
 }
 
-function ConversationRow({ conversation }: { conversation: ReturnType<typeof useNip17Inbox>['conversations'][number] }) {
+function ConversationRow({
+  conversation,
+  unreadCount,
+}: {
+  conversation: ReturnType<typeof useNip17Inbox>['conversations'][number];
+  unreadCount: number;
+}) {
   const { user } = useCurrentUser();
   const otherPubkey = conversation.participants[0] ?? user?.pubkey ?? '';
   const npub = useMemo(() => {
@@ -77,19 +107,28 @@ function ConversationRow({ conversation }: { conversation: ReturnType<typeof use
   return (
     <Link
       to={`/messages/${npub}`}
-      className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
+      className="relative flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
     >
+      {unreadCount > 0 && (
+        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 size-2 bg-primary rounded-full" aria-hidden="true" />
+      )}
       <ConversationAvatar pubkey={otherPubkey} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <ParticipantName pubkey={otherPubkey} />
           {lastMessage && (
-            <span className="text-xs text-muted-foreground shrink-0">
+            <span className={cn(
+              'text-xs shrink-0',
+              unreadCount > 0 ? 'text-primary font-medium' : 'text-muted-foreground',
+            )}>
               {timeAgo(lastMessage.createdAt)}
             </span>
           )}
         </div>
-        <p className="text-sm text-muted-foreground truncate">
+        <p className={cn(
+          'text-sm truncate',
+          unreadCount > 0 ? 'text-foreground font-medium' : 'text-muted-foreground',
+        )}>
           {lastMessage ? lastMessage.content : 'No messages'}
         </p>
       </div>
