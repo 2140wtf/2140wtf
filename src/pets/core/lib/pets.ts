@@ -392,6 +392,10 @@ export interface BlobbonautProfile {
   baoRewardsClaimedAt: string | undefined;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
+  /** Wallet mode for 2140 Pets: 'demo' uses BAO play-money, 'real' uses Cashu sats */
+  walletMode: 'demo' | 'real';
+  /** Selected Cashu mint URL when wallet_mode is 'real' */
+  cashuMintUrl: string | undefined;
   /** Purchased items storage */
   storage: StorageItem[];
   /** Raw content string for missions JSON */
@@ -1394,6 +1398,8 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     baoTier: parseNumericTag(tags, 'bao_tier') ?? 0,
     baoRewardsClaimedAt: getTagValue(tags, 'bao_rewards_claimed_at') ?? undefined,
     room: getTagValue(tags, 'room') ?? undefined,
+    walletMode: parseWalletModeTag(tags),
+    cashuMintUrl: getTagValue(tags, 'cashu_mint_url') ?? undefined,
     storage: parseStorageTags(tags),
     content: event.content,
     allTags: tags,
@@ -1406,12 +1412,18 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
  * Build tags for a new Blobbonaut Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
+function parseWalletModeTag(tags: string[][]): 'demo' | 'real' {
+  const value = getTagValue(tags, 'wallet_mode');
+  return value === 'real' ? 'real' : 'demo';
+}
+
 export function buildBlobbonautTags(pubkey: string): string[][] {
   return [
     ['d', getCanonicalBlobbonautD(pubkey)],
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
+    ['wallet_mode', 'demo'],
   ];
 }
 
@@ -1565,6 +1577,8 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   'bao_lifetime_volume', 'bao_tier', 'bao_rewards_claimed_at',
   // Room persistence
   'room',
+  // Cashu wallet mode
+  'wallet_mode', 'cashu_mint_url',
   // Legacy player progress tags (preserved for compatibility)
   'coins', 'petting_level', 'pettingLevel', 'lifetime_petss', 'lifetimePetss',
   'starter_pets', 'starterPets', 'favorite_pets', 'favoritePets',
