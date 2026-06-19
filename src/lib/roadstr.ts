@@ -76,11 +76,6 @@ export function parseRoadstrReport(event: NostrEvent): RoadstrReport | undefined
   };
 }
 
-/** Default expiry for a report when no explicit expiration tag is present. */
-export function getRoadstrDefaultExpiry(report: RoadstrReport): number {
-  return (report.expiration ?? report.createdAt + ROADSTR_EVENT_TYPES[report.type].ttlSeconds);
-}
-
 /**
  * Parse a kind 1316 Roadstr confirmation/denial event.
  * Returns undefined if required tags are missing or malformed.
@@ -120,8 +115,7 @@ export function computeEffectiveExpiry(
   confirmations: RoadstrConfirmation[],
 ): number {
   const ttl = ROADSTR_EVENT_TYPES[report.type].ttlSeconds;
-  const cap = report.expiration ?? Infinity;
-  let expiry = Math.min(report.createdAt + ttl, cap);
+  let expiry = report.createdAt + ttl;
 
   const sorted = [...confirmations]
     .filter((c) => c.reportId === report.id)
@@ -129,7 +123,7 @@ export function computeEffectiveExpiry(
 
   for (const conf of sorted) {
     if (conf.status === 'still_there') {
-      expiry = Math.min(Math.max(expiry, conf.createdAt + ttl), cap);
+      expiry = Math.max(expiry, conf.createdAt + ttl);
     } else {
       expiry = Math.min(expiry, conf.createdAt);
     }

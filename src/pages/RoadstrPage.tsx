@@ -35,7 +35,7 @@ export function RoadstrPage(): React.JSX.Element {
   });
   useLayoutOptions({ noMaxWidth: true, noOverscroll: true, rightSidebar: null });
 
-  const theme: 'dark' | 'light' = useMemo(() => getBackgroundThemeMode(), []);
+  const theme: 'dark' | 'light' = getBackgroundThemeMode();
 
   const [viewport, setViewport] = useState<BBox | undefined>();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
