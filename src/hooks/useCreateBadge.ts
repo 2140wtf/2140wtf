@@ -3,6 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { BADGE_DEFINITION_KIND } from '@/lib/badgeUtils';
 
 interface CreateBadgeParams {
@@ -24,11 +25,13 @@ interface CreateBadgeParams {
 export function useCreateBadge() {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (params: CreateBadgeParams) => {
       if (!user) throw new Error('User is not logged in');
+      if (!isEnabled('badges')) throw new Error('Badge publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
       const tags: string[][] = [
         ['d', params.identifier],

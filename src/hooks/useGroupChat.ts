@@ -13,6 +13,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
+import { usePublishPreferences } from './usePublishPreferences';
 import {
   GroupChatService,
   type GroupChatGroup,
@@ -73,6 +74,7 @@ export function useGroupChat(): UseGroupChatReturn {
   const { user } = useCurrentUser();
   const { logins } = useNostrLogin();
   const { config } = useAppContext();
+  const { isEnabled } = usePublishPreferences();
 
   const privateKey = useMemo(
     () => extractPrivateKey(logins as unknown[], user?.pubkey),
@@ -277,6 +279,10 @@ export function useGroupChat(): UseGroupChatReturn {
   const publishEvents = useCallback(
     async (events?: NostrEvent[]) => {
       if (!events || events.length === 0) return;
+      if (!isEnabled('directMessages')) {
+        console.error('[useGroupChat] Direct messages publishing disabled');
+        return;
+      }
       for (const event of events) {
         try {
           await nostr.event(event, { signal: AbortSignal.timeout(5000) });
@@ -285,7 +291,7 @@ export function useGroupChat(): UseGroupChatReturn {
         }
       }
     },
-    [nostr],
+    [nostr, isEnabled],
   );
 
   const createGroup = useCallback(

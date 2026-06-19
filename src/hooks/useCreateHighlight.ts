@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { buildHighlightTags, type HighlightSource } from '@/lib/highlightSource';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -22,10 +23,12 @@ interface CreateHighlightParams {
  */
 export function useCreateHighlight(): UseMutationResult<NostrEvent, Error, CreateHighlightParams> {
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
   const queryClient = useQueryClient();
 
   return useMutation<NostrEvent, Error, CreateHighlightParams>({
     mutationFn: async ({ text, context, source, comment }) => {
+      if (!isEnabled('notes')) throw new Error('Notes publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const tags = buildHighlightTags(source, context);
 
       const trimmedComment = comment?.trim();

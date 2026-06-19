@@ -14,6 +14,7 @@ import {
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { SHIPPING_OPTION_KIND, type ShippingOption, type ShippingOptionService } from '@/lib/shippingOption';
 
 interface ShippingOptionFormProps {
@@ -25,6 +26,7 @@ export function ShippingOptionForm({ relays, onCreated }: ShippingOptionFormProp
   const { user } = useCurrentUser();
   const { mutateAsync: createEvent, isPending: isPublishing } = useNostrPublish();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   const [title, setTitle] = useState('');
   const [service, setService] = useState<ShippingOptionService>('standard');
@@ -39,6 +41,13 @@ export function ShippingOptionForm({ relays, onCreated }: ShippingOptionFormProp
 
   const handleSubmit = async () => {
     if (!canSubmit || !user) return;
+    if (!isEnabled('marketplace')) {
+      toast({
+        title: 'Marketplace publishing disabled',
+        description: 'Turn on “Marketplace listings” in Settings → Privacy & Publishing to publish shipping options.',
+      });
+      return;
+    }
 
     const priceValue = price.trim();
     if (priceValue && isNaN(Number(priceValue))) {

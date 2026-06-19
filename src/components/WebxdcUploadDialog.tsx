@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { extractWebxdcMeta } from '@/lib/webxdcMeta';
 import { generateUUID } from '@/lib/uuid';
 import { toast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 interface WebxdcUploadDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
   const { mutateAsync: uploadFile } = useUploadFile();
   const { mutateAsync: createEvent } = useNostrPublish();
   const queryClient = useQueryClient();
+  const { isEnabled } = usePublishPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -80,6 +82,10 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
 
   const handleSubmit = useCallback(async () => {
     if (!file || !user) return;
+    if (!isEnabled('webxdc')) {
+      toast({ title: 'Webxdc publishing disabled', description: 'Turn on “Webxdc apps” in Settings → Privacy & Publishing to share mini-apps.' });
+      return;
+    }
 
     setIsUploading(true);
 
@@ -141,7 +147,7 @@ export function WebxdcUploadDialog({ open, onOpenChange }: WebxdcUploadDialogPro
     } finally {
       setIsUploading(false);
     }
-  }, [file, user, appName, iconUrl, description, uploadFile, createEvent, queryClient, handleOpenChange]);
+  }, [file, user, appName, iconUrl, description, uploadFile, createEvent, queryClient, handleOpenChange, isEnabled]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

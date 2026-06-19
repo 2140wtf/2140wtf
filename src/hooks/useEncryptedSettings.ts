@@ -379,7 +379,7 @@ export function useEncryptedSettings() {
 
   // Initialize settings if they don't exist
   const initializeSettings = async (initialSettings: Partial<EncryptedSettings>) => {
-    if (settings.data !== null || !user?.signer.nip44) {
+    if (settings.data !== null || !user?.signer?.nip44) {
       return; // Already initialized or no encryption support
     }
 
@@ -397,7 +397,7 @@ export function useEncryptedSettings() {
     error: query.error || settings.error,
     updateSettings,
     initializeSettings,
-    hasNip44Support: !!user?.signer.nip44,
+    hasNip44Support: !!user?.signer?.nip44,
     lastSync: settings.data?.lastSync,
     /** True if a local write happened recently. NostrSync should skip applying. */
     recentlyWritten: () => Date.now() - lastWriteTs < 10_000,

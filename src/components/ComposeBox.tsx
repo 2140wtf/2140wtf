@@ -28,6 +28,7 @@ import { NoteContent } from '@/components/NoteContent';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { usePostComment } from '@/hooks/usePostComment';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
@@ -209,6 +210,7 @@ export function ComposeBox({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { config } = useAppContext();
+  const { isEnabled } = usePublishPreferences();
   const imageQuality = config.imageQuality;
   const isMobile = useIsMobile();
 
@@ -707,6 +709,13 @@ export function ComposeBox({
   /** Stop recording, upload, and publish as kind 1222 or 1244. */
   const handleStopAndPublishVoice = useCallback(async () => {
     if (!user) return;
+    if (!isEnabled('notes')) {
+      toast({
+        title: 'Notes publishing disabled',
+        description: 'Turn on “Notes & replies” in Settings → Privacy & Publishing to publish voice messages.',
+      });
+      return;
+    }
     setIsPublishingVoice(true);
     try {
       const recording = await voiceRecorder.stopRecording();
@@ -826,10 +835,17 @@ export function ComposeBox({
     } finally {
       setIsPublishingVoice(false);
     }
-  }, [user, voiceRecorder, uploadFile, createEvent, nostr, replyTo, queryClient, toast, onSuccess]);
+  }, [user, voiceRecorder, uploadFile, createEvent, nostr, replyTo, queryClient, toast, onSuccess, isEnabled]);
 
   const handleSubmit = async () => {
     if (!content.trim() || !user || charCount > MAX_CHARS) return;
+    if (!isEnabled('notes')) {
+      toast({
+        title: 'Notes publishing disabled',
+        description: 'Turn on “Notes & replies” in Settings → Privacy & Publishing to publish notes.',
+      });
+      return;
+    }
 
     try {
       const hashtags = extractHashtags(content);
@@ -1109,6 +1125,13 @@ export function ComposeBox({
     const filledOptions = pollOptions.filter((o) => o.label.trim());
     const finalContent = content.trim();
     if (!finalContent || filledOptions.length < 2 || !user || isPollPending) return;
+    if (!isEnabled('polls')) {
+      toast({
+        title: 'Polls publishing disabled',
+        description: 'Turn on “Polls” in Settings → Privacy & Publishing to publish polls.',
+      });
+      return;
+    }
 
     const tags: string[][] = [];
     const now = Math.floor(Date.now() / 1000);

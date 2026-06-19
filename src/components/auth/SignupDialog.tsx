@@ -10,6 +10,7 @@ import { toast } from '@/hooks/useToast';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { saveNsec } from '@/lib/credentialManager';
 import { ProfileCard } from '@/components/ProfileCard';
@@ -39,6 +40,7 @@ const SignupDialog: React.FC<SignupDialogProps> = ({ isOpen, onClose }) => {
   const login = useLoginActions();
   const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
+  const { isEnabled } = usePublishPreferences();
 
   // Generate a proper nsec key using nostr-tools.
   // The credential manager / file download is deferred until the user clicks "Continue".
@@ -109,7 +111,7 @@ const SignupDialog: React.FC<SignupDialogProps> = ({ isOpen, onClose }) => {
 
   const finishSignup = async (skipProfile = false) => {
     try {
-      if (!skipProfile && (profileData.name || profileData.about || profileData.picture)) {
+      if (!skipProfile && isEnabled('profile') && (profileData.name || profileData.about || profileData.picture)) {
         // Build the outgoing metadata, stripping empty strings and validating shape.
         const { shape, ...rest } = profileData;
         const data: Record<string, unknown> = { ...rest };

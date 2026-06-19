@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -57,6 +58,7 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ onValuesChange
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   // Crop dialog state
   const [cropState, setCropState] = useState<{
@@ -203,6 +205,14 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ onValuesChange
   };
 
   const onSubmit = async (values: ExtendedMetadata) => {
+    if (!isEnabled('profile')) {
+      toast({
+        title: 'Profile publishing disabled',
+        description: 'Turn on “Profile metadata” in Settings → Privacy & Publishing to update your profile.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!user) {
       toast({
         title: 'Error',

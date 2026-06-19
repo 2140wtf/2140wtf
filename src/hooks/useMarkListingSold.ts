@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { NIP99_CLASSIFIED_KIND, type Nip99Listing } from '@/lib/nip99';
 
 /**
@@ -16,6 +17,7 @@ export function useMarkListingSold() {
   const { mutateAsync: createEvent } = useNostrPublish();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isEnabled } = usePublishPreferences();
 
   return useMutation({
     mutationFn: async (listing: Nip99Listing) => {
@@ -24,6 +26,9 @@ export function useMarkListingSold() {
       }
       if (listing.pubkey !== user.pubkey) {
         throw new Error('Only the seller can mark their own listing as sold.');
+      }
+      if (!isEnabled('marketplace')) {
+        throw new Error('Marketplace publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       }
 
       const tags = listing.event.tags.map((tag) =>
