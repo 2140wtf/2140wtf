@@ -291,7 +291,7 @@ export function useShakeReaction({
           toasted.current = true;
           toast({
             title: 'Careful\u2026',
-            description: 'Your 2140.wtf pet is feeling sick!',
+            description: 'Your 2140 PET is feeling sick!',
           });
         }
       }
