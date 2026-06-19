@@ -37,10 +37,13 @@
   "sidebarOrder": [
     "feed",
     "events",
-    "art",
+    "prediction-markets",
     "articles",
     "photos",
     "videos",
+    "market",
+    "pets",
+    "messages",
     "settings",
     "wallet",
     "help"
