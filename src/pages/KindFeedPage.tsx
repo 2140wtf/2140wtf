@@ -39,9 +39,11 @@ interface KindFeedPageProps {
   showFAB?: boolean;
   /** Render the feed as a two-column grid (useful for visual feeds like Art). */
   grid?: boolean;
+  /** Optional children rendered in place of the default feed (e.g. a custom view). */
+  children?: React.ReactNode;
 }
 
-export function KindFeedPage({ kind, title, icon, emptyMessage, kindDef, backTo = '/', alwaysShowBack, fabHref, tagFilters, extra, headerActions, searchQuery, showLoadMoreButton, onFabClick, showFAB = true, feedId, grid }: KindFeedPageProps) {
+export function KindFeedPage({ kind, title, icon, emptyMessage, kindDef, backTo = '/', alwaysShowBack, fabHref, tagFilters, extra, headerActions, searchQuery, showLoadMoreButton, onFabClick, showFAB = true, feedId, grid, children }: KindFeedPageProps) {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const primaryKind = Array.isArray(kind) ? kind[0] : kind;
@@ -63,26 +65,35 @@ export function KindFeedPage({ kind, title, icon, emptyMessage, kindDef, backTo 
 
   const kinds = Array.isArray(kind) ? kind : [kind];
 
+  const pageHeader = (
+    <PageHeader title={title} icon={icon} backTo={backTo} alwaysShowBack={alwaysShowBack}>
+      <div className="flex items-center gap-2">
+        {headerActions}
+        {resolvedDef && <KindInfoButton kindDef={resolvedDef} icon={icon} open={infoOpen} onOpenChange={setInfoOpen} />}
+      </div>
+    </PageHeader>
+  );
+
   return (
     <>
-      <Feed
-        kinds={kinds}
-        tagFilters={tagFilters}
-        hideCompose
-        grid={grid}
-        searchQuery={searchQuery}
-        showLoadMoreButton={showLoadMoreButton}
-        feedId={feedId ?? title.toLowerCase()}
-        emptyMessage={emptyMessage ?? `No ${title.toLowerCase()} yet. Check back soon!`}
-        header={
-          <PageHeader title={title} icon={icon} backTo={backTo} alwaysShowBack={alwaysShowBack}>
-            <div className="flex items-center gap-2">
-              {headerActions}
-              {resolvedDef && <KindInfoButton kindDef={resolvedDef} icon={icon} open={infoOpen} onOpenChange={setInfoOpen} />}
-            </div>
-          </PageHeader>
-        }
-      />
+      {children ? (
+        <>
+          {pageHeader}
+          {children}
+        </>
+      ) : (
+        <Feed
+          kinds={kinds}
+          tagFilters={tagFilters}
+          hideCompose
+          grid={grid}
+          searchQuery={searchQuery}
+          showLoadMoreButton={showLoadMoreButton}
+          feedId={feedId ?? title.toLowerCase()}
+          emptyMessage={emptyMessage ?? `No ${title.toLowerCase()} yet. Check back soon!`}
+          header={pageHeader}
+        />
+      )}
       {extra}
     </>
   );
