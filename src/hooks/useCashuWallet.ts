@@ -44,10 +44,12 @@ import {
   isProcessedTokenHash,
   addProcessedTokenHash,
   loadProcessedTokenHashes,
+  saveProcessedTokenHashes,
   type Transaction,
   type StoredMint,
 } from '@/lib/cashu/storage';
 import { devLog } from '@/lib/cashu/devLog';
+import { deriveNutzapKey } from '@/lib/cashu/cashu';
 import { createMintFetch, runWithAbortSignal } from '@/lib/cashu/cashuFetch';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
@@ -251,6 +253,22 @@ const writeMintedQuote = async (quoteId: string, key: CryptoKey, maxAttempts = 2
   throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
 };
 
+const saveMintedQuotes = async (quoteIds: string[], key: CryptoKey, maxAttempts = 2) => {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const existing = await loadMintedQuotes(key);
+      const merged = [...new Set([...existing, ...quoteIds])];
+      const encrypted = await encryptData(JSON.stringify(merged), key);
+      localStorage.setItem(mintedQuotesKey, encrypted);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Failed to persist minted quotes after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+};
+
 /* ── Pending receive recovery ────────────────────────────────
    Cashu.receive is not atomic: the mint can issue proofs but the response
    may time out before we persist them. We write the original token to an
@@ -390,6 +408,7 @@ export function useCashuWallet(
   const payInvoiceMutexRef = useRef<Promise<void> | null>(null);
   const mintFromQuoteMutexRef = useRef<Promise<void> | null>(null);
   const processedTokenHashesRef = useRef<Set<string>>(new Set());
+  const nutzapKeyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const reconcileProofRecoveryRef = useRef<() => Promise<void>>(async () => {});
   const mintUrlRef = useRef(mintUrl);
   const customMintsRef = useRef(customMints);
@@ -634,8 +653,22 @@ export function useCashuWallet(
           txs = await loadTransactions(currentEncKey, legacyEncKeyRef.current ?? undefined);
         });
       });
+      // Read auxiliary state outside the proof/tx locks; it has its own storage keys.
+      let mintedQuoteIds: string[] = [];
+      let processedTokenHashes: { hash: string; expiresAt: number }[] = [];
+      try {
+        mintedQuoteIds = await loadMintedQuotes(currentEncKey, legacyEncKeyRef.current ?? undefined);
+      } catch (e) {
+        devLog.warn('Failed to read minted quotes for backup:', e);
+      }
+      try {
+        processedTokenHashes = await loadProcessedTokenHashes(currentEncKey, legacyEncKeyRef.current ?? undefined);
+      } catch (e) {
+        devLog.warn('Failed to read processed token hashes for backup:', e);
+      }
+
       const payload: CashuBackupPayload = {
-        version: 1,
+        version: 2,
         timestamp: Date.now(),
         epoch: 0,
         mints: currentAllMints.map(m => m.url),
@@ -643,6 +676,9 @@ export function useCashuWallet(
         transactions: txs,
         selectedMintUrl: currentMintUrl,
         customMints: currentCustomMints.map(m => ({ name: m.name, url: m.url })),
+        nutzapPubkey: nutzapKeyPairRef.current?.pubkey,
+        mintedQuoteIds,
+        processedTokenHashes,
       };
       const result = await backupCashuStateRef.current(payload);
       if (mountedRef.current) {
@@ -789,6 +825,12 @@ export function useCashuWallet(
         if (cancelled) return;
         bip39SeedRef.current = seed;
         encKeyRef.current = key;
+        try {
+          nutzapKeyPairRef.current = deriveNutzapKey(trimmedSeed);
+        } catch (e) {
+          devLog.warn('Failed to derive nutzap key:', e);
+          nutzapKeyPairRef.current = null;
+        }
         // Hydrate the in-memory duplicate-token guard from encrypted storage so
         // a token received before a restart cannot be double-credited.
         try {
@@ -923,6 +965,34 @@ export function useCashuWallet(
                     devLog.warn('Restored selected mint URL is not allowed, skipping:', normalizedSelected);
                   }
                 }
+                // Restore auxiliary state used to prevent double-spend/double-receive.
+                if (restored.version === 2 && Array.isArray(restored.mintedQuoteIds) && restored.mintedQuoteIds.length > 0) {
+                  try {
+                    await saveMintedQuotes(restored.mintedQuoteIds, key);
+                  } catch (e) {
+                    devLog.warn('Failed to restore minted quote IDs:', e);
+                  }
+                }
+                if (restored.version === 2 && Array.isArray(restored.processedTokenHashes) && restored.processedTokenHashes.length > 0) {
+                  try {
+                    const existing = await loadProcessedTokenHashes(key, legacyEncKeyRef.current ?? undefined);
+                    const seen = new Set(existing.map((e) => e.hash));
+                    const merged = [
+                      ...existing,
+                      ...restored.processedTokenHashes.filter(
+                        (h): h is { hash: string; expiresAt: number } =>
+                          !!h &&
+                          typeof h === 'object' &&
+                          typeof h.hash === 'string' &&
+                          typeof h.expiresAt === 'number' &&
+                          !seen.has(h.hash),
+                      ),
+                    ];
+                    await saveProcessedTokenHashes(merged, key);
+                  } catch (e) {
+                    devLog.warn('Failed to restore processed token hashes:', e);
+                  }
+                }
                 if (cancelled) return;
                 await calculateAllBalances(undefined, key);
                 devLog.log('Wallet restored from Nostr relays');
@@ -947,6 +1017,10 @@ export function useCashuWallet(
           bip39SeedRef.current.fill(0);
         }
         bip39SeedRef.current = null;
+        if (nutzapKeyPairRef.current) {
+          nutzapKeyPairRef.current.privkey.fill(0);
+        }
+        nutzapKeyPairRef.current = null;
         encKeyRef.current = null;
         setWallet(null);
         setTransactions([]);
