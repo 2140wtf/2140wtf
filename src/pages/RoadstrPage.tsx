@@ -153,26 +153,26 @@ export function RoadstrPage(): React.JSX.Element {
         </Button>
       </div>
 
-      {isLoading && visibleReports.length === 0 && (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          Loading road events…
-        </div>
-      )}
-
-      {error && visibleReports.length === 0 && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-6">
-          <p className="text-sm text-destructive">{error.message}</p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="text-xs text-primary underline"
-          >
-            Reload
-          </button>
-        </div>
-      )}
-
       <div className="relative flex-1 min-h-0">
+        {isLoading && visibleReports.length === 0 && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center text-muted-foreground text-sm bg-background/60 backdrop-blur-sm">
+            Loading road events…
+          </div>
+        )}
+
+        {error && visibleReports.length === 0 && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-center p-6 bg-background/60 backdrop-blur-sm">
+            <p className="text-sm text-destructive">{error.message}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-xs text-primary underline"
+            >
+              Reload
+            </button>
+          </div>
+        )}
+
         <RoadstrMap
           reports={visibleReports}
           selectedReportId={selectedReportId}

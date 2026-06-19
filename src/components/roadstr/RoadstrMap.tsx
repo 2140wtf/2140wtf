@@ -97,13 +97,21 @@ function getRadius(zoom: number): number {
 
 function getTileConfig(theme: 'dark' | 'light') {
   const isDark = theme === 'dark';
+  if (isDark) {
+    // Use CartoDB's native dark tiles to avoid the performance/flicker issues
+    // caused by applying a CSS filter to the live tile layer.
+    return {
+      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      className: 'roadstr-carto-dark',
+      fallbackUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      fallbackClassName: 'roadstr-osm-dark',
+    };
+  }
   return {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    className: isDark ? 'roadstr-osm-dark' : 'roadstr-osm-light',
-    fallbackUrl: isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    fallbackClassName: isDark ? 'roadstr-carto-dark' : 'roadstr-carto-light',
+    className: 'roadstr-osm-light',
+    fallbackUrl: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    fallbackClassName: 'roadstr-carto-light',
   };
 }
 
@@ -369,11 +377,23 @@ export function RoadstrMap({
   return (
     <>
       <style>{`
+        /* OSM tiles are light, so a filter is needed in dark mode. We only use
+           OSM as a fallback in dark mode; the primary dark provider is CartoDB
+           dark matter, which needs no filter and avoids tile-layer flicker. */
         .roadstr-osm-dark {
           filter: brightness(0.7) contrast(1.1) saturate(0.75);
         }
         .roadstr-carto-dark {
-          filter: brightness(1.35) contrast(1.05) saturate(1.1);
+          /* CartoDB dark matter is already dark; no filter keeps the tile layer
+             free of the compositing flicker caused by CSS filters. */
+        }
+        /* Keep tile animations on the GPU to reduce residual flicker. */
+        .leaflet-tile-pane {
+          will-change: transform;
+        }
+        .leaflet-tile {
+          transform: translateZ(0);
+          backface-visibility: hidden;
         }
         .roadstr-popup-dark .leaflet-popup-content-wrapper {
           background: #0f172a !important;
