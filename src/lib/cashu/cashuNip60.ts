@@ -1,0 +1,721 @@
+/**
+ * NIP-60 / NIP-61 Cashu wallet sync utilities.
+ *
+ * Implements the standard Nostr Cashu wallet protocol:
+ *   - kind:17375 wallet config (NIP-44 encrypted wallet key + mint list)
+ *   - kind:7375 token events (NIP-44 encrypted per-mint unspent proofs)
+ *   - kind:7376 history events (NIP-44 encrypted spend/receive audit log)
+ *   - kind:5   deletions for spent token events
+ *   - kind:10019 Nutzap receiver info
+ *   - kind:9321 Nutzap payment
+ *
+ * Local encrypted storage remains the source of truth for spending. Relay events
+ * are used for restore and cross-device convergence.
+ */
+import { finalizeEvent, getPublicKey, nip44, verifyEvent } from 'nostr-tools';
+import { bytesToHex } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import type { NostrEvent } from '@nostrify/nostrify';
+import type { NostrFilter } from '@nostrify/nostrify';
+import type { NostrSigner } from '@nostrify/types';
+
+import { devLog } from '@/lib/cashu/devLog';
+import { normalizeMintUrl, encryptData, decryptData } from '@/lib/cashu/cashu';
+
+export const WALLET_CONFIG_KIND = 17375;
+export const TOKEN_KIND = 7375;
+export const HISTORY_KIND = 7376;
+export const QUOTE_KIND = 7374;
+export const DELETE_KIND = 5;
+export const NUTZAP_INFO_KIND = 10019;
+export const NUTZAP_KIND = 9321;
+
+const UNIT = 'sat';
+const LOCAL_TOKEN_EVENT_KEY_PREFIX = 'ditto_nip60_token_event_';
+const LOCAL_TOKEN_HASH_KEY_PREFIX = 'ditto_nip60_token_hash_';
+const LOCAL_CONFIG_HASH_KEY = 'ditto_nip60_config_hash';
+const LOCAL_NUTZAP_INFO_HASH_KEY = 'ditto_nip60_nutzap_info_hash';
+
+export type Nip60EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig'>;
+
+/** Minimal signer abstraction so this module does not depend on React context. */
+export interface Nip60Signer {
+  pubkey: string;
+  nip44Encrypt: (pubkey: string, plaintext: string) => Promise<string | null>;
+  nip44Decrypt: (pubkey: string, ciphertext: string) => Promise<string | null>;
+  signEvent: (template: Nip60EventTemplate) => Promise<NostrEvent | null>;
+}
+
+/** Sync adapter passed in by the host (e.g. a React hook). */
+export interface Nip60SyncApi {
+  /** The user's Nostr identity signer (used for kind:17375 / kind:10019 / kind:9321). */
+  signer: Nip60Signer;
+  /** Publish a signed event to relays. Returns the event id on success or null. */
+  publish: (event: NostrEvent) => Promise<string | null>;
+  /** Query relays for events matching a filter. */
+  query: (filter: NostrFilter) => Promise<NostrEvent[]>;
+  /** Relays the user reads/writes from (for Nutzap info tags). */
+  relays: string[];
+}
+
+/** Encrypted wallet config payload stored in kind:17375 content. */
+export interface Nip60WalletConfig {
+  /** Hex private key used for P2PK / Nutzaps. Not the Nostr identity key. */
+  privkey: string;
+  /** Normalized mint URLs. */
+  mints: string[];
+}
+
+/** Encrypted payload stored in kind:7375 content. */
+export interface Nip60TokenContent {
+  mint: string;
+  unit: 'sat';
+  proofs: unknown[];
+  /** Ids of destroyed token events from older rollovers. */
+  del?: string[];
+}
+
+/** Encrypted payload stored in kind:7376 content. */
+export interface Nip60HistoryContent {
+  direction: 'in' | 'out';
+  amount: number;
+  unit: 'sat';
+  mint: string;
+  /** Referenced token event ids with marker. */
+  events?: Array<{ id: string; marker: 'created' | 'destroyed' }>;
+}
+
+export interface Nip60RestoreResult {
+  config: Nip60WalletConfig | null;
+  /** Latest unspent proofs grouped by normalized mint URL. */
+  proofsByMint: Record<string, unknown[]>;
+  /** Parsed history events (newest first). */
+  history: Nip60HistoryContent[];
+}
+
+/** Wrap the app's identity signer into a NIP-60 signer. */
+export function createIdentityNip60Signer(user: { pubkey: string; signer: NostrSigner }): Nip60Signer {
+  return {
+    pubkey: user.pubkey,
+    nip44Encrypt: async (pubkey, plaintext) => {
+      try {
+        return await user.signer.nip44!.encrypt(pubkey, plaintext);
+      } catch (e) {
+        devLog.error('Identity NIP-44 encrypt failed:', e);
+        return null;
+      }
+    },
+    nip44Decrypt: async (pubkey, ciphertext) => {
+      try {
+        return await user.signer.nip44!.decrypt(pubkey, ciphertext);
+      } catch (e) {
+        devLog.error('Identity NIP-44 decrypt failed:', e);
+        return null;
+      }
+    },
+    signEvent: async (template) => {
+      try {
+        return await user.signer.signEvent(template);
+      } catch (e) {
+        devLog.error('Identity sign failed:', e);
+        return null;
+      }
+    },
+  };
+}
+
+/** Create a signer from a raw secp256k1 private key (used for the wallet key). */
+export function createNip60Signer(privkey: Uint8Array): Nip60Signer {
+  const pubkey = getPublicKey(privkey);
+  return {
+    pubkey,
+    nip44Encrypt: async (_pubkey, plaintext) => {
+      try {
+        const ck = nip44.v2.utils.getConversationKey(privkey, _pubkey);
+        return nip44.v2.encrypt(plaintext, ck);
+      } catch (e) {
+        devLog.error('NIP-60 encrypt failed:', e);
+        return null;
+      }
+    },
+    nip44Decrypt: async (_pubkey, ciphertext) => {
+      try {
+        const ck = nip44.v2.utils.getConversationKey(privkey, _pubkey);
+        return nip44.v2.decrypt(ciphertext, ck);
+      } catch (e) {
+        devLog.error('NIP-60 decrypt failed:', e);
+        return null;
+      }
+    },
+    signEvent: async (template) => {
+      try {
+        return finalizeEvent(template, privkey) as NostrEvent;
+      } catch (e) {
+        devLog.error('NIP-60 sign failed:', e);
+        return null;
+      }
+    },
+  };
+}
+
+/** Build the encrypted kind:17375 wallet config payload. */
+export function buildWalletConfigPayload(
+  walletPrivkey: Uint8Array,
+  mints: string[],
+): Nip60WalletConfig {
+  const normalized = [...new Set(mints.map((m) => normalizeMintUrl(m)).filter(Boolean))] as string[];
+  return {
+    privkey: bytesToHex(walletPrivkey),
+    mints: normalized,
+  };
+}
+
+export function computeContentHash(payload: unknown): string {
+  return bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(payload))));
+}
+
+export async function loadLastWalletConfigHash(encKey: CryptoKey): Promise<string | null> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(LOCAL_CONFIG_HASH_KEY); } catch { return null; }
+  if (!raw) return null;
+  try {
+    return await decryptData(raw, encKey);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastWalletConfigHash(hash: string, encKey: CryptoKey): Promise<void> {
+  try {
+    const encrypted = await encryptData(hash, encKey);
+    localStorage.setItem(LOCAL_CONFIG_HASH_KEY, encrypted);
+  } catch (e) {
+    devLog.warn('Failed to save NIP-60 wallet config hash:', e);
+  }
+}
+
+export async function loadLastNutzapInfoHash(encKey: CryptoKey): Promise<string | null> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(LOCAL_NUTZAP_INFO_HASH_KEY); } catch { return null; }
+  if (!raw) return null;
+  try {
+    return await decryptData(raw, encKey);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastNutzapInfoHash(hash: string, encKey: CryptoKey): Promise<void> {
+  try {
+    const encrypted = await encryptData(hash, encKey);
+    localStorage.setItem(LOCAL_NUTZAP_INFO_HASH_KEY, encrypted);
+  } catch (e) {
+    devLog.warn('Failed to save NIP-60 Nutzap info hash:', e);
+  }
+}
+
+function makeLocalMintKey(prefix: string, mintUrl: string): string | null {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized) return null;
+  return prefix + bytesToHex(new TextEncoder().encode(normalized)).slice(0, 32);
+}
+
+export async function loadLastTokenEventId(mintUrl: string, encKey: CryptoKey): Promise<string | null> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+  if (!key) return null;
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(key); } catch { return null; }
+  if (!raw) return null;
+  try {
+    return await decryptData(raw, encKey);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastTokenEventId(mintUrl: string, eventId: string, encKey: CryptoKey): Promise<void> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+  if (!key) return;
+  try {
+    const encrypted = await encryptData(eventId, encKey);
+    localStorage.setItem(key, encrypted);
+  } catch (e) {
+    devLog.warn('Failed to save NIP-60 token event id:', e);
+  }
+}
+
+export async function loadLastTokenEventHash(mintUrl: string, encKey: CryptoKey): Promise<string | null> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl);
+  if (!key) return null;
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(key); } catch { return null; }
+  if (!raw) return null;
+  try {
+    return await decryptData(raw, encKey);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLastTokenEventHash(mintUrl: string, hash: string, encKey: CryptoKey): Promise<void> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl);
+  if (!key) return;
+  try {
+    const encrypted = await encryptData(hash, encKey);
+    localStorage.setItem(key, encrypted);
+  } catch (e) {
+    devLog.warn('Failed to save NIP-60 token hash:', e);
+  }
+}
+
+export function clearLastTokenEventId(mintUrl: string): void {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+  if (!key) return;
+  try { localStorage.removeItem(key); } catch { /* ignore */ }
+}
+
+function mergeExtraTags(tags: string[][], extraTags?: string[][]): string[][] {
+  if (!extraTags || extraTags.length === 0) return tags;
+  return [...tags, ...extraTags];
+}
+
+function addPublishedAt(tags: string[][], publishedAt?: number): string[][] {
+  if (!publishedAt) return tags;
+  if (tags.some(([name]) => name === 'published_at')) return tags;
+  return [...tags, ['published_at', String(publishedAt)]];
+}
+
+/** Build the encrypted kind:17375 wallet config event. */
+export async function buildWalletConfigEvent(
+  config: Nip60WalletConfig,
+  signer: Nip60Signer,
+  opts?: { extraTags?: string[][]; publishedAt?: number; createdAt?: number },
+): Promise<NostrEvent | null> {
+  const plaintext = JSON.stringify([
+    ['privkey', config.privkey],
+    ...config.mints.map((m): [string, string] => ['mint', m]),
+  ]);
+  const content = await signer.nip44Encrypt(signer.pubkey, plaintext);
+  if (!content) return null;
+  let tags = opts?.extraTags ? [...opts.extraTags] : [];
+  tags = addPublishedAt(tags, opts?.publishedAt);
+  return signer.signEvent({
+    kind: WALLET_CONFIG_KIND,
+    content,
+    tags,
+    created_at: opts?.createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Parse a decrypted kind:17375 event into a wallet config. */
+export async function parseWalletConfigEvent(
+  event: NostrEvent,
+  signer: Nip60Signer,
+): Promise<Nip60WalletConfig | null> {
+  if (event.kind !== WALLET_CONFIG_KIND) return null;
+  if (!verifyEvent(event)) return null;
+  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
+  if (!plaintext) return null;
+  try {
+    const parsed = JSON.parse(plaintext) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const entries = parsed as string[][];
+    let privkey: string | null = null;
+    const mints: string[] = [];
+    for (const entry of entries) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const [key, value] = entry;
+      if (key === 'privkey' && typeof value === 'string') privkey = value;
+      if (key === 'mint' && typeof value === 'string') {
+        const normalized = normalizeMintUrl(value);
+        if (normalized) mints.push(normalized);
+      }
+    }
+    if (!privkey || privkey.length !== 64 || mints.length === 0) return null;
+    return { privkey, mints };
+  } catch {
+    return null;
+  }
+}
+
+/** Build a kind:7375 token event for a single mint's unspent proofs. */
+export async function buildTokenEvent(
+  mintUrl: string,
+  proofs: unknown[],
+  signer: Nip60Signer,
+  delEventIds?: string[],
+  extraTags?: string[][],
+  createdAt?: number,
+): Promise<NostrEvent | null> {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized) return null;
+  const payload: Nip60TokenContent = {
+    mint: normalized,
+    unit: UNIT,
+    proofs: proofs.slice(),
+  };
+  if (delEventIds && delEventIds.length > 0) {
+    payload.del = [...new Set(delEventIds)];
+  }
+  const content = await signer.nip44Encrypt(signer.pubkey, JSON.stringify(payload));
+  if (!content) return null;
+  return signer.signEvent({
+    kind: TOKEN_KIND,
+    content,
+    tags: extraTags ? [...extraTags] : [],
+    created_at: createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Decrypt and parse a kind:7375 token event. */
+export async function parseTokenEvent(
+  event: NostrEvent,
+  signer: Nip60Signer,
+): Promise<Nip60TokenContent | null> {
+  if (event.kind !== TOKEN_KIND) return null;
+  if (!verifyEvent(event)) return null;
+  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
+  if (!plaintext) return null;
+  try {
+    const parsed = JSON.parse(plaintext) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const p = parsed as Record<string, unknown>;
+    if (typeof p.mint !== 'string' || p.unit !== UNIT || !Array.isArray(p.proofs)) return null;
+    const normalized = normalizeMintUrl(p.mint);
+    if (!normalized) return null;
+    const content: Nip60TokenContent = {
+      mint: normalized,
+      unit: UNIT,
+      proofs: p.proofs,
+    };
+    if (Array.isArray(p.del)) {
+      content.del = p.del.filter((id): id is string => typeof id === 'string');
+    }
+    return content;
+  } catch {
+    return null;
+  }
+}
+
+/** Build a kind:5 deletion request for spent token events. */
+export async function buildDeletionEvent(
+  eventIds: string[],
+  signer: Nip60Signer,
+  reason = 'spent',
+  extraTags?: string[][],
+  createdAt?: number,
+): Promise<NostrEvent | null> {
+  const ids = [...new Set(eventIds)].filter((id) => typeof id === 'string' && id.length === 64);
+  if (ids.length === 0) return null;
+  return signer.signEvent({
+    kind: DELETE_KIND,
+    content: reason,
+    tags: mergeExtraTags(ids.map((id): [string, string] => ['e', id]), extraTags),
+    created_at: createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Build an optional kind:7376 history event. */
+export async function buildHistoryEvent(
+  direction: 'in' | 'out',
+  amount: number,
+  mintUrl: string,
+  signer: Nip60Signer,
+  referencedEvents?: Array<{ id: string; marker: 'created' | 'destroyed' }>,
+  extraTags?: string[][],
+  createdAt?: number,
+): Promise<NostrEvent | null> {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized) return null;
+  const entries: string[][] = [
+    ['direction', direction],
+    ['amount', String(amount)],
+    ['unit', UNIT],
+    ['mint', normalized],
+  ];
+  if (referencedEvents) {
+    for (const ev of referencedEvents) {
+      entries.push(['e', ev.id, '', ev.marker]);
+    }
+  }
+  const content = await signer.nip44Encrypt(signer.pubkey, JSON.stringify(entries));
+  if (!content) return null;
+  return signer.signEvent({
+    kind: HISTORY_KIND,
+    content,
+    tags: extraTags ? [...extraTags] : [],
+    created_at: createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Parse a kind:7376 history event. */
+export async function parseHistoryEvent(
+  event: NostrEvent,
+  signer: Nip60Signer,
+): Promise<Nip60HistoryContent | null> {
+  if (event.kind !== HISTORY_KIND) return null;
+  if (!verifyEvent(event)) return null;
+  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
+  if (!plaintext) return null;
+  try {
+    const parsed = JSON.parse(plaintext) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const entries = parsed as string[][];
+    const get = (key: string) => entries.find(([k]) => k === key)?.[1];
+    const direction = get('direction');
+    const amount = Number(get('amount'));
+    const mint = get('mint');
+    if ((direction !== 'in' && direction !== 'out') || !Number.isFinite(amount) || typeof mint !== 'string') {
+      return null;
+    }
+    const events: Nip60HistoryContent['events'] = [];
+    for (const tag of entries) {
+      if (tag[0] === 'e' && typeof tag[1] === 'string') {
+        const marker = tag[3] === 'created' || tag[3] === 'destroyed' ? tag[3] : 'created';
+        events.push({ id: tag[1], marker });
+      }
+    }
+    return { direction, amount, unit: UNIT, mint, events };
+  } catch {
+    return null;
+  }
+}
+
+/** Build a kind:10019 Nutzap info event. Signed by the user's identity key. */
+export async function buildNutzapInfoEvent(
+  mints: string[],
+  relays: string[],
+  walletPubkey: string,
+  signer: Nip60Signer,
+  opts?: { extraTags?: string[][]; publishedAt?: number; createdAt?: number },
+): Promise<NostrEvent | null> {
+  const tags: string[][] = [];
+  for (const r of [...new Set(relays)]) {
+    const trimmed = r.trim();
+    if (trimmed) tags.push(['relay', trimmed]);
+  }
+  for (const m of [...new Set(mints.map((m) => normalizeMintUrl(m)).filter((m): m is string => !!m))]) {
+    tags.push(['mint', m, UNIT]);
+  }
+  if (!walletPubkey || walletPubkey.length !== 64) return null;
+  tags.push(['pubkey', walletPubkey]);
+  const finalTags = addPublishedAt(mergeExtraTags(tags, opts?.extraTags), opts?.publishedAt);
+  return signer.signEvent({
+    kind: NUTZAP_INFO_KIND,
+    content: '',
+    tags: finalTags,
+    created_at: opts?.createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Parse a kind:10019 Nutzap info event into the recipient's trusted mints/relays/P2PK pubkey. */
+export function parseNutzapInfoEvent(event: NostrEvent): { pubkey: string; mints: string[]; relays: string[] } | null {
+  if (event.kind !== NUTZAP_INFO_KIND) return null;
+  if (!verifyEvent(event)) return null;
+  const relays: string[] = [];
+  const mints: string[] = [];
+  let pubkey: string | null = null;
+  for (const tag of event.tags) {
+    if (!Array.isArray(tag) || tag.length < 2) continue;
+    const [name, value] = tag;
+    if (name === 'relay' && typeof value === 'string' && value.trim()) {
+      relays.push(value.trim());
+    } else if (name === 'mint' && typeof value === 'string') {
+      const normalized = normalizeMintUrl(value);
+      if (normalized) mints.push(normalized);
+    } else if (name === 'pubkey' && typeof value === 'string') {
+      const cleaned = value.trim().toLowerCase();
+      if (/^[0-9a-f]{64}$/.test(cleaned)) pubkey = cleaned;
+    }
+  }
+  if (!pubkey || mints.length === 0) return null;
+  return { pubkey, mints: [...new Set(mints)], relays: [...new Set(relays)] };
+}
+
+/** Build a kind:9321 Nutzap event. Signed by the sender's identity key. */
+export async function buildNutzapEvent(
+  recipientPubkey: string,
+  mintUrl: string,
+  proofs: unknown[],
+  signer: Nip60Signer,
+  opts?: {
+    memo?: string;
+    zappedEvent?: { id: string; kind: number; relay?: string };
+    extraTags?: string[][];
+    createdAt?: number;
+  },
+): Promise<NostrEvent | null> {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized) return null;
+  if (!recipientPubkey || recipientPubkey.length !== 64) return null;
+  if (!Array.isArray(proofs) || proofs.length === 0) return null;
+  const tags: string[][] = [
+    ['p', recipientPubkey],
+    ['u', normalized],
+    ['unit', UNIT],
+  ];
+  if (opts?.zappedEvent) {
+    tags.push(['e', opts.zappedEvent.id, opts.zappedEvent.relay ?? '']);
+    tags.push(['k', String(opts.zappedEvent.kind)]);
+  }
+  for (const p of proofs) {
+    tags.push(['proof', JSON.stringify(p)]);
+  }
+  return signer.signEvent({
+    kind: NUTZAP_KIND,
+    content: opts?.memo ?? '',
+    tags: opts?.extraTags ? [...tags, ...opts.extraTags] : tags,
+    created_at: opts?.createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Parse a kind:9321 Nutzap event into its mint, proofs, and recipient. */
+export function parseNutzapEvent(event: NostrEvent): { mint: string; proofs: unknown[]; recipient: string; sender: string; amount: number } | null {
+  if (event.kind !== NUTZAP_KIND) return null;
+  let mint = '';
+  let recipient = '';
+  const proofs: unknown[] = [];
+  for (const tag of event.tags) {
+    if (!Array.isArray(tag) || tag.length < 2) continue;
+    if (tag[0] === 'u' && typeof tag[1] === 'string') mint = tag[1];
+    if (tag[0] === 'p' && typeof tag[1] === 'string') recipient = tag[1];
+    if (tag[0] === 'proof' && typeof tag[1] === 'string') {
+      try {
+        proofs.push(JSON.parse(tag[1]));
+      } catch { /* ignore malformed proof */ }
+    }
+  }
+  if (!mint || !recipient || proofs.length === 0) return null;
+  const amount: number = (proofs as unknown[]).reduce<number>((sum, p) => {
+    if (p && typeof p === 'object' && 'amount' in p) {
+      const amt = Number((p as Record<string, unknown>).amount);
+      if (Number.isInteger(amt) && amt > 0) return sum + amt;
+    }
+    return sum;
+  }, 0);
+  return { mint, proofs, recipient, sender: event.pubkey, amount };
+}
+
+/** Build a kind:7376 history event that publicly marks a Nutzap as redeemed. Signed by the wallet key. */
+export async function buildNutzapRedemptionHistoryEvent(
+  amount: number,
+  mintUrl: string,
+  nutzapEventId: string,
+  senderPubkey: string,
+  createdTokenEventId: string,
+  walletSigner: Nip60Signer,
+  extraTags?: string[][],
+  createdAt?: number,
+): Promise<NostrEvent | null> {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized) return null;
+  const contentEntries: string[][] = [
+    ['direction', 'in'],
+    ['amount', String(amount)],
+    ['unit', UNIT],
+    ['mint', normalized],
+    ['e', createdTokenEventId, '', 'created'],
+  ];
+  const content = await walletSigner.nip44Encrypt(walletSigner.pubkey, JSON.stringify(contentEntries));
+  if (!content) return null;
+  const tags: string[][] = [
+    ['e', nutzapEventId, '', 'redeemed'],
+    ['p', senderPubkey],
+  ];
+  return walletSigner.signEvent({
+    kind: HISTORY_KIND,
+    content,
+    tags: extraTags ? [...tags, ...extraTags] : tags,
+    created_at: createdAt ?? Math.floor(Date.now() / 1000),
+  });
+}
+
+/** Rebuild the unspent proof set from token events and deletion events.
+ *
+ * Unions proofs from all non-deleted token events for a given mint. In a
+ * multi-device scenario two devices may publish token events from the same
+ * ancestor with different remaining proofs; keeping only the newest event would
+ * silently drop proofs. The caller is responsible for filtering the returned
+ * proofs against the mint and for deduplicating by secret/`C` before merging
+ * into local storage.
+ */
+export function rebuildProofSet(
+  tokenEvents: Array<{ id: string; content: Nip60TokenContent; created_at: number }>,
+  deletionEventIds: Set<string>,
+): Record<string, unknown[]> {
+  const sorted = [...tokenEvents].sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+  const excluded = new Set<string>(deletionEventIds);
+  const result: Record<string, unknown[]> = {};
+
+  for (const ev of sorted) {
+    if (excluded.has(ev.id)) {
+      if (ev.content.del) {
+        for (const id of ev.content.del) excluded.add(id);
+      }
+      continue;
+    }
+    const existing = result[ev.content.mint];
+    if (!existing) {
+      result[ev.content.mint] = ev.content.proofs.slice();
+    } else {
+      existing.push(...ev.content.proofs);
+    }
+    if (ev.content.del) {
+      for (const id of ev.content.del) excluded.add(id);
+    }
+  }
+
+  return result;
+}
+
+/** Query relays for NIP-60 wallet state. */
+export async function restoreNip60Wallet(
+  walletSigner: Nip60Signer,
+  configSigner: Nip60Signer,
+  queryFn: (filter: NostrFilter) => Promise<NostrEvent[]>,
+): Promise<Nip60RestoreResult> {
+  const result: Nip60RestoreResult = { config: null, proofsByMint: {}, history: [] };
+  try {
+    const [configEvents, tokenEvents, deletionEvents, historyEvents] = await Promise.all([
+      queryFn({ kinds: [WALLET_CONFIG_KIND], authors: [configSigner.pubkey], limit: 5 }),
+      queryFn({ kinds: [TOKEN_KIND], authors: [walletSigner.pubkey], limit: 500 }),
+      queryFn({ kinds: [DELETE_KIND], authors: [walletSigner.pubkey], limit: 500 }),
+      queryFn({ kinds: [HISTORY_KIND], authors: [walletSigner.pubkey], limit: 200 }),
+    ]);
+
+    const newestConfig = configEvents
+      .filter((ev) => verifyEvent(ev))
+      .sort((a, b) => b.created_at - a.created_at)[0];
+    if (newestConfig) {
+      result.config = await parseWalletConfigEvent(newestConfig, configSigner);
+    }
+
+    const deletedIds = new Set<string>();
+    for (const ev of deletionEvents) {
+      if (!verifyEvent(ev)) continue;
+      for (const tag of ev.tags) {
+        if (tag[0] === 'e' && typeof tag[1] === 'string') deletedIds.add(tag[1]);
+      }
+    }
+
+    const parsedTokens: Array<{ id: string; content: Nip60TokenContent; created_at: number }> = [];
+    for (const ev of tokenEvents) {
+      const content = await parseTokenEvent(ev, walletSigner);
+      if (content) {
+        parsedTokens.push({ id: ev.id, content, created_at: ev.created_at });
+      }
+    }
+    result.proofsByMint = rebuildProofSet(parsedTokens, deletedIds);
+
+    for (const ev of historyEvents) {
+      const parsed = await parseHistoryEvent(ev, walletSigner);
+      if (parsed) {
+        result.history.push(parsed);
+      }
+    }
+    result.history.sort((a, b) => b.amount - a.amount);
+  } catch (e) {
+    devLog.error('NIP-60 restore failed:', e);
+  }
+  return result;
+}
