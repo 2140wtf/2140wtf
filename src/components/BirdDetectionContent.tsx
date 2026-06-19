@@ -89,7 +89,7 @@ export function BirdDetectionContent({ event, className }: BirdDetectionContentP
   const extract = summary?.extract;
   const thumbnail = sanitizeUrl(summary?.thumbnail?.source);
 
-  // The whole card routes to Ditto's external-content page for this
+  // The whole card routes to 2140.wtf's external-content page for this
   // species' Wikidata URL. Other users' kind 2473 detections and
   // NIP-22 comments both attach to the same `i`-tag identifier, so
   // the discussion thread aggregates naturally across clients.

@@ -5,7 +5,7 @@ import { useClientCounts } from '@/hooks/useClientCounts';
 const HOUR = 3600;
 const MONTH = 30 * 24 * HOUR;
 
-/** Distinct-author count via the Ditto relay's NIP-50 search extension. */
+/** Distinct-author count via the 2140.wtf relay's NIP-50 search extension. */
 const DISTINCT_AUTHOR = 'distinct:author';
 
 /** Snap to the start of the hour so the query key is stable across renders. */

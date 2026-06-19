@@ -25,12 +25,12 @@ interface UseMusicFeedOptions {
 /**
  * Infinite-scroll music feed with sort and scope filtering.
  *
- * - **Sort**: Maps to Ditto NIP-50 search extensions (`sort:hot`, `sort:top`,
+ * - **Sort**: Maps to 2140.wtf NIP-50 search extensions (`sort:hot`, `sort:top`,
  *   or chronological for `new`).
  * - **Scope**: `global` queries all authors; `following` restricts to the
  *   current user's kind 3 follow list (minus any muted pubkeys).
  *
- * Hot and Top sorts query the Ditto relay (NIP-50 required).
+ * Hot and Top sorts query the 2140.wtf relay (NIP-50 required).
  * New sort queries the default relay pool (standard chronological).
  *
  * Pagination uses `until`-based cursor on `created_at`.
@@ -86,7 +86,7 @@ export function useMusicFeed({ kind, sort, scope, genre, enabled = true }: UseMu
         filter.search = 'sort:top';
       }
 
-      // Hot/top need the Ditto relay for NIP-50; new uses default pool
+      // Hot/top need the 2140.wtf relay for NIP-50; new uses default pool
       const target = sort === 'new' ? nostr : nostr.group(DITTO_RELAYS);
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
 

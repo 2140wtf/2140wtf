@@ -1,5 +1,5 @@
 /**
- * Ditto Service Worker
+ * 2140.wtf Service Worker
  *
  * Handles incoming Web Push notifications from the nostr-push server and
  * opens/focuses the app when the user taps a notification.
@@ -26,10 +26,10 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'Ditto', body: event.data.text() };
+    payload = { title: '2140.wtf', body: event.data.text() };
   }
 
-  const title = typeof payload.title === 'string' ? payload.title.slice(0, 100) : 'Ditto';
+  const title = typeof payload.title === 'string' ? payload.title.slice(0, 100) : '2140.wtf';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 300) : '';
   const icon = isSafeNotificationUrl(payload.icon) ? payload.icon : '/icon-192.png';
   const badge = isSafeNotificationUrl(payload.badge) ? payload.badge : '/icon-192.png';
@@ -58,7 +58,7 @@ self.addEventListener('notificationclick', (event) => {
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // Focus an existing Ditto tab if one is open
+        // Focus an existing 2140.wtf tab if one is open
         for (const client of clientList) {
           if (new URL(client.url).origin === self.location.origin) {
             client.navigate('/notifications');

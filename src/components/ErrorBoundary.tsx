@@ -32,7 +32,7 @@ interface ErrorBoundaryProps {
 /**
  * Error boundary that catches render-time exceptions in its subtree.
  *
- * Wraps `react-error-boundary` to preserve Ditto's existing public API
+ * Wraps `react-error-boundary` to preserve 2140.wtf's existing public API
  * (`fallback?: ReactNode`, `reportToSentry?: boolean`) while gaining the
  * render-prop fallback, `resetKeys`, and `onError` features that pure
  * class-based boundaries don't provide.

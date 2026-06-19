@@ -1,36 +1,36 @@
-# Contributing to Ditto
+# Contributing to 2140.wtf
 
-We welcome contributions, but we have high standards. Ditto is a carefully designed product with a specific vision, and every merge request must meet that bar. This guide exists to help you succeed.
+We welcome contributions, but we have high standards. 2140.wtf is a carefully designed product with a specific vision, and every merge request must meet that bar. This guide exists to help you succeed.
 
 **Required reading before you start:**
 
-- [Ditto Philosophy](https://about.ditto.pub/philosophy) -- the product vision. Your change must align with it.
+- [2140.wtf Philosophy](https://about.ditto.pub/philosophy) -- the product vision. Your change must align with it.
 - [Contributing Guide](https://about.ditto.pub/contributing) -- the upstream contribution process.
 - `AGENTS.md` in this repo -- the codebase conventions. Your AI tool should load this file.
 
-## Understanding Ditto
+## Understanding 2140.wtf
 
-Ditto is a carnival, not a platform. Before contributing, you need to understand what that means.
+2140.wtf is a carnival, not a platform. Before contributing, you need to understand what that means.
 
 ### The product decision filter
 
-Every change to Ditto should pass this test:
+Every change to 2140.wtf should pass this test:
 
-> *Does this make Ditto more magnetic, more threatening to the status quo, and more peaceful to inhabit?*
+> *Does this make 2140.wtf more magnetic, more threatening to the status quo, and more peaceful to inhabit?*
 
-- **Magnetic** -- Ditto attracts through experience, not ideology. People don't need to understand Nostr to love it. They need to feel something they haven't felt online since the early web. Features should be odd, intriguing, and captivating -- not generic social media clones.
-- **Threatening to the status quo** -- Ditto threatens mainstream platforms when someone opens it and thinks: *"Why can't my platform do this?"* Theming, games, treasure hunts, interoperable micro-apps -- these are things walled gardens can't replicate.
-- **Peaceful to inhabit** -- Ditto displaces argument with creation, conformity with expression, and consumption with participation. No ads, no engagement-optimized algorithms, no outrage incentives.
+- **Magnetic** -- 2140.wtf attracts through experience, not ideology. People don't need to understand Nostr to love it. They need to feel something they haven't felt online since the early web. Features should be odd, intriguing, and captivating -- not generic social media clones.
+- **Threatening to the status quo** -- 2140.wtf threatens mainstream platforms when someone opens it and thinks: *"Why can't my platform do this?"* Theming, games, treasure hunts, interoperable micro-apps -- these are things walled gardens can't replicate.
+- **Peaceful to inhabit** -- 2140.wtf displaces argument with creation, conformity with expression, and consumption with participation. No ads, no engagement-optimized algorithms, no outrage incentives.
 
 If a change does all three, it belongs. If it only does one, think harder. If it does none, it doesn't belong here.
 
-### What Ditto is NOT
+### What 2140.wtf is NOT
 
 - A Twitter/X clone with decentralization bolted on
 - A place to replicate features that mainstream platforms already do well
 - A showcase for generic UI components or boilerplate social features
 
-### What Ditto IS
+### What 2140.wtf IS
 
 - A convergence point for interoperable Nostr experiences (games, treasure hunts, themes, color moments, live streams, and things nobody has imagined yet)
 - A place where profiles feel like worlds, not business cards
@@ -48,7 +48,7 @@ When the bug was introduced by an identifiable prior commit, add a `Regression-o
 
 ### New features and significant changes
 
-Every feature MR must link to an existing open issue and clearly align with the [Ditto Philosophy](https://about.ditto.pub/philosophy). The philosophy alignment section in the MR template is where you make the case for why your change belongs in Ditto. If you can't articulate that clearly, the change probably doesn't belong.
+Every feature MR must link to an existing open issue and clearly align with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy). The philosophy alignment section in the MR template is where you make the case for why your change belongs in 2140.wtf. If you can't articulate that clearly, the change probably doesn't belong.
 
 If you have an idea for a feature that doesn't have an issue yet:
 
@@ -56,7 +56,7 @@ If you have an idea for a feature that doesn't have an issue yet:
 2. Prove it works and get user feedback.
 3. Open an issue to discuss integration.
 
-**Feature MRs that don't link to an issue or don't align with the Ditto Philosophy will be closed.** Our open issues are our internal roadmap -- some require deep product context. If your implementation doesn't match the product vision, it will be closed regardless of code quality.
+**Feature MRs that don't link to an issue or don't align with the 2140.wtf Philosophy will be closed.** Our open issues are our internal roadmap -- some require deep product context. If your implementation doesn't match the product vision, it will be closed regardless of code quality.
 
 ## Required tools
 
@@ -82,7 +82,7 @@ Read `AGENTS.md` in the repo root. This is the single source of truth for how co
 
 ### 4. Read the philosophy
 
-Read the [Ditto Philosophy](https://about.ditto.pub/philosophy). Ditto is a carnival, not a platform. Your change should feel like it belongs in Ditto -- not like it was transplanted from a generic social media template. Apply the product decision filter above.
+Read the [2140.wtf Philosophy](https://about.ditto.pub/philosophy). 2140.wtf is a carnival, not a platform. Your change should feel like it belongs in 2140.wtf -- not like it was transplanted from a generic social media template. Apply the product decision filter above.
 
 ### 5. Plan before you code
 
@@ -166,7 +166,7 @@ Fill out every field in the MR template. Incomplete MRs will not be reviewed.
 ## What gets your MR closed without review
 
 - No linked issue
-- Feature MRs with no clear alignment with the [Ditto Philosophy](https://about.ditto.pub/philosophy)
+- Feature MRs with no clear alignment with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy)
 - Features that fail the product decision filter (not magnetic, not threatening to the status quo, not peaceful)
 - Incomplete MR template (missing checklist, screenshots, or preview URL)
 - Changes that go beyond what was asked for (scope creep)

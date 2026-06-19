@@ -2,19 +2,19 @@
  * NIP-A3 payment targets (kind 10133).
  *
  * A payment target is a `(type, authority)` pair declared in a `payto` tag of
- * a replaceable kind 10133 event. Ditto uses the phrase "payment targets" in
+ * a replaceable kind 10133 event. 2140.wtf uses the phrase "payment targets" in
  * code and "Accept Donations" in the UI.
  *
- * Ditto restricts the editable set to a curated allowlist of recognized
+ * 2140.wtf restricts the editable set to a curated allowlist of recognized
  * payment types (see {@link PAYMENT_METHODS}). Each method knows how to:
  *   - validate an `authority` (address / handle / lightning address);
  *   - build a clickable native URI (e.g. `monero:<addr>`), preferring the
  *     native scheme over RFC-8905 `payto:` wherever one exists;
  *   - render itself with an icon + label.
  *
- * Bitcoin and Lightning are "native" methods that Ditto already supports with
+ * Bitcoin and Lightning are "native" methods that 2140.wtf already supports with
  * a rich purpose-built UI; their payment-target entries override the values
- * Ditto would otherwise derive (a Taproot address from the pubkey for Bitcoin,
+ * 2140.wtf would otherwise derive (a Taproot address from the pubkey for Bitcoin,
  * the kind-0 `lud16` for Lightning) but reuse the existing flows rather than a
  * generic clickable button.
  *
@@ -29,7 +29,7 @@ import { isSilentPaymentAddress, validateSilentPaymentAddress } from '@/lib/sile
 export const PAYMENT_TARGETS_KIND = 10133;
 
 /**
- * Curated payment-target types Ditto knows how to validate and render. The
+ * Curated payment-target types 2140.wtf knows how to validate and render. The
  * NIP-A3 type string is always lowercase; we normalize on parse.
  */
 export type PaymentTargetType =
@@ -51,9 +51,9 @@ export interface PaymentTarget {
 /**
  * How a payment target is consumed in the zap dialog.
  *
- * - `bitcoin` / `lightning` are **native**: Ditto already has dedicated,
+ * - `bitcoin` / `lightning` are **native**: 2140.wtf already has dedicated,
  *   icon-rich flows for them. A payment target of these types overrides the
- *   value Ditto would derive, but the UI/UX is preserved (no extra clickable
+ *   value 2140.wtf would derive, but the UI/UX is preserved (no extra clickable
  *   button).
  * - `generic` methods (Monero, Ethereum, …) render a QR code, a copyable
  *   address, and a clickable native-URI button.
@@ -205,7 +205,7 @@ export function getPaymentMethod(type: string): PaymentMethodDef | undefined {
  * Per NIP-A3 a `payto` tag is `["payto", "<type>", "<authority>", …]`.
  * Elements beyond index 2 are reserved and ignored for forward compatibility.
  *
- * Ditto:
+ * 2140.wtf:
  *   - normalizes `type` to lowercase;
  *   - drops unrecognized types (curated allowlist);
  *   - drops entries whose authority fails the type's validator;

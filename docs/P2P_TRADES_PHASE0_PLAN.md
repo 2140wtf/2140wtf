@@ -1,14 +1,14 @@
 # Phase 0 Implementation Plan — Remove Letters, Add NIP-17 DMs
 
 > **Status:** Implemented  
-> **Goal:** Delete the kind 8211 letter feature from Ditto and replace it with NIP-17 private direct messages, using 0xchat as the UX reference.  
+> **Goal:** Delete the kind 8211 letter feature from 2140.wtf and replace it with NIP-17 private direct messages, using 0xchat as the UX reference.  
 > **Timeline:** Completed in a single implementation pass.
 
 ---
 
 ## 1. Overview
 
-This plan covers the first phase of the P2P Trades project. Before P2P Trades can use encrypted negotiation, Ditto needs a modern, metadata-private messaging primitive. This phase:
+This plan covers the first phase of the P2P Trades project. Before P2P Trades can use encrypted negotiation, 2140.wtf needs a modern, metadata-private messaging primitive. This phase:
 
 1. **Removes** all kind 8211 encrypted letter code, routes, sidebar items, and notification plumbing.
 2. **Implements** NIP-17 private direct messages (kind 14 → 13 → 1059) using `nostr-tools` built-in helpers.
@@ -181,7 +181,7 @@ In `src/lib/schemas.ts` and `src/contexts/AppContext.ts`:
 In `NIP.md`:
 
 - Remove or rewrite the kind 8211 specification section.
-- Add a note that Ditto has migrated to NIP-17 for private messaging.
+- Add a note that 2140.wtf has migrated to NIP-17 for private messaging.
 
 ### 3.9 Verify nothing references deleted code
 
@@ -204,7 +204,7 @@ Fix all TypeScript and ESLint errors caused by the deletion.
 - `unwrapEvent`
 - `unwrapManyEvents`
 
-We will wrap these in Ditto's signer-aware hooks.
+We will wrap these in 2140.wtf's signer-aware hooks.
 
 ### 4.1 Add NIP-17 crypto utilities
 
@@ -221,7 +221,7 @@ export function parseNip17Message(...)   // validates rumor structure
 
 Responsibilities:
 - Wrap `nostr-tools/nip17` functions.
-- Convert between Ditto's `NostrEvent` types and nostr-tools types.
+- Convert between 2140.wtf's `NostrEvent` types and nostr-tools types.
 - Add validation (recipient pubkey well-formed, content not empty, etc.).
 - Sanitize URLs in any message content that might be rendered as links.
 
@@ -462,7 +462,7 @@ If Phase 0 needs to be reverted:
 
 - [x] All letter files, routes, sidebar items, kind labels, and notification plumbing removed.
 - [x] `npm run test` passes with zero letter references.
-- [x] NIP-17 DMs can be sent and received between two Ditto users.
+- [x] NIP-17 DMs can be sent and received between two 2140.wtf users.
 - [x] `/messages` inbox renders conversation list.
 - [x] `/messages/:npub` thread renders messages and supports reply.
 - [x] Profile "Message" button works.

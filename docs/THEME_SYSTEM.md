@@ -1,6 +1,6 @@
 # Theme System
 
-This document describes the two separate but overlapping theme features in Ditto: the **App Theme** (which controls the local UI) and the **Profile Theme** (which is published to Nostr for others to see). Understanding the distinction is key to working with this codebase.
+This document describes the two separate but overlapping theme features in 2140.wtf: the **App Theme** (which controls the local UI) and the **Profile Theme** (which is published to Nostr for others to see). Understanding the distinction is key to working with this codebase.
 
 ## Overview
 

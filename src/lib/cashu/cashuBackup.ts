@@ -1,5 +1,5 @@
 /**
- * Ditto Private Cashu Sync (DPCS).
+ * 2140.wtf Private Cashu Sync (DPCS).
  *
  * The wallet state is encrypted with the user's own NIP-44 signer
  * (self-encryption) and published as a kind 30078 addressable event with an

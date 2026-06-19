@@ -1,11 +1,11 @@
 ---
 name: theming
-description: Customize Ditto's visual design — install Google Fonts via @fontsource, change the color scheme, configure light/dark themes, and apply consistent component styling patterns with Tailwind and CSS variables.
+description: Customize 2140.wtf's visual design — install Google Fonts via @fontsource, change the color scheme, configure light/dark themes, and apply consistent component styling patterns with Tailwind and CSS variables.
 ---
 
 # Theming, Fonts, and Color Schemes
 
-Use this skill when the user wants to change fonts, colors, light/dark appearance, or general visual styling. Ditto ships with a light/dark theme system built on CSS custom properties and Tailwind v3, plus a `useTheme` hook for runtime switching.
+Use this skill when the user wants to change fonts, colors, light/dark appearance, or general visual styling. 2140.wtf ships with a light/dark theme system built on CSS custom properties and Tailwind v3, plus a `useTheme` hook for runtime switching.
 
 ## Adding Fonts
 
@@ -48,7 +48,7 @@ For expressive hierarchies, pair a sans body font with a display/serif heading f
 
 ### Runtime font loading from Nostr events
 
-Ditto also supports loading fonts referenced from Nostr events (theme events, letter stationery, etc.) through `src/lib/fontLoader.ts`. That path is separate from the build-time `@fontsource` approach — it constructs `@font-face` rules at runtime from sanitized URLs. Never feed event data through the `@fontsource` path; always go through `fontLoader` so the URL and family name are passed through `sanitizeUrl()` and `sanitizeCssString()` (see the `nostr-security` skill).
+2140.wtf also supports loading fonts referenced from Nostr events (theme events, letter stationery, etc.) through `src/lib/fontLoader.ts`. That path is separate from the build-time `@fontsource` approach — it constructs `@font-face` rules at runtime from sanitized URLs. Never feed event data through the `@fontsource` path; always go through `fontLoader` so the URL and family name are passed through `sanitizeUrl()` and `sanitizeCssString()` (see the `nostr-security` skill).
 
 ## Color Schemes
 
@@ -68,7 +68,7 @@ The shadcn/ui components consume these semantic tokens, so changing the variable
 
 ## Light/Dark Theme Switching
 
-Ditto includes:
+2140.wtf includes:
 
 - **`useTheme` hook** (`src/hooks/useTheme.ts`) — read and set the current theme programmatically.
 - **CSS custom properties** in `src/index.css` — one set in `:root`, dark overrides in `.dark`.
@@ -102,7 +102,7 @@ export function ThemeToggle() {
 - **Responsive design:** lean on Tailwind breakpoints (`sm:`, `md:`, `lg:`) rather than JS media queries. Use `useIsMobile` only when layout must change based on JS-measured viewport.
 - **Interactive states:** always define `hover:`, `focus-visible:`, and `disabled:` states for clickable elements. Focus rings should use `ring-ring` / `ring-offset-background` so they pick up theme colors.
 - **Spacing:** an 8px grid (Tailwind's default 4-based scale) keeps visual rhythm consistent. Common paddings: `p-4`, `p-6`; gaps: `gap-2`, `gap-4`.
-- **Depth:** soft shadows (`shadow-sm`, `shadow-md`), subtle gradients, and `rounded-lg` / `rounded-xl` corners match Ditto's aesthetic. Avoid heavy drop shadows.
+- **Depth:** soft shadows (`shadow-sm`, `shadow-md`), subtle gradients, and `rounded-lg` / `rounded-xl` corners match 2140.wtf's aesthetic. Avoid heavy drop shadows.
 
 ### Negative z-index gotcha
 

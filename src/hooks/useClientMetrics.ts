@@ -8,7 +8,7 @@ const DAY = 86400;
 const MONTH = 30 * DAY;
 
 /**
- * The Ditto relay supports `distinct:author` in the NIP-45 COUNT `search`
+ * The 2140.wtf relay supports `distinct:author` in the NIP-45 COUNT `search`
  * field, which counts unique authors rather than total events.
  */
 const DISTINCT_AUTHOR = 'distinct:author';
@@ -59,7 +59,7 @@ function dailyBuckets(days: number): Array<{ since: number; until: number; label
 
 /**
  * Fetch usage metrics for a NIP-89 client via NIP-45 COUNT queries against the
- * Ditto relay. Mirrors the approach used by the ditto-metrics dashboard, but
+ * 2140.wtf relay. Mirrors the approach used by the ditto-metrics dashboard, but
  * exposes only the two metrics surfaced on `/client/:name`:
  *
  * - **MAU** — distinct authors who published with this client in the last 30 days.

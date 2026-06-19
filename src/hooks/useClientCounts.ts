@@ -13,7 +13,7 @@ export interface ClientCount {
  * For each known client, issue a NIP-45 COUNT query with a `#client` filter
  * and return an array of `{ client, count }` sorted by count descending.
  *
- * Counts come from the Ditto relay. Pass `search: 'distinct:author'` in the
+ * Counts come from the 2140.wtf relay. Pass `search: 'distinct:author'` in the
  * base filter to count unique authors rather than total events.
  */
 export function useClientCounts(baseFilter: NostrFilter) {

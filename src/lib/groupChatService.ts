@@ -1,5 +1,5 @@
 /**
- * Ditto Group Chat Service
+ * 2140.wtf Group Chat Service
  *
  * End-to-end encrypted group chat using NIP-104 event kinds with a
  * Group Ratchet fallback (no Rust MLS backend required).
