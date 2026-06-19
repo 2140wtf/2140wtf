@@ -615,8 +615,10 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
   const closedAt = getZapPollConstraint(event.tags, 'closed_at');
   const isExpired = closedAt !== undefined ? closedAt < Math.floor(Date.now() / 1000) : false;
 
-  // Fetch zap receipt events from default relays + poll hints + author relays.
+  // Fetch zap receipts (canonical zap-poll votes) and kind:1018 responses
+  // (some clients vote on zap polls with regular responses).
   const { data: receipts } = usePollVotes(event, 9735);
+  const { data: textResponses } = usePollVotes(event, 1018);
 
   const tally = useMemo(() => {
     const map = new Map<string, number>();
@@ -636,11 +638,17 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
     return sum;
   }, [tally]);
 
-  const userVote = useMemo(() => {
+  const userZapVote = useMemo(() => {
     if (!user || !receipts) return undefined;
     return receipts.find((r) => getZapSenderPubkey(r) === user.pubkey && extractPollOptionFromReceipt(r) !== undefined);
   }, [user, receipts]);
 
+  const userTextVote = useMemo(() => {
+    if (!user || !textResponses) return undefined;
+    return textResponses.find((r) => r.pubkey === user.pubkey);
+  }, [user, textResponses]);
+
+  const userVote = userZapVote ?? userTextVote;
   const hasVoted = !!userVote;
   const showResults = hasVoted || isExpired;
 
@@ -651,7 +659,8 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
   };
 
   const handleZapSuccess = () => {
-    queryClient.invalidateQueries({ queryKey: ['zap-poll-votes', event.id] });
+    queryClient.invalidateQueries({ queryKey: ['poll-votes', event.id, 9735, user?.pubkey ?? ''] });
+    queryClient.invalidateQueries({ queryKey: ['poll-votes', event.id, 1018, user?.pubkey ?? ''] });
   };
 
   return (
