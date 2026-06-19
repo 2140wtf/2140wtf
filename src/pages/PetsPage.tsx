@@ -1958,8 +1958,8 @@ function PetsDashboard({
     <DashboardShell>
       {/* Legacy Migration Notice */}
       {companion.isLegacy && (
-        <div className="mx-4 mt-2 sm:mx-6 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-          <p className="text-sm text-amber-600 dark:text-amber-400">
+        <div className="mx-4 mt-2 sm:mx-6 px-4 py-3 rounded-lg bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
+          <p className="text-sm text-amber-950 dark:text-amber-100">
             This pet uses an older format. It will be automatically upgraded on your next interaction.
           </p>
         </div>
@@ -3366,8 +3366,8 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
     <div className="flex flex-col items-center h-full min-h-[210px] px-3 sm:px-4">
       <div className="w-full max-w-sm rounded-xl border p-3 mt-2 space-y-2">
         <div className="flex items-center gap-2">
-          <div className="size-7 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-            <TrendingUp className="size-4 text-amber-500" />
+          <div className="size-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0 dark:bg-amber-900/40">
+            <TrendingUp className="size-4 text-amber-800 dark:text-amber-200" />
           </div>
           <p className="text-sm font-semibold">
             {profile?.walletMode === 'demo'
@@ -3375,7 +3375,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
               : 'Bitcoin (cashu/real sats)'}
           </p>
           {profile && (
-            <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">
               {getBaoTierLabel(profile.baoTier)}
             </span>
           )}
