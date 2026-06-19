@@ -4,6 +4,7 @@ import { useSeoMeta } from '@unhead/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { Button } from '@/components/ui/button';
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -13,6 +14,7 @@ import {
   BattleResultOverlay,
   useBattleGame,
   useBattlePayout,
+  emitBattleInteractionEvent,
 } from '@/pets/battle';
 import {
   DEFAULT_PRIZE_AMOUNT,
@@ -47,6 +49,7 @@ export default function PetsBattlePage() {
 
   const { state, inputRef, startMatch, resetMatch, onFinishRef } = useBattleGame(matchOptions);
   const payout = useBattlePayout(updateProfileEvent);
+  const { mutateAsync: publishEvent } = useNostrPublish();
 
   useEffect(() => {
     onFinishRef.current = async (winner) => {
@@ -61,8 +64,32 @@ export default function PetsBattlePage() {
       } finally {
         setPendingPayout(false);
       }
+
+      const { pet1, pet2 } = selectedPetsRef.current ?? {};
+      if (pet1 && pet2 && user) {
+        emitBattleInteractionEvent(publishEvent, {
+          ownerPubkey: user.pubkey,
+          fighterDTags: [pet1.d, pet2.d],
+          winnerDTag:
+            winner === 0 ? pet1.d : winner === 1 ? pet2.d : 'draw',
+          mode: matchMode,
+          prizeAmount: matchOptions.prizeAmount,
+          durationSeconds: matchOptions.roundDurationSeconds,
+          p1Health: Math.max(0, state.fighters[0].health),
+          p2Health: Math.max(0, state.fighters[1].health),
+        });
+      }
     };
-  }, [onFinishRef, payout, matchOptions.prizeAmount, matchMode]);
+  }, [
+    onFinishRef,
+    payout,
+    publishEvent,
+    matchOptions.prizeAmount,
+    matchOptions.roundDurationSeconds,
+    matchMode,
+    state.fighters,
+    user,
+  ]);
 
   const handleStart = (
     pet1: PetsCompanion,
