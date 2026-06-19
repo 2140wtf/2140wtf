@@ -111,6 +111,9 @@ export function RoadstrMap({
   const onSelectReportRef = useRef(onSelectReport);
   const onMapClickRef = useRef(onMapClick);
   const onBoundsChangeRef = useRef(onBoundsChange);
+  const reportsRef = useRef<RoadstrReport[]>(reports);
+
+  useEffect(() => { reportsRef.current = reports; }, [reports]);
 
   useEffect(() => { onSelectReportRef.current = onSelectReport; }, [onSelectReport]);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
@@ -182,6 +185,15 @@ export function RoadstrMap({
       map.on('click', clickHandler as L.LeafletEventHandlerFn);
     }
 
+    const updateRadii = () => {
+      const z = map.getZoom();
+      const r = getRadius(z);
+      markersRef.current.forEach((marker, key) => {
+        marker.setStyle({ radius: key === '__user__' ? r + 2 : r });
+      });
+    };
+    map.on('zoomend', updateRadii);
+
     mapRef.current = map;
 
     return () => {
@@ -191,6 +203,7 @@ export function RoadstrMap({
       if (resizeTimer2) clearTimeout(resizeTimer2);
       resizeObs.disconnect();
       if (reportBoundsHandler) map.off('moveend zoomend', reportBoundsHandler);
+      map.off('zoomend', updateRadii);
       if (onMapClickRef.current) map.off('click', clickHandler);
       tileLayer.off('tileerror', tileErrorHandler);
       markers.clear();
@@ -329,6 +342,16 @@ export function RoadstrMap({
     const marker = markersRef.current.get(report.id);
     marker?.openPopup();
   }, [selectedReportId, reports]);
+
+  const prevUserLocationRef = useRef<{ lat: number; lon: number } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userLocation) return;
+    const prev = prevUserLocationRef.current;
+    if (prev && prev.lat === userLocation.lat && prev.lon === userLocation.lon) return;
+    prevUserLocationRef.current = userLocation;
+    map.setView([userLocation.lat, userLocation.lon], 15, { animate: true, duration: 0.4 });
+  }, [userLocation]);
 
   return (
     <>
