@@ -1,8 +1,9 @@
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { buildNip17GiftWraps, type Rumor } from '@/lib/nip17';
 import { extractReadRelays } from '@/lib/inboxRelays';
 import { extractDmRelays } from '@/hooks/useDmRelays';
@@ -59,7 +60,13 @@ async function fetchDmRelays(
 export function useNip17SendMessage() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const [isPending, setIsPending] = useState(false);
+
+  const defaultRelays = useMemo(
+    () => config.relayMetadata?.relays?.map((r) => r.url).filter((url): url is string => typeof url === 'string' && /^wss?:\/\//.test(url)) ?? [],
+    [config.relayMetadata],
+  );
 
   const sendMessage = async (
     options: SendNip17MessageOptions,
@@ -99,15 +106,20 @@ export function useNip17SendMessage() {
           const pTag = wrap.tags.find(([name]) => name === 'p')?.[1];
           if (!pTag) return;
 
-          const relays = relaysByRecipient.get(pTag) ?? [];
+          let relays = relaysByRecipient.get(pTag) ?? [];
           if (relays.length === 0) {
             if (pTag === recipientPubkey) {
               throw new Error('Recipient has no DM relays configured');
             }
-            return;
+            // Self-copy: fall back to default app relays so sent messages remain visible.
+            relays = defaultRelays;
           }
 
-          await nostr.group(relays).event(wrap, { signal: AbortSignal.timeout(5000) });
+          if (relays.length === 0) {
+            await nostr.event(wrap, { signal: AbortSignal.timeout(5000) });
+          } else {
+            await nostr.group(relays).event(wrap, { signal: AbortSignal.timeout(5000) });
+          }
         }),
       );
 
