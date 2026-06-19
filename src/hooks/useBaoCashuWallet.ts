@@ -1,11 +1,15 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { NostrSigner } from '@nostrify/types';
+import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBaoCashuSeed } from '@/hooks/useBaoCashuSeed';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
 import { deriveBaoWalletKey } from '@/lib/cashu/cashu';
+import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
+import { devLog } from '@/lib/cashu/devLog';
 import { syncCashuState, restoreCashuState as fetchCashuBackup } from '@/lib/cashu/cashuBackup';
 import type { CashuBackupPayload } from '@/lib/cashu/cashuBackup';
 
@@ -30,8 +34,9 @@ export function useBaoCashuWallet(
   relayUrls: string[],
 ) {
   const { config } = useAppContext();
+  const currentUser = useCurrentUser().user;
   const nip60Sync = useNip60Sync();
-  const { seedPhrase: baoSeedPhrase } = useBaoCashuSeed(userSeedPhrase);
+  const { seedPhrase: baoSeedPhrase, isNew: isNewBaoSeed } = useBaoCashuSeed(userSeedPhrase);
 
   const defaultMints = useMemo(() => {
     const url = config.baoSignetMintUrl?.trim();
@@ -53,7 +58,7 @@ export function useBaoCashuWallet(
     [user, relayUrls],
   );
 
-  return useCashuWallet(baoSeedPhrase, {
+  const wallet = useCashuWallet(baoSeedPhrase, {
     backupCashuState,
     restoreCashuState,
     nip60Sync,
@@ -62,4 +67,32 @@ export function useBaoCashuWallet(
     walletLabel: 'BAO Demo',
     publishWalletConfig: false,
   });
+
+  // Auto-claim the one-time BAO demo faucet grant for new users.
+  const walletRef = useRef(wallet);
+  useEffect(() => { walletRef.current = wallet; }, [wallet]);
+  useEffect(() => {
+    const pubkey = currentUser?.pubkey;
+    const faucetUrl = config.baoSignetFaucetUrl?.trim();
+    if (!isNewBaoSeed || !pubkey || !faucetUrl || !baoSeedPhrase) return;
+    const guardKey = `bao_faucet_claimed_${pubkey}`;
+    try {
+      if (localStorage.getItem(guardKey)) return;
+      localStorage.setItem(guardKey, 'true');
+    } catch {
+      return;
+    }
+    const npub = nip19.npubEncode(pubkey);
+    claimBaoSignetFaucet(faucetUrl, { npub, amount: 200 })
+      .then((res) => {
+        if (res?.token) {
+          void walletRef.current.receiveToken(res.token.trim());
+        }
+      })
+      .catch((e) => {
+        devLog.error('BAO auto-faucet failed:', e);
+      });
+  }, [isNewBaoSeed, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
+
+  return wallet;
 }
