@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import {
   Dialog,
@@ -64,7 +65,12 @@ export function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Join Private Group</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <ShieldCheck className="size-4 text-primary" />
+            </div>
+            Join Private Group
+          </DialogTitle>
           <DialogDescription>
             Paste a Welcome gift-wrap event (kind 1059) you received from a group admin.
           </DialogDescription>

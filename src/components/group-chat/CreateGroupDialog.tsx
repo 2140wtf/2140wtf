@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Users } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,12 @@ export function CreateGroupDialog({ open, onOpenChange, onCreate }: CreateGroupD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Private Group</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-primary/10">
+              <Users className="size-4 text-primary" />
+            </div>
+            Create Private Group
+          </DialogTitle>
           <DialogDescription>
             Create an encrypted group chat. You will be the first admin and can invite others.
           </DialogDescription>
