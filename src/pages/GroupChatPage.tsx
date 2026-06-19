@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { LogIn, Lock, Shield, Users } from 'lucide-react';
+import { LogIn, Lock, Menu, Shield, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  Sheet,
+  SheetContent,
+} from '@/components/ui/sheet';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -48,6 +52,7 @@ export function GroupChatPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [mobileListOpen, setMobileListOpen] = useState(false);
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -131,6 +136,15 @@ export function GroupChatPage() {
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       <PageHeader title="Private Groups" icon={<Shield className="size-5" />}>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="sm:hidden"
+            onClick={() => setMobileListOpen(true)}
+          >
+            <Menu className="size-4 mr-1.5" />
+            Groups
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setJoinOpen(true)}>
             Join group
           </Button>
@@ -203,6 +217,23 @@ export function GroupChatPage() {
           </div>
         </div>
       )}
+
+      <Sheet open={mobileListOpen} onOpenChange={setMobileListOpen}>
+        <SheetContent side="left" className="p-0 w-72">
+          <GroupList
+            groups={groups}
+            selectedGroupId={selectedGroup?.nostrGroupId ?? null}
+            onSelectGroup={(groupId) => {
+              selectGroup(groupId);
+              setMobileListOpen(false);
+            }}
+            onCreateClick={() => {
+              setMobileListOpen(false);
+              setCreateOpen(true);
+            }}
+          />
+        </SheetContent>
+      </Sheet>
 
       <CreateGroupDialog
         open={createOpen}

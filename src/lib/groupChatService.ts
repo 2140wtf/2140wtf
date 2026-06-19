@@ -309,7 +309,7 @@ export class GroupChatService {
       return { success: false, error: 'Group encryption state missing' };
     }
 
-    const appMessage = createApplicationMessage(this.userPubkey, trimmed, groupId);
+    const appMessage = createApplicationMessage(this.userPubkey, this.userPrivkey, trimmed, groupId);
     const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret);
 
     let appTimestampMs: number;
@@ -440,41 +440,60 @@ export class GroupChatService {
       return { success: false, error: `Group has reached the maximum member limit (${MAX_MEMBERS})` };
     }
 
-    const rootSecret = this.getRootSecret(groupId);
-    const exporterSecret = this.getExporterSecret(groupId);
-    if (!rootSecret || !exporterSecret) {
+    const oldRootSecret = this.getRootSecret(groupId);
+    const oldExporterSecret = this.getExporterSecret(groupId);
+    if (!oldRootSecret || !oldExporterSecret) {
       return { success: false, error: 'Missing group encryption state' };
     }
 
     const newEpoch = group.epoch + 1;
-    const welcomePayload = JSON.stringify({
-      groupId,
-      epoch: newEpoch,
-      metadata: createNostrGroupDataExtension({
-        nostrGroupId: groupId,
-        name: group.name,
-        description: group.description,
-        adminPubkeys: group.adminPubkeys,
-        relays: group.relays,
-      }),
-      rootSecret,
-      exporterSecret,
-    });
-
-    const welcomeEvent = createWelcomeEvent(
-      this.userPubkey,
-      welcomePayload,
-      'placeholder',
-      group.relays,
-    );
-    const giftWrap = await wrapWelcomeEvent(welcomeEvent, memberPubkey);
+    const newRootSecret = await rotateRootSecret(oldRootSecret, groupId);
+    const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
 
     group.members.push(memberPubkey);
     group.epoch = newEpoch;
+    group.exporterSecret = newExporterSecret;
+    group.rootSecret = newRootSecret;
     group.lastActivity = Date.now();
+    this.setSecrets(groupId, newExporterSecret, newRootSecret);
+
+    const metadata = createNostrGroupDataExtension({
+      nostrGroupId: groupId,
+      name: group.name,
+      description: group.description,
+      adminPubkeys: group.adminPubkeys,
+      relays: group.relays,
+    });
+
+    const events: NostrEvent[] = [];
+    for (const target of group.members) {
+      if (target === this.userPubkey) continue;
+      try {
+        const welcomePayload = JSON.stringify({
+          groupId,
+          epoch: newEpoch,
+          type: 'member_add',
+          rootSecret: newRootSecret,
+          exporterSecret: newExporterSecret,
+          members: group.members,
+          metadata,
+        });
+        const welcomeEvent = createWelcomeEvent(
+          this.userPubkey,
+          welcomePayload,
+          'placeholder',
+          group.relays,
+        );
+        const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
+        events.push(giftWrap);
+      } catch (err) {
+        console.error(`Failed to wrap add-member Welcome for ${target.slice(0, 8)}...`, err);
+      }
+    }
+
     this.persistGroup(group);
 
-    return { success: true, events: [giftWrap] };
+    return { success: true, events };
   }
 
   async removeMember(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
@@ -540,6 +559,7 @@ export class GroupChatService {
           type: 'key_rotation',
           rootSecret: newRootSecret,
           exporterSecret: newExporterSecret,
+          members: group.members,
           metadata: createNostrGroupDataExtension({
             nostrGroupId: groupId,
             name: group.name,
@@ -620,17 +640,23 @@ export class GroupChatService {
     }
 
     const existing = this.groups.get(groupId);
-    if (existing && existing.members.some((m) => m === this.userPubkey)) {
-      return { success: false, error: 'Already a member of this group' };
-    }
     if (existing && existing.bannedPubkeys.some((b) => b === this.userPubkey)) {
       return { success: false, error: 'You are banned from this group' };
+    }
+    if (existing && existing.epoch >= (typeof wd.epoch === 'number' ? wd.epoch : 0)) {
+      return { success: false, error: 'Welcome event is outdated' };
+    }
+    if (existing && !existing.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
+      return { success: false, error: 'Welcome not from a group admin' };
     }
 
     const metadataJson = typeof wd.metadata === 'string' ? wd.metadata : undefined;
     const metadata = metadataJson ? parseNostrGroupDataExtension(metadataJson) : null;
     if (!metadata) {
       return { success: false, error: 'Invalid group metadata in Welcome' };
+    }
+    if (!metadata.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
+      return { success: false, error: 'Welcome sender is not a group admin' };
     }
 
     const epoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
@@ -649,17 +675,19 @@ export class GroupChatService {
       return { success: false, error: 'Missing group secrets in Welcome' };
     }
 
-    if (existing && existing.epoch >= epoch) {
-      // We already have a newer state; ignore this welcome.
-      return { success: false, error: 'Welcome event is outdated' };
-    }
+    const welcomeMembers = Array.isArray(wd.members)
+      ? wd.members.filter((m): m is string => typeof m === 'string' && isNostrId(m))
+      : undefined;
 
     const stored: StoredGroup = {
       nostrGroupId: groupId,
       name: metadata.name,
       description: metadata.description,
       adminPubkeys: metadata.adminPubkeys,
-      members: [this.userPubkey],
+      members:
+        welcomeMembers && welcomeMembers.length > 0
+          ? welcomeMembers
+          : (existing?.members ?? [this.userPubkey]),
       relays: metadata.relays,
       epoch,
       exporterSecret,
