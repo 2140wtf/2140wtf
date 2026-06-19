@@ -638,6 +638,49 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
     return sum;
   }, [tally]);
 
+  // Combined vote tally from Lightning receipts and kind:1018 responses,
+  // deduplicated by pubkey so one voter counts once.
+  const voteTally = useMemo(() => {
+    const votes = new Map<string, { optionId: string; createdAt: number }>();
+
+    for (const receipt of receipts ?? []) {
+      const optionId = extractPollOptionFromReceipt(receipt);
+      if (optionId === undefined) continue;
+      const pubkey = getZapSenderPubkey(receipt) ?? receipt.pubkey;
+      const existing = votes.get(pubkey);
+      if (!existing || receipt.created_at > existing.createdAt) {
+        votes.set(pubkey, { optionId, createdAt: receipt.created_at });
+      }
+    }
+
+    for (const response of textResponses ?? []) {
+      const optionId = response.tags.find(([n]) => n === 'response')?.[1];
+      if (!optionId) continue;
+      const existing = votes.get(response.pubkey);
+      if (!existing || response.created_at > existing.createdAt) {
+        votes.set(response.pubkey, { optionId, createdAt: response.created_at });
+      }
+    }
+
+    const counts = new Map<string, number>();
+    for (const { optionId } of votes.values()) {
+      counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
+    }
+    return counts;
+  }, [receipts, textResponses]);
+
+  const totalVotes = useMemo(() => {
+    let sum = 0;
+    for (const value of voteTally.values()) sum += value;
+    return sum;
+  }, [voteTally]);
+
+  function getVoteOptionId(vote: NostrEvent | undefined): string | undefined {
+    if (!vote) return undefined;
+    if (vote.kind === 9735) return extractPollOptionFromReceipt(vote);
+    return vote.tags.find(([n]) => n === 'response')?.[1];
+  }
+
   const userZapVote = useMemo(() => {
     if (!user || !receipts) return undefined;
     return receipts.find((r) => getZapSenderPubkey(r) === user.pubkey && extractPollOptionFromReceipt(r) !== undefined);
@@ -712,7 +755,7 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
               const sats = tally.get(opt.id) ?? 0;
               const pct = totalSats > 0 ? Math.round((sats / totalSats) * 100) : 0;
               const isSelected = selectedOption === opt.id;
-              const isMyVote = userVote && extractPollOptionFromReceipt(userVote) === opt.id;
+              const isMyVote = userVote && getVoteOptionId(userVote) === opt.id;
 
               return showResults ? (
                 <div key={opt.id} className="relative overflow-hidden rounded-lg border border-border">
@@ -730,6 +773,7 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
                       <span className={cn('text-sm break-words', isMyVote && 'font-semibold')}>{opt.label}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3 text-xs tabular-nums text-muted-foreground">
+                      <span>{voteTally.get(opt.id) ?? 0} votes</span>
                       <span>{sats.toLocaleString()} sats</span>
                       <span className="font-medium text-foreground">{pct}%</span>
                     </div>
@@ -756,7 +800,8 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
           {!showResults && (
             <div className="flex items-center justify-between mt-3">
               <span className="text-xs text-muted-foreground">
-                {totalSats > 0 ? `${totalSats.toLocaleString()} sats voted` : '0 sats voted'}
+                {totalVotes > 0 ? `${totalVotes.toLocaleString()} ${totalVotes === 1 ? 'vote' : 'votes'}` : '0 votes'}
+                {totalSats > 0 ? ` · ${totalSats.toLocaleString()} sats` : ''}
               </span>
               {user && (
                 <button
