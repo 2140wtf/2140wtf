@@ -21,6 +21,7 @@ import { useGroupChatContext } from '@/hooks/useGroupChatContext';
 import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { toast } from '@/hooks/useToast';
 import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
+import type { GroupChatMessage } from '@/lib/groupChatService';
 
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
@@ -40,12 +41,25 @@ export function MessagesPage() {
     requiresNsec,
     createGroup,
     joinFromWelcome,
+    getMessagesForGroup,
   } = useGroupChatContext();
   const { unreadGroups } = useGroupChatHasUnread();
   const unreadGroupCounts = useMemo(
     () => Object.fromEntries(unreadGroups.map(({ group, unreadCount }) => [group.nostrGroupId, unreadCount])),
     [unreadGroups],
   );
+  const lastMessages = useMemo(() => {
+    const map: Record<string, GroupChatMessage> = {};
+    for (const group of groups) {
+      const msgs = getMessagesForGroup(group.nostrGroupId);
+      const last = msgs.reduce(
+        (max, message) => (message.timestamp > max.timestamp ? message : max),
+        msgs[0],
+      );
+      if (last) map[group.nostrGroupId] = last;
+    }
+    return map;
+  }, [groups, getMessagesForGroup]);
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
 
@@ -175,6 +189,7 @@ export function MessagesPage() {
                   groups={groups}
                   selectedGroupId={null}
                   unreadCounts={unreadGroupCounts}
+                  lastMessages={lastMessages}
                   onSelectGroup={(groupId) => navigate(`/groups?g=${encodeURIComponent(groupId)}`)}
                   className="border-r-0 bg-transparent"
                 />
