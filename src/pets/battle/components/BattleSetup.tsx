@@ -136,7 +136,7 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_AMOUNT} BAO coins
+              Winner prize: {DEFAULT_PRIZE_AMOUNT} ₿AO coins
             </p>
             <p className="text-muted-foreground">
               One prize per day. Real sats mode coming soon.
