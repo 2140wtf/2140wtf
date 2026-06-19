@@ -87,6 +87,7 @@ import {
    previewStatChangesWithSegments,
    useDailyMissions,
    useAwardDailyXp,
+   useDailyLoginBonus,
    usePersistEvolutionProgress,
    usePersistDailyProgress,
    applyXPGain,
@@ -1543,7 +1544,7 @@ function PetsDashboard({
   // Persist daily mission progress (debounced) to kind 11125 so it survives page refresh
   usePersistDailyProgress(updateProfileEvent);
 
-  // Award XP when all daily missions are complete
+  // Award XP/coins when all daily missions are complete
   const { mutate: awardDailyXp } = useAwardDailyXp(updateProfileEvent);
   const dailyXpAwardedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1554,6 +1555,9 @@ function PetsDashboard({
     dailyXpAwardedRef.current = dateKey;
     awardDailyXp({ missions: dailyMissions.raw });
   }, [dailyMissions.allComplete, dailyMissions.raw, awardDailyXp]);
+
+  // Daily login coin bonus (auto-claimed once per session)
+  useDailyLoginBonus(updateProfileEvent);
 
   // ─── Poop Cleanup XP (debounced: batch multiple pickups into one publish) ───
   const pendingPoopXpRef = useRef(0);
@@ -3021,7 +3025,7 @@ function MissionsTabContent({
                   <span className="text-[10px] tabular-nums font-medium text-muted-foreground shrink-0">{mission.progress}/{mission.target}</span>
                 )}
                 {mission.complete && (
-                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.xp} XP</span>
+                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.xp} XP · +{mission.coinReward} coins</span>
                 )}
               </div>
             ))}
@@ -3036,7 +3040,7 @@ function MissionsTabContent({
                   <p className="text-sm font-medium leading-tight">Daily Champion</p>
                   <p className="text-[10px] text-muted-foreground">All missions complete!</p>
                 </div>
-                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusXp} XP</span>
+                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusXp} XP · +{dailyMissions.bonusCoins} coins</span>
               </div>
             )}
 
