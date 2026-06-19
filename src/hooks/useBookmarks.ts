@@ -2,6 +2,8 @@ import { useNostr } from '@nostrify/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
+import { toast } from './useToast';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 /** Hook to manage the user's NIP-51 bookmark list (kind 10003). */
@@ -10,6 +12,8 @@ export function useBookmarks() {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const bookmarksEnabled = isEnabled('bookmarks');
 
   // Query the user's bookmark list (kind 10003 — replaceable event)
   const bookmarkListQuery = useQuery({
@@ -82,6 +86,14 @@ export function useBookmarks() {
       } else {
         // Add the bookmark — append to end per NIP-51 recommendation
         newTags = [...currentTags, ['e', eventId]];
+      }
+
+      if (!bookmarksEnabled) {
+        toast({
+          title: 'Bookmarks publishing disabled',
+          description: 'Turn on “Bookmarks” in Settings → Privacy & Publishing to sync bookmarks.',
+        });
+        return;
       }
 
       await publishEvent({
