@@ -643,6 +643,10 @@ export class GroupChatService {
   }
 
   async promoteAdmin(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
+    return this.withGroupLock(groupId, () => this.promoteAdminLocked(groupId, pubkeyInput));
+  }
+
+  private async promoteAdminLocked(groupId: string, pubkeyInput: string): Promise<GroupOperationResult> {
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
@@ -662,11 +666,61 @@ export class GroupChatService {
       return { success: false, error: 'User is already an admin' };
     }
 
+    const oldRootSecret = this.getRootSecret(groupId);
+    if (!oldRootSecret) {
+      return { success: false, error: 'Missing group root secret' };
+    }
+
+    const newEpoch = group.epoch + 1;
+    const newRootSecret = generateRootSecret();
+    const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
+
     group.adminPubkeys.push(memberPubkey);
+    group.epoch = newEpoch;
+    group.exporterSecret = newExporterSecret;
+    group.rootSecret = newRootSecret;
     group.lastActivity = Date.now();
+    this.setSecrets(groupId, newExporterSecret, newRootSecret);
+
+    const metadata = createNostrGroupDataExtension({
+      nostrGroupId: groupId,
+      name: group.name,
+      description: group.description,
+      adminPubkeys: group.adminPubkeys,
+      relays: group.relays,
+    });
+
+    const events: NostrEvent[] = [];
+    let failedCount = 0;
+    for (const target of group.members) {
+      if (target === this.userPubkey) continue;
+      try {
+        const welcomePayload = JSON.stringify({
+          groupId,
+          epoch: newEpoch,
+          type: 'admin_promotion',
+          rootSecret: newRootSecret,
+          exporterSecret: newExporterSecret,
+          members: group.members,
+          metadata,
+        });
+        const welcomeEvent = createWelcomeEvent(
+          this.userPrivkey,
+          welcomePayload,
+          'placeholder',
+          group.relays,
+        );
+        const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
+        events.push(giftWrap);
+      } catch (err) {
+        failedCount++;
+        console.error(`Failed to wrap promotion Welcome for ${target.slice(0, 8)}...`, err);
+      }
+    }
+
     this.persistGroup(group);
 
-    return { success: true };
+    return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
 
   async joinFromWelcome(giftWrapEvent: NostrEvent): Promise<GroupOperationResult<GroupChatGroup>> {
@@ -695,6 +749,14 @@ export class GroupChatService {
       return { success: false, error: 'Invalid group id in Welcome' };
     }
 
+    return this.withGroupLock(groupId, () => this.joinFromWelcomeLocked(groupId, welcomeEvent, wd));
+  }
+
+  private async joinFromWelcomeLocked(
+    groupId: string,
+    welcomeEvent: NostrEvent,
+    wd: Record<string, unknown>,
+  ): Promise<GroupOperationResult<GroupChatGroup>> {
     const welcomeEpoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
 
     const existing = this.groups.get(groupId);
