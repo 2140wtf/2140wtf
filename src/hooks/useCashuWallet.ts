@@ -6,12 +6,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
+import { verifyEvent, nip19 } from 'nostr-tools';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import type { MintQuoteResponse, MeltQuoteResponse } from '@cashu/cashu-ts';
+import type { NostrEvent } from '@nostrify/nostrify';
 import {
   deriveMasterKey,
   deriveEncryptionKey,
   deriveLegacyEncryptionKey,
+  deriveNip60WalletKey,
   DEFAULT_MINTS,
   decodeCashuToken,
   encryptData,
@@ -48,8 +52,38 @@ import {
   type Transaction,
   type StoredMint,
 } from '@/lib/cashu/storage';
+import { useAppContext } from '@/hooks/useAppContext';
 import { devLog } from '@/lib/cashu/devLog';
 import { deriveNutzapKey } from '@/lib/cashu/cashu';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import {
+  createNip60Signer,
+  buildWalletConfigPayload,
+  buildWalletConfigEvent,
+  buildTokenEvent,
+  buildDeletionEvent,
+  buildHistoryEvent,
+  buildNutzapInfoEvent,
+  buildNutzapEvent,
+  buildNutzapRedemptionHistoryEvent,
+  parseNutzapInfoEvent,
+  parseNutzapEvent,
+  restoreNip60Wallet,
+  computeContentHash,
+  loadLastWalletConfigHash,
+  saveLastWalletConfigHash,
+  loadLastNutzapInfoHash,
+  saveLastNutzapInfoHash,
+  loadLastTokenEventId,
+  saveLastTokenEventId,
+  loadLastTokenEventHash,
+  saveLastTokenEventHash,
+  WALLET_CONFIG_KIND,
+  NUTZAP_INFO_KIND,
+  NUTZAP_KIND,
+  type Nip60SyncApi,
+} from '@/lib/cashu/cashuNip60';
+/* eslint-enable @typescript-eslint/no-unused-vars */
 import { createMintFetch, runWithAbortSignal } from '@/lib/cashu/cashuFetch';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
@@ -70,6 +104,7 @@ export interface CashuWalletState {
   success: string;
   backupStatus: 'idle' | 'syncing' | 'synced' | 'failed';
   lastBackupAt: number | null;
+  nutzaps: NostrEvent[];
 }
 
 export interface CashuWalletActions {
@@ -83,6 +118,8 @@ export interface CashuWalletActions {
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
+  sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<boolean>;
+  receiveNutzap: (event: NostrEvent) => Promise<void>;
   checkMintQuote: (quote: MintQuoteResponse) => Promise<MintQuoteResponse | null>;
   checkMeltQuote: (quote: MeltQuoteResponse) => Promise<MeltQuoteResponse | null>;
   clearError: () => void;
@@ -361,7 +398,9 @@ export function useCashuWallet(
   externalSeed?: string,
   backupCashuState?: (payload: CashuBackupPayload) => Promise<string | null>,
   restoreCashuState?: () => Promise<CashuBackupPayload | null>,
+  nip60Sync?: Nip60SyncApi,
 ): CashuWalletState & CashuWalletActions {
+  const { config } = useAppContext();
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
   const [mintUrl, setMintUrlState] = useState<string>(DEFAULT_MINTS[0]?.url || '');
   const [customMints, setCustomMints] = useState<Array<{ name: string; url: string }>>([]);
@@ -370,6 +409,7 @@ export function useCashuWallet(
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [totalBalance, setTotalBalance] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [nutzaps, setNutzaps] = useState<NostrEvent[]>([]);
   const [backupStatus, setBackupStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
   const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
   const seedPhraseRef = useRef('');
@@ -399,8 +439,13 @@ export function useCashuWallet(
   const walletCacheRef = useRef<Map<string, CashuWallet>>(new Map());
   const backupCashuStateRef = useRef(backupCashuState);
   const restoreCashuStateRef = useRef(restoreCashuState);
+  const nip60SyncRef = useRef(nip60Sync);
   useEffect(() => { backupCashuStateRef.current = backupCashuState; }, [backupCashuState]);
   useEffect(() => { restoreCashuStateRef.current = restoreCashuState; }, [restoreCashuState]);
+  useEffect(() => { nip60SyncRef.current = nip60Sync; }, [nip60Sync]);
+  const nip60WalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
+  const nip60RestoredRef = useRef(false);
+  const processedNutzapIdsRef = useRef<Set<string>>(new Set());
   const lastSeedRef = useRef<string>('');
   const balanceVersionRef = useRef(0);
   const receiveTokenMutexRef = useRef<Promise<void> | null>(null);
@@ -831,6 +876,12 @@ export function useCashuWallet(
           devLog.warn('Failed to derive nutzap key:', e);
           nutzapKeyPairRef.current = null;
         }
+        try {
+          nip60WalletKeyRef.current = deriveNip60WalletKey(trimmedSeed);
+        } catch (e) {
+          devLog.warn('Failed to derive NIP-60 wallet key:', e);
+          nip60WalletKeyRef.current = null;
+        }
         // Hydrate the in-memory duplicate-token guard from encrypted storage so
         // a token received before a restart cannot be double-credited.
         try {
@@ -851,6 +902,28 @@ export function useCashuWallet(
           if (mountedRef.current) setTransactions(migratedTxs);
         } catch (e) {
           devLog.error('Transaction load failed:', e);
+        }
+
+        // NIP-60 restore and initial sync (before DPCS fallback)
+        if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current) {
+          try {
+            const loadedCustomMints = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
+            const priorAllMints = allMintsRef.current;
+            allMintsRef.current = dedupeByKey(
+              [...DEFAULT_MINTS, ...loadedCustomMints],
+              (m) => normalizeMintUrl(m.url)!,
+            );
+            if (!nip60RestoredRef.current) {
+              await restoreFromNip60();
+              nip60RestoredRef.current = true;
+            }
+            await syncNip60WalletConfig();
+            await syncAllNip60Tokens();
+            await publishNip60NutzapInfo();
+            allMintsRef.current = priorAllMints;
+          } catch (e) {
+            devLog.error('NIP-60 init sync failed:', e);
+          }
         }
 
         // Auto-restore from Nostr relays if local wallet is empty
@@ -1035,6 +1108,16 @@ export function useCashuWallet(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSeed]);
 
+  // Re-publish NIP-60 wallet config and Nutzap info when the mint list or sync adapter changes.
+  useEffect(() => {
+    if (!encKeyRef.current || !nip60SyncRef.current || !nip60WalletKeyRef.current || !seedPhraseRef.current) return;
+    (async () => {
+      await syncNip60WalletConfig();
+      await publishNip60NutzapInfo();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMints, nip60Sync]);
+
   // Re-init wallet when mint or seed changes
   useEffect(() => {
     if (mintUrl && bip39SeedRef.current) {
@@ -1181,6 +1264,125 @@ export function useCashuWallet(
     });
   }, [getOrCreateWallet]);
 
+  // ─── NIP-60 / NIP-61 helpers ─────────────────────────────────────────────────
+
+  const getClientTag = useCallback((): string[] => {
+    return ['client', config.clientName ?? config.appName ?? 'Ditto'];
+  }, [config.clientName, config.appName]);
+
+  const getNip60WalletSigner = useCallback(() => {
+    const key = nip60WalletKeyRef.current;
+    if (!key) return null;
+    return createNip60Signer(key.privkey);
+  }, []);
+
+  const syncNip60TokenForMint = useCallback(async (
+    mintUrl: string,
+    direction: 'in' | 'out',
+    amount: number,
+    referencedEvents?: Array<{ id: string; marker: 'created' | 'destroyed' }>,
+  ): Promise<NostrEvent | undefined> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const walletSigner = getNip60WalletSigner();
+    if (!sync || !encKey || !walletSigner) return;
+
+    const normalized = normalizeMintUrl(mintUrl);
+    if (!normalized) return;
+
+    try {
+      const proofs = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+      const lastEventId = await loadLastTokenEventId(normalized, encKey);
+      const delIds = lastEventId ? [lastEventId] : undefined;
+      const payload = { mint: normalized, unit: 'sat' as const, proofs, del: delIds };
+      const hash = computeContentHash(payload);
+      const lastHash = await loadLastTokenEventHash(normalized, encKey);
+      if (hash === lastHash) return;
+
+      const tokenEvent = await buildTokenEvent(normalized, proofs, walletSigner, delIds, [getClientTag()]);
+      if (!tokenEvent) {
+        devLog.warn('Failed to build NIP-60 token event for mint:', normalized);
+        return undefined;
+      }
+      const publishedId = await sync.publish(tokenEvent);
+      if (!publishedId) {
+        devLog.warn('NIP-60 token event publish failed for mint:', normalized);
+        return undefined;
+      }
+
+      if (lastEventId) {
+        const deletion = await buildDeletionEvent([lastEventId], walletSigner, 'spent', [getClientTag()]);
+        if (deletion) await sync.publish(deletion).catch(() => {});
+      }
+
+      const historyRefs: Array<{ id: string; marker: 'created' | 'destroyed' }> = [
+        ...(referencedEvents ?? []),
+        { id: tokenEvent.id, marker: 'created' },
+      ];
+      if (lastEventId) historyRefs.push({ id: lastEventId, marker: 'destroyed' });
+      const history = await buildHistoryEvent(direction, amount, normalized, walletSigner, historyRefs, [getClientTag()]);
+      if (history) await sync.publish(history).catch(() => {});
+
+      await saveLastTokenEventId(normalized, tokenEvent.id, encKey);
+      await saveLastTokenEventHash(normalized, hash, encKey);
+      return tokenEvent;
+    } catch (e) {
+      devLog.error('NIP-60 token sync failed for mint:', normalized, e);
+      return undefined;
+    }
+  }, [getClientTag, getNip60WalletSigner]);
+
+  const syncAllNip60Tokens = useCallback(async (): Promise<void> => {
+    const sync = nip60SyncRef.current;
+    if (!sync || !getNip60WalletSigner()) return;
+    for (const m of allMintsRef.current) {
+      await syncNip60TokenForMint(m.url, 'in', 0);
+    }
+  }, [getNip60WalletSigner, syncNip60TokenForMint]);
+
+  const syncNip60WalletConfig = useCallback(async (): Promise<void> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const key = nip60WalletKeyRef.current;
+    if (!sync || !encKey || !key) return;
+
+    try {
+      const mints = allMintsRef.current.map((m) => m.url);
+      const payload = buildWalletConfigPayload(key.privkey, mints);
+      const hash = computeContentHash(payload);
+      const lastHash = await loadLastWalletConfigHash(encKey);
+      if (hash === lastHash) return;
+
+      const event = await buildWalletConfigEvent(payload, sync.signer, { extraTags: [getClientTag()] });
+      if (!event) return;
+      const id = await sync.publish(event);
+      if (id) await saveLastWalletConfigHash(hash, encKey);
+    } catch (e) {
+      devLog.error('NIP-60 wallet config sync failed:', e);
+    }
+  }, [getClientTag]);
+
+  const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const key = nip60WalletKeyRef.current;
+    if (!sync || !encKey || !key) return;
+
+    try {
+      const mints = allMintsRef.current.map((m) => m.url);
+      const hash = computeContentHash({ pubkey: key.pubkey, mints, relays: sync.relays });
+      const lastHash = await loadLastNutzapInfoHash(encKey);
+      if (hash === lastHash) return;
+
+      const event = await buildNutzapInfoEvent(mints, sync.relays, key.pubkey, sync.signer, { extraTags: [getClientTag()] });
+      if (!event) return;
+      const id = await sync.publish(event);
+      if (id) await saveLastNutzapInfoHash(hash, encKey);
+    } catch (e) {
+      devLog.error('NIP-60 Nutzap info publish failed:', e);
+    }
+  }, [getClientTag]);
+
   const calculateAllBalances = useCallback(async (_seed?: Uint8Array, overrideEncKey?: CryptoKey) => {
     const encKey = encKeyRef.current;
     // Use an explicitly passed key when called before the encKey state has been
@@ -1219,6 +1421,70 @@ export function useCashuWallet(
       setTotalBalance(total);
     }
   }, [allMints]);
+
+  const restoreFromNip60 = useCallback(async (): Promise<boolean> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const walletSigner = getNip60WalletSigner();
+    if (!sync || !encKey || !walletSigner) return false;
+
+    try {
+      const restored = await restoreNip60Wallet(walletSigner, sync.signer, sync.query);
+      if (!restored.config) return false;
+
+      // Only merge remote proofs when local store is empty; local state is authoritative.
+      const hasAnyProofs = await (async () => {
+        for (const m of allMintsRef.current) {
+          const normalized = normalizeMintUrl(m.url)!;
+          const local = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+          if (local.length > 0) return true;
+        }
+        return false;
+      })();
+
+      const seed = bip39SeedRef.current;
+      if (!hasAnyProofs && seed) {
+        await withProofLock(async () => {
+          for (const [mint, remoteProofs] of Object.entries(restored.proofsByMint)) {
+            const normalized = normalizeMintUrl(mint);
+            if (!normalized || remoteProofs.length === 0) continue;
+            try {
+              const unspent = sanitizeProofs(dedupeProofs(await filterUnspentProofs(normalized, remoteProofs, seed)));
+              if (unspent.length === 0) continue;
+              const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+              const merged = dedupeProofs([...existing, ...unspent]);
+              await saveProofsForMint(normalized, merged, encKey);
+            } catch (e) {
+              devLog.warn('Failed to merge remote NIP-60 proofs for mint:', normalized, e);
+            }
+          }
+        });
+        await calculateAllBalances();
+      }
+
+      // Adopt any mints from the remote config that we do not already know.
+      if (restored.config.mints.length > 0) {
+        const known = new Set(allMintsRef.current.map((m) => normalizeMintUrl(m.url)!));
+        const newMints = restored.config.mints.filter((m) => !known.has(m));
+        if (newMints.length > 0) {
+          const valid = newMints.filter((m) => isAllowedMintUrl(m));
+          if (valid.length > 0) {
+            const existing = await loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
+            const merged = dedupeByKey(
+              [...existing, ...valid.map((url) => ({ name: url, url }))],
+              (m) => normalizeMintUrl(m.url)!,
+            );
+            setCustomMints(merged);
+            await saveCustomMints(merged, encKey);
+          }
+        }
+      }
+      return true;
+    } catch (e) {
+      devLog.error('NIP-60 restore failed:', e);
+      return false;
+    }
+  }, [getNip60WalletSigner, calculateAllBalances, filterUnspentProofs]);
 
   const initWallet = useCallback(async (seed: Uint8Array, encKeyOverride?: CryptoKey) => {
     const nonce = ++initNonceRef.current;
@@ -1607,6 +1873,7 @@ export function useCashuWallet(
               }, encKey, legacyEncKeyRef.current ?? undefined);
             });
             await refreshTransactions();
+            await syncNip60TokenForMint(normalized, 'in', receivedAmount);
             return received;
           });
 
@@ -1661,7 +1928,7 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, addCustomMint, calculateAllBalances, refreshTransactions, getOrCreateWallet, filterUnspentProofs]);
+  }, [wallet, mintUrl, triggerBackup, addCustomMint, calculateAllBalances, refreshTransactions, getOrCreateWallet, filterUnspentProofs, syncNip60TokenForMint]);
 
   // Keep a ref to the latest receiveToken so reconciliation effects can call it
   // without creating dependency cycles.
@@ -1803,6 +2070,8 @@ export function useCashuWallet(
         return tokenStr;
       });
 
+      await syncNip60TokenForMint(normalizeMintUrl(mintUrl)!, 'out', amount);
+
       // Return token immediately — proof update and tx recording are complete.
       if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats`);
 
@@ -1831,7 +2100,7 @@ export function useCashuWallet(
         } catch { /* ignore */ }
       })();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
 
   const requestInvoice = useCallback(async (amount: number, description = 'Freedom ID'): Promise<MintQuoteResponse | null> => {
     const encKey = encKeyRef.current;
@@ -1993,6 +2262,8 @@ export function useCashuWallet(
         await calculateAllBalances();
       });
 
+      await syncNip60TokenForMint(normalizeMintUrl(mintUrl)!, 'in', amount);
+
       if (mountedRef.current) setSuccessTimed(`${amount} sats minted successfully!`);
     } catch (err: any) {
       if (mountedRef.current) setError(`Mint failed: ${err.message}`);
@@ -2001,7 +2272,7 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
 
   const payInvoice = useCallback(async (invoice: string): Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }> => {
     const trimmedInvoice = typeof invoice === 'string' ? invoice.trim() : '';
@@ -2205,6 +2476,10 @@ export function useCashuWallet(
         };
       });
 
+      if (state !== 'UNPAID') {
+        await syncNip60TokenForMint(normalizeMintUrl(mintUrl)!, 'out', paidAmount);
+      }
+
       if (state === 'UNPAID') {
         if (mountedRef.current) setError('Payment failed: invoice was not paid');
         return { success: false, amount: 0, quote };
@@ -2233,7 +2508,252 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, filterUnspentProofs]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, filterUnspentProofs, syncNip60TokenForMint]);
+
+  const receiveNutzap = useCallback(async (event: NostrEvent): Promise<void> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const walletSigner = getNip60WalletSigner();
+    if (!sync || !encKey || !walletSigner || !wallet) {
+      devLog.warn('Cannot receive Nutzap: wallet or NIP-60 sync not ready');
+      return;
+    }
+    if (processedNutzapIdsRef.current.has(event.id)) return;
+    processedNutzapIdsRef.current.add(event.id);
+
+    try {
+      if (!verifyEvent(event)) {
+        devLog.warn('Rejected Nutzap with invalid signature:', event.id);
+        return;
+      }
+      const parsed = parseNutzapEvent(event);
+      if (!parsed) {
+        devLog.warn('Failed to parse Nutzap event:', event.id);
+        return;
+      }
+      if (parsed.recipient !== sync.signer.pubkey) {
+        devLog.warn('Nutzap recipient does not match current user:', event.id);
+        return;
+      }
+
+      const normalized = normalizeMintUrl(parsed.mint);
+      if (!normalized) return;
+      const targetWallet = normalized === normalizeMintUrl(mintUrl)
+        ? wallet
+        : await withTimeout(getOrCreateWallet(normalized, bip39SeedRef.current!), 15000, 'Foreign mint load');
+
+      await withProofLock(async () => {
+        const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+        const tokenStr = getEncodedToken({ mint: normalized, proofs: parsed.proofs as unknown[], unit: 'sat' });
+        const received = await withTimeout(
+          targetWallet.receive(tokenStr, {
+            proofsWeHave: existing,
+            privkey: bytesToHex(nip60WalletKeyRef.current!.privkey),
+            requireDleq: true,
+          }),
+          60000,
+          'Receive Nutzap',
+        );
+        let receivedProofs = sanitizeProofs(received ?? []);
+        if (receivedProofs.length === 0) {
+          devLog.warn('Nutzap redemption returned no proofs:', event.id);
+          return;
+        }
+        const activeKeysetIds = new Set(targetWallet.keysets.filter((k) => k.active).map((k) => k.id));
+        const validation = validateReceivedProofs(receivedProofs, {
+          activeKeysetIds,
+          localSecrets: new Set(existing.map((p) => String(p?.secret))),
+          getKeyset: (id) => targetWallet.keys.get(id),
+          requireDleq: true,
+        });
+        if (!validation.valid) {
+          throw new Error(validation.reason);
+        }
+        const unspent = await withTimeout(filterUnspentProofs(normalized, receivedProofs, bip39SeedRef.current!), 15000, 'Check Nutzap proof states');
+        if (unspent.length !== receivedProofs.length) {
+          throw new Error('Nutzap proofs are already spent');
+        }
+        receivedProofs = sanitizeProofs(unspent);
+        const merged = dedupeProofs([...existing, ...receivedProofs]);
+        await saveProofsForMint(normalized, merged, encKey);
+        writeProofStoreTimestamp(normalized);
+        await calculateAllBalances();
+
+        const receivedAmount = receivedProofs.reduce((sum: number, p: any) => sum + (Number.isInteger(p?.amount) ? p.amount : 0), 0);
+        await withTxLock(async () => {
+          await addTransaction({
+            type: 'receive',
+            amount: receivedAmount,
+            memo: 'Nutzap',
+            mintUrl: normalized,
+            status: 'completed',
+          }, encKey, legacyEncKeyRef.current ?? undefined);
+        });
+        await refreshTransactions();
+
+        const tokenEvent = await syncNip60TokenForMint(normalized, 'in', receivedAmount);
+        const redemption = await buildNutzapRedemptionHistoryEvent(
+          receivedAmount,
+          normalized,
+          event.id,
+          event.pubkey,
+          tokenEvent?.id ?? '',
+          walletSigner,
+          [getClientTag()],
+        );
+        if (redemption) await sync.publish(redemption).catch(() => {});
+      });
+
+      setNutzaps((prev) => (prev.some((e) => e.id === event.id) ? prev : [event, ...prev]));
+    } catch (e) {
+      devLog.error('Failed to receive Nutzap:', event.id, e);
+    }
+  }, [wallet, mintUrl, getNip60WalletSigner, getOrCreateWallet, filterUnspentProofs, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
+
+  const sendNutzap = useCallback(async (
+    amount: number,
+    recipientNpubOrNprofile: string,
+    mintUrl: string,
+    opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } },
+  ): Promise<boolean> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const walletSigner = getNip60WalletSigner();
+    if (!sync || !encKey || !walletSigner || !wallet) {
+      setError('Wallet not initialized');
+      return false;
+    }
+    const err = validateAmount(amount);
+    if (err) { setError(err); return false; }
+
+    let recipientIdentityPubkey: string;
+    try {
+      const decoded = nip19.decode(recipientNpubOrNprofile.trim());
+      if (decoded.type === 'npub') {
+        recipientIdentityPubkey = decoded.data;
+      } else if (decoded.type === 'nprofile') {
+        recipientIdentityPubkey = decoded.data.pubkey;
+      } else {
+        throw new Error('Unsupported recipient identifier');
+      }
+    } catch {
+      setError('Invalid recipient npub or nprofile');
+      return false;
+    }
+
+    const normalizedMint = normalizeMintUrl(mintUrl);
+    if (!normalizedMint) {
+      setError('Invalid mint URL');
+      return false;
+    }
+
+    try {
+      // Fetch the recipient's kind:10019 Nutzap info and verify the chosen mint is trusted.
+      const infoEvents = await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
+      const info = infoEvents
+        .filter((ev) => verifyEvent(ev))
+        .sort((a, b) => b.created_at - a.created_at)
+        .map((ev) => parseNutzapInfoEvent(ev))
+        .find((parsed) => parsed);
+      if (!info) {
+        setError('Recipient has not published Nutzap preferences');
+        return false;
+      }
+      if (!info.mints.includes(normalizedMint)) {
+        setError('Recipient does not accept this mint');
+        return false;
+      }
+
+      const targetWallet = normalizedMint === normalizeMintUrl(mintUrl)
+        ? wallet
+        : await withTimeout(getOrCreateWallet(normalizedMint, bip39SeedRef.current!), 15000, 'Foreign mint load');
+
+      await withProofLock(async () => {
+        const proofs = sanitizeProofs(await getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined));
+        const available = proofs.reduce((sum, p) => {
+          const amt = Number(p.amount);
+          return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
+        }, 0);
+        if (available < amount) {
+          throw new Error(`Insufficient balance: ${available} sats available`);
+        }
+
+        const sendResult = await withTimeout(
+          targetWallet.send(amount, proofs, {
+            proofsWeHave: proofs,
+            pubkey: '02' + info.pubkey,
+            includeDleq: true,
+          }),
+          60000,
+          'Send Nutzap',
+        );
+        if (!sendResult || !Array.isArray(sendResult.send) || !Array.isArray(sendResult.keep)) {
+          throw new Error('Mint returned invalid Nutzap send response');
+        }
+        const sendProofs = sanitizeProofs(dedupeProofs(sendResult.send));
+        const keepProofs = sanitizeProofs(dedupeProofs(sendResult.keep));
+        if (sumProofAmounts(sendProofs) !== amount) {
+          throw new Error('Mint returned send proofs with incorrect total amount');
+        }
+        const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
+        for (const p of [...sendProofs, ...keepProofs]) {
+          if (inputSecrets.has(String(p.secret))) {
+            throw new Error('Mint returned unspent input proofs as outputs');
+          }
+        }
+
+        await saveProofsForMint(normalizedMint, keepProofs, encKey);
+        writeProofStoreTimestamp(normalizedMint);
+        await calculateAllBalances();
+
+        await withTxLock(async () => {
+          await addTransaction({
+            type: 'send',
+            amount,
+            memo: opts?.memo || 'Nutzap',
+            mintUrl: normalizedMint,
+            status: 'completed',
+          }, encKey, legacyEncKeyRef.current ?? undefined);
+        });
+        await refreshTransactions();
+
+        const tokenEvent = await syncNip60TokenForMint(normalizedMint, 'out', amount);
+        const nutzap = await buildNutzapEvent(
+          recipientIdentityPubkey,
+          normalizedMint,
+          sendProofs,
+          sync.signer,
+          { memo: opts?.memo, zappedEvent: opts?.zappedEvent, extraTags: [getClientTag()] },
+        );
+        if (!nutzap) {
+          throw new Error('Failed to build Nutzap event');
+        }
+        const published = await sync.publish(nutzap);
+        if (!published) {
+          throw new Error('Failed to publish Nutzap event');
+        }
+        // Reference the token event that holds the change in the Nutzap history.
+        if (tokenEvent?.id) {
+          const history = await buildHistoryEvent(
+            'out',
+            amount,
+            normalizedMint,
+            walletSigner,
+            [{ id: tokenEvent.id, marker: 'created' }],
+            [getClientTag()],
+          );
+          if (history) await sync.publish(history).catch(() => {});
+        }
+      });
+
+      if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats via Nutzap`);
+      return true;
+    } catch (err: any) {
+      devLog.error('Nutzap send failed:', err);
+      if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
+      return false;
+    }
+  }, [wallet, getNip60WalletSigner, getOrCreateWallet, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
 
   const restoreFromBackup = useCallback(async (payload: CashuBackupPayload) => {
     const encKey = encKeyRef.current;
@@ -2416,6 +2936,7 @@ export function useCashuWallet(
     balances,
     totalBalance,
     transactions,
+    nutzaps,
     seedPhrase: seedPhraseRef.current,
     isNewWallet,
     showSeedBackup,
@@ -2434,6 +2955,8 @@ export function useCashuWallet(
     requestInvoice,
     mintFromQuote,
     payInvoice,
+    sendNutzap,
+    receiveNutzap,
     checkMintQuote,
     checkMeltQuote,
     restoreFromBackup,
