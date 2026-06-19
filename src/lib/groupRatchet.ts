@@ -9,8 +9,10 @@
  *   Each group has a shared rootSecret (32 bytes, hex-encoded).
  *   The exporterSecret for epoch N is derived via HKDF-SHA256:
  *     exporterSecret = HKDF(rootSecret, salt=groupId, info="ditto-grp-v1:epoch:N")
- *   On member removal, a new rootSecret is generated via HKDF with random salt:
- *     rootSecret' = HKDF(oldRootSecret, salt=random(32), info="ditto-grp-v1:rotate:groupId")
+ *   On membership change a fresh random rootSecret is generated and distributed
+ *   to remaining members via gift-wrapped Welcome events. A fresh random secret
+ *   is used (instead of deriving from the old one) so a former member who may
+ *   have compromised the old root cannot derive the new one.
  *
  * This is NOT full MLS (RFC 9420) but provides real cryptographic security
  * purely in the browser. It is compatible with the NIP-104 event layer used
@@ -101,32 +103,6 @@ export async function deriveEpochSecret(
  */
 export function generateRootSecret(): string {
   return bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
-}
-
-/**
- * Rotate the root secret after a member is removed.
- * The new secret is unpredictable without the old one.
- *
- * @param oldRootSecret - Previous root secret (64 hex chars)
- * @param groupId       - Group identifier (domain separation)
- * @returns New 64-char hex root secret
- */
-export async function rotateRootSecret(
-  oldRootSecret: string,
-  groupId: string,
-): Promise<string> {
-  assertHex64(oldRootSecret, 'oldRootSecret');
-
-  const salt = crypto.getRandomValues(new Uint8Array(32));
-  const encoder = new TextEncoder();
-  const derived = await hkdf256(
-    hexToBytes(oldRootSecret),
-    salt,
-    encoder.encode(`ditto-grp-v1:rotate:${groupId}`),
-    256,
-  );
-
-  return bytesToHex(derived);
 }
 
 /**
