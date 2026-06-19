@@ -1,8 +1,9 @@
-import { getEventHash } from 'nostr-tools/pure';
+import { getEventHash, verifyEvent } from 'nostr-tools/pure';
 import type { UnsignedEvent } from 'nostr-tools/pure';
 import { createWrap } from 'nostr-tools/nip59';
 import { GiftWrap, PrivateDirectMessage, Seal } from 'nostr-tools/kinds';
 import type { NostrEvent, NostrSigner } from '@nostrify/nostrify';
+import { isNostrId } from './nostrId';
 
 export interface Nip17Message {
   id: string;
@@ -20,6 +21,9 @@ export type Rumor = UnsignedEvent & { id: string };
 
 /** Two-day jitter used by NIP-59 seals and gift wraps. */
 const TWO_DAYS = 2 * 24 * 60 * 60;
+
+const MAX_DM_CONTENT_LENGTH = 16000;
+const MAX_CLOCK_SKEW_SECONDS = 300;
 
 function randomNow(): number {
   return Math.round(Date.now() / 1000 - Math.random() * TWO_DAYS);
@@ -145,6 +149,14 @@ export async function buildNip17GiftWraps(
  * Returns the inner kind 13 seal event, or null if decryption fails.
  * Mirrors Snort's `EventPublisher.unwrapGift`.
  */
+function verifyEventHashAndSig(event: NostrEvent): boolean {
+  try {
+    return getEventHash(event) === event.id && verifyEvent(event);
+  } catch {
+    return false;
+  }
+}
+
 export async function unwrapNip17GiftWrap(
   wrap: NostrEvent,
   signer: NostrSigner,
@@ -154,10 +166,13 @@ export async function unwrapNip17GiftWrap(
   }
 
   if (wrap.kind !== GiftWrap) return null;
+  if (!verifyEventHashAndSig(wrap)) return null;
 
   try {
     const plaintext = await signer.nip44.decrypt(wrap.pubkey, wrap.content);
-    return JSON.parse(plaintext) as NostrEvent;
+    const seal = JSON.parse(plaintext) as NostrEvent;
+    if (!verifyEventHashAndSig(seal)) return null;
+    return seal;
   } catch {
     return null;
   }
@@ -170,6 +185,24 @@ export async function unwrapNip17GiftWrap(
  * Verifies that the seal author matches the rumor author (NIP-17 auth check).
  * Mirrors Snort's `EventPublisher.unsealRumor`.
  */
+function isStringArrayArray(value: unknown): value is string[][] {
+  return (
+    Array.isArray(value) && value.every((item) => Array.isArray(item) && item.every((x) => typeof x === 'string'))
+  );
+}
+
+function hasValidRumorShape(rumor: Rumor): boolean {
+  return (
+    typeof rumor.id === 'string' &&
+    typeof rumor.pubkey === 'string' &&
+    typeof rumor.content === 'string' &&
+    typeof rumor.created_at === 'number' &&
+    Number.isFinite(rumor.created_at) &&
+    typeof rumor.kind === 'number' &&
+    isStringArrayArray(rumor.tags)
+  );
+}
+
 export async function unsealNip17Rumor(
   seal: NostrEvent,
   signer: NostrSigner,
@@ -187,6 +220,8 @@ export async function unsealNip17Rumor(
     // NIP-17: seal author MUST match rumor author, otherwise anyone can
     // impersonate another sender by changing the pubkey in the rumor.
     if (rumor.pubkey !== seal.pubkey) return null;
+    if (!hasValidRumorShape(rumor)) return null;
+    if (getEventHash(rumor) !== rumor.id) return null;
 
     return rumor;
   } catch {
@@ -223,11 +258,18 @@ export function parseNip17Rumor(
   wrapId?: string,
 ): Nip17Message | null {
   if (rumor.kind !== PrivateDirectMessage) return null;
+  if (!hasValidRumorShape(rumor)) return null;
+  if (!isNostrId(rumor.pubkey)) return null;
+  if (getEventHash(rumor) !== rumor.id) return null;
+  if (rumor.content.length > MAX_DM_CONTENT_LENGTH) return null;
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (rumor.created_at > nowSeconds + MAX_CLOCK_SKEW_SECONDS) return null;
 
   const recipients = rumor.tags
     .filter(([name]) => name === 'p')
     .map(([, pubkey]) => pubkey)
-    .filter(Boolean);
+    .filter((pubkey): pubkey is string => typeof pubkey === 'string' && isNostrId(pubkey));
 
   const replyTo = rumor.tags.find(([name]) => name === 'e')?.[1];
   const subject = rumor.tags.find(([name]) => name === 'subject')?.[1];
@@ -263,4 +305,14 @@ export function computeNip17ConversationId(participants: string[]): string {
 export function getNip17Participants(message: Nip17Message, viewerPubkey: string): string[] {
   const all = [message.sender, ...message.recipients].filter((pk) => pk !== viewerPubkey);
   return [...new Set(all)].sort();
+}
+
+/** Extract DM relay URLs from a kind 10050 Direct Message Relays event. */
+export function getNip17DmRelays(event: NostrEvent): string[] {
+  if (event.kind !== 10050) return [];
+  const relays = event.tags
+    .filter(([name, url]) => name === 'relay' && typeof url === 'string')
+    .map(([, url]) => url as string)
+    .filter((url) => /^wss?:\/\//.test(url));
+  return [...new Set(relays)];
 }
