@@ -15,7 +15,7 @@ import {
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 
 export interface BattlePayoutRequest {
-  /** Number of demo BAO coins to award to the winner. */
+  /** Number of demo ₿AO coins to award to the winner. */
   amount: number;
   /** Demo mode awards profile coins; real mode is a future Cashu extension. */
   mode: 'demo' | 'real';
@@ -91,7 +91,7 @@ export function useBattlePayout(
       if (amountAwarded > 0) {
         toast({
           title: 'Battle reward claimed!',
-          description: `You received ${amountAwarded} BAO coins. Balance: ${newCoinTotal}.`,
+          description: `You received ${amountAwarded} ₿AO coins. Balance: ${newCoinTotal}.`,
         });
       }
     },

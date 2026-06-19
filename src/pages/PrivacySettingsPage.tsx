@@ -85,7 +85,7 @@ export function PrivacySettingsPage() {
               2140 PETS
             </CardTitle>
             <CardDescription>
-              Pet state and interactions are already sandboxed to the BAO relay.
+              Pet state and interactions are already sandboxed to the ₿AO relay.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
