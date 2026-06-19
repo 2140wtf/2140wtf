@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import {
   Archive,
   Award,
@@ -6,16 +8,15 @@ import {
   Bird,
   Blocks,
   BookMarked,
+  Box,
   Bookmark,
   BookOpen,
-  Bot,
   CalendarDays,
   Camera,
-  Clapperboard,
   Code,
-  Earth,
   Film,
   HelpCircle,
+  Info,
 
   MessageSquare,
   MessageSquareMore,
@@ -24,28 +25,26 @@ import {
   Palette,
   PartyPopper,
   Podcast,
-  Egg,
   Quote,
   Repeat2,
   Scroll,
   ScrollText,
   Search,
   Settings,
+  ShoppingBag,
   Smile,
   SmilePlus,
-  Wallet,
+  WalletCards,
+  MapPin,
+  Navigation,
   Sparkles,
   Stars,
   TrendingUp,
   User,
+  Users,
   Zap,
 } from "lucide-react";
-import { CardsIcon } from "@/components/icons/CardsIcon";
-import { ChestIcon } from "@/components/icons/ChestIcon";
-import { PlanetIcon } from "@/components/icons/PlanetIcon";
 import { WikipediaIcon } from "@/components/icons/WikipediaIcon";
-import { BlueskyIcon } from "@/components/icons/BlueskyIcon";
-import { MailboxIcon } from "@/components/icons/MailboxIcon";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,7 +97,7 @@ export interface SidebarItemDef {
   id: string;
   /** Display label. */
   label: string;
-  /** Navigation path (e.g. '/feed', '/notifications', '/vines'). */
+  /** Navigation path (e.g. '/feed', '/notifications', '/videos'). */
   path: string;
   /** Icon component. */
   icon: IconComponent;
@@ -112,12 +111,49 @@ export interface SidebarItemDef {
  * Single source of truth for all sidebar items.
  *
  * Every item that can appear in the sidebar — whether it's a system page like
- * "Feed" or a Nostr content type like "Vines" — lives here with a consistent
+ * "Feed" or a Nostr content type like "Videos" — lives here with a consistent
  * shape. The order here is the default display order for fresh installs.
  */
 export const SIDEBAR_ITEMS: SidebarItemDef[] = [
+  // Top navigation
+  { id: "feed", label: "Feed", path: "/feed", icon: Box },
+  {
+    id: "profile",
+    label: "Profile",
+    path: "/profile",
+    icon: User,
+    requiresAuth: true,
+  },
+  {
+    id: "wallet",
+    label: "Wallet",
+    path: "/wallet",
+    icon: WalletCards,
+    requiresAuth: true,
+  },
+  { id: "search", label: "Search", path: "/search", icon: Search },
+  { id: "prediction-markets", label: "Prediction Markets", path: "/prediction-markets", icon: BarChart3 },
+  { id: "market", label: "Store", path: "/market", icon: ShoppingBag },
+  {
+    id: "btcmap",
+    label: "BTC MAP",
+    path: "/btcmap",
+    icon: MapPin,
+  },
+  {
+    id: "roadstr",
+    label: "Roadstr",
+    path: "/roadstr",
+    icon: Navigation,
+  },
   // System pages
-  { id: "feed", label: "Feed", path: "/feed", icon: PlanetIcon },
+  {
+    id: "messages",
+    label: "Messages",
+    path: "/messages",
+    icon: MessageSquare,
+    requiresAuth: true,
+  },
   {
     id: "notifications",
     label: "Notifications",
@@ -125,7 +161,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: Bell,
     requiresAuth: true,
   },
-  { id: "search", label: "Search", path: "/search", icon: Search },
   { id: "trends", label: "Trends", path: "/trends", icon: TrendingUp },
   {
     id: "bookmarks",
@@ -135,44 +170,23 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   {
-    id: "profile",
-    label: "Profile",
-    path: "/profile",
-    icon: User,
-    requiresAuth: true,
-  },
-  {
     id: "lists",
     label: "Lists",
     path: "/lists",
     icon: Scroll,
     requiresAuth: true,
   },
+  {
+    id: "groups",
+    label: "Private Groups",
+    path: "/groups",
+    icon: Users,
+    requiresAuth: true,
+  },
   { id: "settings", label: "Settings", path: "/settings", icon: Settings },
-  {
-    id: "wallet",
-    label: "Wallet",
-    path: "/wallet",
-    icon: Wallet,
-    requiresAuth: true,
-  },
   { id: "changelog", label: "Changelog", path: "/changelog", icon: ScrollText },
-  {
-    id: "letters",
-    label: "Letters",
-    path: "/letters",
-    icon: MailboxIcon,
-    requiresAuth: true,
-  },
-  {
-    id: "ai-chat",
-    label: "AI Chat",
-    path: "/ai-chat",
-    icon: Bot,
-    requiresAuth: true,
-  },
-  { id: 'blobbi', label: 'Blobbi', path: '/blobbi', icon: Egg, requiresAuth: true },
   { id: "help", label: "Help", path: "/help", icon: HelpCircle },
+  { id: "about", label: "About", path: "/about", icon: Info },
   // Content types
   { id: "events", label: "Events", path: "/events", icon: CalendarDays },
   { id: "photos", label: "Photos", path: "/photos", icon: Camera },
@@ -180,24 +194,19 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "articles", label: "Articles", path: "/articles", icon: BookOpen },
   { id: "highlights", label: "Highlights", path: "/highlights", icon: Quote },
   { id: "books", label: "Books", path: "/books", icon: BookMarked },
-  { id: "vines", label: "Divines", path: "/vines", icon: Clapperboard },
   { id: "music", label: "Music", path: "/music", icon: Music },
   { id: "podcasts", label: "Podcasts", path: "/podcasts", icon: Podcast },
 
-  { id: "webxdc", label: "Webxdc", path: "/webxdc", icon: Blocks },
+  { id: "webxdc", label: "Mini apps", path: "/mini-apps", icon: Blocks },
   { id: "themes", label: "Themes", path: "/themes", icon: Sparkles },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
   { id: "packs", label: "Follow Packs", path: "/packs", icon: PartyPopper },
-  { id: "colors", label: "Color Moments", path: "/colors", icon: Palette },
-  { id: "decks", label: "Magic Decks", path: "/decks", icon: CardsIcon },
-  { id: "treasures", label: "Treasures", path: "/treasures", icon: ChestIcon },
   { id: "emojis", label: "Emojis", path: "/emojis", icon: SmilePlus },
   { id: "development", label: "Development", path: "/development", icon: Code },
   { id: "badges", label: "Badges", path: "/badges", icon: Award },
-  { id: "world", label: "World", path: "/world", icon: Earth },
+
   { id: "archive", label: "Archive", path: "/archive", icon: Archive },
   { id: "wikipedia", label: "Wikipedia", path: "/wikipedia", icon: WikipediaIcon },
-  { id: "bluesky", label: "Bluesky", path: "/bluesky", icon: BlueskyIcon },
 ];
 
 /** Set of all known sidebar item IDs for quick lookup. */
