@@ -135,6 +135,8 @@ const hardcodedConfig: AppConfig = {
     "badges",
     "emojis",
     "themes",
+    "polls",
+    "music",
     "settings",
     "help",
     "about",
