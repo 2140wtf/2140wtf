@@ -178,6 +178,7 @@ export function createWelcomeEvent(
   welcomeData: string,
   keyPackageEventId: string,
   groupRelays: string[],
+  epoch: number,
 ): NostrEvent {
   const template: UnsignedEvent = {
     pubkey: getPublicKey(senderPrivkey),
@@ -186,6 +187,7 @@ export function createWelcomeEvent(
     tags: [
       ['e', keyPackageEventId],
       ['relays', ...groupRelays],
+      ['epoch', String(epoch)],
     ],
     content: welcomeData,
   };
@@ -276,11 +278,15 @@ export function createApplicationMessage(
   senderPrivkey: Uint8Array,
   content: string,
   groupId: string,
+  epoch: number,
 ): string {
   const rumor: UnsignedEvent = {
     kind: 9,
     content,
-    tags: [['h', groupId]],
+    tags: [
+      ['h', groupId],
+      ['epoch', String(epoch)],
+    ],
     created_at: Math.floor(Date.now() / 1000),
     pubkey: senderPubkey,
   };
@@ -337,6 +343,7 @@ export async function createGroupEvent(
   nostrGroupId: string,
   mlsMessage: string,
   exporterSecret: string,
+  epoch: number,
 ): Promise<NostrEvent> {
   const ephemeralPrivkey = generateSecretKey();
   const derivedPrivkey = await deriveEncryptionPrivkey(exporterSecret);
@@ -351,7 +358,10 @@ export async function createGroupEvent(
   const template: UnsignedEvent = {
     created_at: Math.floor(Date.now() / 1000),
     kind: KIND_GROUP,
-    tags: [['h', nostrGroupId]],
+    tags: [
+      ['h', nostrGroupId],
+      ['epoch', String(epoch)],
+    ],
     content: encryptedContent,
     pubkey: getPublicKey(ephemeralPrivkey),
   };
