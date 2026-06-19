@@ -152,6 +152,7 @@ const hardcodedConfig: AppConfig = {
   faviconUrl: "",
   linkPreviewUrl: "",
   corsProxy: "",
+  baoSignetMintUrl: (import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL as string | undefined,
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
   sentryEnabled: true,
