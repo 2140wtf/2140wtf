@@ -32,7 +32,7 @@
       "purpose": "maskable"
     },
     {
-      "src": "/logo.jpg",
+      "src": "/logo.png",
       "sizes": "200x200",
       "type": "image/jpeg",
       "purpose": "any"
