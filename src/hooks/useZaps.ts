@@ -3,6 +3,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
+import { usePublishPreferences } from './usePublishPreferences';
 import { useNWC } from '@/hooks/useNWCContext';
 import type { NWCConnection } from '@/hooks/useNWC';
 import { redactSecrets } from '@/lib/redactSecrets';
@@ -42,6 +43,8 @@ export function useZaps(
   const { toast } = useToast();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const { isEnabled } = usePublishPreferences();
+  const zapsEnabled = isEnabled('zaps');
   const queryClient = useQueryClient();
   const author = useAuthor(target?.pubkey);
   const { sendPayment, getActiveConnection } = useNWC();
@@ -64,6 +67,13 @@ export function useZaps(
   }, []);
 
   const zap = async (amount: number, comment: string) => {
+    if (!zapsEnabled) {
+      toast({
+        title: 'Zaps disabled',
+        description: 'Turn on “Zap receipts” in Settings → Privacy & Publishing to send zaps.',
+      });
+      return;
+    }
     if (amount <= 0) {
       return;
     }

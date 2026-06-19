@@ -8,6 +8,7 @@ import { impactLight } from '@/lib/haptics';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useDeleteEvent } from '@/hooks/useDeleteEvent';
@@ -29,6 +30,8 @@ export function RepostMenu({ event, children }: RepostMenuProps) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutate: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const repostsEnabled = isEnabled('reposts');
   const { mutate: deleteEvent } = useDeleteEvent();
   const repostEventId = useRepostStatus(event.id);
   const queryClient = useQueryClient();
@@ -39,6 +42,10 @@ export function RepostMenu({ event, children }: RepostMenuProps) {
   const handleRepost = () => {
     if (!user) {
       toast({ title: 'Please log in to repost', variant: 'destructive' });
+      return;
+    }
+    if (!repostsEnabled) {
+      toast({ title: 'Reposts disabled', description: 'Turn on “Reposts” in Settings → Privacy & Publishing to repost.' });
       return;
     }
     impactLight();
@@ -105,6 +112,10 @@ export function RepostMenu({ event, children }: RepostMenuProps) {
 
   const handleUnrepost = () => {
     if (!user || !repostEventId) return;
+    if (!repostsEnabled) {
+      toast({ title: 'Reposts disabled', description: 'Turn on “Reposts” in Settings → Privacy & Publishing to manage reposts.' });
+      return;
+    }
     impactLight();
 
     // Optimistically update stats cache

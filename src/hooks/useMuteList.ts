@@ -5,6 +5,8 @@ import { nip19 } from 'nostr-tools';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
+import { toast } from './useToast';
 import { useNostrStorage } from './useNostrStorage';
 import { useAppContext } from './useAppContext';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
@@ -155,6 +157,8 @@ export function useMuteList() {
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const mutesEnabled = isEnabled('mutes');
   const { store } = useNostrStorage();
   const cacheKey = getMuteCacheKey(config.appId);
 
@@ -339,6 +343,13 @@ export function useMuteList() {
   // Update entire mute list
   const updateMuteList = async (items: MuteListItem[], prev: NostrEvent | null) => {
     if (!user) throw new Error('User not logged in');
+    if (!mutesEnabled) {
+      toast({
+        title: 'Mute list publishing disabled',
+        description: 'Turn on “Mute list” in Settings → Privacy & Publishing to sync mutes.',
+      });
+      return;
+    }
     if (!user.signer.nip44) throw new Error('NIP-44 encryption not supported');
 
     const tags: string[][] = [];

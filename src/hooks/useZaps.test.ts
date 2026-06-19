@@ -19,6 +19,15 @@ vi.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mocks.toastMock }),
 }));
 
+vi.mock('@/hooks/usePublishPreferences', () => ({
+  usePublishPreferences: () => ({
+    isEnabled: () => true,
+    prefs: {},
+    setEnabled: vi.fn(),
+    isLoading: false,
+  }),
+}));
+
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({
     user: {

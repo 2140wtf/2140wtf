@@ -3,6 +3,8 @@ import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { usePublishPreferences } from './usePublishPreferences';
+import { toast } from './useToast';
 import { useNostrStorage } from './useNostrStorage';
 import { useCacheFirstSeed } from './useCacheFirstSeed';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
@@ -91,6 +93,8 @@ export function useFollowActions(): UseFollowActionsReturn {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { isEnabled } = usePublishPreferences();
+  const followsEnabled = isEnabled('follows');
   const queryClient = useQueryClient();
   const { store } = useNostrStorage();
 
@@ -99,6 +103,13 @@ export function useFollowActions(): UseFollowActionsReturn {
   const mutateFollowList = useCallback(
     async (targetPubkey: string, action: 'follow' | 'unfollow') => {
       if (!user) throw new Error('Not logged in');
+      if (!followsEnabled) {
+        toast({
+          title: 'Follow list publishing disabled',
+          description: 'Turn on “Follow list” in Settings → Privacy & Publishing to follow or unfollow.',
+        });
+        throw new Error('Follow list publishing is disabled');
+      }
       setIsPending(true);
 
       try {
@@ -154,7 +165,7 @@ export function useFollowActions(): UseFollowActionsReturn {
         setIsPending(false);
       }
     },
-    [nostr, user, publishEvent, queryClient, store],
+    [nostr, user, publishEvent, queryClient, store, followsEnabled],
   );
 
   const follow = useCallback(
@@ -170,6 +181,13 @@ export function useFollowActions(): UseFollowActionsReturn {
   const followMany = useCallback(
     async (pubkeys: string[]): Promise<number> => {
       if (!user) throw new Error('Not logged in');
+      if (!followsEnabled) {
+        toast({
+          title: 'Follow list publishing disabled',
+          description: 'Turn on “Follow list” in Settings → Privacy & Publishing to follow accounts.',
+        });
+        throw new Error('Follow list publishing is disabled');
+      }
       setIsPending(true);
 
       try {
@@ -211,7 +229,7 @@ export function useFollowActions(): UseFollowActionsReturn {
         setIsPending(false);
       }
     },
-    [nostr, user, publishEvent, queryClient, store],
+    [nostr, user, publishEvent, queryClient, store, followsEnabled],
   );
 
   return { isPending, follow, unfollow, followMany };
