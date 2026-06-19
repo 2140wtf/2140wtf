@@ -12,7 +12,7 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
  * (see birdstar/src/hooks/useWikipediaSound.ts for the original).
  * Birdstar falls back to iNaturalist for obscure species whose enwiki
  * article lacks a recording; we deliberately skip that fallback per
- * the user's request — Ditto only uses Wikipedia/Commons.
+ * the user's request — 2140.wtf only uses Wikipedia/Commons.
  *
  * Why Wikipedia? Bird species articles on enwiki carry editorially
  * curated, mostly Xeno-Canto-sourced recordings: clean, labeled,

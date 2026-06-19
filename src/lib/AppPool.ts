@@ -410,7 +410,7 @@ function isDTagFilter(filter: NostrFilter): boolean {
 }
 
 /**
- * Ditto's custom wrapper around Nostrify's {@link NPool}.
+ * 2140.wtf's custom wrapper around Nostrify's {@link NPool}.
  *
  * `AppPool` is the `nostr` object the whole app talks to via `useNostr()`. It
  * exposes the same interface as `NPool` (`.query()`, `.event()`, `.req()`,

@@ -244,7 +244,7 @@ function ReactionsTab({ reactions }: { reactions: ReactionEntry[] }) {
 
 /* ──── Zaps Tab ────
  *
- * Renders both NIP-57 Lightning receipts (kind 9735) and Ditto's on-chain
+ * Renders both NIP-57 Lightning receipts (kind 9735) and 2140.wtf's on-chain
  * zap attestations (kind 8333) in a single list. The two rails intentionally
  * look identical — same avatar, same name, same amber amount badge — because
  * the social meaning is the same: someone paid the author. Users can still

@@ -1,4 +1,4 @@
-Thanks for contributing to Ditto! Please read [CONTRIBUTING.md](CONTRIBUTING.md) in full before submitting -- it covers everything you need to get your MR accepted.
+Thanks for contributing to 2140.wtf! Please read [CONTRIBUTING.md](CONTRIBUTING.md) in full before submitting -- it covers everything you need to get your MR accepted.
 
 ## Related Issue
 
@@ -29,7 +29,7 @@ Closes #
 ## Philosophy Alignment
 
 <!-- Answer this question for your change: -->
-<!-- "Does this make Ditto more magnetic, more threatening to the status quo, -->
+<!-- "Does this make 2140.wtf more magnetic, more threatening to the status quo, -->
 <!-- and more peaceful to inhabit?" -->
 <!-- See: https://about.ditto.pub/philosophy -->
 <!-- For bug fixes: "Bug fix -- restores intended behavior" is acceptable. -->
@@ -50,7 +50,7 @@ Closes #
 ### Process
 
 - [ ] I read `AGENTS.md` before starting
-- [ ] I read the [Ditto Philosophy](https://about.ditto.pub/philosophy)
+- [ ] I read the [2140.wtf Philosophy](https://about.ditto.pub/philosophy)
 - [ ] I used plan/research mode before writing code
 - [ ] I used Claude Opus 4.6 (or equivalent frontier model)
 

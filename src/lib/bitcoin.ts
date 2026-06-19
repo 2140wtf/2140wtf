@@ -1042,7 +1042,7 @@ export { validateSilentPaymentAddress };
  *   4. return a finalized PSBT v2 we can extract with
  *      {@link extractTxFromSignedPsbtV2}.
  *
- * BIP-375 forbids inputs with witness version > 1. Ditto's wallet only
+ * BIP-375 forbids inputs with witness version > 1. 2140.wtf's wallet only
  * spends from the sender's own P2TR (witness v1) UTXOs, so we never hit
  * that constraint, but the check is still applied here for safety.
  *

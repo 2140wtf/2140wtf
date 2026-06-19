@@ -49,7 +49,7 @@ export function getZapAmountSats(event: NostrEvent): number {
  * expensive for a notification card that renders synchronously.
  *
  * As a pragmatic approximation we evenly split the total across the
- * listed recipients. Ditto's own zap-many flow always pays an equal
+ * listed recipients. 2140.wtf's own zap-many flow always pays an equal
  * amount per recipient so this is exact for batches we produced; for
  * batches from other clients it's a reasonable estimate that will
  * never be more wrong than the recipient count.

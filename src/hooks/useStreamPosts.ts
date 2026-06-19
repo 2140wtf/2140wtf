@@ -252,12 +252,12 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
       searchParts.push(query.trim());
     }
 
-    // Add language filter (NIP-50 extension supported by Ditto)
+    // Add language filter (NIP-50 extension supported by 2140.wtf)
     if (options.language && options.language !== 'global') {
       searchParts.push(`language:${options.language}`);
     }
 
-    // Add media filter (NIP-50 extension supported by Ditto)
+    // Add media filter (NIP-50 extension supported by 2140.wtf)
     // Skip for dedicated-kind queries — kind selection already scopes them
     if (!isDedicatedKindQuery) {
       if (options.mediaType === 'images') {
@@ -401,7 +401,7 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
       try {
         const now = Math.floor(Date.now() / 1000);
         
-        // Use Ditto relays directly for streaming to avoid pool's eoseTimeout
+        // Use 2140.wtf relays directly for streaming to avoid pool's eoseTimeout
         const dittoRelay = nostr.group(DITTO_RELAYS);
         
         for await (const msg of dittoRelay.req(

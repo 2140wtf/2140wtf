@@ -108,7 +108,7 @@ function getCountryCode(event: NostrEvent): string | undefined {
     const m = /^iso3166:([A-Za-z]{2})$/.exec(value);
     if (m) {
       const code = m[1].toUpperCase();
-      // Only return the code if Ditto's COUNTRIES table knows about it,
+      // Only return the code if 2140.wtf's COUNTRIES table knows about it,
       // otherwise we'd render an unrecognized two-letter blob.
       if (getCountryInfo(code)) return code;
     }

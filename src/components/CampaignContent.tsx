@@ -239,7 +239,7 @@ interface DonateButtonProps {
  * dialog offers three paths in order of friction:
  *
  * 1. **Zap** — opens {@link ZapDialog} for the campaign event, routing the
- *    send through Ditto's built-in PSBT wallet to the campaign's `w`
+ *    send through 2140.wtf's built-in PSBT wallet to the campaign's `w`
  *    endpoint and publishing a kind 8333 receipt (on-chain only; SP
  *    donations publish no Nostr event per spec). Hidden when the user
  *    has no PSBT-capable signer, since they have nothing to sign with.
@@ -294,7 +294,7 @@ function DonateButton({ event, wallets, title }: DonateButtonProps) {
 
   // The in-app Zap button only makes sense when the user is logged in
   // and has a PSBT-capable signer. Without one, the parent dialog's
-  // QR + Open-native-wallet path is the only way to donate from Ditto.
+  // QR + Open-native-wallet path is the only way to donate from 2140.wtf.
   const showZapButton = !!user && canSignPsbt;
 
   const handleZapClick = useCallback(() => {
@@ -320,7 +320,7 @@ function DonateButton({ event, wallets, title }: DonateButtonProps) {
             <DialogTitle>Donate to {title}</DialogTitle>
             <DialogDescription>
               {showZapButton
-                ? 'Zap from Ditto, open in a native wallet, or scan the QR.'
+                ? 'Zap from 2140.wtf, open in a native wallet, or scan the QR.'
                 : 'Open in a native wallet or scan the QR.'}
             </DialogDescription>
           </DialogHeader>

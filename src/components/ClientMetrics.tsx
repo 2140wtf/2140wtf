@@ -32,7 +32,7 @@ const chartConfig: ChartConfig = {
 /**
  * Usage metrics for a single client: Monthly Active Users headline plus a
  * 30-day time-series of active users. Data comes from NIP-45 COUNT queries
- * against the Ditto relay (see `useClientMetrics`).
+ * against the 2140.wtf relay (see `useClientMetrics`).
  *
  * Renders nothing if the relay can't provide the metrics, so the underlying
  * feed remains the focus when stats are unavailable.

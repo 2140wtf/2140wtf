@@ -1,15 +1,15 @@
 # P2P Trades — Feature Scope
 
 > **Status:** Design draft  
-> **Goal:** Add a Vexl-inspired, Nostr-native peer-to-peer Bitcoin trading layer to Ditto, built on NIP-99 classified listings and a public-web-of-trust reputation model, without phone numbers.
+> **Goal:** Add a Vexl-inspired, Nostr-native peer-to-peer Bitcoin trading layer to 2140.wtf, built on NIP-99 classified listings and a public-web-of-trust reputation model, without phone numbers.
 
 ---
 
 ## 1. Elevator Pitch
 
-**P2P Trades** lets Ditto users publish Bitcoin buy/sell offers as ordinary NIP-99 classified listings, discover offers within a configurable trust radius, negotiate privately via encrypted chat, and settle outside the app — exactly like Vexl, but with **Nostr pubkeys replacing phone numbers** and the **follow graph replacing the address-book graph**.
+**P2P Trades** lets 2140.wtf users publish Bitcoin buy/sell offers as ordinary NIP-99 classified listings, discover offers within a configurable trust radius, negotiate privately via encrypted chat, and settle outside the app — exactly like Vexl, but with **Nostr pubkeys replacing phone numbers** and the **follow graph replacing the address-book graph**.
 
-No custody. No KYC. No central backend. Offers are plain Nostr events, readable by any NIP-99 client; the trust filtering, ranking, and negotiation UI is Ditto-specific.
+No custody. No KYC. No central backend. Offers are plain Nostr events, readable by any NIP-99 client; the trust filtering, ranking, and negotiation UI is 2140.wtf-specific.
 
 ---
 
@@ -17,11 +17,11 @@ No custody. No KYC. No central backend. Offers are plain Nostr events, readable 
 
 | Principle | What it means in practice |
 |---|---|
-| **No custody** | Ditto never holds bitcoin or fiat. Settlement happens off-app (cash, bank transfer, LN, on-chain, etc.). |
+| **No custody** | 2140.wtf never holds bitcoin or fiat. Settlement happens off-app (cash, bank transfer, LN, on-chain, etc.). |
 | **No KYC** | Identity is the user's Nostr pubkey. Optional verification (NIP-05, mutual contacts) is voluntary. |
 | **Privacy by default** | Offer metadata is public (NIP-99). Negotiation is encrypted (NIP-17 DMs). Sensitive preferences may be wrapped (NIP-59). |
 | **Web-of-trust ranking** | Reputation is computed from public follows, followers, mutual connections, and trade attestations — not a centralized score. |
-| **Ecosystem compatible** | Listings use standard NIP-99 so other clients can render them; Ditto adds the trust-filtering and ranking layers on top. |
+| **Ecosystem compatible** | Listings use standard NIP-99 so other clients can render them; 2140.wtf adds the trust-filtering and ranking layers on top. |
 | **Progressive disclosure** | Users reveal only what they choose: pseudonymous offer → encrypted chat → optional real name/location → meet. |
 
 ---
@@ -30,11 +30,11 @@ No custody. No KYC. No central backend. Offers are plain Nostr events, readable 
 
 A literal fork of Vexl is not the right path:
 
-- Vexl is **React Native + Expo + Java microservices**. Ditto is **React web + Capacitor**. A fork would be a separate app, not a Ditto feature.
+- Vexl is **React Native + Expo + Java microservices**. 2140.wtf is **React web + Capacitor**. A fork would be a separate app, not a 2140.wtf feature.
 - Vexl's safety model is built on **phone contacts and hashed phone-number matching**. Replacing that with Nostr IDs removes the real-world trust anchor.
-- It is simpler and more coherent to **build Vexl-inspired features natively into Ditto**, reusing the existing NIP-99 marketplace, payment rails, NIP-17 DMs, and follow graph.
+- It is simpler and more coherent to **build Vexl-inspired features natively into 2140.wtf**, reusing the existing NIP-99 marketplace, payment rails, NIP-17 DMs, and follow graph.
 
-This scope therefore describes a **Ditto-native implementation**, not a fork.
+This scope therefore describes a **2140.wtf-native implementation**, not a fork.
 
 ---
 
@@ -60,7 +60,7 @@ This scope therefore describes a **Ditto-native implementation**, not a fork.
                     └─────────────────────┘
 ```
 
-### Reuse from existing Ditto
+### Reuse from existing 2140.wtf
 
 | Existing component | Reuse in P2P Trades |
 |---|---|
@@ -72,7 +72,7 @@ This scope therefore describes a **Ditto-native implementation**, not a fork.
 | `useNip85Stats` | Public reputation signals (followers, post count, zap totals) |
 | NWC / WebLN / on-chain zap flows | Settlement options |
 
-> **Note on letters:** The existing kind 8211 encrypted letters are **removed entirely**. Ditto's private messaging moves to NIP-17 DMs, with UI inspiration from 0xchat.
+> **Note on letters:** The existing kind 8211 encrypted letters are **removed entirely**. 2140.wtf's private messaging moves to NIP-17 DMs, with UI inspiration from 0xchat.
 
 ---
 
@@ -104,7 +104,7 @@ Offers are **kind 30402** classified listings with standard tags:
 
 ### 5.2 P2P-specific tag extensions
 
-Ditto adds **optional, backward-compatible tags** inside the same NIP-99 event:
+2140.wtf adds **optional, backward-compatible tags** inside the same NIP-99 event:
 
 | Tag | Values | Meaning |
 |---|---|---|
@@ -112,13 +112,13 @@ Ditto adds **optional, backward-compatible tags** inside the same NIP-99 event:
 | `t` | `buy-btc` / `sell-btc` | Trade direction |
 | `t` | `cash`, `bank-transfer`, `revolut`, `paypal`, `strike`, `lightning`, `on-chain` | Settlement methods the trader accepts |
 | `t` | `in-person`, `online` | Meeting mode |
-| `visibility` | `public`, `follows`, `wot-2`, `wot-3` | Who can see the offer in Ditto's feed |
+| `visibility` | `public`, `follows`, `wot-2`, `wot-3` | Who can see the offer in 2140.wtf's feed |
 | `currency` | e.g. `EUR`, `USD`, `CZK` | Redundant with price[2] for indexing |
 | `premium` | `-2.5` | Percentage above/below market rate (optional) |
 | `min-amount` | `50` | Minimum trade amount in listing currency |
 | `max-amount` | `500` | Maximum trade amount in listing currency |
 
-**Important:** These tags are plain text. Any NIP-99 client can read and render the listing. Ditto's `visibility` tag is a **client-side hint**: other clients may ignore it and display the offer publicly. Users must understand that NIP-99 is a public bulletin board.
+**Important:** These tags are plain text. Any NIP-99 client can read and render the listing. 2140.wtf's `visibility` tag is a **client-side hint**: other clients may ignore it and display the offer publicly. Users must understand that NIP-99 is a public bulletin board.
 
 ### 5.3 Exposure trade-off
 
@@ -133,7 +133,7 @@ This is **by design** for liquidity and ecosystem compatibility, but it has impl
 - **Location precision:** Encourage coarse locations (city, neighborhood) and optional geohash precision.
 - **Identity:** The seller's pubkey is public. Users should be warned before posting.
 - **Phone numbers / bank details:** Must **never** appear in listing content/tags. They are shared only inside encrypted negotiation.
-- **Visibility hint is not enforced:** A malicious or non-Ditto client can still show a "follows-only" offer to anyone.
+- **Visibility hint is not enforced:** A malicious or non-2140.wtf client can still show a "follows-only" offer to anyone.
 
 Mitigation: if a user needs stronger privacy, they can wrap the entire listing in **NIP-59** (see §7).
 
@@ -155,13 +155,13 @@ From the viewer's perspective, every other pubkey sits in one of these circles:
 | **3rd degree** | Accounts followed by ≥1 of my 2nd-degree follows | Extended network |
 | **Everyone else** | Rest of Nostr | Strangers |
 
-Ditto can compute 1st and 2nd degrees locally from the viewer's follow list and the follow lists of followed accounts. 3rd degree is expensive and noisy; it should be optional and computed via a NIP-85-style stats provider or batched relay queries.
+2140.wtf can compute 1st and 2nd degrees locally from the viewer's follow list and the follow lists of followed accounts. 3rd degree is expensive and noisy; it should be optional and computed via a NIP-85-style stats provider or batched relay queries.
 
 ### 6.2 Offer visibility scopes
 
-When creating an offer, the seller picks a visibility scope. The tag is advisory; Ditto filters the feed accordingly.
+When creating an offer, the seller picks a visibility scope. The tag is advisory; 2140.wtf filters the feed accordingly.
 
-| Scope | Who sees it in Ditto | Use case |
+| Scope | Who sees it in 2140.wtf | Use case |
 |---|---|---|
 | `public` | Anyone | Maximum liquidity; lowest privacy |
 | `follows` | My followers only | Seller broadcasts to people who trust them |
@@ -212,7 +212,7 @@ Computed from public signals:
 
 For BTC/fiat trades:
 
-- Fetch BTC price from Ditto's existing Esplora price source.
+- Fetch BTC price from 2140.wtf's existing Esplora price source.
 - Compute premium vs. spot.
 - Rank closer-to-market offers slightly higher, but never above trust signals.
 
@@ -240,7 +240,7 @@ Each offer card shows:
 
 When a buyer opens an offer:
 
-1. Ditto creates a **NIP-17 DM thread** with the seller.
+1. 2140.wtf creates a **NIP-17 DM thread** with the seller.
 2. The first message is a **trade request** containing pre-filled fields:
    - Offer being referenced (`a` tag: `30402:<seller>:<d-tag>`)
    - Desired amount
@@ -259,7 +259,7 @@ For users who want Vexl-like privacy (offer not visible to the public internet):
 
 - The seller creates a **standard NIP-99 listing** as the inner event.
 - The inner event is wrapped as a **NIP-59 gift wrap (kind 1059)** addressed to each intended recipient or to a group defined by follow graph.
-- Recipients unwrap with their signer and see the offer inside Ditto.
+- Recipients unwrap with their signer and see the offer inside 2140.wtf.
 
 Trade-offs:
 
@@ -307,7 +307,7 @@ Trade-offs:
 
 ### 8.3 NIP-17 DM Implementation Architecture
 
-NIP-17 is a three-layer gift-wrap protocol. Ditto must implement all three layers and the relay-discovery mechanism.
+NIP-17 is a three-layer gift-wrap protocol. 2140.wtf must implement all three layers and the relay-discovery mechanism.
 
 #### Three-layer event structure
 
@@ -340,7 +340,7 @@ NIP-17 is a three-layer gift-wrap protocol. Ditto must implement all three layer
 
 #### Self-copies
 
-Senders cannot read messages they encrypted to someone else's pubkey. To show sent messages in the sender's own inbox, Ditto must publish a **second gift wrap** addressed to the sender's own pubkey, containing the same seal.
+Senders cannot read messages they encrypted to someone else's pubkey. To show sent messages in the sender's own inbox, 2140.wtf must publish a **second gift wrap** addressed to the sender's own pubkey, containing the same seal.
 
 #### DM relay discovery (kind 10050)
 
@@ -384,7 +384,7 @@ This lets the DM inbox surface trade requests distinctly and link back to the of
 
 ### 8.4 Custom kind: Trade Attestation
 
-To enable reputation without a central server, Ditto can introduce a **trade attestation** event. This must follow the `nostr-kind-design` skill and be documented in `NIP.md`.
+To enable reputation without a central server, 2140.wtf can introduce a **trade attestation** event. This must follow the `nostr-kind-design` skill and be documented in `NIP.md`.
 
 Draft:
 
@@ -462,7 +462,7 @@ Because of the privacy trade-off, Phase 1 might skip public attestations and rel
 
 ### 9.5 Settlement
 
-Ditto does **not** escrow. It provides settlement helpers:
+2140.wtf does **not** escrow. It provides settlement helpers:
 
 - **Lightning / on-chain / NWC / WebLN:** Reuse existing `ZapDialog` if the trade is structured as a payment to the seller's declared payment targets.
 - **Cash / bank transfer:** Show a checklist and safety tips; no code path needed.
@@ -472,7 +472,7 @@ Ditto does **not** escrow. It provides settlement helpers:
 
 The new NIP-17 DM interface borrows from 0xchat's chat-first design:
 
-| 0xchat pattern | Ditto adaptation |
+| 0xchat pattern | 2140.wtf adaptation |
 |---|---|
 | **Conversation list / inbox** | `/messages` page showing recent threads with avatar, name, last message preview, timestamp, unread dot |
 | **Chat thread** | Full-screen or sheet-based thread with message bubbles, timestamps, read status |
@@ -543,7 +543,7 @@ On each offer card and trader profile:
 
 ## 11. Safety & Abuse Mitigation
 
-P2P trading with pseudonymous users carries real-world risk (theft, scams, physical danger). Ditto must be defensive without becoming custodial.
+P2P trading with pseudonymous users carries real-world risk (theft, scams, physical danger). 2140.wtf must be defensive without becoming custodial.
 
 ### 11.1 In-app warnings
 
@@ -551,7 +551,7 @@ P2P trading with pseudonymous users carries real-world risk (theft, scams, physi
   - Meet in public places.
   - Verify identity before large trades.
   - Never share private keys or seed phrases.
-  - Ditto does not escrow or mediate disputes.
+  - 2140.wtf does not escrow or mediate disputes.
 - Stranger-offer cards show: "You have no connection to this trader."
 - High-value offers prompt an extra confirmation.
 
@@ -569,7 +569,7 @@ P2P trading with pseudonymous users carries real-world risk (theft, scams, physi
 
 ### 11.4 Optional: verified traders
 
-- A curated list of pubkeys (e.g., from Ditto admins, meetup organizers, or NIP-05-verified community leaders) can get a **"Verified trader"** badge.
+- A curated list of pubkeys (e.g., from 2140.wtf admins, meetup organizers, or NIP-05-verified community leaders) can get a **"Verified trader"** badge.
 - This is a trust-sensitive query and must be filtered by `authors: ADMIN_PUBKEYS` or a configurable curator list.
 
 ---
@@ -605,7 +605,7 @@ interface AppConfig {
 
 ### Phase 0 — Replace Letters with NIP-17 DMs (4–6 weeks)
 
-This phase removes the kind 8211 letter feature and replaces it with general-purpose NIP-17 DMs for all Ditto users.
+This phase removes the kind 8211 letter feature and replaces it with general-purpose NIP-17 DMs for all 2140.wtf users.
 
 #### 0a. Remove letters from the codebase
 
@@ -624,7 +624,7 @@ Delete or replace the following:
 | Settings | Remove letter preferences from settings pages/schemas |
 | P2P/marketplace | Update any existing "message seller via letter" callsites to use NIP-17 DMs |
 
-> **Data migration:** Existing kind 8211 events remain on relays; they simply won't render in Ditto anymore. If users need historical letters, a one-time read-only migration view could be added later, but it is out of scope for Phase 0.
+> **Data migration:** Existing kind 8211 events remain on relays; they simply won't render in 2140.wtf anymore. If users need historical letters, a one-time read-only migration view could be added later, but it is out of scope for Phase 0.
 
 #### 0b. Build NIP-17 DM infrastructure
 
@@ -686,7 +686,7 @@ Delete or replace the following:
 3. **Should offers be allowed in non-fiat currencies (e.g., sats for goods/services)?**
 4. **How do we handle location privacy — city-level only, or configurable geohash precision?**
 5. **Do we integrate a price oracle beyond the existing BTC/USD Esplora source?**
-6. **Should there be a Ditto-curated "verified trader" list, or purely decentralized reputation?**
+6. **Should there be a 2140.wtf-curated "verified trader" list, or purely decentralized reputation?**
 7. **What is the legal risk of facilitating in-person cash trades in the App Store / Google Play?**
 8. **How do we rate-limit offer creation without a central backend?**
 9. **Do we support NIP-59 in Phase 1, or defer to Phase 2 due to complexity?**
@@ -711,8 +711,8 @@ Delete or replace the following:
 
 ## 16. Conclusion
 
-**P2P Trades** is a high-value, strategically aligned feature for Ditto. It leverages Ditto's existing strengths (NIP-99 marketplace, payment rails, mobile app) plus a new **NIP-17 DM layer** (replacing kind 8211 letters) and Nostr's native social graph to approximate Vexl's trust-based trading model without phone numbers.
+**P2P Trades** is a high-value, strategically aligned feature for 2140.wtf. It leverages 2140.wtf's existing strengths (NIP-99 marketplace, payment rails, mobile app) plus a new **NIP-17 DM layer** (replacing kind 8211 letters) and Nostr's native social graph to approximate Vexl's trust-based trading model without phone numbers.
 
-The right approach is **not to fork Vexl**, but to build a Ditto-native layer on top of NIP-99. Phase 0 removes letters and ships NIP-17 DMs for all users with 0xchat-inspired UX. Phase 1 layers P2P Trades on top: public listings + web-of-trust filtering + NIP-17 negotiation. Later phases add private offers (NIP-59) and reputation attestations.
+The right approach is **not to fork Vexl**, but to build a 2140.wtf-native layer on top of NIP-99. Phase 0 removes letters and ships NIP-17 DMs for all users with 0xchat-inspired UX. Phase 1 layers P2P Trades on top: public listings + web-of-trust filtering + NIP-17 negotiation. Later phases add private offers (NIP-59) and reputation attestations.
 
 **Next step:** Confirm the letter removal boundary, then start Phase 0 implementation or create a detailed task breakdown.

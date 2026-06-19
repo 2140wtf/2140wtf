@@ -45,7 +45,7 @@ export function PrivacySettingsPage() {
 
   useSeoMeta({
     title: `Privacy & Publishing | Settings | ${config.appName}`,
-    description: 'Control what Ditto publishes to Nostr on your behalf',
+    description: 'Control what 2140.wtf publishes to Nostr on your behalf',
   });
 
   return (
@@ -57,7 +57,7 @@ export function PrivacySettingsPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold">Privacy & Publishing</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Decide what Ditto is allowed to publish to Nostr.
+              Decide what 2140.wtf is allowed to publish to Nostr.
             </p>
           </div>
         }
@@ -170,7 +170,7 @@ export function PrivacySettingsPage() {
               Auto-publish
             </CardTitle>
             <CardDescription>
-              Events Ditto publishes automatically when you change settings.
+              Events 2140.wtf publishes automatically when you change settings.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0 divide-y">

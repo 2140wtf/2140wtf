@@ -1,7 +1,7 @@
 /**
  * useGroupChat Hook
  *
- * React hook for Ditto's encrypted group chat.
+ * React hook for 2140.wtf's encrypted group chat.
  * Manages group state, message subscriptions, and event publishing.
  */
 

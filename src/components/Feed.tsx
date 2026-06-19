@@ -181,8 +181,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // feed instead of the noisy global feed so new visitors see quality content.
   const useTopFeedForLoggedOut = !user && !kinds;
 
-  // When the Ditto tab is active (logged in), show the same hot-sorted curated feed.
-  // Disabled on kind-specific pages — the Ditto tab is not shown there.
+  // When the 2140.wtf tab is active (logged in), show the same hot-sorted curated feed.
+  // Disabled on kind-specific pages — the 2140.wtf tab is not shown there.
   const useDittoTab = user && activeTab === 'ditto' && !kinds;
 
   // Standard feed query (used when logged in, or on kind-specific pages, or core tabs)
@@ -197,7 +197,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     (kinds || tagFilters) ? { kinds, tagFilters } : undefined,
   );
 
-  // Curated Ditto feed: latest content from the curator's follow list.
+  // Curated 2140.wtf feed: latest content from the curator's follow list.
   const topQuery = useCuratedDittoFeed(
     curatorFollowList,
     useTopFeedForLoggedOut || !!useDittoTab,
@@ -587,7 +587,7 @@ function SavedFeedContent({ feed }: { feed: SavedFeed }) {
     user?.pubkey ?? '',
   );
 
-  // Augment the resolved filter with protocol:nostr (NIP-50 Ditto extension)
+  // Augment the resolved filter with protocol:nostr (NIP-50 2140.wtf extension)
   // to match the behavior of the core feeds and ensure latest native Nostr
   // posts are returned.
   const augmentedFilter = useMemo(() => {

@@ -198,7 +198,7 @@ export interface SavedFeed {
 }
 
 export interface AppConfig {
-  /** Application display name used in page titles, UI text, and branding. Default: "Ditto". */
+  /** Application display name used in page titles, UI text, and branding. Default: "2140.wtf". */
   appName: string;
   /** Application identifier used as a prefix for application-specific metadata (NIP-78 d-tags, etc). Default: "ditto". */
   appId: string;
@@ -278,7 +278,7 @@ export interface AppConfig {
   autoplayVideos: boolean;
   /** Image upload quality: "compressed" resizes/optimizes, "original" uploads as-is. Default: "compressed". */
   imageQuality: 'compressed' | 'original';
-  /** Hex pubkey of the curator whose follow list defines the Ditto feed. */
+  /** Hex pubkey of the curator whose follow list defines the 2140.wtf feed. */
   curatorPubkey?: string;
   /** Wildcard domain used for iframe sandboxing (e.g. "iframe.diy"). Default: "iframe.diy". */
   sandboxDomain: string;

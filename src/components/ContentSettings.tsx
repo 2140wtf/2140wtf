@@ -367,7 +367,7 @@ function FeedTabsSection() {
       const userCount = Object.keys(data.names).length;
 
       // Extract label from domain (hostname without TLD)
-      // ditto.pub -> Ditto, spinster.xyz -> Spinster, etc.
+      // ditto.pub -> 2140.wtf, spinster.xyz -> Spinster, etc.
       const domainParts = domain.split('.');
       const hostname = domainParts[0]; // Get first part
       const label = hostname.charAt(0).toUpperCase() + hostname.slice(1); // Capitalize

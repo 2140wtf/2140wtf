@@ -738,7 +738,7 @@ function EmbeddedNoteCard({
 
   // Truly unknown kind: not a content kind, no Pets inline visual, no `alt`
   // fallback text, AND we don't recognize the kind via `getKindLabel`. Only
-  // these get the "This event kind is not supported" tombstone. Kinds Ditto
+  // these get the "This event kind is not supported" tombstone. Kinds 2140.wtf
   // knows about (via `EXTRA_KINDS`) but that the author authored without an
   // `alt` tag get a kind-labeled card showing the icon + label centrally,
   // so the embed at least communicates what type of content it points to.
