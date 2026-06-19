@@ -119,6 +119,7 @@ export interface EncryptedSettings {
     liveChat?: boolean;
     themeDefinitions?: boolean;
     pushSubscriptions?: boolean;
+    nutzaps?: boolean;
   };
   /** Last sync timestamp */
   lastSync?: number;

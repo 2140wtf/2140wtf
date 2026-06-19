@@ -417,6 +417,11 @@ export function PrivacySettingsPage() {
               description="Publish encrypted app settings and Cashu backups (kind 30078)."
             />
             <ToggleRow
+              feature="nutzaps"
+              title="Receive Nutzaps"
+              description="Publish a public Cashu receiver ad so others can send NIP-61 Nutzaps to you (kind 10019)."
+            />
+            <ToggleRow
               feature="themeDefinitions"
               title="Theme definitions"
               description="Publish custom theme definitions (kind 36767)."

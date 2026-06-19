@@ -43,6 +43,57 @@ These event kinds were created by community contributors and are supported by Di
 
 ---
 
+## Ditto Private Cashu Sync (DPCS) & Nutzap Receiver
+
+Ditto stores Cashu wallet state on relays using **kind:30078** addressable events, encrypted with the user’s own NIP-44 signer (self-encryption). Unlike a public NIP-60 wallet event, DPCS keeps all mint URLs, proofs, transactions, and auxiliary state inside the ciphertext and uses an **opaque, pubkey-derived d-tag**.
+
+### DPCS d-tag
+
+The d-tag is deterministically derived from the user’s hex pubkey so every device computes the same value:
+
+```
+d = hex(sha256("ditto:cashu:v1:" + pubkeyHex)).slice(0, 16)
+```
+
+This tag reveals no wallet-specific information. The legacy `d=freedomid:cashu` tag is still read as a migration fallback but is no longer written.
+
+### Encrypted payload (v2)
+
+The decrypted payload is JSON with the following shape:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | `2` | Payload version. |
+| `timestamp` | number | Backup timestamp (ms). |
+| `epoch` | number | Reserved for future migration epochs. |
+| `mints` | `string[]` | All mint URLs the wallet knows about. |
+| `proofs` | `{ mintUrl, proofs }[]` | Proof lists grouped by mint. |
+| `transactions` | `Transaction[]` | Wallet transaction history. |
+| `selectedMintUrl` | `string` | Currently selected mint. |
+| `customMints` | `{ name, url }[]` | User-added custom mints. |
+| `nutzapPubkey` | `string` (optional) | Compressed secp256k1 pubkey used for NIP-61 Nutzaps. |
+| `mintedQuoteIds` | `string[]` (optional) | Quote IDs already minted, to prevent double-mint across devices. |
+| `processedTokenHashes` | `{ hash, expiresAt }[]` (optional) | Cross-device duplicate-token guard. |
+
+Version `1` backups are still accepted during restore but are re-published as version `2` on the next sync.
+
+### Nutzap receiver advertisement (opt-in)
+
+NIP-61 Nutzaps are peer-to-peer Cashu payments delivered as `kind:9321` events. To receive them, a user must publish a `kind:10019` receiver ad containing the mints they accept, the relays they read, and the compressed pubkey that proofs should be P2PK-locked to.
+
+Ditto derives the Nutzap key pair from the same BIP-39 wallet seed used for DPCS:
+
+```
+nutzapPrivkey = hkdf_sha256(seed, salt='', info='ditto:cashu:nutzap:v1', 32)
+nutzapPubkey  = compressed secp256k1 public key of nutzapPrivkey
+```
+
+Because the key is derived from the seed, a restored wallet can unlock previously received P2PK proofs.
+
+The receiver ad is **opt-in** via Settings → Privacy & Publishing → *Receive Nutzaps*. It defaults to **off**. When disabled, Ditto overwrites any existing `kind:10019` with an empty replacement so relays stop serving the old ad.
+
+---
+
 ## NIP-104: Group Chat
 
 Ditto implements NIP-104 (Marmot) encrypted group chat with a **Group Ratchet fallback** so that no external MLS backend is required. The feature is exposed in the UI as **Private Groups** (`/groups`).
