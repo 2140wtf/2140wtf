@@ -68,7 +68,6 @@ export function NostrSync() {
         'external-user-reaction',
         'external-user-repost',
         'feed',
-        'vines-follows',
         'theme-feed',
         'book-feed',
       ];
@@ -417,39 +416,46 @@ export function NostrSync() {
       return changed ? updates : current;
     });
 
-    // Sync feed tab settings (stored directly in localStorage, not AppConfig)
-    if (encryptedSettings.showGlobalFeed !== undefined) {
-      const key = getStorageKey(config.appId, "showGlobalFeed");
-      const current = localStorage.getItem(key);
-      const incoming = String(encryptedSettings.showGlobalFeed);
-      if (current !== incoming) {
-        localStorage.setItem(key, incoming);
+    // Sync feed tab settings (stored directly in localStorage, not AppConfig).
+    // Wrap the whole block: a single corrupt/quota localStorage entry must not
+    // abort the rest of the encrypted settings sync.
+    try {
+      if (encryptedSettings.showGlobalFeed !== undefined) {
+        const key = getStorageKey(config.appId, "showGlobalFeed");
+        const current = localStorage.getItem(key);
+        const incoming = String(encryptedSettings.showGlobalFeed);
+        if (current !== incoming) {
+          localStorage.setItem(key, incoming);
+        }
       }
-    }
-    if (encryptedSettings.showCommunityFeed !== undefined) {
-      const key = getStorageKey(config.appId, "showCommunityFeed");
-      const current = localStorage.getItem(key);
-      const incoming = String(encryptedSettings.showCommunityFeed);
-      if (current !== incoming) {
-        localStorage.setItem(key, incoming);
+      if (encryptedSettings.showCommunityFeed !== undefined) {
+        const key = getStorageKey(config.appId, "showCommunityFeed");
+        const current = localStorage.getItem(key);
+        const incoming = String(encryptedSettings.showCommunityFeed);
+        if (current !== incoming) {
+          localStorage.setItem(key, incoming);
+        }
       }
-    }
-    if (encryptedSettings.communityData) {
-      const community = {
-        domain: encryptedSettings.communityData.domain,
-        label: encryptedSettings.communityData.label,
-        userCount: encryptedSettings.communityData.userCount,
-      };
-      const communityKey = getStorageKey(config.appId, "community");
-      const currentRaw = localStorage.getItem(communityKey);
-      const incoming = JSON.stringify(community);
-      if (currentRaw !== incoming) {
-        localStorage.setItem(communityKey, incoming);
-        localStorage.setItem(
-          getStorageKey(config.appId, "communityData"),
-          JSON.stringify({ names: encryptedSettings.communityData.nip05 }),
-        );
+      if (encryptedSettings.communityData) {
+        const community = {
+          domain: encryptedSettings.communityData.domain,
+          label: encryptedSettings.communityData.label,
+          userCount: encryptedSettings.communityData.userCount,
+        };
+        const communityKey = getStorageKey(config.appId, "community");
+        const currentRaw = localStorage.getItem(communityKey);
+        const incoming = JSON.stringify(community);
+        if (currentRaw !== incoming) {
+          localStorage.setItem(communityKey, incoming);
+          localStorage.setItem(
+            getStorageKey(config.appId, "communityData"),
+            JSON.stringify({ names: encryptedSettings.communityData.nip05 }),
+          );
+        }
       }
+    } catch {
+      // localStorage may be unavailable (private mode, quota). The in-memory
+      // config already reflects the synced values, so the UI remains correct.
     }
 
     // Persist the sync timestamp so the next page load can render immediately
@@ -498,6 +504,9 @@ export function NostrSync() {
           ...(parsed.font && { font: parsed.font }),
           ...(parsed.titleFont && { titleFont: parsed.titleFont }),
           ...(parsed.background && { background: parsed.background }),
+          ...(parsed.tokens && Object.keys(parsed.tokens).length > 0 && { tokens: parsed.tokens }),
+          ...(parsed.radius && { radius: parsed.radius }),
+          ...(parsed.backgroundOpacity !== undefined && { backgroundOpacity: parsed.backgroundOpacity }),
         };
 
         // Update customTheme if it differs from what we have locally.

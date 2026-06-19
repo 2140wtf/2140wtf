@@ -49,11 +49,13 @@ export function useFollowList() {
     queryKey: ['follow-list', user?.pubkey ?? ''],
     queryFn: async ({ signal }) => {
       if (!user) return { event: null, pubkeys: [] };
-      const event = await fetchContactList(nostr, store, user.pubkey, { signal, timeout: 5000 });
+      const event = await fetchContactList(nostr, store, user.pubkey, { signal, timeout: 10000 });
       return { event, pubkeys: contactListPubkeys(event) };
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    // Keep the follow list fresh enough to recover quickly if a transient
+    // empty/stale relay response is returned, but don't hammer relays.
+    staleTime: 10 * 1000,
   });
 }
 
@@ -102,7 +104,20 @@ export function useFollowActions(): UseFollowActionsReturn {
       try {
         // ① Fetch the freshest kind 3 event via pool, falling back to the
         // locally cached copy so a relay miss can't wipe the follow list.
-        const prev = await fetchFreshEvent(nostr, { kinds: [3], authors: [user.pubkey] }, { store });
+        let prev = await fetchFreshEvent(nostr, { kinds: [3], authors: [user.pubkey] }, { store });
+
+        // If relays returned nothing, try the longer cache-aware read path as
+        // a last resort before mutating.
+        if (!prev) {
+          prev = await fetchContactList(nostr, store, user.pubkey, { timeout: 15_000 });
+        }
+
+        // Unfollowing requires a known baseline; otherwise we could publish an
+        // empty kind 3 and wipe the list. Following without a baseline means
+        // creating the user's first contact list, which is allowed.
+        if (action === 'unfollow' && !prev) {
+          throw new Error('Cannot unfollow: existing contact list is not available.');
+        }
 
         // ② Separate tags into `p` tags (follow entries) and everything else
         const existingTags = prev?.tags ?? [];

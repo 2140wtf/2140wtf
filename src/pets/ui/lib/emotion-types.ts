@@ -1,5 +1,5 @@
 /**
- * Blobbi Emotion Type Definitions
+ * Pets Emotion Type Definitions
  *
  * Neutral type file with no runtime dependencies.
  * Both recipe.ts and emotions.ts import from here,
@@ -7,10 +7,10 @@
  */
 
 /**
- * Available emotion states for Blobbies.
+ * Available emotion states for Petses.
  * Each emotion is a named preset that resolves into a part-based visual recipe.
  */
-export type BlobbiEmotion =
+export type PetsEmotion =
   | 'neutral'
   | 'sad'
   | 'boring'
@@ -31,6 +31,6 @@ export type BlobbiEmotion =
   | 'chewing';
 
 /**
- * Blobbi variant for variant-specific adjustments.
+ * Pets variant for variant-specific adjustments.
  */
-export type BlobbiVariant = 'baby' | 'adult';
+export type PetsVariant = 'baby' | 'adult';

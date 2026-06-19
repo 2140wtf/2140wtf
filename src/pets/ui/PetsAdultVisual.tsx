@@ -1,12 +1,12 @@
 /**
- * BlobbiAdultVisual — Visual wrapper for rendering Blobbi adults.
+ * PetsAdultVisual — Visual wrapper for rendering Pets adults.
  *
  * Responsibilities:
  *   - Owns the container ref for eye hooks to query SVG DOM
- *   - Runs useBlobbiEyes (blink RAF loop, optional mouse tracking)
+ *   - Runs usePetsEyes (blink RAF loop, optional mouse tracking)
  *   - Runs useExternalEyeOffset (companion gaze RAF loop)
  *   - Applies reaction CSS classes (sway/bounce) in page mode
- *   - Delegates SVG rendering to BlobbiAdultSvgRenderer
+ *   - Delegates SVG rendering to PetsAdultSvgRenderer
  *
  * The SVG renderer is a separate component so the dangerouslySetInnerHTML
  * node stays mounted even when wrapper-level props change (reaction,
@@ -22,23 +22,23 @@ import { useRef, type RefObject } from 'react';
 
 import { cn } from '@/lib/utils';
 
-import { useBlobbiEyes, type BlobbiLookMode } from './lib/useBlobbiEyes';
+import { usePetsEyes, type PetsLookMode } from './lib/usePetsEyes';
 import { useExternalEyeOffset } from './lib/useExternalEyeOffset';
-import type { ExternalEyeOffset, BlobbiReactionState, BlobbiRenderMode } from './lib/types';
-import type { BlobbiVisualRecipe } from './lib/recipe';
-import type { BlobbiEmotion } from './lib/emotion-types';
+import type { ExternalEyeOffset, PetsReactionState, PetsRenderMode } from './lib/types';
+import type { PetsVisualRecipe } from './lib/recipe';
+import type { PetsEmotion } from './lib/emotion-types';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
-import type { Blobbi } from '@/blobbi/core/types/blobbi';
-import { isBlobbiSleeping } from '@/blobbi/core/types/blobbi';
-import { BlobbiAdultSvgRenderer } from './BlobbiAdultSvgRenderer';
+import type { Pets } from '@/pets/core/types/pets';
+import { isPetsSleeping } from '@/pets/core/types/pets';
+import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
 
-export interface BlobbiAdultVisualProps {
-  /** The Blobbi data */
-  blobbi: Blobbi;
+export interface PetsAdultVisualProps {
+  /** The Pets data */
+  pets: Pets;
   /** Reaction state for music/sing animations */
-  reaction?: BlobbiReactionState;
+  reaction?: PetsReactionState;
   /** Controls eye tracking behavior (default: 'follow-pointer') */
-  lookMode?: BlobbiLookMode;
+  lookMode?: PetsLookMode;
   /** Disable blinking animation (for photo/export mode) */
   disableBlink?: boolean;
   /** External eye offset (value-based — causes rerenders). */
@@ -46,21 +46,21 @@ export interface BlobbiAdultVisualProps {
   /** Ref-based external eye offset (imperative — no rerenders). Preferred for companion mode. */
   externalEyeOffsetRef?: RefObject<ExternalEyeOffset>;
   /** Render mode. Default: 'page'. */
-  renderMode?: BlobbiRenderMode;
+  renderMode?: PetsRenderMode;
   /** Pre-resolved visual recipe. Takes precedence over `emotion`. */
-  recipe?: BlobbiVisualRecipe;
+  recipe?: PetsVisualRecipe;
   /** Label for the recipe (used in CSS class names). */
   recipeLabel?: string;
   /** Named emotion preset. Ignored when `recipe` is provided. Default: 'neutral' */
-  emotion?: BlobbiEmotion;
+  emotion?: PetsEmotion;
   /** Body-level visual effects (manual/external use only). */
   bodyEffects?: BodyEffectsSpec;
   /** Additional CSS classes for the container */
   className?: string;
 }
 
-export function BlobbiAdultVisual({
-  blobbi,
+export function PetsAdultVisual({
+  pets,
   reaction = 'idle',
   lookMode = 'follow-pointer',
   disableBlink = false,
@@ -72,10 +72,10 @@ export function BlobbiAdultVisual({
   emotion = 'neutral',
   bodyEffects,
   className,
-}: BlobbiAdultVisualProps) {
-  const isSleeping = isBlobbiSleeping(blobbi);
+}: PetsAdultVisualProps) {
+  const isSleeping = isPetsSleeping(pets);
 
-  // This ref is the DOM query boundary for eye hooks. useBlobbiEyes and
+  // This ref is the DOM query boundary for eye hooks. usePetsEyes and
   // useExternalEyeOffset use querySelector on this element to find SVG
   // eye elements rendered by the child SvgRenderer.
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,7 +86,7 @@ export function BlobbiAdultVisual({
 
   // ── Eye hooks ──────────────────────────────────────────────────────────────
 
-  useBlobbiEyes(containerRef, {
+  usePetsEyes(containerRef, {
     isSleeping,
     maxMovement: 2.5,
     lookMode,
@@ -115,13 +115,13 @@ export function BlobbiAdultVisual({
         !isCompanion && (effectiveReaction === 'listening' ||
           effectiveReaction === 'swaying' ||
           effectiveReaction === 'happy') &&
-          'animate-blobbi-sway',
-        !isCompanion && effectiveReaction === 'singing' && 'animate-blobbi-bounce',
+          'animate-pets-sway',
+        !isCompanion && effectiveReaction === 'singing' && 'animate-pets-bounce',
         className,
       )}
     >
-      <BlobbiAdultSvgRenderer
-        blobbi={blobbi}
+      <PetsAdultSvgRenderer
+        pets={pets}
         isSleeping={isSleeping}
         recipe={recipe}
         recipeLabel={recipeLabel}

@@ -1,9 +1,9 @@
 /**
- * Blobbi Visual Recipe System
+ * Pets Visual Recipe System
  *
  * This module defines the part-based visual recipe architecture. Every
  * visual state — whether derived from named emotion presets or resolved
- * from Blobbi stats — is represented as a **BlobbiVisualRecipe** composed
+ * from Pets stats — is represented as a **PetsVisualRecipe** composed
  * of independent parts:
  *
  *   - eyes:        pupil modifications, star eyes, dizzy spirals, sleepy blink
@@ -21,13 +21,13 @@
  *   2. **Status-driven composition** (status-reactions.ts): Builds recipes
  *      dynamically from current stats using part-priority rules. Each low
  *      stat contributes parts, and the resolver picks winners per-part.
- *      This is the primary pathway for ongoing Blobbi expressions.
+ *      This is the primary pathway for ongoing Pets expressions.
  *
  * The rendering pipeline (applyVisualRecipe) applies each part independently
  * through its subsystem, regardless of which pathway produced the recipe.
  *
  * Key concepts:
- *   - BlobbiVisualRecipe: the central type describing all visual parts
+ *   - PetsVisualRecipe: the central type describing all visual parts
  *   - EMOTION_RECIPES: named emotion presets for actions and overrides
  *   - resolveVisualRecipe(): resolves a named emotion preset into a recipe
  *   - mergeVisualRecipes(): merges two recipes (overlay takes precedence)
@@ -87,7 +87,7 @@ import {
   type StinkCloudsConfig,
 } from './bodyEffects';
 
-import type { BlobbiEmotion, BlobbiVariant } from './emotion-types';
+import type { PetsEmotion, PetsVariant } from './emotion-types';
 
 // ─── Recipe Types ─────────────────────────────────────────────────────────────
 
@@ -177,12 +177,12 @@ export interface TearConfig {
 // ─── Central Recipe Type ──────────────────────────────────────────────────────
 
 /**
- * A resolved visual recipe describing all parts of a Blobbi's expression.
+ * A resolved visual recipe describing all parts of a Pets's expression.
  *
  * Each field is optional — only the parts present in the recipe are applied.
  * An empty recipe ({}) produces the neutral/default expression.
  */
-export interface BlobbiVisualRecipe {
+export interface PetsVisualRecipe {
   /** Eye modifications (watery, star, dizzy, sleepy blink) */
   eyes?: EyeRecipe;
   /** Mouth shape override */
@@ -200,10 +200,10 @@ export interface BlobbiVisualRecipe {
 /**
  * Named emotion presets as part-based visual recipes.
  *
- * These presets define how Blobbi looks in different emotional/status states.
+ * These presets define how Pets looks in different emotional/status states.
  * Each preset creates a distinct, recognizable expression that feels pet-like.
  *
- * The base Blobbi SVG (neutral) is visually content with a gentle smile,
+ * The base Pets SVG (neutral) is visually content with a gentle smile,
  * so 'neutral' maps to an empty recipe (no modifications).
  *
  * **Relationship to status-driven expressions:**
@@ -224,7 +224,7 @@ export interface BlobbiVisualRecipe {
  *   - Interaction states (excited, surprised) should feel reactive
  *   - Expressions should work well alone and in combinations
  */
-export const EMOTION_RECIPES: Record<BlobbiEmotion, BlobbiVisualRecipe> = {
+export const EMOTION_RECIPES: Record<PetsEmotion, PetsVisualRecipe> = {
   // ── Neutral ─────────────────────────────────────────────────────────────────
   // Base state: content, at ease. The SVG's default smile is the expression.
   neutral: {},
@@ -378,7 +378,7 @@ export const EMOTION_RECIPES: Record<BlobbiEmotion, BlobbiVisualRecipe> = {
 
   // ── Eating ──────────────────────────────────────────────────────────────────
   // Mouth wide open, ready to receive food. Used during food-drag when the
-  // dragged item is near Blobbi's mouth. Simple filled round mouth — no
+  // dragged item is near Pets's mouth. Simple filled round mouth — no
   // extra eye or brow effects so it layers cleanly over the current status.
   eating: {
     mouth: { eatingMouth: true },
@@ -422,7 +422,7 @@ export const EMOTION_RECIPES: Record<BlobbiEmotion, BlobbiVisualRecipe> = {
  * @param emotion - Named emotion preset
  * @returns The resolved visual recipe
  */
-export function resolveVisualRecipe(emotion: BlobbiEmotion): BlobbiVisualRecipe {
+export function resolveVisualRecipe(emotion: PetsEmotion): PetsVisualRecipe {
   return EMOTION_RECIPES[emotion] ?? {};
 }
 
@@ -442,9 +442,9 @@ export function resolveVisualRecipe(emotion: BlobbiEmotion): BlobbiVisualRecipe 
  * @returns A merged recipe
  */
 export function mergeVisualRecipes(
-  base: BlobbiVisualRecipe,
-  overlay: BlobbiVisualRecipe,
-): BlobbiVisualRecipe {
+  base: PetsVisualRecipe,
+  overlay: PetsVisualRecipe,
+): PetsVisualRecipe {
   return {
     eyes: overlay.eyes ?? base.eyes,
     mouth: overlay.mouth ?? base.mouth,
@@ -505,7 +505,7 @@ function generateTears(eyes: EyePosition[], config: TearConfig, seed?: number): 
       const totalCycle = fullCycleDuration * eyes.length;
 
       return `
-    <g class="blobbi-tear blobbi-tear-${eye.side}">
+    <g class="pets-tear pets-tear-${eye.side}">
       <ellipse cx="${eye.cx}" cy="${tearStartY}" rx="2.5" ry="4" fill="url(#tearGradient)" opacity="0">
         <animate attributeName="cy" values="${tearStartY};${tearEndY};${tearStartY}" keyTimes="0;${config.duration / totalCycle};1" dur="${totalCycle}s" begin="${delay}s" repeatCount="indefinite" />
         <animate attributeName="opacity" values="0;0.8;0.8;0;0" keyTimes="0;${0.05 * config.duration / totalCycle};${0.8 * config.duration / totalCycle};${config.duration / totalCycle};1" dur="${totalCycle}s" begin="${delay}s" repeatCount="indefinite" />
@@ -532,7 +532,7 @@ function generateTears(eyes: EyePosition[], config: TearConfig, seed?: number): 
     const delay = index * (config.duration / 2);
 
     return `
-    <g class="blobbi-tear blobbi-tear-${eye.side}">
+    <g class="pets-tear pets-tear-${eye.side}">
       <ellipse cx="${eye.cx}" cy="${tearStartY}" rx="2.5" ry="4" fill="url(#tearGradient)" opacity="0">
         <animate attributeName="cy" values="${tearStartY};${tearEndY}" dur="${fullCycleDuration}s" begin="${delay}s" repeatCount="indefinite" />
         <animate attributeName="opacity" values="0;0.8;0.8;0;0" keyTimes="0;0.05;${0.8 * config.duration / fullCycleDuration};${config.duration / fullCycleDuration};1" dur="${fullCycleDuration}s" begin="${delay}s" repeatCount="indefinite" />
@@ -566,9 +566,9 @@ function generateSleepyStyles(cycleDuration: number): string {
       0% { transform: translateY(0); } 35% { transform: translateY(-4px); }
       60% { transform: translateY(-8px); } 70%, 100% { transform: translateY(-10px); }
     }
-    .blobbi-sleepy .blobbi-eye { animation: sleepy-wake-glance ${dur}s ease-in-out infinite; }
-    .blobbi-sleepy .blobbi-closed-eye { animation: sleepy-closed-eye ${dur}s ease-in-out infinite; }
-    .blobbi-sleepy .blobbi-zzz { animation: sleepy-zzz ${dur}s ease-in-out infinite, sleepy-zzz-float ${dur}s ease-in-out infinite; }
+    .pets-sleepy .pets-eye { animation: sleepy-wake-glance ${dur}s ease-in-out infinite; }
+    .pets-sleepy .pets-closed-eye { animation: sleepy-closed-eye ${dur}s ease-in-out infinite; }
+    .pets-sleepy .pets-zzz { animation: sleepy-zzz ${dur}s ease-in-out infinite, sleepy-zzz-float ${dur}s ease-in-out infinite; }
   </style>`;
 }
 
@@ -602,12 +602,12 @@ function generateClosedEyeLines(eyes: EyePosition[]): string {
     const curveDepth = eye.radius * 0.5;
     const yOffset = eye.radius * 0.75;
     const lineY = eye.cy + yOffset;
-    return `<path class="blobbi-closed-eye blobbi-closed-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY + curveDepth} ${endX} ${lineY}" stroke="#374151" stroke-width="2" stroke-linecap="round" fill="none" opacity="0" />`;
+    return `<path class="pets-closed-eye pets-closed-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY + curveDepth} ${endX} ${lineY}" stroke="#374151" stroke-width="2" stroke-linecap="round" fill="none" opacity="0" />`;
   }).join('\n');
 }
 
 function generateSleepyZzz(): string {
-  return `<g class="blobbi-zzz" opacity="0">
+  return `<g class="pets-zzz" opacity="0">
     <text x="70" y="12" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" fill="#6b7280">z</text>
     <text x="76" y="8" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#6b7280">z</text>
     <text x="84" y="3" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#6b7280">z</text>
@@ -620,14 +620,14 @@ function applySleepyAnimation(
   anchor: { cx: number; cy: number } | null,
   cycleDuration: number,
 ): string {
-  // Add 'blobbi-sleepy' class to SVG root
+  // Add 'pets-sleepy' class to SVG root
   svgText = svgText.replace(/<svg([^>]*)>/, (match, attrs) => {
     if (attrs.includes('class="')) {
-      return match.replace(/class="([^"]*)"/, 'class="$1 blobbi-sleepy"');
+      return match.replace(/class="([^"]*)"/, 'class="$1 pets-sleepy"');
     } else if (attrs.includes("class='")) {
-      return match.replace(/class='([^']*)'/, "class='$1 blobbi-sleepy'");
+      return match.replace(/class='([^']*)'/, "class='$1 pets-sleepy'");
     } else {
-      return `<svg${attrs} class="blobbi-sleepy">`;
+      return `<svg${attrs} class="pets-sleepy">`;
     }
   });
 
@@ -651,7 +651,7 @@ function applySleepyAnimation(
   const closedEyeLines = generateClosedEyeLines(eyes);
   const zzz = generateSleepyZzz();
   const sleepyOverlays = `
-  <g class="blobbi-sleepy-overlays">
+  <g class="pets-sleepy-overlays">
     ${closedEyeLines}
     ${zzz}
   </g>`;
@@ -676,20 +676,20 @@ function generateSleepingStyles(): string {
       85%  { opacity: 0.4; transform: translateY(-10px); }
       100% { opacity: 0;   transform: translateY(-12px); }
     }
-    .blobbi-sleeping .blobbi-sleeping-zzz text:nth-child(1) {
+    .pets-sleeping .pets-sleeping-zzz text:nth-child(1) {
       animation: sleeping-zzz 3.5s ease-in-out infinite;
     }
-    .blobbi-sleeping .blobbi-sleeping-zzz text:nth-child(2) {
+    .pets-sleeping .pets-sleeping-zzz text:nth-child(2) {
       animation: sleeping-zzz 3.5s ease-in-out 0.6s infinite;
     }
-    .blobbi-sleeping .blobbi-sleeping-zzz text:nth-child(3) {
+    .pets-sleeping .pets-sleeping-zzz text:nth-child(3) {
       animation: sleeping-zzz 3.5s ease-in-out 1.2s infinite;
     }
   </style>`;
 }
 
 function generateSleepingZzz(): string {
-  return `<g class="blobbi-sleeping-zzz">
+  return `<g class="pets-sleeping-zzz">
     <text x="70" y="12" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" fill="#6b7280" opacity="0">z</text>
     <text x="76" y="8" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#6b7280" opacity="0">z</text>
     <text x="84" y="3" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#6b7280" opacity="0">z</text>
@@ -716,7 +716,7 @@ function applyHappyArcEyes(svgText: string, eyes: EyePosition[]): string {
     const closedY = baseY + closedOffset;
     const closedHeight = fullHeight - closedOffset;
     // Include a dummy SMIL <animate> element so the JS blink loop in
-    // useBlobbiEyes detects it and skips overriding the closed position.
+    // usePetsEyes detects it and skips overriding the closed position.
     // Without this, the rAF blink loop resets clip-rects to the open state.
     return `<rect class="${EYE_CLASSES.clipRect}" x="${x}" y="${closedY}" width="${width}" height="${closedHeight}"><animate attributeName="y" values="${closedY}" dur="0.001s" fill="freeze" /></rect>`;
   });
@@ -730,11 +730,11 @@ function applyHappyArcEyes(svgText: string, eyes: EyePosition[]): string {
     const curveDepth = eye.radius * 0.5;
     const yOffset = eye.radius * 0.75;
     const lineY = eye.cy + yOffset;
-    return `<path class="blobbi-happy-eye blobbi-happy-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY - curveDepth} ${endX} ${lineY}" stroke="#111827" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="1" />`;
+    return `<path class="pets-happy-eye pets-happy-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY - curveDepth} ${endX} ${lineY}" stroke="#111827" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="1" />`;
   }).join('\n');
 
   const overlays = `
-  <g class="blobbi-happy-arc-overlays">
+  <g class="pets-happy-arc-overlays">
     ${arcLines}
   </g>`;
   svgText = svgText.replace('</svg>', overlays + '\n</svg>');
@@ -756,14 +756,14 @@ function applySleepingClosedEyes(
   eyes: EyePosition[],
   anchor: { cx: number; cy: number } | null,
 ): string {
-  // Add 'blobbi-sleeping' class to SVG root
+  // Add 'pets-sleeping' class to SVG root
   svgText = svgText.replace(/<svg([^>]*)>/, (match, attrs) => {
     if (attrs.includes('class="')) {
-      return match.replace(/class="([^"]*)"/, 'class="$1 blobbi-sleeping"');
+      return match.replace(/class="([^"]*)"/, 'class="$1 pets-sleeping"');
     } else if (attrs.includes("class='")) {
-      return match.replace(/class='([^']*)'/, "class='$1 blobbi-sleeping'");
+      return match.replace(/class='([^']*)'/, "class='$1 pets-sleeping'");
     } else {
-      return `<svg${attrs} class="blobbi-sleeping">`;
+      return `<svg${attrs} class="pets-sleeping">`;
     }
   });
 
@@ -803,12 +803,12 @@ function applySleepingClosedEyes(
     const curveDepth = eye.radius * 0.5;
     const yOffset = eye.radius * 0.75;
     const lineY = eye.cy + yOffset;
-    return `<path class="blobbi-closed-eye blobbi-closed-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY + curveDepth} ${endX} ${lineY}" stroke="#374151" stroke-width="2" stroke-linecap="round" fill="none" opacity="1" />`;
+    return `<path class="pets-closed-eye pets-closed-eye-${eye.side}" d="M ${startX} ${lineY} Q ${eye.cx} ${lineY + curveDepth} ${endX} ${lineY}" stroke="#374151" stroke-width="2" stroke-linecap="round" fill="none" opacity="1" />`;
   }).join('\n');
 
   const zzz = generateSleepingZzz();
   const sleepingOverlays = `
-  <g class="blobbi-sleeping-overlays">
+  <g class="pets-sleeping-overlays">
     ${closedEyeLines}
     ${zzz}
   </g>`;
@@ -829,7 +829,7 @@ function applySleepingClosedEyes(
  * - Body effects: preserved (dirty smudges, stink clouds still visible)
  * - Extras: food icon kept, drool/tears removed
  */
-export function buildSleepingRecipe(statusRecipe?: BlobbiVisualRecipe): BlobbiVisualRecipe {
+export function buildSleepingRecipe(statusRecipe?: PetsVisualRecipe): PetsVisualRecipe {
   return {
     // Sleeping face overrides everything
     eyes: { sleepingClosed: true },
@@ -872,9 +872,9 @@ export function buildSleepingRecipe(statusRecipe?: BlobbiVisualRecipe): BlobbiVi
  */
 export function applyVisualRecipe(
   svgText: string,
-  recipe: BlobbiVisualRecipe,
+  recipe: PetsVisualRecipe,
   recipeLabel: string,
-  variant: BlobbiVariant = 'adult',
+  variant: PetsVariant = 'adult',
   form?: string,
   instanceId?: string,
 ): string {
@@ -1023,7 +1023,7 @@ export function applyVisualRecipe(
   if (overlays.length > 0) {
     const overlayGroup = `
   <!-- Visual recipe overlays: ${recipeLabel} -->
-  <g class="blobbi-recipe blobbi-recipe-${recipeLabel}">
+  <g class="pets-recipe pets-recipe-${recipeLabel}">
     ${overlays.join('\n    ')}
   </g>`;
     svgText = svgText.replace('</svg>', overlayGroup + '\n</svg>');

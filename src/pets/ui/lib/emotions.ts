@@ -1,5 +1,5 @@
 /**
- * Blobbi Emotion System — Public API
+ * Pets Emotion System — Public API
  *
  * This file provides the public API for the emotion system.
  * Internally, it delegates to the **part-based visual recipe** system
@@ -35,7 +35,7 @@ export {
 };
 
 export type {
-  BlobbiVisualRecipe,
+  PetsVisualRecipe,
   EyeRecipe,
   MouthRecipe,
   EyebrowRecipe,
@@ -47,8 +47,8 @@ export type {
 
 // Canonical type definitions live in emotion-types.ts (no runtime deps).
 // Re-exported here so existing consumers keep working.
-export type { BlobbiEmotion, BlobbiVariant } from './emotion-types';
-import type { BlobbiEmotion, BlobbiVariant } from './emotion-types';
+export type { PetsEmotion, PetsVariant } from './emotion-types';
+import type { PetsEmotion, PetsVariant } from './emotion-types';
 
 // Re-export subsystem types needed by external consumers
 export type { EyePosition } from './eyes';
@@ -72,8 +72,8 @@ export type { EyebrowConfig } from './eyebrows';
  */
 export function applyEmotion(
   svgText: string,
-  emotion: BlobbiEmotion,
-  variant: BlobbiVariant = 'adult',
+  emotion: PetsEmotion,
+  variant: PetsVariant = 'adult',
   form?: string,
   instanceId?: string,
 ): string {
@@ -90,7 +90,7 @@ export function applyEmotion(
 /**
  * Check if an emotion requires special eye handling.
  */
-export function emotionAffectsEyes(emotion: BlobbiEmotion): boolean {
+export function emotionAffectsEyes(emotion: PetsEmotion): boolean {
   const recipe = resolveVisualRecipe(emotion);
   return !!(recipe.eyes?.wateryEyes || recipe.eyes?.starEyes || recipe.eyes?.dizzySpirals || recipe.eyes?.happyArc);
 }
@@ -99,24 +99,24 @@ export function emotionAffectsEyes(emotion: BlobbiEmotion): boolean {
 // These maintain backward compatibility for external consumers that imported
 // from emotions.ts directly. New code should import from the subsystem modules.
 
-/** @deprecated Import from '@/blobbi/ui/lib/mouth' instead */
+/** @deprecated Import from '@/pets/ui/lib/mouth' instead */
 export { detectMouthPosition } from './mouth';
-/** @deprecated Import from '@/blobbi/ui/lib/mouth' instead */
+/** @deprecated Import from '@/pets/ui/lib/mouth' instead */
 export { generateRoundMouth } from './mouth';
-/** @deprecated Import from '@/blobbi/ui/lib/mouth' instead */
+/** @deprecated Import from '@/pets/ui/lib/mouth' instead */
 export { generateSadMouth } from './mouth';
-/** @deprecated Import from '@/blobbi/ui/lib/eyes' instead */
+/** @deprecated Import from '@/pets/ui/lib/eyes' instead */
 export { detectEyePositions } from './eyes';
-/** @deprecated Import from '@/blobbi/ui/lib/eyebrows' instead */
+/** @deprecated Import from '@/pets/ui/lib/eyebrows' instead */
 export { generateEyebrows } from './eyebrows';
 
 // ─── Legacy Type Compatibility ────────────────────────────────────────────────
 
 /**
- * @deprecated Use BlobbiVisualRecipe from './recipe' instead.
+ * @deprecated Use PetsVisualRecipe from './recipe' instead.
  * This type alias exists only for backward compatibility.
  */
-export type EmotionConfig = import('./recipe').BlobbiVisualRecipe;
+export type EmotionConfig = import('./recipe').PetsVisualRecipe;
 
 /**
  * @deprecated Use EMOTION_RECIPES from './recipe' instead.

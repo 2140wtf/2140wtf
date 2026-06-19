@@ -1,5 +1,5 @@
 /**
- * useBlobbiCompanion Hook
+ * usePetsCompanion Hook
  * 
  * Main hook that combines all companion behavior into a single interface.
  * This is the primary hook consumers should use.
@@ -30,12 +30,12 @@ const DEFAULT_MOTION: CompanionMotion = {
 };
 import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 import { calculateMovementBounds, calculateGroundY } from '../utils/movement';
-import { useBlobbiCompanionData } from './useBlobbiCompanionData';
-import { useBlobbiCompanionState } from './useBlobbiCompanionState';
-import { useBlobbiCompanionMotion } from './useBlobbiCompanionMotion';
-import { useBlobbiCompanionGaze } from './useBlobbiCompanionGaze';
-import { useBlobbiAttention } from './useBlobbiAttention';
-import { useBlobbiEntryAnimation } from './useBlobbiEntryAnimation';
+import { usePetsCompanionData } from './usePetsCompanionData';
+import { usePetsCompanionState } from './usePetsCompanionState';
+import { usePetsCompanionMotion } from './usePetsCompanionMotion';
+import { usePetsCompanionGaze } from './usePetsCompanionGaze';
+import { usePetsAttention } from './usePetsAttention';
+import { usePetsEntryAnimation } from './usePetsEntryAnimation';
 import { useRouteReaction } from './useRouteReaction';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 
@@ -48,7 +48,7 @@ interface TriggerAttentionOptions {
   isGlance?: boolean;
 }
 
-interface UseBlobbiCompanionResult {
+interface UsePetsCompanionResult {
   /** The current companion data */
   companion: CompanionData | null;
   /** Whether companion data is loading */
@@ -86,10 +86,10 @@ interface UseBlobbiCompanionResult {
 }
 
 /**
- * Main hook for the Blobbi companion system.
+ * Main hook for the Pets companion system.
  * Combines data fetching, state management, motion, and gaze.
  */
-export function useBlobbiCompanion(): UseBlobbiCompanionResult {
+export function usePetsCompanion(): UsePetsCompanionResult {
   const location = useLocation();
   const config = DEFAULT_COMPANION_CONFIG;
   
@@ -150,7 +150,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
   });
   
   // Fetch companion data
-  const { companion, isLoading } = useBlobbiCompanionData();
+  const { companion, isLoading } = usePetsCompanionData();
   
   // Whether companion should be visible
   const isVisible = !!companion && !isLoading;
@@ -190,7 +190,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
   }, [viewport.width, viewport.height]);
   
   // Attention management - will be activated after entry completes
-  const { currentAttention, triggerAttention, clearAttention } = useBlobbiAttention({
+  const { currentAttention, triggerAttention, clearAttention } = usePetsAttention({
     isActive: isVisible && hasEnteredOnce,
   });
   
@@ -228,7 +228,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
     observationTarget,
     attentionPosition,
     onReachedTarget,
-  } = useBlobbiCompanionState({
+  } = usePetsCompanionState({
     isActive: isVisible,
     motionRef,
     bounds,
@@ -245,7 +245,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
     updateDrag,
     endDrag,
     setPosition,
-  } = useBlobbiCompanionMotion({
+  } = usePetsCompanionMotion({
     initialX: groundPosition.x, // Always use groundPosition - entry syncs to this
     groundY,
     bounds,
@@ -266,7 +266,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
     currentInspectionDirection,
     wasResolvedFromStuck,
     acknowledgeCompletion,
-  } = useBlobbiEntryAnimation({
+  } = usePetsEntryAnimation({
     isActive: isVisible,
     pathname: location.pathname,
     sidebarOrder,
@@ -319,7 +319,7 @@ export function useBlobbiCompanion(): UseBlobbiCompanionResult {
   }, [entryJustCompleted, wasResolvedFromStuck, setPosition, groundPosition, acknowledgeCompletion]);
   
   // Gaze management - passes entry inspection direction for eye control during entry
-  const { eyeOffsetRef } = useBlobbiCompanionGaze({
+  const { eyeOffsetRef } = usePetsCompanionGaze({
     state: isEntering ? 'idle' : state,
     direction: isEntering ? 'right' : direction,
     companionPosition: motion.position,

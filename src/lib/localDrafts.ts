@@ -1,4 +1,5 @@
 import type { Draft } from '@/hooks/useDrafts';
+import { generateUUID } from '@/lib/uuid';
 
 const DRAFTS_KEY = 'article-drafts';
 
@@ -14,7 +15,7 @@ export function saveDraft(draft: Omit<Draft, 'id' | 'updatedAt'> & { id?: string
 
     const newDraft: Draft = {
       ...draft,
-      id: draft.id || (existingIndex >= 0 ? drafts[existingIndex].id : crypto.randomUUID()),
+      id: draft.id || (existingIndex >= 0 ? drafts[existingIndex].id : generateUUID()),
       updatedAt: Date.now(),
     };
 

@@ -8,7 +8,7 @@ import { getStorageKey } from '@/lib/storageKey';
  * the selection in sessionStorage so it survives navigation within
  * the same browser session.
  *
- * Each feed page should pass a unique `feedId` (e.g. 'home', 'vines', 'videos').
+ * Each feed page should pass a unique `feedId` (e.g. 'home', 'videos').
  *
  * @param feedId  Unique identifier for this feed page.
  * @param validTabs  Optional list of valid tab values for validation. If omitted, any stored value is accepted.

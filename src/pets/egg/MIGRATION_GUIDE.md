@@ -1,4 +1,4 @@
-# Blobbi Egg Module - Migration Guide
+# Pets Egg Module - Migration Guide
 
 ## How to Copy This Module to Another Project
 
@@ -40,10 +40,10 @@ That's it! No other dependencies needed.
 ```tsx
 // Import from the module
 import { EggGraphic } from './egg';
-import type { EggVisualBlobbi } from './egg';
+import type { EggVisualPets } from './egg';
 
 // Create an egg object
-const myEgg: EggVisualBlobbi = {
+const myEgg: EggVisualPets = {
   baseColor: '#f2f2f2',
   lifeStage: 'egg',
 };
@@ -52,7 +52,7 @@ const myEgg: EggVisualBlobbi = {
 function MyComponent() {
   return (
     <div style={{ width: '200px', height: '250px' }}>
-      <EggGraphic blobbi={myEgg} animated={true} warmth={50} />
+      <EggGraphic pets={myEgg} animated={true} warmth={50} />
     </div>
   );
 }
@@ -93,7 +93,7 @@ Should compile without errors related to the egg module.
 1. Install and configure Tailwind CSS (recommended)
 2. Add custom CSS to override styles
 
-#### Issue: TypeScript errors about EggVisualBlobbi
+#### Issue: TypeScript errors about EggVisualPets
 
 **Solution**: Make sure TypeScript can resolve the module:
 
@@ -118,7 +118,7 @@ import { EggGraphic } from '../../egg';
 
 #### Change Colors
 
-Modify `src/egg/lib/blobbi-egg-validation.ts` to add your own color palettes:
+Modify `src/egg/lib/pets-egg-validation.ts` to add your own color palettes:
 
 ```typescript
 export const VALID_BASE_COLORS = {
@@ -141,7 +141,7 @@ Edit `src/egg/styles/egg-animations.css`:
 
 1. Add SVG to `src/egg/components/SpecialMarkRenderer.tsx`
 2. Add to `AVAILABLE_SPECIAL_MARKS` in `src/egg/lib/special-marks-utils.ts`
-3. Add validation in `src/egg/lib/blobbi-egg-validation.ts`
+3. Add validation in `src/egg/lib/pets-egg-validation.ts`
 
 ### Best Practices
 
@@ -160,9 +160,9 @@ import { EggGraphic } from './egg/components/EggGraphic';
 #### 2. Use TypeScript Types
 
 ```tsx
-import type { EggVisualBlobbi } from './egg';
+import type { EggVisualPets } from './egg';
 
-const myEgg: EggVisualBlobbi = {
+const myEgg: EggVisualPets = {
   // TypeScript will validate this object
 };
 ```

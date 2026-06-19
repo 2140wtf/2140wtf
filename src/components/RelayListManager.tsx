@@ -156,7 +156,7 @@ export function RelayListManager() {
     
     // Sync to encrypted storage if logged in (non-blocking)
     if (user) {
-      updateSettings.mutate({ useAppRelays: enabled });
+      updateSettings.mutate({ useAppRelays: enabled }, { onError: () => {} });
     }
     
     toast({
@@ -176,7 +176,7 @@ export function RelayListManager() {
 
     // Sync to encrypted storage if logged in (non-blocking)
     if (user) {
-      updateSettings.mutate({ useUserRelays: enabled });
+      updateSettings.mutate({ useUserRelays: enabled }, { onError: () => {} });
     }
 
     toast({

@@ -101,9 +101,9 @@ export function FileMetadataContent({ event, compact }: FileMetadataContentProps
   const fileName = url.split('/').pop() ?? 'file';
   const sizeStr = size ? formatBytes(Number(size)) : undefined;
 
-  // ── Webxdc app ──────────────────────────────────────────────────────
+  // ── Mini app ────────────────────────────────────────────────────────
   if (mime === 'application/x-webxdc') {
-    const appName = altText?.replace(/^Webxdc app:\s*/i, '') ?? summary ?? fileName.replace('.xdc', '');
+    const appName = altText?.replace(/^Mini app:\s*/i, '') ?? summary ?? fileName.replace('.xdc', '');
     return (
       <div className="mt-3">
         <WebxdcEmbed

@@ -1,7 +1,7 @@
 /**
- * Blobbi XP (Experience Points) System
+ * Pets XP (Experience Points) System
  * 
- * This module defines XP values for all Blobbi care actions and provides
+ * This module defines XP values for all Pets care actions and provides
  * utilities for calculating and applying XP gains.
  * 
  * Design Philosophy:
@@ -12,7 +12,7 @@
  * - XP accumulates across all life stages and never resets
  */
 
-import type { BlobbiAction, InventoryAction, DirectAction } from './blobbi-action-utils';
+import type { PetsAction, InventoryAction, DirectAction } from './pets-action-utils';
 
 // ─── XP Values by Action ──────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ export const DIRECT_ACTION_XP: Record<DirectAction, number> = {
  * Combined XP lookup for all action types.
  * Use this for a unified XP calculation interface.
  */
-export const ACTION_XP: Record<BlobbiAction, number> = {
+export const ACTION_XP: Record<PetsAction, number> = {
   ...INVENTORY_ACTION_XP,
   ...DIRECT_ACTION_XP,
 };
@@ -58,7 +58,7 @@ export const POOP_CLEANUP_XP = 5;
  * @param action - The action performed
  * @returns XP points earned
  */
-export function calculateActionXP(action: BlobbiAction): number {
+export function calculateActionXP(action: PetsAction): number {
   return ACTION_XP[action] ?? 0;
 }
 
@@ -96,7 +96,7 @@ export function applyXPGain(currentXP: number | undefined, xpGain: number): numb
  * @returns Object with xpGained and quantity
  */
 export function getXPGainSummary(
-  action: BlobbiAction,
+  action: PetsAction,
   quantity: number = 1
 ): { xpGained: number; quantity: number } {
   const baseXP = ACTION_XP[action] ?? 0;
@@ -126,7 +126,7 @@ export function formatXPGain(xpGained: number): string {
  * @returns Formatted message for user feedback
  */
 export function getXPGainMessage(
-  action: BlobbiAction,
+  action: PetsAction,
   xpGained: number,
   newTotal?: number
 ): string {

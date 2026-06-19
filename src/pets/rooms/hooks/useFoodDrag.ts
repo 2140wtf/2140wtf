@@ -72,7 +72,7 @@ export interface UseFoodDragReturn {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getMouthCenter(): { mx: number; my: number } | null {
-  const el = document.querySelector<HTMLElement>('[data-blobbi-visual]');
+  const el = document.querySelector<HTMLElement>('[data-pets-visual]');
   if (!el) return null;
   const rect = el.getBoundingClientRect();
   return {

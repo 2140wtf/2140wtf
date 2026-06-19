@@ -1,22 +1,22 @@
 /**
- * useBlobbiCompanionData Hook
+ * usePetsCompanionData Hook
  * 
  * Fetches the current companion data from the user's Blobbonaut profile.
  * This is the data layer - it handles fetching and provides companion data.
  * 
- * Uses useBlobbisCollection with a targeted dList (single d-tag) for efficiency.
- * Optimistic updates from mutations propagate across all blobbi-collection
- * queries (including BlobbiPage's 'all' mode) via updateCompanionEvent.
+ * Uses usePetssCollection with a targeted dList (single d-tag) for efficiency.
+ * Optimistic updates from mutations propagate across all pets-collection
+ * queries (including PetsPage's 'all' mode) via updateCompanionEvent.
  */
 
 import { useMemo } from 'react';
 
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { useBlobbisCollection } from '@/blobbi/core/hooks/useBlobbisCollection';
-import { useProjectedBlobbiState } from '@/blobbi/core/hooks/useProjectedBlobbiState';
+import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
+import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
 import type { CompanionData } from '../types/companion.types';
 
-interface UseBlobbiCompanionDataResult {
+interface UsePetsCompanionDataResult {
   /** The current companion data, if available */
   companion: CompanionData | null;
   /** Whether the data is loading */
@@ -31,15 +31,15 @@ interface UseBlobbiCompanionDataResult {
  * Flow:
  * 1. Use useBlobbonautProfile to get the profile (shared query, reactive)
  * 2. Build a dList containing just the currentCompanion (targeted fetch)
- * 3. Use useBlobbisCollection with the dList to get the companion
+ * 3. Use usePetssCollection with the dList to get the companion
  * 4. Apply projected decay for accurate UI reactions
  * 5. Return the companion data with projected stats
  * 
  * Reactivity:
- * - Optimistic updates propagate across all blobbi-collection queries
+ * - Optimistic updates propagate across all pets-collection queries
  * - Projected decay recalculates every 60 seconds while mounted
  */
-export function useBlobbiCompanionData(): UseBlobbiCompanionDataResult {
+export function usePetsCompanionData(): UsePetsCompanionDataResult {
   // Use the shared profile hook - this ensures reactivity when profile changes
   const { profile, isLoading: profileLoading } = useBlobbonautProfile();
   
@@ -53,21 +53,21 @@ export function useBlobbiCompanionData(): UseBlobbiCompanionDataResult {
     return [currentCompanionD];
   }, [currentCompanionD]);
   
-  // Use the shared collection query - same cache as BlobbiPage
+  // Use the shared collection query - same cache as PetsPage
   // This ensures we get optimistic updates immediately
   const {
     companionsByD,
     isLoading: collectionLoading,
-  } = useBlobbisCollection(dList);
+  } = usePetssCollection(dList);
   
-  // Get the BlobbiCompanion from the collection
-  const blobbi = currentCompanionD ? companionsByD[currentCompanionD] ?? null : null;
+  // Get the PetsCompanion from the collection
+  const pets = currentCompanionD ? companionsByD[currentCompanionD] ?? null : null;
   
   // Apply projected decay for accurate visual reactions.
   // Owner surfaces use decay-only — social effects are incorporated via
   // explicit consolidation, not pre-applied projection.
   // This recalculates every 60 seconds while mounted.
-  const projectedState = useProjectedBlobbiState(blobbi);
+  const projectedState = useProjectedPetsState(pets);
   
   // Transform to CompanionData with projected stats
   // When currentCompanionD becomes null/undefined, companion becomes null
@@ -76,16 +76,16 @@ export function useBlobbiCompanionData(): UseBlobbiCompanionDataResult {
     // This ensures removal is reactive
     if (!currentCompanionD) return null;
     
-    if (!blobbi) return null;
+    if (!pets) return null;
     
     // Use projected stats if available, otherwise fall back to base stats
-    const stats = projectedState?.stats ?? blobbi.stats;
+    const stats = projectedState?.stats ?? pets.stats;
     
     return {
-      d: blobbi.d,
-      name: blobbi.name,
-      stage: blobbi.stage,
-      visualTraits: blobbi.visualTraits,
+      d: pets.d,
+      name: pets.name,
+      stage: pets.stage,
+      visualTraits: pets.visualTraits,
       energy: stats.energy ?? 100,
       stats: {
         hunger: stats.hunger ?? 100,
@@ -94,12 +94,12 @@ export function useBlobbiCompanionData(): UseBlobbiCompanionDataResult {
         hygiene: stats.hygiene ?? 100,
         energy: stats.energy ?? 100,
       },
-      state: blobbi.state,
+      state: pets.state,
       // Include adult form info for proper rendering
-      adultType: blobbi.adultType,
-      seed: blobbi.seed,
+      adultType: pets.adultType,
+      seed: pets.seed,
     };
-  }, [currentCompanionD, blobbi, projectedState?.stats]);
+  }, [currentCompanionD, pets, projectedState?.stats]);
   
   return {
     companion,

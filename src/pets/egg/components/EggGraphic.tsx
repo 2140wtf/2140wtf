@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { impactLight } from '@/lib/haptics';
-import type { EggVisualBlobbi } from '../types/egg.types';
-import { isValidBaseColor, isValidSecondaryColor } from '../lib/blobbi-egg-validation';
+import type { EggVisualPets } from '../types/egg.types';
+import { isValidBaseColor, isValidSecondaryColor } from '../lib/pets-egg-validation';
 import { SpecialMarkRenderer, SpecialMarkFallback } from './SpecialMarkRenderer';
 import { isSpecialMarkSupported } from '../lib/special-marks-utils';
 import { useSpecialMark } from '../hooks/useSpecialMark';
-import { isDivineEgg } from '../lib/blobbi-divine-utils';
+import { isDivineEgg } from '../lib/pets-divine-utils';
 import { cn } from '../lib/cn';
 
 /**
@@ -50,13 +50,13 @@ export type EggTourVisualState =
   | 'hatching';
 
 interface EggGraphicProps {
-  blobbi?: EggVisualBlobbi; // Visual blobbi object for visual properties
+  pets?: EggVisualPets; // Visual pets object for visual properties
   sizeVariant?: 'tiny' | 'small' | 'medium' | 'large'; // Internal scaling only, NOT layout size
   className?: string;
   animated?: boolean; // Enable ambient effects (glow pulse, particles) but NOT sway
   reaction?: EggReactionState; // Reaction state for music/sing animations
   cracking?: boolean;
-  warmth?: number; // 0-100, affects the glow (fallback if no blobbi)
+  warmth?: number; // 0-100, affects the glow (fallback if no pets)
   forceInlineSvg?: boolean; // New prop to guarantee inline SVG
   /** Status effects for egg-stage visual feedback */
   statusEffects?: EggStatusEffects;
@@ -133,7 +133,7 @@ const renderLegacySpecialMark = (specialMark: string) => {
 };
 
 export const EggGraphic: React.FC<EggGraphicProps> = ({
-  blobbi,
+  pets,
   sizeVariant = 'medium',
   className,
   animated = false,
@@ -148,19 +148,19 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
   // sizeVariant controls ONLY internal scaling/details, NOT layout dimensions
   // Parent container controls actual rendered width/height via slot
 
-  // Build a quick map from blobbi.tags (["k","v"]) for easier lookups
+  // Build a quick map from pets.tags (["k","v"]) for easier lookups
   const tagMap = React.useMemo(() => {
     const map = new Map<string, string>();
-    blobbi?.tags?.forEach(([k, v]) => {
+    pets?.tags?.forEach(([k, v]) => {
       if (typeof k === 'string' && typeof v === 'string') {
         map.set(k, v);
       }
     });
     return map;
-  }, [blobbi?.tags]);
+  }, [pets?.tags]);
 
   // Initialize special mark hook for dynamic rendering
-  const specialMarkHook = useSpecialMark(blobbi?.specialMark || null, {
+  const specialMarkHook = useSpecialMark(pets?.specialMark || null, {
     animated,
     autoAnimate: true,
     performanceMode: false, // Can be made configurable
@@ -341,20 +341,20 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
   };
 
   // Check if this is a divine egg
-  const isDivine = blobbi ? isDivineEgg(blobbi) : false;
+  const isDivine = pets ? isDivineEgg(pets) : false;
   // Use warmth prop directly (eggTemperature is deprecated)
   const actualWarmth = warmth;
 
-  // Get base color from blobbi or use warmth-based fallback
+  // Get base color from pets or use warmth-based fallback
   const getBaseColor = () => {
     if (isDivine) {
       // Divine eggs always use the canonical Divine primary color
       return DIVINE_PRIMARY_GREEN;
     }
 
-    // 1) direct field on the Blobbi model
-    if (blobbi?.baseColor && isValidBaseColor(blobbi.baseColor)) {
-      return blobbi.baseColor;
+    // 1) direct field on the Pets model
+    if (pets?.baseColor && isValidBaseColor(pets.baseColor)) {
+      return pets.baseColor;
     }
 
     // 2) fallback: read from Nostr tag "base_color" if present
@@ -385,13 +385,13 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
 
   const baseColor = getBaseColor();
   const secondaryColor =
-    blobbi?.secondaryColor && isValidSecondaryColor(blobbi.secondaryColor) && !isDivine
-      ? blobbi.secondaryColor
+    pets?.secondaryColor && isValidSecondaryColor(pets.secondaryColor) && !isDivine
+      ? pets.secondaryColor
       : undefined;
   const glowColor = getGlowColor(actualWarmth);
 
   // Effective special mark - use divine_wordmark for Divine eggs
-  const effectiveSpecialMark = blobbi?.specialMark || (isDivine ? 'divine_wordmark' : null);
+  const effectiveSpecialMark = pets?.specialMark || (isDivine ? 'divine_wordmark' : null);
 
   // Create gradient with full baseColor coverage - no white areas
   const createEggGradient = () => {
@@ -426,9 +426,9 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
     return `radial-gradient(circle at 30% 25%, ${colors.highlight} 0%, ${colors.base} 40%, ${colors.shadow} 100%)`;
   };
 
-  // Create pattern overlay based on blobbi.pattern
+  // Create pattern overlay based on pets.pattern
   const _createPatternOverlay = () => {
-    if (!blobbi?.pattern) return null;
+    if (!pets?.pattern) return null;
 
     const patternStyle = {
       position: 'absolute' as const,
@@ -441,7 +441,7 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
       pointerEvents: 'none' as const,
     };
 
-    switch (blobbi.pattern) {
+    switch (pets.pattern) {
       case 'gradient':
         return (
           <div
@@ -813,7 +813,7 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
           })()}
 
           {/* Title display for special eggs */}
-          {blobbi?.title && (
+          {pets?.title && (
             <div
               className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-center px-2 py-1 bg-black/20 rounded-full backdrop-blur-sm"
               style={{
@@ -822,7 +822,7 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
                 fontSize: '0.75em', // Relative sizing
               }}
             >
-              {blobbi.title}
+              {pets.title}
             </div>
           )}
         </div>
@@ -997,7 +997,7 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
             - Inner spirals: across the egg body itself
             - Mixed colors: gray (primary) + white (accents)
             - Varying sizes, speeds, and rotation directions
-            All use true Archimedean spiral paths matching Blobbi dizzy eyes
+            All use true Archimedean spiral paths matching Pets dizzy eyes
         */}
         {statusEffects?.sick && (
           <>

@@ -1,11 +1,11 @@
 /**
- * Divine Blobbi Utilities
+ * Divine Pets Utilities
  *
  * This module provides centralized utilities for Divine theme detection and tag preservation
  * to ensure consistency across the entire application.
  */
 
-import type { EggVisualBlobbi } from '../types/egg.types';
+import type { EggVisualPets } from '../types/egg.types';
 
 /**
  * Divine theme constants
@@ -29,18 +29,18 @@ export function createTagMap(tags: string[][] = []): Map<string, string> {
 }
 
 /**
- * Robust Divine Blobbi detection
+ * Robust Divine Pets detection
  * Checks both model fields and Nostr tags for comprehensive detection
  */
-export function isDivineBlobbi(blobbi: EggVisualBlobbi | null | undefined): boolean {
-  if (!blobbi) return false;
+export function isDivinePets(pets: EggVisualPets | null | undefined): boolean {
+  if (!pets) return false;
 
   // Check model fields
-  if (blobbi.themeVariant === DIVINE_THEME) return true;
-  if (blobbi.crossoverApp === DIVINE_CROSSOVER_APP) return true;
+  if (pets.themeVariant === DIVINE_THEME) return true;
+  if (pets.crossoverApp === DIVINE_CROSSOVER_APP) return true;
 
   // Check Nostr tags
-  const tagMap = createTagMap(blobbi.tags);
+  const tagMap = createTagMap(pets.tags);
   if (tagMap.get('theme') === DIVINE_THEME) return true;
   if (tagMap.get('crossover_app') === DIVINE_CROSSOVER_APP) return true;
 
@@ -50,26 +50,26 @@ export function isDivineBlobbi(blobbi: EggVisualBlobbi | null | undefined): bool
 /**
  * Robust Divine egg detection (specialized for egg stage)
  */
-export function isDivineEgg(blobbi: EggVisualBlobbi | null | undefined): boolean {
-  if (!blobbi || blobbi.lifeStage !== 'egg') return false;
-  return isDivineBlobbi(blobbi);
+export function isDivineEgg(pets: EggVisualPets | null | undefined): boolean {
+  if (!pets || pets.lifeStage !== 'egg') return false;
+  return isDivinePets(pets);
 }
 
 /**
- * Ensures Divine tags are present in a Blobbi's tags array
+ * Ensures Divine tags are present in a Pets's tags array
  * If Divine properties exist on the model but tags are missing, adds them
  */
-export function ensureDivineTags(blobbi: EggVisualBlobbi): EggVisualBlobbi {
-  const isDivine = isDivineBlobbi(blobbi);
-  if (!isDivine) return blobbi;
+export function ensureDivineTags(pets: EggVisualPets): EggVisualPets {
+  const isDivine = isDivinePets(pets);
+  if (!isDivine) return pets;
 
-  const tagMap = createTagMap(blobbi.tags || []);
+  const tagMap = createTagMap(pets.tags || []);
   const hasThemeTag = tagMap.get('theme') === DIVINE_THEME;
   const hasCrossoverTag = tagMap.get('crossover_app') === DIVINE_CROSSOVER_APP;
 
   // If Divine tags are missing, add them
   if (!hasThemeTag || !hasCrossoverTag) {
-    const newTags = [...(blobbi.tags || [])];
+    const newTags = [...(pets.tags || [])];
 
     if (!hasThemeTag) {
       newTags.push(['theme', DIVINE_THEME]);
@@ -80,20 +80,20 @@ export function ensureDivineTags(blobbi: EggVisualBlobbi): EggVisualBlobbi {
     }
 
     return {
-      ...blobbi,
+      ...pets,
       tags: newTags,
     };
   }
 
-  return blobbi;
+  return pets;
 }
 
 /**
  * Synchronizes Divine model fields with tags
  * Ensures model fields reflect the tag values
  */
-export function syncDivineModelFields(blobbi: EggVisualBlobbi): EggVisualBlobbi {
-  const tagMap = createTagMap(blobbi.tags || []);
+export function syncDivineModelFields(pets: EggVisualPets): EggVisualPets {
+  const tagMap = createTagMap(pets.tags || []);
   const themeFromTag = tagMap.get('theme');
   const crossoverFromTag = tagMap.get('crossover_app');
 
@@ -103,24 +103,24 @@ export function syncDivineModelFields(blobbi: EggVisualBlobbi): EggVisualBlobbi 
   // Only update if tags indicate Divine but model fields don't
   if (
     (hasDivineThemeTag || hasDivineCrossoverTag) &&
-    !(blobbi.themeVariant === DIVINE_THEME || blobbi.crossoverApp === DIVINE_CROSSOVER_APP)
+    !(pets.themeVariant === DIVINE_THEME || pets.crossoverApp === DIVINE_CROSSOVER_APP)
   ) {
     return {
-      ...blobbi,
-      themeVariant: hasDivineThemeTag ? DIVINE_THEME : blobbi.themeVariant,
-      crossoverApp: hasDivineCrossoverTag ? DIVINE_CROSSOVER_APP : blobbi.crossoverApp,
+      ...pets,
+      themeVariant: hasDivineThemeTag ? DIVINE_THEME : pets.themeVariant,
+      crossoverApp: hasDivineCrossoverTag ? DIVINE_CROSSOVER_APP : pets.crossoverApp,
     };
   }
 
-  return blobbi;
+  return pets;
 }
 
 /**
- * Ensures Divine properties are properly set when creating a Divine Blobbi
+ * Ensures Divine properties are properly set when creating a Divine Pets
  */
-export function createDivineBlobbiProperties(
-  overrides: Partial<EggVisualBlobbi> = {}
-): Partial<EggVisualBlobbi> {
+export function createDivinePetsProperties(
+  overrides: Partial<EggVisualPets> = {}
+): Partial<EggVisualPets> {
   return {
     themeVariant: DIVINE_THEME,
     crossoverApp: DIVINE_CROSSOVER_APP,
@@ -134,28 +134,28 @@ export function createDivineBlobbiProperties(
  * Validates that Divine tags and model fields are in sync
  */
 export function validateDivineConsistency(
-  blobbi: EggVisualBlobbi
+  pets: EggVisualPets
 ): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  const tagMap = createTagMap(blobbi.tags || []);
+  const tagMap = createTagMap(pets.tags || []);
   const themeFromTag = tagMap.get('theme');
   const crossoverFromTag = tagMap.get('crossover_app');
 
   // Check consistency between model fields and tags
-  if (blobbi.themeVariant === DIVINE_THEME && themeFromTag !== DIVINE_THEME) {
+  if (pets.themeVariant === DIVINE_THEME && themeFromTag !== DIVINE_THEME) {
     errors.push('Model has themeVariant="divine" but tag is missing or different');
   }
 
-  if (blobbi.crossoverApp === DIVINE_CROSSOVER_APP && crossoverFromTag !== DIVINE_CROSSOVER_APP) {
+  if (pets.crossoverApp === DIVINE_CROSSOVER_APP && crossoverFromTag !== DIVINE_CROSSOVER_APP) {
     errors.push('Model has crossoverApp="divine" but tag is missing or different');
   }
 
-  if (themeFromTag === DIVINE_THEME && blobbi.themeVariant !== DIVINE_THEME) {
+  if (themeFromTag === DIVINE_THEME && pets.themeVariant !== DIVINE_THEME) {
     errors.push('Tag has theme="divine" but model field is missing or different');
   }
 
-  if (crossoverFromTag === DIVINE_CROSSOVER_APP && blobbi.crossoverApp !== DIVINE_CROSSOVER_APP) {
+  if (crossoverFromTag === DIVINE_CROSSOVER_APP && pets.crossoverApp !== DIVINE_CROSSOVER_APP) {
     errors.push('Tag has crossover_app="divine" but model field is missing or different');
   }
 

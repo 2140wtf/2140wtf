@@ -2,7 +2,7 @@
  * RoomPoopLayer — Poop rendering and shovel button components.
  *
  * All poops spawn in the kitchen. `PoopOverlay` renders them in every
- * room so the mess follows the Blobbi around. Cleaning is only possible
+ * room so the mess follows the Pets around. Cleaning is only possible
  * in the kitchen via `InteractivePoopOverlay` + drag-to-clean shovel.
  *
  * - `PoopOverlay`: display-only poop emojis, shown in all rooms
@@ -14,8 +14,8 @@ import { Shovel } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/useToast';
 
-import type { PoopState } from './BlobbiRoomShell';
-import type { BlobbiRoomId } from '../lib/room-config';
+import type { PoopState } from './PetsRoomShell';
+import type { PetsRoomId } from '../lib/room-config';
 import { getPoopsInRoom } from '../lib/poop-system';
 import { RoomActionButton } from './RoomActionButton';
 import type { ShovelDrag } from '../hooks/useShovelDrag';
@@ -24,7 +24,7 @@ import type { ShovelDrag } from '../hooks/useShovelDrag';
 
 /**
  * Static poop display. Shows all poops regardless of which room they
- * spawned in — the mess follows the Blobbi everywhere.
+ * spawned in — the mess follows the Pets everywhere.
  */
 export function PoopOverlay({ poopStateRef }: { poopStateRef: React.MutableRefObject<PoopState | null> }) {
   const poopState = poopStateRef.current;
@@ -52,7 +52,7 @@ export function PoopOverlay({ poopStateRef }: { poopStateRef: React.MutableRefOb
  * Interactive poop display. Renders poops assigned to `roomId`,
  * registers refs for drag hit-testing, and shows the drag ghost.
  */
-export function InteractivePoopOverlay({ drag, poopStateRef, roomId }: { drag: ShovelDrag; poopStateRef: React.MutableRefObject<PoopState | null>; roomId: BlobbiRoomId }) {
+export function InteractivePoopOverlay({ drag, poopStateRef, roomId }: { drag: ShovelDrag; poopStateRef: React.MutableRefObject<PoopState | null>; roomId: PetsRoomId }) {
   const poopState = poopStateRef.current;
   const poops = poopState ? getPoopsInRoom(poopState.poops, roomId) : [];
   if (poops.length === 0 && !drag.isDragging) return null;
@@ -112,7 +112,7 @@ export function ShovelButton({ drag, guideActionGlow }: ShovelButtonProps) {
       glowHex="#78716c"
       onClick={() => {
         if (!drag.anyPoop) {
-          toast({ title: 'Nothing to clean!', description: 'Your Blobbi hasn\'t made a mess.' });
+          toast({ title: 'Nothing to clean!', description: 'Your Pets hasn\'t made a mess.' });
         }
       }}
       onMouseDown={drag.anyPoop ? drag.onMouseDown : undefined}

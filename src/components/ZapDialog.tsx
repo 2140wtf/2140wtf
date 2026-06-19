@@ -69,6 +69,21 @@ interface ZapDialogProps {
   open?: boolean;
   /** Controlled open setter. Required when `open` is provided. */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Optional NIP-69 poll option index. When set, the zap is cast as a vote
+   * on a kind 6969 zap poll and the dialog restricts payment to Lightning.
+   */
+  pollOption?: string;
+  /**
+   * Optional callback invoked when a Lightning zap succeeds. This is called
+   * in addition to the dialog's internal success state handling.
+   */
+  onZapSuccess?: (result: { amountSats: number }) => void;
+  /**
+   * Optional USD amount to prefill the Lightning amount field with. When omitted
+   * the dialog starts at the default tip amount ($0.50).
+   */
+  initialUsdAmount?: number;
 }
 
 // USD presets for the Lightning tab. Lightning zaps are expected to be
@@ -334,6 +349,9 @@ export function ZapDialog({
   className,
   open: controlledOpen,
   onOpenChange,
+  pollOption,
+  onZapSuccess: onZapSuccessProp,
+  initialUsdAmount,
 }: ZapDialogProps) {
   // Parse kind 33863 campaigns so this dialog can route donations to the
   // campaign's declared `w` endpoint instead of the author's derived
@@ -343,6 +361,24 @@ export function ZapDialog({
     () => (target.kind === 33863 ? parseCampaign(target as NostrEvent) : null),
     [target],
   );
+
+  // NIP-69 zap poll vote context.
+  const isPollVote = pollOption !== undefined;
+  const pollValueMinimum = useMemo(() => {
+    if (!isPollVote) return undefined;
+    const tag = target.tags.find(([name]) => name === 'value_minimum');
+    if (!tag?.[1]) return undefined;
+    const n = parseInt(tag[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }, [isPollVote, target]);
+  const pollValueMaximum = useMemo(() => {
+    if (!isPollVote) return undefined;
+    const tag = target.tags.find(([name]) => name === 'value_maximum');
+    if (!tag?.[1]) return undefined;
+    const n = parseInt(tag[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }, [isPollVote, target]);
+
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   // Allow the caller to control open state from the outside (used by ZapMenu
   // to open the dialog after its parent popover finishes dismissing).
@@ -365,6 +401,11 @@ export function ZapDialog({
   const { config } = useAppContext();
   const { esploraApis } = config;
 
+  const primaryRelay = useMemo(() => {
+    if (!isPollVote) return undefined;
+    return target.tags.find(([name]) => name === 'p')?.[2] || config.relayMetadata.relays[0]?.url;
+  }, [isPollVote, target, config]);
+
   // NIP-A3 payment targets declared by the recipient. We don't fetch these
   // for campaigns (campaigns route through their own `w` endpoint).
   const { targets: paymentTargets } = usePaymentTargets(
@@ -385,8 +426,9 @@ export function ZapDialog({
   const handleLightningSuccess = useCallback(
     ({ amountSats }: { amountSats: number }) => {
       setSuccess({ kind: 'lightning', amountSats });
+      onZapSuccessProp?.({ amountSats });
     },
-    [],
+    [onZapSuccessProp],
   );
 
   const { zap, isZapping, invoice, setInvoice } = useZaps(
@@ -395,11 +437,13 @@ export function ZapDialog({
     activeNWC,
     handleLightningSuccess,
     lightningTarget?.authority,
+    pollOption,
+    primaryRelay,
   );
 
   // USD-denominated state (matches OnchainZapContent). The sats amount is
   // derived just before we hit the LNURL endpoint.
-  const [usdAmount, setUsdAmount] = useState<number | string>(0.5);
+  const [usdAmount, setUsdAmount] = useState<number | string>(initialUsdAmount ?? 0.5);
   const [copied, setCopied] = useState(false);
   const [editingAmount, setEditingAmount] = useState(false);
   const [error, setError] = useState('');
@@ -458,8 +502,14 @@ export function ZapDialog({
 
   // Build the ordered list of selectable methods for this dialog.
   // Campaigns always render the single on-chain pane (no method switcher).
+  // NIP-69 zap poll votes are Lightning-only.
   const methods = useMemo<DialogMethod[]>(() => {
     if (campaign) return [];
+    if (isPollVote) {
+      return (hasLightning || lightningTarget)
+        ? [{ id: 'lightning', def: PAYMENT_METHODS.lightning }]
+        : [];
+    }
     const list: DialogMethod[] = [
       { id: 'bitcoin', def: PAYMENT_METHODS.bitcoin },
     ];
@@ -470,10 +520,11 @@ export function ZapDialog({
       list.push({ id: t.type, def: PAYMENT_METHODS[t.type], target: t });
     }
     return list;
-  }, [campaign, hasLightning, lightningTarget, genericTargets]);
+  }, [campaign, hasLightning, lightningTarget, genericTargets, isPollVote]);
 
-  const defaultMethodId: DialogMethodId =
-    bitcoinUnsupported && (hasLightning || lightningTarget) ? 'lightning' : 'bitcoin';
+  const defaultMethodId: DialogMethodId = isPollVote
+    ? 'lightning'
+    : bitcoinUnsupported && (hasLightning || lightningTarget) ? 'lightning' : 'bitcoin';
   const [activeMethod, setActiveMethod] = useState<DialogMethodId>(defaultMethodId);
 
   const currentMethod =
@@ -520,7 +571,7 @@ export function ZapDialog({
 
   useEffect(() => {
     if (open) {
-      setUsdAmount(0.5);
+      setUsdAmount(initialUsdAmount ?? 0.5);
       setInvoice(null);
       setCopied(false);
       setEditingAmount(false);
@@ -529,7 +580,7 @@ export function ZapDialog({
       setSuccess(null);
       setActiveMethod(defaultMethodId);
     } else {
-      setUsdAmount(0.5);
+      setUsdAmount(initialUsdAmount ?? 0.5);
       setInvoice(null);
       setCopied(false);
       setEditingAmount(false);
@@ -540,7 +591,7 @@ export function ZapDialog({
     // `defaultMethodId` deliberately excluded — we only want to reset the
     // active method on open/close, not on every capability re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, setInvoice]);
+  }, [open, setInvoice, initialUsdAmount]);
 
   // Previously, if Bitcoin capability flipped to `unsupported` mid-session we
   // auto-switched to Lightning because the Bitcoin pane was a dead-end. The
@@ -554,6 +605,18 @@ export function ZapDialog({
     if (!btcPrice) { setError('Waiting for BTC price…'); return; }
     if (amountSats <= 0) { setError('Enter an amount.'); return; }
 
+    // Enforce NIP-69 zap poll value limits (tags are in satoshis).
+    if (isPollVote) {
+      if (pollValueMinimum !== undefined && amountSats < pollValueMinimum) {
+        setError(`Minimum vote is ${pollValueMinimum.toLocaleString()} sats.`);
+        return;
+      }
+      if (pollValueMaximum !== undefined && amountSats > pollValueMaximum) {
+        setError(`Maximum vote is ${pollValueMaximum.toLocaleString()} sats.`);
+        return;
+      }
+    }
+
     // Two-tap safety for large amounts: first click arms, second click sends.
     if (isLarge && !confirmArmed) {
       setConfirmArmed(true);
@@ -565,9 +628,22 @@ export function ZapDialog({
   };
 
   const payWithWebLN = () => {
-    if (amountSats > 0) {
-      zap(amountSats, '');
+    if (!btcPrice) { setError('Waiting for BTC price…'); return; }
+    if (amountSats <= 0) { setError('Enter an amount.'); return; }
+
+    // Enforce NIP-69 zap poll value limits for WebLN payments too.
+    if (isPollVote) {
+      if (pollValueMinimum !== undefined && amountSats < pollValueMinimum) {
+        setError(`Minimum vote is ${pollValueMinimum.toLocaleString()} sats.`);
+        return;
+      }
+      if (pollValueMaximum !== undefined && amountSats > pollValueMaximum) {
+        setError(`Maximum vote is ${pollValueMaximum.toLocaleString()} sats.`);
+        return;
+      }
     }
+
+    zap(amountSats, '');
   };
 
   const lightningContentProps: LightningZapContentProps = {
@@ -596,8 +672,10 @@ export function ZapDialog({
 
   // Zap button shows for any logged-in user except when targeting oneself.
   // Campaigns bypass the self-check: a creator donating to their own
-  // campaign is legitimate.
-  const canOpenZap = !!user && (!!campaign || user.pubkey !== target.pubkey);
+  // campaign is legitimate. NIP-69 poll authors cannot vote on their own polls.
+  const canOpenZap = !!user && (!!campaign || user.pubkey !== target.pubkey) &&
+    (!isPollVote || user.pubkey !== target.pubkey) &&
+    (!isPollVote || methods.length > 0);
 
   if (!canOpenZap) {
     // Uncontrolled callers wrap a trigger node; render it bare so the icon
@@ -620,6 +698,8 @@ export function ZapDialog({
           <DialogTitle className="text-base font-semibold flex items-center gap-1.5 min-w-0">
             {success ? (
               'Success'
+            ) : isPollVote ? (
+              'Vote on poll'
             ) : campaign ? (
               `Donate to ${campaign.title}`
             ) : invoice ? (

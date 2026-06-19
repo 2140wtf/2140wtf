@@ -1,14 +1,14 @@
 /**
- * Blobbi Tag Schema - Canonical Reference
+ * Pets Tag Schema - Canonical Reference
  * 
- * This file defines the single source of truth for all Blobbi tags used in Kind 31124
- * (Blobbi State) events. It documents which tags exist, their purpose, when they're
+ * This file defines the single source of truth for all Pets tags used in Kind 31124
+ * (Pets State) events. It documents which tags exist, their purpose, when they're
  * used, and how they should be handled during stage transitions.
  * 
- * @module blobbi-tag-schema
+ * @module pets-tag-schema
  */
 
-import type { BlobbiStage } from './blobbi';
+import type { PetsStage } from './pets';
 
 // ─── Tag Source Types ─────────────────────────────────────────────────────────
 
@@ -41,9 +41,9 @@ export type TagCategory =
 // ─── Tag Schema Definition ────────────────────────────────────────────────────
 
 /**
- * Schema definition for a single Blobbi tag.
+ * Schema definition for a single Pets tag.
  */
-export interface BlobbiTagSchema {
+export interface PetsTagSchema {
   /** Tag name (the first element of the tag array) */
   tag: string;
   
@@ -53,11 +53,11 @@ export interface BlobbiTagSchema {
   /** Category for grouping */
   category: TagCategory;
   
-  /** Whether this tag is required for a valid Blobbi event */
+  /** Whether this tag is required for a valid Pets event */
   required: boolean;
   
   /** Which stages this tag should be present in */
-  stages: BlobbiStage[];
+  stages: PetsStage[];
   
   /** Whether this tag persists across stage transitions (egg → baby → adult) */
   persistent: boolean;
@@ -81,25 +81,25 @@ export interface BlobbiTagSchema {
 // ─── Canonical Tag Schema ─────────────────────────────────────────────────────
 
 /**
- * Complete canonical schema for all valid Blobbi tags.
+ * Complete canonical schema for all valid Pets tags.
  * 
- * This is the SINGLE SOURCE OF TRUTH for Blobbi tag definitions.
+ * This is the SINGLE SOURCE OF TRUTH for Pets tag definitions.
  * All stage transitions, migrations, and validations should reference this schema.
  */
-export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
+export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   // SYSTEM / METADATA TAGS
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'd',
-    description: 'Unique identifier for the Blobbi (addressable event d-tag)',
+    description: 'Unique identifier for the Pets (addressable event d-tag)',
     category: 'system',
     required: true,
     stages: ['egg', 'baby', 'adult'],
     persistent: true,
     source: 'system',
     regenerable: false,
-    format: 'blobbi-{pubkeyPrefix12}-{petId10}',
+    format: 'pets-{pubkeyPrefix12}-{petId10}',
     notes: 'Canonical format required. Legacy formats trigger migration.',
   },
   {
@@ -111,15 +111,15 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
     persistent: true,
     source: 'system',
     regenerable: true,
-    format: 'blobbi:ecosystem:v1',
-    defaultValue: 'blobbi:ecosystem:v1',
+    format: 'pets:ecosystem:v1',
+    defaultValue: 'pets:ecosystem:v1',
   },
   // ═══════════════════════════════════════════════════════════════════════════
   // CORE IDENTITY TAGS
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'name',
-    description: 'Display name for the Blobbi',
+    description: 'Display name for the Pets',
     category: 'identity',
     required: true,
     stages: ['egg', 'baby', 'adult'],
@@ -138,11 +138,11 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: '64 lowercase hex characters',
-    notes: 'Derived once at creation: sha256("blobbi:v1|{pubkey}:{d}:{createdAt}"). MUST NOT be recomputed.',
+    notes: 'Derived once at creation: sha256("pets:v1|{pubkey}:{d}:{createdAt}"). MUST NOT be recomputed.',
   },
   {
     tag: 'generation',
-    description: 'Generation number in the Blobbi lineage',
+    description: 'Generation number in the Pets lineage',
     category: 'identity',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -151,7 +151,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
     regenerable: false,
     format: 'positive integer',
     defaultValue: '1',
-    notes: 'Starts at 1 for adopted Blobbis. Increments for bred offspring.',
+    notes: 'Starts at 1 for adopted Petss. Increments for bred offspring.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -159,7 +159,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'base_color',
-    description: 'Primary/base color for the Blobbi',
+    description: 'Primary/base color for the Pets',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -171,7 +171,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
   },
   {
     tag: 'secondary_color',
-    description: 'Secondary/accent color for the Blobbi',
+    description: 'Secondary/accent color for the Pets',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -183,7 +183,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
   },
   {
     tag: 'eye_color',
-    description: 'Eye color for the Blobbi',
+    description: 'Eye color for the Pets',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -536,7 +536,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'social',
-    description: 'Whether external users can interact with this Blobbi via kind 1124 events',
+    description: 'Whether external users can interact with this Pets via kind 1124 events',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -549,7 +549,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
   },
   {
     tag: 'breeding_ready',
-    description: 'Whether the Blobbi is eligible for breeding',
+    description: 'Whether the Pets is eligible for breeding',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -589,7 +589,7 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Theme identifier string (e.g., "divine")',
-    notes: 'Used for special themed Blobbis. Persists across stages.',
+    notes: 'Used for special themed Petss. Persists across stages.',
   },
   {
     tag: 'crossover_app',
@@ -601,7 +601,31 @@ export const BLOBBI_TAG_SCHEMA: readonly BlobbiTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Application identifier string (e.g., "divine")',
-    notes: 'Indicates Blobbi originated from or has features from another app.',
+    notes: 'Indicates Pets originated from or has features from another app.',
+  },
+  {
+    tag: 'archetype',
+    description: 'Cypherpunk 2140 archetype class',
+    category: 'extension',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'generated',
+    regenerable: true,
+    format: 'ghost | runner | netrunner | drone | construct | cipher',
+    notes: 'Derived from seed. Theme extension for the Cypherpunk 2140 visual system.',
+  },
+  {
+    tag: 'special_ability',
+    description: 'Cypherpunk 2140 special ability',
+    category: 'extension',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'generated',
+    regenerable: true,
+    format: 'glitch-step | overclock | firewall | synesthesia | recursion | mirror-self',
+    notes: 'Derived from seed. Theme extension for the Cypherpunk 2140 visual system.',
   },
 ] as const;
 
@@ -664,7 +688,7 @@ export const DEPRECATED_TAG_SCHEMA: readonly DeprecatedTagSchema[] = [
   },
   {
     tag: 'fees',
-    reason: 'Fee tracking removed from Blobbi events',
+    reason: 'Fee tracking removed from Pets events',
     replacedBy: undefined,
     deprecatedSince: 'v1.0',
   },
@@ -695,7 +719,7 @@ export const DEPRECATED_TAG_SCHEMA: readonly DeprecatedTagSchema[] = [
  */
 export function getPersistentTagNames(): Set<string> {
   return new Set(
-    BLOBBI_TAG_SCHEMA
+    PETS_TAG_SCHEMA
       .filter(schema => schema.persistent)
       .map(schema => schema.tag)
   );
@@ -721,7 +745,7 @@ export function getDeprecatedTagNames(): Set<string> {
  */
 export function getRequiredTagNames(): Set<string> {
   return new Set(
-    BLOBBI_TAG_SCHEMA
+    PETS_TAG_SCHEMA
       .filter(schema => schema.required)
       .map(schema => schema.tag)
   );
@@ -730,22 +754,22 @@ export function getRequiredTagNames(): Set<string> {
 /**
  * Get tag schema by tag name.
  */
-export function getTagSchema(tagName: string): BlobbiTagSchema | undefined {
-  return BLOBBI_TAG_SCHEMA.find(schema => schema.tag === tagName);
+export function getTagSchema(tagName: string): PetsTagSchema | undefined {
+  return PETS_TAG_SCHEMA.find(schema => schema.tag === tagName);
 }
 
 /**
  * Get all tags for a specific stage.
  */
-export function getTagsForStage(stage: BlobbiStage): BlobbiTagSchema[] {
-  return BLOBBI_TAG_SCHEMA.filter(schema => schema.stages.includes(stage));
+export function getTagsForStage(stage: PetsStage): PetsTagSchema[] {
+  return PETS_TAG_SCHEMA.filter(schema => schema.stages.includes(stage));
 }
 
 /**
  * Get all tags in a specific category.
  */
-export function getTagsByCategory(category: TagCategory): BlobbiTagSchema[] {
-  return BLOBBI_TAG_SCHEMA.filter(schema => schema.category === category);
+export function getTagsByCategory(category: TagCategory): PetsTagSchema[] {
+  return PETS_TAG_SCHEMA.filter(schema => schema.category === category);
 }
 
 /**
@@ -777,7 +801,7 @@ export interface TagRepairResult {
   /** List of issues that could not be repaired */
   errors: string[];
   /** The detected final stage */
-  finalStage: BlobbiStage | null;
+  finalStage: PetsStage | null;
 }
 
 /**
@@ -785,12 +809,12 @@ export interface TagRepairResult {
  * These are protocol-level tags that have well-defined defaults.
  */
 const RECOVERABLE_SYSTEM_TAGS: Record<string, string> = {
-  b: 'blobbi:ecosystem:v1',
+  b: 'pets:ecosystem:v1',
 };
 
 /**
  * Tags that should NEVER be invented if they don't exist.
- * Per spec: Do NOT invent personality/trait/adult_type for existing Blobbis.
+ * Per spec: Do NOT invent personality/trait/adult_type for existing Petss.
  */
 const NEVER_INVENT_TAGS = new Set([
   // Personality tags - generated at creation only
@@ -813,7 +837,7 @@ const NEVER_INVENT_TAGS = new Set([
 /**
  * Valid states for each stage. Used to validate/repair state after transitions.
  */
-const VALID_STATES_BY_STAGE: Record<BlobbiStage, Set<string>> = {
+const VALID_STATES_BY_STAGE: Record<PetsStage, Set<string>> = {
   egg: new Set(['active', 'sleeping', 'hibernating']),
   baby: new Set(['active', 'sleeping', 'hibernating']),
   adult: new Set(['active', 'sleeping', 'hibernating']),
@@ -827,7 +851,7 @@ const VALID_STATES_BY_STAGE: Record<BlobbiStage, Set<string>> = {
 const TASK_PROCESS_STATES = new Set(['incubating', 'evolving']);
 
 /**
- * Validate and repair Blobbi tags before publishing.
+ * Validate and repair Pets tags before publishing.
  * 
  * This function ensures tag integrity by:
  * 1. Removing deprecated tags
@@ -846,15 +870,15 @@ const TASK_PROCESS_STATES = new Set(['incubating', 'evolving']);
  * 
  * @example
  * ```typescript
- * const result = validateAndRepairBlobbiTags(newTags, canonical.allTags, { cleanupTaskTags: true });
+ * const result = validateAndRepairPetsTags(newTags, canonical.allTags, { cleanupTaskTags: true });
  * if (result.errors.length > 0) {
  *   console.error('Cannot publish:', result.errors);
  *   return;
  * }
- * await publishEvent({ kind: KIND_BLOBBI_STATE, tags: result.tags, ... });
+ * await publishEvent({ kind: KIND_PETS_STATE, tags: result.tags, ... });
  * ```
  */
-export function validateAndRepairBlobbiTags(
+export function validateAndRepairPetsTags(
   tags: string[][],
   previousTags?: string[][],
   options?: {
@@ -912,7 +936,7 @@ export function validateAndRepairBlobbiTags(
   
   // ─── Step 2: Detect the final stage ───
   const stageTag = filteredTags.find(t => t[0] === 'stage');
-  const finalStage = (stageTag?.[1] as BlobbiStage) || null;
+  const finalStage = (stageTag?.[1] as PetsStage) || null;
   
   if (!finalStage || !['egg', 'baby', 'adult'].includes(finalStage)) {
     errors.push(`Invalid or missing stage tag: '${finalStage}'`);
@@ -938,7 +962,7 @@ export function validateAndRepairBlobbiTags(
     if (schema && !schema.stages.includes(finalStage)) {
       repairs.push(`Removed tag '${name}' (not valid for stage '${finalStage}')`);
       if (isDev) {
-        console.warn(`[Blobbi] Removed invalid-for-stage tag: ${name} (stage: ${finalStage})`);
+        console.warn(`[Pets] Removed invalid-for-stage tag: ${name} (stage: ${finalStage})`);
       }
       continue;
     }
@@ -959,7 +983,7 @@ export function validateAndRepairBlobbiTags(
         filteredTags[stateTagIndex] = ['state', 'active'];
         repairs.push(`Repaired state from '${currentState}' to 'active' (task process completed)`);
         if (isDev) {
-          console.warn(`[Blobbi] Fixed invalid state '${currentState}' -> 'active' after transition`);
+          console.warn(`[Pets] Fixed invalid state '${currentState}' -> 'active' after transition`);
         }
       }
       
@@ -970,7 +994,7 @@ export function validateAndRepairBlobbiTags(
         filteredTags[stateTagIndex] = ['state', 'active'];
         repairs.push(`Repaired invalid state '${newState}' to 'active' for stage '${finalStage}'`);
         if (isDev) {
-          console.warn(`[Blobbi] Fixed invalid state '${newState}' -> 'active' for stage ${finalStage}`);
+          console.warn(`[Pets] Fixed invalid state '${newState}' -> 'active' for stage ${finalStage}`);
         }
       }
     }
@@ -1049,7 +1073,7 @@ export function validateAndRepairBlobbiTags(
       const schema = getTagSchema(tagName);
       if (schema && !schema.stages.includes(finalStage)) {
         if (isDev) {
-          console.warn(`[Blobbi] Skipped recovering '${tagName}' (not valid for stage '${finalStage}')`);
+          console.warn(`[Pets] Skipped recovering '${tagName}' (not valid for stage '${finalStage}')`);
         }
         continue;
       }
@@ -1062,7 +1086,7 @@ export function validateAndRepairBlobbiTags(
   
   // ─── Final dev diagnostics ───
   if (isDev && repairs.length > 0) {
-    console.warn('[Blobbi] Tag repairs applied:', repairs);
+    console.warn('[Pets] Tag repairs applied:', repairs);
   }
   
   return {
@@ -1113,8 +1137,8 @@ function recoverTagValue(
  * Check if tags pass validation without repairing.
  * Use this for quick validation checks.
  */
-export function isValidBlobbiTagSet(tags: string[][]): boolean {
-  const result = validateAndRepairBlobbiTags(tags);
+export function isValidPetsTagSet(tags: string[][]): boolean {
+  const result = validateAndRepairPetsTags(tags);
   return result.errors.length === 0;
 }
 
@@ -1130,7 +1154,7 @@ export function generateSchemaDocumentation(): string {
     'state', 'task', 'progression', 'social', 'evolution', 'extension',
   ] as TagCategory[];
   
-  let doc = '# Blobbi Tag Schema\n\n';
+  let doc = '# Pets Tag Schema\n\n';
   
   for (const category of categories) {
     const tags = getTagsByCategory(category);

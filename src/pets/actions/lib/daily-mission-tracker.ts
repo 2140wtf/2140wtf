@@ -3,7 +3,7 @@
  *
  * Two separate in-memory stores:
  *   - dailyStore: pubkey-scoped, for daily missions (kind 11125)
- *   - evolutionStore: pubkey:d-scoped, for per-Blobbi evolution missions (kind 31124)
+ *   - evolutionStore: pubkey:d-scoped, for per-Pets evolution missions (kind 31124)
  *
  * Both cleared on page refresh. The persistent source of truth is:
  *   - Daily missions → kind 11125 content JSON
@@ -12,8 +12,8 @@
  * Dispatches 'daily-missions-updated' CustomEvent so React hooks re-render.
  */
 
-import type { Mission } from '@/blobbi/core/lib/missions';
-import type { MissionsContent } from '@/blobbi/core/lib/missions';
+import type { Mission } from '@/pets/core/lib/missions';
+import type { MissionsContent } from '@/pets/core/lib/missions';
 import type { DailyMissionAction } from './daily-missions';
 import {
   getTodayDateString,
@@ -37,7 +37,7 @@ function dailyKey(pubkey: string | undefined): string {
   return pubkey ?? '';
 }
 
-function ensureDailyCurrent(pubkey?: string, availableStages?: import('./daily-missions').BlobbiStage[]): MissionsContent {
+function ensureDailyCurrent(pubkey?: string, availableStages?: import('./daily-missions').PetsStage[]): MissionsContent {
   const current = dailyStore.get(dailyKey(pubkey));
   if (!needsDailyReset(current)) return current!;
   const fresh = createDailyMissionsContent(
@@ -53,11 +53,11 @@ function notify(detail?: Record<string, unknown>): void {
   window.dispatchEvent(new CustomEvent('daily-missions-updated', { detail }));
 }
 
-// ─── Evolution Mission Session Store (per-Blobbi) ────────────────────────────
+// ─── Evolution Mission Session Store (per-Pets) ────────────────────────────
 
 /**
- * Per-Blobbi session cache for evolution missions.
- * Keyed by `pubkey:d` so each Blobbi has its own evolution progress.
+ * Per-Pets session cache for evolution missions.
+ * Keyed by `pubkey:d` so each Pets has its own evolution progress.
  * Cleared on page refresh — kind 31124 content is the persistent store.
  */
 const evolutionStore = new Map<string, Mission[]>();
@@ -111,11 +111,11 @@ export function trackMultipleDailyMissionActions(
   notify({ actions });
 }
 
-// ─── Public API: Evolution Missions (per-Blobbi) ─────────────────────────────
+// ─── Public API: Evolution Missions (per-Pets) ─────────────────────────────
 
 /**
  * Increment tally for an evolution mission (e.g. interactions).
- * No-ops if the store is empty for this Blobbi.
+ * No-ops if the store is empty for this Pets.
  */
 export function trackEvolutionMissionTally(
   missionId: string,
@@ -134,7 +134,7 @@ export function trackEvolutionMissionTally(
 
 /**
  * Append a Nostr event ID to an evolution mission (e.g. create_theme).
- * Deduplicates by event ID. No-ops if the store is empty for this Blobbi.
+ * Deduplicates by event ID. No-ops if the store is empty for this Pets.
  */
 export function trackEvolutionMissionEvent(
   missionId: string,
@@ -181,14 +181,14 @@ export function hydrateDailyFromPersisted(missions: MissionsContent, pubkey: str
   dailyStore.set(pubkey, missions);
 }
 
-// ─── Storage Access: Evolution (per-Blobbi) ──────────────────────────────────
+// ─── Storage Access: Evolution (per-Pets) ──────────────────────────────────
 
-/** Read current evolution session state for a specific Blobbi. */
+/** Read current evolution session state for a specific Pets. */
 export function readEvolutionFromStorage(pubkey?: string, d?: string): Mission[] | undefined {
   return evolutionStore.get(evoKey(pubkey, d));
 }
 
-/** Write evolution state for a specific Blobbi. */
+/** Write evolution state for a specific Pets. */
 export function writeEvolutionToStorage(evolution: Mission[], pubkey?: string, d?: string): void {
   evolutionStore.set(evoKey(pubkey, d), evolution);
 }
@@ -196,7 +196,7 @@ export function writeEvolutionToStorage(evolution: Mission[], pubkey?: string, d
 /**
  * Hydrate the evolution session store from kind 31124 content.
  * Called once when a companion with active progression is loaded.
- * No-op if the store already has data for this Blobbi.
+ * No-op if the store already has data for this Pets.
  */
 export function hydrateEvolutionFromPersisted(evolution: Mission[], pubkey: string, d: string): void {
   const k = evoKey(pubkey, d);
@@ -204,7 +204,7 @@ export function hydrateEvolutionFromPersisted(evolution: Mission[], pubkey: stri
   evolutionStore.set(k, evolution);
 }
 
-/** Clear evolution store for a specific Blobbi (on stage transition / stop). */
+/** Clear evolution store for a specific Pets (on stage transition / stop). */
 export function clearEvolutionFromStorage(pubkey?: string, d?: string): void {
   evolutionStore.delete(evoKey(pubkey, d));
 }
@@ -216,7 +216,7 @@ export function clearEvolutionFromStorage(pubkey?: string, d?: string): void {
  *
  * Every item use tracks 'interact'. Specific actions (feed, clean, medicine)
  * also track their corresponding daily mission. This is the single source of
- * truth for the mapping — both useBlobbiUseInventoryItem and useBlobbiItemUse
+ * truth for the mapping — both usePetsUseInventoryItem and usePetsItemUse
  * call this instead of duplicating the logic.
  *
  * Accepts the wider InventoryAction type (string) so callers don't need casts.

@@ -1,5 +1,5 @@
 /**
- * useBlobbiCompanionState Hook
+ * usePetsCompanionState Hook
  * 
  * Manages the behavioral state of the companion (idle, walking, watching).
  * This is the state layer - it handles state transitions and timing.
@@ -18,7 +18,7 @@ import type {
 import { decideNextAction } from '../core/companionMachine';
 import { DEFAULT_COMPANION_CONFIG, randomDuration } from '../core/companionConfig';
 
-interface UseBlobbiCompanionStateOptions {
+interface UsePetsCompanionStateOptions {
   /** Whether the companion is active and should be making decisions */
   isActive: boolean;
   /** 
@@ -37,14 +37,14 @@ interface UseBlobbiCompanionStateOptions {
   isSleeping?: boolean;
 }
 
-interface UseBlobbiCompanionStateResult {
+interface UsePetsCompanionStateResult {
   /** Current behavioral state */
   state: CompanionState;
   /** Current facing direction */
   direction: CompanionDirection;
   /** Target X position for walking */
   targetX: number | null;
-  /** Observation target position (screen coordinates) - what Blobbi is observing */
+  /** Observation target position (screen coordinates) - what Pets is observing */
   observationTarget: Position | null;
   /** Current attention target position (from UI attention system) */
   attentionPosition: Position | null;
@@ -55,14 +55,14 @@ interface UseBlobbiCompanionStateResult {
 /**
  * Hook to manage companion behavioral state.
  */
-export function useBlobbiCompanionState({
+export function usePetsCompanionState({
   isActive,
   motionRef,
   bounds,
   forceInitialWalk = true,
   attentionTarget,
   isSleeping = false,
-}: UseBlobbiCompanionStateOptions): UseBlobbiCompanionStateResult {
+}: UsePetsCompanionStateOptions): UsePetsCompanionStateResult {
   const [state, setState] = useState<CompanionState>('idle');
   const [direction, setDirection] = useState<CompanionDirection>('right');
   const [targetX, setTargetX] = useState<number | null>(null);
@@ -111,7 +111,7 @@ export function useBlobbiCompanionState({
   const generateObservationTarget = useCallback((): Position => {
     // Target should be in the visible content area
     // X: somewhere in the movement bounds
-    // Y: in the upper half of the screen (Blobbi will look up at it)
+    // Y: in the upper half of the screen (Pets will look up at it)
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
     
     const x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);

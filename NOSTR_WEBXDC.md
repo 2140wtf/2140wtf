@@ -1,18 +1,18 @@
 NIP-DC
 ======
 
-Nostr Webxdc
+Nostr Mini-apps
 ------------
 
 `draft` `optional`
 
-This NIP defines how to share and run [webxdc](https://webxdc.org/) apps over Nostr. Webxdc apps are `.xdc` (ZIP) files containing sandboxed HTML5 applications. They are attached to regular Nostr events using `imeta` tags (NIP-92), and state is coordinated through a unique identifier.
+This NIP defines how to share and run [mini-apps](https://webxdc.org/) over Nostr. Mini-apps are `.xdc` (ZIP) files containing sandboxed HTML5 applications. They are attached to regular Nostr events using `imeta` tags (NIP-92), and state is coordinated through a unique identifier.
 
-This spec covers public webxdc communication only. Private communication may be addressed in a future update.
+This spec covers public mini-app communication only. Private communication may be addressed in a future update.
 
 ## Attachment
 
-A webxdc app is attached to any event by including the `.xdc` file URL in the content and an `imeta` tag with MIME type `application/x-webxdc`.
+A mini-app is attached to any event by including the `.xdc` file URL in the content and an `imeta` tag with MIME type `application/x-webxdc`.
 
 The `imeta` tag SHOULD include a `webxdc` property with a randomly generated unique string. This serves as the coordination identifier for state updates and realtime channels. If omitted, the app can still run but state won't work.
 
@@ -31,7 +31,7 @@ The `imeta` tag SHOULD include a `webxdc` property with a randomly generated uni
 }
 ```
 
-A webxdc MAY also be published as a kind `1063` (NIP-94) file metadata event:
+A mini-app MAY also be published as a kind `1063` (NIP-94) file metadata event:
 
 ```json
 {
@@ -41,7 +41,7 @@ A webxdc MAY also be published as a kind `1063` (NIP-94) file metadata event:
     ["url", "https://blossom.example.com/abc123.xdc"],
     ["m", "application/x-webxdc"],
     ["x", "a1b2c3d4e5f6..."],
-    ["alt", "Webxdc app: Chess"],
+    ["alt", "Mini app: Chess"],
     ["webxdc", "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"]
   ]
 }
@@ -49,7 +49,7 @@ A webxdc MAY also be published as a kind `1063` (NIP-94) file metadata event:
 
 ## Kind `4932`: State Update
 
-A regular event carrying a state update, mapping to the webxdc [`sendUpdate()`](https://webxdc.org/docs/spec/sendUpdate.html) API. Updates are ordered by `created_at` and assigned serial numbers by the client.
+A regular event carrying a state update, mapping to the mini-app [`sendUpdate()`](https://webxdc.org/docs/spec/sendUpdate.html) API. Updates are ordered by `created_at` and assigned serial numbers by the client.
 
 ### Tags
 
@@ -59,7 +59,7 @@ A regular event carrying a state update, mapping to the webxdc [`sendUpdate()`](
 - `document`: Document name being edited (optional)
 - `summary`: Short summary text, e.g. "8 votes" (optional)
 
-The optional tags correspond to fields in the webxdc `sendUpdate()` API.
+The optional tags correspond to fields in the mini-app `sendUpdate()` API.
 
 ### Content
 
@@ -71,7 +71,7 @@ JSON-serialized payload from `sendUpdate()`.
   "content": "{\"move\":\"e2e4\",\"player\":\"white\"}",
   "tags": [
     ["i", "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"],
-    ["alt", "Webxdc update"],
+    ["alt", "Mini app update"],
     ["info", "White played e2-e4"]
   ]
 }
@@ -79,7 +79,7 @@ JSON-serialized payload from `sendUpdate()`.
 
 ## Kind `20932`: Realtime Data (Ephemeral)
 
-An ephemeral event carrying realtime data, mapping to the webxdc [`joinRealtimeChannel`](https://webxdc.org/docs/spec/joinRealtimeChannel.html) API. Relays forward these to active subscribers but do not store them.
+An ephemeral event carrying realtime data, mapping to the mini-app [`joinRealtimeChannel`](https://webxdc.org/docs/spec/joinRealtimeChannel.html) API. Relays forward these to active subscribers but do not store them.
 
 ### Tags
 
@@ -103,14 +103,14 @@ Base64-encoded `Uint8Array` payload (max 128,000 bytes raw).
 
 1. A user uploads a `.xdc` file (e.g. to Blossom) and publishes an event with the URL in content and an `imeta` tag. The `imeta` SHOULD include a `webxdc` property.
 2. A client detects the `imeta` tag, downloads the `.xdc`, extracts it, and runs `index.html` in a sandboxed iframe or webview.
-3. `sendUpdate()` publishes a kind `4932` event with the `webxdc` identifier in an `i` tag.
+3. `sendUpdate()` publishes a kind `4932` event with the mini-app identifier in an `i` tag.
 4. The client subscribes to kind `4932` events with `#i` matching the identifier and delivers them via `setUpdateListener()`.
 5. `joinRealtimeChannel()` subscribes to kind `20932` events with `#i` matching the identifier. `send()` publishes ephemeral kind `20932` events. `leave()` closes the subscription.
 6. `selfAddr` and `selfName` MAY map to the user's npub and display name, or any other values.
 
 ## Security Considerations
 
-- Webxdc apps MUST be sandboxed with no network access, per the [webxdc spec](https://webxdc.org/docs/spec/messenger.html).
+- Mini-apps MUST be sandboxed with no network access, per the [webxdc spec](https://webxdc.org/docs/spec/messenger.html).
 - Clients SHOULD verify the `.xdc` file hash (`x` tag) before running it.
-- All communication in this spec is public. Webxdc apps designed for private chats or small groups may not work as expected.
-- Webxdc apps have no access to Nostr signatures or identity verification. Any participant can claim to be anyone within the app. Apps should not rely on `selfAddr` or `selfName` for trust decisions.
+- All communication in this spec is public. Mini-apps designed for private chats or small groups may not work as expected.
+- Mini-apps have no access to Nostr signatures or identity verification. Any participant can claim to be anyone within the app. Apps should not rely on `selfAddr` or `selfName` for trust decisions.

@@ -1,5 +1,5 @@
 /**
- * BlobbiSocialActions — Popover-based social interaction button for a Blobbi.
+ * PetsSocialActions — Popover-based social interaction button for a Pets.
  *
  * Renders an inline action-bar button (HandHeart icon) that opens a compact
  * popover with a two-step flow:
@@ -27,14 +27,14 @@ import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { parseBlobbiEvent } from '@/blobbi/core/lib/blobbi';
+import { parsePetsEvent } from '@/pets/core/lib/pets';
 import {
   buildInteractionEventTemplate,
   type InteractionAction,
-} from '@/blobbi/core/lib/blobbi-interaction';
-import { useBlobbiInteractions } from '@/blobbi/core/hooks/useBlobbiInteractions';
-import { calculateProjectedDecay } from '@/blobbi/core/hooks/useProjectedBlobbiState';
-import { SEVERITY_THRESHOLDS } from '@/blobbi/ui/lib/status-reactions';
+} from '@/pets/core/lib/pets-interaction';
+import { usePetsInteractions } from '@/pets/core/hooks/usePetsInteractions';
+import { calculateProjectedDecay } from '@/pets/core/hooks/useProjectedPetsState';
+import { SEVERITY_THRESHOLDS } from '@/pets/ui/lib/status-reactions';
 import {
   ACTION_METADATA,
   ACTION_TO_ITEM_TYPE,
@@ -43,15 +43,15 @@ import {
   hasHygieneEffectForEgg,
   hasHappinessEffectForEgg,
   type InventoryAction,
-} from '@/blobbi/actions/lib/blobbi-action-utils';
-import { getLiveShopItems } from '@/blobbi/shop/lib/blobbi-shop-items';
-import { ItemCarousel, type CarouselEntry } from '@/blobbi/rooms/components/ItemCarousel';
-import type { BlobbiStats } from '@/blobbi/core/lib/blobbi';
+} from '@/pets/actions/lib/pets-action-utils';
+import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
+import { ItemCarousel, type CarouselEntry } from '@/pets/rooms/components/ItemCarousel';
+import type { PetsStats } from '@/pets/core/lib/pets';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Default source tag value when the component is used on the Blobbi detail/naddr page. */
-const DEFAULT_SOURCE = 'blobbi-view';
+/** Default source tag value when the component is used on the Pets detail/naddr page. */
+const DEFAULT_SOURCE = 'pets-view';
 
 /**
  * Supported social actions on the view page.
@@ -70,7 +70,7 @@ const SOCIAL_ACTIONS: { inventory: InventoryAction; interaction: InteractionActi
  * Used to gate actions by current need — only show actions for stats that
  * are visually in distress (below the status-reaction warning threshold).
  */
-const ACTION_PRIMARY_STAT: Record<InventoryAction, keyof BlobbiStats> = {
+const ACTION_PRIMARY_STAT: Record<InventoryAction, keyof PetsStats> = {
   feed: 'hunger',
   play: 'happiness',
   clean: 'hygiene',
@@ -93,12 +93,12 @@ const INITIAL_STEP: PanelStep = { step: 'actions' };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface BlobbiSocialActionsProps {
-  /** The kind 31124 event of the viewed Blobbi. */
+interface PetsSocialActionsProps {
+  /** The kind 31124 event of the viewed Pets. */
   event: NostrEvent;
   /**
-   * Source tag for the kind 1124 event. Convention: `'blobbi-view'` (detail page),
-   * `'blobbi-feed'` (feed card). Defaults to `'blobbi-view'`.
+   * Source tag for the kind 1124 event. Convention: `'pets-view'` (detail page),
+   * `'pets-feed'` (feed card). Defaults to `'pets-view'`.
    */
   source?: string;
   /**
@@ -107,30 +107,30 @@ interface BlobbiSocialActionsProps {
    */
   onInteractionSuccess?: (action: InventoryAction) => void;
   /**
-   * Pre-parsed companion — avoids redundant `parseBlobbiEvent` when the
+   * Pre-parsed companion — avoids redundant `parsePetsEvent` when the
    * parent already parsed the event for gating purposes.
    */
-  companion?: ReturnType<typeof parseBlobbiEvent>;
+  companion?: ReturnType<typeof parsePetsEvent>;
   /** Extra classes on the trigger button. */
   className?: string;
 }
 
-export function BlobbiSocialActions({ event, source = DEFAULT_SOURCE, onInteractionSuccess, companion: companionProp, className }: BlobbiSocialActionsProps) {
+export function PetsSocialActions({ event, source = DEFAULT_SOURCE, onInteractionSuccess, companion: companionProp, className }: PetsSocialActionsProps) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const queryClient = useQueryClient();
 
-  const parsedCompanion = useMemo(() => companionProp !== undefined ? companionProp : parseBlobbiEvent(event), [event, companionProp]);
+  const parsedCompanion = useMemo(() => companionProp !== undefined ? companionProp : parsePetsEvent(event), [event, companionProp]);
   const companion = parsedCompanion;
 
   // Pending interaction count since last checkpoint.
-  // useBlobbiInteractions already applies the checkpoint `since` filter,
+  // usePetsInteractions already applies the checkpoint `since` filter,
   // so interactions.length represents unprocessed interactions.
-  const { interactions, isLoading: interactionsLoading, isError: interactionsError } = useBlobbiInteractions(companion ?? null);
+  const { interactions, isLoading: interactionsLoading, isError: interactionsError } = usePetsInteractions(companion ?? null);
   const pendingCount = (!interactionsLoading && !interactionsError) ? interactions.length : 0;
 
   // Project decay + pending social interactions onto canonical stats.
-  // This matches BlobbiStateCard's projection so action availability reflects
+  // This matches PetsStateCard's projection so action availability reflects
   // the same effective state visitors see visually. If interactions are still
   // loading, falls back to decay-only (slightly more permissive until loaded).
   const projectedStats = useMemo(() => {
@@ -139,10 +139,10 @@ export function BlobbiSocialActions({ event, source = DEFAULT_SOURCE, onInteract
     return calculateProjectedDecay(companion, undefined, pending).stats;
   }, [companion, interactions]);
 
-  // Filter social actions to only those the Blobbi currently needs.
+  // Filter social actions to only those the Pets currently needs.
   // An action is "needed" when the stat it helps is below the visual distress
   // threshold (SEVERITY_THRESHOLDS.warning = 70). This ensures the social
-  // popover aligns with what the Blobbi is visually expressing — if it looks
+  // popover aligns with what the Pets is visually expressing — if it looks
   // tired, hungry, sad, etc., visitors can help.
   const availableActions = useMemo(() => {
     if (!companion || !projectedStats) return [];
@@ -228,7 +228,7 @@ export function BlobbiSocialActions({ event, source = DEFAULT_SOURCE, onInteract
 
       const template = buildInteractionEventTemplate({
         ownerPubkey: companion.event.pubkey,
-        blobbiDTag: companion.d,
+        petsDTag: companion.d,
         action: mapping.interaction,
         source,
         itemId,
@@ -241,10 +241,10 @@ export function BlobbiSocialActions({ event, source = DEFAULT_SOURCE, onInteract
         // and activity history both reflect the just-published event.
         const coordinate = `31124:${companion.event.pubkey}:${companion.d}`;
         queryClient.invalidateQueries({
-          queryKey: ['blobbi-interactions', coordinate],
+          queryKey: ['pets-interactions', coordinate],
         });
         queryClient.invalidateQueries({
-          queryKey: ['blobbi-activity-history', coordinate],
+          queryKey: ['pets-activity-history', coordinate],
         });
 
         setPanel({ step: 'success', action: mapping.inventory });
@@ -301,7 +301,7 @@ export function BlobbiSocialActions({ event, source = DEFAULT_SOURCE, onInteract
               : 'text-muted-foreground hover:text-pink-500 hover:bg-pink-500/10',
             className,
           )}
-          title="Interact with Blobbi"
+          title="Interact with Pets"
           onClick={(e) => e.stopPropagation()}
         >
           <HandHeart className="size-[18px] sm:size-5" />

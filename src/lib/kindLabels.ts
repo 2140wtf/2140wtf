@@ -87,6 +87,8 @@ export const KIND_LABELS: Record<number, string> = {
   1063: 'File metadata',
   // NIP-88
   1068: 'Poll',
+  // NIP-69 / NIP-B9 Zap Poll
+  6969: 'Zap poll',
   // NIP-22
   1111: 'Comment',
   // NIP-A0 Voice
@@ -94,6 +96,9 @@ export const KIND_LABELS: Record<number, string> = {
   1244: 'Voice message comment',
   // NIP-53 Live
   1311: 'Live chat message',
+  // Roadstr
+  1315: 'Road event report',
+  1316: 'Road event confirmation',
   // NIP-C0
   1337: 'Code snippet',
   // NIP-34 Git
@@ -129,7 +134,6 @@ export const KIND_LABELS: Record<number, string> = {
   3063: 'Zapstore asset',
 
   // Ditto custom kinds
-  3367: 'Color moment',
 
   // NIP-72
   4550: 'Community post approval',
@@ -145,15 +149,11 @@ export const KIND_LABELS: Record<number, string> = {
   7376: 'Cashu wallet history',
 
   // Geocaching
-  7516: 'Found log',
   7517: 'Geocache proof of find',
 
   // NIP-43
   8000: 'Add user',
   8001: 'Remove user',
-
-  // Ditto letters
-  8211: 'Letter',
 
   // NIP-29 Group control (range)
   9000: 'Group control event',
@@ -223,7 +223,7 @@ export const KIND_LABELS: Record<number, string> = {
   10073: 'Read books',
   10074: 'Currently reading',
   10075: 'To be read',
-  // Blobbi
+  // Pets
   11125: 'Blobbonaut profile',
 
   // Ditto custom kinds
@@ -236,10 +236,10 @@ export const KIND_LABELS: Record<number, string> = {
   // Corny Chat
   14388: 'User sound effect lists',
 
-  // Blobbi
-  14919: 'Blobbi interaction',
-  14920: 'Blobbi breeding',
-  14921: 'Blobbi record',
+  // Pets
+  14919: 'Pets interaction',
+  14920: 'Pets breeding',
+  14921: 'Pets record',
 
   // NIP-5A nsites
   15128: 'Nsite',
@@ -271,9 +271,9 @@ export const KIND_LABELS: Record<number, string> = {
   28935: 'Invite request',
   28936: 'Leave request',
 
-  // Webxdc
-  4932: 'Webxdc sync',
-  20932: 'Webxdc sync',
+  // Mini apps
+  4932: 'Mini app sync',
+  20932: 'Mini app sync',
 
   // ---- Addressable events (30000+) ----
 
@@ -356,8 +356,8 @@ export const KIND_LABELS: Record<number, string> = {
   31990: 'App',
   // Bookstr
   31985: 'Book review',
-  // Blobbi
-  31124: 'Blobbi',
+  // 2140 pets
+  31124: '2140 pets',
   // Zapstore
   32267: 'Zapstore app',
   // Corny Chat
@@ -367,7 +367,6 @@ export const KIND_LABELS: Record<number, string> = {
   33863: 'Fundraiser',
   // NIP-71
   34235: 'Addressable video',
-  34236: 'Addressable short video',
   // Corny Chat
   34388: 'Sound effects',
   // Music
@@ -381,9 +380,6 @@ export const KIND_LABELS: Record<number, string> = {
   36767: 'Theme definition',
   // Music
   36787: 'Music track',
-  // Ditto custom
-  37381: 'Magic deck',
-  37516: 'Geocache listing',
   // NIP-87
   38172: 'Cashu mint announcement',
   38173: 'Fedimint announcement',

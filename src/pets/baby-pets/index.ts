@@ -1,7 +1,7 @@
 /**
- * Baby Blobbi Module
+ * Baby Pets Module
  * 
- * Self-contained module for baby stage Blobbi visuals and customization.
+ * Self-contained module for baby stage Pets visuals and customization.
  * This module includes:
  * - Baby SVG assets (awake and sleeping)
  * - SVG resolution and loading utilities
@@ -32,5 +32,5 @@ export {
 // SVG Customization
 export {
   customizeBabySvg,
-  customizeBabySvgFromBlobbi,
+  customizeBabySvgFromPets,
 } from './lib/baby-svg-customizer';

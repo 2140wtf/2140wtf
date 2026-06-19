@@ -1,10 +1,10 @@
 /**
- * useBlobbiCompanionGaze Hook
+ * usePetsCompanionGaze Hook
  * 
  * Manages the eye/gaze behavior of the companion.
  * 
  * Behavior rules:
- * 1. When moving: Eyes look in the direction Blobbi is going
+ * 1. When moving: Eyes look in the direction Pets is going
  * 2. When idle: Eyes look around randomly, observing the screen
  * 3. Sometimes: Eyes briefly focus on mouse cursor, then return to normal
  * 
@@ -29,7 +29,7 @@ import {
 } from '../core/companionMachine';
 import { DEFAULT_COMPANION_CONFIG, randomDuration } from '../core/companionConfig';
 
-interface UseBlobbiCompanionGazeOptions {
+interface UsePetsCompanionGazeOptions {
   /** Current behavioral state */
   state: CompanionState;
   /** Current facing direction */
@@ -48,7 +48,7 @@ interface UseBlobbiCompanionGazeOptions {
   entryInspectionDirection?: InspectionDirection | null;
 }
 
-interface UseBlobbiCompanionGazeResult {
+interface UsePetsCompanionGazeResult {
   /** Ref-based eye offset for imperative gaze control (no rerenders) */
   eyeOffsetRef: React.RefObject<EyeOffset>;
 }
@@ -65,7 +65,7 @@ function generateRandomScreenGaze(): EyeOffset {
   
   // Y: Asymmetric range favoring upward looks
   // -0.7 to 0.4 (can look more up than down)
-  // Bias slightly toward center/up since Blobbi is at the bottom of screen
+  // Bias slightly toward center/up since Pets is at the bottom of screen
   const y = (Math.random() - 0.55) * 1.1; // Range: -0.55*1.1=-0.6 to 0.45*1.1=0.5
   
   return { x, y };
@@ -82,7 +82,7 @@ function smoothLerp(current: number, target: number, factor: number): number {
 /**
  * Hook to manage companion gaze behavior.
  */
-export function useBlobbiCompanionGaze({
+export function usePetsCompanionGaze({
   state,
   direction,
   companionPosition,
@@ -91,7 +91,7 @@ export function useBlobbiCompanionGaze({
   observationTarget,
   attentionPosition,
   entryInspectionDirection,
-}: UseBlobbiCompanionGazeOptions): UseBlobbiCompanionGazeResult {
+}: UsePetsCompanionGazeOptions): UsePetsCompanionGazeResult {
   const [, setGaze] = useState<GazeState>(createInitialGaze);
   // Eye offset is driven imperatively via ref — no React state needed.
   // The RAF loop writes to eyeOffsetRef; useExternalEyeOffset reads from it.

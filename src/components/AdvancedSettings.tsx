@@ -124,12 +124,12 @@ export function AdvancedSettings() {
                       toast({ title: 'Favicon URL updated' });
                     }
                   }}
-                  placeholder="https://ditto.pub/api/favicon/{hostname}"
+                  placeholder="https://example.com/api/favicon/{hostname}"
                   className="font-mono text-base md:text-sm"
                 />
                 <div className="text-xs text-muted-foreground mt-2">
                   <span className="font-medium">Default: </span>
-                  <span className="font-mono break-all">https://ditto.pub/api/favicon/{'{hostname}'}</span>
+                  <span className="font-mono break-all">none</span>
                 </div>
               </div>
 
@@ -153,12 +153,12 @@ export function AdvancedSettings() {
                       toast({ title: 'Link preview URL updated' });
                     }
                   }}
-                  placeholder="https://ditto.pub/api/link-preview/{url}"
+                  placeholder="https://example.com/api/link-preview/{url}"
                   className="font-mono text-base md:text-sm"
                 />
                 <div className="text-xs text-muted-foreground mt-2">
                   <span className="font-medium">Default: </span>
-                  <span className="font-mono break-all">https://ditto.pub/api/link-preview/{'{url}'}</span>
+                  <span className="font-mono break-all">none</span>
                 </div>
               </div>
 
@@ -182,12 +182,12 @@ export function AdvancedSettings() {
                       toast({ title: 'CORS proxy updated' });
                     }
                   }}
-                  placeholder="https://proxy.shakespeare.diy/?url={href}"
+                  placeholder="https://example.com/proxy?url={href}"
                   className="font-mono text-base md:text-sm"
                 />
                 <div className="text-xs text-muted-foreground mt-2">
                   <span className="font-medium">Default: </span>
-                  <span className="font-mono break-all">https://proxy.shakespeare.diy/?url={'{href}'}</span>
+                  <span className="font-mono break-all">none</span>
                 </div>
               </div>
             </div>

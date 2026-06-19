@@ -1,7 +1,7 @@
 /**
- * BlobbiDevEditor - DEV MODE ONLY
+ * PetsDevEditor - DEV MODE ONLY
  * 
- * A comprehensive editor for directly modifying Blobbi state during development.
+ * A comprehensive editor for directly modifying Pets state during development.
  * Allows testing stage transitions, stat changes, adult forms, and other properties
  * without going through the normal game flow.
  * 
@@ -22,36 +22,36 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
-import type { BlobbiCompanion, BlobbiStage, BlobbiState, BlobbiStats } from '@/blobbi/core/lib/blobbi';
-import { ADULT_FORMS } from '@/blobbi/adult-blobbi/types/adult.types';
+import type { PetsCompanion, PetsStage, PetsState, PetsStats } from '@/pets/core/lib/pets';
+import { ADULT_FORMS } from '@/pets/adult-pets/types/adult.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface BlobbiDevEditorProps {
+interface PetsDevEditorProps {
   /** Whether the editor modal is open */
   isOpen: boolean;
   /** Callback to close the modal */
   onClose: () => void;
-  /** The current Blobbi companion to edit */
-  companion: BlobbiCompanion;
+  /** The current Pets companion to edit */
+  companion: PetsCompanion;
   /** Callback when changes should be applied */
-  onApply: (updates: BlobbiDevUpdates) => Promise<void>;
+  onApply: (updates: PetsDevUpdates) => Promise<void>;
   /** Whether an update is in progress */
   isUpdating?: boolean;
   /** DEV: Reset account-level daily missions and trigger persist */
   onResetDailyMissions?: () => void;
 }
 
-/** Updates that can be applied to a Blobbi */
-export interface BlobbiDevUpdates {
+/** Updates that can be applied to a Pets */
+export interface PetsDevUpdates {
   /** Stage transition */
-  stage?: BlobbiStage;
+  stage?: PetsStage;
   /** State change (active, sleeping, etc.) */
-  state?: BlobbiState;
+  state?: PetsState;
   /** Adult form type (only for adults) */
   adultType?: string;
   /** Stats updates */
-  stats?: Partial<BlobbiStats>;
+  stats?: Partial<PetsStats>;
   /** Experience points */
   experience?: number;
   /** Care streak */
@@ -67,7 +67,7 @@ export interface BlobbiDevUpdates {
 interface StatPreset {
   name: string;
   description: string;
-  stats: Partial<BlobbiStats>;
+  stats: Partial<PetsStats>;
   variant: 'default' | 'destructive' | 'outline' | 'secondary';
 }
 
@@ -166,20 +166,20 @@ function StatSlider({ label, icon, value, onChange, color }: StatSliderProps) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function BlobbiDevEditor({
+export function PetsDevEditor({
   isOpen,
   onClose,
   companion,
   onApply,
   isUpdating = false,
   onResetDailyMissions,
-}: BlobbiDevEditorProps) {
+}: PetsDevEditorProps) {
   // ─── Local State ───
   // Initialize from companion values
-  const [stage, setStage] = useState<BlobbiStage>(companion.stage);
-  const [state, setState] = useState<BlobbiState>(companion.state);
+  const [stage, setStage] = useState<PetsStage>(companion.stage);
+  const [state, setState] = useState<PetsState>(companion.state);
   const [adultType, setAdultType] = useState<string>(companion.adultType ?? 'catti');
-  const [stats, setStats] = useState<BlobbiStats>({
+  const [stats, setStats] = useState<PetsStats>({
     hunger: companion.stats.hunger ?? 100,
     happiness: companion.stats.happiness ?? 100,
     health: companion.stats.health ?? 100,
@@ -233,13 +233,13 @@ export function BlobbiDevEditor({
   }, []);
 
   // Update single stat
-  const updateStat = useCallback((key: keyof BlobbiStats, value: number) => {
+  const updateStat = useCallback((key: keyof PetsStats, value: number) => {
     setStats(prev => ({ ...prev, [key]: value }));
   }, []);
 
   // Handle apply
   const handleApply = useCallback(async () => {
-    const updates: BlobbiDevUpdates = {};
+    const updates: PetsDevUpdates = {};
 
     // Only include changed values
     if (stage !== companion.stage) {
@@ -253,7 +253,7 @@ export function BlobbiDevEditor({
     }
 
     // Stats - check each individually
-    const statsUpdates: Partial<BlobbiStats> = {};
+    const statsUpdates: Partial<PetsStats> = {};
     if (stats.hunger !== (companion.stats.hunger ?? 100)) statsUpdates.hunger = stats.hunger;
     if (stats.happiness !== (companion.stats.happiness ?? 100)) statsUpdates.happiness = stats.happiness;
     if (stats.health !== (companion.stats.health ?? 100)) statsUpdates.health = stats.health;
@@ -285,13 +285,13 @@ export function BlobbiDevEditor({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-amber-500">DEV</span>
-            <span>Blobbi State Editor</span>
+            <span>Pets State Editor</span>
             <Badge variant="outline" className="ml-2 text-xs">
               {companion.name}
             </Badge>
           </DialogTitle>
           <DialogDescription>
-            Directly edit Blobbi state for testing. Changes are published to the network.
+            Directly edit Pets state for testing. Changes are published to the network.
           </DialogDescription>
         </DialogHeader>
 
@@ -377,7 +377,7 @@ export function BlobbiDevEditor({
           {/* ─── State Controls ─── */}
           <div className="space-y-3">
             <Label className="text-sm font-semibold">Activity State</Label>
-            <Select value={state} onValueChange={(v) => setState(v as BlobbiState)}>
+            <Select value={state} onValueChange={(v) => setState(v as PetsState)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

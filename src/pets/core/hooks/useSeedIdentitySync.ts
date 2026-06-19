@@ -1,7 +1,7 @@
 /**
  * Seed Identity Sync Hook
  *
- * Automatically republishes visible Blobbi companions whose persisted
+ * Automatically republishes visible Pets companions whose persisted
  * mirror tags (colors, pattern, size, adult_type) don't match the
  * seed-derived canonical values.
  *
@@ -18,14 +18,14 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-  type BlobbiCompanion,
-} from '../lib/blobbi';
+  KIND_PETS_STATE,
+  updatePetsTags,
+  type PetsCompanion,
+} from '../lib/pets';
 
 /**
  * For each visible companion that has needsSeedIdentitySync === true,
- * republish it with an `updateBlobbiTags` call that includes the
+ * republish it with an `updatePetsTags` call that includes the
  * companion's (possibly adjusted) seed. The merge pipeline's
  * syncMirrorTagsToSeed will overwrite all stale mirror tags.
  *
@@ -33,7 +33,7 @@ import {
  * no seed (nothing to sync to).
  */
 export function useSeedIdentitySync(
-  companions: BlobbiCompanion[],
+  companions: PetsCompanion[],
   updateCompanionEvent: (event: NostrEvent) => void,
 ): void {
   const { nostr } = useNostr();
@@ -70,7 +70,7 @@ export function useSeedIdentitySync(
           // Fetch the freshest version from relays to avoid stale overwrites
           // (another device may have updated the event since our cache was populated).
           const prev = await fetchFreshEvent(nostr, {
-            kinds: [KIND_BLOBBI_STATE],
+            kinds: [KIND_PETS_STATE],
             authors: [c.event.pubkey],
             '#d': [c.d],
           });
@@ -86,9 +86,9 @@ export function useSeedIdentitySync(
 
           // Include the (possibly adjusted) seed in updates so that
           // syncMirrorTagsToSeed reads the correct seed value.
-          const newTags = updateBlobbiTags(prev.tags, { seed: c.seed! });
+          const newTags = updatePetsTags(prev.tags, { seed: c.seed! });
           const event = await publishEvent({
-            kind: KIND_BLOBBI_STATE,
+            kind: KIND_PETS_STATE,
             content: prev.content,
             tags: newTags,
             prev,

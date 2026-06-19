@@ -1,7 +1,7 @@
 /**
- * Blobbi Visual System Library
+ * Pets Visual System Library
  *
- * Centralized exports for the Blobbi visual system.
+ * Centralized exports for the Pets visual system.
  *
  * Structure:
  * - types.ts: Shared type definitions
@@ -14,7 +14,7 @@
  *
  * Animation/rendering modules (not re-exported here):
  * - eye-animation.ts: SVG transformation for eye animation
- * - useBlobbiEyes.ts: Runtime eye animation hook
+ * - usePetsEyes.ts: Runtime eye animation hook
  * - useExternalEyeOffset.ts: External eye offset control
  * - recipe.ts: Part-based visual recipe system (core architecture)
  * - emotions.ts: Public API for emotion presets (delegates to recipe.ts)
@@ -28,7 +28,7 @@ export * from './types';
 export * from './constants';
 
 // Adapters
-export { blobbiCompanionToBlobbi, companionDataToBlobbi } from './adapters';
+export { petsCompanionToPets, companionDataToPets } from './adapters';
 
 // SVG utilities
 export * from './svg';

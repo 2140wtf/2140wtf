@@ -8,14 +8,14 @@ import { useLocalStorage } from './useLocalStorage';
 import {
   KIND_BLOBBONAUT_PROFILE,
   BLOBBONAUT_PROFILE_KINDS,
-  BLOBBI_CACHE_KEY,
+  PETS_CACHE_KEY,
   getBlobbonautQueryDValues,
   isValidBlobbonautEvent,
   isLegacyBlobbonautKind,
   parseBlobbonautEvent,
-  type BlobbiBootCache,
+  type PetsBootCache,
   type BlobbonautProfile,
-} from '@/blobbi/core/lib/blobbi';
+} from '@/pets/core/lib/pets';
 
 /**
  * Hook to fetch and manage the Blobbonaut Profile for the logged-in user.
@@ -34,8 +34,8 @@ export function useBlobbonautProfile() {
   const queryClient = useQueryClient();
   
   // Boot cache in localStorage
-  const [bootCache, setBootCache] = useLocalStorage<BlobbiBootCache | null>(
-    BLOBBI_CACHE_KEY,
+  const [bootCache, setBootCache] = useLocalStorage<PetsBootCache | null>(
+    PETS_CACHE_KEY,
     null
   );
   

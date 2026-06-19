@@ -1,7 +1,7 @@
 /**
- * BlobbiPolaroidCard - Polaroid-style card for Blobbi photos
+ * PetsPolaroidCard - Polaroid-style card for Pets photos
  *
- * Renders a Blobbi inside a classic polaroid-style frame with:
+ * Renders a Pets inside a classic polaroid-style frame with:
  * - White/off-white border on ALL sides (like a real polaroid)
  * - Thin borders on top, left, and right
  * - Larger bottom border for caption area
@@ -13,16 +13,16 @@
 
 import { forwardRef } from 'react';
 
-import { BlobbiStageVisual } from './BlobbiStageVisual';
+import { PetsStageVisual } from './PetsStageVisual';
 import { cn } from '@/lib/utils';
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface BlobbiPolaroidCardProps {
-  /** The Blobbi companion data */
-  companion: BlobbiCompanion;
-  /** Optional caption text (defaults to Blobbi name) */
+export interface PetsPolaroidCardProps {
+  /** The Pets companion data */
+  companion: PetsCompanion;
+  /** Optional caption text (defaults to Pets name) */
   caption?: string;
   /** Show stage badge (e.g., "Baby", "Adult") */
   showStage?: boolean;
@@ -48,13 +48,13 @@ const PHOTO_HEIGHT = CARD_HEIGHT - FRAME_PADDING_TOP - FRAME_PADDING_BOTTOM;
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * Polaroid-style card for Blobbi photos.
+ * Polaroid-style card for Pets photos.
  *
  * Uses forwardRef to allow parent components to capture the DOM node
  * for image export using html-to-image.
  */
-export const BlobbiPolaroidCard = forwardRef<HTMLDivElement, BlobbiPolaroidCardProps>(
-  function BlobbiPolaroidCard({ companion, caption, showStage = false, className }, ref) {
+export const PetsPolaroidCard = forwardRef<HTMLDivElement, PetsPolaroidCardProps>(
+  function PetsPolaroidCard({ companion, caption, showStage = false, className }, ref) {
     const displayCaption = caption ?? companion.name;
     const stageLabel = companion.stage.charAt(0).toUpperCase() + companion.stage.slice(1);
 
@@ -96,8 +96,8 @@ export const BlobbiPolaroidCard = forwardRef<HTMLDivElement, BlobbiPolaroidCardP
             }}
           />
 
-          {/* Blobbi visual - centered, forward looking, no blink for photo */}
-          <BlobbiStageVisual
+          {/* Pets visual - centered, forward looking, no blink for photo */}
+          <PetsStageVisual
             companion={companion}
             size="lg"
             animated={false} // No animations for photo capture
@@ -124,7 +124,7 @@ export const BlobbiPolaroidCard = forwardRef<HTMLDivElement, BlobbiPolaroidCardP
             width: CARD_WIDTH,
           }}
         >
-          {/* Blobbi name - handwritten style */}
+          {/* Pets name - handwritten style */}
           <p
             style={{
               fontFamily: "'Permanent Marker', 'Comic Sans MS', cursive, sans-serif",

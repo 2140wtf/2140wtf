@@ -14,8 +14,10 @@ import {
   Mail,
   MessageCircle,
   Music,
+  Navigation,
   Quote,
   Rocket,
+  Shield,
   MoreHorizontal,
   Package,
   Play,
@@ -35,11 +37,11 @@ import { type ReactNode, lazy, memo, Suspense, useCallback, useEffect, useMemo, 
 import { Link } from "react-router-dom";
 /** Lazy-loaded markdown-heavy components — keeps react-markdown + unified pipeline out of the main feed bundle. */
 const ArticleContent = lazy(() => import("@/components/ArticleContent").then(m => ({ default: m.ArticleContent })));
-const BlobbiStateCard = lazy(() => import("@/components/BlobbiStateCard").then(m => ({ default: m.BlobbiStateCard })));
-const BlobbiSocialActions = lazy(() => import("@/components/BlobbiSocialActions").then(m => ({ default: m.BlobbiSocialActions })));
-import { parseBlobbiEvent } from "@/blobbi/core/lib/blobbi";
-import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/blobbi/ui/hooks/useInteractionReaction';
-import type { InventoryAction } from '@/blobbi/actions/lib/blobbi-action-utils';
+const PetsStateCard = lazy(() => import("@/components/PetsStateCard").then(m => ({ default: m.PetsStateCard })));
+const PetsSocialActions = lazy(() => import("@/components/PetsSocialActions").then(m => ({ default: m.PetsSocialActions })));
+import { parsePetsEvent } from "@/pets/core/lib/pets";
+import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/pets/ui/hooks/useInteractionReaction';
+import type { InventoryAction } from '@/pets/actions/lib/pets-action-utils';
 import {
   MusicPlaylistContent,
   MusicTrackContent,
@@ -50,22 +52,19 @@ import { BadgeAwardCard } from "@/components/BadgeAwardCard";
 import { BadgeContent } from "@/components/BadgeContent";
 import { BadgeSetContent } from "@/components/BadgeSetContent";
 import { CalendarEventContent } from "@/components/CalendarEventContent";
-import {
-  ColorMomentContent,
-  ColorMomentEyeButton,
-} from "@/components/ColorMomentContent";
+import { ClassifiedListingContent } from "@/components/ClassifiedListingContent";
 import { BrokenEventFallback } from "@/components/BrokenEventFallback";
 import { CommentContext } from "@/components/CommentContext";
 import { ContentWarningGuard } from "@/components/ContentWarningGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { EmojifiedText, ReactionEmoji } from "@/components/CustomEmoji";
 const CustomNipCard = lazy(() => import("@/components/CustomNipCard").then(m => ({ default: m.CustomNipCard })));
+const RoadstrReportContent = lazy(() => import("@/components/roadstr/RoadstrReportContent").then(m => ({ default: m.RoadstrReportContent })));
+const RoadstrConfirmationContent = lazy(() => import("@/components/roadstr/RoadstrReportContent").then(m => ({ default: m.RoadstrConfirmationContent })));
 import { EmojiPackContent } from "@/components/EmojiPackContent";
 import { FileMetadataContent } from "@/components/FileMetadataContent";
 import { PeopleListContent } from "@/components/PeopleListContent";
 import { PeopleAvatarStack } from "@/components/PeopleAvatarStack";
-import { FoundLogContent } from "@/components/FoundLogContent";
-import { GeocacheContent } from "@/components/GeocacheContent";
 import { BirdDetectionContent } from "@/components/BirdDetectionContent";
 import { BirdexContent } from "@/components/BirdexContent";
 import { ConstellationContent } from "@/components/ConstellationContent";
@@ -75,11 +74,8 @@ import { CampaignContent } from "@/components/CampaignContent";
 import { ZapContent } from "@/components/ZapContent";
 import { NsiteCard } from "@/components/NsiteCard";
 import { ImageGallery } from "@/components/ImageGallery";
-import { CardsIcon } from "@/components/icons/CardsIcon";
-import { ChestIcon } from "@/components/icons/ChestIcon";
 import { RepostIcon } from "@/components/icons/RepostIcon";
 import { LiveStreamPlayer } from "@/components/LiveStreamPlayer";
-import { MagicDeckContent } from "@/components/MagicDeckContent";
 import { Nip05Badge } from "@/components/Nip05Badge";
 import { NoteContent } from "@/components/NoteContent";
 import { NoteMoreMenu } from "@/components/NoteMoreMenu";
@@ -95,13 +91,12 @@ import { ReplyContext } from "@/components/ReplyContext";
 import { RepostMenu } from "@/components/RepostMenu";
 import { ThemeContent } from "@/components/ThemeContent";
 import { UnknownKindContent } from "@/components/UnknownKindContent";
-import { EncryptedMessageContent } from "@/components/EncryptedMessageContent";
-import { EncryptedLetterContent } from "@/components/EncryptedLetterContent";
 import { LoveListContent } from "@/components/LoveListContent";
 import { VanishCardCompact } from "@/components/VanishEventContent";
 import { ZapstoreAppContent } from "@/components/ZapstoreAppContent";
 import { ZapstoreReleaseContent, ZapstoreAssetContent } from "@/components/ZapstoreReleaseContent";
 import { AppHandlerContent } from "@/components/AppHandlerContent";
+import { GroupChatCard } from "@/components/group-chat/GroupChatCard";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { isBadgeSetEvent, isProfileBadgesEvent } from "@/lib/badgeUtils";
@@ -134,8 +129,15 @@ import { parseBadgeSet } from "@/lib/parseBadgeSet";
 import { getEffectiveStreamStatus } from "@/lib/streamStatus";
 import { cn } from "@/lib/utils";
 import { encodeEventAddress } from "@/lib/encodeEvent";
-import { isVineMuted, setVineMuted } from "@/lib/vineGlobalMute";
+// ─── Shared short-form video mute state (kind 22 inline player) ───────────────
 
+let shortVideoMuted = true;
+function isShortVideoMuted(): boolean {
+  return shortVideoMuted;
+}
+function setShortVideoMuted(value: boolean): void {
+  shortVideoMuted = value;
+}
 
 /** Profile card for use in feeds (kind 0). */
 function ProfileCardContent({ event }: { event: NostrEvent }) {
@@ -408,12 +410,12 @@ export const NoteCard = memo(function NoteCard({
   const [recipientMoreMenuOpen, setRecipientMoreMenuOpen] = useState(false);
   const [recipientReplyOpen, setRecipientReplyOpen] = useState(false);
 
-  // Blobbi interaction reaction — triggers visual feedback on the card when social action succeeds
-  const { state: blobbiReactionState, trigger: triggerBlobbiReaction } = useInteractionReaction();
-  const handleBlobbiInteractionSuccess = useCallback((action: InventoryAction) => {
+  // Pets interaction reaction — triggers visual feedback on the card when social action succeeds
+  const { state: petsReactionState, trigger: triggerPetsReaction } = useInteractionReaction();
+  const handlePetsInteractionSuccess = useCallback((action: InventoryAction) => {
     const mapped = INVENTORY_TO_REACTION[action];
-    if (mapped) triggerBlobbiReaction(mapped);
-  }, [triggerBlobbiReaction]);
+    if (mapped) triggerPetsReaction(mapped);
+  }, [triggerPetsReaction]);
 
   // Zap button shows for any logged-in user except on their own posts.
   // On-chain zaps are always available; Lightning is offered inside the dialog
@@ -452,17 +454,13 @@ export const NoteCard = memo(function NoteCard({
     auxOpenPost(e);
   };
 
-  const isVine = event.kind === 34236 || event.kind === 22;
-  const isPoll = event.kind === 1068;
-  const isGeocache = event.kind === 37516;
-  const isFoundLog = event.kind === 7516;
-  const isColor = event.kind === 3367;
+  const isShortVideo = event.kind === 22;
+  const isPoll = event.kind === 1068 || event.kind === 6969;
   const isBirdDetection = event.kind === 2473;
   const isBirdex = event.kind === 12473;
   const isConstellation = event.kind === 30621;
   const isPeopleList = event.kind === 3 || event.kind === 30000 || event.kind === 39089;
   const isArticle = event.kind === 30023;
-  const isMagicDeck = event.kind === 37381;
   const isStream = event.kind === 30311;
   const isFileMetadata = event.kind === 1063;
   const isThemeDefinition = event.kind === 36767;
@@ -470,6 +468,7 @@ export const NoteCard = memo(function NoteCard({
   const isTheme = isThemeDefinition || isActiveTheme;
   const isVoiceMessage = event.kind === 1222 || event.kind === 1244;
   const isCalendarEvent = event.kind === 31922 || event.kind === 31923;
+  const isClassifiedListing = event.kind === 30402;
   const isEmojiPack = event.kind === 30030;
   const isBadgeDefinition = event.kind === 30009;
   const isProfileBadges = isProfileBadgesEvent(event);
@@ -496,11 +495,13 @@ export const NoteCard = memo(function NoteCard({
   const isZapstoreRelease = event.kind === 30063;
   const isZapstoreAsset = event.kind === 3063;
   const isAppHandler = event.kind === 31990;
-  const isEncryptedDM = event.kind === 4;
-  const isLetter = event.kind === 8211;
   const isLoveList = event.kind === LOVE_LIST_KIND;
   const isHighlight = event.kind === 9802;
   const isCampaign = event.kind === 33863;
+  const isRoadstrReport = event.kind === 1315;
+  const isRoadstrConfirmation = event.kind === 1316;
+  const isRoadstr = isRoadstrReport || isRoadstrConfirmation;
+  const isGroupEvent = event.kind === 445;
   const isVanish = event.kind === 62;
   const isZap = event.kind === 9735 || event.kind === 8333;
   // Multi-recipient onchain zap (NIP-BC batch form): more than one `p` tag.
@@ -512,31 +513,28 @@ export const NoteCard = memo(function NoteCard({
     [event],
   );
   const isProfile = event.kind === 0;
-  const isBlobbiState = event.kind === 31124;
-  const blobbiCompanion = useMemo(() => isBlobbiState ? parseBlobbiEvent(event) : null, [event, isBlobbiState]);
-  const showBlobbiInteract = isBlobbiState
+  const isPetsState = event.kind === 31124;
+  const petsCompanion = useMemo(() => isPetsState ? parsePetsEvent(event) : null, [event, isPetsState]);
+  const showPetsInteract = isPetsState
     && !!user
     && user.pubkey !== event.pubkey
-    && !!blobbiCompanion?.socialOpen
-    && blobbiCompanion?.stage !== 'egg';
+    && !!petsCompanion?.socialOpen
+    && petsCompanion?.stage !== 'egg';
   const isDevKind = isGitRepo || isPatch || isPullRequest || isCustomNip || isNsite;
   const isTextNote =
-    !isVine &&
+    !isShortVideo &&
     !isPoll &&
-    !isGeocache &&
-    !isFoundLog &&
-    !isColor &&
     !isBirdDetection &&
     !isBirdex &&
     !isConstellation &&
     !isPeopleList &&
     !isArticle &&
-    !isMagicDeck &&
     !isStream &&
     !isFileMetadata &&
     !isTheme &&
     !isVoiceMessage &&
     !isCalendarEvent &&
+    !isClassifiedListing &&
     !isEmojiPack &&
     !isBadge &&
     !isReaction &&
@@ -550,15 +548,15 @@ export const NoteCard = memo(function NoteCard({
     !isZapstoreRelease &&
     !isZapstoreAsset &&
     !isAppHandler &&
-    !isEncryptedDM &&
-    !isLetter &&
     !isLoveList &&
     !isHighlight &&
     !isCampaign &&
+    !isRoadstr &&
     !isVanish &&
     !isZap &&
     !isProfile &&
-    !isBlobbiState;
+    !isPetsState &&
+    !isGroupEvent;
 
   const isComment = event.kind === 1111;
   const isReply = isTextNote && !isComment && isReplyEvent(event);
@@ -613,13 +611,13 @@ export const NoteCard = memo(function NoteCard({
   }, [event, isReply]);
   const parentEventId = parentHints?.id;
 
-  // Kind 22 / 34236 specific
+  // Kind 22 specific
   const imeta = useMemo(
-    () => (isVine ? parseVideoImeta(event.tags) : undefined),
-    [event.tags, isVine],
+    () => (isShortVideo ? parseVideoImeta(event.tags) : undefined),
+    [event.tags, isShortVideo],
   );
-  const vineTitle = isVine ? getTag(event.tags, "title") : undefined;
-  const hashtags = isVine
+  const shortVideoTitle = isShortVideo ? getTag(event.tags, "title") : undefined;
+  const hashtags = isShortVideo
     ? event.tags.filter(([n]) => n === "t").map(([, v]) => v)
     : [];
 
@@ -633,17 +631,6 @@ export const NoteCard = memo(function NoteCard({
     getContentWarning(event) !== undefined &&
     config.contentWarningPolicy === "hide"
   ) {
-    return null;
-  }
-
-  // Hide magic decks tagged t:unlisted and treasures tagged t:hidden
-  if (
-    isMagicDeck &&
-    event.tags.some(([n, v]) => n === "t" && v === "unlisted")
-  ) {
-    return null;
-  }
-  if (isGeocache && event.tags.some(([n, v]) => n === "t" && v === "hidden")) {
     return null;
   }
 
@@ -673,23 +660,17 @@ export const NoteCard = memo(function NoteCard({
           <PhotoContent event={event} />
         ) : isVideo ? (
           <VideoContent event={event} />
-        ) : isVine ? (
+        ) : isShortVideo ? (
           <>
-            {vineTitle && (
+            {shortVideoTitle && (
               <p className="text-[15px] mt-2 leading-relaxed break-words overflow-hidden">
-                {vineTitle}
+                {shortVideoTitle}
               </p>
             )}
-            <VineMedia imeta={imeta} hashtags={hashtags} />
+            <ShortVideoMedia imeta={imeta} hashtags={hashtags} />
           </>
         ) : isPoll ? (
           <PollContent event={event} />
-        ) : isGeocache ? (
-          <GeocacheContent event={event} />
-        ) : isFoundLog ? (
-          <FoundLogContent event={event} />
-        ) : isColor ? (
-          <ColorMomentContent event={event} />
         ) : isBirdDetection ? (
           <BirdDetectionContent event={event} />
         ) : isBirdex ? (
@@ -702,8 +683,6 @@ export const NoteCard = memo(function NoteCard({
           <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
             <ArticleContent event={event} preview className="mt-2" />
           </Suspense>
-        ) : isMagicDeck ? (
-          <MagicDeckContent event={event} />
         ) : isStream ? (
           <StreamContent event={event} />
         ) : isFileMetadata ? (
@@ -724,6 +703,8 @@ export const NoteCard = memo(function NoteCard({
           <VoiceMessagePlayer event={event} />
         ) : isCalendarEvent ? (
           <CalendarEventContent event={event} compact />
+        ) : isClassifiedListing ? (
+          <ClassifiedListingContent event={event} compact />
         ) : isMusicTrack ? (
           <MusicTrackContent event={event} />
         ) : isMusicPlaylist ? (
@@ -766,24 +747,30 @@ export const NoteCard = memo(function NoteCard({
           </div>
         ) : isAppHandler ? (
           <AppHandlerContent event={event} compact />
-        ) : isEncryptedDM ? (
-          <EncryptedMessageContent event={event} compact />
-        ) : isLetter ? (
-          <EncryptedLetterContent event={event} compact />
         ) : isLoveList ? (
           <LoveListContent event={event} compact />
         ) : isHighlight ? (
           <HighlightContent event={event} />
         ) : isCampaign ? (
           <CampaignContent event={event} />
+        ) : isRoadstrReport ? (
+          <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+            <RoadstrReportContent event={event} />
+          </Suspense>
+        ) : isRoadstrConfirmation ? (
+          <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+            <RoadstrConfirmationContent event={event} />
+          </Suspense>
         ) : isProfile ? (
           <ProfileCardContent event={event} />
-        ) : isBlobbiState ? (
+        ) : isPetsState ? (
           <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
-            <BlobbiStateCard event={event} lookMode="follow-pointer" interactionReaction={blobbiReactionState} />
+            <PetsStateCard event={event} lookMode="follow-pointer" interactionReaction={petsReactionState} />
           </Suspense>
         ) : isZap ? (
           <ZapContent event={event} recipientPubkey={profileZapRecipient} />
+        ) : isGroupEvent ? (
+          <GroupChatCard event={event} className="mt-2" />
         ) : isUnknownKind ? (
           <UnknownKindContent event={event} />
         ) : (
@@ -890,17 +877,17 @@ export const NoteCard = memo(function NoteCard({
     const reply = opts?.onReply ?? (() => setReplyOpen(true));
     const more = opts?.onMore ?? (() => setMoreMenuOpen(true));
     return (
-      <div className={cn("flex items-center mt-3 -ml-2", showBlobbiInteract ? "gap-4 sm:gap-5" : "gap-5")}>
+      <div className={cn("flex items-center mt-3 -ml-2", showPetsInteract ? "gap-4 sm:gap-5" : "gap-5")}>
         <button
           type="button"
-          className={cn("flex items-center gap-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors", showBlobbiInteract ? "p-1.5 sm:p-2" : "p-2")}
+          className={cn("flex items-center gap-1.5 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors", showPetsInteract ? "p-1.5 sm:p-2" : "p-2")}
           title="Reply"
           onClick={(e) => {
             e.stopPropagation();
             reply();
           }}
         >
-          <MessageCircle className={showBlobbiInteract ? "size-[18px] sm:size-5" : "size-5"} />
+          <MessageCircle className={showPetsInteract ? "size-[18px] sm:size-5" : "size-5"} />
           {s?.replies ? (
             <span className="text-sm tabular-nums">{formatNumber(s.replies)}</span>
           ) : null}
@@ -910,10 +897,10 @@ export const NoteCard = memo(function NoteCard({
           {(isReposted: boolean) => (
             <button
               type="button"
-              className={cn(`flex items-center gap-1.5 rounded-full transition-colors ${isReposted ? "text-accent hover:text-accent/80 hover:bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10"}`, showBlobbiInteract ? "p-1.5 sm:p-2" : "p-2")}
+              className={cn(`flex items-center gap-1.5 rounded-full transition-colors ${isReposted ? "text-accent hover:text-accent/80 hover:bg-accent/10" : "text-muted-foreground hover:text-accent hover:bg-accent/10"}`, showPetsInteract ? "p-1.5 sm:p-2" : "p-2")}
               title={isReposted ? "Undo repost" : "Repost"}
             >
-              <RepostIcon className={showBlobbiInteract ? "size-[18px] sm:size-5" : "size-5"} />
+              <RepostIcon className={showPetsInteract ? "size-[18px] sm:size-5" : "size-5"} />
               {s?.reposts || s?.quotes ? (
                 <span className="text-sm tabular-nums">
                   {formatNumber((s?.reposts ?? 0) + (s?.quotes ?? 0))}
@@ -931,9 +918,9 @@ export const NoteCard = memo(function NoteCard({
           reactionCount={s?.reactions}
         />
 
-        {showBlobbiInteract && (
+        {showPetsInteract && (
           <Suspense fallback={null}>
-            <BlobbiSocialActions event={t} source="blobbi-feed" companion={blobbiCompanion} onInteractionSuccess={handleBlobbiInteractionSuccess} />
+            <PetsSocialActions event={t} source="pets-feed" companion={petsCompanion} onInteractionSuccess={handlePetsInteractionSuccess} />
           </Suspense>
         )}
 
@@ -944,12 +931,12 @@ export const NoteCard = memo(function NoteCard({
               className={cn(
                 "flex items-center gap-1.5 rounded-full transition-colors",
                 "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10",
-                showBlobbiInteract ? "p-1.5 sm:p-2" : "p-2",
+                showPetsInteract ? "p-1.5 sm:p-2" : "p-2",
               )}
               title="Zap"
             >
               <Zap
-                className={showBlobbiInteract ? "size-[18px] sm:size-5" : "size-5"}
+                className={showPetsInteract ? "size-[18px] sm:size-5" : "size-5"}
                 fill="none"
               />
               {s?.zapAmount ? (
@@ -963,14 +950,14 @@ export const NoteCard = memo(function NoteCard({
 
         <button
           type="button"
-          className={cn("rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors", showBlobbiInteract ? "p-1.5 sm:p-2" : "p-2")}
+          className={cn("rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors", showPetsInteract ? "p-1.5 sm:p-2" : "p-2")}
           title="More"
           onClick={(e) => {
             e.stopPropagation();
             more();
           }}
         >
-          <MoreHorizontal className={showBlobbiInteract ? "size-[18px] sm:size-5" : "size-5"} />
+          <MoreHorizontal className={showPetsInteract ? "size-[18px] sm:size-5" : "size-5"} />
         </button>
       </div>
     );
@@ -1458,7 +1445,6 @@ export const NoteCard = memo(function NoteCard({
       <div className="flex items-center gap-3">
         {avatarElement}
         {authorInfo}
-        {isColor && <ColorMomentEyeButton event={event} />}
       </div>
 
       {contentBlock}
@@ -1719,8 +1705,8 @@ function VideoContent({ event }: { event: NostrEvent }) {
   );
 }
 
-/** Media content for kind 22 / 34236 short-form video events — rendered at full card width. */
-function VineMedia({
+/** Media content for kind 22 short-form video events — rendered at full card width. */
+function ShortVideoMedia({
   imeta,
   hashtags,
 }: {
@@ -1731,7 +1717,7 @@ function VineMedia({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(isVineMuted);
+  const [isMuted, setIsMuted] = useState(isShortVideoMuted);
 
   // Pause video when scrolled out of view
   useEffect(() => {
@@ -1760,19 +1746,19 @@ function VineMedia({
       // If the autoplay-videos setting is off, a click-to-play is an explicit
       // user gesture and should play with sound — consistent with the regular
       // VideoPlayer. When autoplay is on, browsers require the initial play()
-      // to be muted, so defer to the shared vine mute state.
-      const startMuted = config.autoplayVideos ? isVineMuted() : false;
+      // to be muted, so defer to the shared short-form video mute state.
+      const startMuted = config.autoplayVideos ? isShortVideoMuted() : false;
       video.muted = startMuted;
       video.play().then(() => {
-        // Persist the choice so other vine players (and this one on next play)
-        // follow suit until the user toggles mute again.
-        setVineMuted(startMuted);
+        // Persist the choice so other short-form video players (and this one on
+        // next play) follow suit until the user toggles mute again.
+        setShortVideoMuted(startMuted);
         setIsMuted(startMuted);
       }).catch(() => {
         // play blocked — retry muted as a fallback
         video.muted = true;
         video.play().then(() => {
-          setVineMuted(true);
+          setShortVideoMuted(true);
           setIsMuted(true);
         }).catch(() => {
           // still blocked — leave paused
@@ -1790,7 +1776,7 @@ function VineMedia({
     if (!video) return;
     const next = !video.muted;
     video.muted = next;
-    setVineMuted(next);
+    setShortVideoMuted(next);
     setIsMuted(next);
   };
 
@@ -2068,35 +2054,11 @@ const KIND_HEADER_MAP: Record<number, KindHeaderConfig> = {
     action: "sent an",
     noun: "encrypted message",
   },
-  8211: {
-    icon: Mail,
-    action: "sent a",
-    noun: "letter",
-    nounRoute: "/letters",
-  },
   [LOVE_LIST_KIND]: {
     icon: Heart,
     iconClassName: "text-red-500",
     action: (event) => publishedAtAction(event, { created: "wrote their", updated: "updated their", fallback: "updated their" }),
     noun: "Love List",
-  },
-  37516: {
-    icon: ChestIcon,
-    action: (event) => publishedAtAction(event, { created: "hid a", updated: "updated a", fallback: "hid a" }),
-    noun: "treasure",
-    nounRoute: "/treasures",
-  },
-  7516: {
-    icon: ChestIcon,
-    action: "found a",
-    noun: "treasure",
-    nounRoute: "/treasures",
-  },
-  37381: {
-    icon: CardsIcon,
-    action: (event) => publishedAtAction(event, { created: "created a", updated: "updated a", fallback: "shared a" }),
-    noun: "deck",
-    nounRoute: "/decks",
   },
   36767: {
     icon: Sparkles,
@@ -2227,15 +2189,34 @@ const KIND_HEADER_MAP: Record<number, KindHeaderConfig> = {
     action: (event) => publishedAtAction(event, { created: "started a", updated: "updated their", fallback: "shared a" }),
     noun: "fundraiser",
   },
+  1315: {
+    icon: Navigation,
+    action: "reported a",
+    noun: "road event",
+    nounRoute: "/roadstr",
+  },
+  1316: {
+    icon: Navigation,
+    action: (event) => {
+      const status = event.tags.find(([n]) => n === 'status')?.[1];
+      return status === 'no_longer_there' ? 'marked a road event as gone' : 'confirmed a road event';
+    },
+  },
   8333: {
     icon: Zap,
     action: "zapped",
   },
+  445: {
+    icon: Shield,
+    action: "sent a",
+    noun: "private group message",
+    nounRoute: "/groups",
+  },
   31124: {
     icon: Egg,
     action: (event) => publishedAtAction(event, { created: "created their", updated: "cared for their", fallback: "cared for their" }),
-    noun: "Blobbi",
-    nounRoute: "/blobbi",
+    noun: "2140 pet",
+    nounRoute: "/pets",
   },
   39089: {
     icon: PartyPopper,

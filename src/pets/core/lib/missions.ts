@@ -3,7 +3,7 @@
  *
  * Two separate persistence locations:
  *   - Daily missions → kind 11125 content JSON (per-user)
- *   - Evolution missions → kind 31124 content JSON (per-Blobbi)
+ *   - Evolution missions → kind 31124 content JSON (per-Pets)
  *
  * Tally missions track a `count` (no event IDs).
  * Event missions track an `events` array of Nostr event IDs.
@@ -66,15 +66,15 @@ export interface MissionsContent {
  */
 export interface ProfileContent {
   missions?: MissionsContent;
-  room_layouts?: import('@/blobbi/rooms/lib/room-layout-schema').RoomLayoutsContent;
-  room_furniture?: import('@/blobbi/rooms/lib/room-furniture-schema').RoomFurnitureContent;
+  room_layouts?: import('@/pets/rooms/lib/room-layout-schema').RoomLayoutsContent;
+  room_furniture?: import('@/pets/rooms/lib/room-furniture-schema').RoomFurnitureContent;
 }
 
 // ─── Evolution Missions (kind 31124) ─────────────────────────────────────────
 
 /**
  * Evolution mission state stored in kind 31124 content JSON.
- * Per-Blobbi progression that survives reloads.
+ * Per-Pets progression that survives reloads.
  */
 export interface EvolutionContent {
   evolution: Mission[];
@@ -145,7 +145,7 @@ export function parseProfileContent(content: string): ProfileContent {
  * Preserves any unknown top-level keys from the existing content.
  *
  * NOTE: Strips any legacy `evolution` key from the missions object
- * so old 11125 events don't carry stale per-Blobbi data.
+ * so old 11125 events don't carry stale per-Pets data.
  */
 export function serializeProfileContent(
   existingContent: string,

@@ -1,5 +1,5 @@
 /**
- * BlobbiAdoptionConfirmDialog - Confirmation modal before adopting
+ * PetsAdoptionConfirmDialog - Confirmation modal before adopting
  * 
  * Shows a clear confirmation that adopting will cost 100 coins.
  */
@@ -15,20 +15,20 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { BlobbiStageVisual } from '@/blobbi/ui/BlobbiStageVisual';
-import { BLOBBI_ADOPTION_COST } from '@/blobbi/core/lib/blobbi';
+import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
+import { PETS_ADOPTION_COST } from '@/pets/core/lib/pets';
 import { formatCompactNumber } from '@/lib/utils';
 
-import type { BlobbiEggPreview } from '../lib/blobbi-preview';
-import { previewToBlobbiCompanion } from '../lib/blobbi-preview';
+import type { PetsEggPreview } from '../lib/pets-preview';
+import { previewToPetsCompanion } from '../lib/pets-preview';
 
-interface BlobbiAdoptionConfirmDialogProps {
+interface PetsAdoptionConfirmDialogProps {
   /** Whether the dialog is open */
   open: boolean;
   /** Called when dialog open state changes */
   onOpenChange: (open: boolean) => void;
   /** The preview being adopted */
-  preview: BlobbiEggPreview;
+  preview: PetsEggPreview;
   /** Current coin balance */
   coins: number;
   /** Whether adoption is in progress */
@@ -37,16 +37,16 @@ interface BlobbiAdoptionConfirmDialogProps {
   onConfirm: () => void;
 }
 
-export function BlobbiAdoptionConfirmDialog({
+export function PetsAdoptionConfirmDialog({
   open,
   onOpenChange,
   preview,
   coins,
   isAdopting,
   onConfirm,
-}: BlobbiAdoptionConfirmDialogProps) {
-  const companionForVisual = previewToBlobbiCompanion(preview);
-  const coinsAfterAdoption = coins - BLOBBI_ADOPTION_COST;
+}: PetsAdoptionConfirmDialogProps) {
+  const companionForVisual = previewToPetsCompanion(preview);
+  const coinsAfterAdoption = coins - PETS_ADOPTION_COST;
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -54,14 +54,14 @@ export function BlobbiAdoptionConfirmDialog({
         <DialogHeader>
           <DialogTitle>Confirm Adoption</DialogTitle>
           <DialogDescription>
-            You're about to adopt this Blobbi. This action cannot be undone.
+            You're about to adopt this Pets. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
           {/* Preview Visual */}
           <div className="flex justify-center">
-            <BlobbiStageVisual
+            <PetsStageVisual
               companion={companionForVisual}
               size="md"
               animated
@@ -79,7 +79,7 @@ export function BlobbiAdoptionConfirmDialog({
             </div>
             <div className="flex items-center justify-between gap-2 mb-3 text-destructive">
               <span className="text-sm">Adoption Cost</span>
-              <span className="font-semibold whitespace-nowrap">-{formatCompactNumber(BLOBBI_ADOPTION_COST)} coins</span>
+              <span className="font-semibold whitespace-nowrap">-{formatCompactNumber(PETS_ADOPTION_COST)} coins</span>
             </div>
             <div className="border-t border-amber-500/20 pt-3 flex items-center justify-between gap-2">
               <span className="text-sm font-medium">After Adoption</span>
@@ -94,8 +94,8 @@ export function BlobbiAdoptionConfirmDialog({
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
             <AlertCircle className="size-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              By adopting, you'll spend <strong>{BLOBBI_ADOPTION_COST} coins</strong>.
-              This Blobbi will become your companion and will be saved to your Nostr account.
+              By adopting, you'll spend <strong>{PETS_ADOPTION_COST} coins</strong>.
+              This Pets will become your companion and will be saved to your Nostr account.
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 /**
- * Blobbi Eye System
+ * Pets Eye System
  *
  * This module is the single source of truth for all eye-related operations.
  * It provides a unified API for:
@@ -31,7 +31,7 @@
  *   // Types
  *   EyePosition,
  *   EYE_CLASSES,
- * } from '@/blobbi/ui/lib/eyes';
+ * } from '@/pets/ui/lib/eyes';
  * ```
  *
  * ## Eye Structure
@@ -39,11 +39,11 @@
  * After processing by eye-animation.ts, each eye has this structure:
  *
  * ```
- * <ellipse class="blobbi-eyelid blobbi-eyelid-{side}" />  <!-- behind eye -->
- * <g class="blobbi-blink blobbi-blink-{side}" clip-path="...">
+ * <ellipse class="pets-eyelid pets-eyelid-{side}" />  <!-- behind eye -->
+ * <g class="pets-blink pets-blink-{side}" clip-path="...">
  *   <ellipse ... />  <!-- eye white (fixed) -->
  *   <!-- Fixed effect layer: water fill, etc. -->
- *   <g class="blobbi-eye blobbi-eye-{side}">  <!-- tracking group -->
+ *   <g class="pets-eye pets-eye-{side}">  <!-- tracking group -->
  *     <circle ... />  <!-- pupil -->
  *     <circle ... />  <!-- highlight(s) -->
  *     <!-- Tracking effect layer: stars, sad highlights, etc. -->

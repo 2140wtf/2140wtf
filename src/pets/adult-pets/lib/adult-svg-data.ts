@@ -1,5 +1,5 @@
-// Auto-generated: inlined SVG content for adult Blobbi assets.
-// Source: src/blobbi/adult-blobbi/assets/
+// Auto-generated: inlined SVG content for adult Pets assets.
+// Source: src/pets/adult-pets/assets/
 
 import type { AdultForm } from '../types/adult.types';
 
@@ -38,7 +38,7 @@ const BLOOMI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
   </g>
 
   <!-- Centro da flor -->
-  <circle cx="100" cy="110" r="35" fill="url(#bloomiCenter)" data-blobbi-body="true" />
+  <circle cx="100" cy="110" r="35" fill="url(#bloomiCenter)" data-pets-body="true" />
   <circle cx="100" cy="110" r="28" fill="url(#bloomiCenterHighlight)" opacity="0.6" />
 
   <!-- Eyes (white/base eye shapes) -->
@@ -139,7 +139,7 @@ const BLOOMI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
   </g>
 
   <!-- Centro da flor -->
-  <circle cx="100" cy="110" r="35" fill="url(#bloomiCenter)" data-blobbi-body="true" />
+  <circle cx="100" cy="110" r="35" fill="url(#bloomiCenter)" data-pets-body="true" />
   <circle cx="100" cy="110" r="28" fill="url(#bloomiCenterHighlight)" opacity="0.6" />
 
   <!-- Olhos dormindo -->
@@ -208,7 +208,7 @@ const BLOOMI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
 const BREEZY_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">  
   <!-- Main leaf body - classic leaf shape -->
   <path d="M 100 40 Q 70 60 60 90 Q 55 120 70 140 Q 85 155 100 160 Q 115 155 130 140 Q 145 120 140 90 Q 130 60 100 40" 
-        fill="url(#breezyBody)" data-blobbi-body="true" />
+        fill="url(#breezyBody)" data-pets-body="true" />
   
   <!-- Leaf veins - central vein -->
   <path d="M 100 45 L 100 155" stroke="url(#breezyVein)" stroke-width="3" opacity="0.6" />
@@ -309,7 +309,7 @@ const BREEZY_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
 const BREEZY_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">  
   <!-- Main leaf body -->
   <path d="M 100 40 Q 70 60 60 90 Q 55 120 70 140 Q 85 155 100 160 Q 115 155 130 140 Q 145 120 140 90 Q 130 60 100 40" 
-        fill="url(#breezyBody)" data-blobbi-body="true" />
+        fill="url(#breezyBody)" data-pets-body="true" />
   
   <!-- Leaf veins -->
   <path d="M 100 45 L 100 155" stroke="url(#breezyVein)" stroke-width="3" opacity="0.6" />
@@ -406,7 +406,7 @@ const BREEZY_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
 const CACTI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
   
   <!-- Main cactus body -->
-  <rect x="85" y="80" width="30" height="80" rx="15" fill="url(#cactiBody)" data-blobbi-body="true" />
+  <rect x="85" y="80" width="30" height="80" rx="15" fill="url(#cactiBody)" data-pets-body="true" />
   
   <!-- Cactus arms -->
   <rect x="60" y="100" width="20" height="40" rx="10" fill="url(#cactiArm)" />
@@ -482,7 +482,7 @@ const CACTI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg
 const CACTI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
   
   <!-- Main cactus body -->
-  <rect x="85" y="80" width="30" height="80" rx="15" fill="url(#cactiBody)" data-blobbi-body="true" />
+  <rect x="85" y="80" width="30" height="80" rx="15" fill="url(#cactiBody)" data-pets-body="true" />
   
   <!-- Cactus arms -->
   <rect x="60" y="100" width="20" height="40" rx="10" fill="url(#cactiArm)" />
@@ -604,7 +604,7 @@ const CATTI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Oval upright body -->
-  <ellipse cx="100" cy="120" rx="45" ry="60" fill="url(#cattiBody3D)" data-blobbi-body="true" />
+  <ellipse cx="100" cy="120" rx="45" ry="60" fill="url(#cattiBody3D)" data-pets-body="true" />
   
   <!-- Triangle ears -->
   <path d="M 68 72 L 58 48 L 82 62 Z" fill="url(#cattiEar3D)" />
@@ -696,7 +696,7 @@ const CATTI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Oval upright body -->
-  <ellipse cx="100" cy="120" rx="45" ry="60" fill="url(#cattiBody3D)" data-blobbi-body="true" />
+  <ellipse cx="100" cy="120" rx="45" ry="60" fill="url(#cattiBody3D)" data-pets-body="true" />
   
   <!-- Triangle ears -->
   <path d="M 68 72 L 58 48 L 82 62 Z" fill="url(#cattiEar3D)" />
@@ -738,7 +738,7 @@ const CATTI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
 
 const CLOUDI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">  
   <!-- Main cloud body - multiple overlapping circles -->
-  <circle cx="100" cy="120" r="45" fill="url(#cloudiBody)" data-blobbi-body="true" />
+  <circle cx="100" cy="120" r="45" fill="url(#cloudiBody)" data-pets-body="true" />
   <circle cx="75" cy="110" r="35" fill="url(#cloudiBody)" />
   <circle cx="125" cy="110" r="35" fill="url(#cloudiBody)" />
   <circle cx="85" cy="95" r="25" fill="url(#cloudiBody)" />
@@ -788,7 +788,7 @@ const CLOUDI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
 
 const CLOUDI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">  
   <!-- Main cloud body - multiple overlapping circles -->
-  <circle cx="100" cy="120" r="45" fill="url(#cloudiBody)" data-blobbi-body="true" />
+  <circle cx="100" cy="120" r="45" fill="url(#cloudiBody)" data-pets-body="true" />
   <circle cx="75" cy="110" r="35" fill="url(#cloudiBody)" />
   <circle cx="125" cy="110" r="35" fill="url(#cloudiBody)" />
   <circle cx="85" cy="95" r="25" fill="url(#cloudiBody)" />
@@ -888,7 +888,7 @@ const CRYSTI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Main crystal body - rounded hexagon shape -->
-  <path d="M 100 50 L 140 80 L 140 130 L 100 160 L 60 130 L 60 80 Z" fill="url(#crystiBody)" data-blobbi-body="true" />
+  <path d="M 100 50 L 140 80 L 140 130 L 100 160 L 60 130 L 60 80 Z" fill="url(#crystiBody)" data-pets-body="true" />
   <path d="M 100 55 L 135 82 L 135 128 L 100 155 L 65 128 L 65 82 Z" fill="url(#crystiInner)" opacity="0.7" />
   
   <!-- Crystal segments with rounded edges -->
@@ -979,7 +979,7 @@ const CRYSTI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Main crystal body - rounded hexagon shape -->
-  <path d="M 100 50 L 140 80 L 140 130 L 100 160 L 60 130 L 60 80 Z" fill="url(#crystiBody)" data-blobbi-body="true" />
+  <path d="M 100 50 L 140 80 L 140 130 L 100 160 L 60 130 L 60 80 Z" fill="url(#crystiBody)" data-pets-body="true" />
   <path d="M 100 55 L 135 82 L 135 128 L 100 155 L 65 128 L 65 82 Z" fill="url(#crystiInner)" opacity="0.7" />
   
   <!-- Crystal segments with rounded edges -->
@@ -1052,7 +1052,7 @@ const DROPPI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
   
   <!-- Main water drop body -->
   <path d="M 100 40 Q 100 30 100 40 Q 135 60 140 110 Q 140 150 100 165 Q 60 150 60 110 Q 65 60 100 40" 
-        fill="url(#droppiBody)" data-blobbi-body="true" />
+        fill="url(#droppiBody)" data-pets-body="true" />
   
   <!-- Inner water reflection -->
   <ellipse cx="100" cy="100" rx="35" ry="45" fill="url(#droppiInner)" opacity="0.6" />
@@ -1142,7 +1142,7 @@ const DROPPI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
   
   <!-- Main water drop body -->
   <path d="M 100 40 Q 100 30 100 40 Q 135 60 140 110 Q 140 150 100 165 Q 60 150 60 110 Q 65 60 100 40" 
-        fill="url(#droppiBody)" data-blobbi-body="true" />
+        fill="url(#droppiBody)" data-pets-body="true" />
   
   <!-- Inner water reflection -->
   <ellipse cx="100" cy="100" rx="35" ry="45" fill="url(#droppiInner)" opacity="0.6" />
@@ -1249,7 +1249,7 @@ const FLAMMI_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
   </g>
 
   <!-- Flammy Body -->
-  <path d="M 100 160 Q 60 140 50 110 Q 45 80 70 60 Q 80 40 100 25 Q 120 40 130 60 Q 155 80 150 110 Q 140 140 100 160 Z" fill="url(#flammiBody)" data-blobbi-body="true" />
+  <path d="M 100 160 Q 60 140 50 110 Q 45 80 70 60 Q 80 40 100 25 Q 120 40 130 60 Q 155 80 150 110 Q 140 140 100 160 Z" fill="url(#flammiBody)" data-pets-body="true" />
   <path d="M 100 155 Q 65 138 58 115 Q 55 90 75 70 Q 82 50 100 35 Q 118 50 125 70 Q 145 90 142 115 Q 135 138 100 155 Z" fill="url(#flammiInner)" opacity="0.8" />
   <path d="M 100 145 Q 70 130 65 110 Q 62 95 80 80 Q 85 65 100 55 Q 115 65 120 80 Q 138 95 135 110 Q 130 130 100 145 Z" fill="url(#flammiCore)" opacity="0.9" />
 
@@ -1326,7 +1326,7 @@ const FLAMMI_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
   </g>
 
   <!-- Flammy Body -->
-  <path d="M 100 160 Q 60 140 50 110 Q 45 80 70 60 Q 80 40 100 25 Q 120 40 130 60 Q 155 80 150 110 Q 140 140 100 160 Z" fill="url(#flammiBody)" data-blobbi-body="true" />
+  <path d="M 100 160 Q 60 140 50 110 Q 45 80 70 60 Q 80 40 100 25 Q 120 40 130 60 Q 155 80 150 110 Q 140 140 100 160 Z" fill="url(#flammiBody)" data-pets-body="true" />
   <path d="M 100 155 Q 65 138 58 115 Q 55 90 75 70 Q 82 50 100 35 Q 118 50 125 70 Q 145 90 142 115 Q 135 138 100 155 Z" fill="url(#flammiInner)" opacity="0.8" />
   <path d="M 100 145 Q 70 130 65 110 Q 62 95 80 80 Q 85 65 100 55 Q 115 65 120 80 Q 138 95 135 110 Q 130 130 100 145 Z" fill="url(#flammiCore)" opacity="0.9" />
 
@@ -1406,7 +1406,7 @@ const FROGGI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Flattened oval body -->
-  <ellipse cx="100" cy="120" rx="70" ry="50" fill="url(#froggiBody3D)" data-blobbi-body="true" />
+  <ellipse cx="100" cy="120" rx="70" ry="50" fill="url(#froggiBody3D)" data-pets-body="true" />
   
   <!-- Big circular pop-out eyes -->
   <circle cx="70" cy="80" r="27" fill="url(#froggiEyeBase3D)" />
@@ -1508,7 +1508,7 @@ const FROGGI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Flattened oval body -->
-  <ellipse cx="100" cy="120" rx="70" ry="50" fill="url(#froggiBody3D)" data-blobbi-body="true" />
+  <ellipse cx="100" cy="120" rx="70" ry="50" fill="url(#froggiBody3D)" data-pets-body="true" />
   
   <!-- Big circular pop-out eyes -->
   <circle cx="70" cy="80" r="27" fill="url(#froggiEyeBase3D)" />
@@ -1583,7 +1583,7 @@ const LEAFY_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg
   <ellipse cx="100" cy="85" rx="45" ry="12" fill="url(#leafyPetal)" transform="rotate(337.5 100 85)" />
   
   <!-- Sunflower center - outer ring -->
-  <circle cx="100" cy="85" r="30" fill="url(#leafyCenter)" data-blobbi-body="true" />
+  <circle cx="100" cy="85" r="30" fill="url(#leafyCenter)" data-pets-body="true" />
   <circle cx="100" cy="85" r="25" fill="url(#leafyCenterInner)" />
   
   <!-- Eyes (white base) -->
@@ -1700,7 +1700,7 @@ const LEAFY_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000
   <ellipse cx="100" cy="85" rx="45" ry="12" fill="url(#leafyPetal)" transform="rotate(337.5 100 85)" />
   
   <!-- Sunflower center - outer ring -->
-  <circle cx="100" cy="85" r="30" fill="url(#leafyCenter)" data-blobbi-body="true" />
+  <circle cx="100" cy="85" r="30" fill="url(#leafyCenter)" data-pets-body="true" />
   <circle cx="100" cy="85" r="25" fill="url(#leafyCenterInner)" />
   
   <!-- Sleeping eyes -->
@@ -1790,7 +1790,7 @@ const MUSHIE_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/sv
   <ellipse cx="100" cy="135" rx="20" ry="35" fill="url(#mushieStemHighlight)" opacity="0.6" />
   
   <!-- Mushroom cap -->
-  <path d="M 50 110 Q 50 70 100 60 Q 150 70 150 110 Z" fill="url(#mushieCap)" data-blobbi-body="true" />
+  <path d="M 50 110 Q 50 70 100 60 Q 150 70 150 110 Z" fill="url(#mushieCap)" data-pets-body="true" />
   <path d="M 55 108 Q 55 75 100 65 Q 145 75 145 108 Z" fill="url(#mushieCapHighlight)" opacity="0.7" />
   
   <!-- Cap spots -->
@@ -1863,7 +1863,7 @@ const MUSHIE_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/200
   <ellipse cx="100" cy="135" rx="20" ry="35" fill="url(#mushieStemHighlight)" opacity="0.6" />
   
   <!-- Mushroom cap -->
-  <path d="M 50 110 Q 50 70 100 60 Q 150 70 150 110 Z" fill="url(#mushieCap)" data-blobbi-body="true" />
+  <path d="M 50 110 Q 50 70 100 60 Q 150 70 150 110 Z" fill="url(#mushieCap)" data-pets-body="true" />
   <path d="M 55 108 Q 55 75 100 65 Q 145 75 145 108 Z" fill="url(#mushieCapHighlight)" opacity="0.7" />
   
   <!-- Cap spots -->
@@ -1978,7 +1978,7 @@ const OWLI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Round body -->
-  <circle cx="100" cy="110" r="60" fill="url(#owliBody3D)" data-blobbi-body="true" />
+  <circle cx="100" cy="110" r="60" fill="url(#owliBody3D)" data-pets-body="true" />
   
   <!-- Triangle ears -->
   <path d="M 60 70 L 70 48 L 82 70 Z" fill="url(#owliEar3D)" />
@@ -2059,7 +2059,7 @@ const OWLI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Round body -->
-  <circle cx="100" cy="110" r="60" fill="url(#owliBody3D)" data-blobbi-body="true" />
+  <circle cx="100" cy="110" r="60" fill="url(#owliBody3D)" data-pets-body="true" />
   
   <!-- Triangle ears -->
   <path d="M 60 70 L 70 48 L 82 70 Z" fill="url(#owliEar3D)" />
@@ -2130,22 +2130,22 @@ const PANDI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Main body - perfect circle -->
-  <circle cx="100" cy="120" r="55" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" data-blobbi-body="true" />
+  <circle cx="100" cy="120" r="55" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" data-pets-body="true" />
   
   <!-- Head - perfect circle -->
   <circle cx="100" cy="85" r="45" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" />
   
   <!-- Black ear patches -->
-  <circle cx="70" cy="45" r="18" fill="#1f2937" data-blobbi-skip="true" />
-  <circle cx="130" cy="45" r="18" fill="#1f2937" data-blobbi-skip="true" />
+  <circle cx="70" cy="45" r="18" fill="#1f2937" data-pets-skip="true" />
+  <circle cx="130" cy="45" r="18" fill="#1f2937" data-pets-skip="true" />
   
   <!-- Inner ears -->
-  <circle cx="70" cy="45" r="12" fill="#374151" data-blobbi-skip="true" />
-  <circle cx="130" cy="45" r="12" fill="#374151" data-blobbi-skip="true" />
+  <circle cx="70" cy="45" r="12" fill="#374151" data-pets-skip="true" />
+  <circle cx="130" cy="45" r="12" fill="#374151" data-pets-skip="true" />
   
   <!-- Eyes (black patches + white base) -->
-  <circle cx="85" cy="82" r="20" fill="#1f2937" data-blobbi-skip="true" />
-  <circle cx="115" cy="82" r="20" fill="#1f2937" data-blobbi-skip="true" />
+  <circle cx="85" cy="82" r="20" fill="#1f2937" data-pets-skip="true" />
+  <circle cx="115" cy="82" r="20" fill="#1f2937" data-pets-skip="true" />
   <circle cx="85" cy="82" r="12" fill="url(#pandiEyeWhite3D)" />
   <circle cx="115" cy="82" r="12" fill="url(#pandiEyeWhite3D)" />
   
@@ -2203,22 +2203,22 @@ const PANDI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Main body - perfect circle -->
-  <circle cx="100" cy="120" r="55" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" data-blobbi-body="true" />
+  <circle cx="100" cy="120" r="55" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" data-pets-body="true" />
   
   <!-- Head - perfect circle -->
   <circle cx="100" cy="85" r="45" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2" />
   
   <!-- Black ear patches -->
-  <circle cx="70" cy="45" r="18" fill="#1f2937" data-blobbi-skip="true" />
-  <circle cx="130" cy="45" r="18" fill="#1f2937" data-blobbi-skip="true" />
+  <circle cx="70" cy="45" r="18" fill="#1f2937" data-pets-skip="true" />
+  <circle cx="130" cy="45" r="18" fill="#1f2937" data-pets-skip="true" />
   
   <!-- Inner ears -->
-  <circle cx="70" cy="45" r="12" fill="#374151" data-blobbi-skip="true" />
-  <circle cx="130" cy="45" r="12" fill="#374151" data-blobbi-skip="true" />
+  <circle cx="70" cy="45" r="12" fill="#374151" data-pets-skip="true" />
+  <circle cx="130" cy="45" r="12" fill="#374151" data-pets-skip="true" />
   
   <!-- Eyes -->
-  <circle cx="85" cy="82" r="20" fill="#1f2937" data-blobbi-skip="true" />
-  <circle cx="115" cy="82" r="20" fill="#1f2937" data-blobbi-skip="true" />
+  <circle cx="85" cy="82" r="20" fill="#1f2937" data-pets-skip="true" />
+  <circle cx="115" cy="82" r="20" fill="#1f2937" data-pets-skip="true" />
   <circle cx="85" cy="82" r="12" fill="url(#pandiEyeWhite3D)" />
   <circle cx="115" cy="82" r="12" fill="url(#pandiEyeWhite3D)" />
   <path d="M 73 85 Q 85 88 97 85" stroke="#1e293b" stroke-width="3" fill="none" stroke-linecap="round" />
@@ -2290,7 +2290,7 @@ const ROCKY_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg
   </g>
 
   <!-- Rocky's body -->
-  <path d="M 100 50 L 130 70 L 140 110 L 130 150 L 100 165 L 70 150 L 60 110 L 70 70 Z" fill="url(#rockyBody)" data-blobbi-body="true" />
+  <path d="M 100 50 L 130 70 L 140 110 L 130 150 L 100 165 L 70 150 L 60 110 L 70 70 Z" fill="url(#rockyBody)" data-pets-body="true" />
   <path d="M 100 55 L 125 72 L 135 108 L 125 145 L 100 158 L 75 145 L 65 108 L 75 72 Z" fill="url(#rockyInner)" opacity="0.8" />
 
   <!-- Texture -->
@@ -2395,7 +2395,7 @@ const ROCKY_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000
 
   <!-- Corpo do Rocky -->
   <path d="M 100 50 L 130 70 L 140 110 L 130 150 L 100 165 L 70 150 L 60 110 L 70 70 Z" 
-        fill="url(#rockyBody)" data-blobbi-body="true" />
+        fill="url(#rockyBody)" data-pets-body="true" />
   <path d="M 100 55 L 125 72 L 135 108 L 125 145 L 100 158 L 75 145 L 65 108 L 75 72 Z" 
         fill="url(#rockyInner)" opacity="0.8" />
 
@@ -2463,7 +2463,7 @@ const ROSEY_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg
   <ellipse cx="110" cy="150" rx="12" ry="8" fill="url(#roseyLeaf)" transform="rotate(30 115 150)" />
   
   <!-- Rose petals - layered -->
-  <circle cx="100" cy="90" r="35" fill="url(#roseyPetal1)" data-blobbi-body="true" />
+  <circle cx="100" cy="90" r="35" fill="url(#roseyPetal1)" data-pets-body="true" />
   <path d="M 100 60 Q 120 70 125 90 Q 120 110 100 120 Q 80 110 75 90 Q 80 70 100 60" fill="url(#roseyPetal2)" />
   <path d="M 100 65 Q 115 73 118 90 Q 115 107 100 115 Q 85 107 82 90 Q 85 73 100 65" fill="url(#roseyPetal3)" />
   <circle cx="100" cy="90" r="20" fill="url(#roseyCenter)" />
@@ -2558,7 +2558,7 @@ const ROSEY_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000
   <ellipse cx="115" cy="150" rx="12" ry="8" fill="url(#roseyLeaf)" transform="rotate(30 115 150)" />
   
   <!-- Rose petals - layered -->
-  <circle cx="100" cy="90" r="35" fill="url(#roseyPetal1)" data-blobbi-body="true" />
+  <circle cx="100" cy="90" r="35" fill="url(#roseyPetal1)" data-pets-body="true" />
   <path d="M 100 60 Q 120 70 125 90 Q 120 110 100 120 Q 80 110 75 90 Q 80 70 100 60" fill="url(#roseyPetal2)" />
   <path d="M 100 65 Q 115 73 118 90 Q 115 107 100 115 Q 85 107 82 90 Q 85 73 100 65" fill="url(#roseyPetal3)" />
   <circle cx="100" cy="90" r="20" fill="url(#roseyCenter)" />
@@ -2677,7 +2677,7 @@ const STARRI_BASE = `<?xml version="1.0" encoding="UTF-8"?>
   </defs>
   
   <!-- Main star body - larger 5-pointed star shape -->
-  <path d="M 100 25 L 115 75 L 165 75 L 125 110 L 140 160 L 100 130 L 60 160 L 75 110 L 35 75 L 85 75 Z" fill="url(#starriBody)" data-blobbi-body="true" />
+  <path d="M 100 25 L 115 75 L 165 75 L 125 110 L 140 160 L 100 130 L 60 160 L 75 110 L 35 75 L 85 75 Z" fill="url(#starriBody)" data-pets-body="true" />
   <path d="M 100 35 L 112 70 L 150 70 L 120 95 L 132 135 L 100 115 L 68 135 L 80 95 L 50 70 L 88 70 Z" fill="url(#starriInner)" opacity="0.8" />
   
   <!-- Eyes (white base) -->
@@ -2750,7 +2750,7 @@ const STARRI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   
   <!-- Main star body - larger 5-pointed star shape -->
   <path d="M 100 25 L 115 75 L 165 75 L 125 110 L 140 160 L 100 130 L 60 160 L 75 110 L 35 75 L 85 75 Z" 
-        fill="url(#starriBody)" data-blobbi-body="true" />
+        fill="url(#starriBody)" data-pets-body="true" />
   <path d="M 100 35 L 112 70 L 150 70 L 120 95 L 132 135 L 100 115 L 68 135 L 80 95 L 50 70 L 88 70 Z" 
         fill="url(#starriInner)" opacity="0.8" />
   
@@ -2786,6 +2786,372 @@ const STARRI_SLEEPING = `<?xml version="1.0" encoding="UTF-8"?>
   <text x="162" y="51" font-size="6" fill="#666" opacity="0.4">z</text>
 </svg>`;
 
+const GLITCHFOX_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Glitch aura -->
+  <g opacity="0.35">
+    <rect x="30" y="60" width="140" height="80" rx="4" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1" stroke-dasharray="8 6">
+      <animate attributeName="stroke-dashoffset" from="0" to="28" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="25" y="55" width="150" height="90" rx="6" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="0.5" opacity="0.6"/>
+  </g>
+
+  <!-- Tail -->
+  <path d="M 70 145 L 55 165 L 75 160 L 65 180 L 90 155" fill="url(#glitchfoxTail)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Body -->
+  <path d="M 85 145 L 115 145 L 110 115 L 90 115 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxMagenta)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <path d="M 70 110 L 100 75 L 130 110 L 115 125 L 85 125 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxCyan)" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Ears -->
+  <path d="M 75 85 L 55 45 L 92 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M 125 85 L 145 45 L 108 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Eyes -->
+  <g>
+    <polygon points="82,102 95,98 95,110 82,108" fill="url(#glitchfoxEye)"/>
+    <polygon points="118,102 105,98 105,110 118,108" fill="url(#glitchfoxEye)"/>
+    <!-- Pupils -->
+    <rect x="86" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
+    <rect x="109" y="101" width="5" height="5" fill="url(#glitchfoxPupil)"/>
+  </g>
+
+  <!-- Snout / mouth -->
+  <path d="M 92 118 L 100 124 L 108 118" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Circuit traces -->
+  <path d="M 88 135 L 88 142 M 100 135 L 100 142 M 112 135 L 112 142" stroke="url(#glitchfoxCyan)" stroke-width="1" opacity="0.8"/>
+  <circle cx="88" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="100" cy="142" r="1.5" fill="url(#glitchfoxMagenta)">
+    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="112" cy="142" r="1.5" fill="url(#glitchfoxCyan)">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Glitch shards -->
+  <rect x="132" y="95" width="12" height="3" fill="url(#glitchfoxCyan)" opacity="0.7"/>
+  <rect x="55" y="105" width="10" height="2" fill="url(#glitchfoxMagenta)" opacity="0.6"/>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="50%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </radialGradient>
+    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxTail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4b5563"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <radialGradient id="glitchfoxEye" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <radialGradient id="glitchfoxPupil" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#f0abfc"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </radialGradient>
+    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e879f9"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
+const GLITCHFOX_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Glitch aura -->
+  <g opacity="0.2">
+    <rect x="30" y="60" width="140" height="80" rx="4" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1" stroke-dasharray="8 6">
+      <animate attributeName="stroke-dashoffset" from="0" to="28" dur="2.4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Tail -->
+  <path d="M 70 145 L 55 165 L 75 160 L 65 180 L 90 155" fill="url(#glitchfoxTail)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Body -->
+  <path d="M 85 145 L 115 145 L 110 115 L 90 115 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxMagenta)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <path d="M 70 110 L 100 75 L 130 110 L 115 125 L 85 125 Z" fill="url(#glitchfoxBody)" stroke="url(#glitchfoxCyan)" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Ears -->
+  <path d="M 75 85 L 55 45 L 92 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M 125 85 L 145 45 L 108 78 Z" fill="url(#glitchfoxEar)" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Sleeping eyes -->
+  <path d="M 82 106 Q 88 110 95 106" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 105 106 Q 112 110 118 106" fill="none" stroke="url(#glitchfoxCyan)" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Snout / mouth -->
+  <path d="M 92 118 L 100 124 L 108 118" fill="none" stroke="url(#glitchfoxMagenta)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Sleep zzz -->
+  <text x="135" y="75" fill="url(#glitchfoxCyan)" font-family="monospace" font-size="10" opacity="0.7">Z</text>
+  <text x="145" y="62" fill="url(#glitchfoxMagenta)" font-family="monospace" font-size="8" opacity="0.5">z</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="glitchfoxBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="50%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </radialGradient>
+    <linearGradient id="glitchfoxEar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#374151"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxTail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4b5563"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxCyan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="glitchfoxMagenta" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e879f9"/>
+      <stop offset="100%" stop-color="#c026d3"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
+const BIOMECHMOTH_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wings back -->
+  <g opacity="0.9">
+    <path d="M 100 110 C 70 70 30 60 25 100 C 30 140 70 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+    <path d="M 100 110 C 130 70 170 60 175 100 C 170 140 130 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+    <path d="M 100 110 C 60 85 40 90 30 100 M 100 110 C 60 115 45 110 35 105 M 100 110 C 65 125 50 120 40 115" stroke="url(#biomechmothAmber)" stroke-width="0.6" fill="none" opacity="0.6"/>
+    <path d="M 100 110 C 140 85 160 90 170 100 M 100 110 C 140 115 155 110 165 105 M 100 110 C 135 125 150 120 160 115" stroke="url(#biomechmothAmber)" stroke-width="0.6" fill="none" opacity="0.6"/>
+  </g>
+
+  <!-- Body -->
+  <ellipse cx="100" cy="115" rx="18" ry="28" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <circle cx="100" cy="82" r="14" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Antennae -->
+  <path d="M 92 72 Q 80 50 70 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 108 72 Q 120 50 130 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="70" cy="45" r="2.5" fill="url(#biomechmothAmber)">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="130" cy="45" r="2.5" fill="url(#biomechmothAmber)">
+    <animate attributeName="opacity" values="1;0.4;1" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Eyes -->
+  <circle cx="92" cy="80" r="4" fill="url(#biomechmothEye)"/>
+  <circle cx="108" cy="80" r="4" fill="url(#biomechmothEye)"/>
+  <circle cx="92" cy="80" r="2" fill="url(#biomechmothPupil)"/>
+  <circle cx="108" cy="80" r="2" fill="url(#biomechmothPupil)"/>
+
+  <!-- Mouth -->
+  <path d="M 96 90 Q 100 93 104 90" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Circuit details -->
+  <line x1="92" y1="105" x2="108" y2="105" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
+  <line x1="94" y1="115" x2="106" y2="115" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
+  <line x1="96" y1="125" x2="104" y2="125" stroke="url(#biomechmothAmber)" stroke-width="0.7" opacity="0.7"/>
+  <circle cx="92" cy="105" r="1.5" fill="url(#biomechmothAmber)"/>
+  <circle cx="108" cy="105" r="1.5" fill="url(#biomechmothAmber)"/>
+  <circle cx="100" cy="115" r="1.5" fill="url(#biomechmothAmber)"/>
+
+  <!-- Glow particles -->
+  <circle cx="60" cy="60" r="1" fill="url(#biomechmothAmber)" opacity="0.6">
+    <animate attributeName="opacity" values="0.2;0.8;0.2" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="140" cy="60" r="1" fill="url(#biomechmothAmber)" opacity="0.6">
+    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="70%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <radialGradient id="biomechmothEye" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="100%" stop-color="#eab308"/>
+    </radialGradient>
+    <radialGradient id="biomechmothPupil" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </radialGradient>
+    <linearGradient id="biomechmothAmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
+const BIOMECHMOTH_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Wings back -->
+  <g opacity="0.85">
+    <path d="M 100 110 C 70 70 30 60 25 100 C 30 140 70 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+    <path d="M 100 110 C 130 70 170 60 175 100 C 170 140 130 130 100 120" fill="url(#biomechmothWing)" stroke="url(#biomechmothAmber)" stroke-width="1"/>
+  </g>
+
+  <!-- Body -->
+  <ellipse cx="100" cy="115" rx="18" ry="28" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Head -->
+  <circle cx="100" cy="82" r="14" fill="url(#biomechmothBody)" stroke="url(#biomechmothAmber)" stroke-width="1.5"/>
+
+  <!-- Antennae -->
+  <path d="M 92 72 Q 80 50 70 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 108 72 Q 120 50 130 45" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="70" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
+  <circle cx="130" cy="45" r="2" fill="url(#biomechmothAmber)" opacity="0.4"/>
+
+  <!-- Sleeping eyes -->
+  <path d="M 88 82 Q 92 85 96 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+  <path d="M 104 82 Q 108 85 112 82" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Mouth -->
+  <path d="M 96 90 Q 100 93 104 90" fill="none" stroke="url(#biomechmothAmber)" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Sleep zzz -->
+  <text x="130" y="55" fill="url(#biomechmothAmber)" font-family="monospace" font-size="10" opacity="0.5">Z</text>
+  <text x="140" y="42" fill="url(#biomechmothAmber)" font-family="monospace" font-size="8" opacity="0.35">z</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="biomechmothBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <radialGradient id="biomechmothWing" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="70%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="biomechmothAmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
+const LIQUIDBLOB_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer glow blob -->
+  <path d="M 100 55 C 135 55 155 80 155 110 C 155 145 130 165 100 165 C 65 165 45 140 45 110 C 45 75 70 55 100 55 Z" fill="url(#liquidblobBody)" stroke="url(#liquidblobCyan)" stroke-width="2" opacity="0.95"/>
+
+  <!-- Inner liquid core -->
+  <path d="M 100 70 C 125 70 140 88 140 110 C 140 135 120 150 100 150 C 75 150 60 132 60 110 C 60 85 80 70 100 70 Z" fill="url(#liquidblobCore)" opacity="0.85"/>
+
+  <!-- Floating bubbles -->
+  <circle cx="80" cy="100" r="4" fill="url(#liquidblobBubble)" opacity="0.7">
+    <animate attributeName="cy" values="100;90;100" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="115" cy="120" r="3" fill="url(#liquidblobBubble)" opacity="0.6">
+    <animate attributeName="cy" values="120;110;120" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="95" cy="130" r="2.5" fill="url(#liquidblobBubble)" opacity="0.5">
+    <animate attributeName="cy" values="130;120;130" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Eyes -->
+  <ellipse cx="82" cy="105" rx="6" ry="7" fill="white"/>
+  <ellipse cx="118" cy="105" rx="6" ry="7" fill="white"/>
+  <circle cx="83" cy="106" r="3.5" fill="url(#liquidblobPupil)"/>
+  <circle cx="119" cy="106" r="3.5" fill="url(#liquidblobPupil)"/>
+  <circle cx="84" cy="103" r="1.5" fill="white"/>
+  <circle cx="120" cy="103" r="1.5" fill="white"/>
+
+  <!-- Mouth -->
+  <path d="M 92 122 Q 100 128 108 122" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Drip -->
+  <path d="M 100 165 Q 100 178 108 180 Q 116 178 112 165" fill="url(#liquidblobBody)" opacity="0.8">
+    <animate attributeName="d" values="M 100 165 Q 100 178 108 180 Q 116 178 112 165;M 100 165 Q 100 185 108 188 Q 116 185 112 165;M 100 165 Q 100 178 108 180 Q 116 178 112 165" dur="4s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#0891b2"/>
+      <stop offset="50%" stop-color="#0e7490"/>
+      <stop offset="100%" stop-color="#164e63"/>
+    </radialGradient>
+    <radialGradient id="liquidblobCore" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="70%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <radialGradient id="liquidblobBubble" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#cffafe"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </radialGradient>
+    <radialGradient id="liquidblobPupil" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </radialGradient>
+    <linearGradient id="liquidblobCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
+const LIQUIDBLOB_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer glow blob -->
+  <path d="M 100 55 C 135 55 155 80 155 110 C 155 145 130 165 100 165 C 65 165 45 140 45 110 C 45 75 70 55 100 55 Z" fill="url(#liquidblobBody)" stroke="url(#liquidblobCyan)" stroke-width="2" opacity="0.9"/>
+
+  <!-- Inner liquid core -->
+  <path d="M 100 70 C 125 70 140 88 140 110 C 140 135 120 150 100 150 C 75 150 60 132 60 110 C 60 85 80 70 100 70 Z" fill="url(#liquidblobCore)" opacity="0.8"/>
+
+  <!-- Sleeping eyes -->
+  <path d="M 76 106 Q 82 110 88 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 112 106 Q 118 110 124 106" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Mouth -->
+  <path d="M 94 124 Q 100 128 106 124" fill="none" stroke="url(#liquidblobCyan)" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Sleep zzz -->
+  <text x="140" y="75" fill="url(#liquidblobCyan)" font-family="monospace" font-size="10" opacity="0.6">Z</text>
+  <text x="150" y="62" fill="url(#liquidblobCyan)" font-family="monospace" font-size="8" opacity="0.4">z</text>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="liquidblobBody" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#0891b2"/>
+      <stop offset="50%" stop-color="#0e7490"/>
+      <stop offset="100%" stop-color="#164e63"/>
+    </radialGradient>
+    <radialGradient id="liquidblobCore" cx="0.5" cy="0.5">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="70%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </radialGradient>
+    <linearGradient id="liquidblobCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
 /**
  * Map of adult form to { base, sleeping } SVG content
  */
@@ -2806,4 +3172,7 @@ export const ADULT_SVG_MAP: Record<AdultForm, { base: string; sleeping: string }
   rocky: { base: ROCKY_BASE, sleeping: ROCKY_SLEEPING },
   rosey: { base: ROSEY_BASE, sleeping: ROSEY_SLEEPING },
   starri: { base: STARRI_BASE, sleeping: STARRI_SLEEPING },
+  glitchfox: { base: GLITCHFOX_BASE, sleeping: GLITCHFOX_SLEEPING },
+  biomechmoth: { base: BIOMECHMOTH_BASE, sleeping: BIOMECHMOTH_SLEEPING },
+  liquidblob: { base: LIQUIDBLOB_BASE, sleeping: LIQUIDBLOB_SLEEPING },
 };

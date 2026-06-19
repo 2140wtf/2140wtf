@@ -23,7 +23,7 @@ import {
   buildNormalizedProfileTags,
   isLegacyBlobbonautKind,
   type BlobbonautProfile,
-} from '@/blobbi/core/lib/blobbi';
+} from '@/pets/core/lib/pets';
 
 interface UseBlobbonautProfileNormalizationOptions {
   /** The current profile (null if doesn't exist) */
@@ -73,7 +73,7 @@ export function useBlobbonautProfileNormalization({
     const reasons: string[] = [];
     if (needsTagNormalization) reasons.push('missing pettingLevel');
     if (needsKindMigration) reasons.push('legacy kind 31125 → 11125');
-    if (needsOnboardingMigration) reasons.push('onboarding_done → blobbi_onboarding_done');
+    if (needsOnboardingMigration) reasons.push('onboarding_done → pets_onboarding_done');
     
     console.log(`[ProfileNormalization] Profile needs normalization: ${reasons.join(', ')}`);
     

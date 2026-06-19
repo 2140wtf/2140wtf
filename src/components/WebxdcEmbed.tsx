@@ -85,7 +85,7 @@ export function WebxdcEmbed({ url, uuid, name, icon, showNameCard = true, classN
   }, []);
 
   if (!launched) {
-    const appName = name ?? 'Webxdc App';
+    const appName = name ?? 'Mini App';
     return (
       <div
         className={cn('mt-3 flex flex-col items-center', className)}
@@ -130,7 +130,7 @@ export function WebxdcEmbed({ url, uuid, name, icon, showNameCard = true, classN
             {icon ? (
               <img
                 src={icon}
-                alt={name ?? 'Webxdc App'}
+                alt={name ?? 'Mini App'}
                 className="size-6 rounded-md object-cover shrink-0"
               />
             ) : (
@@ -138,7 +138,7 @@ export function WebxdcEmbed({ url, uuid, name, icon, showNameCard = true, classN
                 <Blocks className="size-3.5 text-primary/50" />
               </div>
             )}
-            <span className="text-sm font-medium truncate">{name ?? 'Webxdc App'}</span>
+            <span className="text-sm font-medium truncate">{name ?? 'Mini App'}</span>
           </div>
 
           {/* Controls */}

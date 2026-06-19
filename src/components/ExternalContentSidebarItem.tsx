@@ -21,6 +21,8 @@ export interface ExternalContentSidebarItemProps {
   onClick?: (e: React.MouseEvent) => void;
   /** Extra classes on the link. */
   linkClassName?: string;
+  /** When true, render as an icon-only item for a collapsed sidebar. */
+  compact?: boolean;
 }
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ function ExternalSidebarLabel({ id }: { id: string }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ExternalContentSidebarItem({
-  id, active, editing, onRemove, onClick, linkClassName,
+  id, active, editing, onRemove, onClick, linkClassName, compact,
 }: ExternalContentSidebarItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -93,18 +95,21 @@ export function ExternalContentSidebarItem({
         to={path}
         onClick={onClick}
         className={cn(
-          'flex items-center gap-4 py-3 rounded-full transition-colors hover:bg-secondary/60 flex-1 min-w-0',
-          editing ? 'px-2' : 'px-3',
+          'flex items-center rounded-full transition-colors hover:bg-secondary/60 min-w-0',
+          compact ? 'justify-center py-2.5 px-2' : 'gap-4 py-3 flex-1',
+          editing ? 'px-2' : compact ? 'px-2' : 'px-3',
           active ? 'font-bold text-primary' : 'font-normal text-foreground',
           linkClassName ?? 'text-lg',
         )}
       >
-        <span className="shrink-0">
+        <span className={cn('shrink-0', compact && 'flex items-center justify-center')}>
           <ExternalSidebarIcon id={id} />
         </span>
-        <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>
-          <ExternalSidebarLabel id={id} />
-        </span>
+        {!compact && (
+          <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>
+            <ExternalSidebarLabel id={id} />
+          </span>
+        )}
       </Link>
 
       {editing && (

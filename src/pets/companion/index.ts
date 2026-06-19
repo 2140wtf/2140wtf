@@ -1,33 +1,33 @@
 /**
- * Blobbi Companion Module
+ * Pets Companion Module
  * 
- * A modular companion system for rendering an interactive Blobbi
+ * A modular companion system for rendering an interactive Pets
  * that roams the screen and responds to user interaction.
  * 
  * Usage:
  * ```tsx
- * import { BlobbiCompanionLayer } from '@/blobbi/companion';
+ * import { PetsCompanionLayer } from '@/pets/companion';
  * 
  * // In your app root:
- * <BlobbiCompanionLayer />
+ * <PetsCompanionLayer />
  * ```
  */
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
-export { BlobbiCompanionLayer } from './components/BlobbiCompanionLayer';
-export { BlobbiCompanion } from './components/BlobbiCompanion';
-export { BlobbiCompanionVisual } from './components/BlobbiCompanionVisual';
+export { PetsCompanionLayer } from './components/PetsCompanionLayer';
+export { PetsCompanion } from './components/PetsCompanion';
+export { PetsCompanionVisual } from './components/PetsCompanionVisual';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-export { useBlobbiCompanion } from './hooks/useBlobbiCompanion';
-export { useBlobbiCompanionData } from './hooks/useBlobbiCompanionData';
-export { useBlobbiCompanionState } from './hooks/useBlobbiCompanionState';
-export { useBlobbiCompanionMotion } from './hooks/useBlobbiCompanionMotion';
-export { useBlobbiCompanionGaze } from './hooks/useBlobbiCompanionGaze';
-export { useBlobbiAttention } from './hooks/useBlobbiAttention';
-export { useBlobbiEntryAnimation } from './hooks/useBlobbiEntryAnimation';
+export { usePetsCompanion } from './hooks/usePetsCompanion';
+export { usePetsCompanionData } from './hooks/usePetsCompanionData';
+export { usePetsCompanionState } from './hooks/usePetsCompanionState';
+export { usePetsCompanionMotion } from './hooks/usePetsCompanionMotion';
+export { usePetsCompanionGaze } from './hooks/usePetsCompanionGaze';
+export { usePetsAttention } from './hooks/usePetsAttention';
+export { usePetsEntryAnimation } from './hooks/usePetsEntryAnimation';
 export { useTypingAttention } from './hooks/useTypingAttention';
 export { useCompanionItemReaction } from './hooks/useCompanionItemReaction';
 

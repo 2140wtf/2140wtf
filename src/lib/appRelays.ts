@@ -9,9 +9,6 @@ export const DITTO_RELAYS: string[] = [
   'wss://relay.dreamith.to/',
 ];
 
-/** Relay used for kind 34236 addressable short video events, used by divine */
-export const DIVINE_RELAY = 'wss://divine.video/';
-
 /** Relay used for Zapstore app metadata (kind 32267) and releases (kind 30063). */
 export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev/';
 

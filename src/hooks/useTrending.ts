@@ -191,7 +191,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
  * Uses NIP-50 search extension `sort:hot` against relay.ditto.pub.
  *
  * `extraFilters` allows appending additional filter objects to the REQ,
- * useful when some kinds need tag constraints (e.g. webxdc needs `#m`).
+ * useful when some kinds need tag constraints (e.g. mini-apps need `#m`).
  */
 export function useInfiniteHotFeed(
   kinds: number[],
@@ -373,8 +373,15 @@ export function useTagSparklines(tags: string[], labelCreatedAt: number, enabled
         sparkMap.set(tag, new Array(SPARKLINE_DAYS).fill(0));
       }
 
-      // Trends is not critical
-      await new Promise((resolve) => requestIdleCallback(resolve, { timeout: 10000 }));
+      // Trends is not critical — defer with requestIdleCallback when available,
+      // falling back to setTimeout so the query works in Safari / test environments.
+      await new Promise((resolve) => {
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(resolve, { timeout: 10000 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
 
       // Build one filter per tag×day and send them all in a single REQ.
       // Each filter is narrow enough (since/until + #t) that the relay returns

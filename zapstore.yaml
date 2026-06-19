@@ -6,13 +6,13 @@ summary: Your content. Your vibe. Your rules.
 
 description: |
   Ditto is an open-source Nostr client. Your content. Your vibe. Your rules,
-  and all the other stuff: games, treasure hunts, magic decks, live streams,
-  color moments, and more.
+  and all the other stuff: games, treasure hunts, live streams,
+  and more.
 
   Features:
   - Theming — 9 built-in presets, shareable themes
   - Infinite content types — notes, articles, short videos (Vines), live streams,
-    polls, follow packs, color moments, magic decks, geocaching, Webxdc mini-apps
+    polls, follow packs, geocaching, mini-apps
   - Lightning payments — zap posts and profiles via NWC or WebLN
   - Comments on anything — posts, URLs, profiles, hashtags, books, and more
 
@@ -27,7 +27,7 @@ license: AGPL-3.0
 
 website: https://ditto.pub
 
-icon: ./public/logo.png
+icon: ./public/logo.jpg
 
 images:
   - https://blossom.ditto.pub/47fcb3bdc414ced245fbba53b0456d9bfdf112d711ecf5cc628361a47002392a.png
@@ -90,4 +90,3 @@ supported_nips:
   - "98"  # HTTP authentication (kind 27235, used for AI API calls)
   - "A0"  # Voice messages (kind 1222 root, kind 1244 reply)
   - "GC"  # Geocaching (kind 37516 cache listings, kind 7516 found logs)
-  - "MG"  # Magic decks (kind 37381)

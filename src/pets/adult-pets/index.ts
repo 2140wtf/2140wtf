@@ -1,7 +1,7 @@
 /**
- * Adult Blobbi Module
+ * Adult Pets Module
  * 
- * Self-contained module for adult stage Blobbi visuals and customization.
+ * Self-contained module for adult stage Pets visuals and customization.
  * This module includes:
  * - Adult SVG assets (awake and sleeping variants for each form)
  * - SVG resolution and loading utilities
@@ -42,5 +42,5 @@ export {
 // SVG Customization
 export {
   customizeAdultSvg,
-  customizeAdultSvgFromBlobbi,
+  customizeAdultSvgFromPets,
 } from './lib/adult-svg-customizer';

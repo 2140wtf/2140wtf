@@ -225,7 +225,7 @@ export function useRouteReaction({
         clickPos = click.fallback;
       }
 
-      // Clamp Y so Blobbi looks *across* toward the sidebar, not sharply
+      // Clamp Y so Pets looks *across* toward the sidebar, not sharply
       // downward when the clicked item is near the bottom of the viewport.
       const maxY = window.innerHeight * 0.55;
       if (clickPos.y > maxY) {

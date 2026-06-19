@@ -1,5 +1,6 @@
 import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppContext } from './useAppContext';
 import { useCurrentUser } from './useCurrentUser';
 import { useFeedSettings } from './useFeedSettings';
@@ -45,8 +46,55 @@ interface FeedPage {
 interface UseFeedOptions {
   /** Override the kinds list instead of using feed settings. Used by kind-specific pages. */
   kinds?: number[];
-  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }`). */
+  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }` for mini-apps). */
   tagFilters?: Record<string, string[]>;
+}
+
+/** Parse the cached community NIP-05 pubkey list from its localStorage raw value. */
+function readCommunityPubkeys(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const data = JSON.parse(raw);
+    if (!data.names || typeof data.names !== 'object') return [];
+    return Object.values(data.names).filter((pk): pk is string => typeof pk === 'string');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Reactive wrapper around the community pubkey list stored in localStorage.
+ * Re-reads when another tab or NostrSync writes the community data, and on
+ * window focus, so the Communities feed doesn't stay stale.
+ */
+function useCommunityPubkeys(appId: string): string[] {
+  const key = getStorageKey(appId, 'communityData');
+  const [raw, setRaw] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? '';
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    const sync = () => {
+      try {
+        const next = localStorage.getItem(key) ?? '';
+        setRaw((prev) => (prev === next ? prev : next));
+      } catch {
+        // localStorage may be unavailable
+      }
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+    };
+  }, [key]);
+
+  return useMemo(() => readCommunityPubkeys(raw), [raw]);
 }
 
 /** Hook to fetch the global, followed, loved, or communities feed with infinite scroll pagination. */
@@ -89,21 +137,8 @@ export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', opt
         ? !!user && lovedPubkeys !== undefined
         : true;
 
-  // Load community pubkeys from localStorage
-  const communityPubkeys = (() => {
-    if (tab !== 'communities') return [];
-    try {
-      const dataStr = localStorage.getItem(getStorageKey(config.appId, 'communityData'));
-      if (!dataStr) return [];
-      
-      const data = JSON.parse(dataStr);
-      if (!data.names) return [];
-      
-      return Object.values(data.names).filter((pk): pk is string => typeof pk === 'string');
-    } catch {
-      return [];
-    }
-  })();
+  const allCommunityPubkeys = useCommunityPubkeys(config.appId);
+  const communityPubkeys = tab === 'communities' ? allCommunityPubkeys : [];
 
   return useInfiniteQuery<FeedPage, Error>({
     // NOTE: followList is intentionally excluded from the query key
@@ -112,7 +147,7 @@ export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', opt
     // on page load because feedSettings is read from localStorage
     // synchronously — the encrypted settings sync at ~5s only calls
     // updateConfig if values actually differ (NostrSync changed guard).
-    queryKey: ['feed', tab, user?.pubkey ?? '', kindsKey, tagFiltersKey, communityPubkeys.length, feedSettings.followsFeedShowReplies, mutedKey],
+    queryKey: ['feed', tab, user?.pubkey ?? '', kindsKey, tagFiltersKey, communityPubkeys, feedSettings.followsFeedShowReplies, mutedKey],
     queryFn: async ({ pageParam }) => {
       const signal = AbortSignal.timeout(8000);
       const now = Math.floor(Date.now() / 1000);
@@ -155,10 +190,12 @@ export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', opt
 
         // Fetch kind 0 metadata for all authors to verify NIP-05
         const authorPubkeys = [...new Set(events.map(e => e.pubkey))];
-        const metadataEvents = await nostr.query(
-          [{ kinds: [0], authors: authorPubkeys }],
-          { signal },
-        );
+        const metadataEvents = authorPubkeys.length > 0
+          ? await nostr.query(
+              [{ kinds: [0], authors: authorPubkeys }],
+              { signal },
+            )
+          : [];
 
         // Seed the author query cache from the metadata we already fetched
         // for NIP-05 verification, so downstream useAuthor() calls are instant.

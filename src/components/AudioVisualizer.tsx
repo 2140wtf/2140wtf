@@ -3,6 +3,7 @@ import { Play, Pause, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { AvatarShape } from '@/lib/avatarShape';
 import { cn } from '@/lib/utils';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 import { formatTime } from '@/lib/formatTime';
 
@@ -32,6 +33,8 @@ export function AudioVisualizer({
   avatarShape,
   className,
 }: AudioVisualizerProps) {
+  const safeSrc = sanitizeUrl(src) ?? '';
+  const safeAvatarUrl = sanitizeUrl(avatarUrl) ?? undefined;
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -85,9 +88,9 @@ export function AudioVisualizer({
     const primaryGlow  = `hsl(${primaryHsl} / 0.55)`;
 
     const analyser = analyserRef.current;
-    let dataArray: Uint8Array | null = null;
+    let dataArray: Uint8Array<ArrayBuffer> | null = null;
     if (analyser && isPlaying) {
-      dataArray = new Uint8Array(analyser.frequencyBinCount);
+      dataArray = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
       analyser.getByteTimeDomainData(dataArray);
     }
 
@@ -245,7 +248,7 @@ export function AudioVisualizer({
     >
       {/* Hidden audio element */}
       <audio ref={audioRef} preload="metadata" crossOrigin="anonymous" className="hidden">
-        {mime ? <source src={src} type={mime} /> : <source src={src} />}
+        {mime ? <source src={safeSrc} type={mime} /> : <source src={safeSrc} />}
       </audio>
 
       {/* Sinewave canvas — fills the entire box */}
@@ -267,7 +270,7 @@ export function AudioVisualizer({
           )}
         >
           <Avatar className="size-20 border-2 border-white/20" shape={avatarShape}>
-            <AvatarImage src={avatarUrl} alt={avatarFallback} />
+            <AvatarImage src={safeAvatarUrl} alt={avatarFallback} />
             <AvatarFallback className="bg-primary/20 text-primary text-2xl font-semibold">
               {avatarFallback}
             </AvatarFallback>

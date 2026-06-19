@@ -207,7 +207,9 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
           return allFiles;
         };
 
-        readAllEntries(entries).then(addFiles);
+        readAllEntries(entries).then(addFiles).catch(() => {
+          // Directory traversal is best-effort; fall through to plain files.
+        });
         return;
       }
     }

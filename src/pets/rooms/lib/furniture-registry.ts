@@ -13,7 +13,7 @@
  * handle this gracefully (skip or show a placeholder).
  */
 
-import type { BlobbiRoomId } from './room-config';
+import type { PetsRoomId } from './room-config';
 import type { FurnitureLayer } from './room-furniture-schema';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export interface FurnitureDefinition {
   /** Default layer when first placed */
   defaultLayer: FurnitureLayer;
   /** Which rooms this can be placed in (undefined = all rooms) */
-  allowedRooms?: BlobbiRoomId[];
+  allowedRooms?: PetsRoomId[];
   /** Whether horizontal flip is supported */
   flippable: boolean;
   /** Render priority within the same layer. Lower values render first (behind). Default 0. */
@@ -616,7 +616,7 @@ export function getFurnitureAsset(def: FurnitureDefinition, variant?: string): s
  * Check whether an item can be placed in a specific room.
  * Returns true if item has no room restriction or if the room is in the allowed list.
  */
-export function canPlaceInRoom(def: FurnitureDefinition, roomId: BlobbiRoomId): boolean {
+export function canPlaceInRoom(def: FurnitureDefinition, roomId: PetsRoomId): boolean {
   if (!def.allowedRooms) return true;
   return def.allowedRooms.includes(roomId);
 }
@@ -624,7 +624,7 @@ export function canPlaceInRoom(def: FurnitureDefinition, roomId: BlobbiRoomId): 
 /**
  * Get all official furniture definitions that can be placed in a specific room.
  */
-export function getAvailableFurnitureForRoom(roomId: BlobbiRoomId): FurnitureDefinition[] {
+export function getAvailableFurnitureForRoom(roomId: PetsRoomId): FurnitureDefinition[] {
   return OFFICIAL_FURNITURE.filter((def) => canPlaceInRoom(def, roomId));
 }
 
@@ -653,7 +653,7 @@ export interface FurnitureCategoryGroup {
  * Get available furniture for a room, grouped by category.
  * Omits categories with no available items. Preserves item order within each category.
  */
-export function getAvailableFurnitureByCategory(roomId: BlobbiRoomId): FurnitureCategoryGroup[] {
+export function getAvailableFurnitureByCategory(roomId: PetsRoomId): FurnitureCategoryGroup[] {
   const available = getAvailableFurnitureForRoom(roomId);
   const groups: FurnitureCategoryGroup[] = [];
 

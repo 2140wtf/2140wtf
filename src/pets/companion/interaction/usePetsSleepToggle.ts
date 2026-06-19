@@ -1,11 +1,11 @@
 /**
- * useBlobbiSleepToggle — Standalone sleep/wake toggle for the companion.
+ * usePetsSleepToggle — Standalone sleep/wake toggle for the companion.
  *
- * This hook mirrors the essential logic of BlobbiPage's `handleRest` but
+ * This hook mirrors the essential logic of PetsPage's `handleRest` but
  * works independently — it fetches fresh event data from relays, publishes
  * the state change, and updates the TanStack Query cache directly.
  *
- * This eliminates the dependency on BlobbiPage being mounted. The companion
+ * This eliminates the dependency on PetsPage being mounted. The companion
  * sleep button works on any page.
  */
 
@@ -18,25 +18,25 @@ import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { BlobbiCompanion } from '@/blobbi/core/lib/blobbi';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBI_STATE,
-  updateBlobbiTags,
-  parseBlobbiEvent,
-  isValidBlobbiEvent,
-} from '@/blobbi/core/lib/blobbi';
-import { applyBlobbiDecay } from '@/blobbi/core/lib/blobbi-decay';
-import { getStreakTagUpdates } from '@/blobbi/actions/lib/blobbi-streak';
-import { trackDailyMissionProgress } from '@/blobbi/actions/lib/daily-mission-tracker';
+  KIND_PETS_STATE,
+  updatePetsTags,
+  parsePetsEvent,
+  isValidPetsEvent,
+} from '@/pets/core/lib/pets';
+import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
+import { trackDailyMissionProgress } from '@/pets/actions/lib/daily-mission-tracker';
 
-export interface UseBlobbiSleepToggleResult {
+export interface UsePetsSleepToggleResult {
   /** Toggle sleep/wake state. Resolves when published. */
   toggleSleep: () => Promise<void>;
   /** Whether a toggle is currently in progress. */
   isPending: boolean;
 }
 
-export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
+export function usePetsSleepToggle(): UsePetsSleepToggleResult {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -51,34 +51,34 @@ export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
   const fetchFreshCompanion = useCallback(async (
     pubkey: string,
     dTag: string,
-  ): Promise<BlobbiCompanion | null> => {
+  ): Promise<PetsCompanion | null> => {
     const events = await nostr.query([{
-      kinds: [KIND_BLOBBI_STATE],
+      kinds: [KIND_PETS_STATE],
       authors: [pubkey],
       '#d': [dTag],
     }]);
 
     const validEvents = events
-      .filter(isValidBlobbiEvent)
+      .filter(isValidPetsEvent)
       .sort((a, b) => b.created_at - a.created_at);
 
     if (validEvents.length === 0) return null;
-    return parseBlobbiEvent(validEvents[0]) ?? null;
+    return parsePetsEvent(validEvents[0]) ?? null;
   }, [nostr]);
 
   /** Optimistically update the TanStack cache so the companion reacts immediately. */
   const updateCache = useCallback((event: import('@nostrify/nostrify').NostrEvent, pubkey: string) => {
-    const parsed = parseBlobbiEvent(event);
+    const parsed = parsePetsEvent(event);
     if (!parsed) return;
 
-    // Optimistically update ALL blobbi-collection queries for this user.
-    // The cache key is ['blobbi-collection', pubkey, dListArray], so we use
+    // Optimistically update ALL pets-collection queries for this user.
+    // The cache key is ['pets-collection', pubkey, dListArray], so we use
     // partial matching to find all entries regardless of dList shape.
     // No invalidation needed — we fetched fresh from relays before mutating,
     // so the optimistic update is the correct state.
-    type CollectionData = { companionsByD: Record<string, BlobbiCompanion>; companions: BlobbiCompanion[] };
+    type CollectionData = { companionsByD: Record<string, PetsCompanion>; companions: PetsCompanion[] };
     const matchingQueries = queryClient.getQueriesData<CollectionData>({
-      queryKey: ['blobbi-collection', pubkey],
+      queryKey: ['pets-collection', pubkey],
     });
 
     for (const [queryKey, data] of matchingQueries) {
@@ -119,7 +119,7 @@ export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
 
       // Apply accumulated decay before the state change
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyBlobbiDecay({
+      const decayResult = applyPetsDecay({
         stage: companion.stage,
         state: companion.state,
         stats: companion.stats,
@@ -132,7 +132,7 @@ export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
       // Streak updates (putting to sleep/waking counts as care activity)
       const streakUpdates = getStreakTagUpdates(companion) ?? {};
 
-      const newTags = updateBlobbiTags(companion.allTags, {
+      const newTags = updatePetsTags(companion.allTags, {
         state: newState,
         hunger: decayResult.stats.hunger.toString(),
         happiness: decayResult.stats.happiness.toString(),
@@ -145,7 +145,7 @@ export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
       });
 
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content: companion.event.content,
         tags: newTags,
         prev: companion.event,
@@ -157,8 +157,8 @@ export function useBlobbiSleepToggle(): UseBlobbiSleepToggleResult {
       toast({
         title: isCurrentlySleeping ? 'Woke up!' : 'Resting...',
         description: isCurrentlySleeping
-          ? 'Your Blobbi is now awake and active!'
-          : 'Your Blobbi is taking a rest.',
+          ? 'Your Pets is now awake and active!'
+          : 'Your Pets is taking a rest.',
       });
 
       // Track daily mission progress (only when putting to sleep)

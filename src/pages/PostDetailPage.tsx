@@ -12,10 +12,12 @@ import {
   Loader2,
   MessageCircle,
   MoreHorizontal,
+  Navigation,
   Radio,
   Package,
   Rocket,
   Share2,
+  Shield,
   Star,
   Stars,
   Zap,
@@ -29,27 +31,23 @@ import { BadgeDetailContent } from "@/components/BadgeDetailContent";
 import { CalendarEventDetailPage } from "@/components/CalendarEventDetailPage";
 
 import {
-  ColorMomentContent,
-  ColorMomentEyeButton,
-} from "@/components/ColorMomentContent";
-import {
   EmojifiedText,
   ReactionEmoji,
   RenderResolvedEmoji,
 } from "@/components/CustomEmoji";
-const BlobbiStateCard = lazy(() => import("@/components/BlobbiStateCard").then(m => ({ default: m.BlobbiStateCard })));
-const BlobbiSocialActions = lazy(() => import("@/components/BlobbiSocialActions").then(m => ({ default: m.BlobbiSocialActions })));
-import { parseBlobbiEvent } from "@/blobbi/core/lib/blobbi";
-import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/blobbi/ui/hooks/useInteractionReaction';
-import type { InventoryAction } from '@/blobbi/actions/lib/blobbi-action-utils';
+const PetsStateCard = lazy(() => import("@/components/PetsStateCard").then(m => ({ default: m.PetsStateCard })));
+const PetsSocialActions = lazy(() => import("@/components/PetsSocialActions").then(m => ({ default: m.PetsSocialActions })));
+import { parsePetsEvent } from "@/pets/core/lib/pets";
+import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/pets/ui/hooks/useInteractionReaction';
+import type { InventoryAction } from '@/pets/actions/lib/pets-action-utils';
 const CustomNipCard = lazy(() => import("@/components/CustomNipCard").then(m => ({ default: m.CustomNipCard })));
+const RoadstrReportContent = lazy(() => import("@/components/roadstr/RoadstrReportContent").then(m => ({ default: m.RoadstrReportContent })));
+const RoadstrConfirmationContent = lazy(() => import("@/components/roadstr/RoadstrReportContent").then(m => ({ default: m.RoadstrConfirmationContent })));
 import { FileMetadataContent } from "@/components/FileMetadataContent";
 import { HighlightContent } from "@/components/HighlightContent";
 import { CampaignContent } from "@/components/CampaignContent";
 import { PeopleListContent } from "@/components/PeopleListContent";
 import { PeopleListDetailContent } from "@/components/PeopleListDetailContent";
-import { FoundLogContent } from "@/components/FoundLogContent";
-import { GeocacheContent } from "@/components/GeocacheContent";
 import { BirdDetectionContent } from "@/components/BirdDetectionContent";
 import { BirdexContent } from "@/components/BirdexContent";
 import { ConstellationContent } from "@/components/ConstellationContent";
@@ -61,7 +59,6 @@ import {
 } from "@/components/InteractionsModal";
 import { RepostIcon } from "@/components/icons/RepostIcon";
 import { LiveStreamPage } from "@/components/LiveStreamPage";
-import { MagicDeckContent } from "@/components/MagicDeckContent";
 import { MusicDetailContent } from "@/components/MusicDetailContent";
 import { ActivityCard, EventActionHeader, NoteCard } from "@/components/NoteCard";
 import { publishedAtAction } from "@/lib/publishedAtAction";
@@ -90,8 +87,6 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { EncryptedMessageContent } from "@/components/EncryptedMessageContent";
-import { EncryptedLetterContent } from "@/components/EncryptedLetterContent";
 import { LoveListContent } from "@/components/LoveListContent";
 import { LOVE_LIST_KIND } from "@/hooks/useLoveList";
 import { VanishEventContent } from "@/components/VanishEventContent";
@@ -102,6 +97,7 @@ import { ZapstoreAppContent } from "@/components/ZapstoreAppContent";
 import { ZapstoreReleaseContent, ZapstoreReleaseSkeleton, ZapstoreAssetContent, ZapstoreAssetSkeleton } from "@/components/ZapstoreReleaseContent";
 import { AppHandlerContent } from "@/components/AppHandlerContent";
 import { AppHandlerDetailPage } from "@/pages/AppHandlerDetailPage";
+import { GroupChatCard } from "@/components/group-chat/GroupChatCard";
 import { useAppContext } from "@/hooks/useAppContext";
 import { type AddrCoords, useAddrEvent, useEvent } from "@/hooks/useEvent";
 import { usePollVoteLabel } from "@/hooks/usePollVoteLabel";
@@ -218,7 +214,7 @@ function getTag(tags: string[][], name: string): string | undefined {
   return tags.find(([n]) => n === name)?.[1];
 }
 
-/** Parse single imeta tag into structured object (for kind 34236 vines). */
+/** Parse single imeta tag into structured object (for video events). */
 function parseImeta(tags: string[][]): {
   url?: string;
   thumbnail?: string;
@@ -570,6 +566,8 @@ function CopyableHex({ value }: { value: string }) {
     navigator.clipboard.writeText(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {
+      // Clipboard may be denied or unavailable; ignore silently.
     });
   };
 
@@ -890,7 +888,7 @@ function parsePhotoUrls(
   return results;
 }
 
-/** Video + title + hashtags for a kind 34236 vine on the detail page. */
+/** Video + title + hashtags for NIP-71 video events on the detail page. */
 function VideoDetailContent({ event }: { event: NostrEvent }) {
   const imeta = useMemo(() => parseImeta(event.tags), [event.tags]);
   const title = getTag(event.tags, "title");
@@ -920,42 +918,6 @@ function VideoDetailContent({ event }: { event: NostrEvent }) {
       )}
       {(hashtags.length > 0 || duration) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
-          {hashtags.slice(0, 8).map((tag) => (
-            <Link
-              key={tag}
-              to={`/t/${encodeURIComponent(tag)}`}
-              className="text-sm text-primary hover:underline"
-            >
-              #{tag}
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VineDetailContent({ event }: { event: NostrEvent }) {
-  const imeta = useMemo(() => parseImeta(event.tags), [event.tags]);
-  const vineTitle = getTag(event.tags, "title");
-  const hashtags = event.tags.filter(([n]) => n === "t").map(([, v]) => v);
-
-  return (
-    <div className="mt-3">
-      {vineTitle && (
-        <p className="text-[15px] leading-relaxed break-words mb-2">
-          {vineTitle}
-        </p>
-      )}
-      {imeta.url && (
-        <VideoPlayer
-          src={imeta.url}
-          poster={imeta.thumbnail}
-          title={vineTitle ?? undefined}
-        />
-      )}
-      {hashtags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
           {hashtags.slice(0, 8).map((tag) => (
             <Link
               key={tag}
@@ -1059,19 +1021,14 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
   }, [encodedEventId, shareOrigin]);
 
   // Kind detection — mirrors NoteCard
-  const isVine = event.kind === 34236;
-  const isPoll = event.kind === 1068;
+  const isPoll = event.kind === 1068 || event.kind === 6969;
   const isPollVote = event.kind === 1018;
-  const isGeocache = event.kind === 37516;
-  const isFoundLog = event.kind === 7516;
-  const isColor = event.kind === 3367;
   const isBirdDetection = event.kind === 2473;
   const isBirdex = event.kind === 12473;
   const isConstellation = event.kind === 30621;
   const isPeopleList = event.kind === 3 || event.kind === 30000 || event.kind === 39089;
   const isEmojiPack = event.kind === 30030;
   const isArticle = event.kind === 30023;
-  const isMagicDeck = event.kind === 37381;
   const isFileMetadata = event.kind === 1063;
   const isTheme = event.kind === 36767 || event.kind === 16767;
   const isVoiceMessage = event.kind === 1222 || event.kind === 1244;
@@ -1089,31 +1046,28 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
   const isZapstoreRelease = event.kind === 30063;
   const isZapstoreAsset = event.kind === 3063;
   const isAppHandler = event.kind === 31990;
-  const isEncryptedDM = event.kind === 4;
-  const isLetter = event.kind === 8211;
   const isLoveList = event.kind === LOVE_LIST_KIND;
   const isHighlight = event.kind === 9802;
   const isCampaign = event.kind === 33863;
+  const isRoadstrReport = event.kind === 1315;
+  const isRoadstrConfirmation = event.kind === 1316;
+  const isRoadstr = isRoadstrReport || isRoadstrConfirmation;
   const isVanish = event.kind === VANISH_KIND;
   const isZap = event.kind === 9735;
   const isOnchainZap = event.kind === 8333;
   const isProfile = event.kind === 0;
-  const isBlobbiState = event.kind === 31124;
+  const isPetsState = event.kind === 31124;
+  const isGroupEvent = event.kind === 445;
   const isBadgeAward = event.kind === BADGE_AWARD_KIND;
   const isDevKind = isGitRepo || isPatch || isPullRequest || isCustomNip || isNsite;
   const isTextNote =
-    !isVine &&
     !isPoll &&
     !isPollVote &&
-    !isGeocache &&
-    !isFoundLog &&
-    !isColor &&
     !isBirdDetection &&
     !isConstellation &&
     !isPeopleList &&
     !isEmojiPack &&
     !isArticle &&
-    !isMagicDeck &&
     !isFileMetadata &&
     !isTheme &&
     !isVoiceMessage &&
@@ -1127,16 +1081,16 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
     !isZapstoreRelease &&
     !isZapstoreAsset &&
     !isAppHandler &&
-    !isEncryptedDM &&
-    !isLetter &&
     !isLoveList &&
     !isHighlight &&
     !isCampaign &&
+    !isRoadstr &&
     !isVanish &&
     !isZap &&
     !isOnchainZap &&
     !isProfile &&
-    !isBlobbiState &&
+    !isPetsState &&
+    !isGroupEvent &&
     !isBadgeAward;
 
   // Unknown kinds land in the `isTextNote` branch (negation of every known flag
@@ -1365,19 +1319,19 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
   const [interactionsTab, setInteractionsTab] =
     useState<InteractionTab>("reposts");
   const { user } = useCurrentUser();
-  const blobbiCompanion = useMemo(() => isBlobbiState ? parseBlobbiEvent(event) : null, [event, isBlobbiState]);
-  const showBlobbiInteract = isBlobbiState
+  const petsCompanion = useMemo(() => isPetsState ? parsePetsEvent(event) : null, [event, isPetsState]);
+  const showPetsInteract = isPetsState
     && !!user
     && user.pubkey !== event.pubkey
-    && !!blobbiCompanion?.socialOpen
-    && blobbiCompanion?.stage !== 'egg';
+    && !!petsCompanion?.socialOpen
+    && petsCompanion?.stage !== 'egg';
 
-  // Blobbi interaction reaction — triggers visual feedback on the card when social action succeeds
-  const { state: blobbiReactionState, trigger: triggerBlobbiReaction } = useInteractionReaction();
-  const handleBlobbiInteractionSuccess = useCallback((action: InventoryAction) => {
+  // Pets interaction reaction — triggers visual feedback on the card when social action succeeds
+  const { state: petsReactionState, trigger: triggerPetsReaction } = useInteractionReaction();
+  const handlePetsInteractionSuccess = useCallback((action: InventoryAction) => {
     const mapped = INVENTORY_TO_REACTION[action];
-    if (mapped) triggerBlobbiReaction(mapped);
-  }, [triggerBlobbiReaction]);
+    if (mapped) triggerPetsReaction(mapped);
+  }, [triggerPetsReaction]);
 
   const parentHints = useMemo(
     () => (isTextNote || isReaction || isRepost || isZap || isOnchainZap || isPollVote ? getParentEventHints(event) : undefined),
@@ -1416,7 +1370,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
     return parseAddr(aTag);
   }, [event, isComment]);
 
-  // For kind 1111 comments on any other addressable event (vines, music, etc.),
+  // For kind 1111 comments on any other addressable event (music, articles, etc.),
   // extract the addr for a generic preview — only if not already handled above.
   const addrRoot = useMemo(() => {
     if (
@@ -2179,6 +2133,19 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
           {isConstellation && (
             <EventActionHeader pubkey={event.pubkey} icon={Stars} action={publishedAtAction(event, { created: "drew a", updated: "redrew a", fallback: "drew a" })} noun="constellation" />
           )}
+          {isGroupEvent && (
+            <EventActionHeader pubkey={event.pubkey} icon={Shield} action="sent a" noun="private group message" nounRoute="/groups" />
+          )}
+          {isRoadstrReport && (
+            <EventActionHeader pubkey={event.pubkey} icon={Navigation} action="reported a" noun="road event" nounRoute="/roadstr" />
+          )}
+          {isRoadstrConfirmation && (
+            <EventActionHeader
+              pubkey={event.pubkey}
+              icon={Navigation}
+              action={event.tags.find(([n]) => n === 'status')?.[1] === 'no_longer_there' ? 'marked a road event as gone' : 'confirmed a road event'}
+            />
+          )}
 
           {/* Author row */}
           <div className="flex items-center gap-3">
@@ -2232,7 +2199,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
                     🤖
                   </span>
                 )}
-                {isColor && <ColorMomentEyeButton event={event} />}
+
               </>
             )}
           </div>
@@ -2261,8 +2228,6 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
               <Suspense fallback={<Skeleton className="h-32 w-full rounded-lg" />}>
                 <ArticleContent event={event} className="mt-3" />
               </Suspense>
-            ) : isMagicDeck ? (
-              <MagicDeckContent event={event} />
             ) : isFileMetadata ? (
               <FileMetadataContent event={event} />
             ) : isTheme ? (
@@ -2313,38 +2278,44 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
               </div>
             ) : isAppHandler ? (
               <AppHandlerContent event={event} />
-            ) : isEncryptedDM ? (
-              <EncryptedMessageContent event={event} />
-            ) : isLetter ? (
-              <EncryptedLetterContent event={event} />
+            ) : event.kind === 4 ? (
+              <div className="mt-3 rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground">
+                NIP-04 direct messages are not supported
+              </div>
             ) : isLoveList ? (
               <LoveListContent event={event} />
             ) : isHighlight ? (
               <HighlightContent event={event} expanded />
             ) : isCampaign ? (
               <CampaignContent event={event} expanded />
-            ) : isBlobbiState ? (
+            ) : isRoadstrReport ? (
+              <Suspense fallback={<Skeleton className="h-32 w-full rounded-lg" />}>
+                <div className="mt-3">
+                  <RoadstrReportContent event={event} expanded />
+                </div>
+              </Suspense>
+            ) : isRoadstrConfirmation ? (
+              <Suspense fallback={<Skeleton className="h-32 w-full rounded-lg" />}>
+                <div className="mt-3">
+                  <RoadstrConfirmationContent event={event} />
+                </div>
+              </Suspense>
+            ) : isGroupEvent ? (
+              <GroupChatCard event={event} />
+            ) : isPetsState ? (
               <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
-                <BlobbiStateCard event={event} lookMode="follow-pointer" interactionReaction={blobbiReactionState} />
+                <PetsStateCard event={event} lookMode="follow-pointer" interactionReaction={petsReactionState} />
               </Suspense>
             ) : isBadgeAward ? (
               <BadgeAwardCard event={event} />
-            ) : isVine ||
-              isPoll ||
-              isGeocache ||
-              isFoundLog ||
-              isColor ||
+            ) : isPoll ||
               isBirdDetection ||
               isBirdex ||
               isConstellation ||
               isPeopleList ||
               isEmojiPack ? (
               <>
-                {isVine && <VineDetailContent event={event} />}
                 {isPoll && <PollContent event={event} />}
-                {isGeocache && <GeocacheContent event={event} />}
-                {isFoundLog && <FoundLogContent event={event} />}
-                {isColor && <ColorMomentContent event={event} />}
                 {isBirdDetection && <BirdDetectionContent event={event} />}
                 {isBirdex && <BirdexContent event={event} expanded />}
                 {isConstellation && <ConstellationContent event={event} />}
@@ -2374,10 +2345,10 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
             onReply={() => setReplyOpen(true)}
             onMore={() => setMoreMenuOpen(true)}
             className="-mx-4 px-4"
-            compact={showBlobbiInteract}
-            extraButtons={showBlobbiInteract ? (
+            compact={showPetsInteract}
+            extraButtons={showPetsInteract ? (
               <Suspense fallback={null}>
-                <BlobbiSocialActions event={event} companion={blobbiCompanion} onInteractionSuccess={handleBlobbiInteractionSuccess} />
+                <PetsSocialActions event={event} companion={petsCompanion} onInteractionSuccess={handlePetsInteractionSuccess} />
               </Suspense>
             ) : undefined}
           />

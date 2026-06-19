@@ -34,6 +34,9 @@ const WALL_STYLE_LABELS: Record<WallStyle, string> = {
   stripes: 'Stripes',
   dots: 'Dots',
   gradient: 'Gradient',
+  circuit: 'Circuit',
+  hexgrid: 'Hexgrid',
+  scanlines: 'Scanlines',
 };
 
 const FLOOR_STYLE_LABELS: Record<FloorStyle, string> = {
@@ -41,6 +44,9 @@ const FLOOR_STYLE_LABELS: Record<FloorStyle, string> = {
   wood: 'Wood',
   tile: 'Tile',
   carpet: 'Carpet',
+  metal: 'Metal',
+  glass: 'Glass',
+  holo: 'Holo',
 };
 
 const VARIANT_LABELS: Record<SurfaceVariant, string> = {

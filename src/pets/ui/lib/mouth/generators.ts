@@ -28,14 +28,14 @@ export function generateRoundMouth(mouth: MouthPosition, config: RoundMouthConfi
   
   if (config.filled) {
     return `<ellipse 
-      class="blobbi-mouth blobbi-mouth-round"
+      class="pets-mouth pets-mouth-round"
       cx="${centerX}" cy="${centerY}" 
       rx="${config.rx}" ry="${config.ry}"
       fill="#1f2937"
     />`;
   } else {
     return `<ellipse 
-      class="blobbi-mouth blobbi-mouth-round"
+      class="pets-mouth pets-mouth-round"
       cx="${centerX}" cy="${centerY}" 
       rx="${config.rx}" ry="${config.ry}"
       fill="none" stroke="#1f2937" stroke-width="2"
@@ -55,7 +55,7 @@ export function generateSadMouth(mouth: MouthPosition): string {
   const yOffset = Math.abs(curveAmount) * 0.5;
   
   return `<path 
-    class="blobbi-mouth blobbi-mouth-sad"
+    class="pets-mouth pets-mouth-sad"
     d="M ${mouth.startX} ${mouth.startY + yOffset} Q ${mouth.controlX} ${invertedControlY + yOffset} ${mouth.endX} ${mouth.endY + yOffset}" 
     ${mouth.strokeAttrs || 'stroke="#1f2937" stroke-width="2.5"'}
     fill="none" stroke-linecap="round"
@@ -77,7 +77,7 @@ export function generateSmallSmile(mouth: MouthPosition, config: SmallSmileConfi
   const scaledControlY = centerY + (mouth.controlY - centerY) * scale;
   
   return `<path 
-    class="blobbi-mouth blobbi-mouth-small"
+    class="pets-mouth pets-mouth-small"
     d="M ${scaledStartX} ${centerY} Q ${centerX} ${scaledControlY} ${scaledEndX} ${centerY}" 
     ${mouth.strokeAttrs || 'stroke="#1f2937" stroke-width="2.5"'}
     fill="none" stroke-linecap="round"
@@ -101,7 +101,7 @@ export function generateDroopyMouth(mouth: MouthPosition, config: DroopyMouthCon
   const yOffset = Math.abs(curveAmount) * 0.3;
   
   return `<path 
-    class="blobbi-mouth blobbi-mouth-droopy"
+    class="pets-mouth pets-mouth-droopy"
     d="M ${scaledStartX} ${baselineY + yOffset} Q ${centerX} ${invertedControlY + yOffset} ${scaledEndX} ${baselineY + yOffset}" 
     ${mouth.strokeAttrs || 'stroke="#1f2937" stroke-width="2.5"'}
     fill="none" stroke-linecap="round"
@@ -124,7 +124,7 @@ export function generateBigSmile(mouth: MouthPosition, config: BigSmileConfig): 
   const scaledControlY = baselineY + curveDepth * config.curveScale;
   
   return `<path 
-    class="blobbi-mouth blobbi-mouth-big"
+    class="pets-mouth pets-mouth-big"
     d="M ${scaledStartX} ${baselineY} Q ${centerX} ${scaledControlY} ${scaledEndX} ${baselineY}" 
     ${mouth.strokeAttrs || 'stroke="#1f2937" stroke-width="2.5"'}
     fill="none" stroke-linecap="round"
@@ -149,7 +149,7 @@ export function generateDrool(mouth: MouthPosition, config: DroolConfig): string
   const dropSize = 3;
   const dropLength = 6;
   
-  return `<g class="blobbi-drool">
+  return `<g class="pets-drool">
     <path
       d="M ${droolX} ${droolStartY} 
          Q ${droolX - dropSize * 0.3} ${droolStartY + dropLength * 0.4} ${droolX} ${droolStartY + dropLength * 0.6}
@@ -277,7 +277,7 @@ export function generateDroolAtAnchor(anchor: DroolAnchor, config: DroolConfig):
   const dropSize = 3;
   const dropLength = 6;
 
-  return `<g class="blobbi-drool">
+  return `<g class="pets-drool">
     <path
       d="M ${droolX} ${droolStartY} 
          Q ${droolX - dropSize * 0.3} ${droolStartY + dropLength * 0.4} ${droolX} ${droolStartY + dropLength * 0.6}
@@ -310,7 +310,7 @@ export function generateDroolAtAnchor(anchor: DroolAnchor, config: DroolConfig):
 // ─── Food Icon ────────────────────────────────────────────────────────────────
 
 /**
- * Generate a fork and knife icon near the Blobbi.
+ * Generate a fork and knife icon near the Pets.
  * 
  * Position and size vary by variant:
  *   - Baby (100x100): Upper-right, smaller icon (fixed positions)
@@ -348,7 +348,7 @@ export function generateFoodIcon(config: FoodIconConfig): string {
   
   if (config.type === 'plate') {
     const r = 5 * scale;
-    return `<g class="blobbi-food-icon" opacity="0.75" transform="translate(${iconX}, ${iconY})">
+    return `<g class="pets-food-icon" opacity="0.75" transform="translate(${iconX}, ${iconY})">
       <circle cx="0" cy="${3 * scale}" r="${r}" fill="none" stroke="#9ca3af" stroke-width="${0.8 * strokeScale}" />
       <path d="M ${-4 * scale} ${-2 * scale} L ${-4 * scale} ${5 * scale}" stroke="#9ca3af" stroke-width="${0.8 * strokeScale}" stroke-linecap="round" />
       <path d="M ${-5 * scale} ${-2 * scale} L ${-5 * scale} ${1 * scale}" stroke="#9ca3af" stroke-width="${0.6 * strokeScale}" stroke-linecap="round" />
@@ -359,7 +359,7 @@ export function generateFoodIcon(config: FoodIconConfig): string {
   }
   
   // Utensils icon (fork and knife)
-  return `<g class="blobbi-food-icon" opacity="${isAdult ? 0.75 : 0.65}" transform="translate(${iconX}, ${iconY}) scale(${scale})">
+  return `<g class="pets-food-icon" opacity="${isAdult ? 0.75 : 0.65}" transform="translate(${iconX}, ${iconY}) scale(${scale})">
     <!-- Fork -->
     <g transform="translate(-5, 0)">
       <path d="M 2 3 L 2 8" stroke="#6b7280" stroke-width="${1 * strokeScale}" stroke-linecap="round" />
@@ -401,7 +401,7 @@ export function generateSleepyMouth(centerX: number, centerY: number): string {
   const expandRy = ry + 0.6;
   
   return `<ellipse
-    class="blobbi-mouth blobbi-mouth-sleepy"
+    class="pets-mouth pets-mouth-sleepy"
     cx="${centerX}" cy="${centerY}"
     rx="${rx}" ry="${ry}"
     fill="#1f2937"
@@ -462,17 +462,17 @@ export function computeActionMouthGeometry(mouth: MouthPosition): ActionMouthGeo
 
 /**
  * Generate a static "open mouth" ellipse for the eating state (food near
- * Blobbi's mouth during drag).  Uses the shared action-mouth geometry so
+ * Pets's mouth during drag).  Uses the shared action-mouth geometry so
  * size and position are consistent with the chewing mouth that follows.
  *
- * Emits `data-blobbi-mouth="1"` for DOM-based crumb positioning.
+ * Emits `data-pets-mouth="1"` for DOM-based crumb positioning.
  */
 export function generateEatingMouth(mouth: MouthPosition): string {
   const g = computeActionMouthGeometry(mouth);
 
   return `<ellipse
-    class="blobbi-mouth blobbi-mouth-eating"
-    data-blobbi-mouth="1"
+    class="pets-mouth pets-mouth-eating"
+    data-pets-mouth="1"
     cx="${g.cx}" cy="${g.cy}"
     rx="${g.rx}" ry="${g.ryEating}"
     fill="#1f2937"
@@ -500,7 +500,7 @@ export const CHEW_CYCLE_SEC = 0.3;
  * {@link computeActionMouthGeometry} so the eating → chewing transition
  * feels natural (same position, slightly smaller vertical radius).
  *
- * Emits `data-blobbi-mouth="1"` for DOM-based crumb positioning.
+ * Emits `data-pets-mouth="1"` for DOM-based crumb positioning.
  *
  * @param mouth - Detected mouth position from the neutral SVG
  */
@@ -510,8 +510,8 @@ export function generateChewingMouth(mouth: MouthPosition): string {
   const dur = CHEW_CYCLE_SEC;
 
   return `<ellipse
-    class="blobbi-mouth blobbi-mouth-chewing"
-    data-blobbi-mouth="1"
+    class="pets-mouth pets-mouth-chewing"
+    data-pets-mouth="1"
     cx="${g.cx}" cy="${g.cy}"
     rx="${g.rx}" ry="${g.ryChewOpen}"
     fill="#1f2937"
@@ -523,7 +523,7 @@ export function generateChewingMouth(mouth: MouthPosition): string {
 // ─── Sleepy Mouth ─────────────────────────────────────────────────────────────
 
 /**
- * Apply the canonical sleepy mouth to a Blobbi SVG.
+ * Apply the canonical sleepy mouth to a Pets SVG.
  * 
  * **Direct replacement**: removes the current mouth entirely and inserts
  * the sleepy breathing mouth in its place. No morph, no transition,

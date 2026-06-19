@@ -44,15 +44,40 @@ export async function fetchContactList(
 
   const filter: NostrFilter = { kinds: [3], authors: [pubkey], limit: 1 };
 
-  const [event] = await nostr.query([filter], { signal: querySignal });
+  try {
+    const events = await nostr.query([filter], { signal: querySignal });
 
-  if (event) {
-    // Persist the fresh event to the store (fire-and-forget).
-    void store.event(event);
-    return event;
+    // Pick the most recent event in case multiple relays return different
+    // versions (common after a follow/unfollow from another device).
+    const relayEvent = events.length
+      ? events.reduce((latest, current) =>
+          current.created_at > latest.created_at ? current : latest,
+        )
+      : null;
+
+    // Always compare the relay result against the local cache. A relay that
+    // returns an older or empty kind 3 must not blank out a newer cached
+    // follow list (the root cause of the "my follows disappeared" bug).
+    const cached = await readCachedContactList(store, pubkey);
+
+    if (!relayEvent) return cached;
+    if (!cached) {
+      void store.event(relayEvent);
+      return relayEvent;
+    }
+
+    const best = cached.created_at > relayEvent.created_at ? cached : relayEvent;
+    if (best === relayEvent) {
+      void store.event(relayEvent);
+    }
+    return best;
+  } catch (err) {
+    // Timeouts / relay errors shouldn't leave the follow list stuck loading.
+    // Fall back to the cached copy (if any) so the feed can render.
+    console.warn('Failed to fetch contact list from relays:', err);
   }
 
-  // Relay miss — fall back to the cached kind 3 event.
+  // Relay miss or error — fall back to the cached kind 3 event.
   return readCachedContactList(store, pubkey);
 }
 

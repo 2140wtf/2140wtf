@@ -1,18 +1,18 @@
 /**
- * useOverstimulationReaction — Blobbi gets angry from rapid repeated clicks.
+ * useOverstimulationReaction — Pets gets angry from rapid repeated clicks.
  *
  * Phases: idle → rising → cooling → idle, or rising → blocked → cooling → idle.
  * At max level, enters a timed block where clicks are ignored.
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { BlobbiVisualRecipe } from '@/blobbi/ui/lib/recipe';
+import type { PetsVisualRecipe } from '@/pets/ui/lib/recipe';
 
 // ─── Profile & Defaults ──────────────────────────────────────────────────────
 
 export interface OverstimulationProfile {
-  mild: { recipe: BlobbiVisualRecipe; label: string };
-  strong: { recipe: BlobbiVisualRecipe; label: string };
+  mild: { recipe: PetsVisualRecipe; label: string };
+  strong: { recipe: PetsVisualRecipe; label: string };
   fillColor: string;
 }
 
@@ -54,7 +54,7 @@ export interface UseOverstimulationReactionResult {
   level: number;
   phase: OverstimulationPhase;
   isBlocked: boolean;
-  recipe: BlobbiVisualRecipe | null;
+  recipe: PetsVisualRecipe | null;
   recipeLabel: string | null;
 }
 
@@ -163,7 +163,7 @@ export function useOverstimulationReaction({
     const p = prof.current;
     const isBlocked = phase === 'blocked';
     if (visLevel >= STRONG_LEVEL) {
-      const recipe: BlobbiVisualRecipe = {
+      const recipe: PetsVisualRecipe = {
         ...p.strong.recipe,
         bodyEffects: { ...p.strong.recipe.bodyEffects, angerRise: { color: p.fillColor, duration: 0, level: visLevel } },
       };

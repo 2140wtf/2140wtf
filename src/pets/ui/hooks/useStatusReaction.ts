@@ -1,8 +1,8 @@
 /**
  * useStatusReaction Hook
  *
- * Manages automatic status-based visual reactions for Blobbi.
- * Resolves stats into a final BlobbiVisualRecipe that can be passed
+ * Manages automatic status-based visual reactions for Pets.
+ * Resolves stats into a final PetsVisualRecipe that can be passed
  * straight to applyVisualRecipe() for rendering.
  *
  * The hook's output is recipe-first:
@@ -24,8 +24,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { BlobbiEmotion } from '../lib/emotion-types';
-import type { BlobbiStats } from '@/blobbi/core/types/blobbi';
+import type { PetsEmotion } from '../lib/emotion-types';
+import type { PetsStats } from '@/pets/core/types/pets';
 import {
   resolveStatusRecipe,
   EMPTY_RECIPE,
@@ -35,24 +35,24 @@ import {
   type StatSeverity,
   type StatusRecipeResult,
 } from '../lib/status-reactions';
-import { resolveVisualRecipe, type BlobbiVisualRecipe } from '../lib/recipe';
+import { resolveVisualRecipe, type PetsVisualRecipe } from '../lib/recipe';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface UseStatusReactionOptions {
-  /** Current Blobbi stats */
-  stats: BlobbiStats;
+  /** Current Pets stats */
+  stats: PetsStats;
   /** Whether the system is enabled (disable during sleep, etc.) */
   enabled?: boolean;
   /** Timing configuration override */
   timing?: Partial<StatusReactionTiming>;
   /** Temporary override emotion (from actions like eating, playing, etc.) */
-  actionOverride?: BlobbiEmotion | null;
+  actionOverride?: PetsEmotion | null;
 }
 
 export interface StatusReactionState {
   /** The fully resolved visual recipe to render (includes body effects) */
-  recipe: BlobbiVisualRecipe;
+  recipe: PetsVisualRecipe;
   /** Human-readable label for the recipe (for CSS classes, debugging) */
   recipeLabel: string;
   /** Whether any status reaction is actively showing */

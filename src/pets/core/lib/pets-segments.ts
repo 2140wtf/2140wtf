@@ -1,10 +1,10 @@
-// src/blobbi/core/lib/blobbi-segments.ts
+// src/pets/core/lib/pets-segments.ts
 //
 // Pure helper that derives UI display state from internal 1–100 stats.
 // This does NOT change any gameplay behaviour — it is read-only interpretation.
 
-import type { BlobbiStage, BlobbiStats } from './blobbi';
-import { STAT_MIN, STAT_MAX } from './blobbi';
+import type { PetsStage, PetsStats } from './pets';
+import { STAT_MIN, STAT_MAX } from './pets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,8 +35,8 @@ export interface StatDisplayState {
 }
 
 export interface StatDisplayInput {
-  stage: BlobbiStage;
-  stat: keyof BlobbiStats;
+  stage: PetsStage;
+  stat: keyof PetsStats;
   value: number;
 }
 
@@ -92,12 +92,12 @@ function deriveFlags(careState: CareState) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Derive the UI display state for a single Blobbi stat.
+ * Derive the UI display state for a single Pets stat.
  *
  * Internal stats remain 0–100 (actually 1–100 per STAT_MIN).
  * This function only interprets them for display — it never mutates state.
  */
-export function getBlobbiStatDisplayState(input: StatDisplayInput): StatDisplayState {
+export function getPetsStatDisplayState(input: StatDisplayInput): StatDisplayState {
   const clamped = clamp(input.value, STAT_MIN, STAT_MAX);
 
   // ── Egg: always protected, always full ──────────────────────────────────

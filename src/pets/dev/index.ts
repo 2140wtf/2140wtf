@@ -1,7 +1,7 @@
 /**
- * Blobbi Dev Tools Module - DEV MODE ONLY
+ * Pets Dev Tools Module - DEV MODE ONLY
  * 
- * Development-only tools for testing Blobbi features.
+ * Development-only tools for testing Pets features.
  * These components and hooks should never be used in production.
  */
 
@@ -31,10 +31,10 @@ export function isLocalhostDev(): boolean {
   return false;
 }
 
-export { BlobbiDevEditor, type BlobbiDevUpdates } from './BlobbiDevEditor';
-export { useBlobbiDevUpdate } from './useBlobbiDevUpdate';
+export { PetsDevEditor, type PetsDevUpdates } from './PetsDevEditor';
+export { usePetsDevUpdate } from './usePetsDevUpdate';
 
 // Emotion testing tools
 export { EmotionDevProvider } from './EmotionDevContext';
 export { useEmotionDev, useEffectiveEmotion } from './useEmotionDev';
-export { BlobbiEmotionPanel } from './BlobbiEmotionPanel';
+export { PetsEmotionPanel } from './PetsEmotionPanel';

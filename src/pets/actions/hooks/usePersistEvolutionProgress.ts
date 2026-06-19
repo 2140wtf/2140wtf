@@ -1,9 +1,9 @@
 /**
  * usePersistEvolutionProgress - Debounced persistence for evolution mission progress.
  *
- * Evolution missions live in the per-Blobbi session store (keyed by pubkey:d).
+ * Evolution missions live in the per-Pets session store (keyed by pubkey:d).
  * This hook listens for changes and debounce-publishes the updated state to the
- * kind 31124 Blobbi event content JSON so progress survives page refreshes.
+ * kind 31124 Pets event content JSON so progress survives page refreshes.
  *
  * Design:
  * - Listens to 'daily-missions-updated' CustomEvent (same event the tracker fires)
@@ -22,9 +22,9 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 import {
-  KIND_BLOBBI_STATE,
-} from '@/blobbi/core/lib/blobbi';
-import { serializeEvolutionContent } from '@/blobbi/core/lib/missions';
+  KIND_PETS_STATE,
+} from '@/pets/core/lib/pets';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { readEvolutionFromStorage } from '../lib/daily-mission-tracker';
 
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -37,7 +37,7 @@ const PERSIST_DELAY_MS = 5_000;
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
- * @param companionD - The d-tag of the active Blobbi (required for per-Blobbi storage)
+ * @param companionD - The d-tag of the active Pets (required for per-Pets storage)
  * @param updateCompanionEvent - Callback to update companion in query cache
  */
 export function usePersistEvolutionProgress(
@@ -61,15 +61,15 @@ export function usePersistEvolutionProgress(
 
     publishingRef.current = true;
     try {
-      // Fetch the fresh Blobbi event from relays
+      // Fetch the fresh Pets event from relays
       const prev = await fetchFreshEvent(nostr, {
-        kinds: [KIND_BLOBBI_STATE],
+        kinds: [KIND_PETS_STATE],
         authors: [pubkey],
         '#d': [companionD],
       });
 
       if (!prev) {
-        console.warn('[PersistEvolution] No Blobbi event found for d-tag:', companionD);
+        console.warn('[PersistEvolution] No Pets event found for d-tag:', companionD);
         return;
       }
 
@@ -81,14 +81,14 @@ export function usePersistEvolutionProgress(
       if (content === prev.content) return;
 
       const event = await publishEvent({
-        kind: KIND_BLOBBI_STATE,
+        kind: KIND_PETS_STATE,
         content,
         tags: prev.tags,
         prev,
       });
 
       updateCompanionEvent(event);
-      queryClient.invalidateQueries({ queryKey: ['blobbi-collection', pubkey] });
+      queryClient.invalidateQueries({ queryKey: ['pets-collection', pubkey] });
     } finally {
       publishingRef.current = false;
     }

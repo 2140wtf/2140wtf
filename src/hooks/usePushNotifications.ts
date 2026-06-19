@@ -17,6 +17,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { NostrPushClient, serializePushSubscription, urlBase64ToUint8Array } from '@/lib/nostrPush';
 import { NOTIFICATION_TEMPLATES } from '@/lib/notificationTemplates';
+import { generateUUID } from '@/lib/uuid';
 import type { EncryptedSettings } from '@/hooks/useEncryptedSettings';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -40,8 +41,12 @@ const SUBSCRIPTION_ID_KEY = 'ditto-push-subscription-id';
 function getOrCreateSubscriptionId(): string {
   const existing = localStorage.getItem(SUBSCRIPTION_ID_KEY);
   if (existing) return existing;
-  const id = crypto.randomUUID();
-  localStorage.setItem(SUBSCRIPTION_ID_KEY, id);
+  const id = generateUUID();
+  try {
+    localStorage.setItem(SUBSCRIPTION_ID_KEY, id);
+  } catch {
+    // Storage may be unavailable; the in-memory id is still usable for this session.
+  }
   return id;
 }
 
@@ -237,7 +242,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as Uint8Array<ArrayBuffer>,
       });
     }
     pushSubRef.current = sub;
