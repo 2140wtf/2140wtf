@@ -1,16 +1,18 @@
 /**
  * Local persistence for Ditto group chat state.
  *
- * SECURITY NOTE: group root secrets are stored in localStorage plaintext.
- * This is consistent with Ditto's existing threat model where the user's nsec
- * is also stored in localStorage. A future hardening step can encrypt storage
- * with a PIN-derived AES-GCM key (see Bao's secureGroupKeyStorage.ts).
+ * Group metadata is stored in localStorage. Secrets (rootSecret / exporterSecret)
+ * are routed through the platform-aware secureStorage adapter, which on native
+ * uses the iOS Keychain / Android Keystore and falls back to localStorage on web.
  *
  * All storage is scoped by the current user's pubkey so multiple accounts on
  * the same device do not share group state.
  */
 
+import { secureStorage } from './secureStorage';
+
 const STORAGE_PREFIX = 'ditto:groups:';
+const SECRETS_KEY_PREFIX = `${STORAGE_PREFIX}secrets:`;
 const MAX_MESSAGES_PER_GROUP = 500;
 
 export interface StoredMessage {
@@ -32,15 +34,22 @@ export interface StoredGroup {
   members: string[];
   relays: string[];
   epoch: number;
-  exporterSecret: string;
-  rootSecret?: string;
   bannedPubkeys: string[];
   createdAt: number;
   lastActivity: number;
 }
 
+export interface StoredGroupSecrets {
+  exporterSecret: string;
+  rootSecret?: string;
+}
+
 function key(userPubkey: string, ...parts: string[]): string {
   return `${STORAGE_PREFIX}${userPubkey}:${parts.join(':')}`;
+}
+
+function secretsKey(userPubkey: string, nostrGroupId: string): string {
+  return `${SECRETS_KEY_PREFIX}${userPubkey}:${nostrGroupId}`;
 }
 
 function safeParse<T>(value: string | null): T | null {
@@ -58,12 +67,10 @@ function isHex64(value: unknown): value is string {
 
 export function validateStoredGroup(g: unknown): StoredGroup | null {
   if (typeof g !== 'object' || g === null) return null;
-  const group = g as Partial<StoredGroup>;
+  const group = g as Partial<StoredGroup> & Partial<StoredGroupSecrets>;
   if (
     typeof group.nostrGroupId !== 'string' ||
     typeof group.name !== 'string' ||
-    !isHex64(group.exporterSecret) ||
-    (group.rootSecret !== undefined && !isHex64(group.rootSecret)) ||
     typeof group.epoch !== 'number' ||
     typeof group.createdAt !== 'number' ||
     typeof group.lastActivity !== 'number'
@@ -91,11 +98,20 @@ export function validateStoredGroup(g: unknown): StoredGroup | null {
     members,
     relays,
     epoch: group.epoch,
-    exporterSecret: group.exporterSecret,
-    rootSecret: group.rootSecret,
     bannedPubkeys,
     createdAt: group.createdAt,
     lastActivity: group.lastActivity,
+  };
+}
+
+function validateStoredGroupSecrets(s: unknown): StoredGroupSecrets | null {
+  if (typeof s !== 'object' || s === null) return null;
+  const secrets = s as Partial<StoredGroupSecrets>;
+  if (!isHex64(secrets.exporterSecret)) return null;
+  if (secrets.rootSecret !== undefined && !isHex64(secrets.rootSecret)) return null;
+  return {
+    exporterSecret: secrets.exporterSecret,
+    rootSecret: secrets.rootSecret,
   };
 }
 
@@ -104,7 +120,7 @@ export function migrateLegacyGroupStorage(userPubkey: string): void {
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k && k.startsWith(STORAGE_PREFIX) && !k.startsWith(scopedPrefix)) {
+    if (k && k.startsWith(STORAGE_PREFIX) && !k.startsWith(scopedPrefix) && !k.startsWith(SECRETS_KEY_PREFIX)) {
       keysToRemove.push(k);
     }
   }
@@ -126,6 +142,42 @@ export function loadGroups(userPubkey: string): StoredGroup[] {
     }
   }
   return groups;
+}
+
+export async function loadGroupSecrets(
+  userPubkey: string,
+  nostrGroupId: string,
+): Promise<StoredGroupSecrets | null> {
+  const raw = await secureStorage.getItem(secretsKey(userPubkey, nostrGroupId));
+  if (!raw) return null;
+  return validateStoredGroupSecrets(safeParse<unknown>(raw));
+}
+
+export async function saveGroupSecrets(
+  userPubkey: string,
+  nostrGroupId: string,
+  secrets: StoredGroupSecrets,
+): Promise<void> {
+  await secureStorage.setItem(secretsKey(userPubkey, nostrGroupId), JSON.stringify(secrets));
+}
+
+export async function deleteGroupSecrets(userPubkey: string, nostrGroupId: string): Promise<void> {
+  await secureStorage.removeItem(secretsKey(userPubkey, nostrGroupId));
+}
+
+/**
+ * Migrate legacy secrets that were previously embedded in the StoredGroup object.
+ * Returns the extracted secrets and updates localStorage to remove them.
+ */
+export function extractLegacyGroupSecrets(group: StoredGroup & Partial<StoredGroupSecrets>): StoredGroupSecrets | null {
+  const legacy = group as Record<string, unknown>;
+  if (isHex64(legacy.exporterSecret)) {
+    return {
+      exporterSecret: legacy.exporterSecret,
+      rootSecret: isHex64(legacy.rootSecret) ? legacy.rootSecret : undefined,
+    };
+  }
+  return null;
 }
 
 export function saveGroup(userPubkey: string, group: StoredGroup): void {
@@ -158,12 +210,12 @@ export function appendMessage(userPubkey: string, nostrGroupId: string, message:
   saveMessages(userPubkey, nostrGroupId, messages);
 }
 
-export function clearAllGroupStorage(userPubkey: string): void {
+export async function clearAllGroupStorage(userPubkey: string): Promise<void> {
   const prefix = key(userPubkey, '');
   const keys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k?.startsWith(prefix)) keys.push(k);
+    if (k?.startsWith(prefix) || k?.startsWith(SECRETS_KEY_PREFIX + userPubkey + ':')) keys.push(k);
   }
   for (const k of keys) {
     localStorage.removeItem(k);
