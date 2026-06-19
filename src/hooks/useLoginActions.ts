@@ -6,13 +6,97 @@ import {
   type NostrConnectStatus,
   useNostrLogin,
 } from '@nostrify/react/login';
+import { BunkerURI, NSecSigner } from '@nostrify/nostrify';
+import { generateSecretKey, nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
+import { NConnectSignerBtc } from '@/lib/bitcoin-signers';
 
 // NOTE: This file should not be edited except for adding new login methods.
 
 export type { NostrConnectParams, NostrConnectStatus };
-export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/react/login';
+export { generateNostrConnectParams } from '@nostrify/react/login';
+
+/**
+ * Permissions requested from a NIP-46 remote signer (e.g. Amber) during login.
+ *
+ * NIP-46 signers use this list to decide which operations can be auto-approved
+ * instead of prompting the user for every single action. `sign_event` without a
+ * kind number means "all event kinds" — this is the only practical choice for a
+ * general-purpose client that publishes many kinds.
+ */
+const NOSTR_CONNECT_PERMS = [
+  'get_public_key',
+  'sign_event',
+  'nip04_encrypt',
+  'nip04_decrypt',
+  'nip44_encrypt',
+  'nip44_decrypt',
+].join(',');
+
+/** Options for generating a nostrconnect:// URI. */
+export interface NostrConnectURIOptions {
+  /** Application name to include in the URI. */
+  name?: string;
+  /** Callback URL for mobile signer apps to redirect back to. */
+  callback?: string;
+  /** Permissions to request from the signer. Defaults to {@link NOSTR_CONNECT_PERMS}. */
+  perms?: string;
+}
+
+/** Generate a nostrconnect:// URI from the given parameters. */
+export function generateNostrConnectURI(
+  params: NostrConnectParams,
+  opts?: NostrConnectURIOptions,
+): string {
+  const searchParams = new URLSearchParams();
+
+  for (const relay of params.relays) {
+    searchParams.append('relay', relay);
+  }
+  searchParams.set('secret', params.secret);
+  searchParams.set('perms', opts?.perms ?? NOSTR_CONNECT_PERMS);
+
+  if (opts?.name) {
+    searchParams.set('name', opts.name);
+  }
+  if (opts?.callback) {
+    searchParams.set('callback', opts.callback);
+  }
+
+  return `nostrconnect://${params.clientPubkey}?${searchParams.toString()}`;
+}
+
+/** Access the TypeScript-private `cmd` method on an NConnectSigner at runtime. */
+function getNConnectCmd(
+  signer: NConnectSignerBtc,
+): (method: string, params: string[]) => Promise<string> {
+  return (signer as unknown as { cmd(method: string, params: string[]): Promise<string> }).cmd;
+}
+
+/**
+ * Establish a NIP-46 bunker session, requesting broad permissions so the signer
+ * can auto-approve subsequent operations. Falls back to a plain connect handshake
+ * if the signer rejects the perms argument.
+ */
+async function establishBunkerSession(
+  signer: NConnectSignerBtc,
+  bunkerPubkey: string,
+  secret?: string,
+): Promise<void> {
+  const cmd = getNConnectCmd(signer);
+  const baseParams = [bunkerPubkey];
+  if (secret) baseParams.push(secret);
+
+  try {
+    await cmd.call(signer, 'connect', [...baseParams, NOSTR_CONNECT_PERMS]);
+  } catch (error) {
+    // Some older/simpler signers don't accept a third `perms` argument on
+    // `connect`. Retry without it so login still works.
+    console.warn('[bunker] connect with perms failed, retrying without perms:', error);
+    await cmd.call(signer, 'connect', baseParams);
+  }
+}
 
 export function useLoginActions() {
   const { nostr } = useNostr();
@@ -37,7 +121,31 @@ export function useLoginActions() {
     },
     // Login with a NIP-46 "bunker://" URI
     async bunker(uri: string): Promise<void> {
-      const login = await NLogin.fromBunker(uri, nostr);
+      const { pubkey: bunkerPubkey, secret, relays } = new BunkerURI(uri);
+
+      if (!relays.length) {
+        throw new Error('No relay provided');
+      }
+
+      const clientSk = generateSecretKey();
+      const clientSigner = new NSecSigner(clientSk);
+
+      const signer = new NConnectSignerBtc({
+        relay: nostr.group(relays),
+        pubkey: bunkerPubkey,
+        signer: clientSigner,
+        timeout: 60_000,
+      });
+
+      await establishBunkerSession(signer, bunkerPubkey, secret);
+      const pubkey = await signer.getPublicKey();
+
+      const login = new NLogin('bunker', pubkey, {
+        bunkerPubkey,
+        clientNsec: nip19.nsecEncode(clientSk),
+        relays,
+      });
+
       addAndActivate(login);
     },
     // Login with a NIP-07 browser extension
