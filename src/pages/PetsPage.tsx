@@ -743,7 +743,26 @@ function PetsContent() {
   // After ceremony check, if the user has no profile/pet yet, show the empty
   // adoption prompt instead of getting stuck on a loading spinner.
   if (!profile && !profileLoading) {
-    return <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />;
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: no profile adoption prompt');
+    return (
+      <>
+        <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />
+        <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+            <PetsOnboardingFlow
+              profile={profile}
+              updateProfileEvent={updateProfileEvent}
+              updateCompanionEvent={updateCompanionEvent}
+              invalidateProfile={invalidateProfile}
+              invalidateCompanion={invalidateCompanion}
+              setStoredSelectedD={setStoredSelectedD}
+              adoptionOnly={true}
+              onComplete={() => setShowAdoptionFlow(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    );
   }
   
   // ─── CASE D: Companions still loading ───
@@ -777,7 +796,25 @@ function PetsContent() {
   // create their first pet; nothing is published automatically.
   if (companions.length === 0 && !collectionLoading && !collectionFetching) {
     if (DEBUG_PETS) console.log('[PetsPage] Showing: no pet adoption prompt');
-    return <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />;
+    return (
+      <>
+        <NoPetState onAdopt={() => setShowAdoptionFlow(true)} />
+        <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+            <PetsOnboardingFlow
+              profile={profile}
+              updateProfileEvent={updateProfileEvent}
+              updateCompanionEvent={updateCompanionEvent}
+              invalidateProfile={invalidateProfile}
+              invalidateCompanion={invalidateCompanion}
+              setStoredSelectedD={setStoredSelectedD}
+              adoptionOnly={true}
+              onComplete={() => setShowAdoptionFlow(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    );
   }
   
   // ─── CASE G/H: No valid selection or companion not resolved ───
