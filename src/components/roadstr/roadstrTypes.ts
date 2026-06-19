@@ -75,3 +75,12 @@ export const ROADSTR_EVENT_TYPES: Record<RoadstrEventType, RoadstrTypeConfig> = 
 export function isRoadstrEventType(value: string): value is RoadstrEventType {
   return ROADSTR_EVENT_TYPE_VALUES.includes(value as RoadstrEventType);
 }
+
+export type MapStyle = 'auto' | 'light' | 'dark' | 'satellite';
+
+export const MAP_STYLE_LABELS: Record<MapStyle, string> = {
+  auto: 'Auto',
+  light: 'Light',
+  dark: 'Dark',
+  satellite: 'Satellite',
+};
