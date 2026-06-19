@@ -231,10 +231,7 @@ function MarketDetailDialog({
             <PredictionMarketChart market={market} />
           </div>
 
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Market volume</h3>
-            <PredictionMarketVolumeChart market={market} />
-          </div>
+
         </div>
       </DialogContent>
     </Dialog>
