@@ -282,6 +282,8 @@ export interface AppConfig {
   curatorPubkey?: string;
   /** Wildcard domain used for iframe sandboxing (e.g. "iframe.diy"). Default: "iframe.diy". */
   sandboxDomain: string;
+  /** URL of the BAO signet Cashu mint used for the BAO demo wallet. Empty/disabled if not set. */
+  baoSignetMintUrl?: string;
   /**
    * Ordered list of base URLs for Esplora-compatible Bitcoin REST APIs.
    * Used by the wallet, on-chain zap flows, and NIP-73 Bitcoin tx/address
