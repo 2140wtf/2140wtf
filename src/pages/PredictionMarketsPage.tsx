@@ -38,6 +38,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets } from "@/hooks/useBaoPredictionMarkets";
 import { PredictionMarketChart } from "@/components/PredictionMarketChart";
 import { cn } from "@/lib/utils";
+import { openUrl } from "@/lib/downloadFile";
 import type { BaoMarket } from "@/lib/baoMarketParser";
 
 const SORT_OPTIONS = [
@@ -216,17 +217,15 @@ function MarketDetailDialog({
             })}
           </div>
 
-          <a
-            href={`https://bao.markets/demo/market/${encodeURIComponent(market.marketId)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block mt-6"
+          <Button
+            className="w-full mt-6"
+            onClick={() =>
+              openUrl(`https://bao.markets/demo/market/${encodeURIComponent(market.marketId)}`)
+            }
           >
-            <Button className="w-full">
-              Trade on ₿AO MARKETS
-              <ExternalLink className="size-4 ml-2" />
-            </Button>
-          </a>
+            Trade on ₿AO MARKETS
+            <ExternalLink className="size-4 ml-2" />
+          </Button>
 
           <div className="space-y-1.5">
             <h3 className="text-sm font-semibold">Market chart</h3>
@@ -447,14 +446,13 @@ export function PredictionMarketsPage(): React.JSX.Element {
           <AlertDescription>
             Prediction Markets powered by ₿AO MARKETS. All markets are for play only with dummy
             bitcoin in demo mode, claim testnet bitcoin by visiting{' '}
-            <a
-              href="https://bao.markets"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
+            <button
+              type="button"
+              onClick={() => openUrl("https://bao.markets")}
+              className="text-primary hover:underline bg-transparent border-none p-0"
             >
               https://bao.markets
-            </a>
+            </button>
             . Learn how to use all bitcoin networks: lightning, ecash, liquid, ark, spark and all
             other layers of BTC tech that make it stronger faster and private without risk.
           </AlertDescription>

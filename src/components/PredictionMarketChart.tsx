@@ -100,11 +100,17 @@ function aggregateHistory(
   } else {
     // No trade history yet — mirror bao.markets and synthesize a seeded
     // random-walk sparkline so the chart is never empty.
-    if (range === 'ALL' && market.createdAt > 0) {
+    if (range === 'ALL' && market.createdAt > 0 && market.createdAt <= now) {
       startTime = market.createdAt;
     } else {
       startTime = now - duration;
     }
+  }
+
+  // Defensive: malformed timestamps or future dates would produce an invalid
+  // window. Fall back to the last 24 hours so the chart still renders.
+  if (!Number.isFinite(startTime) || startTime >= now) {
+    startTime = now - Math.min(duration, 24 * 60 * 60);
   }
 
   // Cap the ALL window to avoid thousands of empty buckets.
@@ -117,9 +123,10 @@ function aggregateHistory(
   const perSeries: Record<string, { time: number; value: number }[]> = {};
 
   if (!hasHistory) {
-    let bucketCount = Math.max(2, Math.ceil((endTime - startTime) / bucketSize));
+    const span = Math.max(1, endTime - startTime);
+    let bucketCount = Math.max(2, Math.ceil(span / bucketSize));
     if (bucketCount > 100) bucketCount = 100;
-    const step = (endTime - startTime) / (bucketCount - 1);
+    const step = span / (bucketCount - 1);
 
     let yesValues: number[] | null = null;
 
