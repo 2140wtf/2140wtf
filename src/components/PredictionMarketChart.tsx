@@ -12,6 +12,7 @@ import {
 import { useBaoMarketPriceHistory, type PricePoint, type PriceHistoryRange } from '@/hooks/useBaoMarketPriceHistory';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { synthesizeBaoSparkline } from '@/lib/synthesizeBaoSparkline';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
 type TimeRange = PriceHistoryRange;
@@ -75,9 +76,10 @@ interface ChartRow {
 
 function aggregateHistory(
   history: Record<string, PricePoint[]>,
-  outcomes: BaoMarket['outcomes'],
+  market: BaoMarket,
   range: TimeRange,
 ): { data: ChartRow[]; series: string[]; current: Record<string, number> } {
+  const outcomes = market.outcomes;
   const now = Math.floor(Date.now() / 1000);
   const duration = RANGE_DURATIONS[range];
   const bucketSize = RANGE_BUCKETS[range];
@@ -88,19 +90,24 @@ function aggregateHistory(
     for (const p of points) allTimes.push(p.time);
   }
 
-  // If no outcome has any real price history, treat the chart as empty so the UI
-  // can show a friendly "no trades yet" state instead of a synthetic flat line.
   const hasHistory = allTimes.length > 0;
-  if (!hasHistory) {
-    return { data: [], series: [], current: {} };
-  }
-
-  const minTime = Math.min(...allTimes);
-  let startTime = range === 'ALL' ? minTime : Math.max(minTime, now - duration);
+  const minTime = hasHistory ? Math.min(...allTimes) : 0;
   const endTime = now;
 
-  // Cap the ALL window to avoid thousands of empty buckets (e.g. synthetic points
-  // at the Unix epoch or malformed trade timestamps).
+  let startTime: number;
+  if (hasHistory) {
+    startTime = range === 'ALL' ? minTime : Math.max(minTime, now - duration);
+  } else {
+    // No trade history yet — mirror bao.markets and synthesize a seeded
+    // random-walk sparkline so the chart is never empty.
+    if (range === 'ALL' && market.createdAt > 0) {
+      startTime = market.createdAt;
+    } else {
+      startTime = now - duration;
+    }
+  }
+
+  // Cap the ALL window to avoid thousands of empty buckets.
   if (range === 'ALL' && (endTime - startTime) / bucketSize > MAX_BUCKETS) {
     startTime = endTime - MAX_BUCKETS * bucketSize;
   }
@@ -109,43 +116,77 @@ function aggregateHistory(
   const current: Record<string, number> = {};
   const perSeries: Record<string, { time: number; value: number }[]> = {};
 
-  for (let i = 0; i < outcomes.length; i++) {
-    const outcome = outcomes[i];
-    const key = outcome.label;
-    series.push(key);
+  if (!hasHistory) {
+    let bucketCount = Math.max(2, Math.ceil((endTime - startTime) / bucketSize));
+    if (bucketCount > 100) bucketCount = 100;
+    const step = (endTime - startTime) / (bucketCount - 1);
 
-    const points = history[key] ?? history[outcome.id] ?? [];
-    const sorted = [...points].sort((a, b) => a.time - b.time);
+    let yesValues: number[] | null = null;
 
-    // Default probability if we have no history for this outcome.
-    const defaultProb = Math.max(0, Math.min(1, outcome.probability ?? 1 / outcomes.length));
+    for (let i = 0; i < outcomes.length; i++) {
+      const outcome = outcomes[i];
+      const key = outcome.label;
+      series.push(key);
 
-    const buckets: { time: number; value: number }[] = [];
-    let lastPrice = defaultProb;
-    let pointIdx = 0;
+      const targetProb = Math.max(0, Math.min(1, outcome.probability ?? 1 / outcomes.length));
 
-    // Start with a point at the window start using the earliest known price.
-    for (const p of sorted) {
-      if (p.time <= startTime) lastPrice = p.price;
-      else break;
-    }
-
-    for (let t = startTime; t <= endTime; t += bucketSize) {
-      const bucketEnd = t + bucketSize;
-      while (pointIdx < sorted.length && sorted[pointIdx].time < bucketEnd) {
-        lastPrice = sorted[pointIdx].price;
-        pointIdx++;
+      let values: number[];
+      if (outcomes.length === 2 && i === 0) {
+        yesValues = synthesizeBaoSparkline(targetProb, market.marketId, bucketCount);
+        values = yesValues;
+      } else if (outcomes.length === 2 && i === 1 && yesValues) {
+        values = yesValues.map((v) => 1 - v);
+      } else {
+        values = synthesizeBaoSparkline(targetProb, `${market.marketId}:${outcome.label}`, bucketCount);
       }
-      buckets.push({ time: t, value: lastPrice });
-    }
 
-    // Ensure the final current price is reflected at the end of the window.
-    if (buckets.length === 0 || buckets[buckets.length - 1].time < endTime) {
-      buckets.push({ time: endTime, value: lastPrice });
-    }
+      const buckets: { time: number; value: number }[] = [];
+      for (let j = 0; j < bucketCount; j++) {
+        buckets.push({ time: Math.floor(startTime + j * step), value: values[j] });
+      }
 
-    perSeries[key] = buckets;
-    current[key] = lastPrice;
+      perSeries[key] = buckets;
+      current[key] = values[values.length - 1];
+    }
+  } else {
+    for (let i = 0; i < outcomes.length; i++) {
+      const outcome = outcomes[i];
+      const key = outcome.label;
+      series.push(key);
+
+      const points = history[key] ?? history[outcome.id] ?? [];
+      const sorted = [...points].sort((a, b) => a.time - b.time);
+
+      // Default probability if we have no history for this outcome.
+      const defaultProb = Math.max(0, Math.min(1, outcome.probability ?? 1 / outcomes.length));
+
+      const buckets: { time: number; value: number }[] = [];
+      let lastPrice = defaultProb;
+      let pointIdx = 0;
+
+      // Start with a point at the window start using the earliest known price.
+      for (const p of sorted) {
+        if (p.time <= startTime) lastPrice = p.price;
+        else break;
+      }
+
+      for (let t = startTime; t <= endTime; t += bucketSize) {
+        const bucketEnd = t + bucketSize;
+        while (pointIdx < sorted.length && sorted[pointIdx].time < bucketEnd) {
+          lastPrice = sorted[pointIdx].price;
+          pointIdx++;
+        }
+        buckets.push({ time: t, value: lastPrice });
+      }
+
+      // Ensure the final current price is reflected at the end of the window.
+      if (buckets.length === 0 || buckets[buckets.length - 1].time < endTime) {
+        buckets.push({ time: endTime, value: lastPrice });
+      }
+
+      perSeries[key] = buckets;
+      current[key] = lastPrice;
+    }
   }
 
   // Merge all series into rows keyed by time.
@@ -172,8 +213,8 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
   const { data: history = {}, isLoading, error } = useBaoMarketPriceHistory(market, range);
 
   const { data, series, current } = useMemo(
-    () => aggregateHistory(history, market.outcomes, range),
-    [history, market.outcomes, range],
+    () => aggregateHistory(history, market, range),
+    [history, market, range],
   );
 
   if (isLoading) {
