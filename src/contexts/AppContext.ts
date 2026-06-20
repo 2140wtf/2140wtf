@@ -243,6 +243,8 @@ export interface AppConfig {
   sidebarOrder: string[];
   /** Version counter used to reset sidebarOrder to the latest default when it changes. */
   sidebarOrderVersion: number;
+  /** Version counter used to reset the default theme for existing users when the app's default changes. */
+  themeDefaultVersion?: number;
   /** NIP-85 stats pubkey source (hex format) */
   nip85StatsPubkey: string;
   /**
