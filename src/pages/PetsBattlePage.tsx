@@ -45,7 +45,7 @@ export default function PetsBattlePage() {
     prizeAmount: DEFAULT_PRIZE_AMOUNT,
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
   });
-  const [matchMode, setMatchMode] = useState<'demo' | 'real'>('demo');
+  const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats'>('demo-sats');
   const [pendingPayout, setPendingPayout] = useState(false);
   const selectedPetsRef = useRef<{ pet1: PetsCompanion; pet2: PetsCompanion } | null>(null);
 
@@ -105,7 +105,7 @@ export default function PetsBattlePage() {
     pet1: PetsCompanion,
     pet2: PetsCompanion,
     prizeAmount: number,
-    mode: 'demo' | 'real',
+    mode: 'demo-sats' | 'btc-sats',
   ) => {
     selectedPetsRef.current = { pet1, pet2 };
     setMatchOptions((prev) => ({ ...prev, prizeAmount }));

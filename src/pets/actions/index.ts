@@ -142,9 +142,10 @@ export {
 } from './lib/daily-mission-tracker';
 export {
   calculateDailyLoginBonus,
-  DAILY_LOGIN_BASE_COINS,
-  DAILY_LOGIN_STREAK_BONUS_COINS,
-  MAX_DAILY_LOGIN_STREAK_BONUS_COINS,
+  DEMO_SATS_PER_COIN,
+  DAILY_LOGIN_BASE_SATS,
+  DAILY_LOGIN_STREAK_BONUS_SATS,
+  MAX_DAILY_LOGIN_STREAK_BONUS_SATS,
 } from './lib/daily-login-bonus';
 export type { DailyLoginBonusResult } from './lib/daily-login-bonus';
 export type {

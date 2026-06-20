@@ -6,8 +6,7 @@
  *   - re-validates every request URL against the allowed-mint list,
  *   - forces `redirect: 'manual'` so mints cannot redirect us elsewhere,
  *   - rejects 3xx responses before any response body is read,
- *   - propagates the active operation AbortSignal so network calls are
- *     cancelled when an operation times out.
+ *   - attaches a per-request abort timeout so network calls cannot hang forever.
  */
 import { isAllowedMintUrl } from '@/lib/cashu/cashu';
 import { devLog } from '@/lib/cashu/devLog';
@@ -18,27 +17,7 @@ export type MintRequestOptions = {
   headers?: Record<string, string>;
 } & Omit<RequestInit, 'body' | 'headers'>;
 
-/** Stack of abort signals for in-flight operations. */
-const activeAbortSignals: AbortSignal[] = [];
-
-/**
- * Run `fn` with `signal` registered as the active abort signal for the
- * duration of the call. The custom mint fetch wrapper reads the most recently
- * registered signal and passes it to `fetch`, so a timeout can cancel the
- * underlying network request.
- */
-export function runWithAbortSignal<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<T> {
-  activeAbortSignals.push(signal);
-  return fn().finally(() => {
-    const idx = activeAbortSignals.indexOf(signal);
-    if (idx >= 0) activeAbortSignals.splice(idx, 1);
-  });
-}
-
-/** Test helper: clear any leaked active abort signals. */
-export function __clearActiveAbortSignals(): void {
-  activeAbortSignals.length = 0;
-}
+const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 
 function isAllowedMintEndpoint(endpoint: string, allowedUrls: string[]): boolean {
   if (!isAllowedMintUrl(endpoint)) return false;
@@ -84,7 +63,9 @@ export function createMintFetch(allowedUrls: string[]) {
     }
 
     const body = requestBody ? JSON.stringify(requestBody) : undefined;
-    const signal = activeAbortSignals[activeAbortSignals.length - 1];
+    // Per-request timeout prevents hung mint connections from leaking forever.
+    // Callers may pass their own signal via `rest.signal`.
+    const signal = rest.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
 
     let response: Response;
     try {
