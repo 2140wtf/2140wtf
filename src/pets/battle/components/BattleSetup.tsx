@@ -14,10 +14,11 @@ import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { createRivalCompanion } from '../lib/rival';
 import { DEFAULT_PRIZE_AMOUNT } from '../lib/constants';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { BattleMode } from '../lib/battleInteraction';
 
 export interface BattleSetupProps {
   ownerPubkey: string;
-  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: 'demo' | 'real' | 'bao') => void;
+  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: BattleMode) => void;
   className?: string;
 }
 
@@ -56,8 +57,8 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
     return eligiblePets.find((pet) => pet.d === pet2Id) ?? createRivalCompanion(ownerPubkey, 1);
   }, [eligiblePets, ownerPubkey, pet2Id]);
 
-  const walletMode = profile?.walletMode ?? 'demo';
-  const isRealDisabled = walletMode === 'real';
+  const walletMode = profile?.walletMode ?? 'demo-sats';
+  const isRealDisabled = walletMode === 'btc-sats';
 
   const handleStart = () => {
     if (!pet1 || !pet2) return;
@@ -136,7 +137,7 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_AMOUNT} ₿AO coins
+              Winner prize: {DEFAULT_PRIZE_AMOUNT} demo sats
             </p>
             <p className="text-muted-foreground">
               One prize per day. Real sats mode coming soon.

@@ -15,21 +15,21 @@ import {
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 
 export interface BattlePayoutRequest {
-  /** Number of demo ₿AO coins to award to the winner. */
+  /** Number of demo sats to award to the winner. */
   amount: number;
-  /** Demo mode awards profile coins; real/bao modes are future Cashu extensions. */
-  mode: 'demo' | 'real' | 'bao';
+  /** 'demo-sats' awards profile sats; 'btc-sats' is a future real-sat extension. */
+  mode: 'demo-sats' | 'btc-sats';
 }
 
 export interface BattlePayoutResult {
-  newCoinTotal: number;
+  newSatsTotal: number;
   amountAwarded: number;
 }
 
 /**
  * Hook to pay out demo credits after a pet battle.
  *
- * In demo mode the winner receives coins on the host's Blobbonaut profile.
+ * In demo-sats mode the winner receives sats on the host's Blobbonaut profile.
  * A `battle_rewards_claimed_at` tag caps earnings to one payout per local day.
  * Real Cashu mode is intentionally left as a stub for the next phase.
  */
@@ -46,8 +46,8 @@ export function useBattlePayout(
         throw new Error('You must be logged in to collect battle rewards.');
       }
 
-      if (mode === 'real' || mode === 'bao') {
-        throw new Error('Real sats payout is coming soon.');
+      if (mode === 'btc-sats') {
+        throw new Error('BTC sats payout is coming soon.');
       }
 
       const prev = await fetchFreshPetsEvent(nostr, {
@@ -62,15 +62,15 @@ export function useBattlePayout(
       if (profile?.allTags.some((tag) => tag[0] === 'battle_rewards_claimed_at' && tag[1] === today)) {
         return {
           amountAwarded: 0,
-          newCoinTotal: profile?.coins ?? 0,
+          newSatsTotal: profile?.sats ?? 0,
         };
       }
 
-      const currentCoins = profile?.coins ?? 0;
-      const newCoinTotal = currentCoins + amount;
+      const currentSats = profile?.sats ?? 0;
+      const newSatsTotal = currentSats + amount;
 
       const tags = updateBlobbonautTags(prev?.tags ?? [], {
-        coins: newCoinTotal.toString(),
+        sats: newSatsTotal.toString(),
         battle_rewards_claimed_at: today,
       });
 
@@ -85,13 +85,13 @@ export function useBattlePayout(
 
       updateProfileEvent(event);
 
-      return { amountAwarded: amount, newCoinTotal };
+      return { amountAwarded: amount, newSatsTotal };
     },
-    onSuccess: ({ amountAwarded, newCoinTotal }) => {
+    onSuccess: ({ amountAwarded, newSatsTotal }) => {
       if (amountAwarded > 0) {
         toast({
           title: 'Battle reward claimed!',
-          description: `You received ${amountAwarded} ₿AO coins. Balance: ${newCoinTotal}.`,
+          description: `You received ${amountAwarded.toLocaleString()} demo sats. Balance: ${newSatsTotal.toLocaleString()}.`,
         });
       }
     },

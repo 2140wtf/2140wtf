@@ -1,8 +1,8 @@
 /**
- * useDailyLoginBonus - Award a daily login coin bonus
+ * useDailyLoginBonus - Award a daily login sats bonus
  *
  * Checks the Blobbonaut profile once per session and, if the user hasn't
- * received a login bonus today, awards coins and updates the profile.
+ * received a login bonus today, awards demo sats and updates the profile.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -23,12 +23,12 @@ import { calculateDailyLoginBonus } from '../lib/daily-login-bonus';
 
 export interface DailyLoginBonusResult {
   awarded: boolean;
-  coinsAwarded: number;
+  satsAwarded: number;
   streak: number;
 }
 
 /**
- * Hook to claim the daily login bonus.
+ * Hook to claim the daily login sats bonus.
  *
  * @param updateProfileEvent - Callback to update profile in query cache
  */
@@ -50,12 +50,12 @@ export function useDailyLoginBonus(
       });
 
       if (!prev) {
-        return { awarded: false, coinsAwarded: 0, streak: 0 };
+        return { awarded: false, satsAwarded: 0, streak: 0 };
       }
 
       const freshProfile = parseBlobbonautEvent(prev);
       if (!freshProfile) {
-        return { awarded: false, coinsAwarded: 0, streak: 0 };
+        return { awarded: false, satsAwarded: 0, streak: 0 };
       }
 
       const bonus = calculateDailyLoginBonus(
@@ -64,14 +64,14 @@ export function useDailyLoginBonus(
       );
 
       if (!bonus.awarded) {
-        return { awarded: false, coinsAwarded: 0, streak: bonus.streak };
+        return { awarded: false, satsAwarded: 0, streak: bonus.streak };
       }
 
-      const currentCoins = freshProfile.coins;
-      const newCoins = currentCoins + bonus.coinsAwarded;
+      const currentSats = freshProfile.sats;
+      const newSats = currentSats + bonus.satsAwarded;
 
       const updatedTags = updateBlobbonautTags(prev?.tags ?? [], {
-        coins: newCoins.toString(),
+        sats: newSats.toString(),
         daily_login_last_day: bonus.lastDay,
         daily_login_streak: bonus.streak.toString(),
       });
@@ -87,18 +87,18 @@ export function useDailyLoginBonus(
 
       return {
         awarded: true,
-        coinsAwarded: bonus.coinsAwarded,
+        satsAwarded: bonus.satsAwarded,
         streak: bonus.streak,
       };
     },
-    onSuccess: ({ awarded, coinsAwarded, streak }) => {
+    onSuccess: ({ awarded, satsAwarded, streak }) => {
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
       if (awarded) {
         toast({
           title: 'Daily Login Bonus!',
-          description: `You received ${coinsAwarded} coins. Streak: ${streak} day${streak === 1 ? '' : 's'}.`,
+          description: `You received ${satsAwarded.toLocaleString()} demo sats. Streak: ${streak} day${streak === 1 ? '' : 's'}.`,
         });
       }
     },
