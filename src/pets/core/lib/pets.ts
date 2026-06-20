@@ -58,8 +58,8 @@ export const DEFAULT_INCUBATION_TIME = 345600;
 
 // ─── Onboarding Constants ─────────────────────────────────────────────────────
 
-/** Initial demo sats given to new Blobbonauts */
-export const INITIAL_BLOBBONAUT_SATS = 20_000;
+/** Initial demo sats given to new Blobbonauts (players must claim daily rewards to earn more). */
+export const INITIAL_BLOBBONAUT_SATS = 0;
 
 /** Cost in demo sats to reroll/generate another egg preview during onboarding */
 export const PETS_PREVIEW_REROLL_SATS = 1_000;
