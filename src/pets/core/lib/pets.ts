@@ -9,6 +9,8 @@ import { applyColorGuardrails, hexToHsl, hslToHex } from './color-guardrails';
 import type { Mission } from './missions';
 import { parseEvolutionContent } from './missions';
 import { BREED_CATEGORIES, type PetsBreedCategory } from './pet-categories';
+import type { BaoRarity } from '@/pets/adult-pets/lib/bao-recipe';
+import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -161,6 +163,9 @@ export type PetsArchetype = 'ghost' | 'runner' | 'netrunner' | 'drone' | 'constr
 
 /** Cypherpunk 2140 special abilities */
 export type PetsSpecialAbility = 'glitch-step' | 'overclock' | 'firewall' | 'synesthesia' | 'recursion' | 'mirror-self';
+
+/** ₿AO rarity tier, persisted on kind 31124 for BAO pets. */
+export type PetsBaoRarity = BaoRarity;
 
 /**
  * @deprecated Legacy palette — no longer used for seed-based generation.
@@ -332,6 +337,14 @@ export interface PetsCompanion {
   breedCategory?: PetsBreedCategory;
   /** Category-specific asset identifier (adult form name or bao card id). */
   breedAsset?: string;
+  /** ₿AO rarity tier (BAO pets only). */
+  baoRarity?: PetsBaoRarity;
+  /** Parent A d-tag when this pet was produced via breeding. */
+  parentA?: string;
+  /** Parent B d-tag when this pet was produced via breeding. */
+  parentB?: string;
+  /** Unix timestamp (seconds) when this pet can breed again. */
+  breedingCooldown?: number;
   /** 
    * @deprecated Use progressionStartedAt instead.
    * Timestamp when current state (incubating/evolving) started (unix seconds).
@@ -395,6 +408,16 @@ export interface BlobbonautProfile {
   baoTier: number;
   /** Date (YYYY-MM-DD) when BAO trading rewards were last claimed */
   baoRewardsClaimedAt: string | undefined;
+  /** Consecutive days with BAO trading activity. */
+  baoTradeStreak: number;
+  /** Local day string (YYYY-MM-DD) of last BAO trade streak update. */
+  baoTradeStreakLastDay: string | undefined;
+  /** 2140 category currency balance. */
+  runes: number;
+  /** ₿AO category currency balance. */
+  sats: number;
+  /** Ditto Blobbi category currency balance. */
+  seeds: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
   /** Wallet mode for 2140 Pets: 'demo' uses play-money coins, 'real' uses normal Cashu sats, 'bao' uses BAO signet/demo sats */
@@ -410,6 +433,16 @@ export interface BlobbonautProfile {
 }
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
+
+/**
+ * Normalize a raw breed_asset value into a ₿AO rarity tier.
+ * Returns undefined if the asset is not a known BAO card id.
+ */
+export function getBaoRarityFromAsset(asset: string | undefined): BaoRarity | undefined {
+  if (!asset || !asset.startsWith('bao-')) return undefined;
+  const recipe = getBaoRecipeById(asset);
+  return recipe?.rarity;
+}
 
 /**
  * Get the first 12 lowercase hex characters from a pubkey.
@@ -1363,6 +1396,17 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
         : undefined;
     })(),
     breedAsset: getTagValue(tags, 'breed_asset') ?? undefined,
+    baoRarity: (() => {
+      const raw = getTagValue(tags, 'bao_rarity');
+      if (raw && ['common', 'uncommon', 'rare', 'epic', 'legendary'].includes(raw)) {
+        return raw as BaoRarity;
+      }
+      const asset = getTagValue(tags, 'breed_asset');
+      return getBaoRarityFromAsset(asset);
+    })(),
+    parentA: getTagValue(tags, 'parent_a') ?? undefined,
+    parentB: getTagValue(tags, 'parent_b') ?? undefined,
+    breedingCooldown: parseNumericTag(tags, 'breeding_cooldown'),
     stateStartedAt: parseNumericTag(tags, 'state_started_at'),
     progressionStartedAt: parseNumericTag(tags, 'progression_started_at') ?? parseNumericTag(tags, 'state_started_at'),
     tasks,
@@ -1382,15 +1426,15 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
  */
 export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | undefined {
   if (!isValidBlobbonautEvent(event)) return undefined;
-  
+
   const tags = event.tags;
   const d = getTagValue(tags, 'd')!;
-  
+
   // Parse pettingLevel from either camelCase or snake_case tag
-  const pettingLevelValue = parseNumericTag(tags, 'pettingLevel') 
-    ?? parseNumericTag(tags, 'petting_level') 
+  const pettingLevelValue = parseNumericTag(tags, 'pettingLevel')
+    ?? parseNumericTag(tags, 'petting_level')
     ?? 0;
-  
+
   return {
     event,
     d,
@@ -1409,6 +1453,11 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     baoLifetimeVolume: parseNumericTag(tags, 'bao_lifetime_volume') ?? 0,
     baoTier: parseNumericTag(tags, 'bao_tier') ?? 0,
     baoRewardsClaimedAt: getTagValue(tags, 'bao_rewards_claimed_at') ?? undefined,
+    baoTradeStreak: parseNumericTag(tags, 'bao_trade_streak') ?? 0,
+    baoTradeStreakLastDay: getTagValue(tags, 'bao_trade_streak_last_day') ?? undefined,
+    runes: parseNumericTag(tags, 'runes') ?? 0,
+    sats: parseNumericTag(tags, 'sats') ?? 0,
+    seeds: parseNumericTag(tags, 'seeds') ?? 0,
     room: getTagValue(tags, 'room') ?? undefined,
     walletMode: parseWalletModeTag(tags),
     cashuMintUrl: getTagValue(tags, 'cashu_mint_url') ?? undefined,
@@ -1529,6 +1578,9 @@ export const MANAGED_PETS_STATE_TAG_NAMES = new Set([
   'theme', 'crossover_app',
   // Cypherpunk 2140 theme extension tags
   'archetype', 'special_ability',
+  // Phase B: breed category + breeding tags
+  'breed_category', 'breed_asset', 'bao_rarity',
+  'parent_a', 'parent_b', 'breeding_cooldown',
 ]);
 
 /**

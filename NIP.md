@@ -782,6 +782,28 @@ Kind 16158 (replaceable) describes a weather station's configuration: name, geoh
 
 NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds the current pet state across three stages (egg, baby, adult) with stats, appearance, and personality traits. Kind 14919 logs individual interactions, kind 14920 records breeding events, kind 14921 stores immutable lifecycle records, and kind 11125 (replaceable) holds the owner's profile with coins, achievements, and inventory.
 
+#### Kind 31124 `bao_rarity`, `breed_category`, `breed_asset` tags
+
+2140.wtf extends kind 31124 with breed-category tags so pets can have category-specific gameplay:
+
+| Tag | Value | Description |
+|-----|-------|-------------|
+| `breed_category` | `2140-pets` \| `ditto-blobbi` \| `bao` | Visual family / gameplay category |
+| `breed_asset` | string | Adult form ID or BAO card ID |
+| `bao_rarity` | `common` \| `uncommon` \| `rare` \| `epic` \| `legendary` | ₿AO rarity tier, derived from `breed_asset` |
+
+These tags are set at mint time and persist across all stage transitions.
+
+#### Kind 31124 breeding tags
+
+When a pet is created via breeding, the offspring egg carries parent references and the parents receive a cooldown tag:
+
+| Tag | Value | Description |
+|-----|-------|-------------|
+| `parent_a` | canonical d-tag | First parent |
+| `parent_b` | canonical d-tag | Second parent |
+| `breeding_cooldown` | Unix timestamp | When this adult can breed again |
+
 #### Kind 11125 `wallet_mode` tag
 
 2140.wtf extends kind 11125 with a `wallet_mode` tag that selects how Pets economy costs are settled:
@@ -806,11 +828,34 @@ The `content` of kind 11125 is a JSON object. 2140.wtf extends it with a `missio
     "evolution": [ /* Mission[] — active hatch/evolve tasks, cleared on stage transition */ ],
     "rerolls": 2                // remaining daily mission rerolls
   }
-  // ...other profile fields (coins, achievements, inventory, etc.)
+  // ...other profile fields
 }
 ```
 
-Each `Mission` is either a **TallyMission** (`{ id, target, count }`) or an **EventMission** (`{ id, target, events: string[] }`) where `events` contains Nostr event IDs that satisfy the mission. Evolution missions are populated when incubation or evolution begins and cleared when the stage transition completes or is cancelled.
+#### Kind 11125 `content` JSON — category currencies
+
+Phase B adds three category-specific currencies that are earned from category-weighted daily quests and spent on category items (elixirs, accessories):
+
+```jsonc
+{
+  "runes": 120,   // 2140 Pets currency
+  "sats": 45,     // ₿AO Pets currency
+  "seeds": 80     // Ditto Blobbi currency
+}
+```
+
+All three default to `0` when missing.
+
+#### Kind 11125 `content` JSON — BAO trade streak
+
+For ₿AO evolution missions and reward bonuses, the profile tracks consecutive days with BAO trading activity:
+
+```jsonc
+{
+  "baoTradeStreak": 2,              // consecutive days with BAO trades
+  "baoTradeStreakLastDay": "2026-04-16"  // local day string of last streak update
+}
+```
 
 #### Kind 11125 `content` JSON — `room_layouts` field
 
