@@ -74,11 +74,11 @@ export const BAO_STAT_CAP_BONUS: Record<BaoRarity, number> = {
 
 /** Flat BAO reward bonus (sats) added to daily BAO claims per rarity tier. */
 export const BAO_REWARD_BONUS: Record<BaoRarity, number> = {
-  common: 10,
-  uncommon: 18,
-  rare: 28,
-  epic: 40,
-  legendary: 50,
+  common: 10 * 100,
+  uncommon: 18 * 100,
+  rare: 28 * 100,
+  epic: 40 * 100,
+  legendary: 50 * 100,
 };
 
 /** Human-readable stat cap for UI display, e.g. "100", "105", "130". */

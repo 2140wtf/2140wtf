@@ -100,11 +100,11 @@ describe('getCategoryAbilityBonuses', () => {
     });
 
     it.each([
-      ['common', 10],
-      ['uncommon', 18],
-      ['rare', 28],
-      ['epic', 40],
-      ['legendary', 50],
+      ['common', 1_000],
+      ['uncommon', 1_800],
+      ['rare', 2_800],
+      ['epic', 4_000],
+      ['legendary', 5_000],
     ] as const)('bao %s reward bonus is %i', (rarity, expected) => {
       const bonuses = getCategoryAbilityBonuses('bao', { baoRarity: rarity });
       expect(bonuses.baoRewardBonus).toBe(expected);
@@ -157,11 +157,11 @@ describe('getBaoRewardBonus', () => {
   });
 
   it.each([
-    ['common', 10],
-    ['uncommon', 18],
-    ['rare', 28],
-    ['epic', 40],
-    ['legendary', 50],
+    ['common', 1_000],
+    ['uncommon', 1_800],
+    ['rare', 2_800],
+    ['epic', 4_000],
+    ['legendary', 5_000],
   ] as const)('returns %i for %s', (rarity, expected) => {
     expect(getBaoRewardBonus(rarity)).toBe(expected);
   });
