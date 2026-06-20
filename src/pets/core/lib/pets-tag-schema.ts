@@ -36,6 +36,7 @@ export type TagCategory =
   | 'task'             // Task system (task, task_completed, progression_state, progression_started_at)
   | 'social'           // Social flags (breeding_ready)
   | 'evolution'        // Evolution-specific (adult_type)
+  | 'breeding'         // Breeding tags (parent_a, parent_b, breeding_cooldown)
   | 'extension';       // Extension tags (theme, crossover_app)
 
 // ─── Tag Schema Definition ────────────────────────────────────────────────────
@@ -559,6 +560,85 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     format: 'true | false',
     defaultValue: 'false',
     notes: 'Typically only true for healthy adults.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BREED CATEGORY TAGS
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    tag: 'breed_category',
+    description: 'Breed family / gameplay category selected when the pet was minted',
+    category: 'identity',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'system',
+    regenerable: false,
+    format: '2140-pets | ditto-blobbi | bao',
+    notes: 'Determines category-specific abilities, evolution missions, and daily quest weighting.',
+  },
+  {
+    tag: 'breed_asset',
+    description: 'Category-specific asset identifier (adult form name or BAO card id)',
+    category: 'identity',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'system',
+    regenerable: false,
+    notes: 'For 2140-pets/ditto-blobbi this is an AdultForm string; for bao it is a bao-* card id.',
+  },
+  {
+    tag: 'bao_rarity',
+    description: '₿AO rarity tier derived from breed_asset',
+    category: 'identity',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'system',
+    regenerable: true,
+    format: 'common | uncommon | rare | epic | legendary',
+    notes: 'Clients MAY derive this from breed_asset when the tag is missing.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BREEDING TAGS
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    tag: 'parent_a',
+    description: 'First parent d-tag when this pet was produced via breeding',
+    category: 'breeding',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'system',
+    regenerable: false,
+    format: 'canonical d-tag',
+    notes: 'Set on offspring at mint time.',
+  },
+  {
+    tag: 'parent_b',
+    description: 'Second parent d-tag when this pet was produced via breeding',
+    category: 'breeding',
+    required: false,
+    stages: ['egg', 'baby', 'adult'],
+    persistent: true,
+    source: 'system',
+    regenerable: false,
+    format: 'canonical d-tag',
+    notes: 'Set on offspring at mint time.',
+  },
+  {
+    tag: 'breeding_cooldown',
+    description: 'Unix timestamp when this adult can breed again',
+    category: 'breeding',
+    required: false,
+    stages: ['adult'],
+    persistent: true,
+    source: 'computed',
+    regenerable: false,
+    format: 'Unix timestamp (seconds)',
+    notes: 'Removed or set to 0 when no cooldown is active.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

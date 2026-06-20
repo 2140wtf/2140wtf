@@ -15,6 +15,7 @@ import {
   getCanonicalPetsD,
   getLocalDayString,
   adjustSeedForAdultType,
+  getBaoRarityFromAsset,
   type PetsVisualTraits,
   type PetsStats,
 } from '@/pets/core/lib/pets';
@@ -209,6 +210,9 @@ export function previewToEventTags(preview: PetsEggPreview): string[][] {
     ['special_ability', visualTraits.specialAbility],
     ...(preview.breedCategory ? [['breed_category', preview.breedCategory]] : []),
     ...(preview.breedAsset ? [['breed_asset', preview.breedAsset]] : []),
+    ...(preview.breedCategory === 'bao' && preview.breedAsset
+      ? [['bao_rarity', getBaoRarityFromAsset(preview.breedAsset) ?? 'common']]
+      : []),
   ];
 }
 
