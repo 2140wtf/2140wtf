@@ -1,20 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
-import { parseWalletModeTag } from './pets';
+import { parseWalletModeTag, setPetsRealSatsEnabled } from './pets';
 
 describe('parseWalletModeTag', () => {
+  beforeEach(() => {
+    // Default state for safe testing: real-sats mode is disabled.
+    setPetsRealSatsEnabled(false);
+  });
+
+  afterEach(() => {
+    setPetsRealSatsEnabled(false);
+  });
+
   it('returns "demo-sats" by default', () => {
     expect(parseWalletModeTag([])).toBe('demo-sats');
     expect(parseWalletModeTag([['wallet_mode', '']])).toBe('demo-sats');
     expect(parseWalletModeTag([['wallet_mode', 'unknown']])).toBe('demo-sats');
   });
 
-  it('maps legacy "real" and "bao" modes to "btc-sats"', () => {
-    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('btc-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');
+  it('treats legacy "real" and "bao" as demo-sats while real-sats is disabled', () => {
+    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('demo-sats');
+    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('demo-sats');
+    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('demo-sats');
   });
 
-  it('returns "btc-sats" explicitly', () => {
+  it('maps legacy "real" and "bao" modes to "btc-sats" when real-sats is enabled', () => {
+    setPetsRealSatsEnabled(true);
+    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('btc-sats');
+    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');
     expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('btc-sats');
   });
 });
