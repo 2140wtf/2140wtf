@@ -49,6 +49,13 @@ import {
   addProcessedTokenHash,
   loadProcessedTokenHashes,
   saveProcessedTokenHashes,
+  isProcessedNutzapId,
+  addProcessedNutzapId,
+  loadProcessedNutzapIds,
+  loadPendingNutzaps,
+  savePendingNutzap,
+  removePendingNutzap,
+  type PendingNutzapEntry,
   type Transaction,
   type StoredMint,
 } from '@/lib/cashu/storage';
@@ -66,6 +73,7 @@ import {
   buildNutzapInfoEvent,
   buildNutzapEvent,
   buildNutzapRedemptionHistoryEvent,
+  parseTokenEvent,
   parseNutzapInfoEvent,
   parseNutzapEvent,
   restoreNip60Wallet,
@@ -79,6 +87,7 @@ import {
   loadLastTokenEventHash,
   saveLastTokenEventHash,
   WALLET_CONFIG_KIND,
+  TOKEN_KIND,
   NUTZAP_INFO_KIND,
   NUTZAP_KIND,
   type Nip60SyncApi,
@@ -463,6 +472,7 @@ export function useCashuWallet(
   const nip60WalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const nip60RestoredRef = useRef(false);
   const processedNutzapIdsRef = useRef<Set<string>>(new Set());
+  const pendingNutzapInFlightRef = useRef(false);
   const lastSeedRef = useRef<string>('');
   const balanceVersionRef = useRef(0);
   const receiveTokenMutexRef = useRef<Promise<void> | null>(null);
@@ -907,6 +917,14 @@ export function useCashuWallet(
         } catch {
           // Non-fatal: the persisted guard is a defense-in-depth optimization.
         }
+        // Hydrate the in-memory Nutzap dedup guard so a restart does not re-attempt
+        // redemption of an already-processed Nutzap.
+        try {
+          const persistedNutzaps = await loadProcessedNutzapIds(key, legacyEncKeyRef.current ?? undefined);
+          for (const entry of persistedNutzaps) processedNutzapIdsRef.current.add(entry.id);
+        } catch {
+          // Non-fatal: the Nutzap guard is defense in depth.
+        }
         await initWallet(seed, key);
         if (cancelled) return;
 
@@ -1310,13 +1328,30 @@ export function useCashuWallet(
     try {
       const proofs = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
       const lastEventId = await loadLastTokenEventId(normalized, encKey);
-      const delIds = lastEventId ? [lastEventId] : undefined;
-      const payload = { mint: normalized, unit: 'sat' as const, proofs, del: delIds };
+      const delIds = new Set<string>();
+      if (lastEventId) delIds.add(lastEventId);
+
+      // Replace every remote token event for this mint, not just the last local
+      // one. Otherwise stale events from other devices or restores stay on relays
+      // and converge back into the wallet as duplicate/spent proofs.
+      try {
+        const remoteEvents = await sync.query({ kinds: [TOKEN_KIND], authors: [walletSigner.pubkey], limit: 500 });
+        for (const ev of remoteEvents) {
+          if (ev.id === lastEventId) continue;
+          const content = await parseTokenEvent(ev, walletSigner);
+          if (content && content.mint === normalized) delIds.add(ev.id);
+        }
+      } catch (e) {
+        devLog.warn('Failed to query remote token events for sync:', normalized, e);
+      }
+
+      const delArray = [...delIds].filter((id) => id.length === 64);
+      const payload = { mint: normalized, unit: 'sat' as const, proofs, del: delArray.length > 0 ? delArray : undefined };
       const hash = computeContentHash(payload);
       const lastHash = await loadLastTokenEventHash(normalized, encKey);
       if (hash === lastHash) return;
 
-      const tokenEvent = await buildTokenEvent(normalized, proofs, walletSigner, delIds, [getClientTag()]);
+      const tokenEvent = await buildTokenEvent(normalized, proofs, walletSigner, delArray.length > 0 ? delArray : undefined, [getClientTag()]);
       if (!tokenEvent) {
         devLog.warn('Failed to build NIP-60 token event for mint:', normalized);
         return undefined;
@@ -1327,8 +1362,8 @@ export function useCashuWallet(
         return undefined;
       }
 
-      if (lastEventId) {
-        const deletion = await buildDeletionEvent([lastEventId], walletSigner, 'spent', [getClientTag()]);
+      if (delArray.length > 0) {
+        const deletion = await buildDeletionEvent(delArray, walletSigner, 'spent', [getClientTag()]);
         if (deletion) await sync.publish(deletion).catch(() => {});
       }
 
@@ -1841,7 +1876,18 @@ export function useCashuWallet(
               () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
             );
             let receivedProofs = sanitizeProofs(received ?? []);
-            if (sumProofAmounts(receivedProofs) !== tokenAmount) {
+            let maxExpectedFee = 0;
+            try {
+              maxExpectedFee = targetWallet.getFeesForProofs(entry.proofs);
+            } catch {
+              maxExpectedFee = Math.max(1, Math.floor(tokenAmount * 0.001));
+            }
+            if (!isFeeWithinMaxPpm(maxExpectedFee, tokenAmount, MAX_MINT_FEE_PPM)) {
+              throw new Error('Mint fee exceeds maximum allowed');
+            }
+            const receivedSum = sumProofAmounts(receivedProofs);
+            const actualFee = tokenAmount - receivedSum;
+            if (actualFee < 0 || actualFee > maxExpectedFee) {
               throw new Error('Mint returned received proofs with incorrect total amount');
             }
             // Verify the mint did not return malformed, duplicate, or spent proofs.
@@ -2539,7 +2585,7 @@ export function useCashuWallet(
       return;
     }
     if (processedNutzapIdsRef.current.has(event.id)) return;
-    processedNutzapIdsRef.current.add(event.id);
+    if (await isProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined)) return;
 
     try {
       if (!verifyEvent(event)) {
@@ -2565,6 +2611,17 @@ export function useCashuWallet(
       await withProofLock(async () => {
         const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
         const tokenStr = getEncodedToken({ mint: normalized, proofs: parsed.proofs as unknown[], unit: 'sat' });
+        const nutzapInputProofs = sanitizeProofs(parsed.proofs);
+        const nutzapInputAmount = sumProofAmounts(nutzapInputProofs);
+        let maxNutzapReceiveFee = 0;
+        try {
+          maxNutzapReceiveFee = targetWallet.getFeesForProofs(nutzapInputProofs);
+        } catch {
+          maxNutzapReceiveFee = Math.max(1, Math.floor(nutzapInputAmount * 0.001));
+        }
+        if (!isFeeWithinMaxPpm(maxNutzapReceiveFee, nutzapInputAmount, MAX_MINT_FEE_PPM)) {
+          throw new Error('Mint fee exceeds maximum allowed');
+        }
         const received = await withTimeout(
           targetWallet.receive(tokenStr, {
             proofsWeHave: existing,
@@ -2576,8 +2633,12 @@ export function useCashuWallet(
         );
         let receivedProofs = sanitizeProofs(received ?? []);
         if (receivedProofs.length === 0) {
-          devLog.warn('Nutzap redemption returned no proofs:', event.id);
-          return;
+          throw new Error('No proofs received from Nutzap');
+        }
+        const receivedAmount = sumProofAmounts(receivedProofs);
+        const nutzapActualFee = nutzapInputAmount - receivedAmount;
+        if (nutzapActualFee < 0 || nutzapActualFee > maxNutzapReceiveFee) {
+          throw new Error('Nutzap redemption returned incorrect amount');
         }
         const activeKeysetIds = new Set(targetWallet.keysets.filter((k) => k.active).map((k) => k.id));
         const validation = validateReceivedProofs(receivedProofs, {
@@ -2599,7 +2660,6 @@ export function useCashuWallet(
         writeProofStoreTimestamp(normalized);
         await calculateAllBalances();
 
-        const receivedAmount = receivedProofs.reduce((sum: number, p: any) => sum + (Number.isInteger(p?.amount) ? p.amount : 0), 0);
         await withTxLock(async () => {
           await addTransaction({
             type: 'receive',
@@ -2612,18 +2672,25 @@ export function useCashuWallet(
         await refreshTransactions();
 
         const tokenEvent = await syncNip60TokenForMint(normalized, 'in', receivedAmount);
+        const lastEventId = await loadLastTokenEventId(normalized, encKey);
         const redemption = await buildNutzapRedemptionHistoryEvent(
           receivedAmount,
           normalized,
           event.id,
           event.pubkey,
-          tokenEvent?.id ?? '',
+          tokenEvent?.id || lastEventId || '',
           walletSigner,
           [getClientTag()],
         );
         if (redemption) await sync.publish(redemption).catch(() => {});
       });
 
+      processedNutzapIdsRef.current.add(event.id);
+      try {
+        await addProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined);
+      } catch (e) {
+        devLog.warn('Failed to persist processed Nutzap id:', e);
+      }
       setNutzaps((prev) => (prev.some((e) => e.id === event.id) ? prev : [event, ...prev]));
     } catch (e) {
       devLog.error('Failed to receive Nutzap:', event.id, e);
@@ -2662,50 +2729,70 @@ export function useCashuWallet(
     }
 
     const normalizedMint = normalizeMintUrl(mintUrl);
-    if (!normalizedMint) {
-      setError('Invalid mint URL');
+    if (!normalizedMint || !isAllowedMintUrl(normalizedMint)) {
+      setError('Selected mint is not allowed');
+      return false;
+    }
+
+    // Fetch the recipient's kind:10019 Nutzap info and verify both the author
+    // and the chosen mint. A forged info event from a different author could
+    // redirect Nutzaps to an attacker's wallet pubkey.
+    let recipientInfo: { pubkey: string; mints: string[] } | null = null;
+    try {
+      const infoEvents = await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
+      const sorted = infoEvents
+        .filter((ev) => parseNutzapInfoEvent(ev, recipientIdentityPubkey) !== null)
+        .sort((a, b) => b.created_at - a.created_at);
+      recipientInfo = sorted.length > 0 ? parseNutzapInfoEvent(sorted[0], recipientIdentityPubkey) : null;
+    } catch (e) {
+      devLog.error('Failed to fetch recipient Nutzap info:', e);
+    }
+    if (!recipientInfo) {
+      setError('Recipient has not published Nutzap preferences');
+      return false;
+    }
+    if (!recipientInfo.mints.includes(normalizedMint)) {
+      setError('Recipient does not accept this mint');
       return false;
     }
 
     try {
-      // Fetch the recipient's kind:10019 Nutzap info and verify the chosen mint is trusted.
-      const infoEvents = await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
-      const info = infoEvents
-        .filter((ev) => verifyEvent(ev))
-        .sort((a, b) => b.created_at - a.created_at)
-        .map((ev) => parseNutzapInfoEvent(ev))
-        .find((parsed) => parsed);
-      if (!info) {
-        setError('Recipient has not published Nutzap preferences');
-        return false;
-      }
-      if (!info.mints.includes(normalizedMint)) {
-        setError('Recipient does not accept this mint');
-        return false;
-      }
-
+      if (mountedRef.current) setLoading(true);
+      if (mountedRef.current) setError('');
       const targetWallet = normalizedMint === normalizeMintUrl(mintUrl)
         ? wallet
         : await withTimeout(getOrCreateWallet(normalizedMint, bip39SeedRef.current!), 15000, 'Foreign mint load');
 
-      await withProofLock(async () => {
-        const proofs = sanitizeProofs(await getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined));
-        const available = proofs.reduce((sum, p) => {
-          const amt = Number(p.amount);
-          return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
-        }, 0);
+      const sendProofs = await withProofLock(async () => {
+        const proofs = dedupeProofs(sanitizeProofs(await getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined)));
+        if (proofs.length === 0) {
+          throw new Error('No proofs available for this mint');
+        }
+        const available = sumProofAmounts(proofs);
         if (available < amount) {
           throw new Error(`Insufficient balance: ${available} sats available`);
         }
 
+        let maxNutzapFee = 0;
+        try {
+          maxNutzapFee = targetWallet.getFeesForProofs(proofs);
+        } catch {
+          maxNutzapFee = Math.max(1, Math.floor(available * 0.001));
+        }
+        if (!isFeeWithinMaxPpm(maxNutzapFee, available, MAX_MINT_FEE_PPM)) {
+          throw new Error('Mint fee exceeds maximum allowed');
+        }
+
+        await writeProofRecovery(normalizedMint, proofs, encKey);
         const sendResult = await withTimeout(
           targetWallet.send(amount, proofs, {
             proofsWeHave: proofs,
-            pubkey: '02' + info.pubkey,
+            pubkey: '02' + recipientInfo!.pubkey,
             includeDleq: true,
           }),
           60000,
           'Send Nutzap',
+          () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
         );
         if (!sendResult || !Array.isArray(sendResult.send) || !Array.isArray(sendResult.keep)) {
           throw new Error('Mint returned invalid Nutzap send response');
@@ -2715,6 +2802,14 @@ export function useCashuWallet(
         if (sumProofAmounts(sendProofs) !== amount) {
           throw new Error('Mint returned send proofs with incorrect total amount');
         }
+        const outputAmount = sumProofAmounts(sendProofs) + sumProofAmounts(keepProofs);
+        if (outputAmount > available) {
+          throw new Error('Mint returned invalid proofs: outputs exceed inputs');
+        }
+        const actualFee = available - outputAmount;
+        if (actualFee < 0 || actualFee > maxNutzapFee) {
+          throw new Error('Mint returned invalid proofs: fee exceeds reported fee');
+        }
         const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
         for (const p of [...sendProofs, ...keepProofs]) {
           if (inputSecrets.has(String(p.secret))) {
@@ -2722,10 +2817,12 @@ export function useCashuWallet(
           }
         }
 
+        if (keepProofs.length > 0) {
+          await writeProofRecovery(normalizedMint, keepProofs, encKey);
+        }
         await saveProofsForMint(normalizedMint, keepProofs, encKey);
         writeProofStoreTimestamp(normalizedMint);
-        await calculateAllBalances();
-
+        clearProofRecovery(normalizedMint);
         await withTxLock(async () => {
           await addTransaction({
             type: 'send',
@@ -2736,44 +2833,126 @@ export function useCashuWallet(
           }, encKey, legacyEncKeyRef.current ?? undefined);
         });
         await refreshTransactions();
+        await calculateAllBalances();
+        try {
+          await syncNip60TokenForMint(normalizedMint, 'out', amount);
+        } catch (e) {
+          devLog.error('NIP-60 Nutzap send sync failed:', e);
+        }
+        return sendProofs;
+      });
 
-        const tokenEvent = await syncNip60TokenForMint(normalizedMint, 'out', amount);
-        const nutzap = await buildNutzapEvent(
+      // Persist the signed Nutzap before publishing so a publish failure can be
+      // retried without losing the locked proofs.
+      const pendingEntry: PendingNutzapEntry = {
+        id: '',
+        sendProofs,
+        recipientPubkey: recipientIdentityPubkey,
+        mintUrl: normalizedMint,
+        amount,
+        memo: opts?.memo,
+        zappedEvent: opts?.zappedEvent,
+        timestamp: Date.now(),
+        attempts: 0,
+      };
+      let event: NostrEvent | null = null;
+      try {
+        event = await buildNutzapEvent(
           recipientIdentityPubkey,
           normalizedMint,
           sendProofs,
           sync.signer,
           { memo: opts?.memo, zappedEvent: opts?.zappedEvent, extraTags: [getClientTag()] },
         );
-        if (!nutzap) {
-          throw new Error('Failed to build Nutzap event');
+      } catch (e) {
+        devLog.error('Failed to build Nutzap event:', e);
+      }
+      if (!event) {
+        pendingEntry.id = `build-failed-${pendingEntry.timestamp}`;
+        try {
+          await savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
+        } catch (saveErr) {
+          devLog.error('Failed to save pending Nutzap after build failure:', saveErr);
         }
-        const published = await sync.publish(nutzap);
-        if (!published) {
-          throw new Error('Failed to publish Nutzap event');
+        if (mountedRef.current) setError('Failed to build Nutzap — saved for retry');
+        return false;
+      }
+      pendingEntry.id = event.id;
+      pendingEntry.event = event;
+      const publishedId = await sync.publish(event);
+      if (!publishedId) {
+        pendingEntry.attempts = 1;
+        try {
+          await savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
+        } catch (saveErr) {
+          devLog.error('Failed to save pending Nutzap after publish failure:', saveErr);
         }
-        // Reference the token event that holds the change in the Nutzap history.
-        if (tokenEvent?.id) {
-          const history = await buildHistoryEvent(
-            'out',
-            amount,
-            normalizedMint,
-            walletSigner,
-            [{ id: tokenEvent.id, marker: 'created' }],
-            [getClientTag()],
-          );
-          if (history) await sync.publish(history).catch(() => {});
-        }
-      });
-
+        if (mountedRef.current) setError('Failed to publish Nutzap — saved for retry');
+        return false;
+      }
+      try {
+        await removePendingNutzap(event.id, encKey, legacyEncKeyRef.current ?? undefined);
+      } catch (e) {
+        devLog.warn('Failed to clear pending Nutzap after successful publish:', e);
+      }
       if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats via Nutzap`);
       return true;
     } catch (err: any) {
       devLog.error('Nutzap send failed:', err);
       if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
       return false;
+    } finally {
+      if (mountedRef.current) setLoading(false);
+      await triggerBackup();
     }
-  }, [wallet, getNip60WalletSigner, getOrCreateWallet, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
+  }, [wallet, getNip60WalletSigner, getOrCreateWallet, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag, triggerBackup]);
+
+  // Retry Nutzap sends whose mint operation succeeded but whose publish failed.
+  const reconcilePendingNutzaps = useCallback(async () => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    if (!sync || !encKey || pendingNutzapInFlightRef.current) return;
+    pendingNutzapInFlightRef.current = true;
+    try {
+      const pending = await loadPendingNutzaps(encKey, legacyEncKeyRef.current ?? undefined);
+      if (pending.length === 0) return;
+      const now = Date.now();
+      for (const entry of pending) {
+        if (entry.lastAttemptAt && now - entry.lastAttemptAt < 60_000) continue;
+        let event: NostrEvent | null = entry.event ?? null;
+        if (!event) {
+          event = await buildNutzapEvent(entry.recipientPubkey, entry.mintUrl, entry.sendProofs, sync.signer, {
+            memo: entry.memo,
+            zappedEvent: entry.zappedEvent,
+            extraTags: [getClientTag()],
+          });
+        }
+        if (!event) continue;
+        const id = await sync.publish(event);
+        if (id) {
+          await removePendingNutzap(entry.id, encKey, legacyEncKeyRef.current ?? undefined);
+          devLog.log('Published pending Nutzap:', id);
+        } else {
+          await savePendingNutzap({ ...entry, attempts: entry.attempts + 1, lastAttemptAt: now }, encKey, legacyEncKeyRef.current ?? undefined);
+        }
+      }
+    } catch (e) {
+      devLog.error('Pending Nutzap reconciliation failed:', e);
+    } finally {
+      pendingNutzapInFlightRef.current = false;
+    }
+  }, [getClientTag]);
+
+  // Retry any Nutzap sends that succeeded on the mint side but failed to publish.
+  useEffect(() => {
+    if (!wallet || !nip60SyncRef.current) return;
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await reconcilePendingNutzaps();
+    })();
+    return () => { cancelled = true; };
+  }, [wallet, reconcilePendingNutzaps]);
 
   const restoreFromBackup = useCallback(async (payload: CashuBackupPayload) => {
     const encKey = encKeyRef.current;
