@@ -13,7 +13,14 @@ import {
 } from '@/pets/core/lib/pets';
 import { getLocalDayString } from '@/pets/core/lib/pets';
 
-import { BAO_RELAY_URL, aggregateBaoTradeActivity } from '../lib/bao-trade-parser';
+import {
+  BAO_POSITION_SYNC_KIND,
+  BAO_SYNC_RELAYS,
+  aggregateBaoPositionSync,
+  emptyBaoTradeActivity,
+  generateBaoPositionDTag,
+  parsePositionSyncData,
+} from '../lib/bao-position-sync';
 import { calculateBaoReward, calculateBaoTier, getBaoTierLabel } from '../lib/bao-rewards';
 
 export interface ClaimBaoTradeRewardsResult {
@@ -47,13 +54,30 @@ export function useClaimBaoTradeRewards(
 
       const today = getLocalDayString();
 
-      // Fetch the latest ₿AO order events directly from the ₿AO relay.
-      const relay = nostr.relay(BAO_RELAY_URL);
-      const tradeEvents = await relay.query(
-        [{ kinds: [38001], authors: [user.pubkey], limit: 1000 }],
+      // Fetch the latest NIP-78 position-sync event from the BAO relays and
+      // decrypt it with the user's signer. We intentionally do not unwrap
+      // NIP-59 gift-wrapped trades; the sync event is the privacy-safe source
+      // of truth for open positions.
+      const dTag = generateBaoPositionDTag(user.pubkey);
+      const pool = nostr.group([...BAO_SYNC_RELAYS]);
+      const syncEvents = await pool.query(
+        [{ kinds: [BAO_POSITION_SYNC_KIND], authors: [user.pubkey], '#d': [dTag], limit: 1 }],
         { signal: AbortSignal.timeout(15_000) },
       );
-      const activity = aggregateBaoTradeActivity(tradeEvents);
+
+      const latestSync = syncEvents.sort((a, b) => b.created_at - a.created_at)[0];
+      let activity = emptyBaoTradeActivity();
+      if (latestSync && user.signer?.nip44?.decrypt) {
+        try {
+          const decrypted = await user.signer.nip44.decrypt(user.pubkey, latestSync.content);
+          const data = parsePositionSyncData(decrypted.trimEnd());
+          if (data) {
+            activity = aggregateBaoPositionSync(data);
+          }
+        } catch (error) {
+          console.error('Failed to decrypt BAO position-sync event during claim:', error);
+        }
+      }
 
       // Fetch the latest profile so we never overwrite concurrent updates.
       const prev = await fetchFreshPetsEvent(nostr, {
