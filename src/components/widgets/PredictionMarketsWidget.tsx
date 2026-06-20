@@ -1,11 +1,12 @@
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import type { BaoMarket } from '@/lib/baoMarketParser';
+import { openUrl } from '@/lib/downloadFile';
+import { useBaoPredictionMarkets } from '@/hooks/useBaoPredictionMarkets';
+
 
 function formatProbability(prob: number): string {
   if (!Number.isFinite(prob)) return '—';
@@ -31,18 +32,24 @@ function getOutcomeColor(label: string): { text: string; indicator?: string } {
   return { text: 'text-muted-foreground' };
 }
 
+function titleCaseCategory(name: string): string {
+  return name
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /** Compact prediction-markets widget for the right sidebar.
  *
- *  Reads cached market data without triggering a BAO relay fetch.
+ *  Fetches active markets from the BAO relay and shows the top 5.
  *  Clicking a market opens its detail popup on the prediction-markets page.
  */
 export function PredictionMarketsWidget() {
-  const { data: markets = [] } = useQuery<BaoMarket[]>({
-    queryKey: ['bao-prediction-markets', 'all'],
-    enabled: false,
-  });
+  const { data: markets = [] } = useBaoPredictionMarkets('all');
 
-  const visibleMarkets = markets.slice(0, 5);
+  const now = Math.floor(Date.now() / 1000);
+  const visibleMarkets = markets
+    .filter((m) => m.state === 'active' && (m.endTime <= 0 || m.endTime >= now))
+    .slice(0, 5);
 
   if (visibleMarkets.length === 0) {
     return (
@@ -55,14 +62,13 @@ export function PredictionMarketsWidget() {
         <p className="text-xs text-muted-foreground leading-relaxed">
           Explore prediction markets powered by ₿AO MARKETS. All markets are for play only with
           dummy bitcoin in demo mode — claim testnet bitcoin by visiting{' '}
-          <a
-            href="https://bao.markets"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
+          <button
+            type="button"
+            onClick={() => openUrl('https://bao.markets')}
+            className="text-primary hover:underline bg-transparent border-none p-0"
           >
             https://bao.markets
-          </a>
+          </button>
           .
         </p>
 
@@ -92,7 +98,7 @@ export function PredictionMarketsWidget() {
                 {market.title}
               </p>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                {market.category}
+                {titleCaseCategory(market.category)}
               </Badge>
             </div>
 
@@ -125,8 +131,9 @@ export function PredictionMarketsWidget() {
       </div>
 
       <div className="pt-1">
-        <Link to="/prediction-markets" className="text-xs text-primary hover:underline">
+        <Link to="/prediction-markets" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
           View all markets
+          <ExternalLink className="size-3" />
         </Link>
       </div>
     </div>
