@@ -2048,6 +2048,8 @@ function PetsDashboard({
             <div className="max-w-2xl mx-auto w-full pb-4 pt-2">
               {activeDrawer === 'missions' && (
                 <MissionsTabContent
+                  profile={profile}
+                  updateProfileEvent={updateProfileEvent}
                   isIncubating={isIncubating}
                   isEvolvingState={isEvolvingState}
                   isEgg={isEgg}
@@ -2938,6 +2940,8 @@ function ClosetBar() {
 // ─── Missions Tab Content ─────────────────────────────────────────────────────
 
 interface MissionsTabContentProps {
+  profile: BlobbonautProfile | null;
+  updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
   isIncubating: boolean;
   isEvolvingState: boolean;
   isEgg: boolean;
@@ -2961,9 +2965,11 @@ interface MissionsTabContentProps {
   onStartEvolution: () => void;
 }
 
-type QuestPane = 'journey' | 'bounties';
+type QuestPane = 'journey' | 'bounties' | 'bao-markets';
 
 function MissionsTabContent({
+  profile,
+  updateProfileEvent,
   isIncubating,
   isEvolvingState,
   isEgg,
@@ -3225,7 +3231,7 @@ function MissionsTabContent({
         )}
 
         {pane === 'bao-markets' && (
-          <BaoMarketsQuestContent profile={profile} updateProfileEvent={updateProfileEvent} />
+          <BlobbiTabContent profile={profile} updateProfileEvent={updateProfileEvent} />
         )}
       </div>
     </div>
