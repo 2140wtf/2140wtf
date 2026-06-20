@@ -412,12 +412,8 @@ export interface BlobbonautProfile {
   baoTradeStreak: number;
   /** Local day string (YYYY-MM-DD) of last BAO trade streak update. */
   baoTradeStreakLastDay: string | undefined;
-  /** 2140 category currency balance. */
-  runes: number;
-  /** ₿AO category currency balance. */
+  /** Demo-sats / BTC-sats balance (all breed categories share this wallet). */
   sats: number;
-  /** Ditto Blobbi category currency balance. */
-  seeds: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
   /** Wallet mode for 2140 Pets: 'demo-sats' uses in-game demo sats, 'btc-sats' uses real BTC sats via Cashu/NIP-60. */
@@ -1455,9 +1451,7 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     baoRewardsClaimedAt: getTagValue(tags, 'bao_rewards_claimed_at') ?? undefined,
     baoTradeStreak: parseNumericTag(tags, 'bao_trade_streak') ?? 0,
     baoTradeStreakLastDay: getTagValue(tags, 'bao_trade_streak_last_day') ?? undefined,
-    runes: parseNumericTag(tags, 'runes') ?? 0,
     sats: parseNumericTag(tags, 'sats') ?? 0,
-    seeds: parseNumericTag(tags, 'seeds') ?? 0,
     room: getTagValue(tags, 'room') ?? undefined,
     walletMode: parseWalletModeTag(tags),
     cashuMintUrl: getTagValue(tags, 'cashu_mint_url') ?? undefined,
