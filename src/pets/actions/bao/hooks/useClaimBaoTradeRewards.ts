@@ -17,19 +17,19 @@ import { BAO_RELAY_URL, aggregateBaoTradeActivity } from '../lib/bao-trade-parse
 import { calculateBaoReward, calculateBaoTier, getBaoTierLabel } from '../lib/bao-rewards';
 
 export interface ClaimBaoTradeRewardsResult {
-  coinsAwarded: number;
-  newCoinTotal: number;
+  satsAwarded: number;
+  newSatsTotal: number;
   newLifetimeBao: number;
   tier: number;
   tierLabel: string;
 }
 
 /**
- * Claim daily ₿AO coins earned from ₿AO trading activity.
+ * Claim daily ₿AO sats earned from ₿AO trading activity.
  *
  * The mutation fetches fresh profile data and fresh ₿AO order events, so it
  * is safe to call repeatedly. It is idempotent per local day: calling it
- * twice on the same day returns 0 coins the second time.
+ * twice on the same day returns 0 sats the second time.
  *
  * @param updateProfileEvent - Callback to update the cached profile event
  */
@@ -67,23 +67,23 @@ export function useClaimBaoTradeRewards(
 
       const reward = calculateBaoReward(activity, lifetimeBao, claimedDate, today);
 
-      if (!reward.claimable || reward.coins <= 0) {
+      if (!reward.claimable || reward.sats <= 0) {
         return {
-          coinsAwarded: 0,
-          newCoinTotal: freshProfile?.coins ?? 0,
+          satsAwarded: 0,
+          newSatsTotal: freshProfile?.sats ?? 0,
           newLifetimeBao: lifetimeBao,
           tier: reward.tier,
           tierLabel: reward.tierLabel,
         };
       }
 
-      const currentCoins = freshProfile?.coins ?? 0;
-      const newCoinTotal = currentCoins + reward.coins;
-      const newLifetimeBao = lifetimeBao + reward.coins;
+      const currentSats = freshProfile?.sats ?? 0;
+      const newSatsTotal = currentSats + reward.sats;
+      const newLifetimeBao = lifetimeBao + reward.sats;
       const newTier = calculateBaoTier(newLifetimeBao);
 
       const updatedTags = updateBlobbonautTags(prev?.tags ?? [], {
-        coins: newCoinTotal.toString(),
+        sats: newSatsTotal.toString(),
         bao_lifetime_volume: newLifetimeBao.toString(),
         bao_tier: newTier.toString(),
         bao_rewards_claimed_at: today,
@@ -99,21 +99,21 @@ export function useClaimBaoTradeRewards(
       updateProfileEvent(event);
 
       return {
-        coinsAwarded: reward.coins,
-        newCoinTotal,
+        satsAwarded: reward.sats,
+        newSatsTotal,
         newLifetimeBao,
         tier: newTier,
         tierLabel: getBaoTierLabel(newTier),
       };
     },
-    onSuccess: ({ coinsAwarded, tierLabel }) => {
+    onSuccess: ({ satsAwarded, tierLabel }) => {
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
-      if (coinsAwarded > 0) {
+      if (satsAwarded > 0) {
         toast({
           title: '₿AO Trading Reward Claimed!',
-          description: `+${coinsAwarded} ₿AO · Tier: ${tierLabel}`,
+          description: `+${satsAwarded} ₿AO sats · Tier: ${tierLabel}`,
         });
       }
     },

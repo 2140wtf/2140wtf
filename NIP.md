@@ -847,19 +847,15 @@ The `content` of kind 11125 is a JSON object. 2140.wtf extends it with a `missio
 }
 ```
 
-#### Kind 11125 `content` JSON — category currencies
+#### Kind 11125 category-currency tags
 
-Phase B adds three category-specific currencies that are earned from category-weighted daily quests and spent on category items (elixirs, accessories):
+Phase B adds three category-specific currencies as top-level tags. They are earned from category-weighted daily quests and BAO trading rewards, and spent on category items (elixirs, accessories):
 
-```jsonc
-{
-  "runes": 120,   // 2140 Pets currency
-  "sats": 45,     // ₿AO Pets currency
-  "seeds": 80     // Ditto Blobbi currency
-}
-```
-
-All three default to `0` when missing.
+| Tag | Meaning | Default |
+|-----|---------|---------|
+| `runes` | 2140 Pets currency | `0` |
+| `sats` | ₿AO Pets currency / BAO trading reward balance | `0` |
+| `seeds` | Ditto Blobbi currency | `0` |
 
 #### Kind 11125 `content` JSON — BAO trade streak
 
