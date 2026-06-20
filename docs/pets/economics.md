@@ -4,15 +4,13 @@ This document describes the economic and gameplay systems added in **Phase B** o
 
 ## Currencies
 
-There are four currencies in the Pets economy:
+There is one currency in the Pets economy:
 
 | Currency | Source | Spent on | Storage |
 |---|---|---|---|
-| `sats` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy) | kind 11125 `sats` tag |
-| `runes` | 2140 category daily quests | 2140-specific items, relay-routing boosts | kind 11125 `content.runes` |
-| `seeds` | Ditto Blobbi category daily quests | Ditto Blobbi-specific items, growth serums | kind 11125 `content.seeds` |
+| `sats` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy), adoption, rerolls | kind 11125 `sats` tag |
 
-All category currencies default to `0` when missing from a profile.
+`sats` are demo sats when `wallet_mode` is `demo-sats` and real BTC sats when `wallet_mode` is `btc-sats`. All breed categories share this balance. New Blobbonauts start with `0` sats and must claim daily rewards to earn their first sats.
 
 ## Category Abilities
 

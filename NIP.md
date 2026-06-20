@@ -846,15 +846,15 @@ The `content` of kind 11125 is a JSON object. 2140.wtf extends it with a `missio
 }
 ```
 
-#### Kind 11125 category-currency tags
+#### Kind 11125 `sats` tag
 
-Phase B adds three category-specific currencies as top-level tags. They are earned from category-weighted daily quests and BAO trading rewards, and spent on category items (elixirs, accessories):
+The Pets economy uses a single `sats` balance for all breed categories. In `demo-sats` wallet mode these are in-game demo sats; in `btc-sats` wallet mode they represent real BTC sats settled via an external Cashu/NIP-60 wallet.
 
 | Tag | Meaning | Default |
 |-----|---------|---------|
-| `runes` | 2140 Pets currency | `0` |
-| `sats` | ₿AO Pets currency / BAO trading reward balance | `0` |
-| `seeds` | Ditto Blobbi currency | `0` |
+| `sats` | Demo-sats / BTC-sats balance | `0` |
+
+New Blobbonauts start with `0` sats and earn them from daily login bonuses, daily missions, BAO trading rewards, and battles.
 
 #### Kind 11125 `content` JSON — BAO trade streak
 
