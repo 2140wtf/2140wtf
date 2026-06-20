@@ -60,16 +60,54 @@ walletPubkey  = compressed secp256k1 public key of walletPrivkey
 
 Every device that knows the seed derives the same wallet key, so kind `7375` token events encrypted to this key can be restored anywhere.
 
+### BAO demo/signet wallet
+
+2140.wtf also supports a separate **BAO demo Cashu wallet** for signet/demo ecash. It is derived deterministically from the same BIP-39 seed as the normal wallet, so any device with the seed recovers the same BAO balance.
+
+#### BAO seed derivation
+
+```
+baoSeedMnemonic = bip39_from_entropy(hkdf_sha256(seed, salt='', info='2140:cashu:bao:seed:v1', 16))
+```
+
+The HKDF output is 16 bytes, which encodes to a 12-word BIP-39 mnemonic. This mnemonic is then encrypted with NIP-44 to the user's identity pubkey and stored locally.
+
+#### BAO wallet key derivation
+
+```
+baoWalletPrivkey = hkdf_sha256(baoSeed, salt='', info='ditto:cashu:bao:walletkey:v1', 32)
+baoWalletPubkey  = compressed secp256k1 public key of baoWalletPrivkey
+```
+
+The BAO wallet key signs its own `kind:7375` token events, `kind:7376` history events, and `kind:5` deletions. It does **not** sign the normal wallet's events.
+
 ### Event kinds
 
 | Kind | Name | Use in 2140.wtf |
 |------|------|-----------------|
-| 17375 | Wallet config | Publishes the wallet pubkey, mint list, and `published_at`. |
+| 17375 | Wallet config | Publishes one or more wallet pubkeys + mint lists (default + optional BAO). |
 | 7375 | Token | NIP-44 encrypted token events storing proofs per mint. |
 | 7376 | History | NIP-44 encrypted transaction history entries. |
 | 5 | Deletion | Deletes superseded `kind:7375` token events. |
 | 10019 | Nutzap info | Receiver advertisement: trusted mints, relays, and P2PK pubkey. |
 | 9321 | Nutzap | Peer-to-peer Cashu payment event. |
+
+### Multi-wallet `kind:17375` format
+
+A single `kind:17375` event can carry multiple wallet configs. The encrypted plaintext is a JSON array of tags:
+
+```json
+[
+  ["privkey", "<default-wallet-privkey-hex>"],
+  ["mint", "https://mint.example.com"],
+  ["privkey", "bao", "<bao-wallet-privkey-hex>"],
+  ["mint", "https://mint.bao.network"]
+]
+```
+
+- A two-element `privkey` tag represents the default/normal Cashu wallet.
+- A three-element `privkey` tag with the identifier `bao` represents the BAO demo wallet.
+- `mint` tags following a `privkey` tag belong to that wallet until the next `privkey` tag.
 
 ### Token storage and rollover
 
@@ -118,6 +156,8 @@ d = hex(sha256("ditto:cashu:v1:" + pubkeyHex)).slice(0, 16)
 ```
 
 Restore prefers NIP-60 events and falls back to DPCS only when no NIP-60 state is found. The legacy `d=freedomid:cashu` tag is still read as a migration fallback but is no longer written.
+
+The BAO demo wallet writes a separate DPCS fallback with the d-tag `freedomid:cashu:bao`.
 
 ---
 
@@ -741,6 +781,18 @@ Kind 16158 (replaceable) describes a weather station's configuration: name, geoh
 **See also:** [Pets tag schema](docs/pets/pets-tag-schema.md) (2140.wtf-specific integration details)
 
 NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds the current pet state across three stages (egg, baby, adult) with stats, appearance, and personality traits. Kind 14919 logs individual interactions, kind 14920 records breeding events, kind 14921 stores immutable lifecycle records, and kind 11125 (replaceable) holds the owner's profile with coins, achievements, and inventory.
+
+#### Kind 11125 `wallet_mode` tag
+
+2140.wtf extends kind 11125 with a `wallet_mode` tag that selects how Pets economy costs are settled:
+
+| Value | Meaning |
+|-------|---------|
+| `demo` | Costs are paid with play-money `coins` stored on the profile. |
+| `real` | Reserved for normal Cashu sats (not yet wired). |
+| `bao` | Costs are paid with BAO signet/demo Cashu sats from the BAO wallet. |
+
+When the tag is missing or unrecognized, clients MUST treat the profile as `demo`.
 
 #### Kind 11125 `content` JSON — `missions` field
 
