@@ -307,7 +307,11 @@ export function signerWithNudge(
   // Decrypt cache + backoff (per signer instance)
   // -------------------------------------------------------------------------
 
-  const decryptCache = new Map<string, Promise<string>>();
+  interface DecryptPromise extends Promise<string> {
+    resolvedAt?: number;
+  }
+
+  const decryptCache = new Map<string, DecryptPromise>();
   let decryptPausedUntil = 0;
 
   function isUserDenied(error: unknown): boolean {
@@ -331,10 +335,8 @@ export function signerWithNudge(
     // If still over the limit, drop the oldest completed entries.
     if (decryptCache.size > DECRYPT_CACHE_LIMIT) {
       const completed = Array.from(decryptCache.entries())
-        .filter(([, p]) => (p as { resolvedAt?: number }).resolvedAt !== undefined)
-        .sort((a, b) =>
-          (a[1] as { resolvedAt: number }).resolvedAt - (b[1] as { resolvedAt: number }).resolvedAt
-        );
+        .filter(([, p]) => p.resolvedAt !== undefined)
+        .sort((a, b) => a[1].resolvedAt! - b[1].resolvedAt!);
       const toDrop = decryptCache.size - DECRYPT_CACHE_LIMIT;
       for (let i = 0; i < toDrop && i < completed.length; i++) {
         decryptCache.delete(completed[i][0]);
@@ -361,10 +363,10 @@ export function signerWithNudge(
       const cached = decryptCache.get(key);
       if (cached) return cached;
 
-      const promise = crypto
+      const promise: DecryptPromise = crypto
         .decrypt(pubkey, ciphertext)
         .then((plaintext) => {
-          (promise as { resolvedAt?: number }).resolvedAt = Date.now();
+          promise.resolvedAt = Date.now();
           evictDecryptCache();
           return plaintext;
         })

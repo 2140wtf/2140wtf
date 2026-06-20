@@ -3036,6 +3036,18 @@ function MissionsTabContent({
               <span className="text-[10px] tabular-nums text-muted-foreground">{dailyCompleted}/{dailyTotal}</span>
             )}
           </button>
+          <button
+            onClick={() => setPane('bao-markets')}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200',
+              pane === 'bao-markets'
+                ? 'bg-background shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <TrendingUp className="size-3.5" />
+            ₿AO MARKETS activity
+          </button>
         </div>
       </div>
 
@@ -3210,6 +3222,10 @@ function MissionsTabContent({
               </div>
             )}
           </>
+        )}
+
+        {pane === 'bao-markets' && (
+          <BaoMarketsQuestContent profile={profile} updateProfileEvent={updateProfileEvent} />
         )}
       </div>
     </div>
