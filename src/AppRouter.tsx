@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, LayoutGrid, LayoutList, Plus, Search } from "lucide-react";
+import { Box, LayoutList, Plus, Search } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ const highlightsDef = getExtraKindDef("highlights")!;
 /** Polls feed page with a FAB that opens the compose modal (poll mode via + menu). */
 function PollsFeedPage() {
   const [composeOpen, setComposeOpen] = useState(false);
-  const [view, setView] = useState<'list' | 'grid' | 'cubes'>('list');
+  const [view, setView] = useState<'list' | 'cubes'>('cubes');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
 
@@ -119,7 +119,7 @@ function PollsFeedPage() {
         kind={pollKinds}
         title={pollsDef.label}
         icon={sidebarItemIcon("polls", "size-5")}
-        grid={view === 'grid'}
+        grid={false}
         searchQuery={searchQuery}
         onFabClick={() => setComposeOpen(true)}
         headerActions={
@@ -151,19 +151,16 @@ function PollsFeedPage() {
               type="single"
               value={view}
               onValueChange={(v) => {
-                if (v) setView(v as 'list' | 'grid' | 'cubes');
+                if (v) setView(v as 'list' | 'cubes');
               }}
               variant="outline"
               size="sm"
             >
-              <ToggleGroupItem value="list" aria-label="List view">
-                <LayoutList className="size-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="grid" aria-label="2-column grid">
-                <LayoutGrid className="size-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="cubes" aria-label="Hosted cubes">
+              <ToggleGroupItem value="cubes" aria-label="Cube view">
                 <Box className="size-4" />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="Flat text view">
+                <LayoutList className="size-4" />
               </ToggleGroupItem>
             </ToggleGroup>
             <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
