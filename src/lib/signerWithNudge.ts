@@ -267,6 +267,7 @@ async function runWithNudge<T>(op: () => Promise<T>, opts: RunOpts): Promise<Run
 export function signerWithNudge(
   signer: NostrSigner,
   isBunkerConnected?: () => boolean,
+  pubkey?: string,
 ): NostrSigner {
   /** Run an op and return just the value (discarding nudge metadata). */
   function run<T>(op: () => Promise<T>, kind: number | undefined, opType: OpType): Promise<T> {
@@ -274,7 +275,10 @@ export function signerWithNudge(
   }
 
   const wrapped: NostrSigner = {
-    getPublicKey: () => run(() => signer.getPublicKey(), undefined, 'sign'),
+    getPublicKey: () => {
+      if (pubkey) return Promise.resolve(pubkey);
+      return run(() => signer.getPublicKey(), undefined, 'sign');
+    },
 
     signEvent: (event: NostrEvent) => {
       return run(() => signer.signEvent(event), event.kind, 'sign');
