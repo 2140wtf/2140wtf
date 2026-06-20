@@ -2,12 +2,15 @@ import { NKinds, NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
+/** Max rounds of recursive fetching to avoid runaway loops. */
+const MAX_FETCH_DEPTH = 5;
+
 export function useComments(root: NostrEvent | URL | `#${string}` | undefined, limit?: number) {
   const { nostr } = useNostr();
 
   return useQuery({
     queryKey: ['nostr', 'comments', root instanceof URL ? root.toString() : typeof root === 'string' ? root : root?.id, limit],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!root) throw new Error('root is required');
       const limitFilter: Pick<NostrFilter, 'limit'> = {};
       if (typeof limit === 'number') {
@@ -15,6 +18,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
       }
 
       const filters: NostrFilter[] = [];
+      const isRegularEventRoot = typeof root !== 'string' && !(root instanceof URL) && !NKinds.addressable(root.kind) && !NKinds.replaceable(root.kind);
 
       if (typeof root === 'string') {
         filters.push({ kinds: [1111, 1244], '#I': [root], ...limitFilter });
@@ -32,9 +36,44 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
         filters.push({ kinds: [1], '#e': [root.id], ...limitFilter });
       }
 
-      // Query for all comments that reference this event regardless of depth
-      const signal = AbortSignal.timeout(5000);
-      const events = await nostr.query(filters, { signal });
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+
+      // Query for comments that reference the root directly.
+      const allEvents: NostrEvent[] = [];
+      const seen = new Set<string>();
+      const addEvents = (incoming: NostrEvent[]) => {
+        for (const e of incoming) {
+          if (!seen.has(e.id)) {
+            seen.add(e.id);
+            allEvents.push(e);
+          }
+        }
+      };
+
+      const initial = await nostr.query(filters, { signal: querySignal });
+      addEvents(initial);
+
+      // For regular event roots, kind 1 NIP-10 replies only tag their immediate
+      // parent, not the thread root. Recursively chase newly discovered kind 1
+      // IDs so nested Primal-style replies on polls are also loaded.
+      if (isRegularEventRoot) {
+        let idsToQuery = [root.id];
+        for (let depth = 0; depth < MAX_FETCH_DEPTH && idsToQuery.length > 0; depth++) {
+          const replies = await nostr.query(
+            [{ kinds: [1], '#e': idsToQuery, ...limitFilter }],
+            { signal: querySignal },
+          );
+          const newIds: string[] = [];
+          for (const e of replies) {
+            if (!seen.has(e.id)) {
+              seen.add(e.id);
+              allEvents.push(e);
+              newIds.push(e.id);
+            }
+          }
+          idsToQuery = newIds;
+        }
+      }
 
       // Helper function to get tag value
       const getTagValue = (event: NostrEvent, tagName: string): string | undefined => {
@@ -43,7 +82,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
       };
 
       // Filter top-level comments (those with lowercase tag matching the root)
-      const topLevelComments = events.filter(comment => {
+      const topLevelComments = allEvents.filter(comment => {
         if (typeof root === 'string') {
           return getTagValue(comment, 'i') === root;
         } else if (root instanceof URL) {
@@ -60,7 +99,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
 
       // Helper function to get all descendants of a comment
       const getDescendants = (parentId: string): NostrEvent[] => {
-        const directReplies = events.filter(comment => {
+        const directReplies = allEvents.filter(comment => {
           const eTag = getTagValue(comment, 'e');
           return eTag === parentId;
         });
@@ -77,7 +116,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
 
       // Create a map of comment ID to its descendants
       const commentDescendants = new Map<string, NostrEvent[]>();
-      for (const comment of events) {
+      for (const comment of allEvents) {
         commentDescendants.set(comment.id, getDescendants(comment.id));
       }
 
@@ -85,7 +124,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
       const sortedTopLevel = topLevelComments.sort((a, b) => b.created_at - a.created_at);
 
       return {
-        allComments: events,
+        allComments: allEvents,
         topLevelComments: sortedTopLevel,
         getDescendants: (commentId: string) => {
           const descendants = commentDescendants.get(commentId) || [];
@@ -93,7 +132,7 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
           return descendants.sort((a, b) => a.created_at - b.created_at);
         },
         getDirectReplies: (commentId: string) => {
-          const directReplies = events.filter(comment => {
+          const directReplies = allEvents.filter(comment => {
             const eTag = getTagValue(comment, 'e');
             return eTag === commentId;
           });
