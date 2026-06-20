@@ -397,9 +397,9 @@ export interface BlobbonautProfile {
   baoRewardsClaimedAt: string | undefined;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
-  /** Wallet mode for 2140 Pets: 'demo' uses BAO play-money, 'real' uses Cashu sats */
-  walletMode: 'demo' | 'real';
-  /** Selected Cashu mint URL when wallet_mode is 'real' */
+  /** Wallet mode for 2140 Pets: 'demo' uses play-money coins, 'real' uses normal Cashu sats, 'bao' uses BAO signet/demo sats */
+  walletMode: 'demo' | 'real' | 'bao';
+  /** Selected Cashu mint URL when wallet_mode is 'real' or 'bao' */
   cashuMintUrl: string | undefined;
   /** Purchased items storage */
   storage: StorageItem[];
@@ -1424,9 +1424,11 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
  * Build tags for a new Blobbonaut Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
-function parseWalletModeTag(tags: string[][]): 'demo' | 'real' {
+export function parseWalletModeTag(tags: string[][]): 'demo' | 'real' | 'bao' {
   const value = getTagValue(tags, 'wallet_mode');
-  return value === 'real' ? 'real' : 'demo';
+  if (value === 'real') return 'real';
+  if (value === 'bao') return 'bao';
+  return 'demo';
 }
 
 export function buildBlobbonautTags(pubkey: string): string[][] {
