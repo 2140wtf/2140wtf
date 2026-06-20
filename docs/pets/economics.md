@@ -31,6 +31,7 @@ Each breed category has passive abilities that modify decay, sats gain, and miss
 ### ₿AO Pets — Market Born
 
 - **Reward bonus**: flat sat bonus added to daily BAO claims based on rarity.
+- **Real-sats earnings**: in `btc-sats` wallet mode, ₿AO trading rewards are real BTC sats credited to the profile `sats` tag; in `demo-sats` mode they are demo sats.
 - **Trade-streak bonus**: consecutive days of BAO trading boost the next claim.
 - **Market sense**: rare+ pets show trending-relay hints in the UI (visual only).
 

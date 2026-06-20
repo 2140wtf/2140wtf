@@ -9,10 +9,10 @@ import type { BaoTradeActivity } from './bao-trade-parser';
 export const BAO_SAT_TO_BAO_RATE = 1;
 
 /** Maximum BAO sats that can be earned from trading activity per day. */
-export const BAO_DAILY_REWARD_CAP = 500;
+export const BAO_DAILY_REWARD_CAP = 50_000;
 
 /** Minimum total active order amount required before any reward is granted. */
-export const BAO_MIN_ACTIVE_AMOUNT = 10;
+export const BAO_MIN_ACTIVE_AMOUNT = 1_000;
 
 /** Trader tier thresholds in lifetime BAO earned. */
 export const BAO_TIER_THRESHOLDS = [0, 1_000, 5_000, 25_000, 100_000] as const;
