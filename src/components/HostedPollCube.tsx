@@ -66,7 +66,7 @@ export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps
         style={{ border: 0, opacity: loaded ? 1 : 0 }}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         loading="lazy"
-        sandbox="allow-scripts allow-same-origin allow-popups"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         onLoad={() => setLoaded(true)}
       />
     </div>
