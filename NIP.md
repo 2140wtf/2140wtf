@@ -801,11 +801,11 @@ Each `breed_category` grants passive gameplay bonuses that are computed at read 
 - `ditto-blobbi`: happiness decay is 15% slower; base stat cap increased by 5.
 - `2140-pets`: daily quest tally progress counts as +20%; missed-care health penalties are 30% shorter; +10% sats from care and missions during local daylight hours (06:00–18:00).
 - `bao`: stat-cap and daily BAO reward bonuses are derived from `bao_rarity`:
-  - common: cap 100, +10 sats
-  - uncommon: cap 105, +18 sats
-  - rare: cap 112, +28 sats
-  - epic: cap 120, +40 sats
-  - legendary: cap 130, +50 sats
+  - common: cap 100, +1,000 sats
+  - uncommon: cap 105, +1,800 sats
+  - rare: cap 112, +2,800 sats
+  - epic: cap 120, +4,000 sats
+  - legendary: cap 130, +5,000 sats
 
 Stat effects are calculated against the effective cap, but stored stat tags remain clamped to 100 for backward compatibility. Clients that render stat bars should treat values above 100 as capped for display unless they explicitly support over-cap buffers.
 
@@ -825,10 +825,10 @@ When a pet is created via breeding, the offspring egg carries parent references 
 
 | Value | Meaning |
 |-------|---------|
-| `demo-sats` | Costs are paid with in-game demo `sats` stored on the profile. Shop/catalog prices are multiplied by 100 to convert legacy coin values to demo sats. |
-| `btc-sats` | Costs are settled with real BTC sats from an external Cashu/NIP-60 wallet before the in-game `sats` ledger is updated. |
+| `demo-sats` | Costs are paid with in-game demo `sats` stored on the profile. This is the default and the only mode currently enabled for testing. |
+| `btc-sats` | Costs are settled with real BTC sats from an external Cashu/NIP-60 wallet before the in-game `sats` ledger is updated. This mode is gated by a feature flag and not yet active in production builds. |
 
-Legacy values `demo`, `real`, and `bao` SHOULD be read for backward compatibility and mapped to `demo-sats` or `btc-sats` as follows: `demo` → `demo-sats`; `real` and `bao` → `btc-sats`. When the tag is missing or unrecognized, clients MUST treat the profile as `demo-sats`.
+Legacy values `demo`, `real`, and `bao` SHOULD be read for backward compatibility. When the real-sats feature flag is enabled, map them as follows: `demo` → `demo-sats`; `real` and `bao` → `btc-sats`. When the flag is disabled, or when the tag is missing or unrecognized, clients MUST treat the profile as `demo-sats`.
 
 #### Kind 11125 `content` JSON — `missions` field
 

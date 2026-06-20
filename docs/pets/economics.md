@@ -88,14 +88,28 @@ Three shop items halve the remaining breeding cooldown once per pet per week:
 - `elixir_market` — ₿AO Pets
 - `elixir_growth` — Ditto Blobbi
 
+## Shop Prices
+
+Shop prices are denominated directly in sats, anchored to rough real-world USD equivalents (~$3 ≈ 5,000 sats). Examples:
+
+| Item | Price (sats) | Approx. USD |
+|---|---|---|
+| Apple | 1,000 | ~$0.60 |
+| Burger | 5,000 | ~$3.00 |
+| Pizza | 5,000 | ~$3.00 |
+| Cake | 7,500 | ~$4.50 |
+| Health Elixir | 12,000 | ~$7.20 |
+
 ## Daily Quests
 
 Each day the player receives 3 missions. Mission selection is seeded by date, pubkey, and active pet category. At least one mission (40% weighting) is drawn from the active category's pool.
 
-Rewards include sats and the matching category currency.
+Rewards are paid in `sats` (demo sats by default; real BTC sats once `btc-sats` wallet mode is enabled).
 
 ## Economy Safety Rules
 
 - All currency values are non-negative integers.
-- Profile content JSON is the source of truth for category currencies and BAO streaks.
+- New Blobbonauts start with `0` sats and must claim daily rewards to earn their first sats.
+- `demo-sats` is the default wallet mode; `btc-sats` is gated by a feature flag while real-sats settlement is still being tested.
+- Profile content JSON is the source of truth for BAO streaks.
 - Kind 31124 tags remain the source of truth for pet state, rarity, and breeding cooldowns.
