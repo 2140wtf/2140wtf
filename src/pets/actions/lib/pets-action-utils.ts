@@ -93,25 +93,29 @@ export const ALL_ACTION_METADATA: Record<PetsAction, { label: string; descriptio
 // STAT_MIN and STAT_MAX are imported from @/lib/pets (single source of truth)
 
 /**
- * Clamp a stat value between STAT_MIN (1) and STAT_MAX (100).
+ * Clamp a stat value between STAT_MIN (1) and an optional max.
  * Safe for undefined values (returns STAT_MIN).
- * 
+ *
  * The minimum of 1 (instead of 0) ensures:
  * - Pets is never in an unrecoverable state
  * - Visual feedback shows critical state without being "dead"
  * - Recovery is always possible with any healing item
  */
-export function clampStat(value: number | undefined): number {
+export function clampStat(value: number | undefined, max: number = STAT_MAX): number {
   if (value === undefined) return STAT_MIN;
-  return Math.max(STAT_MIN, Math.min(STAT_MAX, Math.round(value)));
+  return Math.max(STAT_MIN, Math.min(max, Math.round(value)));
 }
 
 /**
- * Apply a delta to a stat, clamping the result to STAT_MIN-STAT_MAX.
+ * Apply a delta to a stat, clamping the result to STAT_MIN-max.
  */
-export function applyStat(current: number | undefined, delta: number): number {
+export function applyStat(
+  current: number | undefined,
+  delta: number,
+  max: number = STAT_MAX,
+): number {
   const currentValue = current ?? STAT_MIN;
-  return clampStat(currentValue + delta);
+  return clampStat(currentValue + delta, max);
 }
 
 /**
@@ -121,24 +125,25 @@ export function applyStat(current: number | undefined, delta: number): number {
  */
 export function applyItemEffects(
   currentStats: Partial<PetsStats>,
-  effects: ItemEffect
+  effects: ItemEffect,
+  max: number = STAT_MAX,
 ): Partial<PetsStats> {
   const newStats: Partial<PetsStats> = { ...currentStats };
 
   if (effects.hunger !== undefined) {
-    newStats.hunger = applyStat(currentStats.hunger, effects.hunger);
+    newStats.hunger = applyStat(currentStats.hunger, effects.hunger, max);
   }
   if (effects.happiness !== undefined) {
-    newStats.happiness = applyStat(currentStats.happiness, effects.happiness);
+    newStats.happiness = applyStat(currentStats.happiness, effects.happiness, max);
   }
   if (effects.energy !== undefined) {
-    newStats.energy = applyStat(currentStats.energy, effects.energy);
+    newStats.energy = applyStat(currentStats.energy, effects.energy, max);
   }
   if (effects.hygiene !== undefined) {
-    newStats.hygiene = applyStat(currentStats.hygiene, effects.hygiene);
+    newStats.hygiene = applyStat(currentStats.hygiene, effects.hygiene, max);
   }
   if (effects.health !== undefined) {
-    newStats.health = applyStat(currentStats.health, effects.health);
+    newStats.health = applyStat(currentStats.health, effects.health, max);
   }
 
   return newStats;

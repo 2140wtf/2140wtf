@@ -23,7 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { PetsCompanion } from '../lib/pets';
 import { KIND_PETS_STATE, updatePetsTags, statsToTagUpdates } from '../lib/pets';
-import { applyPetsDecay } from '../lib/pets-decay';
+import { applyPetsDecayForCompanion } from '../lib/pets-decay';
 import { consolidateSocialInteractions } from '../lib/pets-social-projection';
 import {
   resolveSocialCheckpoint,
@@ -95,13 +95,7 @@ export function useConsolidateSocialInteractions(
       const now = Math.floor(Date.now() / 1000);
 
       // ── Step 1: Apply accumulated decay to canonical stats ──
-      const decayResult = applyPetsDecay({
-        stage: companion.stage,
-        state: companion.state,
-        stats: companion.stats,
-        lastDecayAt: companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(companion, now);
 
       // ── Step 2: Resolve the current checkpoint ──
       const resolved = resolveSocialCheckpoint(companion);

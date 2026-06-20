@@ -794,6 +794,21 @@ NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds 
 
 These tags are set at mint time and persist across all stage transitions.
 
+#### Kind 31124 category abilities
+
+Each `breed_category` grants passive gameplay bonuses that are computed at read time:
+
+- `ditto-blobbi`: happiness decay is 15% slower; base stat cap increased by 5.
+- `2140-pets`: daily quest tally progress counts as +20%; missed-care health penalties are 30% shorter; +10% sats from care and missions during local daylight hours (06:00–18:00).
+- `bao`: stat-cap and daily BAO reward bonuses are derived from `bao_rarity`:
+  - common: cap 100, +10 sats
+  - uncommon: cap 105, +18 sats
+  - rare: cap 112, +28 sats
+  - epic: cap 120, +40 sats
+  - legendary: cap 130, +50 sats
+
+Stat effects are calculated against the effective cap, but stored stat tags remain clamped to 100 for backward compatibility. Clients that render stat bars should treat values above 100 as capped for display unless they explicitly support over-cap buffers.
+
 #### Kind 31124 breeding tags
 
 When a pet is created via breeding, the offspring egg carries parent references and the parents receive a cooldown tag:
