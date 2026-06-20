@@ -2315,7 +2315,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
               isPeopleList ||
               isEmojiPack ? (
               <>
-                {isPoll && <PollContent event={event} expanded />}
+                {isPoll && <PollContent event={event} />}
                 {isBirdDetection && <BirdDetectionContent event={event} />}
                 {isBirdex && <BirdexContent event={event} expanded />}
                 {isConstellation && <ConstellationContent event={event} />}

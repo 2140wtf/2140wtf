@@ -54,7 +54,7 @@ export function useCurrentUser() {
       default:
         throw new Error(`Unsupported login type: ${login.type}`);
     }
-    return new NUser(user.method, user.pubkey, signerWithNudge(user.signer, isBunkerConnected));
+    return new NUser(user.method, user.pubkey, signerWithNudge(user.signer, isBunkerConnected, login.pubkey));
   }, [nostr]);
 
   const users = useMemo(() => {
