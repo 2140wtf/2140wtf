@@ -17,15 +17,12 @@ import { Label } from '@/components/ui/label';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { cn, formatCompactNumber } from '@/lib/utils';
 import {
-  PETS_PREVIEW_REROLL_COST,
-  PETS_ADOPTION_COST,
+  PETS_PREVIEW_REROLL_SATS,
+  PETS_ADOPTION_SATS,
 } from '@/pets/core/lib/pets';
 
 import type { PetsEggPreview } from '../lib/pets-preview';
 import { previewToPetsCompanion } from '../lib/pets-preview';
-
-/** Demo-sats are priced at 100× the base catalog unit. */
-const SATS_MULTIPLIER = 100;
 
 interface PetsEggPreviewCardProps {
   /** The preview data to display */
@@ -59,8 +56,8 @@ export function PetsEggPreviewCard({
   // Convert preview to companion for visual rendering
   const companionForVisual = previewToPetsCompanion(preview);
 
-  const rerollCostSats = PETS_PREVIEW_REROLL_COST * SATS_MULTIPLIER;
-  const adoptionCostSats = PETS_ADOPTION_COST * SATS_MULTIPLIER;
+  const rerollCostSats = PETS_PREVIEW_REROLL_SATS;
+  const adoptionCostSats = PETS_ADOPTION_SATS;
 
   const canAffordReroll = sats >= rerollCostSats;
   const canAffordAdopt = sats >= adoptionCostSats;

@@ -67,7 +67,7 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
   it('pays with real sats and does not deduct profile sats', async () => {
     const sendToken = vi.fn().mockResolvedValue('token123');
     const externalWallet = {
-      totalBalance: 500,
+      totalBalance: 5_000,
       loading: false,
       sendToken,
     } as unknown as CashuWalletState & CashuWalletActions;
@@ -75,15 +75,15 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 10, quantity: 2 });
+    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(sendToken).toHaveBeenCalledWith(20, 'Pets shop: Apple');
+    expect(sendToken).toHaveBeenCalledWith(1_000, 'Pets shop: Apple');
 
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
     expect(published).toBeDefined();
-    expect(published?.tags.some((t) => t[0] === 'storage' && t[1] === 'food_apple:2')).toBe(true);
+    expect(published?.tags.some((t) => t[0] === 'storage' && t[1] === 'food_apple:1')).toBe(true);
     expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('20000');
   });
 
@@ -97,7 +97,7 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 10, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toContain('Insufficient external wallet balance');
@@ -112,7 +112,7 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('demo-sats', 20_000));
   });
 
-  it('deducts demo sats using the 100× multiplier and does not call the external wallet', async () => {
+  it('deducts demo sats and does not call the external wallet', async () => {
     const sendToken = vi.fn();
     const externalWallet = {
       totalBalance: 500,
@@ -123,7 +123,7 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 10, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -132,11 +132,11 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19000');
   });
 
-  it('validates that the multiplied demo-sats cost is affordable', async () => {
+  it('validates that the demo-sats cost is affordable', async () => {
     const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 500))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 10, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toContain('Insufficient demo sats');
