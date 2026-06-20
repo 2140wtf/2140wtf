@@ -55,3 +55,6 @@ android/downloads/
 .research/
 *.apk
 *.apk.sha256
+
+# Local experimental-branch notes
+EXPERIMENTAL_BRANCHES.md
