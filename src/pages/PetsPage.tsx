@@ -7,6 +7,7 @@ import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, The
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
+
 import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
 import { usePetsInteractions } from '@/pets/core/hooks/usePetsInteractions';
 import { usePetsActivityHistory } from '@/pets/core/hooks/usePetsActivityHistory';
@@ -433,21 +434,25 @@ function PetsContent() {
     setStoredSelectedD(d);
   }, [setStoredSelectedD, storedSelectedD]);
 
-  // Toggle between demo (₿AO coins) and real (Cashu sats) wallet mode.
+  // Toggle between demo (play-money coins) and bao (BAO signet/demo sats) wallet mode.
   // Always republish from a freshly fetched profile to avoid clobbering tags.
-  const _handleWalletModeChange = useCallback(async (mode: 'demo' | 'real') => {
-    if (!user?.pubkey || !profile) return;
-    try {
-      const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-      if (!fresh) return;
-      const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
-      await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
-      await invalidateProfile();
-      toast({ title: 'Wallet mode', description: mode === 'real' ? 'Real Cashu sats enabled' : 'Demo coins enabled' });
-    } catch {
-      toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
-    }
-  }, [user?.pubkey, profile, nostr, publishEvent, invalidateProfile]);
+  const _handleWalletModeChange = useCallback(
+    async (mode: 'demo' | 'real' | 'bao') => {
+      if (!user?.pubkey || !profile) return;
+      try {
+        const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+        if (!fresh) return;
+        const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
+        await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
+        await invalidateProfile();
+        const modeLabel = mode === 'bao' ? 'BAO signet sats' : mode === 'real' ? 'real Cashu sats' : 'demo coins';
+        toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
+      } catch {
+        toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
+      }
+    },
+    [user?.pubkey, profile, nostr, publishEvent, invalidateProfile],
+  );
   
   // ─── Helper: Ensure Canonical Before Action ───
   // Centralized migration helper that auto-migrates legacy pets before any action
@@ -3434,8 +3439,10 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           </div>
           <p className="text-sm font-semibold">
             {profile?.walletMode === 'demo'
-              ? 'Bitcoin (cashu/₿AO demo sats)'
-              : 'Bitcoin (cashu/real sats)'}
+              ? 'Bitcoin (demo coins)'
+              : profile?.walletMode === 'bao'
+                ? 'Bitcoin (BAO signet sats)'
+                : 'Bitcoin (real Cashu sats)'}
           </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">

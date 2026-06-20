@@ -17,7 +17,7 @@ import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 export interface BattleSetupProps {
   ownerPubkey: string;
-  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: 'demo' | 'real') => void;
+  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: 'demo' | 'real' | 'bao') => void;
   className?: string;
 }
 

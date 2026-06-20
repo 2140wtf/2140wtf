@@ -17,8 +17,8 @@ import { serializeProfileContent } from '@/pets/core/lib/missions';
 export interface BattlePayoutRequest {
   /** Number of demo ₿AO coins to award to the winner. */
   amount: number;
-  /** Demo mode awards profile coins; real mode is a future Cashu extension. */
-  mode: 'demo' | 'real';
+  /** Demo mode awards profile coins; real/bao modes are future Cashu extensions. */
+  mode: 'demo' | 'real' | 'bao';
 }
 
 export interface BattlePayoutResult {
@@ -46,7 +46,7 @@ export function useBattlePayout(
         throw new Error('You must be logged in to collect battle rewards.');
       }
 
-      if (mode === 'real') {
+      if (mode === 'real' || mode === 'bao') {
         throw new Error('Real sats payout is coming soon.');
       }
 
