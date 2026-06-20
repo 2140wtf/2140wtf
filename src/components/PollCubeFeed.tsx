@@ -115,7 +115,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
       <div className="grid grid-cols-1 gap-6">
         {filteredPolls.map((poll) => (
           <div key={poll.id} className="flex flex-col gap-3">
-            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-[420px]" />
+            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="aspect-square min-h-[420px] max-h-[80vh]" />
             <div className="text-center px-2">
               <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
             </div>
