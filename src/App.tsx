@@ -22,6 +22,7 @@ import { GroupChatProvider } from "@/contexts/GroupChatContext";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
+import { DEFAULT_SIDEBAR_WIDGETS } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
 import AppRouter from "./AppRouter";
 
@@ -182,11 +183,7 @@ const hardcodedConfig: AppConfig = {
   sandboxDomain: 'iframe.diy',
   esploraApis: [...DEFAULT_ESPLORA_APIS],
   currencyDisplay: 'usd',
-  sidebarWidgets: [
-    { id: 'trends' },
-    { id: 'hot-posts' },
-    { id: 'wikipedia' },
-  ],
+  sidebarWidgets: DEFAULT_SIDEBAR_WIDGETS,
   maxCachedEventAge: 604800,
 };
 

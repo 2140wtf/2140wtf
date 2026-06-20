@@ -250,6 +250,9 @@ export function useInitialSync() {
               if (parsed.sidebarOrder && parsed.sidebarOrder.length > 0) {
                 updates.sidebarOrder = parsed.sidebarOrder;
               }
+              if (parsed.sidebarWidgets) {
+                updates.sidebarWidgets = parsed.sidebarWidgets;
+              }
               if (parsed.homePage) {
                 updates.homePage = parsed.homePage;
               }

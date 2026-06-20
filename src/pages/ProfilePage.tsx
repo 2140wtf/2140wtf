@@ -162,6 +162,9 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
   const [giveBadgeOpen, setGiveBadgeOpen] = useState(false);
   const [followQROpen, setFollowQROpen] = useState(false);
   const zapTriggerRef = useRef<HTMLSpanElement>(null);
+  // ZapDialog mounts its own payment-target query, so defer mounting it until
+  // the user actually invokes zap instead of on every profile load.
+  const [zapMounted, setZapMounted] = useState(false);
   // Show zap action for any non-self profile. Both on-chain and Lightning
   // zaps are offered inside the dialog (Lightning only when the author has
   // a lud06/lud16 configured).
@@ -219,6 +222,7 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
   const handleGiveBadge = () => openAfterClose(setGiveBadgeOpen);
   const handleZap = () => {
     close();
+    setZapMounted(true);
     setTimeout(() => zapTriggerRef.current?.click(), 150);
   };
 
@@ -320,12 +324,14 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
 
     <ReportDialog pubkey={pubkey} open={reportOpen} onOpenChange={setReportOpen} />
 
-    <AddToListDialog
-      pubkey={pubkey}
-      displayName={displayName}
-      open={addToListOpen}
-      onOpenChange={setAddToListOpen}
-    />
+    {addToListOpen && (
+      <AddToListDialog
+        pubkey={pubkey}
+        displayName={displayName}
+        open={addToListOpen}
+        onOpenChange={setAddToListOpen}
+      />
+    )}
 
     {isOwnProfile && (
       <>
@@ -349,7 +355,7 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
       />
     )}
 
-    {showZap && authorEvent && (
+    {showZap && authorEvent && zapMounted && (
       <ZapDialog target={authorEvent}>
         <span ref={zapTriggerRef} className="hidden" />
       </ZapDialog>
@@ -467,7 +473,7 @@ function SortableTabChip({
         onClick={(e) => { e.stopPropagation(); onSelect(); }}
         className="py-3.5 pr-1"
       >
-        {tab.label}
+        {tabDisplayLabel(tab.label)}
       </button>
 
       {/* Edit — only rendered for active custom (non-core) tabs */}
@@ -948,6 +954,15 @@ const CORE_TAB_IDS: Record<string, string> = {
   'Media': 'media', 'Products': 'products', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall',
 };
 
+// Map a canonical tab label to its user-facing display text. The canonical
+// label (e.g. 'Posts') is kept for the internal tab id and the serialized
+// kind 16769 event (cross-client interop); only the rendered text differs.
+const TAB_DISPLAY_LABELS: Record<string, string> = {
+  'Posts': 'Feed',
+};
+
+const tabDisplayLabel = (label: string): string => TAB_DISPLAY_LABELS[label] ?? label;
+
 export function ProfilePage() {
   const { config } = useAppContext();
   const params = useParams();
@@ -1332,7 +1347,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     fetchNextPage: fetchNextMediaPage,
     hasNextPage: hasNextMediaPage,
     isFetchingNextPage: isFetchingNextMediaPage,
-  } = useProfileMedia(pubkey, hasTabs);
+  } = useProfileMedia(pubkey, hasTabs && activeTab === 'media');
 
   // Profile products — NIP-99 classified listings authored by this user
   const {
@@ -1365,7 +1380,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     fetchNextPage: fetchNextWallPage,
     hasNextPage: hasNextWallPage,
     isFetchingNextPage: isFetchingNextWallPage,
-  } = useWallComments(pubkey, hasTabs ? wallFollowList : undefined);
+  } = useWallComments(pubkey, hasTabs && activeTab === 'wall' ? wallFollowList : undefined);
 
   // Synthetic kind 0 event for the ComposeBox replyTo (NIP-22 comments on the profile)
   const wallReplyTarget = useMemo((): NostrEvent | undefined => {
@@ -2341,7 +2356,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
             return (
               <TabButton
                 key={tab.label}
-                label={tab.label}
+                label={tabDisplayLabel(tab.label)}
                 active={activeTab === tabId}
                 onClick={() => {
                   setActiveTab(tabId);
@@ -2399,7 +2414,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                       const tabId = CORE_TAB_IDS[label] ?? label;
                       return (
                         <DropdownMenuItem key={label} onClick={() => setActiveTab(tabId)}>
-                          {label}
+                          {tabDisplayLabel(label)}
                         </DropdownMenuItem>
                       );
                     })}
@@ -2436,7 +2451,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                           {present
                             ? <Check className="size-3.5 mr-2 opacity-60" strokeWidth={4} />
                             : <Plus className="size-3.5 mr-2" strokeWidth={4} />}
-                          {name}
+                          {tabDisplayLabel(name)}
                         </DropdownMenuItem>
                       );
                     })}
@@ -2469,7 +2484,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         <div style={{ height: ARC_OVERHANG_PX }} />
 
         {/* Add/edit single tab modal */}
-        {pubkey && (
+        {pubkey && tabModalOpen && (
           <ProfileTabEditModal
             open={tabModalOpen}
             onOpenChange={setTabModalOpen}
