@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
@@ -8,7 +9,13 @@ import { cn } from '@/lib/utils';
 interface HostedPollCubeProps {
   pollId: string;
   title?: string;
+  event?: NostrEvent;
   className?: string;
+}
+
+function encodeEventParam(event: NostrEvent): string {
+  const json = JSON.stringify(event);
+  return btoa(unescape(encodeURIComponent(json)));
 }
 
 /**
@@ -18,11 +25,21 @@ interface HostedPollCubeProps {
  * latest branding/wall images are used when available. If the API cannot be
  * reached, we fall back to the deterministic `https://bao.markets/embed/cube/<poll-id>`
  * URL, which renders a default BAO-branded cube for any poll.
+ *
+ * When the raw poll event is provided, it is passed to the embed iframe so the
+ * cube can render even if BAO's relays don't have the poll.
  */
-export function HostedPollCube({ pollId, title, className }: HostedPollCubeProps) {
+export function HostedPollCube({ pollId, title, event, className }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
-  const embedUrl = sanitizeUrl(design?.embedUrl) ?? null;
+
+  const embedUrl = useMemo(() => {
+    const url = sanitizeUrl(design?.embedUrl);
+    if (!url) return null;
+    if (!event) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}event=${encodeURIComponent(encodeEventParam(event))}`;
+  }, [design?.embedUrl, event]);
 
   if (isLoading) {
     return (
