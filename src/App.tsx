@@ -29,6 +29,21 @@ const head = createHead({
   plugins: [InferSeoMetaPlugin()],
 });
 
+/** Sanitize an optional build-time URL so malformed env values cannot leak
+ *  into the wallet/faucet flow.
+ */
+function safeOptionalUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return trimmed;
+  } catch {
+    // invalid URL
+  }
+  return undefined;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -152,9 +167,9 @@ const hardcodedConfig: AppConfig = {
   faviconUrl: "",
   linkPreviewUrl: "",
   corsProxy: "",
-  baoSignetMintUrl: (import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL as string | undefined,
-  baoSignetFaucetUrl: (import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL as string | undefined,
-  baoApiUrl: (import.meta.env as Record<string, unknown>).VITE_BAO_API_URL as string | undefined,
+  baoSignetMintUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL),
+  baoSignetFaucetUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL),
+  baoApiUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_API_URL),
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
   sentryEnabled: true,

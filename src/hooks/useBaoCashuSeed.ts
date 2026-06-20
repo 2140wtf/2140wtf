@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { deriveBaoCashuMnemonic } from '@/lib/cashu/cashu';
+import { secureStorage } from '@/lib/secureStorage';
 
 const seedStorageKey = (pubkey: string) => `2140_bao_seed_${pubkey}`;
 const SEED_OP_TIMEOUT_MS = 15_000;
@@ -34,9 +35,10 @@ export interface UseBaoCashuSeedResult {
  * Generate or load the deterministic BAO Cashu seed phrase for the current user.
  *
  * The seed is derived from the user's main Cashu seed via HKDF, then encrypted
- * with NIP-44 to the user's own pubkey and stored in localStorage. This gives
- * every device that knows the main seed the same BAO wallet, while keeping the
- * BAO seed encrypted at rest.
+ * with NIP-44 to the user's own pubkey and stored in secure storage. On native
+ * builds this uses the iOS Keychain / Android Keystore; on web it falls back to
+ * localStorage. This gives every device that knows the main seed the same BAO
+ * wallet, while keeping the BAO seed encrypted at rest.
  */
 export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashuSeedResult {
   const { user } = useCurrentUser();
@@ -49,11 +51,11 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
   retryRef.current = retryToken;
 
   const retry = useCallback(() => setRetryToken((t) => t + 1), []);
-  const regenerate = useCallback(() => {
+  const regenerate = useCallback(async () => {
     const pubkey = user?.pubkey;
     if (pubkey) {
       try {
-        localStorage.removeItem(seedStorageKey(pubkey));
+        await secureStorage.removeItem(seedStorageKey(pubkey));
       } catch {
         // ignore storage errors
       }
@@ -80,7 +82,11 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
     (async () => {
       try {
         const key = seedStorageKey(pubkey);
-        const ciphertext = localStorage.getItem(key);
+        const ciphertext = await withTimeout(
+          secureStorage.getItem(key),
+          SEED_OP_TIMEOUT_MS,
+          'Load BAO seed',
+        );
 
         if (ciphertext) {
           const decrypted = await withTimeout(
@@ -99,7 +105,11 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
             SEED_OP_TIMEOUT_MS,
             'Encrypt BAO seed',
           );
-          localStorage.setItem(key, encrypted);
+          await withTimeout(
+            secureStorage.setItem(key, encrypted),
+            SEED_OP_TIMEOUT_MS,
+            'Save BAO seed',
+          );
           if (!cancelled && currentToken === retryRef.current) {
             setSeedPhrase(mnemonic);
             setIsNew(true);

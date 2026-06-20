@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { useNutzapReceiver } from './useNutzapReceiver';
@@ -44,6 +44,10 @@ describe('useNutzapReceiver', () => {
     mocks.currentUser = { pubkey: userPubkey };
     mocks.received = [];
     mocks.nostrReq.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('subscribes to kind:9321 events tagged for the user and trusted mints', async () => {

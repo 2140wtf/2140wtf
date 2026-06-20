@@ -29,6 +29,10 @@ function dedupeMintUrls(mints: Array<{ url: string; name?: string }>): string[] 
  * - Listens for kind:9321 events tagged with the user's identity pubkey (`#p`)
  *   and one of the configured mint URLs (`#u`).
  * - Calls `onNutzap` for every new event so the wallet can redeem it.
+ *
+ * The subscription runs until the component unmounts. It reconnects with a short
+ * backoff after errors or unexpected completion so Nutzaps are not silently
+ * missed after the first minute.
  */
 export function useNutzapReceiver(
   seedPhrase: string,
@@ -39,6 +43,8 @@ export function useNutzapReceiver(
   const { nostr } = useNostr();
 
   const keyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
+  const onNutzapRef = useRef(onNutzap);
+  onNutzapRef.current = onNutzap;
 
   useEffect(() => {
     if (!seedPhrase) {
@@ -65,23 +71,35 @@ export function useNutzapReceiver(
       { kinds: [NUTZAP_PAYMENT_KIND], '#p': [user.pubkey], '#u': normalizedMints },
     ];
 
-    let cancelled = false;
-    const _sub = (async () => {
-      try {
-        for await (const msg of nostr.req(filters, { signal: AbortSignal.timeout(60_000) })) {
-          if (cancelled) break;
-          if (msg[0] === 'EVENT') {
-            onNutzap(msg[2]);
+    const controller = new AbortController();
+    let active = true;
+
+    const runSubscription = async () => {
+      while (active && !controller.signal.aborted) {
+        try {
+          for await (const msg of nostr.req(filters, { signal: controller.signal })) {
+            if (!active || controller.signal.aborted) break;
+            if (msg[0] === 'EVENT') {
+              onNutzapRef.current?.(msg[2]);
+            }
           }
+        } catch (e) {
+          devLog.warn('Nutzap subscription error:', e);
         }
-      } catch {
-        // Subscription errors are best-effort; the caller can re-mount to retry.
+        if (!active || controller.signal.aborted) break;
+        // Brief backoff before reconnecting so a relay error does not spin.
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
-    })();
-    void _sub;
+    };
+
+    void runSubscription();
 
     return () => {
-      cancelled = true;
+      active = false;
+      controller.abort();
     };
-  }, [user, onNutzap, mintUrls, nostr]);
+    // onNutzap is intentionally omitted; we use a ref so the subscription does
+    // not tear down on every callback identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, mintUrls, nostr]);
 }
