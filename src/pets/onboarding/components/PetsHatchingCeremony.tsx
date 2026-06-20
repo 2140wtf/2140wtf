@@ -237,7 +237,7 @@ export function PetsHatchingCeremony({
           const tagsWithName = [
             ...baseTags,
             ['name', suggestedName],
-            ['coins', INITIAL_BLOBBONAUT_COINS.toString()],
+            ['sats', (INITIAL_BLOBBONAUT_COINS * 100).toString()],
           ];
 
           const profileEvent = await publishEvent({

@@ -1,9 +1,9 @@
 /**
  * PetsEggPreviewCard - Egg preview display during adoption flow
- * 
+ *
  * Shows the preview egg with visual traits and action buttons for
  * rerolling (generating another) or adopting.
- * 
+ *
  * Includes a name input so users can customize their Pets's name
  * before adoption. The name in the preview becomes the final name.
  */
@@ -24,11 +24,14 @@ import {
 import type { PetsEggPreview } from '../lib/pets-preview';
 import { previewToPetsCompanion } from '../lib/pets-preview';
 
+/** Demo-sats are priced at 100× the base catalog unit. */
+const SATS_MULTIPLIER = 100;
+
 interface PetsEggPreviewCardProps {
   /** The preview data to display */
   preview: PetsEggPreview;
-  /** Current coin balance */
-  coins: number;
+  /** Current demo-sat balance */
+  sats: number;
   /** Whether this is the first (free) preview */
   isFirstPreview: boolean;
   /** Whether an action is in progress */
@@ -45,7 +48,7 @@ interface PetsEggPreviewCardProps {
 
 export function PetsEggPreviewCard({
   preview,
-  coins,
+  sats,
   isFirstPreview,
   isProcessing,
   actionInProgress,
@@ -55,38 +58,41 @@ export function PetsEggPreviewCard({
 }: PetsEggPreviewCardProps) {
   // Convert preview to companion for visual rendering
   const companionForVisual = previewToPetsCompanion(preview);
-  
-  const canAffordReroll = coins >= PETS_PREVIEW_REROLL_COST;
-  const canAffordAdopt = coins >= PETS_ADOPTION_COST;
-  
+
+  const rerollCostSats = PETS_PREVIEW_REROLL_COST * SATS_MULTIPLIER;
+  const adoptionCostSats = PETS_ADOPTION_COST * SATS_MULTIPLIER;
+
+  const canAffordReroll = sats >= rerollCostSats;
+  const canAffordAdopt = sats >= adoptionCostSats;
+
   // Validate name - must not be empty after trim
   const trimmedName = preview.name.trim();
   const isValidName = trimmedName.length > 0;
-  
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
       <div className="flex flex-col items-center gap-6 text-center max-w-md w-full">
-        {/* Coins Display */}
+        {/* Sats Display */}
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-100 border border-amber-200 dark:bg-amber-900/40 dark:border-amber-800">
           <Coins className="size-4 text-amber-800 dark:text-amber-200 shrink-0" />
           <span className="font-semibold text-amber-950 dark:text-amber-100 whitespace-nowrap">
-            {formatCompactNumber(coins)} coins
+            {formatCompactNumber(sats)} demo sats
           </span>
         </div>
-        
+
         {/* Title */}
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-bold">
             Meet Your 2140 PET!
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            {isFirstPreview 
+            {isFirstPreview
               ? "Here's your first egg preview - this one's free!"
               : "Here's another egg to consider adopting."
             }
           </p>
         </div>
-        
+
         {/* Name Input */}
         <div className="w-full max-w-xs space-y-2">
           <Label htmlFor="pets-name" className="text-sm font-medium flex items-center gap-1">
@@ -107,7 +113,7 @@ export function PetsEggPreviewCard({
             <p className="text-xs text-destructive">Please enter a name for your 2140 PET</p>
           )}
         </div>
-        
+
         {/* Visible colored name display above egg */}
         {trimmedName && (
           <p
@@ -117,12 +123,12 @@ export function PetsEggPreviewCard({
             {trimmedName}
           </p>
         )}
-        
+
         {/* Egg Preview Visual */}
         <div className="relative">
           {/* Glow effect */}
           <div className="absolute inset-0 -m-8 bg-primary/5 rounded-full blur-3xl" />
-          
+
         {/* Main visual - key forces remount on preview change */}
             <div className={cn(
               "relative transition-all duration-300",
@@ -136,7 +142,7 @@ export function PetsEggPreviewCard({
                 className="size-48 sm:size-56"
               />
             </div>
-          
+
           {/* Processing overlay */}
           {isProcessing && (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -144,7 +150,7 @@ export function PetsEggPreviewCard({
             </div>
           )}
         </div>
-        
+
         {/* Visual Traits Badges */}
         <div className="flex flex-wrap justify-center gap-2">
           <Badge variant="outline" className="capitalize">
@@ -160,7 +166,7 @@ export function PetsEggPreviewCard({
             {preview.visualTraits.size}
           </Badge>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="w-full space-y-3 mt-4">
           {/* Adopt Button */}
@@ -178,11 +184,11 @@ export function PetsEggPreviewCard({
             ) : (
               <>
                 <Heart className="size-4 mr-2" />
-                Adopt {trimmedName || 'This 2140 PET'} ({PETS_ADOPTION_COST} coins)
+                Adopt {trimmedName || 'This 2140 PET'} ({formatCompactNumber(adoptionCostSats)} demo sats)
               </>
             )}
           </Button>
-          
+
           {/* Reroll Button */}
           <Button
             variant="outline"
@@ -199,27 +205,27 @@ export function PetsEggPreviewCard({
             ) : (
               <>
                 <RefreshCw className="size-4 mr-2" />
-                Try Another ({PETS_PREVIEW_REROLL_COST} coins)
+                Try Another ({formatCompactNumber(rerollCostSats)} demo sats)
               </>
             )}
           </Button>
         </div>
-        
-        {/* Insufficient Coins Warning */}
+
+        {/* Insufficient Sats Warning */}
         {!canAffordAdopt && (
           <p className="text-sm text-destructive">
-            You need {PETS_ADOPTION_COST - coins} more coins to adopt.
+            You need {formatCompactNumber(adoptionCostSats - sats)} more demo sats to adopt.
           </p>
         )}
         {canAffordAdopt && !canAffordReroll && (
           <p className="text-sm text-muted-foreground">
-            Not enough coins to try another preview.
+            Not enough demo sats to try another preview.
           </p>
         )}
-        
+
         {/* Cost Explanation */}
         <p className="text-xs text-muted-foreground mt-2">
-          Adopting costs {PETS_ADOPTION_COST} coins. Trying another costs {PETS_PREVIEW_REROLL_COST} coins.
+          Adopting costs {formatCompactNumber(adoptionCostSats)} demo sats. Trying another costs {formatCompactNumber(rerollCostSats)} demo sats.
         </p>
       </div>
     </div>

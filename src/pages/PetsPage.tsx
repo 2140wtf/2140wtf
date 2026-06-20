@@ -434,10 +434,10 @@ function PetsContent() {
     setStoredSelectedD(d);
   }, [setStoredSelectedD, storedSelectedD]);
 
-  // Toggle between demo (play-money coins) and bao (BAO signet/demo sats) wallet mode.
+  // Toggle between demo-sats (in-game demo sats) and btc-sats (real BTC sats) wallet mode.
   // Always republish from a freshly fetched profile to avoid clobbering tags.
   const _handleWalletModeChange = useCallback(
-    async (mode: 'demo' | 'real' | 'bao') => {
+    async (mode: 'demo-sats' | 'btc-sats') => {
       if (!user?.pubkey || !profile) return;
       try {
         const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
@@ -445,7 +445,7 @@ function PetsContent() {
         const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
         await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
         await invalidateProfile();
-        const modeLabel = mode === 'bao' ? 'BAO signet sats' : mode === 'real' ? 'real Cashu sats' : 'demo coins';
+        const modeLabel = mode === 'btc-sats' ? 'BTC sats' : 'demo sats';
         toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
       } catch {
         toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
@@ -3184,7 +3184,7 @@ function MissionsTabContent({
                   <span className="text-[10px] tabular-nums font-medium text-muted-foreground shrink-0">{mission.progress}/{mission.target}</span>
                 )}
                 {mission.complete && (
-                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.xp} XP · +{mission.coinReward} coins</span>
+                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.xp} XP · +{mission.satsReward} sats</span>
                 )}
               </div>
             ))}
@@ -3199,7 +3199,7 @@ function MissionsTabContent({
                   <p className="text-sm font-medium leading-tight">Daily Champion</p>
                   <p className="text-[10px] text-muted-foreground">All missions complete!</p>
                 </div>
-                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusXp} XP · +{dailyMissions.bonusCoins} coins</span>
+                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusXp} XP · +{dailyMissions.bonusSats} sats</span>
               </div>
             )}
 
@@ -3432,11 +3432,9 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
             <TrendingUp className="size-4 text-amber-800 dark:text-amber-200" />
           </div>
           <p className="text-sm font-semibold">
-            {profile?.walletMode === 'demo'
-              ? 'Bitcoin (demo coins)'
-              : profile?.walletMode === 'bao'
-                ? 'Bitcoin (BAO signet sats)'
-                : 'Bitcoin (real Cashu sats)'}
+            {profile?.walletMode === 'btc-sats'
+              ? 'Bitcoin (BTC sats)'
+              : 'Bitcoin (demo sats)'}
           </p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">
