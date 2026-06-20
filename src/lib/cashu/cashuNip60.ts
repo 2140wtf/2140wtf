@@ -541,10 +541,16 @@ export async function buildNutzapInfoEvent(
   });
 }
 
-/** Parse a kind:10019 Nutzap info event into the recipient's trusted mints/relays/P2PK pubkey. */
-export function parseNutzapInfoEvent(event: NostrEvent): { pubkey: string; mints: string[]; relays: string[] } | null {
+/** Parse a kind:10019 Nutzap info event into the recipient's trusted mints/relays/P2PK pubkey.
+ *  When `expectedAuthor` is provided, the event must be authored by that pubkey.
+ */
+export function parseNutzapInfoEvent(
+  event: NostrEvent,
+  expectedAuthor?: string,
+): { pubkey: string; mints: string[]; relays: string[] } | null {
   if (event.kind !== NUTZAP_INFO_KIND) return null;
   if (!verifyEvent(event)) return null;
+  if (expectedAuthor && event.pubkey.toLowerCase() !== expectedAuthor.toLowerCase()) return null;
   const relays: string[] = [];
   const mints: string[] = [];
   let pubkey: string | null = null;
@@ -642,6 +648,7 @@ export async function buildNutzapRedemptionHistoryEvent(
 ): Promise<NostrEvent | null> {
   const normalized = normalizeMintUrl(mintUrl);
   if (!normalized) return null;
+  if (!createdTokenEventId || createdTokenEventId.length !== 64) return null;
   const contentEntries: string[][] = [
     ['direction', 'in'],
     ['amount', String(amount)],

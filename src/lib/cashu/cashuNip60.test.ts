@@ -203,6 +203,17 @@ describe('Nutzap info event', () => {
     tampered.content = 'tampered';
     expect(parseNutzapInfoEvent(tampered)).toBeNull();
   });
+
+  it('rejects a kind:10019 event authored by someone other than the expected recipient', async () => {
+    const identitySigner = createNip60Signer(generateSecretKey());
+    const attackerSigner = createNip60Signer(generateSecretKey());
+    const walletPubkey = getPublicKey(generateSecretKey());
+    const event = await buildNutzapInfoEvent(['https://mint.example.com'], [], walletPubkey, attackerSigner);
+
+    expect(parseNutzapInfoEvent(event!)).not.toBeNull();
+    expect(parseNutzapInfoEvent(event!, identitySigner.pubkey)).toBeNull();
+    expect(parseNutzapInfoEvent(event!, attackerSigner.pubkey)).not.toBeNull();
+  });
 });
 
 describe('Nutzap event', () => {
@@ -254,6 +265,15 @@ describe('Nutzap redemption history event', () => {
 
     const parsed = await parseHistoryEvent(event!, walletSigner);
     expect(parsed).toMatchObject({ direction: 'in', amount: 42, mint: 'https://mint.example.com' });
+  });
+
+  it('rejects an empty or malformed created token event id', async () => {
+    const walletSigner = createNip60Signer(generateSecretKey());
+    const senderPubkey = getPublicKey(generateSecretKey());
+    const baseArgs = [42, 'https://mint.example.com', 'nutzapid'.repeat(4).padEnd(64, '0'), senderPubkey] as const;
+
+    expect(await buildNutzapRedemptionHistoryEvent(...baseArgs, '', walletSigner)).toBeNull();
+    expect(await buildNutzapRedemptionHistoryEvent(...baseArgs, 'short', walletSigner)).toBeNull();
   });
 });
 

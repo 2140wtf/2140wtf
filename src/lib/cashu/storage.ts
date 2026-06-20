@@ -15,6 +15,7 @@ import {
 import { devLog } from '@/lib/cashu/devLog';
 
 import { stringToBase64 } from '@/lib/cashu/base64';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 const DEFAULT_PREFIX = 'freedomid_';
 
@@ -910,7 +911,7 @@ export async function saveProcessedTokenHashes(entries: ProcessedTokenEntry[], e
 
 export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!hash || !encKey) return;
-  const entries = await loadProcessedTokenHashes(encKey, legacyKey);
+  const entries = await loadProcessedTokenHashes(encKey, legacyKey, namespace);
   const now = Date.now();
   const filtered = entries.filter((e) => e.hash !== hash);
   filtered.push({ hash, expiresAt: now + PROCESSED_TOKEN_TTL_MS });
@@ -923,6 +924,157 @@ export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, le
     if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
     throw new Error(`Failed to save processed token hash: ${e instanceof Error ? e.message : String(e)}`);
   }
+}
+
+// ── Processed Nutzap ids (receive dedup, survives restart) ─
+
+const PROCESSED_NUTZAP_CONTEXT = 'freedomid:processed-nutzaps';
+const PROCESSED_NUTZAP_KEY = 'processed_nutzaps';
+const MAX_PROCESSED_NUTZAP_ENTRIES = 1000;
+const PROCESSED_NUTZAP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface ProcessedNutzapEntry {
+  id: string;
+  expiresAt: number;
+}
+
+export async function loadProcessedNutzapIds(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<ProcessedNutzapEntry[]> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + PROCESSED_NUTZAP_KEY); } catch { return []; }
+  if (!raw || !encKey) return [];
+  try {
+    const decrypted = await decryptData(raw, encKey, legacyKey, PROCESSED_NUTZAP_CONTEXT);
+    if (decrypted === null) return [];
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return parsed.filter((e): e is ProcessedNutzapEntry => {
+      if (!e || typeof e !== 'object') return false;
+      const entry = e as Record<string, unknown>;
+      return (
+        typeof entry.id === 'string' &&
+        entry.id.length > 0 &&
+        typeof entry.expiresAt === 'number' &&
+        Number.isFinite(entry.expiresAt) &&
+        entry.expiresAt > now
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function isProcessedNutzapId(id: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<boolean> {
+  if (!id) return false;
+  const entries = await loadProcessedNutzapIds(encKey, legacyKey, namespace);
+  return entries.some((e) => e.id === id);
+}
+
+export async function addProcessedNutzapId(id: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
+  if (!id || !encKey) return;
+  const entries = await loadProcessedNutzapIds(encKey, legacyKey, namespace);
+  const now = Date.now();
+  const filtered = entries.filter((e) => e.id !== id);
+  filtered.push({ id, expiresAt: now + PROCESSED_NUTZAP_TTL_MS });
+  filtered.sort((a, b) => b.expiresAt - a.expiresAt);
+  const trimmed = filtered.slice(0, MAX_PROCESSED_NUTZAP_ENTRIES);
+  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_NUTZAP_CONTEXT);
+  try {
+    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_NUTZAP_KEY, ciphertext);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    throw new Error(`Failed to save processed Nutzap id: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// ── Pending Nutzap sends (recover from publish failure) ───
+
+const PENDING_NUTZAP_CONTEXT = 'freedomid:pending-nutzaps';
+const PENDING_NUTZAP_KEY = 'pending_nutzaps';
+const MAX_PENDING_NUTZAP_ENTRIES = 100;
+const PENDING_NUTZAP_RETRY_COOLDOWN_MS = 60_000;
+
+export interface PendingNutzapEntry {
+  id: string;
+  event?: NostrEvent;
+  sendProofs: unknown[];
+  recipientPubkey: string;
+  mintUrl: string;
+  amount: number;
+  memo?: string;
+  zappedEvent?: { id: string; kind: number; relay?: string };
+  timestamp: number;
+  attempts: number;
+  lastAttemptAt?: number;
+}
+
+export async function loadPendingNutzaps(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<PendingNutzapEntry[]> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY); } catch { return []; }
+  if (!raw || !encKey) return [];
+  try {
+    const decrypted = await decryptData(raw, encKey, legacyKey, PENDING_NUTZAP_CONTEXT);
+    if (decrypted === null) return [];
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((e): e is PendingNutzapEntry => {
+      if (!e || typeof e !== 'object') return false;
+      const entry = e as Record<string, unknown>;
+      return (
+        typeof entry.id === 'string' &&
+        entry.id.length > 0 &&
+        typeof entry.recipientPubkey === 'string' &&
+        typeof entry.mintUrl === 'string' &&
+        typeof entry.amount === 'number' &&
+        Number.isInteger(entry.amount) &&
+        entry.amount > 0 &&
+        typeof entry.timestamp === 'number' &&
+        Number.isFinite(entry.timestamp) &&
+        typeof entry.attempts === 'number' &&
+        Number.isInteger(entry.attempts) &&
+        entry.attempts >= 0 &&
+        Array.isArray(entry.sendProofs)
+      );
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function savePendingNutzap(entry: PendingNutzapEntry, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
+  if (!encKey || !entry?.id) return;
+  const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
+  const filtered = entries.filter((e) => e.id !== entry.id);
+  filtered.push(entry);
+  filtered.sort((a, b) => b.timestamp - a.timestamp);
+  const trimmed = filtered.slice(0, MAX_PENDING_NUTZAP_ENTRIES);
+  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PENDING_NUTZAP_CONTEXT);
+  try {
+    localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    throw new Error(`Failed to save pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+export async function removePendingNutzap(id: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
+  if (!encKey || !id) return;
+  const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
+  const filtered = entries.filter((e) => e.id !== id);
+  if (filtered.length === entries.length) return;
+  const ciphertext = await encryptData(JSON.stringify(filtered), encKey, PENDING_NUTZAP_CONTEXT);
+  try {
+    localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
+  } catch (e) {
+    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+    throw new Error(`Failed to remove pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+export function pendingNutzapCooldownRemaining(entry: PendingNutzapEntry, now = Date.now()): number {
+  if (!entry.lastAttemptAt) return 0;
+  const remaining = entry.lastAttemptAt + PENDING_NUTZAP_RETRY_COOLDOWN_MS - now;
+  return remaining > 0 ? remaining : 0;
 }
 
 // ── Wipe ──────────────────────────────────────────────────
@@ -1021,8 +1173,15 @@ export function createCashuStorage(namespace?: string) {
     addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>, encKey?: CryptoKey, legacyKey?: CryptoKey, opts?: LoadTransactionsOptions) => addTransaction(tx, encKey, legacyKey, opts, namespace),
     updateTransactionStatus: (id: string, status: Transaction['status'], encKey?: CryptoKey, legacyKey?: CryptoKey, opts?: LoadTransactionsOptions) => updateTransactionStatus(id, status, encKey, legacyKey, opts, namespace),
     loadProcessedTokenHashes: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadProcessedTokenHashes(encKey, legacyKey, namespace),
-    isProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, ns?: string) => isProcessedTokenHash(hash, encKey, legacyKey, ns),
+    isProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => isProcessedTokenHash(hash, encKey, legacyKey, namespace),
     addProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => addProcessedTokenHash(hash, encKey, legacyKey, namespace),
+    loadProcessedNutzapIds: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadProcessedNutzapIds(encKey, legacyKey, namespace),
+    isProcessedNutzapId: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => isProcessedNutzapId(id, encKey, legacyKey, namespace),
+    addProcessedNutzapId: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => addProcessedNutzapId(id, encKey, legacyKey, namespace),
+    loadPendingNutzaps: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadPendingNutzaps(encKey, legacyKey, namespace),
+    savePendingNutzap: (entry: PendingNutzapEntry, encKey?: CryptoKey, legacyKey?: CryptoKey) => savePendingNutzap(entry, encKey, legacyKey, namespace),
+    removePendingNutzap: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => removePendingNutzap(id, encKey, legacyKey, namespace),
+    pendingNutzapCooldownRemaining: (entry: PendingNutzapEntry, now?: number) => pendingNutzapCooldownRemaining(entry, now),
     wipeAllAppData: () => wipeAllAppData(),
   };
 }
