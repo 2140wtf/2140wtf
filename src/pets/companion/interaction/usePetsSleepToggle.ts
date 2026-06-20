@@ -26,7 +26,7 @@ import {
   parsePetsEvent,
   isValidPetsEvent,
 } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
 import { trackDailyMissionProgress } from '@/pets/actions/lib/daily-mission-tracker';
 
@@ -120,13 +120,7 @@ export function usePetsSleepToggle(): UsePetsSleepToggleResult {
 
       // Apply accumulated decay before the state change
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: companion.stage,
-        state: companion.state,
-        stats: companion.stats,
-        lastDecayAt: companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(companion, now);
 
       const nowStr = now.toString();
 

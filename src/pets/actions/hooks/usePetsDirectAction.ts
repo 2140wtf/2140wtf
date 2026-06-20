@@ -11,7 +11,8 @@ import {
   KIND_PETS_STATE,
   updatePetsTags,
 } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
+import { getEffectiveStatCap } from '@/pets/core/lib/category-abilities';
 import {
   clampStat,
   applyStat,
@@ -115,27 +116,31 @@ export function usePetsDirectAction({
       // ─── Apply Accumulated Decay First ───
       // CRITICAL: Use canonical.companion for decay calculations, not the stale outer companion
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
       
       const statsAfterDecay = decayResult.stats;
+
+      // Effective stat cap for this companion (category + rarity). Stored tags
+      // remain clamped to 100 for backward compatibility; the effective cap is
+      // used for effect calculations so direct actions can still grant XP when
+      // stored stats are already at 100.
+      const effectiveMax = getEffectiveStatCap(
+        canonical.companion.breedCategory,
+        canonical.companion.baoRarity,
+      );
       
       // ─── Apply Happiness Effect ───
       const happinessDelta = DIRECT_ACTION_HAPPINESS_EFFECTS[action];
-      const newHappiness = applyStat(statsAfterDecay.happiness, happinessDelta);
+      const newHappiness = applyStat(statsAfterDecay.happiness, happinessDelta, effectiveMax);
       
-      // Track if happiness actually changed
+      // Track if happiness actually changed (against effective cap, not storage clamp)
       const happinessChanged = newHappiness !== statsAfterDecay.happiness;
       
       // Build stats update
       const isEgg = canonical.companion.stage === 'egg';
+      // Stored tags remain clamped to 100 for backward compatibility.
       const statsUpdate: Record<string, string> = {
-        happiness: newHappiness.toString(),
+        happiness: clampStat(newHappiness, 100).toString(),
         health: statsAfterDecay.health.toString(),
         hygiene: statsAfterDecay.hygiene.toString(),
       };

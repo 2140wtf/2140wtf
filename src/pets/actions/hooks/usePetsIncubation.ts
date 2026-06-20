@@ -27,7 +27,7 @@ import {
   KIND_PETS_STATE,
   updatePetsTags,
 } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecay, applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createHatchMissions, createEvolveMissions } from '../lib/evolution-missions';
 import {
@@ -241,13 +241,7 @@ export function useStartIncubation({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
       
       // ─── Build Updated Tags ───
       // Remove any existing task tags when starting fresh (for all modes)
@@ -402,13 +396,7 @@ export function useStopIncubation({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
       
       // ─── Build Updated Tags ───
       // Remove task tags and progression timing
@@ -537,13 +525,7 @@ export function useStartEvolution({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
       
       // ─── Build Updated Tags ───
       // Remove any existing task tags when starting fresh
@@ -683,13 +665,7 @@ export function useStopEvolution({
       const now = Math.floor(Date.now() / 1000);
       const nowStr = now.toString();
       
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
       
       // ─── Build Updated Tags ───
       // Remove task tags and progression timing
