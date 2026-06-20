@@ -50,3 +50,8 @@ android/.gradle/
 android/*/build/
 android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png
 android/downloads/
+
+# Local research assets and build artifacts
+.research/
+*.apk
+*.apk.sha256
