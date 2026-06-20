@@ -9,6 +9,7 @@
  */
 
 import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
+import { BAO_RECIPE } from '@/pets/adult-pets/lib/bao-recipe';
 
 export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao';
 
@@ -50,12 +51,31 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   },
 ] as const;
 
-const BAO_MEMBERS: BaoCardMember[] = Array.from({ length: 21 }, (_, i) => {
-  const n = String(i + 1).padStart(2, '0');
+/**
+ * Curated ₿AO market-born forms shown under the 2140 Pets species category.
+ *
+ * The full set has 21 near-duplicate trading-card variations; we surface only
+ * the most visually distinct ones and label them with their canonical names.
+ */
+const BAO_MEMBER_IDS = [
+  'bao-01',
+  'bao-06',
+  'bao-09',
+  'bao-12',
+  'bao-13',
+  'bao-14',
+  'bao-15',
+  'bao-17',
+  'bao-18',
+  'bao-21',
+] as const;
+
+const BAO_MEMBERS: BaoCardMember[] = BAO_MEMBER_IDS.map((id) => {
+  const recipe = BAO_RECIPE.find((r) => r.id === id);
   return {
     kind: 'bao-card' as const,
-    id: `bao-${n}`,
-    label: `₿AO #${i + 1}`,
+    id,
+    label: recipe?.name ?? id,
   };
 });
 
