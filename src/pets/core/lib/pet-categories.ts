@@ -9,7 +9,6 @@
  */
 
 import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
-import { BAO_RECIPE } from '@/pets/adult-pets/lib/bao-recipe';
 
 export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao';
 
@@ -29,6 +28,8 @@ export interface BaoCardMember {
   kind: 'bao-card';
   id: string;
   label: string;
+  /** Original BAO recipe id used to render the card SVG / rarity. */
+  recipeId?: string;
 }
 
 export type CategoryMember = AdultFormMember | BaoCardMember;
@@ -57,27 +58,25 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
  * The full set has 21 near-duplicate trading-card variations; we surface only
  * the most visually distinct ones and label them with their canonical names.
  */
-const BAO_MEMBER_IDS = [
-  'bao-01',
-  'bao-06',
-  'bao-09',
-  'bao-12',
-  'bao-13',
-  'bao-14',
-  'bao-15',
-  'bao-17',
-  'bao-18',
-  'bao-21',
-] as const;
-
-const BAO_MEMBERS: BaoCardMember[] = BAO_MEMBER_IDS.map((id) => {
-  const recipe = BAO_RECIPE.find((r) => r.id === id);
-  return {
-    kind: 'bao-card' as const,
-    id,
-    label: recipe?.name ?? id,
-  };
-});
+/**
+ * Curated ₿AO market-born forms shown under the 2140 Pets species category.
+ *
+ * The full set has 21 near-duplicate trading-card variations; we surface only
+ * the most visually distinct ones and give them stylised names that match
+ * their colour/accessory theme.
+ */
+const BAO_MEMBERS: BaoCardMember[] = [
+  { kind: 'bao-card' as const, id: 'root-pup', label: 'Root Pup', recipeId: 'bao-01' },
+  { kind: 'bao-card' as const, id: 'jolt-hound', label: 'Jolt Hound', recipeId: 'bao-06' },
+  { kind: 'bao-card' as const, id: 'matrix-lynx', label: 'Matrix Lynx', recipeId: 'bao-09' },
+  { kind: 'bao-card' as const, id: 'skyjack-hawk', label: 'Skyjack Hawk', recipeId: 'bao-12' },
+  { kind: 'bao-card' as const, id: 'thorn-drake', label: 'Thorn Drake', recipeId: 'bao-13' },
+  { kind: 'bao-card' as const, id: 'crown-hydra', label: 'Crown Hydra', recipeId: 'bao-14' },
+  { kind: 'bao-card' as const, id: 'ember-manticore', label: 'Ember Manticore', recipeId: 'bao-15' },
+  { kind: 'bao-card' as const, id: 'azure-dragon', label: 'Azure Dragon', recipeId: 'bao-17' },
+  { kind: 'bao-card' as const, id: 'oracle-bull', label: 'Oracle Bull', recipeId: 'bao-18' },
+  { kind: 'bao-card' as const, id: 'apex-hound', label: 'Apex Hound', recipeId: 'bao-21' },
+];
 
 export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
   '2140-pets': [
