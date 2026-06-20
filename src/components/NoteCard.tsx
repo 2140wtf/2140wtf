@@ -36,7 +36,6 @@ import { nip19 } from "nostr-tools";
 import { type ReactNode, lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 /** Lazy-loaded markdown-heavy components — keeps react-markdown + unified pipeline out of the main feed bundle. */
-const ArticleContent = lazy(() => import("@/components/ArticleContent").then(m => ({ default: m.ArticleContent })));
 const EmbeddedArticleCard = lazy(() => import("@/components/EmbeddedArticleCard").then(m => ({ default: m.EmbeddedArticleCard })));
 const PetsStateCard = lazy(() => import("@/components/PetsStateCard").then(m => ({ default: m.PetsStateCard })));
 const PetsSocialActions = lazy(() => import("@/components/PetsSocialActions").then(m => ({ default: m.PetsSocialActions })));
