@@ -24,8 +24,9 @@ Core protocol-level tags required for event identification and ecosystem members
 |-----|----------|--------|------------|--------|--------|-------------|
 | `d` | **Yes** | egg, baby, adult | Yes | system | `2140pets-{pubkeyPrefix12}-{petId10}` | Unique identifier (addressable event d-tag) |
 | `b` | **Yes** | egg, baby, adult | Yes | system | `pets:ecosystem:v1` | Ecosystem namespace identifier |
-| `t` | **Yes** | egg, baby, adult | Yes | system | `2140pets` | Topic tag for discoverability |
-| `client` | No | egg, baby, adult | Yes | system | `2140.wtf` | Client identifier |
+| `client` | No | egg, baby, adult | Yes | system | `2140.wtf` | Client identifier (added automatically by publishing hook) |
+
+**Note**: The `t` tag is deprecated. The `b` namespace tag is sufficient for ecosystem identification.
 
 ### 2. Core Identity Tags
 
@@ -35,7 +36,7 @@ Tags that define the 2140 Pet's unique identity. These MUST be preserved across 
 |-----|----------|--------|------------|--------|--------|-------------|
 | `name` | **Yes** | egg, baby, adult | Yes | user | string | Display name (set during adoption) |
 | `seed` | **Yes** | egg, baby, adult | Yes | system | 64 hex chars | Deterministic seed for visual traits |
-| `generation` | No | egg, baby, adult | Yes | system | positive integer | Lineage generation (default: 1) |
+| `generation` | No | egg, baby, adult | Yes | system | positive integer | Lineage generation (default: 1, incremented for bred offspring) |
 
 **Important**: The `seed` is derived once at creation using `sha256("pets:v1|{pubkey}:{d}:{createdAt}")` and MUST NEVER be recomputed.
 
@@ -128,6 +129,7 @@ User preferences and computed flags.
 | Tag | Required | Stages | Persistent | Source | Format | Default | Description |
 |-----|----------|--------|------------|--------|--------|---------|-------------|
 | `breeding_ready` | No | egg, baby, adult | Yes | computed | `true\|false` | false | Breeding eligibility |
+| `social` | No | egg, baby, adult | Yes | user | `open\|closed` | closed | Whether external users can interact via kind 1124 |
 
 ### 10. Evolution Tags
 
@@ -137,7 +139,27 @@ Tags specific to adult 2140 Pets.
 |-----|----------|--------|------------|--------|--------|-------------|
 | `adult_type` | No | adult | Yes | computed | string | Evolution form type |
 
-### 11. Extension Tags
+### 11. Breed Category Tags
+
+Tags that identify which visual family and specific form/card the pet belongs to. These are set at mint time and persist across all stage transitions.
+
+| Tag | Required | Stages | Persistent | Source | Format | Description |
+|-----|----------|--------|------------|--------|--------|-------------|
+| `breed_category` | No | egg, baby, adult | Yes | system | `2140-pets\|ditto-blobbi\|bao` | Breed family |
+| `breed_asset` | No | egg, baby, adult | Yes | system | string | Adult form ID (e.g. `glitchfox`) or BAO card ID (e.g. `bao-07`) |
+| `bao_rarity` | No | egg, baby, adult | Yes | system | `common\|uncommon\|rare\|epic\|legendary` | ₿AO rarity tier (BAO pets only) |
+
+### 12. Breeding Tags
+
+Tags used by the breeding system. All are optional and generated only when a pet is created via breeding.
+
+| Tag | Required | Stages | Persistent | Source | Format | Description |
+|-----|----------|--------|------------|--------|--------|-------------|
+| `parent_a` | No | egg, baby, adult | Yes | system | d-tag | First parent's canonical d-tag |
+| `parent_b` | No | egg, baby, adult | Yes | system | d-tag | Second parent's canonical d-tag |
+| `breeding_cooldown` | No | adult | Yes | computed | Unix timestamp | When this adult can breed again |
+
+### 13. Extension Tags
 
 Optional tags for themes and crossover features.
 
@@ -156,6 +178,8 @@ These tags are from legacy versions and MUST be removed when republishing events
 
 | Tag | Reason | Replaced By |
 |-----|--------|-------------|
+| `t` | Topic tag no longer needed; `b` namespace is sufficient | N/A |
+| `client` | Added automatically by publishing hook | N/A |
 | `shell_integrity` | Eggs use standard `health` stat | `health` |
 | `egg_temperature` | Warmth handled via UI props | N/A |
 | `incubation_progress` | Replaced by task system | `task`, `task_completed` |
@@ -188,12 +212,14 @@ These tags are from legacy versions and MUST be removed when republishing events
 - `last_decay_at` → current timestamp
 
 **Tags to PRESERVE (all persistent tags)**:
-- All system tags (`d`, `b`, `t`, `client`)
+- All system tags (`d`, `b`, `client`)
 - All identity tags (`name`, `seed`, `generation`)
 - All visual tags (colors, pattern, size)
 - All personality tags (if present)
 - All progression tags (`experience`, `care_streak`)
-- All social tags (`breeding_ready`)
+- All social tags (`breeding_ready`, `social`)
+- All breed category tags (`breed_category`, `breed_asset`, `bao_rarity`)
+- All breeding tags (`parent_a`, `parent_b`, `breeding_cooldown`)
 - All extension tags (`theme`, `crossover_app`, `archetype`, `special_ability`)
 
 ### Evolve (baby → adult)
@@ -215,6 +241,7 @@ These tags are from legacy versions and MUST be removed when republishing events
 
 **Tags to ADD (optional)**:
 - `adult_type` → computed based on care history
+- `breed_category`, `breed_asset`, `bao_rarity` → set at mint time or inherited during breeding
 
 ---
 
@@ -235,12 +262,13 @@ When migrating legacy 2140 Pets to canonical format:
 A valid 2140 Pets event MUST have:
 - `d` tag in canonical format
 - `b` tag = `pets:ecosystem:v1`
-- `t` tag = `pets`
 - `name` tag (non-empty)
 - `seed` tag (64 hex chars)
 - `stage` tag (valid value)
 - `state` tag (valid value)
 - `last_interaction` tag (valid timestamp)
+
+**Note**: The `t` tag is deprecated and no longer required.
 
 ---
 

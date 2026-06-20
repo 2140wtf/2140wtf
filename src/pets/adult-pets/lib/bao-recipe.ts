@@ -63,6 +63,29 @@ const RARITY_ORDER: Record<BaoRarity, number> = {
   legendary: 5,
 };
 
+/** Effective stat cap bonus per rarity tier. Common caps at the default 100. */
+export const BAO_STAT_CAP_BONUS: Record<BaoRarity, number> = {
+  common: 0,
+  uncommon: 5,
+  rare: 12,
+  epic: 20,
+  legendary: 30,
+};
+
+/** Flat BAO reward bonus (sats) added to daily BAO claims per rarity tier. */
+export const BAO_REWARD_BONUS: Record<BaoRarity, number> = {
+  common: 10,
+  uncommon: 18,
+  rare: 28,
+  epic: 40,
+  legendary: 50,
+};
+
+/** Human-readable stat cap for UI display, e.g. "100", "105", "130". */
+export function getBaoStatCap(rarity: BaoRarity): number {
+  return 100 + BAO_STAT_CAP_BONUS[rarity];
+}
+
 export function getBaoRecipeById(id: string): BaoRecipe | undefined {
   return BAO_RECIPE.find((r) => r.id === id);
 }
