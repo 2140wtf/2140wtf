@@ -19,7 +19,7 @@ import { VersionCheck } from "./components/VersionCheck";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
-import { PollCubeFeed } from "./components/PollCubeFeed";
+import { PollsViewProvider } from "@/contexts/PollsViewContext";
 
 // Critical-path pages: eagerly loaded (landing + fallback)
 import Index from "./pages/Index";
@@ -112,17 +112,15 @@ function PollsFeedPage() {
     return [pollsDef.kind, ...(pollsDef.extraFeedKinds ?? [])];
   }, [pollFilter]);
 
-  const isCubes = view === 'cubes';
-
   return (
     <>
+      <PollsViewProvider view={view}>
       <KindFeedPage
         kind={pollKinds}
         title={pollsDef.label}
         icon={sidebarItemIcon("polls", "size-5")}
         grid={view === 'grid'}
-        searchQuery={isCubes ? undefined : searchQuery}
-        showLoadMoreButton={!isCubes}
+        searchQuery={searchQuery}
         onFabClick={() => setComposeOpen(true)}
         headerActions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -175,13 +173,8 @@ function PollsFeedPage() {
           </div>
         }
       >
-        {isCubes && (
-          <PollCubeFeed
-            filter={pollFilter}
-            searchQuery={searchQuery}
-          />
-        )}
       </KindFeedPage>
+      </PollsViewProvider>
       {composeOpen && (
         <Suspense fallback={null}>
           <ReplyComposeModal open={composeOpen} onOpenChange={setComposeOpen} initialMode="poll" />
