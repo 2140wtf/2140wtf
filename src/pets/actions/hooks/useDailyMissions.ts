@@ -31,11 +31,11 @@ import {
   createDailyMissionsContent,
   areAllDailyComplete,
   totalDailyXp,
-  totalDailyCoins,
+  totalDailySats,
   getDefinition,
   MAX_DAILY_REROLLS,
   DAILY_BONUS_XP,
-  DAILY_BONUS_COINS,
+  DAILY_BONUS_SATS,
 } from '../lib/daily-missions';
 
 import {
@@ -62,8 +62,8 @@ export interface DailyMissionView {
   complete: boolean;
   /** XP reward */
   xp: number;
-  /** Coin reward */
-  coinReward: number;
+  /** Sats reward */
+  satsReward: number;
 }
 
 export interface UseDailyMissionsOptions {
@@ -86,14 +86,14 @@ export interface UseDailyMissionsResult {
   allComplete: boolean;
   /** Total XP earned today (completed missions + bonus) */
   todayXp: number;
-  /** Total coins earned today (completed missions + bonus) */
-  todayCoins: number;
+  /** Total sats earned today (completed missions + bonus) */
+  todaySats: number;
   /** Whether the daily bonus is unlocked (all missions complete) */
   bonusUnlocked: boolean;
   /** Bonus XP amount */
   bonusXp: number;
-  /** Bonus coin amount */
-  bonusCoins: number;
+  /** Bonus sats amount */
+  bonusSats: number;
   /**
    * Whether the account has no hatched (baby/adult) Pets at all.
    * True only when availableStages contains neither 'baby' nor 'adult'.
@@ -219,14 +219,14 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
         progress: missionProgress(m),
         complete: isMissionComplete(m),
         xp: def?.xp ?? 0,
-        coinReward: def?.coinReward ?? 0,
+        satsReward: def?.satsReward ?? 0,
       };
     });
   }, [raw]);
 
   const allComplete = raw ? areAllDailyComplete(raw) : false;
   const todayXp = raw ? totalDailyXp(raw) : 0;
-  const todayCoins = raw ? totalDailyCoins(raw) : 0;
+  const todaySats = raw ? totalDailySats(raw) : 0;
   const bonusUnlocked = allComplete;
   // noMissionsAvailable means the account genuinely has no hatched Pets.
   // It does NOT reflect loading state — use `isLoading` for that.
@@ -253,10 +253,10 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
     raw,
     allComplete,
     todayXp,
-    todayCoins,
+    todaySats,
     bonusUnlocked,
     bonusXp: DAILY_BONUS_XP,
-    bonusCoins: DAILY_BONUS_COINS,
+    bonusSats: DAILY_BONUS_SATS,
     noMissionsAvailable,
     isLoading,
     rerollsRemaining,

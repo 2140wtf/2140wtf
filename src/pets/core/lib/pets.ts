@@ -420,9 +420,9 @@ export interface BlobbonautProfile {
   seeds: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
-  /** Wallet mode for 2140 Pets: 'demo' uses play-money coins, 'real' uses normal Cashu sats, 'bao' uses BAO signet/demo sats */
-  walletMode: 'demo' | 'real' | 'bao';
-  /** Selected Cashu mint URL when wallet_mode is 'real' or 'bao' */
+  /** Wallet mode for 2140 Pets: 'demo-sats' uses in-game demo sats, 'btc-sats' uses real BTC sats via Cashu/NIP-60. */
+  walletMode: 'demo-sats' | 'btc-sats';
+  /** Selected Cashu mint URL when wallet_mode is 'btc-sats'. */
   cashuMintUrl: string | undefined;
   /** Purchased items storage */
   storage: StorageItem[];
@@ -1473,11 +1473,10 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
  * Build tags for a new Blobbonaut Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
-export function parseWalletModeTag(tags: string[][]): 'demo' | 'real' | 'bao' {
+export function parseWalletModeTag(tags: string[][]): 'demo-sats' | 'btc-sats' {
   const value = getTagValue(tags, 'wallet_mode');
-  if (value === 'real') return 'real';
-  if (value === 'bao') return 'bao';
-  return 'demo';
+  if (value === 'btc-sats' || value === 'real' || value === 'bao') return 'btc-sats';
+  return 'demo-sats';
 }
 
 export function buildBlobbonautTags(pubkey: string): string[][] {
@@ -1486,7 +1485,7 @@ export function buildBlobbonautTags(pubkey: string): string[][] {
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
-    ['wallet_mode', 'demo'],
+    ['wallet_mode', 'demo-sats'],
   ];
 }
 

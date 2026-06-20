@@ -564,7 +564,10 @@ export function parseNutzapInfoEvent(
       if (normalized) mints.push(normalized);
     } else if (name === 'pubkey' && typeof value === 'string') {
       const cleaned = value.trim().toLowerCase();
-      if (/^[0-9a-f]{64}$/.test(cleaned)) pubkey = cleaned;
+      // Accept both x-only (64) and compressed secp256k1 (66) pubkeys.
+      if (/^[0-9a-f]{64}$/.test(cleaned) || /^0[23][0-9a-f]{64}$/.test(cleaned)) {
+        pubkey = cleaned;
+      }
     }
   }
   if (!pubkey || mints.length === 0) return null;
@@ -608,9 +611,16 @@ export async function buildNutzapEvent(
   });
 }
 
-/** Parse a kind:9321 Nutzap event into its mint, proofs, and recipient. */
-export function parseNutzapEvent(event: NostrEvent): { mint: string; proofs: unknown[]; recipient: string; sender: string; amount: number } | null {
+/** Parse a kind:9321 Nutzap event into its mint, proofs, and recipient.
+ *  When `expectedAuthor` is provided, the event must be authored by that pubkey.
+ */
+export function parseNutzapEvent(
+  event: NostrEvent,
+  expectedAuthor?: string,
+): { mint: string; proofs: unknown[]; recipient: string; sender: string; amount: number } | null {
   if (event.kind !== NUTZAP_KIND) return null;
+  if (!verifyEvent(event)) return null;
+  if (expectedAuthor && event.pubkey.toLowerCase() !== expectedAuthor.toLowerCase()) return null;
   let mint = '';
   let recipient = '';
   const proofs: unknown[] = [];

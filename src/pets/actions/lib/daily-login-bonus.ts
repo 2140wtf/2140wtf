@@ -1,7 +1,7 @@
 /**
  * Daily Login Bonus for 2140 PETS
  *
- * Awards coins the first time a user opens the Pets page each local day.
+ * Awards demo sats the first time a user opens the Pets page each local day.
  * Tracks last login day and consecutive streak on the Blobbonaut profile.
  */
 
@@ -9,22 +9,25 @@ import { getLocalDayString, getDaysDifference } from '@/pets/core/lib/pets';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Base coins awarded for logging in each day */
-export const DAILY_LOGIN_BASE_COINS = 50;
+/** Demo sats awarded per legacy coin (keeps old economy values readable). */
+export const DEMO_SATS_PER_COIN = 100;
 
-/** Additional coins awarded per day of consecutive login streak */
-export const DAILY_LOGIN_STREAK_BONUS_COINS = 10;
+/** Base sats awarded for logging in each day */
+export const DAILY_LOGIN_BASE_SATS = 50 * DEMO_SATS_PER_COIN;
+
+/** Additional sats awarded per day of consecutive login streak */
+export const DAILY_LOGIN_STREAK_BONUS_SATS = 10 * DEMO_SATS_PER_COIN;
 
 /** Maximum total streak bonus per login */
-export const MAX_DAILY_LOGIN_STREAK_BONUS_COINS = 100;
+export const MAX_DAILY_LOGIN_STREAK_BONUS_SATS = 100 * DEMO_SATS_PER_COIN;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DailyLoginBonusResult {
   /** Whether a bonus was awarded */
   awarded: boolean;
-  /** Coins awarded this login (0 if already claimed today) */
-  coinsAwarded: number;
+  /** Sats awarded this login (0 if already claimed today) */
+  satsAwarded: number;
   /** New streak length */
   streak: number;
   /** Last login day that will be written to the profile */
@@ -46,16 +49,16 @@ export function calculateDailyLoginBonus(
   today = getLocalDayString(),
 ): DailyLoginBonusResult {
   if (lastDay === today) {
-    return { awarded: false, coinsAwarded: 0, streak: currentStreak, lastDay: today };
+    return { awarded: false, satsAwarded: 0, streak: currentStreak, lastDay: today };
   }
 
   const isConsecutive = lastDay ? getDaysDifference(lastDay, today) === 1 : false;
   const streak = isConsecutive ? currentStreak + 1 : 1;
   const streakBonus = Math.min(
-    (streak - 1) * DAILY_LOGIN_STREAK_BONUS_COINS,
-    MAX_DAILY_LOGIN_STREAK_BONUS_COINS,
+    (streak - 1) * DAILY_LOGIN_STREAK_BONUS_SATS,
+    MAX_DAILY_LOGIN_STREAK_BONUS_SATS,
   );
-  const coinsAwarded = DAILY_LOGIN_BASE_COINS + streakBonus;
+  const satsAwarded = DAILY_LOGIN_BASE_SATS + streakBonus;
 
-  return { awarded: true, coinsAwarded, streak, lastDay: today };
+  return { awarded: true, satsAwarded, streak, lastDay: today };
 }

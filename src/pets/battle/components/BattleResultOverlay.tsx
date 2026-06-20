@@ -6,7 +6,7 @@ export interface BattleResultOverlayProps {
   winner: BattlePlayerIndex | null;
   fighterNames: [string, string];
   prizeAmount: number;
-  mode: 'demo' | 'real' | 'bao';
+  mode: 'demo-sats' | 'btc-sats';
   isPayoutPending: boolean;
   onRematch: () => void;
   onExit: () => void;
@@ -36,9 +36,9 @@ export function BattleResultOverlay({
 
         {winner !== null && (
           <p className="mt-2 text-muted-foreground">
-            {mode === 'real' || mode === 'bao'
+            {mode === 'btc-sats'
               ? 'Real sats payout is coming soon.'
-              : `+${prizeAmount} ₿AO coins awarded to the winner.`}
+              : `+${prizeAmount} demo sats awarded to the winner.`}
           </p>
         )}
 

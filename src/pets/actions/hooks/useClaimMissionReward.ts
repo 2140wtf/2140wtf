@@ -25,7 +25,7 @@ import {
 import { buildXpTagUpdates } from '@/pets/core/lib/progression';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import type { MissionsContent } from '@/pets/core/lib/missions';
-import { totalDailyXp, totalDailyCoins } from '../lib/daily-missions';
+import { totalDailyXp, totalDailySats } from '../lib/daily-missions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,14 +37,14 @@ export interface AwardDailyXpRequest {
 export interface AwardDailyXpResult {
   xpAwarded: number;
   newTotalXp: number;
-  coinsAwarded: number;
-  newCoinTotal: number;
+  satsAwarded: number;
+  newSatsTotal: number;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
- * Hook to award XP for completed daily missions.
+ * Hook to award XP and demo sats for completed daily missions.
  *
  * @param updateProfileEvent - Callback to update profile in query cache
  */
@@ -61,9 +61,9 @@ export function useAwardDailyXp(
       if (!user?.pubkey) throw new Error('Must be logged in');
 
       const xpToAward = totalDailyXp(missions);
-      const coinsToAward = totalDailyCoins(missions);
-      if (xpToAward <= 0 && coinsToAward <= 0) {
-        return { xpAwarded: 0, newTotalXp: 0, coinsAwarded: 0, newCoinTotal: 0 };
+      const satsToAward = totalDailySats(missions);
+      if (xpToAward <= 0 && satsToAward <= 0) {
+        return { xpAwarded: 0, newTotalXp: 0, satsAwarded: 0, newSatsTotal: 0 };
       }
 
       // Fetch fresh profile from relays to avoid stale-read overwrites
@@ -80,22 +80,22 @@ export function useAwardDailyXp(
         return {
           xpAwarded: 0,
           newTotalXp: freshProfile?.xp ?? 0,
-          coinsAwarded: 0,
-          newCoinTotal: freshProfile?.coins ?? 0,
+          satsAwarded: 0,
+          newSatsTotal: freshProfile?.sats ?? 0,
         };
       }
 
       const currentXp = freshProfile?.xp ?? 0;
       const newTotalXp = currentXp + xpToAward;
-      const currentCoins = freshProfile?.coins ?? 0;
-      const newCoinTotal = currentCoins + coinsToAward;
+      const currentSats = freshProfile?.sats ?? 0;
+      const newSatsTotal = currentSats + satsToAward;
 
-      // Update XP, level, coins, and claimed-date tags
+      // Update XP, level, sats, and claimed-date tags
       const updatedTags = updateBlobbonautTags(
         prev?.tags ?? [],
         {
           ...buildXpTagUpdates(newTotalXp),
-          coins: newCoinTotal.toString(),
+          sats: newSatsTotal.toString(),
           daily_rewards_claimed_at: missions.date,
         },
       );
@@ -115,16 +115,16 @@ export function useAwardDailyXp(
 
       updateProfileEvent(event);
 
-      return { xpAwarded: xpToAward, newTotalXp, coinsAwarded: coinsToAward, newCoinTotal };
+      return { xpAwarded: xpToAward, newTotalXp, satsAwarded: satsToAward, newSatsTotal };
     },
-    onSuccess: ({ xpAwarded, coinsAwarded }) => {
+    onSuccess: ({ xpAwarded, satsAwarded }) => {
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
-      if (xpAwarded > 0 || coinsAwarded > 0) {
+      if (xpAwarded > 0 || satsAwarded > 0) {
         toast({
           title: 'Daily Rewards Claimed!',
-          description: `You earned ${xpAwarded} XP and ${coinsAwarded} coins from daily missions.`,
+          description: `You earned ${xpAwarded} XP and ${satsAwarded.toLocaleString()} demo sats from daily missions.`,
         });
       }
     },
