@@ -132,7 +132,7 @@ export function generateEggPreviewForCategory(
   return {
     ...base,
     breedCategory: category,
-    breedAsset: member.id,
+    breedAsset: member.recipeId ?? member.id,
   };
 }
 
