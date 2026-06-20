@@ -3,7 +3,31 @@ import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 
-import { deriveNutzapKey } from './cashu';
+import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM } from './cashu';
+
+describe('isFeeWithinMaxPpm', () => {
+  it('allows zero fees', () => {
+    expect(isFeeWithinMaxPpm(0, 1000, MAX_MINT_FEE_PPM)).toBe(true);
+  });
+
+  it('allows fees up to the ppm cap', () => {
+    expect(isFeeWithinMaxPpm(50, 1000, 50_000)).toBe(true);
+  });
+
+  it('rejects fees above the ppm cap', () => {
+    expect(isFeeWithinMaxPpm(51, 1000, 50_000)).toBe(false);
+  });
+
+  it('rejects negative fees and amounts', () => {
+    expect(isFeeWithinMaxPpm(-1, 1000, MAX_MINT_FEE_PPM)).toBe(false);
+    expect(isFeeWithinMaxPpm(1, -1, MAX_MINT_FEE_PPM)).toBe(false);
+  });
+
+  it('uses the default 5% cap when ppm is omitted', () => {
+    expect(isFeeWithinMaxPpm(50_000, 1_000_000)).toBe(true);
+    expect(isFeeWithinMaxPpm(50_001, 1_000_000)).toBe(false);
+  });
+});
 
 describe('deriveNutzapKey', () => {
   it('derives a deterministic compressed pubkey from a seed phrase', () => {
