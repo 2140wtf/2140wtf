@@ -333,3 +333,63 @@ describe('hibernating is not treated as sleeping', () => {
     expect(r.stats.hunger).toBe(92);
   });
 });
+
+// ─── Category & rarity modifiers ──────────────────────────────────────────────
+
+describe('category ability modifiers', () => {
+  it('slows happiness decay for blobbi', () => {
+    const now = 1_000_000;
+    const r = applyPetsDecay({
+      stage: 'baby',
+      state: 'active',
+      stats: FULL_STATS,
+      lastDecayAt: now - 3600,
+      now,
+      modifiers: {
+        happinessDecayMultiplier: 0.85,
+        satsMultiplier: 1,
+        dailyMissionProgressMultiplier: 1,
+        sicknessDurationMultiplier: 1,
+        statCapBonus: 0,
+        baoRewardBonus: 0,
+      },
+    });
+    // Base baby happiness decay = -4.5/hr. With 0.85 multiplier: -3.825 → trunc(-3.825) = -3
+    expect(r.stats.happiness).toBe(97);
+  });
+
+  it('reduces health penalties for 2140-pets (sickness duration multiplier)', () => {
+    const now = 1_000_000;
+    const r = applyPetsDecay({
+      stage: 'baby',
+      state: 'active',
+      stats: { hunger: 15, happiness: 100, health: 100, hygiene: 100, energy: 100 },
+      lastDecayAt: now - 3600,
+      now,
+      modifiers: {
+        happinessDecayMultiplier: 1,
+        satsMultiplier: 1,
+        dailyMissionProgressMultiplier: 1,
+        sicknessDurationMultiplier: 0.7,
+        statCapBonus: 0,
+        baoRewardBonus: 0,
+      },
+    });
+    // hunger after: 15 + trunc(-8) = 7 (≤ 25, mild + strong penalties)
+    // healthDelta = -0.4 + (-0.5 * 0.7) + (-1.0 * 0.7) = -0.4 - 0.35 - 0.7 = -1.45
+    // trunc(-1.45) = -1 → health = 99
+    expect(r.stats.health).toBe(99);
+  });
+
+  it('does not modify decay when modifiers are omitted', () => {
+    const now = 1_000_000;
+    const r = applyPetsDecay({
+      stage: 'baby',
+      state: 'active',
+      stats: FULL_STATS,
+      lastDecayAt: now - 3600,
+      now,
+    });
+    expect(r.stats.happiness).toBe(96);
+  });
+});

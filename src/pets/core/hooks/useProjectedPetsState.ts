@@ -16,7 +16,7 @@
 import { useState, useEffect, useMemo } from 'react';
 
 import type { PetsCompanion, PetsStats } from '../lib/pets';
-import { applyPetsDecay, getVisibleStatsWithValues, type DecayResult } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion, getVisibleStatsWithValues, type DecayResult } from '@/pets/core/lib/pets-decay';
 import { applySocialInteractions } from '@/pets/core/lib/pets-social-projection';
 import { resolveSocialCheckpoint, type PetsInteraction } from '@/pets/core/lib/pets-interaction';
 
@@ -81,14 +81,8 @@ export function useProjectedPetsState(
     
     const now = Math.floor(Date.now() / 1000);
     
-    // Step 1: Apply decay from persisted state
-    const decayResult: DecayResult = applyPetsDecay({
-      stage: companion.stage,
-      state: companion.state,
-      stats: companion.stats,
-      lastDecayAt: companion.lastDecayAt,
-      now,
-    });
+    // Step 1: Apply decay from persisted state (with category/rarity modifiers)
+    const decayResult: DecayResult = applyPetsDecayForCompanion(companion, now);
     
     // Step 2: Apply social interaction effects on top of decayed stats.
     // Uses the canonical `resolveSocialCheckpoint()` so the projection layer
@@ -137,13 +131,7 @@ export function calculateProjectedDecay(
   now?: number,
   interactions?: readonly PetsInteraction[],
 ): DecayResult {
-  const result = applyPetsDecay({
-    stage: companion.stage,
-    state: companion.state,
-    stats: companion.stats,
-    lastDecayAt: companion.lastDecayAt,
-    now: now ?? Math.floor(Date.now() / 1000),
-  });
+  const result = applyPetsDecayForCompanion(companion, now);
 
   if (interactions && interactions.length > 0) {
     // Canonical checkpoint resolution — same path as the hook and query layer.

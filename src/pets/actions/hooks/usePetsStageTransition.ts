@@ -25,7 +25,7 @@ import {
   STAT_MAX,
   updatePetsTags,
 } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '../lib/evolution-missions';
@@ -145,13 +145,7 @@ export function usePetsHatch({
       // Per decay-system.md: Always apply accumulated decay from persisted state
       // before any stage transition.
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
 
       // ─── Calculate Baby Stats ───
       // All stats reset to 100 when hatching — the baby starts fresh
@@ -315,13 +309,7 @@ export function usePetsEvolve({
       // Per decay-system.md: Always apply accumulated decay from persisted state
       // before any stage transition.
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
 
       // ─── Adult Stats ───
       // Adult inherits all decayed stats from baby
