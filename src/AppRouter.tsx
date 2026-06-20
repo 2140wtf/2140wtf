@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, LayoutList, Plus, Search } from "lucide-react";
+import { Box, Plus, Search } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -159,8 +159,8 @@ function PollsFeedPage() {
               <ToggleGroupItem value="cubes" aria-label="Cube view">
                 <Box className="size-4" />
               </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="Flat text view">
-                <LayoutList className="size-4" />
+              <ToggleGroupItem value="list" aria-label="Text view">
+                <span className="text-xs font-medium">txt</span>
               </ToggleGroupItem>
             </ToggleGroup>
             <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
