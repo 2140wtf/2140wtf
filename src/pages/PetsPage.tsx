@@ -61,7 +61,7 @@ import {
   getLocalDayString,
 } from '@/pets/core/lib/pets';
 
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
 import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
@@ -488,13 +488,7 @@ function PetsContent() {
 
       // Apply accumulated decay before the state change
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
 
       // Build the new tags with decayed stats + new state
       // Get streak updates (putting to sleep/waking counts as care activity)

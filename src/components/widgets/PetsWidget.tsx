@@ -15,7 +15,7 @@ import { isActionVisibleForStage, type InventoryAction, type PetsAction } from '
 import { getVisibleStats } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
 import { KIND_PETS_STATE, KIND_BLOBBONAUT_PROFILE, updatePetsTags, updateBlobbonautTags, filterMigratedLegacyCompanions } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -136,13 +136,7 @@ export function PetsWidget() {
       }
 
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
 
       const nowStr = now.toString();
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};

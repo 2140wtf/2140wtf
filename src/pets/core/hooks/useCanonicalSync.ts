@@ -29,7 +29,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { PetsCompanion } from '../lib/pets';
 import { KIND_PETS_STATE, updatePetsTags, statsToTagUpdates } from '../lib/pets';
-import { applyPetsDecay } from '../lib/pets-decay';
+import { applyPetsDecayForCompanion } from '../lib/pets-decay';
 import { consolidateSocialInteractions } from '../lib/pets-social-projection';
 import {
   resolveSocialCheckpoint,
@@ -117,13 +117,7 @@ export function useCanonicalSync({
       const now = Math.floor(Date.now() / 1000);
 
       // ── Step 1: Apply accumulated decay to canonical stats ──
-      const decayResult = applyPetsDecay({
-        stage: comp.stage,
-        state: comp.state,
-        stats: comp.stats,
-        lastDecayAt: comp.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(comp, now);
 
       // ── Step 2: Pre-check whether social consolidation would consume anything ──
       let hasConsumableInteractions = false;
@@ -155,13 +149,7 @@ export function useCanonicalSync({
       // This handles the edge case where canonical data changed between the
       // initial check and the fresh fetch (e.g. another device published).
       const freshNow = Math.floor(Date.now() / 1000);
-      const freshDecay = applyPetsDecay({
-        stage: canonical.companion.stage,
-        state: canonical.companion.state,
-        stats: canonical.companion.stats,
-        lastDecayAt: canonical.companion.lastDecayAt,
-        now: freshNow,
-      });
+      const freshDecay = applyPetsDecayForCompanion(canonical.companion, freshNow);
 
       let publishStats = freshDecay.stats;
       let publishContent = canonical.content;

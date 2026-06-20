@@ -35,7 +35,8 @@ import {
   parsePetsEvent,
   isValidPetsEvent,
 } from '@/pets/core/lib/pets';
-import { applyPetsDecay } from '@/pets/core/lib/pets-decay';
+import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
+import { getEffectiveStatCap } from '@/pets/core/lib/category-abilities';
 import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import {
   applyItemEffects,
@@ -287,16 +288,19 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       
       // ─── Apply Accumulated Decay First ───
       const now = Math.floor(Date.now() / 1000);
-      const decayResult = applyPetsDecay({
-        stage: companion.stage,
-        state: companion.state,
-        stats: companion.stats,
-        lastDecayAt: companion.lastDecayAt,
-        now,
-      });
+      const decayResult = applyPetsDecayForCompanion(companion, now);
       
       // Start with decayed stats as the base
       const statsAfterDecay = decayResult.stats;
+
+      // Effective stat cap for this companion (category + rarity). Stored tags
+      // remain clamped to 100 for backward compatibility; the effective cap is
+      // used for effect calculations so care actions can still grant XP/mission
+      // progress when stored stats are already maxed.
+      const effectiveMax = getEffectiveStatCap(
+        companion.breedCategory,
+        companion.baoRarity,
+      );
       
       // ─── Apply Item Effects (single use) ───
       const isEggCompanion = companion.stage === 'egg';
@@ -331,21 +335,22 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
         statsUpdate.energy = '100';
       } else {
         // Normal stats application for baby/adult — apply once
-        const currentStats = applyItemEffects({ ...statsAfterDecay }, shopItem.effect);
+        const currentStats = applyItemEffects({ ...statsAfterDecay }, shopItem.effect, effectiveMax);
         
-        statsUpdate.hunger = clampStat(currentStats.hunger).toString();
+        // Stored tags remain clamped to 100 for backward compatibility.
+        statsUpdate.hunger = clampStat(currentStats.hunger, 100).toString();
         statsChanged.hunger = (currentStats.hunger ?? 0) - (statsAfterDecay.hunger ?? 0);
         
-        statsUpdate.happiness = clampStat(currentStats.happiness).toString();
+        statsUpdate.happiness = clampStat(currentStats.happiness, 100).toString();
         statsChanged.happiness = (currentStats.happiness ?? 0) - (statsAfterDecay.happiness ?? 0);
         
-        statsUpdate.energy = clampStat(currentStats.energy).toString();
+        statsUpdate.energy = clampStat(currentStats.energy, 100).toString();
         statsChanged.energy = (currentStats.energy ?? 0) - (statsAfterDecay.energy ?? 0);
         
-        statsUpdate.hygiene = clampStat(currentStats.hygiene).toString();
+        statsUpdate.hygiene = clampStat(currentStats.hygiene, 100).toString();
         statsChanged.hygiene = (currentStats.hygiene ?? 0) - (statsAfterDecay.hygiene ?? 0);
         
-        statsUpdate.health = clampStat(currentStats.health).toString();
+        statsUpdate.health = clampStat(currentStats.health, 100).toString();
         statsChanged.health = (currentStats.health ?? 0) - (statsAfterDecay.health ?? 0);
       }
       
