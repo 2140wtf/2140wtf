@@ -10,7 +10,7 @@ There are four currencies in the Pets economy:
 |---|---|---|---|
 | `coins` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy) | kind 11125 `coins` tag |
 | `runes` | 2140 category daily quests | 2140-specific items, relay-routing boosts | kind 11125 `content.runes` |
-| `sats` | ₿AO category daily quests, BAO reward bonus, 2140 daylight netrunning bonus | ₿AO-specific items, market tonics | kind 11125 `content.sats` |
+| `sats` | ₿AO category daily quests, BAO trading rewards, 2140 daylight netrunning bonus | ₿AO-specific items, market tonics | kind 11125 `sats` tag |
 | `seeds` | Ditto Blobbi category daily quests | Ditto Blobbi-specific items, growth serums | kind 11125 `content.seeds` |
 
 All category currencies default to `0` when missing from a profile.
