@@ -137,9 +137,6 @@ const hardcodedConfig: AppConfig = {
   sidebarOrder: [
     "search",
     "feed",
-    "messages",
-    "pets",
-    "market",
     "music",
     "videos",
     "photos",
@@ -147,6 +144,9 @@ const hardcodedConfig: AppConfig = {
     "events",
     "prediction-markets",
     "polls",
+    "pets",
+    "messages",
+    "market",
     "divider",
     "notifications",
     "bookmarks",
@@ -156,7 +156,7 @@ const hardcodedConfig: AppConfig = {
     "help",
     "about",
   ],
-  sidebarOrderVersion: 1,
+  sidebarOrderVersion: 2,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
   blossomServerMetadata: {
