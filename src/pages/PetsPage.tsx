@@ -977,7 +977,7 @@ function DashboardShell({ children, className }: DashboardShellProps) {
 // ─── Dashboard Drawer Type ────────────────────────────────────────────────────
 
 /** Which drawer is open; 'none' = room view visible */
-type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'blobbi' | 'baos';
+type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'earn';
 
 // ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
@@ -2046,8 +2046,9 @@ function PetsDashboard({
         >
           <ScrollArea style={{ height: 248 }}>
             <div className="max-w-2xl mx-auto w-full pb-4 pt-2">
-              {activeDrawer === 'missions' && (
+              {(activeDrawer === 'missions' || activeDrawer === 'earn') && (
                 <MissionsTabContent
+                  initialPane={activeDrawer === 'earn' ? 'bao-markets' : 'journey'}
                   profile={profile}
                   updateProfileEvent={updateProfileEvent}
                   isIncubating={isIncubating}
@@ -2098,17 +2099,8 @@ function PetsDashboard({
                   isEvolving={isEvolving}
                 />
               )}
-              {activeDrawer === 'blobbi' && (
-                <BlobbiTabContent
-                  profile={profile}
-                  updateProfileEvent={updateProfileEvent}
-                />
-              )}
               {activeDrawer === 'species' && (
                 <SpeciesTabContent />
-              )}
-              {activeDrawer === 'baos' && (
-                <BaosTabContent />
               )}
             </div>
           </ScrollArea>
@@ -2139,16 +2131,10 @@ function PetsDashboard({
               <span className="text-sm">Species</span>
             </span>
           </TabButton>
-          <TabButton label="Blobbi" active={activeDrawer === 'blobbi'} onClick={() => toggleDrawer('blobbi')} className="translate-y-0">
+          <TabButton label="Earn" active={activeDrawer === 'earn'} onClick={() => toggleDrawer('earn')} className="translate-y-0">
             <span className="flex items-center gap-1.5">
-              <Sparkles className="size-4" />
-              <span className="text-sm">Blobbi</span>
-            </span>
-          </TabButton>
-          <TabButton label="₿AOs" active={activeDrawer === 'baos'} onClick={() => toggleDrawer('baos')} className="translate-y-2">
-            <span className="flex items-center gap-1.5">
-              <Wallet className="size-4" />
-              <span className="text-sm">₿AOs</span>
+              <TrendingUp className="size-4" />
+              <span className="text-sm">Earn</span>
             </span>
           </TabButton>
         </SubHeaderBar>
@@ -2940,6 +2926,7 @@ function ClosetBar() {
 // ─── Missions Tab Content ─────────────────────────────────────────────────────
 
 interface MissionsTabContentProps {
+  initialPane?: QuestPane;
   profile: BlobbonautProfile | null;
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
   isIncubating: boolean;
@@ -2968,6 +2955,7 @@ interface MissionsTabContentProps {
 type QuestPane = 'journey' | 'bounties' | 'bao-markets';
 
 function MissionsTabContent({
+  initialPane,
   profile,
   updateProfileEvent,
   isIncubating,
@@ -2992,7 +2980,7 @@ function MissionsTabContent({
   onStartIncubation,
   onStartEvolution,
 }: MissionsTabContentProps) {
-  const [pane, setPane] = useState<QuestPane>('journey');
+  const [pane, setPane] = useState<QuestPane>(initialPane ?? 'journey');
   const hasActiveProcess = (isIncubating && isEgg) || (isEvolvingState && isBaby);
   const isProcessBusy = isHatching || isEvolving || isStoppingIncubation || isStoppingEvolution;
   const tasks = isIncubating ? hatchTasks.tasks : evolveTasks.tasks;
@@ -3231,7 +3219,7 @@ function MissionsTabContent({
         )}
 
         {pane === 'bao-markets' && (
-          <BlobbiTabContent profile={profile} updateProfileEvent={updateProfileEvent} />
+          <BaoMarketsQuestContent profile={profile} updateProfileEvent={updateProfileEvent} />
         )}
       </div>
     </div>
@@ -3420,14 +3408,14 @@ function PetsTabContent({
   );
 }
 
-// ─── Blobbi Tab Content ───────────────────────────────────────────────────────
+// ─── BAO Markets Quest Content ────────────────────────────────────────────────
 
-interface BlobbiTabContentProps {
+interface BaoMarketsQuestContentProps {
   profile: BlobbonautProfile | null;
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
 }
 
-function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps) {
+function BaoMarketsQuestContent({ profile, updateProfileEvent }: BaoMarketsQuestContentProps) {
   const { user } = useCurrentUser();
   const today = getLocalDayString();
 
@@ -3453,11 +3441,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           <div className="size-7 rounded-full bg-amber-100 flex items-center justify-center shrink-0 dark:bg-amber-900/40">
             <TrendingUp className="size-4 text-amber-800 dark:text-amber-200" />
           </div>
-          <p className="text-sm font-semibold">
-            {profile?.walletMode === 'btc-sats'
-              ? 'Bitcoin (BTC sats)'
-              : 'Bitcoin (demo sats)'}
-          </p>
+          <p className="text-sm font-semibold">₿AO MARKETS ACTIVITIES</p>
           {profile && (
             <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">
               {getBaoTierLabel(profile.baoTier)}
@@ -3465,8 +3449,10 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Your open ₿AO orders accrue a daily ₿AO reward. More active sats
-          and a higher trader tier mean a larger reward, up to the daily cap.
+          Earn bitcoin demo sats by taking trades with virtual bitcoin on the platform.
+          You can claim up to 21,400 per day, create markets, and trade markets in any category.
+          Your open ₿AO MARKETS orders accrue a daily sats reward. More active participation
+          and a higher trader tier mean a larger reward, up to the daily cap that can pay for your pet needs.
         </p>
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Open orders</span>
@@ -3522,10 +3508,21 @@ function SpeciesTabContent() {
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        Adult species your 2140 PET can evolve into. Select a category above.
+        Adult species your PET can evolve into. Select a species category above.
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
+        {activeCategory === 'bao' && members.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-xl border p-4 bg-card/50 max-w-xs">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-muted/40 flex items-center justify-center">
+              <TrendingUp className="size-8 text-amber-500" />
+            </div>
+            <span className="text-xs font-medium text-center">₿AO Pets</span>
+            <p className="text-[10px] text-muted-foreground text-center">
+              Animated market-born companions unlocked through ₿AO trading energy. Coming soon.
+            </p>
+          </div>
+        )}
         {members.map((member) => {
           const svg = isAdultFormMember(member)
             ? getAdultBaseSvg(member.form)
@@ -3557,40 +3554,6 @@ function SpeciesTabContent() {
     </div>
   );
 }
-
-// ─── Baos Tab Content ───────────────────────────────────────────────────────────
-
-const BAO_VARIATIONS = Array.from({ length: 21 }, (_, i) => ({
-  id: i + 1,
-  name: `₿AO #${i + 1}`,
-  src: `/pets/bao/bao-${String(i + 1).padStart(2, '0')}.png`,
-}));
-
-function BaosTabContent() {
-  return (
-    <div className="h-full min-h-[210px] px-3 sm:px-4">
-      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 py-3">
-        {BAO_VARIATIONS.map((bao) => (
-          <div
-            key={bao.id}
-            className="flex flex-col items-center gap-1.5 rounded-xl border p-2 bg-card/50"
-          >
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-muted/40">
-              <img
-                src={bao.src}
-                alt={bao.name}
-                className="w-full h-full object-contain"
-                loading="lazy"
-              />
-            </div>
-            <span className="text-[10px] font-medium text-muted-foreground">{bao.name}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 
 // ─── Needs Tab Content ────────────────────────────────────────────────────────
 
