@@ -15,6 +15,7 @@ import {
   Navigation,
   Radio,
   Package,
+  RefreshCw,
   Rocket,
   Share2,
   Shield,
@@ -98,6 +99,7 @@ import { ZapstoreReleaseContent, ZapstoreReleaseSkeleton, ZapstoreAssetContent, 
 import { AppHandlerContent } from "@/components/AppHandlerContent";
 import { AppHandlerDetailPage } from "@/pages/AppHandlerDetailPage";
 import { GroupChatCard } from "@/components/group-chat/GroupChatCard";
+import { ExternalContentView } from "@/pages/ExternalContentPage";
 import { useAppContext } from "@/hooks/useAppContext";
 import { type AddrCoords, useAddrEvent, useEvent } from "@/hooks/useEvent";
 import { usePollVoteLabel } from "@/hooks/usePollVoteLabel";
@@ -251,6 +253,25 @@ function formatFullDate(timestamp: number): string {
   });
 }
 
+/**
+ * If the given event is a kind 1111 NIP-22 comment rooted directly on an
+ * external content identifier (URL, `isbn:`, `iso3166:`, etc.), return that
+ * identifier. Returns `undefined` for comments rooted on Nostr events, replies
+ * to other comments (`K` === `"1111"`), or any non-comment event.
+ *
+ * Used to render the rich external-content discussion page inline on the
+ * comment's own detail route, so opening a comment doesn't require a second
+ * click into `/i/<url>` to see the surrounding thread.
+ */
+function externalCommentUri(event: NostrEvent): string | undefined {
+  if (event.kind !== 1111) return undefined;
+  const I = event.tags.find(([n]) => n === "I")?.[1];
+  const K = event.tags.find(([n]) => n === "K")?.[1];
+  // Replies to other comments should keep the standard comment detail view.
+  if (!I || K === "1111") return undefined;
+  return I;
+}
+
 export function PostDetailPage({
   eventId,
   relays,
@@ -261,6 +282,8 @@ export function PostDetailPage({
     data: event,
     isLoading,
     isError,
+    refetch,
+    isFetching,
   } = useEvent(eventId, relays, authorHint);
   const [retryEvent, setRetryEvent] = useState<NostrEvent | null>(null);
 
@@ -288,7 +311,25 @@ export function PostDetailPage({
         <EventNotFound
           context={{ type: "event", eventId, relays, authorHint }}
           onEventFound={setRetryEvent}
+          onRetry={() => refetch()}
+          isRetrying={isFetching}
         />
+      </PostDetailShell>
+    );
+  }
+
+  // Kind 1111 comments rooted directly on external content (a web URL, ISBN,
+  // country, etc.) render the full external-content discussion page inline —
+  // the same UI as /i/<identifier> — with this comment highlighted in the
+  // thread. This avoids forcing a second click through the preview card to
+  // reach the surrounding conversation.
+  const extUri = externalCommentUri(resolvedEvent);
+  if (extUri) {
+    return (
+      <PostDetailShell title={detailTitle}>
+        <MutedContentGuard event={resolvedEvent}>
+          <ExternalContentView uri={extUri} focusedEventId={resolvedEvent.id} />
+        </MutedContentGuard>
       </PostDetailShell>
     );
   }
@@ -350,7 +391,7 @@ export function PostDetailPage({
 /** Detail page for addressable events (naddr). Same layout as PostDetailPage. */
 export function AddrPostDetailPage({ addr, relays }: AddrPostDetailPageProps) {
   const { config } = useAppContext();
-  const { data: event, isLoading, isError } = useAddrEvent(addr, relays);
+  const { data: event, isLoading, isError, refetch, isFetching } = useAddrEvent(addr, relays);
   const [retryEvent, setRetryEvent] = useState<NostrEvent | null>(null);
 
   const resolvedEvent = event || retryEvent;
@@ -378,6 +419,8 @@ export function AddrPostDetailPage({ addr, relays }: AddrPostDetailPageProps) {
         <EventNotFound
           context={{ type: "addr", addr, relays }}
           onEventFound={setRetryEvent}
+          onRetry={() => refetch()}
+          isRetrying={isFetching}
         />
       </PostDetailShell>
     );
@@ -642,9 +685,13 @@ function AuthorHintRow({ pubkey }: { pubkey: string }) {
 function EventNotFound({
   context,
   onEventFound,
+  onRetry,
+  isRetrying: isRetryingProp = false,
 }: {
   context: EventNotFoundContext;
   onEventFound: (event: NostrEvent) => void;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }) {
   const { nostr } = useNostr();
   const [relayUrl, setRelayUrl] = useState("");
@@ -719,6 +766,22 @@ function EventNotFound({
           </p>
         </div>
 
+        {/* Primary retry action */}
+        {onRetry && (
+          <Button
+            className="rounded-full w-full"
+            onClick={onRetry}
+            disabled={isRetryingProp}
+          >
+            {isRetryingProp ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+            Try again
+          </Button>
+        )}
+
         {/* Context details */}
         <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-2 text-sm">
           <p className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2">
@@ -782,7 +845,7 @@ function EventNotFound({
                 value={relayUrl}
                 onChange={(e) => setRelayUrl(e.target.value)}
                 placeholder="wss://relay.example.com"
-                className="flex-1 font-mono text-base md:text-xs h-9"
+                className="flex-1 font-mono text-base md:text-xs h-9 rounded-full"
                 disabled={isRetrying}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleRetry(relayUrl);
@@ -792,7 +855,7 @@ function EventNotFound({
                 size="sm"
                 onClick={() => handleRetry(relayUrl)}
                 disabled={isRetrying || !relayUrl.trim()}
-                className="shrink-0 h-9"
+                className="shrink-0 h-9 rounded-full"
               >
                 {isRetrying ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -1465,7 +1528,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
       {stats?.reposts ? (
         <button
           onClick={() => openInteractions("reposts")}
-          className="hover:underline transition-colors"
+          className="shrink-0 whitespace-nowrap hover:underline transition-colors"
         >
           <span className="font-bold text-foreground">
             {formatNumber(stats.reposts)}
@@ -1476,7 +1539,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
       {quoteCount ? (
         <button
           onClick={() => openInteractions("quotes")}
-          className="hover:underline transition-colors"
+          className="shrink-0 whitespace-nowrap hover:underline transition-colors"
         >
           <span className="font-bold text-foreground">
             {formatNumber(quoteCount)}
@@ -1487,7 +1550,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
       {stats?.reactions ? (
         <button
           onClick={() => openInteractions("reactions")}
-          className="inline-flex items-center gap-1 hover:[&>span:first-child]:underline transition-colors"
+          className="shrink-0 whitespace-nowrap inline-flex items-center gap-1 hover:[&>span:first-child]:underline transition-colors"
         >
           <span className="font-bold text-foreground">
             {formatNumber(stats.reactions)}
@@ -1510,7 +1573,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
       {stats?.zapCount ? (
         <button
           onClick={() => openInteractions("zaps")}
-          className="hover:underline transition-colors"
+          className="shrink-0 whitespace-nowrap hover:underline transition-colors"
         >
           <span className="font-bold text-foreground">
             {formatNumber(stats.zapCount)}
@@ -1518,20 +1581,20 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
           Zap{stats.zapCount !== 1 ? "s" : ""}
         </button>
       ) : null}
-      <span className="ml-auto shrink-0 flex items-center gap-1.5">
+      <span className="ml-auto min-w-0 flex items-center gap-1.5">
         {clientTag?.[1] && (
           <>
             <Link
               to={`/client/${encodeURIComponent(clientTag[1])}`}
-              className="hover:underline"
+              className="hover:underline truncate min-w-0"
               onClick={(e) => e.stopPropagation()}
             >
               {clientTag[1]}
             </Link>
-            <span>·</span>
+            <span className="shrink-0">·</span>
           </>
         )}
-        <span>{formatFullDate(event.created_at)}</span>
+        <span className="shrink-0">{formatFullDate(event.created_at)}</span>
       </span>
     </div>
   ) : (
@@ -1540,15 +1603,15 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
         <>
           <Link
             to={`/client/${encodeURIComponent(clientTag[1])}`}
-            className="hover:underline"
+            className="hover:underline truncate min-w-0"
             onClick={(e) => e.stopPropagation()}
           >
             {clientTag[1]}
           </Link>
-          <span>·</span>
+          <span className="shrink-0">·</span>
         </>
       )}
-      <span>{formatFullDate(event.created_at)}</span>
+      <span className="shrink-0">{formatFullDate(event.created_at)}</span>
     </div>
   );
 
