@@ -10,8 +10,8 @@ import { vi } from 'vitest';
 // behaviour where seed derivation (sha256) works fine.
 const OriginalTextEncoder = globalThis.TextEncoder;
 class RealmSafeTextEncoder extends OriginalTextEncoder {
-  encode(input?: string): Uint8Array {
-    return new Uint8Array(super.encode(input));
+  override encode(input?: string): Uint8Array<ArrayBuffer> {
+    return new Uint8Array(super.encode(input)) as Uint8Array<ArrayBuffer>;
   }
 }
 Object.defineProperty(globalThis, 'TextEncoder', {
@@ -83,8 +83,8 @@ global.ResizeObserver = vi.fn().mockImplementation((_callback) => ({
 {
   const OriginalTextEncoder = globalThis.TextEncoder;
   class SameRealmTextEncoder extends OriginalTextEncoder {
-    encode(input?: string): Uint8Array {
-      return Uint8Array.from(super.encode(input));
+    override encode(input?: string): Uint8Array<ArrayBuffer> {
+      return Uint8Array.from(super.encode(input)) as Uint8Array<ArrayBuffer>;
     }
   }
   globalThis.TextEncoder = SameRealmTextEncoder as typeof TextEncoder;

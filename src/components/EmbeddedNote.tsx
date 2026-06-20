@@ -735,7 +735,7 @@ function EmbeddedNoteCard({
   // 20) carry their media in imeta `url` fields; content kinds carry URLs in
   // the body. We show the actual media instead of only a "Photo"/"Video" chip.
   const previewMedia = useMemo((): { images: string[]; video?: string } => {
-    if (isBlobbiState) return { images: [] };
+    if (isPetsState) return { images: [] };
     // Collect ordered image + first video URLs.
     if (isPhoto) {
       const images: string[] = [];
@@ -757,7 +757,7 @@ function EmbeddedNoteCard({
       .filter((u): u is string => !!u);
     const video = images.length === 0 ? videoUrls[0] : undefined;
     return { images, video };
-  }, [event.content, event.tags, isPhoto, isBlobbiState]);
+  }, [event.content, event.tags, isPhoto, isPetsState]);
 
   const hasMediaPreview = previewMedia.images.length > 0 || !!previewMedia.video;
 
@@ -805,7 +805,7 @@ function EmbeddedNoteCard({
 
   // Media preview is shown for content kinds (and photos) when not blurred.
   const showMediaPreview =
-    hasMediaPreview && !isBlobbiState && !tagMeta && !isUnknownKind && !isKnownKindWithoutPreview &&
+    hasMediaPreview && !isPetsState && !tagMeta && !isUnknownKind && !isKnownKindWithoutPreview &&
     !(hasCW && config.contentWarningPolicy === 'blur');
 
   const hasChips = !hasCW && (
