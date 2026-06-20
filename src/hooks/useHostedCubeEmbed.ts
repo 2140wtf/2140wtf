@@ -38,6 +38,8 @@ export interface CubeDesign {
   isPaid?: boolean;
   priceSats?: number;
   nostrEventId?: string | null;
+  /** Where this design came from. */
+  source: 'api' | 'nostr' | 'deterministic';
 }
 
 function defaultEmbedUrl(pollId: string): string {
@@ -59,7 +61,7 @@ async function fetchCubeDesign(
       const json = (await res.json()) as Record<string, unknown> | undefined;
       const data = json && typeof json === 'object' ? (json.data ?? json) : null;
       if (data && typeof (data as CubeDesign).embedUrl === 'string') {
-        return data as CubeDesign;
+        return { ...(data as CubeDesign), source: 'api' as const };
       }
     } catch {
       // try next base
@@ -136,6 +138,7 @@ export function useHostedCubeEmbed(pollId: string | undefined, enabled = true) {
             creatorPubkey: event.pubkey,
             designType: 'POLL_ONLY' as const,
             embedUrl,
+            source: 'nostr' as const,
           };
         }
       }
@@ -146,6 +149,7 @@ export function useHostedCubeEmbed(pollId: string | undefined, enabled = true) {
         creatorPubkey: '',
         designType: 'POLL_ONLY' as const,
         embedUrl: defaultEmbedUrl(pollId),
+        source: 'deterministic' as const,
       };
     },
     enabled: !!pollId && enabled,

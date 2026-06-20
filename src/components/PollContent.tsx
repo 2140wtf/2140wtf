@@ -209,10 +209,13 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const { data: authorsMap } = useAuthors(allVoterPubkeys);
 
   // Cube view replaces the flat poll UI with the BAO-hosted 3D cube.
-  // The cube embed can only render polls that BAO Markets has indexed. If BAO
-  // does not know this poll, fall through to the flat UI instead of showing
-  // the BAO "Poll not found" error inside the iframe.
-  if (view === 'cubes' && !(cubeDesign && cubeDesign.nostrEventId == null)) {
+  // BAO can only render polls it has indexed (nostrEventId present). If the
+  // API explicitly says the poll is not indexed, fall back to the flat UI
+  // instead of embedding a BAO 404. While loading, or if we had to fall back
+  // to the deterministic/Nostr design, still try the cube.
+  const canRenderCube =
+    !cubeDesign || cubeDesign.source !== 'api' || !!cubeDesign.nostrEventId;
+  if (view === 'cubes' && canRenderCube) {
     return (
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         <div className="text-[15px] leading-relaxed font-medium break-words">
