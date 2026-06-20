@@ -7,7 +7,6 @@ import { getZapAmountSats, getZapSenderPubkey } from '@/lib/zapHelpers';
 import { useQueryClient } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
 import { usePollVotes } from '@/hooks/usePollVotes';
-import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
@@ -141,7 +140,6 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
   const view = usePollsView();
-  const { data: cubeDesign } = useHostedCubeEmbed(event.id, view === 'cubes');
 
   const options = useMemo(() => getOptions(event.tags), [event.tags]);
   const pollType = getTag(event.tags, 'polltype') ?? 'singlechoice';
@@ -209,13 +207,7 @@ export function PollContent({ event }: { event: NostrEvent }) {
   const { data: authorsMap } = useAuthors(allVoterPubkeys);
 
   // Cube view replaces the flat poll UI with the BAO-hosted 3D cube.
-  // BAO can only render polls it has indexed (nostrEventId present). If the
-  // API explicitly says the poll is not indexed, fall back to the flat UI
-  // instead of embedding a BAO 404. While loading, or if we had to fall back
-  // to the deterministic/Nostr design, still try the cube.
-  const canRenderCube =
-    !cubeDesign || cubeDesign.source !== 'api' || !!cubeDesign.nostrEventId;
-  if (view === 'cubes' && canRenderCube) {
+  if (view === 'cubes') {
     return (
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         <div className="text-[15px] leading-relaxed font-medium break-words">
