@@ -38,24 +38,49 @@ function useEventComments(event: NostrEvent | undefined) {
     queryFn: async ({ signal }) => {
       if (!event) return [];
       const abort = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+      const limit = 80;
+      const isRegularEventRoot = !(event.kind >= 30000 && event.kind < 40000 && aTag);
       const filters =
         event.kind >= 30000 && event.kind < 40000 && aTag
-          ? [{ kinds: [1111, 1244], '#A': [aTag], limit: 80 }]
+          ? [{ kinds: [1111, 1244], '#A': [aTag], limit }]
           : event.kind === 1
           ? [
-              { kinds: [1, 1111], '#e': [event.id], limit: 80 },
-              { kinds: [1111], '#E': [event.id], limit: 80 },
+              { kinds: [1, 1111], '#e': [event.id], limit },
+              { kinds: [1111], '#E': [event.id], limit },
             ]
           : [
               // Non-kind-1 roots (e.g. polls) may receive NIP-10 kind 1 replies
               // from other clients in addition to our NIP-22 kind 1111 comments.
-              { kinds: [1111], '#e': [event.id], limit: 80 },
-              { kinds: [1], '#e': [event.id], limit: 80 },
+              { kinds: [1111], '#e': [event.id], limit },
+              { kinds: [1], '#e': [event.id], limit },
             ];
-      const events = await nostr.query(filters, { signal: abort });
-      const seen = new Set<string>();
-      return events
-        .filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; })
+      const allEvents = await nostr.query(filters, { signal: abort });
+      const seen = new Set<string>(allEvents.map((e) => e.id));
+
+      // Recursively chase kind 1 NIP-10 replies because they only tag their
+      // immediate parent, not the thread root. This keeps the feed comment
+      // sheet in sync with the detail page for polls and other non-kind-1 events.
+      if (isRegularEventRoot) {
+        const MAX_FETCH_DEPTH = 5;
+        let idsToQuery = [event.id];
+        for (let depth = 0; depth < MAX_FETCH_DEPTH && idsToQuery.length > 0; depth++) {
+          const replies = await nostr.query(
+            [{ kinds: [1], '#e': idsToQuery, limit }],
+            { signal: abort },
+          );
+          const newIds: string[] = [];
+          for (const e of replies) {
+            if (!seen.has(e.id)) {
+              seen.add(e.id);
+              allEvents.push(e);
+              newIds.push(e.id);
+            }
+          }
+          idsToQuery = newIds;
+        }
+      }
+
+      return allEvents
         .sort((a, b) => b.created_at - a.created_at);
     },
     enabled: !!event,
