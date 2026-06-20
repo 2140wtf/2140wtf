@@ -46,7 +46,12 @@ function useEventComments(event: NostrEvent | undefined) {
               { kinds: [1, 1111], '#e': [event.id], limit: 80 },
               { kinds: [1111], '#E': [event.id], limit: 80 },
             ]
-          : [{ kinds: [1111], '#e': [event.id], limit: 80 }];
+          : [
+              // Non-kind-1 roots (e.g. polls) may receive NIP-10 kind 1 replies
+              // from other clients in addition to our NIP-22 kind 1111 comments.
+              { kinds: [1111], '#e': [event.id], limit: 80 },
+              { kinds: [1], '#e': [event.id], limit: 80 },
+            ];
       const events = await nostr.query(filters, { signal: abort });
       const seen = new Set<string>();
       return events
