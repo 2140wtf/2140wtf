@@ -8,9 +8,8 @@ There are four currencies in the Pets economy:
 
 | Currency | Source | Spent on | Storage |
 |---|---|---|---|
-| `coins` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy) | kind 11125 `coins` tag |
+| `sats` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy) | kind 11125 `sats` tag |
 | `runes` | 2140 category daily quests | 2140-specific items, relay-routing boosts | kind 11125 `content.runes` |
-| `sats` | ₿AO category daily quests, BAO trading rewards, 2140 daylight netrunning bonus | ₿AO-specific items, market tonics | kind 11125 `sats` tag |
 | `seeds` | Ditto Blobbi category daily quests | Ditto Blobbi-specific items, growth serums | kind 11125 `content.seeds` |
 
 All category currencies default to `0` when missing from a profile.
@@ -43,11 +42,11 @@ BAO pets have one of five rarity tiers. Rarity is set at mint time from the sele
 
 | Tier | Drop weight | IDs | Stat cap bonus | BAO reward bonus |
 |---|---|---|---|---|
-| Common | 50% | bao-01 – bao-08 | +0 | +10 sats |
-| Uncommon | 28% | bao-09 – bao-13 | +5 | +18 sats |
-| Rare | 14% | bao-14 – bao-17 | +12 | +28 sats |
-| Epic | 6% | bao-18 – bao-20 | +20 | +40 sats |
-| Legendary | 2% | bao-21 | +30 | +50 sats |
+| Common | 50% | bao-01 – bao-08 | +0 | +1,000 sats |
+| Uncommon | 28% | bao-09 – bao-13 | +5 | +1,800 sats |
+| Rare | 14% | bao-14 – bao-17 | +12 | +2,800 sats |
+| Epic | 6% | bao-18 – bao-20 | +20 | +4,000 sats |
+| Legendary | 2% | bao-21 | +30 | +5,000 sats |
 
 Rarity affects:
 - Effective stat cap used by item/direct-action calculations.
@@ -94,7 +93,7 @@ Three shop items halve the remaining breeding cooldown once per pet per week:
 
 Each day the player receives 3 missions. Mission selection is seeded by date, pubkey, and active pet category. At least one mission (40% weighting) is drawn from the active category's pool.
 
-Rewards include coins, sats, and the matching category currency.
+Rewards include sats and the matching category currency.
 
 ## Economy Safety Rules
 
