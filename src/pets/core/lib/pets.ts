@@ -1467,9 +1467,30 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
  * Build tags for a new Blobbonaut Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
+/**
+ * Feature flag for real-sats wallet mode.
+ *
+ * While this is `false`, every profile is treated as `demo-sats` so the Pets
+ * economy can be tested safely without touching real BTC. Flip to `true` once
+ * Cashu/NIP-60 real-sats settlement is ready for production.
+ */
+let petsRealSatsEnabled = false;
+
+/** Returns whether real-sats (`btc-sats`) wallet mode is enabled. */
+export function isPetsRealSatsEnabled(): boolean {
+  return petsRealSatsEnabled;
+}
+
+/** Enable or disable real-sats (`btc-sats`) wallet mode. Exposed for tests. */
+export function setPetsRealSatsEnabled(enabled: boolean): void {
+  petsRealSatsEnabled = enabled;
+}
+
 export function parseWalletModeTag(tags: string[][]): 'demo-sats' | 'btc-sats' {
   const value = getTagValue(tags, 'wallet_mode');
-  if (value === 'btc-sats' || value === 'real' || value === 'bao') return 'btc-sats';
+  if (petsRealSatsEnabled && (value === 'btc-sats' || value === 'real' || value === 'bao')) {
+    return 'btc-sats';
+  }
   return 'demo-sats';
 }
 
