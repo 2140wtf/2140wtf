@@ -54,6 +54,13 @@ export function AppProvider(props: AppProviderProps) {
           result.sidebarOrderVersion = currentSidebarVersion;
         }
 
+        // Reset theme to the new default when the default theme version has changed.
+        const currentThemeVersion = defaultConfig.themeDefaultVersion ?? 0;
+        if ((result.themeDefaultVersion ?? 0) < currentThemeVersion) {
+          result.theme = defaultConfig.theme;
+          result.themeDefaultVersion = currentThemeVersion;
+        }
+
         // Migrate legacy blossomServers (string[]) to blossomServerMetadata
         if (!result.blossomServerMetadata) {
           const legacyServers = parsed.blossomServers;
