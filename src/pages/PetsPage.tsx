@@ -3527,7 +3527,7 @@ function SpeciesTabContent() {
           const svg = isAdultFormMember(member)
             ? getAdultBaseSvg(member.form)
             : (() => {
-                const recipe = getBaoRecipeById(member.id);
+                const recipe = getBaoRecipeById(member.recipeId ?? member.id);
                 return recipe ? generateBaoSvg(recipe) : '';
               })();
 
