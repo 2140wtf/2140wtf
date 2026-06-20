@@ -3457,7 +3457,7 @@ function BlobbiTabContent({ profile, updateProfileEvent }: BlobbiTabContentProps
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Daily reward</span>
           <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
-            {baoLoading ? '…' : `+${(baoReward?.coins ?? 0).toLocaleString()} ₿AO`}
+            {baoLoading ? '…' : `+${(baoReward?.sats ?? 0).toLocaleString()} ₿AO sats`}
           </span>
         </div>
         <Button
