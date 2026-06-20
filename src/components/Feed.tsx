@@ -15,7 +15,9 @@ import LoginDialog from '@/components/auth/LoginDialog';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useFeed } from '@/hooks/useFeed';
+import { useFeedStream } from '@/hooks/useFeedStream';
 import { useFollowList } from '@/hooks/useFollowActions';
+import { useMutedAuthorFilter } from '@/hooks/useMutedAuthorFilter';
 import { useIsOnline } from '@/hooks/useIsOnline';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { DITTO_RELAYS } from '@/lib/appRelays';
@@ -36,6 +38,7 @@ import { diversifyFeedPages } from '@/lib/feedDiversity';
 import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
+import { NewPostsPill } from '@/components/NewPostsPill';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
 import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import { TabButton } from '@/components/TabButton';
@@ -84,6 +87,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const { hashtags: geotags } = useInterests('g');
   const { data: curatorFollowList, isError: isCuratorError } = useCuratorFollowList();
   const { data: followData } = useFollowList();
+  const { excludeMuted } = useMutedAuthorFilter();
   const isOnline = useIsOnline();
 
   // Tab settings from localStorage
@@ -212,6 +216,44 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   );
 
   const handleRefresh = usePageRefresh(queryKey);
+
+  // Live auto-refresh: detect new posts arriving on the active feed and surface
+  // a "N new posts" pill, without re-sorting the feed under the user's scroll.
+  // Only the core author/global tabs stream — the curated Ditto tab, saved
+  // feeds, and hashtag/geotag tabs render their own content below.
+  const { feedSettings } = useFeedSettings();
+  const streamAuthors = useMemo<string[] | undefined>(() => {
+    if (feedTabForQuery === 'follows') {
+      const follows = excludeMuted(followData?.pubkeys ?? []);
+      return user ? [...follows, user.pubkey] : follows;
+    }
+    if (feedTabForQuery === 'loved') {
+      return excludeMuted(lovedPubkeys ?? []);
+    }
+    // global / communities: communities derive authors internally in useFeed;
+    // skip streaming there to avoid a second localStorage read. Global has no authors.
+    return undefined;
+  }, [feedTabForQuery, followData?.pubkeys, lovedPubkeys, user, excludeMuted]);
+
+  // Stream only for the core feed tabs, when not the curated Ditto query.
+  const streamEnabled =
+    isCoreFeedTab &&
+    !useDittoQuery &&
+    (feedTabForQuery === 'follows' || feedTabForQuery === 'loved' || feedTabForQuery === 'global');
+
+  const { newPostCount, reset: resetNewPosts } = useFeedStream({
+    tab: feedTabForQuery,
+    authors: streamAuthors,
+    kinds,
+    showReplies: feedSettings.followsFeedShowReplies,
+    enabled: streamEnabled,
+  });
+
+  const handleShowNewPosts = () => {
+    resetNewPosts();
+    handleRefresh();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const {
     data: rawData,
@@ -456,6 +498,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
         <SavedFeedContent feed={activeSavedFeed} />
       ) : (
         <PullToRefresh onRefresh={handleRefresh}>
+          {/* New posts pill — live auto-refresh. Never re-sorts the feed:
+              tapping it refreshes and scrolls to top. */}
+          <NewPostsPill count={newPostCount} onClick={handleShowNewPosts} />
           {visibleItems.length > 0 ? (
             grid ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
