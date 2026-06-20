@@ -9,28 +9,32 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
     queryKey: ['nostr', 'comments', root instanceof URL ? root.toString() : typeof root === 'string' ? root : root?.id, limit],
     queryFn: async () => {
       if (!root) throw new Error('root is required');
-      const filter: NostrFilter = { kinds: [1111, 1244] };
+      const limitFilter: Pick<NostrFilter, 'limit'> = {};
+      if (typeof limit === 'number') {
+        limitFilter.limit = limit;
+      }
+
+      const filters: NostrFilter[] = [];
 
       if (typeof root === 'string') {
-        filter['#I'] = [root];
+        filters.push({ kinds: [1111, 1244], '#I': [root], ...limitFilter });
       } else if (root instanceof URL) {
-        filter['#I'] = [root.toString()];
+        filters.push({ kinds: [1111, 1244], '#I': [root.toString()], ...limitFilter });
       } else if (NKinds.addressable(root.kind)) {
         const d = root.tags.find(([name]) => name === 'd')?.[1] ?? '';
-        filter['#A'] = [`${root.kind}:${root.pubkey}:${d}`];
+        filters.push({ kinds: [1111, 1244], '#A': [`${root.kind}:${root.pubkey}:${d}`], ...limitFilter });
       } else if (NKinds.replaceable(root.kind)) {
-        filter['#A'] = [`${root.kind}:${root.pubkey}:`];
+        filters.push({ kinds: [1111, 1244], '#A': [`${root.kind}:${root.pubkey}:`], ...limitFilter });
       } else {
-        filter['#E'] = [root.id];
+        // Non-kind-1 roots (e.g. polls) may receive NIP-22 kind 1111 comments
+        // or NIP-10 kind 1 replies from other clients. Fetch both conventions.
+        filters.push({ kinds: [1111, 1244], '#E': [root.id], ...limitFilter });
+        filters.push({ kinds: [1], '#e': [root.id], ...limitFilter });
       }
 
-      if (typeof limit === 'number') {
-        filter.limit = limit;
-      }
-
-      // Query for all kind 1111 comments that reference this addressable event regardless of depth
+      // Query for all comments that reference this event regardless of depth
       const signal = AbortSignal.timeout(5000);
-      const events = await nostr.query([filter], { signal });
+      const events = await nostr.query(filters, { signal });
 
       // Helper function to get tag value
       const getTagValue = (event: NostrEvent, tagName: string): string | undefined => {
