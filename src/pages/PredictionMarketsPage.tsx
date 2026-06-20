@@ -87,6 +87,12 @@ function truncatePubkey(pubkey: string): string {
   return `${pubkey.slice(0, 6)}…${pubkey.slice(-6)}`;
 }
 
+function titleCaseCategory(name: string): string {
+  return name
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const MarketCard = memo(function MarketCard({
   market,
   onSelect,
@@ -113,7 +119,7 @@ const MarketCard = memo(function MarketCard({
         </p>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{market.category}</Badge>
+          <Badge variant="secondary">{titleCaseCategory(market.category)}</Badge>
           <span className="text-xs text-muted-foreground">
             Ends {formatEndDate(market.endTime)}
           </span>
@@ -162,7 +168,7 @@ function MarketDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="pr-6 leading-snug">{market.title}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -254,32 +260,39 @@ export function PredictionMarketsPage(): React.JSX.Element {
     description: "Kind 38000 prediction markets from wss://relay.bao.network",
   });
 
-  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets(category);
+  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all');
+
+  const now = Math.floor(Date.now() / 1000);
+
+  const activeMarkets = useMemo(() => {
+    return markets.filter((m) => {
+      if (m.state === 'ended') return false;
+      if (!showResolved) {
+        if (m.state !== 'active') return false;
+        if (m.endTime > 0 && m.endTime < now) return false;
+      }
+      return true;
+    });
+  }, [markets, showResolved, now]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const m of markets) if (m.category) set.add(m.category);
-    return ["all", ...Array.from(set).sort()];
-  }, [markets]);
+    for (const m of activeMarkets) {
+      if (m.category) set.add(m.category);
+    }
+    return ['all', ...Array.from(set).sort()];
+  }, [activeMarkets]);
 
   const filteredAndSorted = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const now = Math.floor(Date.now() / 1000);
 
-    let items = markets.filter((m) => {
-      // Hide ended markets.
-      if (m.state === "ended") return false;
-
-      // Unless showing resolved markets, only show active markets whose end time has not passed.
-      if (!showResolved) {
-        if (m.state !== "active") return false;
-        if (m.endTime > 0 && m.endTime < now) return false;
-      }
+    let items = activeMarkets.filter((m) => {
+      if (category !== 'all' && m.category !== category) return false;
 
       if (!q) return true;
       const hay = `${m.title} ${m.description} ${m.category} ${m.outcomes
         .map((o) => o.label)
-        .join(" ")}`.toLowerCase();
+        .join(' ')}`.toLowerCase();
       return hay.includes(q);
     });
 
@@ -303,7 +316,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
     });
 
     return items;
-  }, [markets, search, sort, showResolved]);
+  }, [activeMarkets, search, sort, category]);
 
   useEffect(() => {
     if (!selectedMarketId || markets.length === 0) return;
@@ -390,7 +403,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
             <SelectContent>
               {categories.map((c) => (
                 <SelectItem key={c} value={c}>
-                  {c === "all" ? "All categories" : c}
+                  {c === 'all' ? 'All categories' : titleCaseCategory(c)}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, ExternalLink } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 
 import { PageHeader } from '@/components/PageHeader';
@@ -20,6 +20,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { getBackgroundThemeMode } from '@/lib/colorUtils';
 import type { BBox, BtcShop } from '@/lib/btcmap/btcmap';
 import { fetchShopDetails, getCountryBbox } from '@/lib/btcmap/btcmap';
+import { openUrl } from '@/lib/downloadFile';
+import { Button } from '@/components/ui/button';
 
 const DEFAULT_FILTERS: BtcMapFiltersState = {
   country: 'all',
@@ -132,7 +134,28 @@ export function BtcMapPage(): React.JSX.Element {
 
   return (
     <main className="flex flex-col h-[calc(100vh-var(--top-bar-height,0px)-var(--safe-area-inset-top,env(safe-area-inset-top,0px)))] sidebar:h-[calc(100vh)]">
-      <PageHeader title="BTC MAP" icon={<MapPin className="size-5" />} />
+      <PageHeader title="BTC MAP" icon={<MapPin className="size-5" />}>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => openUrl('https://btcmap.org/supporters')}
+          >
+            Support
+            <ExternalLink className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => openUrl('https://blog.btcmap.org/')}
+          >
+            Blog
+            <ExternalLink className="size-3.5" />
+          </Button>
+        </div>
+      </PageHeader>
       <BtcMapFilters
         filters={filters}
         onChange={handleFilterChange}
