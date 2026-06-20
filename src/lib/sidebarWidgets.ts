@@ -12,6 +12,7 @@ import {
   Navigation,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
+import type { WidgetConfig } from '@/contexts/AppContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
