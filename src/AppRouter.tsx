@@ -102,7 +102,7 @@ const highlightsDef = getExtraKindDef("highlights")!;
 /** Polls feed page with a FAB that opens the compose modal (poll mode via + menu). */
 function PollsFeedPage() {
   const [composeOpen, setComposeOpen] = useState(false);
-  const [view, setView] = useState<'list' | 'cubes'>('cubes');
+  const [view, setView] = useState<'list' | 'cubes'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
 
