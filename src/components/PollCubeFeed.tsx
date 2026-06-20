@@ -112,7 +112,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className }: Po
 
   return (
     <div className={cn('space-y-6 py-4', className)}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {filteredPolls.map((poll) => (
           <div key={poll.id} className="flex flex-col gap-3">
             <HostedPollCube pollId={poll.id} title={extractTitle(poll)} className="h-[420px]" />
