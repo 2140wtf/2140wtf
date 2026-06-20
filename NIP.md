@@ -825,11 +825,10 @@ When a pet is created via breeding, the offspring egg carries parent references 
 
 | Value | Meaning |
 |-------|---------|
-| `demo` | Costs are paid with play-money `coins` stored on the profile. |
-| `real` | Reserved for normal Cashu sats (not yet wired). |
-| `bao` | Costs are paid with BAO signet/demo Cashu sats from the BAO wallet. |
+| `demo-sats` | Costs are paid with in-game demo `sats` stored on the profile. Shop/catalog prices are multiplied by 100 to convert legacy coin values to demo sats. |
+| `btc-sats` | Costs are settled with real BTC sats from an external Cashu/NIP-60 wallet before the in-game `sats` ledger is updated. |
 
-When the tag is missing or unrecognized, clients MUST treat the profile as `demo`.
+Legacy values `demo`, `real`, and `bao` SHOULD be read for backward compatibility and mapped to `demo-sats` or `btc-sats` as follows: `demo` → `demo-sats`; `real` and `bao` → `btc-sats`. When the tag is missing or unrecognized, clients MUST treat the profile as `demo-sats`.
 
 #### Kind 11125 `content` JSON — `missions` field
 

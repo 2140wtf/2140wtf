@@ -3,7 +3,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
-import { useBaoPayment } from '@/pets/core/hooks/useBaoPayment';
+import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
@@ -17,23 +17,26 @@ import {
 } from '@/pets/core/lib/pets';
 import { getShopItemById } from '../lib/pets-shop-items';
 
+/** Demo-sats are priced at 100× the base catalog price so whole numbers feel substantial. */
+export const DEMO_SATS_PRICE_MULTIPLIER = 100;
+
 /**
  * Hook to purchase items from the Pets Shop.
- * 
+ *
  * Handles:
- * - Coin deduction
+ * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'demo-sats')
+ * - Real BTC sats payment via the external Cashu wallet (wallet_mode === 'btc-sats')
  * - Storage updates (stacking or adding new items)
- * - Atomic profile update (coins + storage in single event)
- * - Optimistic updates and error handling
+ * - Atomic profile update
  */
 export function usePetsPurchaseItem(
   currentProfile: BlobbonautProfile | null,
-  baoWallet?: (CashuWalletState & CashuWalletActions) | null,
+  externalWallet?: (CashuWalletState & CashuWalletActions) | null,
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
-  const { payBaoSats } = useBaoPayment(baoWallet);
+  const { paySats } = useExternalSatsPayment(externalWallet);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -57,23 +60,25 @@ export function usePetsPurchaseItem(
         throw new Error('Item price mismatch. Please refresh and try again.');
       }
 
-      // Calculate total cost
-      const totalCost = price * quantity;
+      const isDemoSats = currentProfile.walletMode === 'demo-sats';
+      const isBtcSats = currentProfile.walletMode === 'btc-sats';
 
-      const isBaoMode = currentProfile.walletMode === 'bao';
+      // Calculate total cost in the active currency unit
+      const totalCost = isDemoSats
+        ? price * quantity * DEMO_SATS_PRICE_MULTIPLIER
+        : price * quantity;
 
-      // Check affordability
-      if (!isBaoMode && currentProfile.coins < totalCost) {
-        throw new Error(`Insufficient coins. You need ${totalCost} coins but only have ${currentProfile.coins}.`);
+      // Check affordability and pay
+      if (isDemoSats) {
+        if (currentProfile.sats < totalCost) {
+          throw new Error(
+            `Insufficient demo sats. You need ${totalCost} demo sats but only have ${currentProfile.sats}.`
+          );
+        }
+      } else if (isBtcSats) {
+        // Pay with real BTC sats before updating storage
+        await paySats(totalCost, `Pets shop: ${item.name}`);
       }
-
-      if (isBaoMode) {
-        // Pay with BAO signet sats before updating storage
-        await payBaoSats(totalCost, `Pets shop: ${item.name}`);
-      }
-
-      // Calculate new coins (only used in demo mode)
-      const newCoins = currentProfile.coins - totalCost;
 
       // Update storage (stack or add)
       const existingIndex = currentProfile.storage.findIndex(s => s.itemId === itemId);
@@ -94,7 +99,7 @@ export function usePetsPurchaseItem(
       // Build updated tags
       // createStorageTags returns [['storage', 'itemId:quantity'], ...], we need just the values
       const storageValues = createStorageTags(newStorage).map(tag => tag[1]);
-      
+
       // Fetch fresh profile from relays to avoid stale-read overwrites
       const prev = await fetchFreshPetsEvent(nostr, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
@@ -107,8 +112,8 @@ export function usePetsPurchaseItem(
       const updates: Record<string, string | string[]> = {
         storage: storageValues, // Array of 'itemId:quantity' strings
       };
-      if (!isBaoMode) {
-        updates.coins = newCoins.toString();
+      if (isDemoSats) {
+        updates.sats = (currentProfile.sats - totalCost).toString();
       }
 
       const updatedTags = updateBlobbonautTags(prev.tags, updates);
@@ -121,9 +126,9 @@ export function usePetsPurchaseItem(
         prev,
       });
 
-      return { event, item, quantity, totalCost };
+      return { event, item, quantity, totalCost, currency: isDemoSats ? 'demo sats' : 'sats' as const };
     },
-    onSuccess: ({ item, quantity, totalCost }) => {
+    onSuccess: ({ item, quantity, totalCost, currency }) => {
       // Invalidate profile query to refetch fresh data
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
@@ -132,7 +137,7 @@ export function usePetsPurchaseItem(
       // Show success toast
       toast({
         title: 'Purchase Successful!',
-        description: `You bought ${item.name} (×${quantity}) for ${totalCost} coins.`,
+        description: `You bought ${item.name} (×${quantity}) for ${totalCost.toLocaleString()} ${currency}.`,
       });
     },
     onError: (error: Error) => {

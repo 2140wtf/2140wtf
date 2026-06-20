@@ -94,7 +94,7 @@ import {
   type Nip60WalletConfig,
 } from '@/lib/cashu/cashuNip60';
 /* eslint-enable @typescript-eslint/no-unused-vars */
-import { createMintFetch, runWithAbortSignal } from '@/lib/cashu/cashuFetch';
+import { createMintFetch } from '@/lib/cashu/cashuFetch';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
 
@@ -337,6 +337,8 @@ interface PendingReceiveEntry {
   status: 'pending' | 'completed';
   timestamp: number;
   attempts: number;
+  /** Normalized mint URLs that have already been successfully received. */
+  succeededMintUrls?: string[];
 }
 
 const pendingReceiveKey = (tokenHash: string) => `freedomid_receive_pending_${stringToBase64(tokenHash)}`;
@@ -368,6 +370,7 @@ const writePendingReceive = async (
   mintUrls: string[],
   amount: number,
   key: CryptoKey,
+  succeededMintUrls?: string[],
 ) => {
   const existing = await loadPendingReceive(tokenHash, key);
   const entry: PendingReceiveEntry = {
@@ -378,6 +381,7 @@ const writePendingReceive = async (
     status: 'pending',
     timestamp: Date.now(),
     attempts: existing?.attempts ?? 0,
+    succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
   };
   const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
   localStorage.setItem(pendingReceiveKey(tokenHash), encrypted);
@@ -644,7 +648,7 @@ export function useCashuWallet(
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     return Promise.race([
-      runWithAbortSignal(controller.signal, () => promise).finally(() => clearTimeout(timer)),
+      promise.finally(() => clearTimeout(timer)),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();
@@ -1242,7 +1246,7 @@ export function useCashuWallet(
     return () => { cancelled = true; };
   }, [wallet, allMints, reconcilePendingReceives]);
 
-  const getOrCreateWallet = useCallback(async (url: string, seed: Uint8Array): Promise<CashuWallet> => {
+  const getOrCreateWallet = useCallback(async (url: string, seed: Uint8Array, allowForeign = false): Promise<CashuWallet> => {
     if (!isAllowedMintUrl(url)) {
       throw new Error('Mint URL is not allowed');
     }
@@ -1257,7 +1261,9 @@ export function useCashuWallet(
         walletCacheRef.current.delete(cacheKey);
       }
     }
-    const allowedUrls = allMintsRef.current.map((m) => m.url);
+    const allowedUrls = allowForeign
+      ? [...allMintsRef.current.map((m) => m.url), url]
+      : allMintsRef.current.map((m) => m.url);
     const mintFetch = createMintFetch(allowedUrls);
     const mint = new CashuMint(url, mintFetch as ConstructorParameters<typeof CashuMint>[1]);
     w = new CashuWallet(mint, { bip39seed: seed, unit: 'sat' });
@@ -1843,15 +1849,18 @@ export function useCashuWallet(
         }
       }
 
-      // Write a pending-receive journal so a crash/timeout after the mint issues
-      // proofs can be retried on the next startup.
+      // Load any prior partial-receive progress so we can skip mints that
+      // already succeeded and avoid an infinite retry loop.
+      const existingPending = await loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
+      const succeededMintUrls = new Set(existingPending?.succeededMintUrls ?? []);
       const groupedEntries = Array.from(grouped.values());
       const pendingMintUrls = groupedEntries.map((e) => normalizeMintUrl(e.mintUrl)!).filter(Boolean);
       const pendingAmount = groupedEntries.reduce((sum, e) => sum + sumProofAmounts(e.proofs), 0);
-      await writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey);
+      await writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
 
       let totalReceived = 0;
       for (const [normalized, entry] of grouped) {
+        if (succeededMintUrls.has(normalized)) continue;
         let entryToken: string;
         try {
           entryToken = getEncodedToken({ mint: normalized, proofs: entry.proofs, unit: 'sat' });
@@ -1864,7 +1873,7 @@ export function useCashuWallet(
           const normalizedMintUrl = normalizeMintUrl(mintUrl);
           const targetWallet = normalized === normalizedMintUrl
             ? wallet
-            : await withTimeout(getOrCreateWallet(normalized, bip39Seed), 15000, 'Foreign mint load');
+            : await withTimeout(getOrCreateWallet(normalized, bip39Seed, true), 15000, 'Foreign mint load');
 
           const received = await withProofLock(async () => {
             const existingProofs = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
@@ -1940,6 +1949,8 @@ export function useCashuWallet(
             });
             await refreshTransactions();
             await syncNip60TokenForMint(normalized, 'in', receivedAmount);
+            succeededMintUrls.add(normalized);
+            await writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
             return received;
           });
 

@@ -24,7 +24,7 @@ import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
-import { useBaoPayment } from '@/pets/core/hooks/useBaoPayment';
+import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 import {
@@ -66,8 +66,8 @@ export interface OnboardingState {
   preview: PetsEggPreview | null;
   /** Whether the current preview is the first (free) one */
   isFirstPreview: boolean;
-  /** Temporary coins for preview phase (before profile exists) */
-  previewCoins: number;
+  /** Temporary demo sats for preview phase (before profile exists) */
+  previewSats: number;
   /** Name set during profile creation (for adoption step display) */
   blobbonautName: string | undefined;
 }
@@ -90,8 +90,8 @@ export interface UsePetsOnboardingResult {
   actions: OnboardingActions;
   /** Suggested name from kind 0 metadata */
   suggestedName: string | undefined;
-  /** Current coin balance (from profile or preview state) */
-  coins: number;
+  /** Current demo-sat balance (from profile or preview state) */
+  sats: number;
 }
 
 // ─── Helper: Derive Initial Step ──────────────────────────────────────────────
@@ -148,8 +148,8 @@ interface UsePetsOnboardingOptions {
    * Requires profile to be non-null.
    */
   adoptionOnly?: boolean;
-  /** BAO signet Cashu wallet, required when profile.walletMode is 'bao'. */
-  baoWallet?: (CashuWalletState & CashuWalletActions) | null;
+  /** External Cashu wallet, required when profile.walletMode is 'btc-sats'. */
+  externalWallet?: (CashuWalletState & CashuWalletActions) | null;
 }
 
 export function usePetsOnboarding({
@@ -161,12 +161,12 @@ export function usePetsOnboarding({
   setStoredSelectedD,
   onComplete,
   adoptionOnly = false,
-  baoWallet,
+  externalWallet,
 }: UsePetsOnboardingOptions): UsePetsOnboardingResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
-  const { payBaoSats } = useBaoPayment(baoWallet);
+  const { paySats } = useExternalSatsPayment(externalWallet);
   
   // Get kind 0 metadata for name suggestion
   const { data: authorData } = useAuthor(user?.pubkey);
@@ -195,7 +195,7 @@ export function usePetsOnboarding({
     return null;
   });
   const [isFirstPreview, setIsFirstPreview] = useState(true);
-  const [previewCoins] = useState(INITIAL_BLOBBONAUT_COINS);
+  const [previewSats] = useState(INITIAL_BLOBBONAUT_COINS * 100);
   const [blobbonautName, setBlobbonautName] = useState<string | undefined>(profile?.name);
   
   // ─── Sync step with profile changes ─────────────────────────────────────────
@@ -251,8 +251,8 @@ export function usePetsOnboarding({
   
   // ─── Derived State ──────────────────────────────────────────────────────────
   
-  // Coins: from profile if exists, otherwise from preview state
-  const coins = profile?.coins ?? previewCoins;
+  // Demo sats: from profile if exists, otherwise from preview state
+  const sats = profile?.sats ?? previewSats;
   
   // ─── Auto Profile Creation ────────────────────────────────────────────────────
   
@@ -292,12 +292,12 @@ export function usePetsOnboarding({
       setActionInProgress('create-profile');
       
       try {
-        // Build tags with name and initial coins
+        // Build tags with name and initial demo sats
         const baseTags = buildBlobbonautTags(user.pubkey);
         const tagsWithName = [
           ...baseTags,
           ['name', name],
-          ['coins', INITIAL_BLOBBONAUT_COINS.toString()],
+          ['sats', (INITIAL_BLOBBONAUT_COINS * 100).toString()],
         ];
         
         const event = await publishEvent({
@@ -359,39 +359,40 @@ export function usePetsOnboarding({
   }, [preview]);
   
   /**
-   * Generate a new preview (reroll) - costs coins in demo mode, BAO sats in bao mode
+   * Generate a new preview (reroll) - costs demo sats in demo-sats mode, BTC sats in btc-sats mode
    */
   const rerollPreview = useCallback(async () => {
     if (!user?.pubkey || !profile) return;
-    
-    const isBaoMode = profile.walletMode === 'bao';
-    
+
+    const isBtcSatsMode = profile.walletMode === 'btc-sats';
+    const rerollCostSats = PETS_PREVIEW_REROLL_COST * 100;
+
     // Check if can afford
-    if (!isBaoMode && coins < PETS_PREVIEW_REROLL_COST) {
+    if (!isBtcSatsMode && sats < rerollCostSats) {
       toast({
-        title: 'Not enough coins',
-        description: `You need ${PETS_PREVIEW_REROLL_COST} coins to try another.`,
+        title: 'Not enough demo sats',
+        description: `You need ${rerollCostSats.toLocaleString()} demo sats to try another.`,
         variant: 'destructive',
       });
       return;
     }
-    
+
     setIsProcessing(true);
     setActionInProgress('reroll');
-    
+
     try {
-      if (isBaoMode) {
-        // Pay with BAO signet sats; no profile coin update needed for a reroll
-        await payBaoSats(PETS_PREVIEW_REROLL_COST, 'Pets reroll');
+      if (isBtcSatsMode) {
+        // Pay with real BTC sats; no profile sats update needed for a reroll
+        await paySats(PETS_PREVIEW_REROLL_COST, 'Pets reroll');
       } else {
         // Fetch fresh profile from relays (read-modify-write safety)
         const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
         const baseEvent = freshProfile?.event ?? profile.event;
-        
-        // Deduct coins from profile
-        const newCoins = coins - PETS_PREVIEW_REROLL_COST;
+
+        // Deduct demo sats from profile
+        const newSats = sats - rerollCostSats;
         const updatedTags = updateBlobbonautTags(baseEvent.tags, {
-          coins: newCoins.toString(),
+          sats: newSats.toString(),
         });
         
         const profileEvent = await publishEvent({
@@ -444,48 +445,49 @@ export function usePetsOnboarding({
       setActionInProgress(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- preview identity (d/seed/petId) only used for debug logs
-  }, [user?.pubkey, nostr, profile, coins, preview?.name, publishEvent, updateProfileEvent, invalidateProfile, payBaoSats]);
+  }, [user?.pubkey, nostr, profile, sats, preview?.name, publishEvent, updateProfileEvent, invalidateProfile, paySats]);
   
   /**
-   * Adopt the current preview - costs coins in demo mode, BAO sats in bao mode
+   * Adopt the current preview - costs demo sats in demo-sats mode, BTC sats in btc-sats mode
    */
   const adoptPreview = useCallback(async () => {
     if (!user?.pubkey || !profile || !preview) return;
-    
-    const isBaoMode = profile.walletMode === 'bao';
-    
+
+    const isBtcSatsMode = profile.walletMode === 'btc-sats';
+    const adoptionCostSats = PETS_ADOPTION_COST * 100;
+
     // Check if can afford
-    if (!isBaoMode && coins < PETS_ADOPTION_COST) {
+    if (!isBtcSatsMode && sats < adoptionCostSats) {
       toast({
-        title: 'Not enough coins',
-        description: `You need ${PETS_ADOPTION_COST} coins to adopt.`,
+        title: 'Not enough demo sats',
+        description: `You need ${adoptionCostSats.toLocaleString()} demo sats to adopt.`,
         variant: 'destructive',
       });
       return;
     }
-    
+
     setIsProcessing(true);
     setActionInProgress('adopt');
-    
+
     try {
-      if (isBaoMode) {
-        // Pay adoption cost with BAO signet sats before creating the pet
-        await payBaoSats(PETS_ADOPTION_COST, 'Pets adoption');
+      if (isBtcSatsMode) {
+        // Pay adoption cost with real BTC sats before creating the pet
+        await paySats(PETS_ADOPTION_COST, 'Pets adoption');
       }
-      
+
       // 1. Publish the Pets egg event using exact preview data
       const eggTags = previewToEventTags(preview);
-      
+
       const eggEvent = await publishEvent({
         kind: KIND_PETS_STATE,
         content: 'A new 2140 PET egg!',
         tags: eggTags,
         created_at: preview.createdAt,
       });
-      
+
       updateCompanionEvent(eggEvent);
-      
-      // 2. Update profile: add to has list (and deduct coins in demo mode)
+
+      // 2. Update profile: add to has list (and deduct demo sats in demo-sats mode)
       // NOTE: We do NOT set current_companion here because the adopted Pets
       // is still an egg. The companion mechanic only becomes available after hatching.
       // Eggs should never be auto-assigned as the floating companion.
@@ -493,16 +495,16 @@ export function usePetsOnboarding({
       // complete onboarding. It is set when the first-hatch tour finishes.
       const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
       const baseEvent = freshProfile?.event ?? profile.event;
-      
+
       const newHas = [...(freshProfile?.has ?? profile.has), preview.d];
-      
+
       const profileUpdates: Record<string, string | string[]> = {
         has: newHas,
       };
-      
-      if (!isBaoMode) {
-        const newCoins = coins - PETS_ADOPTION_COST;
-        profileUpdates.coins = newCoins.toString();
+
+      if (!isBtcSatsMode) {
+        const newSats = sats - adoptionCostSats;
+        profileUpdates.sats = newSats.toString();
       }
       
       const updatedProfileTags = updateBlobbonautTags(baseEvent.tags, profileUpdates);
@@ -541,7 +543,7 @@ export function usePetsOnboarding({
       setIsProcessing(false);
       setActionInProgress(null);
     }
-  }, [user?.pubkey, nostr, profile, preview, coins, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete, payBaoSats]);
+  }, [user?.pubkey, nostr, profile, preview, sats, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete, paySats]);
   
   // ─── Return ─────────────────────────────────────────────────────────────────
   
@@ -552,7 +554,7 @@ export function usePetsOnboarding({
       actionInProgress,
       preview,
       isFirstPreview,
-      previewCoins,
+      previewSats,
       blobbonautName,
     },
     actions: {
@@ -562,6 +564,6 @@ export function usePetsOnboarding({
       adoptPreview,
     },
     suggestedName,
-    coins,
+    sats,
   };
 }

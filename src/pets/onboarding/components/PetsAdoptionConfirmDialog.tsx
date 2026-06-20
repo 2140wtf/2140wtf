@@ -1,7 +1,7 @@
 /**
  * PetsAdoptionConfirmDialog - Confirmation modal before adopting
- * 
- * Shows a clear confirmation that adopting will cost 100 coins.
+ *
+ * Shows a clear confirmation that adopting will cost demo sats.
  */
 
 import { Loader2, Heart, Coins, AlertCircle } from 'lucide-react';
@@ -22,6 +22,9 @@ import { formatCompactNumber } from '@/lib/utils';
 import type { PetsEggPreview } from '../lib/pets-preview';
 import { previewToPetsCompanion } from '../lib/pets-preview';
 
+/** Demo-sats are priced at 100× the base catalog unit. */
+const SATS_MULTIPLIER = 100;
+
 interface PetsAdoptionConfirmDialogProps {
   /** Whether the dialog is open */
   open: boolean;
@@ -29,8 +32,8 @@ interface PetsAdoptionConfirmDialogProps {
   onOpenChange: (open: boolean) => void;
   /** The preview being adopted */
   preview: PetsEggPreview;
-  /** Current coin balance */
-  coins: number;
+  /** Current demo-sat balance */
+  sats: number;
   /** Whether adoption is in progress */
   isAdopting: boolean;
   /** Called when user confirms adoption */
@@ -41,13 +44,14 @@ export function PetsAdoptionConfirmDialog({
   open,
   onOpenChange,
   preview,
-  coins,
+  sats,
   isAdopting,
   onConfirm,
 }: PetsAdoptionConfirmDialogProps) {
   const companionForVisual = previewToPetsCompanion(preview);
-  const coinsAfterAdoption = coins - PETS_ADOPTION_COST;
-  
+  const adoptionCostSats = PETS_ADOPTION_COST * SATS_MULTIPLIER;
+  const satsAfterAdoption = sats - adoptionCostSats;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -57,7 +61,7 @@ export function PetsAdoptionConfirmDialog({
             You're about to adopt this 2140 PET. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4">
           {/* Preview Visual */}
           <div className="flex justify-center">
@@ -67,39 +71,39 @@ export function PetsAdoptionConfirmDialog({
               animated
             />
           </div>
-          
+
           {/* Cost Breakdown */}
           <div className="p-3 sm:p-4 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20">
             <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-sm text-muted-foreground">Current Balance</span>
               <span className="font-semibold flex items-center gap-1 whitespace-nowrap">
                 <Coins className="size-4 text-amber-500 shrink-0" />
-                {formatCompactNumber(coins)} coins
+                {formatCompactNumber(sats)} demo sats
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 mb-3 text-destructive">
               <span className="text-sm">Adoption Cost</span>
-              <span className="font-semibold whitespace-nowrap">-{formatCompactNumber(PETS_ADOPTION_COST)} coins</span>
+              <span className="font-semibold whitespace-nowrap">-{formatCompactNumber(adoptionCostSats)} demo sats</span>
             </div>
             <div className="border-t border-amber-500/20 pt-3 flex items-center justify-between gap-2">
               <span className="text-sm font-medium">After Adoption</span>
               <span className="font-bold flex items-center gap-1 whitespace-nowrap">
                 <Coins className="size-4 text-amber-500 shrink-0" />
-                {formatCompactNumber(coinsAfterAdoption)} coins
+                {formatCompactNumber(satsAfterAdoption)} demo sats
               </span>
             </div>
           </div>
-          
+
           {/* Confirmation Note */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50">
             <AlertCircle className="size-4 text-muted-foreground mt-0.5 shrink-0" />
             <p className="text-xs text-muted-foreground">
-              By adopting, you'll spend <strong>{PETS_ADOPTION_COST} coins</strong>.
+              By adopting, you'll spend <strong>{formatCompactNumber(adoptionCostSats)} demo sats</strong>.
               This Pets will become your companion and will be saved to your Nostr account.
             </p>
           </div>
         </div>
-        
+
         <DialogFooter>
           <Button
             variant="outline"

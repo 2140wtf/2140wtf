@@ -6,7 +6,7 @@ import {
   type PetsInteraction,
 } from '@/pets/core/lib/pets-interaction';
 
-export type BattleMode = 'demo' | 'real';
+export type BattleMode = 'demo-sats' | 'btc-sats';
 
 export interface PetsBattleInteraction extends PetsInteraction {
   action: 'battle';
@@ -104,8 +104,16 @@ export function parseBattleInteractionEvent(
   const winnerTag = event.tags.find(([name]) => name === 'winner')?.[1];
   if (!winnerTag) return undefined;
 
-  const modeTag = event.tags.find(([name]) => name === 'mode')?.[1];
-  if (modeTag !== 'demo' && modeTag !== 'real') return undefined;
+  const rawModeTag = event.tags.find(([name]) => name === 'mode')?.[1];
+  const modeTag: BattleMode | undefined =
+    rawModeTag === 'demo-sats' || rawModeTag === 'btc-sats'
+      ? rawModeTag
+      : rawModeTag === 'demo'
+        ? 'demo-sats'
+        : rawModeTag === 'real' || rawModeTag === 'bao'
+          ? 'btc-sats'
+          : undefined;
+  if (!modeTag) return undefined;
 
   const prize = Number(event.tags.find(([name]) => name === 'prize')?.[1]);
   const duration = Number(event.tags.find(([name]) => name === 'duration')?.[1]);
