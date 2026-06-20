@@ -63,7 +63,7 @@ const hardcodedConfig: AppConfig = {
   homePage: "feed",
   client: "naddr1qvzqqqru7cpzq7q6z5ns2hm5c8msyv83qwzxpxe52j8c4d4q5m92wsp9sflelkh9qqzkg6t5w3hswjl4yp",
   magicMouse: false,
-  theme: "system",
+  theme: "light",
   autoShareTheme: true,
   useAppRelays: true,
   useUserRelays: false,
@@ -158,6 +158,7 @@ const hardcodedConfig: AppConfig = {
     "about",
   ],
   sidebarOrderVersion: 2,
+  themeDefaultVersion: 1,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
   blossomServerMetadata: {
