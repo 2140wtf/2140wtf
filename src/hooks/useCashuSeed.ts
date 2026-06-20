@@ -3,6 +3,7 @@ import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { secureStorage } from '@/lib/secureStorage';
 
 const seedStorageKey = (pubkey: string) => `2140_cashu_seed_${pubkey}`;
 const SEED_OP_TIMEOUT_MS = 15_000;
@@ -39,11 +40,11 @@ export function useCashuSeed(): UseCashuSeedResult {
   retryRef.current = retryToken;
 
   const retry = useCallback(() => setRetryToken((t) => t + 1), []);
-  const regenerate = useCallback(() => {
+  const regenerate = useCallback(async () => {
     const pubkey = user?.pubkey;
     if (pubkey) {
       try {
-        localStorage.removeItem(seedStorageKey(pubkey));
+        await secureStorage.removeItem(seedStorageKey(pubkey));
       } catch {
         // ignore storage errors
       }
@@ -70,7 +71,11 @@ export function useCashuSeed(): UseCashuSeedResult {
     (async () => {
       try {
         const key = seedStorageKey(pubkey);
-        const ciphertext = localStorage.getItem(key);
+        const ciphertext = await withTimeout(
+          secureStorage.getItem(key),
+          SEED_OP_TIMEOUT_MS,
+          'Load Cashu seed',
+        );
 
         if (ciphertext) {
           const decrypted = await withTimeout(
@@ -86,7 +91,11 @@ export function useCashuSeed(): UseCashuSeedResult {
             SEED_OP_TIMEOUT_MS,
             'Encrypt Cashu seed',
           );
-          localStorage.setItem(key, encrypted);
+          await withTimeout(
+            secureStorage.setItem(key, encrypted),
+            SEED_OP_TIMEOUT_MS,
+            'Save Cashu seed',
+          );
           if (!cancelled && currentToken === retryRef.current) setSeedPhrase(mnemonic);
         }
       } catch (err: unknown) {

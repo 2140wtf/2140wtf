@@ -1091,7 +1091,7 @@ export interface WipeResult {
  */
 export async function wipeAllAppData(_namespace?: string): Promise<WipeResult> {
   const result: WipeResult = { deleted: true, blocked: false };
-  const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:', 'pets:cashu:'];
+  const appKeyPrefixes = ['freedomid_', 'freedomid-', 'freedom-id:', 'pets:cashu:', '2140_', 'bao_faucet_claimed_'];
   const appKeys = new Set(['pwa-ios-prompt-dismissed']);
   try {
     if (typeof localStorage !== 'undefined') {

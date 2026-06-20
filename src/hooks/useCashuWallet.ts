@@ -1976,7 +1976,7 @@ export function useCashuWallet(
         }
       }
 
-      const allEntriesSucceeded = grouped.size > 0 && errors.length === 0;
+      const allEntriesSucceeded = grouped.size > 0 && succeededMintUrls.size === grouped.size;
       if (allEntriesSucceeded) {
         processedTokenHashesRef.current.add(tokenHash);
         try {
@@ -2049,7 +2049,8 @@ export function useCashuWallet(
         // Pre-write input proofs as crash recovery. If the app is killed after the mint
         // marks them spent but before we persist the change, the reconciliation loop
         // will ask the mint for spent-state rather than blindly restoring this snapshot.
-        await writeProofRecovery(normalizeMintUrl(mintUrl)!, proofs, encKey);
+        const normalizedMint = normalizeMintUrl(mintUrl)!;
+        await writeProofRecovery(normalizedMint, proofs, encKey);
         const sendResult = await withTimeout(
           wallet.send(amount, proofs, { proofsWeHave: proofs }),
           60000,
@@ -2061,6 +2062,9 @@ export function useCashuWallet(
         }
         const sendProofs = sanitizeProofs(dedupeProofs(sendResult.send));
         const keepProofs = sanitizeProofs(dedupeProofs(sendResult.keep));
+        // Persist keep proofs for crash recovery immediately after the mint
+        // returned them, before any further validation or async work.
+        await writeProofRecovery(normalizedMint, keepProofs, encKey);
         const inputAmount = available;
         const outputAmount = sumProofAmounts(sendProofs) + sumProofAmounts(keepProofs);
         if (sumProofAmounts(sendProofs) !== amount) {
@@ -2093,15 +2097,8 @@ export function useCashuWallet(
           }
         }
 
-        // Write recovery with keep proofs BEFORE save — guards against save failure.
-        // Only overwrite the input-proof recovery if there is change to recover;
-        // an empty keep set would otherwise leave an empty recovery journal and
-        // could wipe still-unspent input proofs on a crash-before-save.
-        const normalizedMint = normalizeMintUrl(mintUrl)!;
-        if (keepProofs.length > 0) {
-          await writeProofRecovery(normalizedMint, keepProofs, encKey);
-        }
-        // Save keep proofs (so user doesn't lose their change)
+        // Save keep proofs (so user doesn't lose their change). Crash recovery
+        // was already written immediately after the mint returned the outputs.
         await saveProofsForMint(normalizedMint, keepProofs, encKey);
         writeProofStoreTimestamp(normalizedMint);
         // Proofs are persisted — clear the recovery journal
@@ -2416,6 +2413,12 @@ export function useCashuWallet(
           throw new Error('Mint returned invalid melt fee');
         }
 
+        const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
+        // Persist change for crash recovery immediately after the mint returns it.
+        if (changeProofs.length > 0) {
+          await writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+        }
+
         const state = meltResult.quote?.state;
         const paidAmount = Number(quote.amount) || 0;
 
@@ -2515,14 +2518,10 @@ export function useCashuWallet(
         }
 
         // PAID / PENDING / unknown: input proofs are spent by the mint; persist change.
-        const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
+        // Crash-recovery for the change was already written immediately after the
+        // mint returned it.
         if (state === 'PENDING' || (state !== 'PAID' && state !== 'UNPAID')) {
           // Keep the input-proof recovery journal until the quote resolves.
-          // Save change to storage and to a separate change recovery journal for
-          // crash recovery while the quote is pending.
-          if (changeProofs.length > 0) {
-            await writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
-          }
           await saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
           writeProofStoreTimestamp(normalizedMint);
           await calculateAllBalances();
@@ -2536,9 +2535,6 @@ export function useCashuWallet(
         }
 
         // PAID: input proofs are spent; persist change and clear all recovery journals.
-        if (changeProofs.length > 0) {
-          await writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
-        }
         await saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
         writeProofStoreTimestamp(normalizedMint);
         clearProofRecovery(normalizedMint);
@@ -2617,7 +2613,7 @@ export function useCashuWallet(
       if (!normalized) return;
       const targetWallet = normalized === normalizeMintUrl(mintUrl)
         ? wallet
-        : await withTimeout(getOrCreateWallet(normalized, bip39SeedRef.current!), 15000, 'Foreign mint load');
+        : await withTimeout(getOrCreateWallet(normalized, bip39SeedRef.current!, true), 15000, 'Foreign mint load');
 
       await withProofLock(async () => {
         const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
@@ -2723,6 +2719,10 @@ export function useCashuWallet(
     }
     const err = validateAmount(amount);
     if (err) { setError(err); return false; }
+    if (typeof opts?.memo !== 'undefined' && (typeof opts.memo !== 'string' || opts.memo.length > 500)) {
+      setError('Memo must be a string with max 500 chars');
+      return false;
+    }
 
     let recipientIdentityPubkey: string;
     try {
@@ -2767,12 +2767,23 @@ export function useCashuWallet(
       return false;
     }
 
+    const recipientP2pkPubkey = (() => {
+      const pk = recipientInfo.pubkey.toLowerCase();
+      if (/^[0-9a-f]{64}$/.test(pk)) return '02' + pk;
+      if (/^0[23][0-9a-f]{64}$/.test(pk)) return pk;
+      return null;
+    })();
+    if (!recipientP2pkPubkey) {
+      setError('Recipient Nutzap pubkey is invalid');
+      return false;
+    }
+
     try {
       if (mountedRef.current) setLoading(true);
       if (mountedRef.current) setError('');
       const targetWallet = normalizedMint === normalizeMintUrl(mintUrl)
         ? wallet
-        : await withTimeout(getOrCreateWallet(normalizedMint, bip39SeedRef.current!), 15000, 'Foreign mint load');
+        : await withTimeout(getOrCreateWallet(normalizedMint, bip39SeedRef.current!, true), 15000, 'Foreign mint load');
 
       const sendProofs = await withProofLock(async () => {
         const proofs = dedupeProofs(sanitizeProofs(await getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined)));
@@ -2798,7 +2809,7 @@ export function useCashuWallet(
         const sendResult = await withTimeout(
           targetWallet.send(amount, proofs, {
             proofsWeHave: proofs,
-            pubkey: '02' + recipientInfo!.pubkey,
+            pubkey: recipientP2pkPubkey,
             includeDleq: true,
           }),
           60000,
@@ -2810,6 +2821,9 @@ export function useCashuWallet(
         }
         const sendProofs = sanitizeProofs(dedupeProofs(sendResult.send));
         const keepProofs = sanitizeProofs(dedupeProofs(sendResult.keep));
+        // Persist keep proofs for crash recovery immediately after the mint
+        // returned them, before any further validation or async work.
+        await writeProofRecovery(normalizedMint, keepProofs, encKey);
         if (sumProofAmounts(sendProofs) !== amount) {
           throw new Error('Mint returned send proofs with incorrect total amount');
         }
@@ -2828,9 +2842,8 @@ export function useCashuWallet(
           }
         }
 
-        if (keepProofs.length > 0) {
-          await writeProofRecovery(normalizedMint, keepProofs, encKey);
-        }
+        // Save keep proofs. Crash recovery was already written immediately after
+        // the mint returned the outputs.
         await saveProofsForMint(normalizedMint, keepProofs, encKey);
         writeProofStoreTimestamp(normalizedMint);
         clearProofRecovery(normalizedMint);
