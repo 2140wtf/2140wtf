@@ -292,6 +292,11 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STAT TAGS
+  //
+  // Stored stat values are clamped to 1-100 for backward compatibility.
+  // Effect calculations use an effective cap that may be higher for certain
+  // breed categories or BAO rarities (e.g. legendary BAO cap 130), but the
+  // persisted tag is always clamped back to 100.
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'hunger',
@@ -586,7 +591,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     persistent: true,
     source: 'system',
     regenerable: false,
-    notes: 'For 2140-pets/ditto-blobbi this is an AdultForm string; for bao it is a bao-* card id.',
+    notes: 'For 2140-pets and ditto-blobbi this is an AdultForm string; for bao it is a bao-* card id.',
   },
   {
     tag: 'bao_rarity',

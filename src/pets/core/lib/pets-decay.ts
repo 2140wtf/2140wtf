@@ -13,8 +13,10 @@
  * @see docs/pets/decay-system.md for full documentation
  */
 
-import type { PetsStage, PetsState, PetsStats } from './pets';
+import type { PetsCompanion, PetsStage, PetsState, PetsStats } from './pets';
 import { STAT_MIN, STAT_MAX } from './pets';
+import type { CategoryAbilityBonuses } from './category-abilities';
+import { getCategoryAbilityBonuses } from './category-abilities';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,8 @@ export interface DecayInput {
   lastDecayAt: number | undefined;
   /** Current unix timestamp (defaults to now) */
   now?: number;
+  /** Optional category/rarity ability modifiers */
+  modifiers?: CategoryAbilityBonuses;
 }
 
 // ─── Constants: Decay Rates ───────────────────────────────────────────────────
@@ -262,24 +266,28 @@ function calculateEggDecay(
 function calculateBabyDecay(
   stats: Partial<PetsStats>,
   state: PetsState,
-  elapsedHours: number
+  elapsedHours: number,
+  modifiers?: CategoryAbilityBonuses,
 ): PetsStats {
   const isSleeping = state === 'sleeping';
 
   // Sleep modifiers: reduce stat drain, boost energy regen, shelter health.
   const statMul = isSleeping ? SLEEP_STAT_DECAY_FRACTION : 1;
-  const penaltyMul = isSleeping ? SLEEP_HEALTH_PENALTY_FRACTION : 1;
-  
+  const basePenaltyMul = isSleeping ? SLEEP_HEALTH_PENALTY_FRACTION : 1;
+  // Category abilities can further reduce health penalties (e.g. 2140 encryption shield).
+  const penaltyMul = basePenaltyMul * (modifiers?.sicknessDurationMultiplier ?? 1);
+
   // Get current values
   let hunger = getStat(stats, 'hunger');
   let happiness = getStat(stats, 'happiness');
   let hygiene = getStat(stats, 'hygiene');
   let energy = getStat(stats, 'energy');
   let health = getStat(stats, 'health');
-  
+
   // Calculate basic stat decay/regen
+  const happinessDecayMul = statMul * (modifiers?.happinessDecayMultiplier ?? 1);
   const hungerDelta = BABY_DECAY.hunger * statMul * elapsedHours;
-  const happinessDelta = BABY_DECAY.happiness * statMul * elapsedHours;
+  const happinessDelta = BABY_DECAY.happiness * happinessDecayMul * elapsedHours;
   const hygieneDelta = BABY_DECAY.hygiene * statMul * elapsedHours;
   const energyDelta = (isSleeping ? BABY_SLEEP_ENERGY_REGEN : BABY_DECAY.energy) * elapsedHours;
   
@@ -326,24 +334,28 @@ function calculateBabyDecay(
 function calculateAdultDecay(
   stats: Partial<PetsStats>,
   state: PetsState,
-  elapsedHours: number
+  elapsedHours: number,
+  modifiers?: CategoryAbilityBonuses,
 ): PetsStats {
   const isSleeping = state === 'sleeping';
 
   // Sleep modifiers: reduce stat drain, boost energy regen, shelter health.
   const statMul = isSleeping ? SLEEP_STAT_DECAY_FRACTION : 1;
-  const penaltyMul = isSleeping ? SLEEP_HEALTH_PENALTY_FRACTION : 1;
-  
+  const basePenaltyMul = isSleeping ? SLEEP_HEALTH_PENALTY_FRACTION : 1;
+  // Category abilities can further reduce health penalties (e.g. 2140 encryption shield).
+  const penaltyMul = basePenaltyMul * (modifiers?.sicknessDurationMultiplier ?? 1);
+
   // Get current values
   let hunger = getStat(stats, 'hunger');
   let happiness = getStat(stats, 'happiness');
   let hygiene = getStat(stats, 'hygiene');
   let energy = getStat(stats, 'energy');
   let health = getStat(stats, 'health');
-  
+
   // Calculate basic stat decay/regen
+  const happinessDecayMul = statMul * (modifiers?.happinessDecayMultiplier ?? 1);
   const hungerDelta = ADULT_DECAY.hunger * statMul * elapsedHours;
-  const happinessDelta = ADULT_DECAY.happiness * statMul * elapsedHours;
+  const happinessDelta = ADULT_DECAY.happiness * happinessDecayMul * elapsedHours;
   const hygieneDelta = ADULT_DECAY.hygiene * statMul * elapsedHours;
   const energyDelta = (isSleeping ? ADULT_SLEEP_ENERGY_REGEN : ADULT_DECAY.energy) * elapsedHours;
   
@@ -429,14 +441,14 @@ export function applyPetsDecay(input: DecayInput): DecayResult {
       newStats = calculateEggDecay(input.stats, elapsedHours);
       break;
     case 'baby':
-      newStats = calculateBabyDecay(input.stats, input.state, elapsedHours);
+      newStats = calculateBabyDecay(input.stats, input.state, elapsedHours, input.modifiers);
       break;
     case 'adult':
-      newStats = calculateAdultDecay(input.stats, input.state, elapsedHours);
+      newStats = calculateAdultDecay(input.stats, input.state, elapsedHours, input.modifiers);
       break;
     default:
       // Fallback to adult decay for unknown stages
-      newStats = calculateAdultDecay(input.stats, input.state, elapsedHours);
+      newStats = calculateAdultDecay(input.stats, input.state, elapsedHours, input.modifiers);
   }
   
   return {
@@ -553,4 +565,29 @@ export function getVisibleStatsWithValues(
       status: getStatStatus(stage, stat, stats[stat] ?? 100),
     }))
     .filter(entry => entry.value < STAT_VISIBILITY_THRESHOLD);
+}
+
+// ─── Companion-aware Decay ────────────────────────────────────────────────────
+
+/**
+ * Apply decay to a PetsCompanion, automatically resolving category/rarity
+ * ability modifiers. This is the recommended call site for mutation paths
+ * that already have a parsed companion in hand.
+ */
+export function applyPetsDecayForCompanion(
+  companion: PetsCompanion,
+  now?: number,
+): DecayResult {
+  const modifiers = getCategoryAbilityBonuses(companion.breedCategory, {
+    baoRarity: companion.baoRarity,
+  });
+
+  return applyPetsDecay({
+    stage: companion.stage,
+    state: companion.state,
+    stats: companion.stats,
+    lastDecayAt: companion.lastDecayAt,
+    now,
+    modifiers,
+  });
 }
