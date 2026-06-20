@@ -17,6 +17,16 @@ const NUDGE_DELAY_MS = 4_000;
 const HARD_TIMEOUT_MS = 45_000;
 
 
+/** How long to back off from decrypt prompts after the user cancels/denies one. */
+const DECRYPT_BACKOFF_MS = 30_000;
+
+/** Maximum number of cached decrypt results per signer instance. */
+const DECRYPT_CACHE_LIMIT = 50;
+
+/** How long to keep successful decrypt results in the cache. */
+const DECRYPT_CACHE_TTL_MS = 5 * 60 * 1_000;
+
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -259,6 +269,9 @@ async function runWithNudge<T>(op: () => Promise<T>, opts: RunOpts): Promise<Run
  * - When a nip44 encrypt is immediately followed by a signEvent (e.g. saving
  *   encrypted settings), shows a phase-transition toast so the user knows to
  *   approve the second request.
+ * - Caches in-flight and completed decrypt calls so duplicate ciphertexts only
+ *   prompt the signer once, and pauses decrypt prompts for a short cooldown
+ *   after the user cancels/denies a request to stop extension prompt storms.
  *
  * @param signer - The underlying NostrSigner to wrap.
  * @param isBunkerConnected - Optional callback checked at nudge time; when it
@@ -290,25 +303,104 @@ export function signerWithNudge(
     wrapped.getRelays = () => run(() => getRelays(), undefined, 'sign');
   }
 
+  // -------------------------------------------------------------------------
+  // Decrypt cache + backoff (per signer instance)
+  // -------------------------------------------------------------------------
+
+  const decryptCache = new Map<string, Promise<string>>();
+  let decryptPausedUntil = 0;
+
+  function isUserDenied(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return /\b(cancel|rejected?|denied|deny|closed|abort|permission|user rejected|user denied)\b/i.test(
+      msg,
+    );
+  }
+
+  function evictDecryptCache(): void {
+    const now = Date.now();
+    // Drop completed entries that have expired first.
+    for (const [key, promise] of decryptCache) {
+      if ((promise as { resolvedAt?: number }).resolvedAt !== undefined) {
+        const resolvedAt = (promise as { resolvedAt: number }).resolvedAt;
+        if (now - resolvedAt > DECRYPT_CACHE_TTL_MS) {
+          decryptCache.delete(key);
+        }
+      }
+    }
+    // If still over the limit, drop the oldest completed entries.
+    if (decryptCache.size > DECRYPT_CACHE_LIMIT) {
+      const completed = Array.from(decryptCache.entries())
+        .filter(([, p]) => (p as { resolvedAt?: number }).resolvedAt !== undefined)
+        .sort((a, b) =>
+          (a[1] as { resolvedAt: number }).resolvedAt - (b[1] as { resolvedAt: number }).resolvedAt
+        );
+      const toDrop = decryptCache.size - DECRYPT_CACHE_LIMIT;
+      for (let i = 0; i < toDrop && i < completed.length; i++) {
+        decryptCache.delete(completed[i][0]);
+      }
+    }
+  }
+
+  function makeDecryptKey(algorithm: string, pubkey: string, ciphertext: string): string {
+    return `${algorithm}:${pubkey}:${ciphertext.length}:${ciphertext}`;
+  }
+
+  function wrapDecrypt(
+    algorithm: 'nip04' | 'nip44',
+    crypto: { decrypt: (pubkey: string, ciphertext: string) => Promise<string> },
+  ): (pubkey: string, ciphertext: string) => Promise<string> {
+    return (pubkey: string, ciphertext: string) => {
+      // If the user recently cancelled a decrypt prompt, fail fast instead of
+      // re-prompting for every new gift-wrap event.
+      if (Date.now() < decryptPausedUntil) {
+        return Promise.reject(new Error('Decryption paused after cancellation'));
+      }
+
+      const key = makeDecryptKey(algorithm, pubkey, ciphertext);
+      const cached = decryptCache.get(key);
+      if (cached) return cached;
+
+      const promise = crypto
+        .decrypt(pubkey, ciphertext)
+        .then((plaintext) => {
+          (promise as { resolvedAt?: number }).resolvedAt = Date.now();
+          evictDecryptCache();
+          return plaintext;
+        })
+        .catch((error) => {
+          decryptCache.delete(key);
+          if (isUserDenied(error)) {
+            decryptPausedUntil = Date.now() + DECRYPT_BACKOFF_MS;
+          }
+          throw error;
+        });
+
+      decryptCache.set(key, promise);
+      return promise;
+    };
+  }
+
   // Shared wrapper for nip04/nip44 encrypt and decrypt methods.
-  function wrapCrypto(crypto: {
-    encrypt: (pubkey: string, plaintext: string) => Promise<string>;
-    decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
-  }) {
+  function wrapCrypto(
+    algorithm: 'nip04' | 'nip44',
+    crypto: {
+      encrypt: (pubkey: string, plaintext: string) => Promise<string>;
+      decrypt: (pubkey: string, ciphertext: string) => Promise<string>;
+    },
+  ) {
     return {
-      encrypt: (pubkey: string, plaintext: string) =>
-        crypto.encrypt(pubkey, plaintext),
-      decrypt: (pubkey: string, ciphertext: string) =>
-        crypto.decrypt(pubkey, ciphertext),
+      encrypt: (pubkey: string, plaintext: string) => crypto.encrypt(pubkey, plaintext),
+      decrypt: wrapDecrypt(algorithm, crypto),
     };
   }
 
   if (signer.nip04) {
-    wrapped.nip04 = wrapCrypto(signer.nip04);
+    wrapped.nip04 = wrapCrypto('nip04', signer.nip04);
   }
 
   if (signer.nip44) {
-    wrapped.nip44 = wrapCrypto(signer.nip44);
+    wrapped.nip44 = wrapCrypto('nip44', signer.nip44);
   }
 
   // Forward signPsbt if the underlying signer supports Bitcoin signing.
