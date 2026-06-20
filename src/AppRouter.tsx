@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, Plus, Search } from "lucide-react";
+import { Box, LayoutList, Plus, Search } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -156,10 +156,12 @@ function PollsFeedPage() {
               variant="outline"
               size="sm"
             >
-              <ToggleGroupItem value="cubes" aria-label="Cube view">
+              <ToggleGroupItem value="cubes" aria-label="Cube view" className="gap-1">
                 <Box className="size-4" />
+                <span className="text-xs font-medium">cube</span>
               </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="Text view">
+              <ToggleGroupItem value="list" aria-label="Text view" className="gap-1">
+                <LayoutList className="size-4" />
                 <span className="text-xs font-medium">txt</span>
               </ToggleGroupItem>
             </ToggleGroup>
