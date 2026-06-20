@@ -35,8 +35,8 @@ export interface BaoOrderEvent {
   demoBot: boolean;
   /** Unix seconds when the order was created */
   createdAt: number;
-  /** Raw Nostr event */
-  raw: NostrEvent;
+  /** Raw Nostr event (optional — not available for NIP-78 derived orders) */
+  raw?: NostrEvent;
 }
 
 /** Aggregated BAO trading activity for a pubkey. */

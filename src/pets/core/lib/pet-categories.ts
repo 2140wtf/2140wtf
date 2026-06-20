@@ -36,7 +36,7 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   {
     id: '2140-pets',
     label: '2140 Pets',
-    description: 'Rare digital life-forms discovered beyond the chain.',
+    description: 'Rare digital life-forms discovered beyond the chain, including the ₿AO market-born line.',
   },
   {
     id: 'ditto-blobbi',
@@ -45,10 +45,19 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   },
   {
     id: 'bao',
-    label: '₿AO',
-    description: 'Market-born collectibles minted from trading energy.',
+    label: '₿AO Pets',
+    description: 'Animated market-born companions unlocked through ₿AO trading energy.',
   },
 ] as const;
+
+const BAO_MEMBERS: BaoCardMember[] = Array.from({ length: 21 }, (_, i) => {
+  const n = String(i + 1).padStart(2, '0');
+  return {
+    kind: 'bao-card' as const,
+    id: `bao-${n}`,
+    label: `₿AO #${i + 1}`,
+  };
+});
 
 export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
   '2140-pets': [
@@ -67,6 +76,7 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       form: 'liquidblob',
       label: 'Liquid Blob',
     },
+    ...BAO_MEMBERS,
   ],
   'ditto-blobbi': [
     { kind: 'adult-form', form: 'bloomi', label: 'Bloomi' },
@@ -86,14 +96,7 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
     { kind: 'adult-form', form: 'rosey', label: 'Rosey' },
     { kind: 'adult-form', form: 'starri', label: 'Starri' },
   ],
-  bao: Array.from({ length: 21 }, (_, i) => {
-    const n = String(i + 1).padStart(2, '0');
-    return {
-      kind: 'bao-card' as const,
-      id: `bao-${n}`,
-      label: `₿AO #${i + 1}`,
-    };
-  }),
+  bao: [],
 };
 
 export function isAdultFormMember(member: CategoryMember): member is AdultFormMember {
