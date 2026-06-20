@@ -30,7 +30,7 @@ export const HIT_KNOCKBACK_X = 90;
 export const HIT_KNOCKBACK_Y = 60;
 
 export const DEFAULT_ROUND_DURATION_SECONDS = 60;
-export const DEFAULT_PRIZE_AMOUNT = 50;
+export const DEFAULT_PRIZE_SATS = 5_000;
 export const COUNTDOWN_SECONDS = 3;
 
 export const KEYBOARD_CONTROLS = {
