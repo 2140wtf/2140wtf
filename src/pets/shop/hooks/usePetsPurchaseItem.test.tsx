@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { usePetsPurchaseItem } from './usePetsPurchaseItem';
-import { parseBlobbonautEvent, KIND_BLOBBONAUT_PROFILE } from '@/pets/core/lib/pets';
+import { parseBlobbonautEvent, KIND_BLOBBONAUT_PROFILE, setPetsRealSatsEnabled } from '@/pets/core/lib/pets';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 const PUBKEY = '0000000000000000000000000000000000000000000000000000000000000001';
@@ -59,9 +59,14 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 describe('usePetsPurchaseItem btc-sats mode', () => {
   beforeEach(() => {
+    setPetsRealSatsEnabled(true);
     vi.clearAllMocks();
     mocks.publishEvent.mockResolvedValue(createProfileEvent('btc-sats', 20_000));
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('btc-sats', 20_000));
+  });
+
+  afterEach(() => {
+    setPetsRealSatsEnabled(false);
   });
 
   it('pays with real sats and does not deduct profile sats', async () => {
