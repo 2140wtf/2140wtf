@@ -9,7 +9,6 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 const CUBE_DESIGN_KIND = 33889;
 
 const DEFAULT_CUBE_API_BASES = [
-  'https://bao.markets/bao-api/v1',
   'https://relay.bao.network/bao-api/v1',
 ];
 
@@ -83,7 +82,7 @@ export function useHostedCubeEmbed(pollId: string | undefined) {
   const { config } = useAppContext();
 
   const apiBases = config.baoApiUrl
-    ? [`${config.baoApiUrl.replace(/\/$/, '')}/v1`]
+    ? [config.baoApiUrl.replace(/\/$/, '')]
     : DEFAULT_CUBE_API_BASES;
 
   return useQuery<CubeDesign | null>({
