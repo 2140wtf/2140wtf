@@ -8,9 +8,15 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.RouteProcessorInstaller;
 
 public class MainActivity extends BridgeActivity {
 
@@ -20,14 +26,48 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         // Register native plugins before super.onCreate.
         registerPlugin(DittoNotificationPlugin.class);
+        registerPlugin(SandboxPlugin.class);
 
         super.onCreate(savedInstanceState);
 
-        // Route SPA paths (e.g. /alex@gleasonator.com) back to index.html. Without
-        // this, Capacitor treats any path with a dotted final segment as a static
-        // file request and the WebView fails with net::ERR_INVALID_RESPONSE instead
-        // of letting React Router render the page.
-        RouteProcessorInstaller.install(getBridge(), new SpaRouteProcessor(this));
+        // Workaround for @capacitor/keyboard plugin intermittently leaving
+        // the CoordinatorLayout at a fixed pixel height on Android 15+
+        // (API 35+) with edge-to-edge enforced.
+        //
+        // The Keyboard plugin's possiblyResizeChildOfContent() sets the
+        // CoordinatorLayout's LayoutParams.height to a computed pixel value
+        // when the keyboard appears. On keyboard dismiss, the animation
+        // callback resets it to MATCH_PARENT. However, when insets change
+        // without a keyboard animation (permission dialogs, config changes,
+        // edge-to-edge recalculations), the plugin's rootView insets
+        // listener fires with showingKeyboard=true and sets the height,
+        // but no animation runs to reset it — leaving the WebView stuck
+        // at roughly half height.
+        //
+        // Fix: set an OnApplyWindowInsetsListener on the CoordinatorLayout
+        // itself. This fires AFTER the Keyboard plugin's listener on the
+        // rootView (parent dispatches to children). When the IME is not
+        // visible, we force the height back to MATCH_PARENT, overriding
+        // any stale value the plugin may have set in the same dispatch.
+        FrameLayout content = getWindow().getDecorView().findViewById(android.R.id.content);
+        if (content != null && content.getChildCount() > 0) {
+            View child = content.getChildAt(0);
+            // Set the listener on the ContentFrameLayout (parent of the
+            // CoordinatorLayout) so it fires after the Keyboard plugin's
+            // rootView listener but before the SystemBars plugin's listener
+            // on the CoordinatorLayout — avoiding overwriting either one.
+            ViewCompat.setOnApplyWindowInsetsListener(content, (@NonNull View v, @NonNull WindowInsetsCompat insets) -> {
+                boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+                if (!imeVisible) {
+                    ViewGroup.LayoutParams lp = child.getLayoutParams();
+                    if (lp.height >= 0) {
+                        lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                        child.requestLayout();
+                    }
+                }
+                return insets;
+            });
+        }
 
         // Only start the foreground service if the user has opted into
         // "persistent" notification style. Default is "push" (no service).
@@ -54,8 +94,6 @@ public class MainActivity extends BridgeActivity {
 
         // Handle notification tap deep link
         handleNotificationIntent(getIntent());
-        // Handle content shared from another app's Share button
-        handleSendIntent(getIntent());
     }
 
     @Override
@@ -63,8 +101,6 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         // Handle notification tap when the activity is already running (singleTask)
         handleNotificationIntent(intent);
-        // Handle a share that arrives while the app is already running
-        handleSendIntent(intent);
     }
 
     /**
@@ -77,53 +113,14 @@ public class MainActivity extends BridgeActivity {
         if (data != null && "ditto.pub".equals(data.getHost())) {
             String path = data.getPath();
             if (path != null && !path.isEmpty()) {
-                navigateWebView(path);
+                // Wait for WebView to be ready, then navigate
+                getBridge().getWebView().post(() -> {
+                    getBridge().getWebView().evaluateJavascript(
+                        "window.location.pathname = '" + path.replace("'", "\\'") + "';",
+                        null
+                    );
+                });
             }
         }
-    }
-
-    /**
-     * Handle content shared into Ditto from another app's Share button.
-     *
-     * Two share targets are registered as activity-aliases in the manifest:
-     *   - {@code .ShareViewAlias}  → "View in Ditto"  → /share?mode=view
-     *   - {@code .SharePostAlias}  → "Post on Ditto"  → /share?mode=post
-     *
-     * We forward the raw shared text to the web app's /share route, which
-     * extracts a URL (view) or prefills the composer (post). URL extraction
-     * is deliberately left to the TypeScript handler so it stays testable.
-     */
-    private void handleSendIntent(Intent intent) {
-        if (intent == null) return;
-        if (!Intent.ACTION_SEND.equals(intent.getAction())) return;
-
-        String text = intent.getStringExtra(Intent.EXTRA_TEXT);
-        if (text == null || text.isEmpty()) return;
-
-        // Determine which share entry the user tapped from the launched component.
-        String mode = "post";
-        if (intent.getComponent() != null) {
-            String cls = intent.getComponent().getClassName();
-            if (cls != null && cls.endsWith("ShareViewAlias")) {
-                mode = "view";
-            }
-        }
-
-        String encoded = Uri.encode(text);
-        navigateWebView("/share?mode=" + mode + "&text=" + encoded);
-    }
-
-    /**
-     * Navigate the in-app WebView to the given path once it is ready. Uses a
-     * full-document navigation so it works on cold start (the SPA boots at the
-     * target route) and while the app is already running.
-     */
-    private void navigateWebView(String path) {
-        getBridge().getWebView().post(() -> {
-            getBridge().getWebView().evaluateJavascript(
-                "window.location.href = '" + path.replace("'", "\\'") + "';",
-                null
-            );
-        });
     }
 }
