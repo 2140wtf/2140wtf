@@ -24,6 +24,8 @@ import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { useBaoPayment } from '@/pets/core/hooks/useBaoPayment';
+import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 import {
   KIND_PETS_STATE,
@@ -146,6 +148,8 @@ interface UsePetsOnboardingOptions {
    * Requires profile to be non-null.
    */
   adoptionOnly?: boolean;
+  /** BAO signet Cashu wallet, required when profile.walletMode is 'bao'. */
+  baoWallet?: (CashuWalletState & CashuWalletActions) | null;
 }
 
 export function usePetsOnboarding({
@@ -157,10 +161,12 @@ export function usePetsOnboarding({
   setStoredSelectedD,
   onComplete,
   adoptionOnly = false,
+  baoWallet,
 }: UsePetsOnboardingOptions): UsePetsOnboardingResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
+  const { payBaoSats } = useBaoPayment(baoWallet);
   
   // Get kind 0 metadata for name suggestion
   const { data: authorData } = useAuthor(user?.pubkey);
@@ -353,13 +359,15 @@ export function usePetsOnboarding({
   }, [preview]);
   
   /**
-   * Generate a new preview (reroll) - costs coins
+   * Generate a new preview (reroll) - costs coins in demo mode, BAO sats in bao mode
    */
   const rerollPreview = useCallback(async () => {
     if (!user?.pubkey || !profile) return;
     
+    const isBaoMode = profile.walletMode === 'bao';
+    
     // Check if can afford
-    if (coins < PETS_PREVIEW_REROLL_COST) {
+    if (!isBaoMode && coins < PETS_PREVIEW_REROLL_COST) {
       toast({
         title: 'Not enough coins',
         description: `You need ${PETS_PREVIEW_REROLL_COST} coins to try another.`,
@@ -372,24 +380,29 @@ export function usePetsOnboarding({
     setActionInProgress('reroll');
     
     try {
-      // Fetch fresh profile from relays (read-modify-write safety)
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-      const baseEvent = freshProfile?.event ?? profile.event;
-      
-      // First, deduct coins from profile
-      const newCoins = coins - PETS_PREVIEW_REROLL_COST;
-      const updatedTags = updateBlobbonautTags(baseEvent.tags, {
-        coins: newCoins.toString(),
-      });
-      
-      const profileEvent = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
-        content: baseEvent.content ?? '',
-        tags: updatedTags,
-        prev: baseEvent,
-      });
-      
-      updateProfileEvent(profileEvent);
+      if (isBaoMode) {
+        // Pay with BAO signet sats; no profile coin update needed for a reroll
+        await payBaoSats(PETS_PREVIEW_REROLL_COST, 'Pets reroll');
+      } else {
+        // Fetch fresh profile from relays (read-modify-write safety)
+        const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+        const baseEvent = freshProfile?.event ?? profile.event;
+        
+        // Deduct coins from profile
+        const newCoins = coins - PETS_PREVIEW_REROLL_COST;
+        const updatedTags = updateBlobbonautTags(baseEvent.tags, {
+          coins: newCoins.toString(),
+        });
+        
+        const profileEvent = await publishEvent({
+          kind: KIND_BLOBBONAUT_PROFILE,
+          content: baseEvent.content ?? '',
+          tags: updatedTags,
+          prev: baseEvent,
+        });
+        
+        updateProfileEvent(profileEvent);
+      }
       
       // Preserve the current name when rerolling
       const currentName = preview?.name ?? 'Egg';
@@ -431,16 +444,18 @@ export function usePetsOnboarding({
       setActionInProgress(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- preview identity (d/seed/petId) only used for debug logs
-  }, [user?.pubkey, nostr, profile, coins, preview?.name, publishEvent, updateProfileEvent, invalidateProfile]);
+  }, [user?.pubkey, nostr, profile, coins, preview?.name, publishEvent, updateProfileEvent, invalidateProfile, payBaoSats]);
   
   /**
-   * Adopt the current preview - costs coins and creates the Pets event
+   * Adopt the current preview - costs coins in demo mode, BAO sats in bao mode
    */
   const adoptPreview = useCallback(async () => {
     if (!user?.pubkey || !profile || !preview) return;
     
+    const isBaoMode = profile.walletMode === 'bao';
+    
     // Check if can afford
-    if (coins < PETS_ADOPTION_COST) {
+    if (!isBaoMode && coins < PETS_ADOPTION_COST) {
       toast({
         title: 'Not enough coins',
         description: `You need ${PETS_ADOPTION_COST} coins to adopt.`,
@@ -453,6 +468,11 @@ export function usePetsOnboarding({
     setActionInProgress('adopt');
     
     try {
+      if (isBaoMode) {
+        // Pay adoption cost with BAO signet sats before creating the pet
+        await payBaoSats(PETS_ADOPTION_COST, 'Pets adoption');
+      }
+      
       // 1. Publish the Pets egg event using exact preview data
       const eggTags = previewToEventTags(preview);
       
@@ -465,7 +485,7 @@ export function usePetsOnboarding({
       
       updateCompanionEvent(eggEvent);
       
-      // 2. Update profile: deduct coins, add to has list
+      // 2. Update profile: add to has list (and deduct coins in demo mode)
       // NOTE: We do NOT set current_companion here because the adopted Pets
       // is still an egg. The companion mechanic only becomes available after hatching.
       // Eggs should never be auto-assigned as the floating companion.
@@ -474,13 +494,16 @@ export function usePetsOnboarding({
       const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
       const baseEvent = freshProfile?.event ?? profile.event;
       
-      const newCoins = coins - PETS_ADOPTION_COST;
       const newHas = [...(freshProfile?.has ?? profile.has), preview.d];
       
       const profileUpdates: Record<string, string | string[]> = {
-        coins: newCoins.toString(),
         has: newHas,
       };
+      
+      if (!isBaoMode) {
+        const newCoins = coins - PETS_ADOPTION_COST;
+        profileUpdates.coins = newCoins.toString();
+      }
       
       const updatedProfileTags = updateBlobbonautTags(baseEvent.tags, profileUpdates);
       
@@ -518,7 +541,7 @@ export function usePetsOnboarding({
       setIsProcessing(false);
       setActionInProgress(null);
     }
-  }, [user?.pubkey, nostr, profile, preview, coins, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete]);
+  }, [user?.pubkey, nostr, profile, preview, coins, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete, payBaoSats]);
   
   // ─── Return ─────────────────────────────────────────────────────────────────
   

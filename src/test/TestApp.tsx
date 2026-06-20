@@ -123,6 +123,8 @@ export function TestApp({ children }: TestAppProps) {
     currencyDisplay: 'usd',
     sidebarWidgets: [],
     maxCachedEventAge: 604800,
+    baoSignetMintUrl: 'https://mint.bao.network',
+    baoSignetFaucetUrl: 'https://faucet.bao.network',
   };
 
   return (
