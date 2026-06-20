@@ -3,8 +3,10 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { useBaoPayment } from '@/pets/core/hooks/useBaoPayment';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
+import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 import type { PurchaseRequest } from '../types/shop.types';
 import type { BlobbonautProfile, StorageItem } from '@/pets/core/lib/pets';
@@ -24,10 +26,14 @@ import { getShopItemById } from '../lib/pets-shop-items';
  * - Atomic profile update (coins + storage in single event)
  * - Optimistic updates and error handling
  */
-export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
+export function usePetsPurchaseItem(
+  currentProfile: BlobbonautProfile | null,
+  baoWallet?: (CashuWalletState & CashuWalletActions) | null,
+) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
+  const { payBaoSats } = useBaoPayment(baoWallet);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -54,12 +60,19 @@ export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
       // Calculate total cost
       const totalCost = price * quantity;
 
+      const isBaoMode = currentProfile.walletMode === 'bao';
+
       // Check affordability
-      if (currentProfile.coins < totalCost) {
+      if (!isBaoMode && currentProfile.coins < totalCost) {
         throw new Error(`Insufficient coins. You need ${totalCost} coins but only have ${currentProfile.coins}.`);
       }
 
-      // Calculate new coins
+      if (isBaoMode) {
+        // Pay with BAO signet sats before updating storage
+        await payBaoSats(totalCost, `Pets shop: ${item.name}`);
+      }
+
+      // Calculate new coins (only used in demo mode)
       const newCoins = currentProfile.coins - totalCost;
 
       // Update storage (stack or add)
@@ -91,10 +104,14 @@ export function usePetsPurchaseItem(currentProfile: BlobbonautProfile | null) {
         throw new Error('Profile not found on relays');
       }
 
-      const updatedTags = updateBlobbonautTags(prev.tags, {
-        coins: newCoins.toString(),
+      const updates: Record<string, string | string[]> = {
         storage: storageValues, // Array of 'itemId:quantity' strings
-      });
+      };
+      if (!isBaoMode) {
+        updates.coins = newCoins.toString();
+      }
+
+      const updatedTags = updateBlobbonautTags(prev.tags, updates);
 
       // Publish updated profile event
       const event = await publishEvent({
