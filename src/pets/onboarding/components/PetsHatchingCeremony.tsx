@@ -30,7 +30,7 @@ import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonau
 import {
   KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
-  INITIAL_BLOBBONAUT_COINS,
+  INITIAL_BLOBBONAUT_SATS,
   STAT_MAX,
   buildBlobbonautTags,
   updateBlobbonautTags,
@@ -237,7 +237,7 @@ export function PetsHatchingCeremony({
           const tagsWithName = [
             ...baseTags,
             ['name', suggestedName],
-            ['sats', (INITIAL_BLOBBONAUT_COINS * 100).toString()],
+            ['sats', INITIAL_BLOBBONAUT_SATS.toString()],
           ];
 
           const profileEvent = await publishEvent({

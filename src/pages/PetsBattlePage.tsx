@@ -19,7 +19,7 @@ import {
   emitBattleInteractionEvent,
 } from '@/pets/battle';
 import {
-  DEFAULT_PRIZE_AMOUNT,
+  DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
 } from '@/pets/battle/lib/constants';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -42,7 +42,7 @@ export default function PetsBattlePage() {
   });
 
   const [matchOptions, setMatchOptions] = useState({
-    prizeAmount: DEFAULT_PRIZE_AMOUNT,
+    prizeAmount: DEFAULT_PRIZE_SATS,
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
   });
   const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats'>('demo-sats');

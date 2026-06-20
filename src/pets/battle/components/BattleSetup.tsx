@@ -12,7 +12,7 @@ import {
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { createRivalCompanion } from '../lib/rival';
-import { DEFAULT_PRIZE_AMOUNT } from '../lib/constants';
+import { DEFAULT_PRIZE_SATS } from '../lib/constants';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMode } from '../lib/battleInteraction';
 
@@ -62,7 +62,7 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
 
   const handleStart = () => {
     if (!pet1 || !pet2) return;
-    onStart(pet1, pet2, DEFAULT_PRIZE_AMOUNT, walletMode);
+    onStart(pet1, pet2, DEFAULT_PRIZE_SATS, walletMode);
   };
 
   if (isLoading) {
@@ -137,7 +137,7 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_AMOUNT} demo sats
+              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} demo sats
             </p>
             <p className="text-muted-foreground">
               One prize per day. Real sats mode coming soon.
