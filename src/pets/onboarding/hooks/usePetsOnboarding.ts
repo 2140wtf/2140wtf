@@ -30,9 +30,9 @@ import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWalle
 import {
   KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
-  INITIAL_BLOBBONAUT_COINS,
-  PETS_PREVIEW_REROLL_COST,
-  PETS_ADOPTION_COST,
+  INITIAL_BLOBBONAUT_SATS,
+  PETS_PREVIEW_REROLL_SATS,
+  PETS_ADOPTION_SATS,
   buildBlobbonautTags,
   updateBlobbonautTags,
   type BlobbonautProfile,
@@ -195,7 +195,7 @@ export function usePetsOnboarding({
     return null;
   });
   const [isFirstPreview, setIsFirstPreview] = useState(true);
-  const [previewSats] = useState(INITIAL_BLOBBONAUT_COINS * 100);
+  const [previewSats] = useState(INITIAL_BLOBBONAUT_SATS);
   const [blobbonautName, setBlobbonautName] = useState<string | undefined>(profile?.name);
   
   // ─── Sync step with profile changes ─────────────────────────────────────────
@@ -297,7 +297,7 @@ export function usePetsOnboarding({
         const tagsWithName = [
           ...baseTags,
           ['name', name],
-          ['sats', (INITIAL_BLOBBONAUT_COINS * 100).toString()],
+          ['sats', INITIAL_BLOBBONAUT_SATS.toString()],
         ];
         
         const event = await publishEvent({
@@ -365,7 +365,7 @@ export function usePetsOnboarding({
     if (!user?.pubkey || !profile) return;
 
     const isBtcSatsMode = profile.walletMode === 'btc-sats';
-    const rerollCostSats = PETS_PREVIEW_REROLL_COST * 100;
+    const rerollCostSats = PETS_PREVIEW_REROLL_SATS;
 
     // Check if can afford
     if (!isBtcSatsMode && sats < rerollCostSats) {
@@ -383,7 +383,7 @@ export function usePetsOnboarding({
     try {
       if (isBtcSatsMode) {
         // Pay with real BTC sats; no profile sats update needed for a reroll
-        await paySats(PETS_PREVIEW_REROLL_COST, 'Pets reroll');
+        await paySats(PETS_PREVIEW_REROLL_SATS, 'Pets reroll');
       } else {
         // Fetch fresh profile from relays (read-modify-write safety)
         const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
@@ -454,7 +454,7 @@ export function usePetsOnboarding({
     if (!user?.pubkey || !profile || !preview) return;
 
     const isBtcSatsMode = profile.walletMode === 'btc-sats';
-    const adoptionCostSats = PETS_ADOPTION_COST * 100;
+    const adoptionCostSats = PETS_ADOPTION_SATS;
 
     // Check if can afford
     if (!isBtcSatsMode && sats < adoptionCostSats) {
@@ -472,7 +472,7 @@ export function usePetsOnboarding({
     try {
       if (isBtcSatsMode) {
         // Pay adoption cost with real BTC sats before creating the pet
-        await paySats(PETS_ADOPTION_COST, 'Pets adoption');
+        await paySats(PETS_ADOPTION_SATS, 'Pets adoption');
       }
 
       // 1. Publish the Pets egg event using exact preview data

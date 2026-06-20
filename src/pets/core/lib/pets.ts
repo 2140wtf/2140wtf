@@ -58,14 +58,14 @@ export const DEFAULT_INCUBATION_TIME = 345600;
 
 // ─── Onboarding Constants ─────────────────────────────────────────────────────
 
-/** Initial coins given to new Blobbonauts */
-export const INITIAL_BLOBBONAUT_COINS = 200;
+/** Initial demo sats given to new Blobbonauts */
+export const INITIAL_BLOBBONAUT_SATS = 20_000;
 
-/** Cost to reroll/generate another egg preview during onboarding */
-export const PETS_PREVIEW_REROLL_COST = 10;
+/** Cost in demo sats to reroll/generate another egg preview during onboarding */
+export const PETS_PREVIEW_REROLL_SATS = 1_000;
 
-/** Cost to adopt a 2140 PET from the preview */
-export const PETS_ADOPTION_COST = 100;
+/** Cost in demo sats to adopt a 2140 PET from the preview */
+export const PETS_ADOPTION_SATS = 10_000;
 
 // ─── Date/Time Utilities ──────────────────────────────────────────────────────
 

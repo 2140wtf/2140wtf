@@ -16,14 +16,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
-import { PETS_ADOPTION_COST } from '@/pets/core/lib/pets';
+import { PETS_ADOPTION_SATS } from '@/pets/core/lib/pets';
 import { formatCompactNumber } from '@/lib/utils';
 
 import type { PetsEggPreview } from '../lib/pets-preview';
 import { previewToPetsCompanion } from '../lib/pets-preview';
-
-/** Demo-sats are priced at 100× the base catalog unit. */
-const SATS_MULTIPLIER = 100;
 
 interface PetsAdoptionConfirmDialogProps {
   /** Whether the dialog is open */
@@ -49,7 +46,7 @@ export function PetsAdoptionConfirmDialog({
   onConfirm,
 }: PetsAdoptionConfirmDialogProps) {
   const companionForVisual = previewToPetsCompanion(preview);
-  const adoptionCostSats = PETS_ADOPTION_COST * SATS_MULTIPLIER;
+  const adoptionCostSats = PETS_ADOPTION_SATS;
   const satsAfterAdoption = sats - adoptionCostSats;
 
   return (

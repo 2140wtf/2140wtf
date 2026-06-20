@@ -17,9 +17,6 @@ import {
 } from '@/pets/core/lib/pets';
 import { getShopItemById } from '../lib/pets-shop-items';
 
-/** Demo-sats are priced at 100× the base catalog price so whole numbers feel substantial. */
-export const DEMO_SATS_PRICE_MULTIPLIER = 100;
-
 /**
  * Hook to purchase items from the Pets Shop.
  *
@@ -63,10 +60,8 @@ export function usePetsPurchaseItem(
       const isDemoSats = currentProfile.walletMode === 'demo-sats';
       const isBtcSats = currentProfile.walletMode === 'btc-sats';
 
-      // Calculate total cost in the active currency unit
-      const totalCost = isDemoSats
-        ? price * quantity * DEMO_SATS_PRICE_MULTIPLIER
-        : price * quantity;
+      // Calculate total cost in sats
+      const totalCost = price * quantity;
 
       // Check affordability and pay
       if (isDemoSats) {
