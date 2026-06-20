@@ -1,6 +1,19 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { generateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 
-import { addTransaction, loadTransactionsSync } from './storage';
+import { deriveEncryptionKey } from './cashu';
+import {
+  addTransaction,
+  loadTransactionsSync,
+  addProcessedNutzapId,
+  isProcessedNutzapId,
+  loadProcessedNutzapIds,
+  savePendingNutzap,
+  loadPendingNutzaps,
+  removePendingNutzap,
+  pendingNutzapCooldownRemaining,
+} from './storage';
 
 describe('addTransaction', () => {
   beforeEach(() => {
@@ -66,5 +79,89 @@ describe('addTransaction', () => {
     expect(txs).toHaveLength(2);
     expect(txs.map((t) => t.id)).toContain(existingId);
     expect(txs.map((t) => t.id)).toContain(id);
+  });
+});
+
+
+describe('processed Nutzap ids', () => {
+  let encKey: CryptoKey;
+
+  beforeEach(async () => {
+    const phrase = generateMnemonic(wordlist);
+    encKey = await deriveEncryptionKey(phrase);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('remembers a processed Nutzap id and evicts it on expiry', async () => {
+    const id = 'nutzap-id'.padEnd(64, '0');
+    await addProcessedNutzapId(id, encKey);
+    expect(await isProcessedNutzapId(id, encKey)).toBe(true);
+    expect(await loadProcessedNutzapIds(encKey)).toHaveLength(1);
+
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 8 * 24 * 60 * 60 * 1000);
+    expect(await isProcessedNutzapId(id, encKey)).toBe(false);
+    expect(await loadProcessedNutzapIds(encKey)).toHaveLength(0);
+  });
+
+  it('returns false for missing or empty ids', async () => {
+    expect(await isProcessedNutzapId('', encKey)).toBe(false);
+    expect(await isProcessedNutzapId('any-id', encKey)).toBe(false);
+  });
+});
+
+describe('pending Nutzap journal', () => {
+  let encKey: CryptoKey;
+
+  beforeEach(async () => {
+    const phrase = generateMnemonic(wordlist);
+    encKey = await deriveEncryptionKey(phrase);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const baseEntry = {
+    id: 'pending-id',
+    sendProofs: [{ amount: 21 }],
+    recipientPubkey: 'recipient'.padEnd(64, '0'),
+    mintUrl: 'https://mint.example.com',
+    amount: 21,
+    timestamp: Date.now(),
+    attempts: 0,
+  } satisfies Parameters<typeof savePendingNutzap>[0];
+
+  it('saves and loads pending Nutzap entries', async () => {
+    await savePendingNutzap(baseEntry, encKey);
+    const loaded = await loadPendingNutzaps(encKey);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.id).toBe(baseEntry.id);
+    expect(loaded[0]!.amount).toBe(baseEntry.amount);
+  });
+
+  it('updates an existing entry by id', async () => {
+    await savePendingNutzap(baseEntry, encKey);
+    await savePendingNutzap({ ...baseEntry, attempts: 3 }, encKey);
+    const loaded = await loadPendingNutzaps(encKey);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.attempts).toBe(3);
+  });
+
+  it('removes a pending entry by id', async () => {
+    await savePendingNutzap(baseEntry, encKey);
+    await removePendingNutzap(baseEntry.id, encKey);
+    expect(await loadPendingNutzaps(encKey)).toHaveLength(0);
+  });
+
+  it('enforces a retry cooldown between attempts', () => {
+    const now = Date.now();
+    const entry = { ...baseEntry, lastAttemptAt: now - 30_000 };
+    expect(pendingNutzapCooldownRemaining(entry, now)).toBeGreaterThan(0);
+    expect(pendingNutzapCooldownRemaining({ ...baseEntry, lastAttemptAt: now - 120_000 }, now)).toBe(0);
   });
 });
