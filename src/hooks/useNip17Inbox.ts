@@ -156,7 +156,7 @@ export function useNip17Inbox() {
         )) {
           if (!alive) break;
           if (msg[0] === 'EVENT') {
-            void processWrap(msg[2]);
+            await processWrap(msg[2]);
           } else if (msg[0] === 'CLOSED') {
             break;
           }
