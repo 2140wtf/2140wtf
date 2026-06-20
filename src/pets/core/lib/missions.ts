@@ -61,15 +61,6 @@ export interface MissionsContent {
 }
 
 /**
- * Category-specific currency balances stored in kind 11125 content JSON.
- */
-export interface CategoryCurrencies {
-  runes: number;
-  sats: number;
-  seeds: number;
-}
-
-/**
  * BAO trading streak state stored in kind 11125 content JSON.
  */
 export interface BaoTradeStreak {
@@ -85,9 +76,6 @@ export interface ProfileContent {
   missions?: MissionsContent;
   room_layouts?: import('@/pets/rooms/lib/room-layout-schema').RoomLayoutsContent;
   room_furniture?: import('@/pets/rooms/lib/room-furniture-schema').RoomFurnitureContent;
-  runes?: number;
-  sats?: number;
-  seeds?: number;
   baoTradeStreak?: number;
   baoTradeStreakLastDay?: string;
 }
@@ -156,11 +144,6 @@ export function parseProfileContent(content: string): ProfileContent {
     if (raw.missions && typeof raw.missions === 'object') {
       result.missions = parseMissionsContent(raw.missions);
     }
-
-    // Category currencies
-    if (typeof raw.runes === 'number') result.runes = Math.max(0, Math.floor(raw.runes));
-    if (typeof raw.sats === 'number') result.sats = Math.max(0, Math.floor(raw.sats));
-    if (typeof raw.seeds === 'number') result.seeds = Math.max(0, Math.floor(raw.seeds));
 
     // BAO trade streak
     if (typeof raw.baoTradeStreak === 'number') {
