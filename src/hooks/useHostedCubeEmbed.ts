@@ -77,7 +77,7 @@ async function fetchCubeDesign(
  * 2. Falls back to reading a kind:33889 cube-design event from Nostr relays.
  * 3. Finally falls back to the deterministic embed URL.
  */
-export function useHostedCubeEmbed(pollId: string | undefined) {
+export function useHostedCubeEmbed(pollId: string | undefined, enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
 
@@ -148,7 +148,7 @@ export function useHostedCubeEmbed(pollId: string | undefined) {
         embedUrl: defaultEmbedUrl(pollId),
       };
     },
-    enabled: !!pollId,
+    enabled: !!pollId && enabled,
     staleTime: 5 * 60 * 1000,
   });
 }
