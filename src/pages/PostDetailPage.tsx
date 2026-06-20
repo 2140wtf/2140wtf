@@ -71,7 +71,6 @@ import { PeopleAvatarStack } from "@/components/PeopleAvatarStack";
 import { PatchCard } from "@/components/PatchCard";
 import { PodcastDetailContent } from "@/components/PodcastDetailContent";
 import { PollContent } from "@/components/PollContent";
-import { PollCubePreview } from "@/components/PollCubePreview";
 const PullRequestCard = lazy(() => import("@/components/PullRequestCard").then(m => ({ default: m.PullRequestCard })));
 import { ReactionButton } from "@/components/ReactionButton";
 import { ReplyComposeModal } from "@/components/ReplyComposeModal";
@@ -2316,12 +2315,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
               isPeopleList ||
               isEmojiPack ? (
               <>
-                {isPoll && (
-                  <>
-                    <PollCubePreview pollId={event.id} title={event.content} />
-                    <PollContent event={event} />
-                  </>
-                )}
+                {isPoll && <PollContent event={event} expanded />}
                 {isBirdDetection && <BirdDetectionContent event={event} />}
                 {isBirdex && <BirdexContent event={event} expanded />}
                 {isConstellation && <ConstellationContent event={event} />}
