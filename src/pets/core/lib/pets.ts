@@ -2098,6 +2098,8 @@ export function buildMigrationTags(
     'personality', 'trait', 'favorite_food', 'voice_type', 'mood',
     // Evolution tags
     'adult_type',
+    // Breed category / asset tags (preserve species selection across migration)
+    'breed_category', 'breed_asset', 'bao_rarity',
     // Extension tags
     'theme', 'crossover_app',
   ];

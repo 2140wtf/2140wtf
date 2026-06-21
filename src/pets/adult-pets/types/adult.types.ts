@@ -93,12 +93,19 @@ export function resolveAdultForm(pets: Pets): AdultForm {
   if (pets.adult?.evolutionForm && isValidAdultForm(pets.adult.evolutionForm)) {
     return pets.adult.evolutionForm;
   }
-  
+
+  // Breed asset for adult-form categories is the chosen AdultForm; respect
+  // it so category-constrained pets render the species the user selected
+  // instead of falling back to a seed-derived form.
+  if (pets.breedAsset && isValidAdultForm(pets.breedAsset)) {
+    return pets.breedAsset;
+  }
+
   // Derive from seed if available
   if (pets.seed) {
     return deriveAdultFormFromSeed(pets.seed);
   }
-  
+
   // Fallback to default
   return getDefaultAdultForm();
 }
