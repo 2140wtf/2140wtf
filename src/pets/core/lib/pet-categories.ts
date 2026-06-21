@@ -38,7 +38,7 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   {
     id: '2140-pets',
     label: '2140 Pets',
-    description: 'Rare digital life-forms discovered beyond the chain, including the ₿AO market-born line.',
+    description: 'Rare digital life-forms discovered beyond the chain.',
   },
   {
     id: 'ditto-blobbi',
@@ -95,7 +95,6 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       form: 'liquidblob',
       label: 'Liquid Blob',
     },
-    ...BAO_MEMBERS,
   ],
   'ditto-blobbi': [
     { kind: 'adult-form', form: 'bloomi', label: 'Bloomi' },
@@ -115,7 +114,7 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
     { kind: 'adult-form', form: 'rosey', label: 'Rosey' },
     { kind: 'adult-form', form: 'starri', label: 'Starri' },
   ],
-  bao: [],
+  bao: BAO_MEMBERS,
 };
 
 export function isAdultFormMember(member: CategoryMember): member is AdultFormMember {
@@ -128,6 +127,9 @@ export function getCategoryMembers(category: PetsBreedCategory): CategoryMember[
 
 export function getRandomCategoryMember(category: PetsBreedCategory): CategoryMember {
   const members = getCategoryMembers(category);
+  if (members.length === 0) {
+    throw new Error(`Breed category "${category}" has no members.`);
+  }
   const index = crypto.getRandomValues(new Uint32Array(1))[0] % members.length;
   return members[index];
 }
