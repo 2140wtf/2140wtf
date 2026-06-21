@@ -1,4 +1,5 @@
 import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { BattleFighterStats } from '../lib/fighterStats';
 
 export type BattlePlayerIndex = 0 | 1;
 
@@ -22,6 +23,7 @@ export interface BattleFighter {
   hitUntil: number;
   attackCooldownUntil: number;
   fireballCooldownUntil: number;
+  stats: BattleFighterStats;
 }
 
 export interface BattleProjectile {

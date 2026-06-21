@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ARENA_HEIGHT, ARENA_WIDTH, SWORD_COOLDOWN_MS } from '../lib/constants';
-import { BattleHud, BattleControlsHelp } from './BattleHud';
+import { BattleHud } from './BattleHud';
 import { BattlePetSprite } from './BattlePetSprite';
 import { BattleTouchControls } from './BattleTouchControls';
 import type { BattleState, BattleInputState } from '../types/battle.types';
@@ -140,7 +140,6 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
       ))}
 
       <BattleHud state={state} />
-      <BattleControlsHelp />
       <BattleTouchControls inputRef={inputRef} />
     </div>
   );
