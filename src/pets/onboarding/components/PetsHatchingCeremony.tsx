@@ -217,6 +217,10 @@ export function PetsHatchingCeremony({
   // ── Silent setup: create profile + egg (new egg flow only) ──
   useEffect(() => {
     if (isExistingEgg) return; // Skip for existing eggs
+    // Wait for the breed category to be supplied before minting. This prevents
+    // a race where the component mounts before the picker state has propagated
+    // and creates a random uncategorized egg.
+    if (!breedCategory) return;
     if (setupAttempted.current || !user?.pubkey) return;
     // Module-level guard: if another mount already started setup for this pubkey, skip
     if (setupInFlightFor.has(user.pubkey)) return;
@@ -353,7 +357,7 @@ export function PetsHatchingCeremony({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.pubkey]);
+  }, [user?.pubkey, breedCategory]);
 
   useEffect(() => {
     if (profile) profileRef.current = profile;
