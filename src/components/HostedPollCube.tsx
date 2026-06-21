@@ -4,9 +4,11 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { ZapPollVoteButton } from '@/components/ZapPollVoteButton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
+import { resolveTheme } from '@/themes';
 
 interface HostedPollCubeProps {
   pollId: string;
@@ -35,14 +37,21 @@ export function HostedPollCube({ pollId, title, event, className }: HostedPollCu
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const resolvedTheme = resolveTheme(config.theme);
 
   const embedUrl = useMemo(() => {
     const url = sanitizeUrl(design?.embedUrl);
     if (!url) return null;
-    if (!event) return url;
-    const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}event=${encodeURIComponent(encodeEventParam(event))}`;
-  }, [design?.embedUrl, event]);
+    const embed = new URL(url);
+    if (event) {
+      embed.searchParams.set('event', encodeEventParam(event));
+    }
+    if (resolvedTheme === 'light') {
+      embed.searchParams.set('theme', 'light');
+    }
+    return embed.toString();
+  }, [design?.embedUrl, event, resolvedTheme]);
 
   if (isLoading) {
     return (
