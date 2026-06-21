@@ -1,9 +1,9 @@
 export const ARENA_WIDTH = 1000;
-export const ARENA_HEIGHT = 500;
+export const ARENA_HEIGHT = 650;
 export const FLOOR_Y = 0;
 
-export const FIGHTER_WIDTH = 80;
-export const FIGHTER_HEIGHT = 120;
+export const FIGHTER_WIDTH = 110;
+export const FIGHTER_HEIGHT = 160;
 export const FIGHTER_MAX_HEALTH = 100;
 export const FIGHTER_MAX_ENERGY = 100;
 

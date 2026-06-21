@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { LoginArea } from '@/components/auth/LoginArea';
 import {
   BattleArena,
+  BattleControlsHelp,
   BattleSetup,
   BattleResultOverlay,
   useBattleGame,
@@ -144,16 +145,31 @@ export default function PetsBattlePage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
-      <div className="w-full max-w-5xl">
+    <main className="flex min-h-screen flex-col p-2 sm:p-4">
+      <div className="mx-auto w-full max-w-7xl">
         {state.status === 'setup' ? (
           <BattleSetup
             ownerPubkey={user.pubkey}
             onStart={handleStart}
           />
         ) : (
-          <div className="relative">
+          <div className="relative flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-lg font-bold sm:text-xl">Battle Arena</h1>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExit}
+                className="hidden sm:inline-flex"
+              >
+                Exit Arena
+              </Button>
+            </div>
+
+            <BattleControlsHelp variant="inline" />
+
             <BattleArena state={state} inputRef={inputRef} />
+
             {state.status === 'finished' && (
               <BattleResultOverlay
                 winner={state.winner}
@@ -168,7 +184,7 @@ export default function PetsBattlePage() {
                 onExit={handleExit}
               />
             )}
-            <div className="mt-3 flex justify-center sm:hidden">
+            <div className="flex justify-center sm:hidden">
               <Button variant="outline" size="sm" onClick={handleExit}>
                 Exit Arena
               </Button>

@@ -80,7 +80,36 @@ export function BattleHud({ state, className }: BattleHudProps) {
   );
 }
 
-export function BattleControlsHelp({ className }: { className?: string }) {
+export function BattleControlsHelp({
+  className,
+  variant = 'overlay',
+}: {
+  className?: string;
+  variant?: 'overlay' | 'inline';
+}) {
+  const p1 = 'P1: A/D move · W jump · S block · F sword · G fireball';
+  const p2 = 'P2: ←/→ move · ↑ jump · ↓ block · L sword · ; fireball';
+
+  if (variant === 'inline') {
+    return (
+      <div
+        className={cn(
+          'hidden items-center justify-center gap-6 rounded-lg bg-muted/80 px-4 py-2 text-xs text-muted-foreground sm:flex',
+          className,
+        )}
+      >
+        <div className="flex items-center gap-1.5 font-medium">
+          <Swords className="size-3.5" />
+          {p1}
+        </div>
+        <div className="flex items-center gap-1.5 font-medium">
+          <Swords className="size-3.5" />
+          {p2}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -90,11 +119,11 @@ export function BattleControlsHelp({ className }: { className?: string }) {
     >
       <div className="mb-1 flex items-center gap-1 font-bold">
         <Swords className="size-3" />
-        P1: A/D move · W jump · S block · F sword · G fireball
+        {p1}
       </div>
       <div className="flex items-center gap-1 font-bold">
         <Swords className="size-3" />
-        P2: ←/→ move · ↑ jump · ↓ block · L sword · ; fireball
+        {p2}
       </div>
     </div>
   );
