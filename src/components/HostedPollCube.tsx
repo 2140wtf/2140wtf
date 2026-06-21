@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
+import { ZapPollVoteButton } from '@/components/ZapPollVoteButton';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
@@ -32,6 +34,7 @@ function encodeEventParam(event: NostrEvent): string {
 export function HostedPollCube({ pollId, title, event, className }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
+  const { user } = useCurrentUser();
 
   const embedUrl = useMemo(() => {
     const url = sanitizeUrl(design?.embedUrl);
@@ -86,6 +89,11 @@ export function HostedPollCube({ pollId, title, event, className }: HostedPollCu
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         onLoad={() => setLoaded(true)}
       />
+      {user && event?.kind === 6969 && (
+        <div className="absolute bottom-3 left-3 z-20">
+          <ZapPollVoteButton event={event} compact />
+        </div>
+      )}
     </div>
   );
 }
