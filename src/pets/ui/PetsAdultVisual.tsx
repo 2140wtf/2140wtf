@@ -32,6 +32,7 @@ import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
 import { resolveAdultForm } from '@/pets/adult-pets';
+import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
 
 export interface PetsAdultVisualProps {
   /** The Pets data */
@@ -87,8 +88,9 @@ export function PetsAdultVisual({
 
   // ── State + form classes for species-specific CSS animations ───────────────
 
+  const baoRecipe = pets.breedAsset ? getBaoRecipeById(pets.breedAsset) : undefined;
   const formClass =
-    pets.breedCategory === 'bao' && pets.breedAsset
+    baoRecipe
       ? `pets-bao-${pets.breedAsset}`
       : `pets-form-${resolveAdultForm(pets)}`;
 
