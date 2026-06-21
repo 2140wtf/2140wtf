@@ -12,6 +12,10 @@ export interface BaoFaucetResponse {
   token?: string;
   /** Human-readable status message from the faucet. */
   message?: string;
+  /** Remaining sats the caller can claim in the current 24h rolling window. */
+  remaining24h?: number;
+  /** Unix timestamp (seconds) when the 24h rolling window resets. */
+  resetsAt?: number;
 }
 
 /**
@@ -48,10 +52,13 @@ export async function claimBaoSignetFaucet(
     }
     const json = (await response.json()) as unknown;
     if (!json || typeof json !== 'object') return null;
-    const { token, message } = json as Record<string, unknown>;
+    const obj = json as Record<string, unknown>;
+    const { token, message, remaining24h, resetsAt } = obj;
     return {
       token: typeof token === 'string' ? token : undefined,
       message: typeof message === 'string' ? message : undefined,
+      remaining24h: typeof remaining24h === 'number' ? remaining24h : undefined,
+      resetsAt: typeof resetsAt === 'number' ? resetsAt : undefined,
     };
   } catch (e) {
     devLog.error('BAO faucet request failed:', e);
