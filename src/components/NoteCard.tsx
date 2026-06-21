@@ -105,6 +105,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { VoiceMessagePlayer } from "@/components/VoiceMessagePlayer";
 import { ZapDialog } from "@/components/ZapDialog";
+import { ZapPollVoteButton } from "@/components/ZapPollVoteButton";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -947,6 +948,10 @@ export const NoteCard = memo(function NoteCard({
               ) : null}
             </button>
           </ZapDialog>
+        )}
+
+        {t.kind === 6969 && user && (
+          <ZapPollVoteButton event={t} compact={showPetsInteract} />
         )}
 
         <button

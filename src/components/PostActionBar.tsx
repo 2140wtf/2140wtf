@@ -5,6 +5,7 @@ import { RepostIcon } from '@/components/icons/RepostIcon';
 import { ReactionButton } from '@/components/ReactionButton';
 import { RepostMenu } from '@/components/RepostMenu';
 import { ZapMenu } from '@/components/ZapMenu';
+import { ZapPollVoteButton } from '@/components/ZapPollVoteButton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEventStats } from '@/hooks/useTrending';
 import { useFormatMoney } from '@/hooks/useFormatMoney';
@@ -113,6 +114,11 @@ export function PostActionBar({
             ) : null}
           </button>
         </ZapMenu>
+      )}
+
+      {/* Zap to vote (kind 6969 zap polls) */}
+      {event.kind === 6969 && canZapAuthor && (
+        <ZapPollVoteButton event={event} compact={compact} />
       )}
 
       {/* More */}
