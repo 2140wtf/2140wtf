@@ -41,7 +41,8 @@ export function useBattleGame(
     ),
   );
   const stateRef = useRef<BattleState>(displayState);
-  const inputRef = useBattleControls(false);
+  const isActive = displayState.status === 'countdown' || displayState.status === 'fighting';
+  const inputRef = useBattleControls(isActive);
   const rafRef = useRef(0);
   const onFinishRef = useRef<((winner: BattlePlayerIndex | null) => void) | null>(
     null,

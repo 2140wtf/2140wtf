@@ -1,28 +1,5 @@
-import {
-  ARENA_WIDTH,
-  FIGHTER_WIDTH,
-  FIGHTER_HEIGHT,
-  FIGHTER_MAX_HEALTH,
-  FIGHTER_MAX_ENERGY,
-  MOVE_SPEED,
-  BLOCK_MOVE_SPEED,
-  JUMP_VELOCITY,
-  GRAVITY,
-  SWORD_DAMAGE,
-  SWORD_RANGE,
-  SWORD_COOLDOWN_MS,
-  SWORD_HIT_STUN_MS,
-  FIREBALL_DAMAGE,
-  FIREBALL_SPEED,
-  FIREBALL_RADIUS,
-  FIREBALL_COOLDOWN_MS,
-  FIREBALL_ENERGY_COST,
-  FIREBALL_HIT_STUN_MS,
-  ENERGY_REGEN_PER_SECOND,
-  BLOCK_DAMAGE_REDUCTION,
-  HIT_KNOCKBACK_X,
-  HIT_KNOCKBACK_Y,
-} from './constants';
+import { ARENA_WIDTH, FIREBALL_HIT_STUN_MS, HIT_KNOCKBACK_X, HIT_KNOCKBACK_Y } from './constants';
+import { computeFighterAttributes, deriveFighterStats } from './fighterStats';
 import type {
   BattleFighter,
   BattlePlayerIndex,
@@ -37,24 +14,28 @@ export function createFighter(
   x: number,
   facing: 1 | -1,
 ): BattleFighter {
+  const stats = deriveFighterStats(pet);
+  const { width, height, maxHealth, maxEnergy } = computeFighterAttributes(pet, stats);
+
   return {
     pet,
     x,
     y: 0,
     vx: 0,
     vy: 0,
-    width: FIGHTER_WIDTH,
-    height: FIGHTER_HEIGHT,
+    width,
+    height,
     facing,
-    health: FIGHTER_MAX_HEALTH,
-    maxHealth: FIGHTER_MAX_HEALTH,
-    energy: FIGHTER_MAX_ENERGY,
-    maxEnergy: FIGHTER_MAX_ENERGY,
+    health: maxHealth,
+    maxHealth,
+    energy: maxEnergy,
+    maxEnergy,
     isBlocking: false,
     isHit: false,
     hitUntil: 0,
     attackCooldownUntil: 0,
     fireballCooldownUntil: 0,
+    stats,
   };
 }
 
@@ -116,15 +97,17 @@ export function applyDamage(
   now: number,
   stunMs: number,
   knockbackDirection: 1 | -1,
+  knockbackX: number,
+  knockbackY: number,
 ): void {
   const reduced = fighter.isBlocking
-    ? rawDamage * (1 - BLOCK_DAMAGE_REDUCTION)
+    ? rawDamage * (1 - fighter.stats.blockDamageReduction)
     : rawDamage;
   const damage = Math.max(1, Math.floor(reduced));
   fighter.health = clamp(fighter.health - damage, 0, fighter.maxHealth);
   fighter.hitUntil = Math.max(fighter.hitUntil, now + stunMs);
-  fighter.vx = knockbackDirection * HIT_KNOCKBACK_X;
-  fighter.vy = HIT_KNOCKBACK_Y;
+  fighter.vx = knockbackDirection * knockbackX;
+  fighter.vy = knockbackY;
 }
 
 function performSwordStrike(
@@ -132,7 +115,7 @@ function performSwordStrike(
   defender: BattleFighter,
 ): boolean {
   const reachStart = attacker.x + attacker.facing * halfWidth(attacker);
-  const reachEnd = reachStart + attacker.facing * SWORD_RANGE;
+  const reachEnd = reachStart + attacker.facing * attacker.stats.swordRange;
   const swordLeft = Math.min(reachStart, reachEnd);
   const swordRight = Math.max(reachStart, reachEnd);
   const swordBottom = attacker.y + attacker.height * 0.25;
@@ -184,14 +167,14 @@ export function stepFighter(
   next.isBlocking = canAct && onGround && input.block;
 
   if (!isStunned) {
-    const speed = next.isBlocking ? BLOCK_MOVE_SPEED : MOVE_SPEED;
+    const speed = next.isBlocking ? next.stats.blockMoveSpeed : next.stats.moveSpeed;
     let desiredVx = 0;
     if (input.left) desiredVx -= speed;
     if (input.right) desiredVx += speed;
     next.vx = desiredVx;
 
     if (onGround && input.jump) {
-      next.vy = JUMP_VELOCITY;
+      next.vy = next.stats.jumpVelocity;
       next.y = 0.1;
     }
 
@@ -202,14 +185,16 @@ export function stepFighter(
     }
 
     if (input.sword && now >= next.attackCooldownUntil && !next.isBlocking) {
-      next.attackCooldownUntil = now + SWORD_COOLDOWN_MS;
+      next.attackCooldownUntil = now + next.stats.swordCooldownMs;
       if (performSwordStrike(next, opponent)) {
         applyDamage(
           opponent,
-          SWORD_DAMAGE,
+          next.stats.swordDamage,
           now,
-          SWORD_HIT_STUN_MS,
+          next.stats.swordHitStunMs,
           next.facing,
+          next.stats.hitKnockbackX,
+          next.stats.hitKnockbackY,
         );
       }
     }
@@ -218,18 +203,18 @@ export function stepFighter(
       input.fireball &&
       now >= next.fireballCooldownUntil &&
       !next.isBlocking &&
-      next.energy >= FIREBALL_ENERGY_COST
+      next.energy >= next.stats.fireballEnergyCost
     ) {
-      next.energy -= FIREBALL_ENERGY_COST;
-      next.fireballCooldownUntil = now + FIREBALL_COOLDOWN_MS;
+      next.energy -= next.stats.fireballEnergyCost;
+      next.fireballCooldownUntil = now + next.stats.fireballCooldownMs;
       spawnedProjectile = {
         id: `${now}-${Math.random().toString(36).slice(2)}`,
         owner: playerIndex,
         x: next.x + next.facing * (halfWidth(next) + 10),
         y: next.y + next.height * 0.55,
-        vx: next.facing * FIREBALL_SPEED,
-        radius: FIREBALL_RADIUS,
-        damage: FIREBALL_DAMAGE,
+        vx: next.facing * next.stats.fireballSpeed,
+        radius: next.stats.fireballRadius,
+        damage: next.stats.fireballDamage,
         spawnedAt: now,
       };
     }
@@ -238,7 +223,7 @@ export function stepFighter(
   }
 
   next.x += next.vx * dt;
-  next.vy += GRAVITY * dt;
+  next.vy += next.stats.gravity * dt;
   next.y += next.vy * dt;
 
   next.x = clamp(next.x, halfWidth(next), ARENA_WIDTH - halfWidth(next));
@@ -248,7 +233,7 @@ export function stepFighter(
   }
 
   next.energy = clamp(
-    next.energy + ENERGY_REGEN_PER_SECOND * dt,
+    next.energy + next.stats.energyRegenPerSecond * dt,
     0,
     next.maxEnergy,
   );
@@ -286,6 +271,8 @@ export function stepProjectiles(
           now,
           FIREBALL_HIT_STUN_MS,
           Math.sign(projectile.vx) as 1 | -1,
+          HIT_KNOCKBACK_X,
+          HIT_KNOCKBACK_Y,
         );
         hitFighters.add(index);
         hit = true;
