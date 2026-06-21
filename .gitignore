@@ -53,6 +53,7 @@ android/downloads/
 
 # Local research assets and build artifacts
 .research/
+.tools/
 *.apk
 *.apk.sha256
 
