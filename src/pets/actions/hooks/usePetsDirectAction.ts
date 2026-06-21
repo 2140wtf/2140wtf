@@ -1,6 +1,7 @@
 // src/pets/actions/hooks/usePetsDirectAction.ts
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
@@ -23,7 +24,11 @@ import { trackMultipleDailyMissionActions, trackEvolutionMissionTally, readEvolu
 import type { DailyMissionAction } from '../lib/daily-missions';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '../lib/pets-streak';
-import { calculateActionXP, applyXPGain, formatXPGain } from '../lib/pets-xp';
+import {
+  calculateActionReward,
+  formatSatsGain,
+} from '../lib/pets-action-rewards';
+import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
 // Import NostrEvent type
@@ -51,8 +56,7 @@ export interface DirectActionRequest {
 export interface DirectActionResult {
   action: DirectAction;
   happinessChange: number;
-  xpGained: number;
-  newXP: number;
+  satsGained: number;
 }
 
 /**
@@ -69,6 +73,8 @@ export interface UsePetsDirectActionParams {
   } | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
+  /** Update profile event in local cache */
+  updateProfileEvent: (event: NostrEvent) => void;
   /** UI surface originating the interaction (used for kind 1124 source tag). Defaults to 'pets-page'. */
   interactionSource?: string;
 }
@@ -90,9 +96,11 @@ export function usePetsDirectAction({
   companion,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
+  updateProfileEvent,
   interactionSource = 'pets-page',
 }: UsePetsDirectActionParams) {
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
@@ -122,7 +130,7 @@ export function usePetsDirectAction({
 
       // Effective stat cap for this companion (category + rarity). Stored tags
       // remain clamped to 100 for backward compatibility; the effective cap is
-      // used for effect calculations so direct actions can still grant XP when
+      // used for effect calculations so direct actions can still grant sats when
       // stored stats are already at 100.
       const effectiveMax = getEffectiveStatCap(
         canonical.companion.breedCategory,
@@ -178,16 +186,13 @@ export function usePetsDirectAction({
       // Get streak updates (will only update if needed based on day)
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
       
-      // ─── Apply XP Gain (ONLY if happiness actually changed) ───
-      // Direct actions modify happiness. Only grant XP if happiness actually increased.
-      const xpGained = happinessChanged ? calculateActionXP(action) : 0;
-      const currentXP = canonical.companion.experience ?? 0;
-      const newXP = applyXPGain(currentXP, xpGained);
-      
+      // ─── Apply sats reward (ONLY if happiness actually changed) ───
+      // Direct actions modify happiness. Only grant sats if happiness actually increased.
+      const satsGained = happinessChanged ? calculateActionReward(action) : 0;
+
       const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
-        experience: newXP.toString(),
         last_interaction: nowStr,
         last_decay_at: nowStr,
       });
@@ -224,19 +229,25 @@ export function usePetsDirectAction({
         });
       }
 
+      // Award sats to the player's profile (best-effort; failures are logged, not thrown)
+      if (satsGained > 0 && user?.pubkey) {
+        addProfileSats(nostr, publishEvent, user.pubkey, satsGained)
+          .then(({ event }) => updateProfileEvent(event))
+          .catch((error) => console.error('[usePetsDirectAction] Failed to add sats:', error));
+      }
+
       return {
         action,
         happinessChange: happinessDelta,
-        xpGained,
-        newXP,
+        satsGained,
       };
     },
-    onSuccess: ({ action, happinessChange, xpGained }) => {
+    onSuccess: ({ action, happinessChange, satsGained }) => {
       const actionMeta = DIRECT_ACTION_METADATA[action];
-      const xpText = formatXPGain(xpGained);
+      const satsText = formatSatsGain(satsGained);
       toast({
         title: `${actionMeta.label} complete!`,
-        description: `Your 2140 PET's happiness increased by ${happinessChange}! ${xpText}`,
+        description: `Your 2140 PET's happiness increased by ${happinessChange}! ${satsText}`,
       });
 
       // Track daily mission progress

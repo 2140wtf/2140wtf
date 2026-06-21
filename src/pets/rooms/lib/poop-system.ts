@@ -25,7 +25,7 @@ export const OVERFEED_THRESHOLD = 95;
 /** Probability (0-1) that overfeeding produces a poop. */
 export const OVERFEED_CHANCE = 0.4;
 const HOURS_PER_POOP = 2;
-export const XP_PER_POOP = 5;
+export const POOP_CLEANUP_REWARD = 5;
 const MAX_POOPS = 3;
 
 /** Poop `bottom` must stay within the canvas floor region: [POOP_BOTTOM_MIN, POOP_BOTTOM_MAX]. */
@@ -115,11 +115,11 @@ export function getPoopsInRoom(poops: PoopInstance[], room: PetsRoomId): PoopIns
 export function removePoop(
   poops: PoopInstance[],
   poopId: string,
-): { remaining: PoopInstance[]; xpReward: number } {
+): { remaining: PoopInstance[]; satsReward: number } {
   const remaining = poops.filter(p => p.id !== poopId);
   return {
     remaining,
-    xpReward: remaining.length < poops.length ? XP_PER_POOP : 0,
+    satsReward: remaining.length < poops.length ? POOP_CLEANUP_REWARD : 0,
   };
 }
 

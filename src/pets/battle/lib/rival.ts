@@ -49,7 +49,6 @@ function basePlaceholder(
     generation: 1,
     breedingReady: false,
     socialOpen: false,
-    experience: 0,
     careStreak: 0,
     careStreakLastAt: 0,
     careStreakLastDay: undefined,
