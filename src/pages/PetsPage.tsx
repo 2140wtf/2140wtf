@@ -384,6 +384,7 @@ function PetsContent() {
   // State for showing the adoption flow (for "Adopt another 2140 PET")
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
   const [selectedBreedCategory, setSelectedBreedCategory] = useState<PetsBreedCategory | undefined>(undefined);
+  const [adoptionStep, setAdoptionStep] = useState<'category' | 'onboarding'>('category');
   
   // STEP 5: Selection Priority
   // 1) localStorage selection (if valid and exists in collection) - USER SELECTION ALWAYS WINS
@@ -828,6 +829,7 @@ function PetsContent() {
         <BreedCategoryPicker
           onSelectCategory={(cat) => {
             setSelectedBreedCategory(cat);
+            setAdoptionStep('onboarding');
             setShowAdoptionFlow(true);
           }}
         />
@@ -835,21 +837,34 @@ function PetsContent() {
           open={showAdoptionFlow}
           onOpenChange={(open) => {
             setShowAdoptionFlow(open);
-            if (!open) setSelectedBreedCategory(undefined);
+            if (!open) {
+              setSelectedBreedCategory(undefined);
+              setAdoptionStep('category');
+            }
           }}
         >
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            <PetsOnboardingFlow
-              profile={profile}
-              updateProfileEvent={updateProfileEvent}
-              updateCompanionEvent={updateCompanionEvent}
-              invalidateProfile={invalidateProfile}
-              invalidateCompanion={invalidateCompanion}
-              setStoredSelectedD={setStoredSelectedD}
-              breedCategory={selectedBreedCategory}
-              adoptionOnly={true}
-              onComplete={() => setShowAdoptionFlow(false)}
-            />
+            {adoptionStep === 'category' ? (
+              <BreedCategoryPicker
+                compact
+                onSelectCategory={(cat) => {
+                  setSelectedBreedCategory(cat);
+                  setAdoptionStep('onboarding');
+                }}
+              />
+            ) : (
+              <PetsOnboardingFlow
+                profile={profile}
+                updateProfileEvent={updateProfileEvent}
+                updateCompanionEvent={updateCompanionEvent}
+                invalidateProfile={invalidateProfile}
+                invalidateCompanion={invalidateCompanion}
+                setStoredSelectedD={setStoredSelectedD}
+                breedCategory={selectedBreedCategory}
+                adoptionOnly={true}
+                onComplete={() => setShowAdoptionFlow(false)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </>
@@ -892,6 +907,7 @@ function PetsContent() {
         <BreedCategoryPicker
           onSelectCategory={(cat) => {
             setSelectedBreedCategory(cat);
+            setAdoptionStep('onboarding');
             setShowAdoptionFlow(true);
           }}
         />
@@ -899,21 +915,34 @@ function PetsContent() {
           open={showAdoptionFlow}
           onOpenChange={(open) => {
             setShowAdoptionFlow(open);
-            if (!open) setSelectedBreedCategory(undefined);
+            if (!open) {
+              setSelectedBreedCategory(undefined);
+              setAdoptionStep('category');
+            }
           }}
         >
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            <PetsOnboardingFlow
-              profile={profile}
-              updateProfileEvent={updateProfileEvent}
-              updateCompanionEvent={updateCompanionEvent}
-              invalidateProfile={invalidateProfile}
-              invalidateCompanion={invalidateCompanion}
-              setStoredSelectedD={setStoredSelectedD}
-              breedCategory={selectedBreedCategory}
-              adoptionOnly={true}
-              onComplete={() => setShowAdoptionFlow(false)}
-            />
+            {adoptionStep === 'category' ? (
+              <BreedCategoryPicker
+                compact
+                onSelectCategory={(cat) => {
+                  setSelectedBreedCategory(cat);
+                  setAdoptionStep('onboarding');
+                }}
+              />
+            ) : (
+              <PetsOnboardingFlow
+                profile={profile}
+                updateProfileEvent={updateProfileEvent}
+                updateCompanionEvent={updateCompanionEvent}
+                invalidateProfile={invalidateProfile}
+                invalidateCompanion={invalidateCompanion}
+                setStoredSelectedD={setStoredSelectedD}
+                breedCategory={selectedBreedCategory}
+                adoptionOnly={true}
+                onComplete={() => setShowAdoptionFlow(false)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </>
@@ -930,23 +959,47 @@ function PetsContent() {
           companions={filteredCompanions}
           onSelect={handleSelectPets}
           isLoading={companionFetching}
-          onAdopt={() => setShowAdoptionFlow(true)}
+          onAdopt={() => {
+            setSelectedBreedCategory(undefined);
+            setAdoptionStep('category');
+            setShowAdoptionFlow(true);
+          }}
           currentCompanion={profile?.currentCompanion}
         />
         
         {/* Adoption Flow Modal */}
-        <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+        <Dialog
+          open={showAdoptionFlow}
+          onOpenChange={(open) => {
+            setShowAdoptionFlow(open);
+            if (!open) {
+              setSelectedBreedCategory(undefined);
+              setAdoptionStep('category');
+            }
+          }}
+        >
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            <PetsOnboardingFlow
-              profile={profile}
-              updateProfileEvent={updateProfileEvent}
-              updateCompanionEvent={updateCompanionEvent}
-              invalidateProfile={invalidateProfile}
-              invalidateCompanion={invalidateCompanion}
-              setStoredSelectedD={setStoredSelectedD}
-              adoptionOnly={true}
-              onComplete={() => setShowAdoptionFlow(false)}
-            />
+            {adoptionStep === 'category' ? (
+              <BreedCategoryPicker
+                compact
+                onSelectCategory={(cat) => {
+                  setSelectedBreedCategory(cat);
+                  setAdoptionStep('onboarding');
+                }}
+              />
+            ) : (
+              <PetsOnboardingFlow
+                profile={profile}
+                updateProfileEvent={updateProfileEvent}
+                updateCompanionEvent={updateCompanionEvent}
+                invalidateProfile={invalidateProfile}
+                invalidateCompanion={invalidateCompanion}
+                setStoredSelectedD={setStoredSelectedD}
+                breedCategory={selectedBreedCategory}
+                adoptionOnly={true}
+                onComplete={() => setShowAdoptionFlow(false)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </>
