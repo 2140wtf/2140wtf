@@ -31,6 +31,7 @@ import {
   KIND_PETS_STATE,
   KIND_BLOBBONAUT_PROFILE,
   INITIAL_BLOBBONAUT_SATS,
+  BAO_PET_STARTER_GRANT_SATS,
   STAT_MAX,
   buildBlobbonautTags,
   updateBlobbonautTags,
@@ -38,6 +39,7 @@ import {
   type BlobbonautProfile,
   type PetsCompanion,
 } from '@/pets/core/lib/pets';
+import { useBaoPetStarterGrant } from '@/pets/core/hooks/useBaoPetStarterGrant';
 
 import {
   generateEggPreview,
@@ -79,6 +81,10 @@ type CeremonyPhase =
 // Tracks pubkeys that have already started setup in this browser session.
 const setupInFlightFor = new Set<string>();
 
+// Module-level guard: prevents duplicate BAO starter-grant claims for the same
+// egg if the component remounts. The BAO API still enforces the real cap.
+const starterGrantAttemptedFor = new Set<string>();
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface PetsHatchingCeremonyProps {
@@ -116,6 +122,7 @@ export function PetsHatchingCeremony({
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
+  const starterGrant = useBaoPetStarterGrant({ onProfileUpdate: updateProfileEvent });
 
   // ── Core state ──
   const [phase, setPhase] = useState<CeremonyPhase>('loading');
@@ -270,7 +277,14 @@ export function PetsHatchingCeremony({
 
         updateCompanionEvent(eggEvent);
 
-        // 3. Update profile with has[] entry
+        // 3. Claim BAO starter sats for the new egg (best-effort; the BAO API
+        //    enforces the 21,400 sats / 24h cap). Never block hatching on this.
+        if (!starterGrantAttemptedFor.has(eggPreview.d)) {
+          starterGrantAttemptedFor.add(eggPreview.d);
+          starterGrant.mutate(BAO_PET_STARTER_GRANT_SATS);
+        }
+
+        // 4. Update profile with has[] entry
         if (latestProfileTags) {
           // If profile already existed (not just created), fetch fresh from relays
           // to avoid overwriting content with stale cache data
