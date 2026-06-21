@@ -36,6 +36,7 @@ import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 import { diversifyFeedPages } from '@/lib/feedDiversity';
 import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
+import { FEED_TOPICS, getFeedTopic, getTopicTagFilter } from '@/lib/feedTopics';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import { NewPostsPill } from '@/components/NewPostsPill';
@@ -181,6 +182,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // Is the active tab a geotag interest?
   const activeGeotag = activeTab.startsWith('geotag:') ? activeTab.slice(7) : null;
 
+  // Is the active tab a topic feed (e.g. Bitcoin, Nostr, Tech/AI)?
+  const activeTopic = useMemo(() => getFeedTopic(activeTab), [activeTab]);
+  const isTopicTab = !!activeTopic;
+
   // When logged out (and not on a kind-specific page), show the "hot" sorted
   // feed instead of the noisy global feed so new visitors see quality content.
   const useTopFeedForLoggedOut = !user && !kinds;
@@ -190,16 +195,19 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const useDittoTab = user && activeTab === 'ditto' && !kinds;
 
   // Standard feed query (used when logged in, or on kind-specific pages, or core tabs)
-  const isCoreFeedTab = activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'ditto';
+  const isCoreFeedTab =
+    activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'ditto' || isTopicTab;
   type UseFeedTab = 'follows' | 'loved' | 'global' | 'communities';
   const feedTabForQuery: UseFeedTab =
     activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities'
       ? (activeTab as UseFeedTab)
       : 'global';
-  const feedQuery = useFeed(
-    isCoreFeedTab ? feedTabForQuery : 'global',
-    (kinds || tagFilters) ? { kinds, tagFilters } : undefined,
-  );
+  const feedQueryOptions = useMemo(() => {
+    if (activeTopic) return { tagFilters: getTopicTagFilter(activeTopic) };
+    if (kinds || tagFilters) return { kinds, tagFilters };
+    return undefined;
+  }, [activeTopic, kinds, tagFilters]);
+  const feedQuery = useFeed(feedTabForQuery, feedQueryOptions);
 
   // Curated 2140.wtf feed: latest content from the curator's follow list.
   const topQuery = useCuratedDittoFeed(
@@ -235,10 +243,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     return undefined;
   }, [feedTabForQuery, followData?.pubkeys, lovedPubkeys, user, excludeMuted]);
 
-  // Stream only for the core feed tabs, when not the curated Ditto query.
+  // Stream only for the core feed tabs, when not the curated Ditto query or a topic tab.
   const streamEnabled =
     isCoreFeedTab &&
     !useDittoQuery &&
+    !isTopicTab &&
     (feedTabForQuery === 'follows' || feedTabForQuery === 'loved' || feedTabForQuery === 'global');
 
   const { newPostCount, reset: resetNewPosts } = useFeedStream({
@@ -407,7 +416,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           ? "We couldn't find any recent posts from people you follow."
           : isLoved
             ? "No recent posts from the people you love. Add more people from their profile's ⋯ menu."
-            : 'No posts found. Check your relay connections or come back soon.';
+            : activeTopic
+              ? `No posts found in ${activeTopic.label}. Check your relay connections or come back soon.`
+              : 'No posts found. Check your relay connections or come back soon.';
 
     return {
       message: baseMessage,
@@ -456,6 +467,19 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {!globalFirst && (isKindSpecificPage || showGlobalFeed) && (
             <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
           )}
+          {showSavedFeedTabs && FEED_TOPICS.map((topic) => (
+            <TabButton
+              key={`topic:${topic.id}`}
+              label={topic.label}
+              active={activeTab === topic.id}
+              onClick={() => handleSetActiveTab(topic.id)}
+            >
+              <span className="flex items-center justify-center gap-1">
+                <span>{topic.icon}</span>
+                {topic.label}
+              </span>
+            </TabButton>
+          ))}
           {showSavedFeedTabs && savedFeeds.map((feed) => (
             <TabButton
               key={feed.id}
