@@ -67,6 +67,9 @@ export const PETS_PREVIEW_REROLL_SATS = 1_000;
 /** Cost in demo sats to adopt a 2140 PET from the preview */
 export const PETS_ADOPTION_SATS = 10_000;
 
+/** Sats auto-claimed from the BAO faucet for every new 2140 PET egg. */
+export const BAO_PET_STARTER_GRANT_SATS = 2_140;
+
 // ─── Date/Time Utilities ──────────────────────────────────────────────────────
 
 /**
