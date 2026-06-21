@@ -185,6 +185,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // Is the active tab a topic feed (e.g. Bitcoin, Nostr, Tech/AI)?
   const activeTopic = useMemo(() => getFeedTopic(activeTab), [activeTab]);
   const isTopicTab = !!activeTopic;
+  const isAuthorTopic = !!activeTopic?.authors && activeTopic.authors.length > 0;
 
   // When logged out (and not on a kind-specific page), show the "hot" sorted
   // feed instead of the noisy global feed so new visitors see quality content.
@@ -203,11 +204,18 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       ? (activeTab as UseFeedTab)
       : 'global';
   const feedQueryOptions = useMemo(() => {
-    if (activeTopic) return { tagFilters: getTopicTagFilter(activeTopic) };
+    if (activeTopic && !isAuthorTopic) return { tagFilters: getTopicTagFilter(activeTopic) };
     if (kinds || tagFilters) return { kinds, tagFilters };
     return undefined;
-  }, [activeTopic, kinds, tagFilters]);
+  }, [activeTopic, isAuthorTopic, kinds, tagFilters]);
   const feedQuery = useFeed(feedTabForQuery, feedQueryOptions);
+
+  // Author-filtered topic feeds (e.g. BAO) show posts from specific pubkeys.
+  const authorTopicQuery = useTabFeed(
+    isAuthorTopic ? { authors: activeTopic.authors } : null,
+    isAuthorTopic ? `topic-${activeTopic.id}` : '',
+    isAuthorTopic,
+  );
 
   // Curated 2140.wtf feed: latest content from the curator's follow list.
   const topQuery = useCuratedDittoFeed(
@@ -217,11 +225,16 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
   // Unify the two query shapes behind a single interface
   const useDittoQuery = useTopFeedForLoggedOut || useDittoTab;
-  const activeQuery = useDittoQuery ? topQuery : feedQuery;
-  const queryKey = useMemo(
-    () => useDittoQuery ? ['ditto-curated-feed'] : ['feed', activeTab],
-    [useDittoQuery, activeTab],
-  );
+  const activeQuery = useDittoQuery
+    ? topQuery
+    : isAuthorTopic
+      ? authorTopicQuery
+      : feedQuery;
+  const queryKey = useMemo(() => {
+    if (useDittoQuery) return ['ditto-curated-feed'];
+    if (isAuthorTopic) return ['tab-feed', `topic-${activeTopic!.id}`];
+    return ['feed', activeTab];
+  }, [useDittoQuery, isAuthorTopic, activeTopic, activeTab]);
 
   const handleRefresh = usePageRefresh(queryKey);
 
@@ -475,7 +488,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
               onClick={() => handleSetActiveTab(topic.id)}
             >
               <span className="flex items-center justify-center gap-1">
-                <span>{topic.icon}</span>
+                {topic.iconSrc ? (
+                  <img src={topic.iconSrc} alt="" className="size-3.5 object-contain rounded-sm" />
+                ) : (
+                  <span>{topic.icon}</span>
+                )}
                 {topic.label}
               </span>
             </TabButton>
