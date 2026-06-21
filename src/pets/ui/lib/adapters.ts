@@ -50,6 +50,9 @@ export function petsCompanionToPets(companion: PetsCompanion): Pets {
     tags: companion.allTags ?? [],
     // Adult-specific data (for adult form resolution)
     adult: companion.adultType ? { evolutionForm: companion.adultType } : undefined,
+    // Breed category / asset so BAO card art and category form classes are preserved
+    breedCategory: companion.breedCategory,
+    breedAsset: companion.breedAsset,
   };
 }
 
