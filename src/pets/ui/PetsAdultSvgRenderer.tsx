@@ -81,18 +81,20 @@ export function PetsAdultSvgRenderer({
   const customizedSvg = useMemo(() => {
     debugPets('svg-rebuild', 'adult customizedSvg rebuild');
 
-    // Resolve the correct adult art. 2140 Pets use the standard adult-form SVGs;
-    // ₿AO Pets render a generated trading-card variation.
+    // Resolve the correct adult art. 2140 Pets / Ditto Blobbi use the standard
+    // adult-form SVGs; ₿AO Pets (identified by a known breed_asset recipe) render
+    // a generated trading-card variation. This also covers legacy pets whose
+    // breed_category was stored as '2140-pets' but whose breed_asset is a bao-* id.
     let form: string;
     let colorizedSvg: string;
 
-    if (pets.breedCategory === 'bao' && pets.breedAsset) {
-      const baoRecipe = getBaoRecipeById(pets.breedAsset);
-      if (!baoRecipe) {
-        return '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><text x="100" y="110" text-anchor="middle" font-size="12" fill="#666">Unknown ₿AO</text></svg>';
-      }
-      form = pets.breedAsset;
+    const baoRecipe = pets.breedAsset ? getBaoRecipeById(pets.breedAsset) : undefined;
+
+    if (baoRecipe) {
+      form = pets.breedAsset!;
       colorizedSvg = customizeBaoSvg(generateBaoSvg(baoRecipe), baoRecipe, instanceId);
+    } else if (pets.breedCategory === 'bao' && pets.breedAsset) {
+      return '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><text x="100" y="110" text-anchor="middle" font-size="12" fill="#666">Unknown ₿AO</text></svg>';
     } else {
       const resolved = resolveAdultSvgWithForm(pets, { isSleeping: false });
       form = resolved.form;
