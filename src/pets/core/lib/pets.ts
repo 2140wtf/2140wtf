@@ -313,8 +313,6 @@ export interface PetsCompanion {
   breedingReady: boolean;
   /** Whether external users can interact with this Pets (social tag = "open") */
   socialOpen: boolean;
-  /** Total XP */
-  experience: number | undefined;
   /** Consecutive care days */
   careStreak: number | undefined;
   /** Unix timestamp (seconds) of last streak update */
@@ -392,10 +390,6 @@ export interface BlobbonautProfile {
   coins: number;
   /** Petting level (interaction counter) */
   pettingLevel: number;
-  /** Player lifetime XP (source of truth for progression) */
-  xp: number;
-  /** Player level (derived from xp, stored as queryable mirror) */
-  level: number;
   /** Date (YYYY-MM-DD) when daily mission rewards were last claimed */
   dailyRewardsClaimedAt: string | undefined;
   /** Date (YYYY-MM-DD) of the last daily login bonus */
@@ -1376,7 +1370,6 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
     generation: parseNumericTag(tags, 'generation'),
     breedingReady: parseBooleanTag(tags, 'breeding_ready', false),
     socialOpen: getTagValue(tags, 'social') === 'open',
-    experience: parseNumericTag(tags, 'experience'),
     careStreak: parseNumericTag(tags, 'care_streak'),
     careStreakLastAt: parseNumericTag(tags, 'care_streak_last_at'),
     careStreakLastDay: getTagValue(tags, 'care_streak_last_day'),
@@ -1441,8 +1434,6 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
     has: getTagValues(tags, 'has'),
     coins: parseNumericTag(tags, 'coins') ?? 0,
     pettingLevel: pettingLevelValue,
-    xp: parseNumericTag(tags, 'xp') ?? 0,
-    level: parseNumericTag(tags, 'level') ?? 1,
     dailyRewardsClaimedAt: getTagValue(tags, 'daily_rewards_claimed_at') ?? undefined,
     dailyLoginLastDay: getTagValue(tags, 'daily_login_last_day') ?? undefined,
     dailyLoginStreak: parseNumericTag(tags, 'daily_login_streak') ?? 0,
@@ -1534,7 +1525,6 @@ export function buildEggTags(
     ['seed', seed],
     ['generation', '1'],
     ['breeding_ready', 'false'],
-    ['experience', '0'],
     ['care_streak', '1'],
     ['care_streak_last_at', now],
     ['care_streak_last_day', getLocalDayString()],
@@ -1578,8 +1568,8 @@ export const MANAGED_PETS_STATE_TAG_NAMES = new Set([
   'base_color', 'secondary_color', 'eye_color', 'pattern', 'special_mark', 'size',
   // Identity/personality tags (MUST persist across stage transitions)
   'personality', 'trait', 'favorite_food', 'voice_type', 'mood',
-  // Progression tags
-  'experience', 'care_streak', 'care_streak_last_at', 'care_streak_last_day',
+  // Care-streak tags
+  'care_streak', 'care_streak_last_at', 'care_streak_last_day',
   // Social/flag tags
   'social', 'breeding_ready',
   // Progression tags (orthogonal to activity state)
@@ -1629,6 +1619,7 @@ export const VISUAL_TRAIT_TAG_NAMES = [
  * - incubation_time: Obsolete; task system uses progression_started_at instead
  * - start_incubation: Obsolete; replaced by progression_started_at
  * - interact_6_progress: Legacy interaction tracking; replaced by ["task", "interactions:N"]
+ * - experience: Deprecated; old per-Pets XP, no longer awarded
  */
 export const DEPRECATED_PETS_TAG_NAMES = new Set([
   't',
@@ -1641,6 +1632,7 @@ export const DEPRECATED_PETS_TAG_NAMES = new Set([
   'incubation_time',
   'start_incubation',
   'interact_6_progress',
+  'experience',
 ]);
 
 /**
@@ -1649,8 +1641,6 @@ export const DEPRECATED_PETS_TAG_NAMES = new Set([
  */
 export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage',
-  // Progression tags
-  'xp', 'level',
   // Daily reward tags
   'daily_rewards_claimed_at', 'daily_login_last_day', 'daily_login_streak',
   // BAO trading reward tags
@@ -1664,6 +1654,15 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
   // Legacy player progress tags (preserved for compatibility)
   'coins', 'petting_level', 'pettingLevel', 'lifetime_petss', 'lifetimePetss',
   'starter_pets', 'starterPets', 'favorite_pets', 'favoritePets',
+]);
+
+/**
+ * Deprecated tags for Kind 11125 (Blobbonaut Profile).
+ * These are stripped when republishing so old profiles migrate cleanly.
+ */
+export const DEPRECATED_BLOBBONAUT_TAG_NAMES = new Set([
+  'xp', // Old player lifetime XP; economy is sats-only now
+  'level', // Derived from old xp; no longer used
 ]);
 
 /**
@@ -1901,8 +1900,10 @@ export function mergeBlobbonautTagsForRepublish(
     }
   }
   
-  // Preserve unknown tags (tags not managed by us)
-  const unknownTags = existingTags.filter(tag => !MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES.has(tag[0]));
+  // Preserve unknown tags (tags not managed by us), excluding deprecated tags
+  const unknownTags = existingTags.filter(
+    tag => !MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES.has(tag[0]) && !DEPRECATED_BLOBBONAUT_TAG_NAMES.has(tag[0])
+  );
   
   // Deduplicate 'has' tags
   return deduplicateHasTags([...newTags, ...unknownTags]);
@@ -2082,8 +2083,8 @@ export function buildMigrationTags(
     'stage',
     // Stat tags
     'hunger', 'happiness', 'health', 'hygiene', 'energy',
-    // Progression tags
-    'experience', 'care_streak', 'care_streak_last_at', 'care_streak_last_day',
+    // Care-streak tags
+    'care_streak', 'care_streak_last_at', 'care_streak_last_day',
     // Progression process tags
     'progression_state', 'progression_started_at',
     // Legacy progression timing (also preserve for fallback)

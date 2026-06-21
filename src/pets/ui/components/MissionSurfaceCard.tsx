@@ -48,7 +48,7 @@ interface DailyCardItem {
   description: string;
   progress: number;
   progressLabel: string;
-  xp: number;
+  satsReward: number;
   complete: boolean;
 }
 
@@ -110,7 +110,7 @@ function buildDailyCards(missions: DailyMissionView[]): DailyCardItem[] {
       ? Math.min(100, Math.round((m.progress / m.target) * 100))
       : 0,
     progressLabel: `${m.progress}/${m.target}`,
-    xp: m.xp,
+    satsReward: m.satsReward,
     complete: m.complete,
   }));
 }
@@ -280,7 +280,7 @@ export function MissionSurfaceCard({
           </span>
           {card.kind === 'daily' && !card.complete && (
             <span className="flex items-center gap-0.5 text-[10px] text-violet-600 dark:text-violet-400 font-medium shrink-0">
-              {card.xp} XP
+              +{card.satsReward.toLocaleString()} sats
             </span>
           )}
         </div>

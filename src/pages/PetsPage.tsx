@@ -19,6 +19,7 @@ import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
+import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { useNostr } from '@nostrify/react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePetsMigration } from '@/pets/core/hooks/usePetsMigration';
@@ -89,7 +90,7 @@ import {
   getStreakTagUpdates,
    previewStatChangesWithSegments,
    useDailyMissions,
-   useAwardDailyXp,
+   useAwardDailySats,
    useDailyLoginBonus,
   useBaoTradeStats,
   useClaimBaoTradeRewards,
@@ -97,8 +98,7 @@ import {
   getBaoTierLabel,
    usePersistEvolutionProgress,
    usePersistDailyProgress,
-   applyXPGain,
-   POOP_CLEANUP_XP,
+   POOP_CLEANUP_REWARD,
    type InventoryAction,
   type DirectAction,
   type InlineActivityState,
@@ -237,14 +237,53 @@ function LoggedOutState() {
 
 function BreedCategoryPicker({
   onSelectCategory,
+  compact = false,
 }: {
   onSelectCategory: (category: PetsBreedCategory) => void;
+  compact?: boolean;
 }) {
   const iconMap: Record<PetsBreedCategory, ComponentType<{ className?: string }>> = {
     '2140-pets': Sparkles,
     'ditto-blobbi': Cat,
     bao: Wallet,
   };
+
+  if (compact) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-2">
+        <div className="text-center space-y-1">
+          <h2 className="text-lg font-semibold">Choose a breed</h2>
+          <p className="text-sm text-muted-foreground">
+            Pick a category for your new companion.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+          {BREED_CATEGORIES.map((cat) => {
+            const Icon = iconMap[cat.id];
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => onSelectCategory(cat.id)}
+                className={cn(
+                  'flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors',
+                  'hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                )}
+              >
+                <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Icon className="size-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{cat.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{cat.description}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="flex flex-col items-center justify-center p-6 gap-6 min-h-[60vh]">
@@ -597,6 +636,7 @@ function PetsContent() {
     companion,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
+    updateProfileEvent,
   });
   
   // Handler for direct actions (play_music, sing)
@@ -1411,6 +1451,8 @@ function PetsDashboard({
   
   // Adoption flow modal state
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
+  const [adoptionStep, setAdoptionStep] = useState<'category' | 'onboarding'>('category');
+  const [adoptionBreedCategory, setAdoptionBreedCategory] = useState<PetsBreedCategory | undefined>(undefined);
   
   const [usingItemId, setUsingItemId] = useState<string | null>(null);
   
@@ -1666,60 +1708,44 @@ function PetsDashboard({
   // Persist daily mission progress (debounced) to kind 11125 so it survives page refresh
   usePersistDailyProgress(updateProfileEvent);
 
-  // Award XP/coins when all daily missions are complete
-  const { mutate: awardDailyXp } = useAwardDailyXp(updateProfileEvent);
-  const dailyXpAwardedRef = useRef<string | null>(null);
+  // Award sats when all daily missions are complete
+  const { mutate: awardDailySats } = useAwardDailySats(updateProfileEvent);
+  const dailySatsAwardedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!dailyMissions.allComplete || !dailyMissions.raw) return;
     // Only award once per date
     const dateKey = dailyMissions.raw.date;
-    if (dailyXpAwardedRef.current === dateKey) return;
-    dailyXpAwardedRef.current = dateKey;
-    awardDailyXp({ missions: dailyMissions.raw });
-  }, [dailyMissions.allComplete, dailyMissions.raw, awardDailyXp]);
+    if (dailySatsAwardedRef.current === dateKey) return;
+    dailySatsAwardedRef.current = dateKey;
+    awardDailySats({ missions: dailyMissions.raw });
+  }, [dailyMissions.allComplete, dailyMissions.raw, awardDailySats]);
 
   // Daily login coin bonus (auto-claimed once per session)
   useDailyLoginBonus(updateProfileEvent);
 
-  // ─── Poop Cleanup XP (debounced: batch multiple pickups into one publish) ───
-  const pendingPoopXpRef = useRef(0);
-  const poopXpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ─── Poop Cleanup sats (debounced: batch multiple pickups into one publish) ───
+  const pendingPoopSatsRef = useRef(0);
+  const poopSatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePoopCleaned = useCallback(() => {
-    pendingPoopXpRef.current += POOP_CLEANUP_XP;
-    toast({ title: `+${POOP_CLEANUP_XP} XP`, description: 'Cleaned up!' });
+    pendingPoopSatsRef.current += POOP_CLEANUP_REWARD;
+    toast({ title: `+${POOP_CLEANUP_REWARD} sats`, description: 'Cleaned up!' });
 
-    // Debounce: wait 1.5s after last pickup, then publish all accumulated XP
-    if (poopXpTimerRef.current) clearTimeout(poopXpTimerRef.current);
-    poopXpTimerRef.current = setTimeout(async () => {
-      const xpToAdd = pendingPoopXpRef.current;
-      pendingPoopXpRef.current = 0;
-      if (xpToAdd <= 0) return;
+    // Debounce: wait 1.5s after last pickup, then publish all accumulated sats
+    if (poopSatsTimerRef.current) clearTimeout(poopSatsTimerRef.current);
+    poopSatsTimerRef.current = setTimeout(async () => {
+      const satsToAdd = pendingPoopSatsRef.current;
+      pendingPoopSatsRef.current = 0;
+      if (satsToAdd <= 0 || !user?.pubkey) return;
 
       try {
-        const canonical = await ensureCanonicalBeforeAction();
-        if (!canonical) return;
-
-        const currentXP = canonical.companion.experience ?? 0;
-        const newXP = applyXPGain(currentXP, xpToAdd);
-
-        const newTags = updatePetsTags(canonical.allTags, {
-          experience: newXP.toString(),
-        });
-
-        const event = await publishEvent({
-          kind: KIND_PETS_STATE,
-          content: canonical.content,
-          tags: newTags,
-          prev: canonical.companion.event,
-        });
-
-        updateCompanionEvent(event);
+        const { event } = await addProfileSats(nostr, publishEvent, user.pubkey, satsToAdd);
+        updateProfileEvent(event);
       } catch (error) {
-        console.error('Failed to persist poop cleanup XP:', error);
+        console.error('Failed to persist poop cleanup sats:', error);
       }
     }, 1500);
-  }, [ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
+  }, [nostr, publishEvent, updateProfileEvent, user?.pubkey]);
 
   // Shared timer ref for temporary action-emotion cleanup.
   // Used across the current feeding/item interaction paths so older timers
@@ -2091,7 +2117,11 @@ function PetsDashboard({
                   selectedD={selectedD}
                   petsNaddr={petsNaddr}
                   onSelectPets={onSelectPets}
-                  onAdopt={() => setShowAdoptionFlow(true)}
+                  onAdopt={() => {
+                    setAdoptionBreedCategory(undefined);
+                    setAdoptionStep('category');
+                    setShowAdoptionFlow(true);
+                  }}
                   onDevOpenEditor={() => setShowDevEditor(true)}
                   onDevOpenEmotionPanel={() => setShowEmotionPanel(true)}
                   onDevInstantTransition={isEgg ? () => setShowHatchCeremony(true) : isBaby ? () => setShowEvolveCeremony(true) : undefined}
@@ -2439,18 +2469,38 @@ function PetsDashboard({
       )}
 
       {/* Adoption Flow Modal */}
-      <Dialog open={showAdoptionFlow} onOpenChange={setShowAdoptionFlow}>
+      <Dialog
+        open={showAdoptionFlow}
+        onOpenChange={(open) => {
+          setShowAdoptionFlow(open);
+          if (!open) {
+            setAdoptionStep('category');
+            setAdoptionBreedCategory(undefined);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-          <PetsOnboardingFlow
-            profile={profile}
-            updateProfileEvent={updateProfileEvent}
-            updateCompanionEvent={updateCompanionEvent}
-            invalidateProfile={invalidateProfile}
-            invalidateCompanion={invalidateCompanion}
-            setStoredSelectedD={setStoredSelectedD}
-            adoptionOnly={true}
-            onComplete={() => setShowAdoptionFlow(false)}
-          />
+          {adoptionStep === 'category' ? (
+            <BreedCategoryPicker
+              compact
+              onSelectCategory={(cat) => {
+                setAdoptionBreedCategory(cat);
+                setAdoptionStep('onboarding');
+              }}
+            />
+          ) : (
+            <PetsOnboardingFlow
+              profile={profile}
+              updateProfileEvent={updateProfileEvent}
+              updateCompanionEvent={updateCompanionEvent}
+              invalidateProfile={invalidateProfile}
+              invalidateCompanion={invalidateCompanion}
+              setStoredSelectedD={setStoredSelectedD}
+              breedCategory={adoptionBreedCategory}
+              adoptionOnly={true}
+              onComplete={() => setShowAdoptionFlow(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
       
@@ -3190,7 +3240,7 @@ function MissionsTabContent({
                   <span className="text-[10px] tabular-nums font-medium text-muted-foreground shrink-0">{mission.progress}/{mission.target}</span>
                 )}
                 {mission.complete && (
-                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.xp} XP · +{mission.satsReward} sats</span>
+                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 shrink-0">+{mission.satsReward.toLocaleString()} sats</span>
                 )}
               </div>
             ))}
@@ -3205,7 +3255,7 @@ function MissionsTabContent({
                   <p className="text-sm font-medium leading-tight">Daily Champion</p>
                   <p className="text-[10px] text-muted-foreground">All missions complete!</p>
                 </div>
-                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusXp} XP · +{dailyMissions.bonusSats} sats</span>
+                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0">+{dailyMissions.bonusSats.toLocaleString()} sats</span>
               </div>
             )}
 
