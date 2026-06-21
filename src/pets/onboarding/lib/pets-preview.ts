@@ -25,6 +25,7 @@ import {
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
+import { deriveAdultFormFromSeed } from '@/pets/adult-pets/types/adult.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,6 +210,12 @@ export function previewToEventTags(preview: PetsEggPreview): string[][] {
     ['special_ability', visualTraits.specialAbility],
     ...(preview.breedCategory ? [['breed_category', preview.breedCategory]] : []),
     ...(preview.breedAsset ? [['breed_asset', preview.breedAsset]] : []),
+    // Lock in the selected adult form for non-₿AO categories so the pet
+    // always evolves into the category member the user chose, even if the
+    // seed-adjustment path is bypassed or overwritten later.
+    ...(preview.breedCategory && preview.breedCategory !== 'bao' && preview.seed
+      ? [['adult_type', deriveAdultFormFromSeed(preview.seed)]]
+      : []),
     ...(preview.breedCategory === 'bao' && preview.breedAsset
       ? [['bao_rarity', getBaoRarityFromAsset(preview.breedAsset) ?? 'common']]
       : []),
