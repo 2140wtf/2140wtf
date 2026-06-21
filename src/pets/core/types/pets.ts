@@ -164,7 +164,6 @@ export interface Pets extends PetsVisualTraits {
   /**
    * Progression.
    */
-  experience?: number;
   generation?: number;
   careStreak?: number;
 
@@ -241,7 +240,6 @@ export function createDefaultPets(overrides: Partial<Pets> = {}): Pets {
     hatchTime: overrides.hatchTime,
     lastInteraction: overrides.lastInteraction,
 
-    experience: overrides.experience ?? 0,
     generation: overrides.generation ?? 1,
     careStreak: overrides.careStreak ?? 0,
 

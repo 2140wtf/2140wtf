@@ -32,7 +32,7 @@ export type TagCategory =
   | 'personality'      // Personality/traits (mood, favorite_food)
   | 'stats'            // Numeric stats (hunger, health, etc.)
   | 'state'            // Lifecycle state (stage, state, timestamps)
-  | 'progression'      // Progress tracking (experience, care_streak)
+  | 'progression'      // Progress tracking (care_streak)
   | 'task'             // Task system (task, task_completed, progression_state, progression_started_at)
   | 'social'           // Social flags (breeding_ready)
   | 'evolution'        // Evolution-specific (adult_type)
@@ -486,16 +486,16 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'experience',
-    description: 'Total experience points accumulated',
+    description: 'Deprecated — old per-Pets XP total. No longer awarded or read.',
     category: 'progression',
     required: false,
     stages: ['egg', 'baby', 'adult'],
-    persistent: true,
+    persistent: false,
     source: 'computed',
     regenerable: false,
     format: 'non-negative integer',
-    defaultValue: '0',
-    notes: 'Accumulates across all stages. Never resets.',
+    defaultValue: undefined,
+    notes: 'Removed during the coins→sats economy migration. Kept in schema only for backward compatibility with old events; clients should strip this tag on republish.',
   },
   {
     tag: 'care_streak',

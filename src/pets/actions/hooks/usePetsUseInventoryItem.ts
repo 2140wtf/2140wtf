@@ -1,6 +1,7 @@
 // src/pets/actions/hooks/usePetsUseInventoryItem.ts
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
@@ -28,7 +29,11 @@ import {
 import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '../lib/daily-mission-tracker';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '../lib/pets-streak';
-import { calculateInventoryActionXP, applyXPGain, formatXPGain } from '../lib/pets-xp';
+import {
+  calculateInventoryActionReward,
+  formatSatsGain,
+} from '../lib/pets-action-rewards';
+import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
 // Import NostrEvent type
@@ -49,8 +54,7 @@ export interface UseItemResult {
   itemName: string;
   action: InventoryAction;
   statsChanged: Record<string, number>;
-  xpGained: number;
-  newXP: number;
+  satsGained: number;
 }
 
 /**
@@ -95,10 +99,11 @@ export function usePetsUseInventoryItem({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  updateProfileEvent: _updateProfileEvent,
+  updateProfileEvent,
   interactionSource = 'pets-page',
 }: UsePetsUseInventoryItemParams) {
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
 
@@ -269,15 +274,12 @@ export function usePetsUseInventoryItem({
       // Get streak updates (will only update if needed based on day)
       const streakUpdates = getStreakTagUpdates(canonical.companion) ?? {};
       
-      // ─── Apply XP Gain ───
-      const xpGained = calculateInventoryActionXP(action, 1);
-      const currentXP = canonical.companion.experience ?? 0;
-      const newXP = applyXPGain(currentXP, xpGained);
-      
+      // ─── Apply sats reward to profile ───
+      const satsGained = calculateInventoryActionReward(action, 1);
+
       const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
-        experience: newXP.toString(),
         last_interaction: nowStr,
         last_decay_at: nowStr,
       });
@@ -315,20 +317,26 @@ export function usePetsUseInventoryItem({
         });
       }
 
+      // Award sats to the player's profile (best-effort; failures are logged, not thrown)
+      if (satsGained > 0 && user?.pubkey) {
+        addProfileSats(nostr, publishEvent, user.pubkey, satsGained)
+          .then(({ event }) => updateProfileEvent(event))
+          .catch((error) => console.error('[usePetsUseInventoryItem] Failed to add sats:', error));
+      }
+
       return {
         itemName: shopItem.name,
         action,
         statsChanged,
-        xpGained,
-        newXP,
+        satsGained,
       };
     },
-    onSuccess: ({ itemName, action, xpGained }) => {
+    onSuccess: ({ itemName, action, satsGained }) => {
       const actionMeta = ACTION_METADATA[action];
-      const xpText = formatXPGain(xpGained);
+      const satsText = formatSatsGain(satsGained);
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${itemName} on your Pets. ${xpText}`,
+        description: `Used ${itemName} on your Pets. ${satsText}`,
       });
 
       // Track daily mission progress

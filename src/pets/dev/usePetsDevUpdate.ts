@@ -120,10 +120,6 @@ export function usePetsDevUpdate({
       }
 
       // Other properties
-      if (updates.experience !== undefined) {
-        tagUpdates.experience = updates.experience.toString();
-        changedFields.push('experience');
-      }
       if (updates.careStreak !== undefined) {
         tagUpdates.care_streak = updates.careStreak.toString();
         // Also update the streak metadata when manually setting streak
