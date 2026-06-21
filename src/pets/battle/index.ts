@@ -1,7 +1,7 @@
 export { BattleArena } from './components/BattleArena';
 export { BattleSetup } from './components/BattleSetup';
 export { BattleResultOverlay } from './components/BattleResultOverlay';
-export { BattleHud } from './components/BattleHud';
+export { BattleHud, BattleControlsHelp } from './components/BattleHud';
 export { BattlePetSprite } from './components/BattlePetSprite';
 export { BattleTouchControls } from './components/BattleTouchControls';
 export { useBattleGame } from './hooks/useBattleGame';
