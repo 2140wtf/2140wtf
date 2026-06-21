@@ -52,8 +52,6 @@ export interface PetsDevUpdates {
   adultType?: string;
   /** Stats updates */
   stats?: Partial<PetsStats>;
-  /** Experience points */
-  experience?: number;
   /** Care streak */
   careStreak?: number;
   /** Breeding ready flag */
@@ -186,7 +184,6 @@ export function PetsDevEditor({
     hygiene: companion.stats.hygiene ?? 100,
     energy: companion.stats.energy ?? 100,
   });
-  const [experience, setExperience] = useState(companion.experience ?? 0);
   const [careStreak, setCareStreak] = useState(companion.careStreak ?? 0);
   const [breedingReady, setBreedingReady] = useState(companion.breedingReady);
   const [generation, setGeneration] = useState(companion.generation ?? 1);
@@ -203,7 +200,6 @@ export function PetsDevEditor({
       hygiene: companion.stats.hygiene ?? 100,
       energy: companion.stats.energy ?? 100,
     });
-    setExperience(companion.experience ?? 0);
     setCareStreak(companion.careStreak ?? 0);
     setBreedingReady(companion.breedingReady);
     setGeneration(companion.generation ?? 1);
@@ -220,12 +216,11 @@ export function PetsDevEditor({
       stats.health !== (companion.stats.health ?? 100) ||
       stats.hygiene !== (companion.stats.hygiene ?? 100) ||
       stats.energy !== (companion.stats.energy ?? 100) ||
-      experience !== (companion.experience ?? 0) ||
       careStreak !== (companion.careStreak ?? 0) ||
       breedingReady !== companion.breedingReady ||
       generation !== (companion.generation ?? 1)
     );
-  }, [stage, state, adultType, stats, experience, careStreak, breedingReady, generation, companion]);
+  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, companion]);
 
   // Apply preset
   const applyPreset = useCallback((preset: StatPreset) => {
@@ -264,14 +259,13 @@ export function PetsDevEditor({
     }
 
     // Other fields
-    if (experience !== (companion.experience ?? 0)) updates.experience = experience;
     if (careStreak !== (companion.careStreak ?? 0)) updates.careStreak = careStreak;
     if (breedingReady !== companion.breedingReady) updates.breedingReady = breedingReady;
     if (generation !== (companion.generation ?? 1)) updates.generation = generation;
 
     await onApply(updates);
     onClose();
-  }, [stage, state, adultType, stats, experience, careStreak, breedingReady, generation, companion, onApply, onClose]);
+  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, companion, onApply, onClose]);
 
   // Handle close
   const handleClose = useCallback(() => {
@@ -502,18 +496,6 @@ export function PetsDevEditor({
             <Label className="text-sm font-semibold">Other Properties</Label>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Experience */}
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Experience (XP)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={experience}
-                  onChange={(e) => setExperience(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="h-8"
-                />
-              </div>
-
               {/* Care Streak */}
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Care Streak (days)</Label>

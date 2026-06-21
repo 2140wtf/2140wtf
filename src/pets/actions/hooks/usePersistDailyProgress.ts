@@ -11,7 +11,7 @@
  * - Debounces by PERSIST_DELAY_MS to batch rapid interactions
  * - Flushes immediately on visibilitychange → hidden (tab close, navigation, lock)
  * - Uses fetchFreshEvent to avoid stale-read overwrites
- * - Writes ONLY to content.missions — does NOT modify XP/level tags
+ * - Writes ONLY to content.missions — does NOT modify sats tags
  * - Skips publish if missions haven't changed from the persisted state
  * - Skips if all missions are already complete (useAwardDailyXp handles that)
  * - Pending/dirty flag ensures updates during in-flight publishes are not dropped
@@ -79,8 +79,8 @@ export function usePersistDailyProgress(
     if (!missions || missions.daily.length === 0) return;
 
     // Skip if all missions are complete — useAwardDailyXp is responsible for
-    // writing the final state together with XP/level tags. Persisting here
-    // would race with the XP-award write and could overwrite fresher tags.
+    // writing the final state together with sats tags. Persisting here
+    // would race with the sats-award write and could overwrite fresher tags.
     if (areAllDailyComplete(missions)) {
       dirtyRef.current = false;
       return;
@@ -120,7 +120,7 @@ export function usePersistDailyProgress(
       const event = await publishEventRef.current({
         kind: KIND_BLOBBONAUT_PROFILE,
         content,
-        // Preserve existing tags exactly — do NOT modify XP/level
+        // Preserve existing tags exactly — do NOT modify sats
         tags: prev.tags,
         prev,
       });

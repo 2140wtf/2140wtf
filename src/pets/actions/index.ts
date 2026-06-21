@@ -129,10 +129,21 @@ export {
 export { useDailyMissions } from './hooks/useDailyMissions';
 export { useDailyLoginBonus } from './hooks/useDailyLoginBonus';
 export type { DailyMissionView, UseDailyMissionsResult } from './hooks/useDailyMissions';
-export { useAwardDailyXp, useClaimMissionReward } from './hooks/useClaimMissionReward';
+export {
+  useAwardDailySats,
+  useAwardDailyXp,
+  useClaimMissionReward,
+} from './hooks/useClaimMissionReward';
 export { usePersistEvolutionProgress } from './hooks/usePersistEvolutionProgress';
 export { usePersistDailyProgress } from './hooks/usePersistDailyProgress';
-export type { AwardDailyXpRequest, AwardDailyXpResult, ClaimMissionRequest, ClaimMissionResult } from './hooks/useClaimMissionReward';
+export type {
+  AwardDailySatsRequest,
+  AwardDailySatsResult,
+  AwardDailyXpRequest,
+  AwardDailyXpResult,
+  ClaimMissionRequest,
+  ClaimMissionResult,
+} from './hooks/useClaimMissionReward';
 export { useRerollMission } from './hooks/useRerollMission';
 export type { RerollMissionRequest, RerollMissionResult } from './hooks/useRerollMission';
 export {
@@ -157,18 +168,6 @@ export type {
   MissionsContent,
 } from './lib/daily-missions';
 
-// Progression
-export {
-  xpToLevel,
-  levelToXp,
-  xpProgress,
-  xpToNextLevel,
-  getUnlocks,
-  buildXpTagUpdates,
-  MAX_LEVEL,
-} from '@/pets/core/lib/progression';
-export type { Unlocks } from '@/pets/core/lib/progression';
-
 // Missions content model
 export {
   parseProfileContent,
@@ -185,17 +184,19 @@ export { isItemOnCooldown, setItemCooldown, subscribeCooldowns } from './lib/ite
 export { ITEM_COOLDOWN_SUCCESS_MS, ITEM_COOLDOWN_FAILURE_MS } from './lib/item-cooldown';
 export { useItemCooldown } from './hooks/useItemCooldown';
 
-// Action XP
+// Action sats rewards
 export {
-  ACTION_XP,
-  INVENTORY_ACTION_XP,
-  DIRECT_ACTION_XP,
-  POOP_CLEANUP_XP,
-  calculateActionXP,
-  calculateInventoryActionXP,
-  applyXPGain,
-  formatXPGain,
-} from './lib/pets-xp';
+  ACTION_REWARDS,
+  INVENTORY_ACTION_REWARDS,
+  DIRECT_ACTION_REWARDS,
+  POOP_CLEANUP_REWARD,
+  calculateActionReward,
+  calculateInventoryActionReward,
+  applySatsReward,
+  formatSatsGain,
+  getSatsGainMessage,
+  getSatsRewardSummary,
+} from './lib/pets-action-rewards';
 
 // Streak tracking
 export {

@@ -4,7 +4,7 @@
  * Provides reactive access to the current day's daily missions.
  * Progress tracking is done via the tracker module (non-React).
  * Completion is implicit (derived from count/events vs target).
- * XP is awarded automatically when missions complete.
+ * Sats are awarded automatically when missions complete.
  *
  * State lives in a pubkey-scoped in-memory Map. On mount or account
  * switch, hydrates from kind 11125 content JSON if the session store
@@ -30,11 +30,9 @@ import {
   needsDailyReset,
   createDailyMissionsContent,
   areAllDailyComplete,
-  totalDailyXp,
   totalDailySats,
   getDefinition,
   MAX_DAILY_REROLLS,
-  DAILY_BONUS_XP,
   DAILY_BONUS_SATS,
 } from '../lib/daily-missions';
 
@@ -60,8 +58,6 @@ export interface DailyMissionView {
   progress: number;
   /** Whether mission is complete */
   complete: boolean;
-  /** XP reward */
-  xp: number;
   /** Sats reward */
   satsReward: number;
 }
@@ -84,14 +80,10 @@ export interface UseDailyMissionsResult {
   raw: MissionsContent | undefined;
   /** Whether all daily missions are complete */
   allComplete: boolean;
-  /** Total XP earned today (completed missions + bonus) */
-  todayXp: number;
   /** Total sats earned today (completed missions + bonus) */
   todaySats: number;
   /** Whether the daily bonus is unlocked (all missions complete) */
   bonusUnlocked: boolean;
-  /** Bonus XP amount */
-  bonusXp: number;
   /** Bonus sats amount */
   bonusSats: number;
   /**
@@ -218,14 +210,12 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
         target: m.target,
         progress: missionProgress(m),
         complete: isMissionComplete(m),
-        xp: def?.xp ?? 0,
         satsReward: def?.satsReward ?? 0,
       };
     });
   }, [raw]);
 
   const allComplete = raw ? areAllDailyComplete(raw) : false;
-  const todayXp = raw ? totalDailyXp(raw) : 0;
   const todaySats = raw ? totalDailySats(raw) : 0;
   const bonusUnlocked = allComplete;
   // noMissionsAvailable means the account genuinely has no hatched Pets.
@@ -252,10 +242,8 @@ export function useDailyMissions(options: UseDailyMissionsOptions = {}): UseDail
     missions,
     raw,
     allComplete,
-    todayXp,
     todaySats,
     bonusUnlocked,
-    bonusXp: DAILY_BONUS_XP,
     bonusSats: DAILY_BONUS_SATS,
     noMissionsAvailable,
     isLoading,
