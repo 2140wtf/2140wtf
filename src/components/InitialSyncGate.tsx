@@ -1150,7 +1150,8 @@ function PrivacyNoticeStep({
           <p className="text-sm text-muted-foreground leading-relaxed">
             <span className="font-medium text-foreground">2140 PETS.</span>{" "}
             Pet state and Blobbonaut profiles are public events (kinds 31124
-            and 11125) sent only to the ₿AO pets relay.
+            and 11125) sent only to the ₿AO pets relay at this stage of
+            development.
           </p>
         </div>
       </div>
