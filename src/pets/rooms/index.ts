@@ -53,7 +53,7 @@ export { PetsRoomEditor, PetsRoomEditorTrigger } from './components/PetsRoomEdit
 
 export {
   type PoopInstance,
-  XP_PER_POOP,
+  POOP_CLEANUP_REWARD,
   OVERFEED_THRESHOLD,
   OVERFEED_CHANCE,
   generateInitialPoops,

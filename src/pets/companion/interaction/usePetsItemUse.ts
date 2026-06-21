@@ -53,6 +53,11 @@ import {
 import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '@/pets/actions/lib/daily-mission-tracker';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
+import {
+  calculateInventoryActionReward,
+  formatSatsGain,
+} from '@/pets/actions/lib/pets-action-rewards';
+import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 
 import type { UseItemFunction } from './PetsActionsContextDef';
@@ -77,6 +82,8 @@ export interface UsePetsItemUseOptions {
    * Override profile - if provided, skip fetching.
    */
   profile?: BlobbonautProfile | null;
+  /** Called to update the profile event in the query cache after sats are awarded. */
+  updateProfileEvent?: (event: NostrEvent) => void;
 }
 
 export interface UsePetsItemUseResult {
@@ -124,6 +131,7 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
   // Fetch profile if not provided
   const { profile: fetchedProfile } = useBlobbonautProfile();
   const profile = options.profile ?? fetchedProfile;
+  const updateProfileEvent = options.updateProfileEvent;
   
   // Per-item cooldown tracking (ref to avoid re-renders)
   const itemCooldowns = useRef<Map<string, ItemCooldownEntry>>(new Map());
@@ -295,7 +303,7 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
 
       // Effective stat cap for this companion (category + rarity). Stored tags
       // remain clamped to 100 for backward compatibility; the effective cap is
-      // used for effect calculations so care actions can still grant XP/mission
+      // used for effect calculations so care actions can still grant sats/mission
       // progress when stored stats are already maxed.
       const effectiveMax = getEffectiveStatCap(
         companion.breedCategory,
@@ -376,6 +384,9 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       // Get streak updates (will only update if needed based on day)
       const streakUpdates = getStreakTagUpdates(companion) ?? {};
       
+      // ─── Apply sats reward to profile ───
+      const satsGained = calculateInventoryActionReward(action, 1);
+
       const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
@@ -418,15 +429,29 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
         });
       }
       
+      // Award sats to the player's profile (best-effort; failures are logged, not thrown)
+      if (satsGained > 0 && user?.pubkey) {
+        addProfileSats(nostr, publishEvent, user.pubkey, satsGained)
+          .then(({ event }) => {
+            if (updateProfileEvent) {
+              updateProfileEvent(event);
+            } else if (user?.pubkey) {
+              queryClient.setQueryData(['blobbonaut-profile', user.pubkey], event);
+            }
+          })
+          .catch((error) => console.error('[usePetsItemUse] Failed to add sats:', error));
+      }
+
       return { statsChanged };
     },
     onSuccess: (_, { itemId, action }) => {
       const shopItem = getShopItemById(itemId);
       const actionMeta = ACTION_METADATA[action];
-      
+      const satsText = formatSatsGain(calculateInventoryActionReward(action, 1));
+
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${shopItem?.name ?? 'item'} on your Pets.`,
+        description: `Used ${shopItem?.name ?? 'item'} on your Pets. ${satsText}`,
       });
       
       // Track daily mission progress

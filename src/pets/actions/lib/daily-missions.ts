@@ -51,8 +51,6 @@ export interface DailyMissionDefinition {
   target: number;
   /** Whether this mission tracks events or tallies */
   tracking: MissionTrackingType;
-  /** XP reward for completing this mission */
-  xp: number;
   /** Sats reward for completing this mission */
   satsReward: number;
   /** Selection weight (higher = more likely) */
@@ -69,9 +67,6 @@ export const MAX_DAILY_REROLLS = 3;
 /** Number of daily missions selected each day */
 export const DAILY_MISSION_COUNT = 3;
 
-/** XP bonus for completing all daily missions */
-export const DAILY_BONUS_XP = 50;
-
 /** Sats bonus for completing all daily missions */
 export const DAILY_BONUS_SATS = 25 * 100;
 
@@ -82,49 +77,49 @@ export const DAILY_MISSION_POOL: DailyMissionDefinition[] = [
   {
     id: 'interact_3', title: 'Quick Care',
     description: 'Interact with your 2140 PET 3 times',
-    action: 'interact', target: 3, tracking: 'tally', xp: 15, satsReward: 1000, weight: 10,
+    action: 'interact', target: 3, tracking: 'tally', satsReward: 1000, weight: 10,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'interact_6', title: 'Attentive Caretaker',
     description: 'Interact with your 2140 PET 6 times',
-    action: 'interact', target: 6, tracking: 'tally', xp: 30, satsReward: 2000, weight: 8,
+    action: 'interact', target: 6, tracking: 'tally', satsReward: 2000, weight: 8,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'feed_1', title: 'Snack Time',
     description: 'Feed your 2140 PET once',
-    action: 'feed', target: 1, tracking: 'tally', xp: 10, satsReward: 500, weight: 10,
+    action: 'feed', target: 1, tracking: 'tally', satsReward: 500, weight: 10,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'feed_2', title: 'Hungry 2140 PET',
     description: 'Feed your 2140 PET 2 times',
-    action: 'feed', target: 2, tracking: 'tally', xp: 20, satsReward: 1000, weight: 8,
+    action: 'feed', target: 2, tracking: 'tally', satsReward: 1000, weight: 8,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'feed_3', title: 'Feast Day',
     description: 'Feed your 2140 PET 3 times',
-    action: 'feed', target: 3, tracking: 'tally', xp: 35, satsReward: 1800, weight: 5,
+    action: 'feed', target: 3, tracking: 'tally', satsReward: 1800, weight: 5,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'sleep_1', title: 'Nap Time',
     description: 'Put your 2140 PET to sleep',
-    action: 'sleep', target: 1, tracking: 'tally', xp: 15, satsReward: 800, weight: 6,
+    action: 'sleep', target: 1, tracking: 'tally', satsReward: 800, weight: 6,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'take_photo_1', title: 'Snapshot',
     description: 'Take a photo of your 2140 PET',
-    action: 'take_photo', target: 1, tracking: 'tally', xp: 25, satsReward: 1200, weight: 4,
+    action: 'take_photo', target: 1, tracking: 'tally', satsReward: 1200, weight: 4,
     requiredStages: ['baby', 'adult'],
   },
   {
     id: 'take_photo_2', title: 'Photo Album',
     description: 'Take 2 photos of your 2140 PET',
-    action: 'take_photo', target: 2, tracking: 'tally', xp: 40, satsReward: 2200, weight: 2,
+    action: 'take_photo', target: 2, tracking: 'tally', satsReward: 2200, weight: 2,
     requiredStages: ['baby', 'adult'],
   },
 
@@ -132,49 +127,49 @@ export const DAILY_MISSION_POOL: DailyMissionDefinition[] = [
   {
     id: 'clean_1', title: 'Quick Cleanup',
     description: 'Clean your 2140 PET once',
-    action: 'clean', target: 1, tracking: 'tally', xp: 10, satsReward: 500, weight: 10,
+    action: 'clean', target: 1, tracking: 'tally', satsReward: 500, weight: 10,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'clean_2', title: 'Squeaky Clean',
     description: 'Clean your 2140 PET 2 times',
-    action: 'clean', target: 2, tracking: 'tally', xp: 20, satsReward: 1000, weight: 6,
+    action: 'clean', target: 2, tracking: 'tally', satsReward: 1000, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'sing_1', title: 'Sing Along',
     description: 'Sing a song to your 2140 PET',
-    action: 'sing', target: 1, tracking: 'tally', xp: 15, satsReward: 800, weight: 6,
+    action: 'sing', target: 1, tracking: 'tally', satsReward: 800, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'sing_2', title: 'Karaoke Session',
     description: 'Sing 2 songs to your 2140 PET',
-    action: 'sing', target: 2, tracking: 'tally', xp: 25, satsReward: 1500, weight: 3,
+    action: 'sing', target: 2, tracking: 'tally', satsReward: 1500, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'play_music_1', title: 'DJ Time',
     description: 'Play a song for your 2140 PET',
-    action: 'play_music', target: 1, tracking: 'tally', xp: 15, satsReward: 800, weight: 6,
+    action: 'play_music', target: 1, tracking: 'tally', satsReward: 800, weight: 6,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'play_music_2', title: 'Music Marathon',
     description: 'Play 2 songs for your 2140 PET',
-    action: 'play_music', target: 2, tracking: 'tally', xp: 25, satsReward: 1500, weight: 3,
+    action: 'play_music', target: 2, tracking: 'tally', satsReward: 1500, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'medicine_1', title: 'Health Check',
     description: 'Give medicine to your 2140 PET',
-    action: 'medicine', target: 1, tracking: 'tally', xp: 20, satsReward: 1000, weight: 5,
+    action: 'medicine', target: 1, tracking: 'tally', satsReward: 1000, weight: 5,
     requiredStages: ['egg', 'baby', 'adult'],
   },
   {
     id: 'medicine_2', title: 'Doctor Visit',
     description: 'Give medicine to your 2140 PET 2 times',
-    action: 'medicine', target: 2, tracking: 'tally', xp: 35, satsReward: 1800, weight: 3,
+    action: 'medicine', target: 2, tracking: 'tally', satsReward: 1800, weight: 3,
     requiredStages: ['egg', 'baby', 'adult'],
   },
 ];
@@ -383,23 +378,6 @@ export function trackEvolutionEvent(
 /** Whether all daily missions are complete */
 export function areAllDailyComplete(missions: MissionsContent): boolean {
   return missions.daily.length > 0 && missions.daily.every(isMissionComplete);
-}
-
-/** Total XP available from today's daily missions (including bonus if all complete) */
-export function totalDailyXp(missions: MissionsContent): number {
-  const base = missions.daily.reduce((sum, m) => {
-    const def = POOL_BY_ID.get(m.id);
-    return sum + (def && isMissionComplete(m) ? def.xp : 0);
-  }, 0);
-  const bonus = areAllDailyComplete(missions) ? DAILY_BONUS_XP : 0;
-  return base + bonus;
-}
-
-/** XP earned by a specific daily mission (0 if incomplete or unknown) */
-export function missionXp(missionId: string, mission: Mission): number {
-  const def = POOL_BY_ID.get(missionId);
-  if (!def || !isMissionComplete(mission)) return 0;
-  return def.xp;
 }
 
 /** Total sats available from today's daily missions (including bonus if all complete) */

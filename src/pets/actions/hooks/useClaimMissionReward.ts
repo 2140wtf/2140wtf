@@ -1,12 +1,13 @@
 /**
- * useAwardDailyXp - Award XP for completed daily missions
+ * useAwardDailySats - Award sats for completed daily missions
  *
  * Completion is implicit (derived from progress vs target).
- * This hook calculates the total XP earned today and persists
- * the updated XP total to kind 11125 tags.
+ * This hook calculates the total sats earned today, persists the updated
+ * sats balance to kind 11125 tags, and records the claim date so rewards
+ * are not double-claimed.
  *
  * Uses fetchFreshEvent to avoid stale-read overwrites when
- * multiple mutations race (e.g. item use XP + daily XP).
+ * multiple mutations race (e.g. action sats + daily sats).
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -22,21 +23,18 @@ import {
   updateBlobbonautTags,
   parseBlobbonautEvent,
 } from '@/pets/core/lib/pets';
-import { buildXpTagUpdates } from '@/pets/core/lib/progression';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import type { MissionsContent } from '@/pets/core/lib/missions';
-import { totalDailyXp, totalDailySats } from '../lib/daily-missions';
+import { totalDailySats } from '../lib/daily-missions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface AwardDailyXpRequest {
-  /** Current missions state to calculate XP from */
+export interface AwardDailySatsRequest {
+  /** Current missions state to calculate sats from */
   missions: MissionsContent;
 }
 
-export interface AwardDailyXpResult {
-  xpAwarded: number;
-  newTotalXp: number;
+export interface AwardDailySatsResult {
   satsAwarded: number;
   newSatsTotal: number;
 }
@@ -44,11 +42,11 @@ export interface AwardDailyXpResult {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
- * Hook to award XP and demo sats for completed daily missions.
+ * Hook to award demo sats for completed daily missions.
  *
  * @param updateProfileEvent - Callback to update profile in query cache
  */
-export function useAwardDailyXp(
+export function useAwardDailySats(
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void,
 ) {
   const { user } = useCurrentUser();
@@ -57,13 +55,12 @@ export function useAwardDailyXp(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ missions }: AwardDailyXpRequest): Promise<AwardDailyXpResult> => {
+    mutationFn: async ({ missions }: AwardDailySatsRequest): Promise<AwardDailySatsResult> => {
       if (!user?.pubkey) throw new Error('Must be logged in');
 
-      const xpToAward = totalDailyXp(missions);
       const satsToAward = totalDailySats(missions);
-      if (xpToAward <= 0 && satsToAward <= 0) {
-        return { xpAwarded: 0, newTotalXp: 0, satsAwarded: 0, newSatsTotal: 0 };
+      if (satsToAward <= 0) {
+        return { satsAwarded: 0, newSatsTotal: 0 };
       }
 
       // Fetch fresh profile from relays to avoid stale-read overwrites
@@ -78,33 +75,22 @@ export function useAwardDailyXp(
       const alreadyClaimedDate = freshProfile?.dailyRewardsClaimedAt;
       if (alreadyClaimedDate === missions.date) {
         return {
-          xpAwarded: 0,
-          newTotalXp: freshProfile?.xp ?? 0,
           satsAwarded: 0,
           newSatsTotal: freshProfile?.sats ?? 0,
         };
       }
 
-      const currentXp = freshProfile?.xp ?? 0;
-      const newTotalXp = currentXp + xpToAward;
       const currentSats = freshProfile?.sats ?? 0;
       const newSatsTotal = currentSats + satsToAward;
 
-      // Update XP, level, sats, and claimed-date tags
-      const updatedTags = updateBlobbonautTags(
-        prev?.tags ?? [],
-        {
-          ...buildXpTagUpdates(newTotalXp),
-          sats: newSatsTotal.toString(),
-          daily_rewards_claimed_at: missions.date,
-        },
-      );
+      // Update sats and claimed-date tags
+      const updatedTags = updateBlobbonautTags(prev?.tags ?? [], {
+        sats: newSatsTotal.toString(),
+        daily_rewards_claimed_at: missions.date,
+      });
 
       // Persist missions state to content field
-      const content = serializeProfileContent(
-        prev?.content ?? '',
-        { missions },
-      );
+      const content = serializeProfileContent(prev?.content ?? '', { missions });
 
       const event = await publishEvent({
         kind: KIND_BLOBBONAUT_PROFILE,
@@ -115,22 +101,22 @@ export function useAwardDailyXp(
 
       updateProfileEvent(event);
 
-      return { xpAwarded: xpToAward, newTotalXp, satsAwarded: satsToAward, newSatsTotal };
+      return { satsAwarded: satsToAward, newSatsTotal };
     },
-    onSuccess: ({ xpAwarded, satsAwarded }) => {
+    onSuccess: ({ satsAwarded }) => {
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
-      if (xpAwarded > 0 || satsAwarded > 0) {
+      if (satsAwarded > 0) {
         toast({
           title: 'Daily Rewards Claimed!',
-          description: `You earned ${xpAwarded} XP and ${satsAwarded.toLocaleString()} demo sats from daily missions.`,
+          description: `You earned ${satsAwarded.toLocaleString()} demo sats from daily missions.`,
         });
       }
     },
     onError: (error: Error) => {
       toast({
-        title: 'Failed to Award XP',
+        title: 'Failed to claim daily rewards',
         description: error.message,
         variant: 'destructive',
       });
@@ -138,7 +124,10 @@ export function useAwardDailyXp(
   });
 }
 
-// Legacy export name for backward compatibility during migration
-export const useClaimMissionReward = useAwardDailyXp;
-export type ClaimMissionRequest = AwardDailyXpRequest;
-export type ClaimMissionResult = AwardDailyXpResult;
+// Legacy export names for backward compatibility during migration
+export const useAwardDailyXp = useAwardDailySats;
+export const useClaimMissionReward = useAwardDailySats;
+export type AwardDailyXpRequest = AwardDailySatsRequest;
+export type AwardDailyXpResult = AwardDailySatsResult;
+export type ClaimMissionRequest = AwardDailySatsRequest;
+export type ClaimMissionResult = AwardDailySatsResult;
