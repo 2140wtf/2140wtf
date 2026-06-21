@@ -22,6 +22,11 @@ export interface FeedTopic {
   label: string;
   /** Single emoji icon (kept lightweight; no icon library dependency). */
   icon: string;
+  /** Optional image URL to use instead of an emoji icon. */
+  iconSrc?: string;
+  /** Optional hex pubkeys whose posts make up this topic feed. When present,
+   *  the feed is filtered by authors instead of `#t` tags. */
+  authors?: string[];
   /** `#t` values to filter on. All values are queried together (OR). */
   tags: string[];
 }
@@ -73,7 +78,9 @@ export const FEED_TOPICS: FeedTopic[] = [
     id: 'bao',
     label: 'BAO',
     icon: '⚡',
-    tags: ['bao', 'baomarkets', 'baobot', 'baobots'],
+    iconSrc: '/bao-icon.png',
+    authors: ['606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6'],
+    tags: [],
   },
   {
     id: 'trending',
