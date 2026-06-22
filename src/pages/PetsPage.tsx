@@ -1100,7 +1100,7 @@ function DashboardShell({ children, className }: DashboardShellProps) {
 // ─── Dashboard Drawer Type ────────────────────────────────────────────────────
 
 /** Which drawer is open; 'none' = room view visible */
-type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'earn' | 'shop' | 'wallet';
+type DashboardDrawer = 'none' | 'activity' | 'pets' | 'species' | 'earn' | 'shop' | 'wallet';
 
 // ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
@@ -1709,6 +1709,16 @@ function PetsDashboard({
   const handleStopEvolution = async () => {
     await stopEvolution();
   };
+
+  // Tap the egg in the room to start or complete hatching.
+  const handleEggClick = useCallback(() => {
+    if (!isEgg) return;
+    if (isIncubating) {
+      setShowHatchCeremony(true);
+    } else if (canStartIncubation) {
+      handleStartIncubation('start');
+    }
+  }, [isEgg, isIncubating, canStartIncubation, handleStartIncubation]);
   
   // Handle opening a direct action (now opens inline card)
   const handleDirectAction = (action: DirectAction) => {
@@ -2170,9 +2180,9 @@ function PetsDashboard({
         >
           <ScrollArea style={{ height: 248 }}>
             <div className="max-w-2xl mx-auto w-full pb-4 pt-2">
-              {(activeDrawer === 'missions' || activeDrawer === 'earn') && (
+              {activeDrawer === 'earn' && (
                 <MissionsTabContent
-                  initialPane={activeDrawer === 'earn' ? 'bao-markets' : 'journey'}
+                  initialPane="bao-markets"
                   profile={profile}
                   updateProfileEvent={updateProfileEvent}
                   isIncubating={isIncubating}
@@ -2241,12 +2251,6 @@ function PetsDashboard({
         </div>
 
         <SubHeaderBar className="relative !top-0" innerClassName="md:min-h-0 min-h-[50px]">
-          <TabButton label="Quests" active={activeDrawer === 'missions'} onClick={() => toggleDrawer('missions')} className="translate-y-0">
-            <span className="flex items-center gap-1.5">
-              <Target className="size-4" />
-              <span className="text-sm">Quests</span>
-            </span>
-          </TabButton>
           <TabButton label="Activity" active={activeDrawer === 'activity'} onClick={() => toggleDrawer('activity')} className="translate-y-2">
             <span className="flex items-center gap-1.5">
               <Activity className="size-4" />
@@ -2432,6 +2436,7 @@ function PetsDashboard({
               petsReaction={petsReaction}
               interactionReaction={isEgg ? undefined : interactionReaction}
               stageRef={stageRef}
+              onEggClick={handleEggClick}
             />
           ) : undefined
         }
