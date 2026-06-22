@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
+import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
@@ -28,7 +31,23 @@ import type { PetsCompanion } from '@/pets/core/lib/pets';
 export default function PetsBattlePage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
+  const { config } = useAppContext();
   const { updateProfileEvent } = useBlobbonautProfile();
+
+  const { seedPhrase: cashuSeedPhrase } = useCashuSeed();
+  const relayUrls = useMemo(
+    () =>
+      (config.relayMetadata?.relays ?? [])
+        .filter((r) => r.read !== false || r.write !== false)
+        .map((r) => r.url)
+        .filter(Boolean),
+    [config.relayMetadata?.relays],
+  );
+  const baoWallet = useBaoCashuWallet(
+    cashuSeedPhrase ?? '',
+    user ?? { pubkey: '', signer: {} as never },
+    relayUrls,
+  );
 
   useSeoMeta({
     title: 'Battle Arena | 2140 Pets',
@@ -45,13 +64,14 @@ export default function PetsBattlePage() {
   const [matchOptions, setMatchOptions] = useState({
     prizeAmount: DEFAULT_PRIZE_SATS,
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
+    isAiOpponent: false,
   });
   const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats'>('demo-sats');
   const [pendingPayout, setPendingPayout] = useState(false);
   const selectedPetsRef = useRef<{ pet1: PetsCompanion; pet2: PetsCompanion } | null>(null);
 
   const { state, inputRef, startMatch, resetMatch, onFinishRef } = useBattleGame(matchOptions);
-  const payout = useBattlePayout(updateProfileEvent);
+  const payout = useBattlePayout(updateProfileEvent, baoWallet);
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
@@ -107,9 +127,10 @@ export default function PetsBattlePage() {
     pet2: PetsCompanion,
     prizeAmount: number,
     mode: 'demo-sats' | 'btc-sats',
+    isAiOpponent: boolean,
   ) => {
     selectedPetsRef.current = { pet1, pet2 };
-    setMatchOptions((prev) => ({ ...prev, prizeAmount }));
+    setMatchOptions((prev) => ({ ...prev, prizeAmount, isAiOpponent }));
     setMatchMode(mode);
     startMatch(pet1, pet2);
   };

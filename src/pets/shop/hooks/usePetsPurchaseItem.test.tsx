@@ -80,11 +80,11 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(sendToken).toHaveBeenCalledWith(1_000, 'Pets shop: Apple');
+    expect(sendToken).toHaveBeenCalledWith(250, 'Pets shop: Apple');
 
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
     expect(published).toBeDefined();
@@ -102,7 +102,7 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toContain('Insufficient external wallet balance');
@@ -128,20 +128,20 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(sendToken).not.toHaveBeenCalled();
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
-    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19000');
+    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19750');
   });
 
   it('validates that the demo-sats cost is affordable', async () => {
-    const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 500))!;
+    const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 100))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 1_000, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toContain('Insufficient demo sats');

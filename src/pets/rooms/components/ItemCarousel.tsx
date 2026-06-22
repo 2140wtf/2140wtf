@@ -179,6 +179,11 @@ export function ItemCarousel({
         <span className="text-[10px] sm:text-xs font-medium text-foreground/80 mt-0.5 w-16 sm:w-20 text-center truncate">
           {current.label}
         </span>
+        {current.meta && (
+          <span className="text-[9px] sm:text-[10px] text-muted-foreground text-center truncate w-16 sm:w-20">
+            {current.meta}
+          </span>
+        )}
         {isThisActive && <Loader2 className="size-3.5 animate-spin text-primary absolute bottom-0.5" />}
       </button>
 

@@ -53,12 +53,8 @@ import {
 import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '@/pets/actions/lib/daily-mission-tracker';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
-import {
-  calculateInventoryActionReward,
-  formatSatsGain,
-} from '@/pets/actions/lib/pets-action-rewards';
-import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
+import { consumeStorageItem } from '@/pets/core/lib/profile-sats';
 
 import type { UseItemFunction } from './PetsActionsContextDef';
 
@@ -284,6 +280,12 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       if (!shopItem.effect) {
         throw new Error('This item has no effect');
       }
+
+      // Validate the user owns the item
+      const owned = profile.storage.find((s) => s.itemId === itemId);
+      if (!owned || owned.quantity <= 0) {
+        throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
+      }
       
       // For eggs, validate that items have applicable effects
       const isEgg = companion.stage === 'egg';
@@ -384,9 +386,6 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       // Get streak updates (will only update if needed based on day)
       const streakUpdates = getStreakTagUpdates(companion) ?? {};
       
-      // ─── Apply sats reward to profile ───
-      const satsGained = calculateInventoryActionReward(action, 1);
-
       const petsTags = updatePetsTags(updatedTags, {
         ...statsUpdate,
         ...streakUpdates,
@@ -417,8 +416,20 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
         });
       }
       
+      // Consume one unit from storage and update the profile cache
+      if (user?.pubkey) {
+        consumeStorageItem(nostr, publishEvent, user.pubkey, itemId)
+          .then(({ event }) => {
+            if (updateProfileEvent) {
+              updateProfileEvent(event);
+            } else if (user?.pubkey) {
+              queryClient.setQueryData(['blobbonaut-profile', user.pubkey], event);
+            }
+          })
+          .catch((error) => console.error('[usePetsItemUse] Failed to consume storage:', error));
+      }
+
       // ─── Invalidate Queries ───
-      // Items are free to use — no storage decrement needed.
       queryClient.invalidateQueries({ queryKey: ['pets-collection', user.pubkey] });
 
       // Invalidate interactions query so social projection reflects the new 1124.
@@ -428,30 +439,16 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
           queryKey: ['pets-interactions', coordinate],
         });
       }
-      
-      // Award sats to the player's profile (best-effort; failures are logged, not thrown)
-      if (satsGained > 0 && user?.pubkey) {
-        addProfileSats(nostr, publishEvent, user.pubkey, satsGained)
-          .then(({ event }) => {
-            if (updateProfileEvent) {
-              updateProfileEvent(event);
-            } else if (user?.pubkey) {
-              queryClient.setQueryData(['blobbonaut-profile', user.pubkey], event);
-            }
-          })
-          .catch((error) => console.error('[usePetsItemUse] Failed to add sats:', error));
-      }
 
       return { statsChanged };
     },
     onSuccess: (_, { itemId, action }) => {
       const shopItem = getShopItemById(itemId);
       const actionMeta = ACTION_METADATA[action];
-      const satsText = formatSatsGain(calculateInventoryActionReward(action, 1));
 
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${shopItem?.name ?? 'item'} on your Pets. ${satsText}`,
+        description: `Used ${shopItem?.name ?? 'item'} on your Pets.`,
       });
       
       // Track daily mission progress
