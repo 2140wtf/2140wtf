@@ -19,6 +19,7 @@
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
 import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
+import { EggTapTarget } from './EggTapTarget';
 import { ROOM_FLOOR_RATIO, getPetsBodyBottomInset } from '../lib/room-layout-schema';
 import { cn } from '@/lib/utils';
 
@@ -177,6 +178,11 @@ export function PetsRoomStage({
           </div>
         </div>
       </div>
+      <EggTapTarget
+        stageRef={stageRef}
+        onClick={onEggClick}
+        enabled={isEgg && !!onEggClick}
+      />
     </div>
   );
 }
