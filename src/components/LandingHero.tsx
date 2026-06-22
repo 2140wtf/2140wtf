@@ -99,15 +99,9 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
   const { config } = useAppContext();
 
   // Public feed tab visibility mirrors the flags used by the logged-in tab bar.
-  const showGlobalFeed = (() => {
-    try {
-      const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
-      return stored !== null ? stored === 'true' : false;
-    } catch {
-      return false;
-    }
-  })();
-
+  // Global is always shown for guests — there is no settings UI for them to
+  // opt into it, and it is one of the core public feeds they should be able to
+  // switch to from the landing hero.
   const showDittoFeed = (() => {
     try {
       const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
@@ -304,13 +298,11 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
                 onClick={() => onTabChange('communities')}
               />
             )}
-            {showGlobalFeed && (
-              <TabButton
-                label="Global"
-                active={activeTab === 'global'}
-                onClick={() => onTabChange('global')}
-              />
-            )}
+            <TabButton
+              label="Global"
+              active={activeTab === 'global'}
+              onClick={() => onTabChange('global')}
+            />
             {FEED_TOPICS.map((topic) => (
               <TabButton
                 key={`guest-topic:${topic.id}`}
