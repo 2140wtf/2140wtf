@@ -187,9 +187,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const isTopicTab = !!activeTopic;
   const isAuthorTopic = !!activeTopic?.authors && activeTopic.authors.length > 0;
 
-  // When logged out (and not on a kind-specific page), show the "hot" sorted
-  // feed instead of the noisy global feed so new visitors see quality content.
-  const useTopFeedForLoggedOut = !user && !kinds;
+  // When logged out and the 2140.wtf (Ditto) tab is active, show the "hot"
+  // sorted curated feed instead of the noisy global feed. Guests can now switch
+  // tabs, so only force the top feed while the Ditto tab is selected.
+  const useTopFeedForLoggedOut = !user && !kinds && activeTab === 'ditto';
 
   // When the 2140.wtf tab is active (logged in), show the same hot-sorted curated feed.
   // Disabled on kind-specific pages — the 2140.wtf tab is not shown there.
@@ -449,6 +450,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
         <LandingHero
           onLoginClick={() => setLoginDialogOpen(true)}
           onSignupClick={startSignup}
+          activeTab={activeTab}
+          onTabChange={handleSetActiveTab}
         />
       )}
 
@@ -456,13 +459,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
       {header}
 
-      {/* Tabs (logged in) */}
-      {user && (
+      {/* Tabs — shown for logged-in users. Guests switch feeds via the tab bar
+          rendered inside LandingHero. */}
+      {user && !kinds && (
         <SubHeaderBar>
-          {globalFirst && (
+          {globalFirst && user && (
             <TabButton label="All" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
           )}
-          {!isKindSpecificPage && hasLovedPeople && (
+          {!isKindSpecificPage && user && hasLovedPeople && (
             <TabButton label="Loved" active={activeTab === 'loved'} onClick={() => handleSetActiveTab('loved')}>
               <span className="flex items-center justify-center gap-1">
                 <Heart className={cn('size-3.5', activeTab === 'loved' && 'fill-red-500 text-red-500')} />
@@ -470,7 +474,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
               </span>
             </TabButton>
           )}
-          <TabButton label="Follows" active={activeTab === 'follows'} onClick={() => handleSetActiveTab('follows')} />
+          {user && (
+            <TabButton label="Follows" active={activeTab === 'follows'} onClick={() => handleSetActiveTab('follows')} />
+          )}
           {!isKindSpecificPage && showDittoFeed && (
             <TabButton label={config.appName} active={activeTab === 'ditto'} onClick={() => handleSetActiveTab('ditto')} />
           )}
@@ -480,7 +486,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {!globalFirst && (isKindSpecificPage || showGlobalFeed) && (
             <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
           )}
-          {showSavedFeedTabs && FEED_TOPICS.map((topic) => (
+          {!isKindSpecificPage && !tagFilters && FEED_TOPICS.map((topic) => (
             <TabButton
               key={`topic:${topic.id}`}
               label={topic.label}

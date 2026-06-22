@@ -4,12 +4,19 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
+import { useAppContext } from '@/hooks/useAppContext';
 import { themePresets, coreToTokens, type CoreThemeColors } from '@/themes';
 import { cn } from '@/lib/utils';
+import { getStorageKey } from '@/lib/storageKey';
+import { FEED_TOPICS } from '@/lib/feedTopics';
+import { SubHeaderBar } from '@/components/SubHeaderBar';
+import { TabButton } from '@/components/TabButton';
 
 interface LandingHeroProps {
   onLoginClick: () => void;
   onSignupClick: () => void;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 /** Converts an HSL token string like "258 70% 60%" to a CSS hsl() value. */
@@ -87,8 +94,52 @@ function ThemeSwatch({
   );
 }
 
-export function LandingHero({ onLoginClick, onSignupClick }: LandingHeroProps) {
+export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChange }: LandingHeroProps) {
   const { theme, customTheme, applyCustomTheme, setTheme } = useTheme();
+  const { config } = useAppContext();
+
+  // Public feed tab visibility mirrors the flags used by the logged-in tab bar.
+  const showGlobalFeed = (() => {
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
+  })();
+
+  const showDittoFeed = (() => {
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
+      return stored !== null ? stored === 'true' : true;
+    } catch {
+      return true;
+    }
+  })();
+
+  const showCommunityFeed = (() => {
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showCommunityFeed'));
+      return stored !== null ? stored === 'true' : false;
+    } catch {
+      return false;
+    }
+  })();
+
+  const communityLabel = (() => {
+    try {
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'community'));
+      if (stored) {
+        const community = JSON.parse(stored);
+        return community.label || 'Community';
+      }
+    } catch {
+      // Fall through
+    }
+    return 'Community';
+  })();
+
+  const appName = config.appName;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -234,6 +285,52 @@ export function LandingHero({ onLoginClick, onSignupClick }: LandingHeroProps) {
           )}
         </div>
       </div>
+
+      {/* ── Public feed tabs (logged-out only) ── */}
+      {onTabChange && (
+        <div className="landing-hero-fade" style={{ animationDelay: '320ms' }}>
+          <SubHeaderBar noArc innerClassName="px-4">
+            {showDittoFeed && (
+              <TabButton
+                label={appName}
+                active={activeTab === 'ditto'}
+                onClick={() => onTabChange('ditto')}
+              />
+            )}
+            {showCommunityFeed && (
+              <TabButton
+                label={communityLabel}
+                active={activeTab === 'communities'}
+                onClick={() => onTabChange('communities')}
+              />
+            )}
+            {showGlobalFeed && (
+              <TabButton
+                label="Global"
+                active={activeTab === 'global'}
+                onClick={() => onTabChange('global')}
+              />
+            )}
+            {FEED_TOPICS.map((topic) => (
+              <TabButton
+                key={`guest-topic:${topic.id}`}
+                label={topic.label}
+                active={activeTab === topic.id}
+                onClick={() => onTabChange(topic.id)}
+              >
+                <span className="flex items-center justify-center gap-1">
+                  {topic.iconSrc ? (
+                    <img src={topic.iconSrc} alt="" className="size-3.5 object-contain rounded-sm" />
+                  ) : (
+                    <span>{topic.icon}</span>
+                  )}
+                  {topic.label}
+                </span>
+              </TabButton>
+            ))}
+          </SubHeaderBar>
+        </div>
+      )}
 
       {/* ── Divider into feed ── */}
       <div className="border-b border-border" />
