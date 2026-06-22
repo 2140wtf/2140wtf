@@ -111,7 +111,10 @@ export function PetsStageVisual({
     } : undefined;
 
     return (
-      <div className={cn('relative', containerClass, className)}>
+      <div
+        className={cn('relative', containerClass, className, onEggClick && 'pointer-events-auto cursor-pointer')}
+        onClick={onEggClick}
+      >
         <PetsEggVisual
           companion={companion}
           size={size as PetsEggSize}
@@ -120,7 +123,6 @@ export function PetsStageVisual({
           statusEffects={eggStatusEffects}
           tourVisualState={tourVisualState}
           onTourEggClick={onTourEggClick}
-          onClick={onEggClick}
           className="size-full"
         />
         <FloatingMusicNotes active={showMusicNotes} />

@@ -48,6 +48,8 @@ export interface PetsRoomStageProps {
   petsReaction: PetsReactionState;
   /** Temporary interaction reaction (sparkles, bubbles, hearts, body animation). */
   interactionReaction?: InteractionReactionState;
+  /** Called when the egg is tapped on the room stage (starts/completes hatching). */
+  onEggClick?: () => void;
   stageRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -68,6 +70,7 @@ export function PetsRoomStage({
   hasDevOverride,
   petsReaction,
   interactionReaction,
+  onEggClick,
   stageRef,
 }: PetsRoomStageProps) {
   // Body-bottom inset: how much of the visual box is empty below the body
@@ -163,6 +166,7 @@ export function PetsRoomStage({
                 recipe={hasDevOverride ? undefined : statusRecipe}
                 recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
                 emotion={effectiveEmotion}
+                onEggClick={onEggClick}
                 className="!size-full"
               />
               {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
