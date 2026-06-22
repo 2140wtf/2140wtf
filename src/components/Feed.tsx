@@ -162,7 +162,15 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     if (!showSavedFeedTabs && (isSavedFeed || isHashtag || isGeotag)) {
       return globalFirst ? 'global' : (user ? 'follows' : 'global');
     }
-    if (!kinds) return rawActiveTab; // Home feed: no clamping
+    if (!kinds) {
+      // Home feed: no clamping for logged-in users. For guests, make sure the
+      // persisted tab is actually visible in the public LandingHero tab bar.
+      if (!user) {
+        if (rawActiveTab === 'ditto' && !showDittoFeed) return 'global';
+        if (rawActiveTab === 'communities' && !showCommunityFeed) return 'global';
+      }
+      return rawActiveTab;
+    }
     if (rawActiveTab === 'global') return 'global';
     if (rawActiveTab === 'follows' && user) return 'follows';
     // `globalFirst` pages default to Global even when logged in.
