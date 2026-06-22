@@ -1,4 +1,4 @@
-import { ARENA_WIDTH, FIREBALL_HIT_STUN_MS, HIT_KNOCKBACK_X, HIT_KNOCKBACK_Y } from './constants';
+import { ARENA_WIDTH, COUNTDOWN_SECONDS, FIREBALL_HIT_STUN_MS, HIT_KNOCKBACK_X, HIT_KNOCKBACK_Y } from './constants';
 import { computeFighterAttributes, deriveFighterStats } from './fighterStats';
 import type {
   BattleFighter,
@@ -53,8 +53,9 @@ export function createInitialState(
     ],
     projectiles: [],
     winner: null,
-    timeRemaining: roundDurationSeconds,
+    timeRemaining: COUNTDOWN_SECONDS,
     lastFrameAt: now,
+    roundDurationSeconds,
   };
 }
 
@@ -318,7 +319,7 @@ export function stepBattleState(
       return {
         ...state,
         status: 'fighting',
-        timeRemaining: -timeRemaining,
+        timeRemaining: state.roundDurationSeconds,
         lastFrameAt: now,
       };
     }
@@ -391,5 +392,6 @@ export function createSetupState(
     winner: null,
     timeRemaining: roundDurationSeconds,
     lastFrameAt: performance.now(),
+    roundDurationSeconds,
   };
 }

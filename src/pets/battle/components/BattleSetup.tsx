@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Swords, Trophy, Info } from 'lucide-react';
+import { Swords, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -18,7 +18,7 @@ import type { BattleMode } from '../lib/battleInteraction';
 
 export interface BattleSetupProps {
   ownerPubkey: string;
-  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: BattleMode) => void;
+  onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: BattleMode, isAiOpponent: boolean) => void;
   className?: string;
 }
 
@@ -58,11 +58,10 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
   }, [eligiblePets, ownerPubkey, pet2Id]);
 
   const walletMode = profile?.walletMode ?? 'demo-sats';
-  const isRealDisabled = walletMode === 'btc-sats';
 
   const handleStart = () => {
     if (!pet1 || !pet2) return;
-    onStart(pet1, pet2, DEFAULT_PRIZE_SATS, walletMode);
+    onStart(pet1, pet2, DEFAULT_PRIZE_SATS, walletMode, pet2Id === 'rival');
   };
 
   if (isLoading) {
@@ -137,23 +136,15 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} demo sats
+              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} {walletMode === 'btc-sats' ? 'BAO sats' : 'demo sats'}
             </p>
             <p className="text-muted-foreground">
-              One prize per day. Real sats mode coming soon.
+              {walletMode === 'btc-sats'
+                ? 'Real BAO signet/demo sats paid from your BAO wallet.'
+                : 'One prize per day in demo mode.'}
             </p>
           </div>
         </div>
-
-        {isRealDisabled && (
-          <div className="flex items-start gap-2 rounded-lg bg-amber-100 border border-amber-200 p-3 text-sm text-amber-950 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-100">
-            <Info className="size-4 shrink-0 text-amber-800 dark:text-amber-200" />
-            <p>
-              Your profile is in real-sats mode. Demo battle rewards are paused
-              until real Cashu payouts are enabled.
-            </p>
-          </div>
-        )}
 
         <Button
           size="lg"

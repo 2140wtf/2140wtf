@@ -9,8 +9,9 @@ export const FIGHTER_MAX_ENERGY = 100;
 
 export const MOVE_SPEED = 260;
 export const BLOCK_MOVE_SPEED = 90;
-export const JUMP_VELOCITY = -620;
-export const GRAVITY = 1800;
+// Coordinate system: y = 0 is the floor, positive y is up.
+export const JUMP_VELOCITY = 620;
+export const GRAVITY = -1800;
 
 export const SWORD_DAMAGE = 12;
 export const SWORD_RANGE = 100;
@@ -30,7 +31,8 @@ export const HIT_KNOCKBACK_X = 90;
 export const HIT_KNOCKBACK_Y = 60;
 
 export const DEFAULT_ROUND_DURATION_SECONDS = 60;
-export const DEFAULT_PRIZE_SATS = 5_000;
+// Tuned to the ~500-sat shop economy: a win covers several staples.
+export const DEFAULT_PRIZE_SATS = 500;
 export const COUNTDOWN_SECONDS = 3;
 
 export const KEYBOARD_CONTROLS = {

@@ -83,7 +83,7 @@ export function useBaoCashuWallet(
       return;
     }
     const npub = nip19.npubEncode(pubkey);
-    claimBaoSignetFaucet(faucetUrl, { npub, amount: 200 })
+    claimBaoSignetFaucet(faucetUrl, { npub, amount: 2_140 })
       .then((res) => {
         if (res?.token) {
           void walletRef.current.receiveToken(res.token.trim());
