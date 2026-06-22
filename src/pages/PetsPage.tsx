@@ -1683,13 +1683,13 @@ function PetsDashboard({
   }, [profile, isCurrentCompanion, canBeCompanion, companion.d, companion.name, ensureCanonicalBeforeAction, publishEvent, updateProfileEvent, invalidateProfile]);
   
   // Handler for starting incubation with explicit mode from dialog
-  const handleStartIncubation = async (mode: StartIncubationMode, stopOtherD?: string) => {
+  const handleStartIncubation = useCallback(async (mode: StartIncubationMode, stopOtherD?: string) => {
     try {
       await startIncubation({ mode, stopOtherD });
     } catch (error) {
       console.error('Failed to start incubation:', error);
     }
-  };
+  }, [startIncubation]);
   
   // Handler for starting evolution
   const handleStartEvolution = async () => {
