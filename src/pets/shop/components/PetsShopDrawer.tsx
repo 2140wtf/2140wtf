@@ -1,0 +1,146 @@
+// src/pets/shop/components/PetsShopDrawer.tsx
+
+import { useMemo } from 'react';
+import { ShoppingBag, Plus, Wallet as WalletIcon, Loader2 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+
+import { usePetsPurchaseItem } from '../hooks/usePetsPurchaseItem';
+import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
+import type { BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
+import type { ShopItem, ShopItemCategory } from '../types/shop.types';
+
+interface PetsShopDrawerProps {
+  profile: BlobbonautProfile | null;
+  externalWallet?: (CashuWalletState & CashuWalletActions) | null;
+}
+
+const CATEGORY_ORDER: ShopItemCategory[] = ['food', 'toy', 'medicine', 'hygiene', 'energy'];
+const CATEGORY_LABELS: Record<ShopItemCategory, string> = {
+  food: 'Food',
+  toy: 'Toys',
+  medicine: 'Medicine',
+  hygiene: 'Hygiene',
+  energy: 'Energy',
+};
+
+function effectSummary(effect: ShopItem['effect']): string {
+  if (!effect) return '';
+  const parts: string[] = [];
+  if (effect.hunger) parts.push(`hunger ${effect.hunger > 0 ? '+' : ''}${effect.hunger}`);
+  if (effect.happiness) parts.push(`happy ${effect.happiness > 0 ? '+' : ''}${effect.happiness}`);
+  if (effect.health) parts.push(`health ${effect.health > 0 ? '+' : ''}${effect.health}`);
+  if (effect.hygiene) parts.push(`hygiene ${effect.hygiene > 0 ? '+' : ''}${effect.hygiene}`);
+  if (effect.energy) parts.push(`energy ${effect.energy > 0 ? '+' : ''}${effect.energy}`);
+  return parts.join(' · ');
+}
+
+export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps) {
+  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, externalWallet);
+
+  const isBtcMode = profile?.walletMode === 'btc-sats';
+  const walletBalance = externalWallet?.totalBalance ?? 0;
+  const walletLoading = externalWallet?.loading ?? false;
+  const spendableSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
+
+  const storageMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of profile?.storage ?? []) {
+      map.set(item.itemId, item.quantity);
+    }
+    return map;
+  }, [profile?.storage]);
+
+  const grouped = useMemo(() => {
+    const groups: Record<ShopItemCategory, ShopItem[]> = {
+      food: [],
+      toy: [],
+      medicine: [],
+      hygiene: [],
+      energy: [],
+    };
+    for (const item of PETS_SHOP_ITEMS) {
+      if (item.status === 'live') {
+        groups[item.type].push(item);
+      }
+    }
+    return groups;
+  }, []);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center gap-2">
+          <ShoppingBag className="size-5 text-primary" />
+          <h2 className="font-semibold">Pet Shop</h2>
+        </div>
+        <Badge variant="secondary" className="flex items-center gap-1.5">
+          <WalletIcon className="size-3" />
+          {walletLoading && spendableSats === 0 ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <span>{spendableSats.toLocaleString()} {isBtcMode ? 'BAO sats' : 'demo sats'}</span>
+          )}
+        </Badge>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-6">
+          {CATEGORY_ORDER.map((category) => {
+            const items = grouped[category];
+            if (items.length === 0) return null;
+            return (
+              <div key={category}>
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">{CATEGORY_LABELS[category]}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {items.map((item) => {
+                    const owned = storageMap.get(item.id) ?? 0;
+                    const canAfford = spendableSats >= item.price;
+                    return (
+                      <Card key={item.id} className={cn('overflow-hidden', !canAfford && 'opacity-70')}>
+                        <CardContent className="p-3">
+                          <div className="flex items-start gap-3">
+                            <div className="text-3xl shrink-0">{item.icon}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium text-sm truncate">{item.name}</p>
+                                {owned > 0 && (
+                                  <Badge variant="outline" className="shrink-0 text-xs">
+                                    ×{owned}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{effectSummary(item.effect)}</p>
+                              <div className="flex items-center justify-between mt-2 gap-2">
+                                <span className="text-sm font-semibold">{item.price.toLocaleString()} sats</span>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={!canAfford || isPending}
+                                  onClick={() => purchase({ itemId: item.id, price: item.price, quantity: 1 })}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  <Plus className="size-3 mr-1" />
+                                  Buy
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}

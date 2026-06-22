@@ -133,7 +133,7 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
 
       {state.fighters.map((fighter, index) => (
         <BattlePetSprite
-          key={fighter.pet.d ?? index}
+          key={`fighter-${index}-${fighter.pet.d}`}
           fighter={fighter}
           scale={scale}
         />

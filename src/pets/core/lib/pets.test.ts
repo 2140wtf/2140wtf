@@ -18,13 +18,16 @@ describe('parseWalletModeTag', () => {
     expect(parseWalletModeTag([['wallet_mode', 'unknown']])).toBe('demo-sats');
   });
 
-  it('treats legacy "real" and "bao" as demo-sats while real-sats is disabled', () => {
+  it('treats legacy "real" as demo-sats while real-sats is disabled', () => {
     expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('demo-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('demo-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('demo-sats');
   });
 
-  it('maps legacy "real" and "bao" modes to "btc-sats" when real-sats is enabled', () => {
+  it('always maps BAO signet/demo and btc-sats to btc-sats', () => {
+    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');
+    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('btc-sats');
+  });
+
+  it('maps legacy "real" to "btc-sats" only when real-sats is enabled', () => {
     setPetsRealSatsEnabled(true);
     expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('btc-sats');
     expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');

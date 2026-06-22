@@ -58,14 +58,14 @@ export const DEFAULT_INCUBATION_TIME = 345600;
 
 // ─── Onboarding Constants ─────────────────────────────────────────────────────
 
-/** Initial demo sats given to new Blobbonauts (players must claim daily rewards to earn more). */
-export const INITIAL_BLOBBONAUT_SATS = 0;
+/** Initial demo sats given to new Blobbonauts (~one meal + a battle entry). */
+export const INITIAL_BLOBBONAUT_SATS = 2_140;
 
 /** Cost in demo sats to reroll/generate another egg preview during onboarding */
-export const PETS_PREVIEW_REROLL_SATS = 1_000;
+export const PETS_PREVIEW_REROLL_SATS = 100;
 
-/** Cost in demo sats to adopt a 2140 PET from the preview */
-export const PETS_ADOPTION_SATS = 10_000;
+/** Cost in demo sats to adopt a 2140 PET from the preview (first pet is free) */
+export const PETS_ADOPTION_SATS = 0;
 
 /** Sats auto-claimed from the BAO faucet for every new 2140 PET egg. */
 export const BAO_PET_STARTER_GRANT_SATS = 2_140;
@@ -1482,7 +1482,9 @@ export function setPetsRealSatsEnabled(enabled: boolean): void {
 
 export function parseWalletModeTag(tags: string[][]): 'demo-sats' | 'btc-sats' {
   const value = getTagValue(tags, 'wallet_mode');
-  if (petsRealSatsEnabled && (value === 'btc-sats' || value === 'real' || value === 'bao')) {
+  // BAO signet/demo sats are always settled through the external BAO Cashu
+  // wallet. The legacy 'real' flag stays gated until real BTC is enabled.
+  if (value === 'btc-sats' || value === 'bao' || (petsRealSatsEnabled && value === 'real')) {
     return 'btc-sats';
   }
   return 'demo-sats';
@@ -1494,7 +1496,9 @@ export function buildBlobbonautTags(pubkey: string): string[][] {
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
-    ['wallet_mode', 'demo-sats'],
+    // New profiles default to the BAO signet/demo Cashu rail so the pet
+    // economy shares the same wallet as bao.markets.
+    ['wallet_mode', 'bao'],
   ];
 }
 
@@ -1643,7 +1647,7 @@ export const DEPRECATED_PETS_TAG_NAMES = new Set([
  * These tags are controlled by the application and may be overwritten.
  */
 export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
-  'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage',
+  'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage', 'sats',
   // Daily reward tags
   'daily_rewards_claimed_at', 'daily_login_last_day', 'daily_login_streak',
   // BAO trading reward tags

@@ -202,6 +202,23 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
     setIsTapWiggling(false);
   }, []);
 
+  // Fallback timeout so the egg never gets stuck unclickable if the CSS
+  // animation overrides the tap-wiggle animation and suppresses onAnimationEnd.
+  const wiggleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isTapWiggling) {
+      wiggleTimeoutRef.current = setTimeout(() => {
+        setIsTapWiggling(false);
+      }, 650);
+    }
+    return () => {
+      if (wiggleTimeoutRef.current) {
+        clearTimeout(wiggleTimeoutRef.current);
+        wiggleTimeoutRef.current = null;
+      }
+    };
+  }, [isTapWiggling]);
+
   // Tour: auto-wiggle effect for show_hatch_card and glowing_waiting_click states
   const shouldAutoWiggle = tourVisualState === 'show_hatch_card' || tourVisualState === 'glowing_waiting_click';
   const autoWiggleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
