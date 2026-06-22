@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ArrowLeftRight, Cat } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -16,6 +16,9 @@ import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import { timeAgo } from '@/lib/timeAgo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
+import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
@@ -67,6 +70,9 @@ import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
 import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
 import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
+import { usePetsPurchaseItem } from '@/pets/shop/hooks/usePetsPurchaseItem';
+import { PetsShopDrawer } from '@/pets/shop/components/PetsShopDrawer';
+import { BaoWalletDrawer } from '@/pets/wallet/components/BaoWalletDrawer';
 
 import {
   PlayMusicModal,
@@ -328,6 +334,7 @@ function BreedCategoryPicker({
 
 function PetsContent() {
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent, isPending: isPublishing } = usePetsNostrPublish();
   const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
@@ -338,6 +345,22 @@ function PetsContent() {
     invalidate: invalidateProfile,
     updateProfileEvent,
   } = useBlobbonautProfile();
+
+  // BAO Cashu wallet shared with bao.markets (same seed, same signet mint).
+  const { seedPhrase: cashuSeedPhrase } = useCashuSeed();
+  const relayUrls = useMemo(
+    () =>
+      (config.relayMetadata?.relays ?? [])
+        .filter((r) => r.read !== false || r.write !== false)
+        .map((r) => r.url)
+        .filter(Boolean),
+    [config.relayMetadata?.relays],
+  );
+  const baoWallet = useBaoCashuWallet(
+    cashuSeedPhrase ?? '',
+    user ?? { pubkey: '', signer: {} as never },
+    relayUrls,
+  );
   
   // Auto-normalize profiles missing pettingLevel tag
   useBlobbonautProfileNormalization({
@@ -573,14 +596,19 @@ function PetsContent() {
     }
   }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
   
+  // ─── Shop Purchase Hook ───
+  const { mutateAsync: purchaseItem, isPending: isPurchasingItem } = usePetsPurchaseItem(profile ?? null, baoWallet);
+
   // ─── Use Inventory Item Hook ───
-  const { mutateAsync: executeUseItem, isPending: isUsingItem } = usePetsUseInventoryItem({
+  const { mutateAsync: executeUseItem, isPending: itemUsePending } = usePetsUseInventoryItem({
     companion,
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
     updateProfileEvent,
   });
+
+  const isUsingItem = itemUsePending || isPurchasingItem;
   
   // Handler for using an item (always uses once)
   const handleUseItem = useCallback(async (itemId: string, action: InventoryAction) => {
@@ -1020,6 +1048,8 @@ function PetsContent() {
       onUseItem={handleUseItem}
       onDirectAction={handleDirectAction}
       isUsingItem={isUsingItem}
+      purchaseItem={purchaseItem}
+      baoWallet={baoWallet}
       isDirectActionPending={isDirectActionPending}
       actionInProgress={actionInProgress}
       isPublishing={isPublishing}
@@ -1070,7 +1100,7 @@ function DashboardShell({ children, className }: DashboardShellProps) {
 // ─── Dashboard Drawer Type ────────────────────────────────────────────────────
 
 /** Which drawer is open; 'none' = room view visible */
-type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'earn';
+type DashboardDrawer = 'none' | 'missions' | 'activity' | 'pets' | 'species' | 'earn' | 'shop' | 'wallet';
 
 // ─── Main Pets Dashboard ────────────────────────────────────────────────────
 
@@ -1083,6 +1113,8 @@ interface PetsDashboardProps {
   onUseItem: (itemId: string, action: InventoryAction) => Promise<void>;
   onDirectAction: (action: DirectAction) => Promise<void>;
   isUsingItem: boolean;
+  purchaseItem: (req: { itemId: string; price: number; quantity: number }) => Promise<unknown>;
+  baoWallet: (CashuWalletState & CashuWalletActions) | null | undefined;
   isDirectActionPending: boolean;
   actionInProgress: string | null;
   isPublishing: boolean;
@@ -1124,6 +1156,8 @@ function PetsDashboard({
   onUseItem,
   onDirectAction,
   isUsingItem,
+  purchaseItem,
+  baoWallet,
   isDirectActionPending,
   actionInProgress,
   isPublishing,
@@ -1811,29 +1845,41 @@ function PetsDashboard({
 
   // Handle tap-based item use.
   // Non-food actions use this path from room bars, and the fridge still uses it for food for now.
+  // If the item is not owned, we auto-purchase one unit before applying it.
   // Triggers a temporary interaction reaction based on the action type.
   // For 'clean' actions, detects whether the Pets was visibly dirty before
   // the action and uses 'clean_complete' if the dirt was fully removed.
-  const handleUseItemFromTab = useCallback((itemId: string) => {
+  const handleUseItemFromTab = useCallback(async (itemId: string) => {
     const action = getActionForItem(itemId);
     if (!action || isUsingItem) return;
+    const shopItem = getShopItemById(itemId);
+    if (!shopItem) return;
+
     clearTimeout(actionCleanupRef.current);
     setUsingItemId(itemId);
 
-    // Snapshot hygiene before the action for clean_complete detection.
-    // "Visibly dirty" = hygiene below the warning threshold (< 70).
-    const wasDirtyBefore = action === 'clean'
-      && currentStats.hygiene < SEVERITY_THRESHOLDS.warning;
+    try {
+      // Auto-purchase if the player doesn't own the item.
+      const owned = profile?.storage.find((s) => s.itemId === itemId);
+      if (!owned || owned.quantity <= 0) {
+        await purchaseItem({ itemId, price: shopItem.price, quantity: 1 });
+      }
 
-    // Map inventory action to reaction type (feed/play/clean/medicine → reaction).
-    const reactionType = INVENTORY_TO_REACTION[action] ?? 'feed';
+      // Snapshot hygiene before the action for clean_complete detection.
+      // "Visibly dirty" = hygiene below the warning threshold (< 70).
+      const wasDirtyBefore = action === 'clean'
+        && currentStats.hygiene < SEVERITY_THRESHOLDS.warning;
 
-    // For non-clean actions, trigger immediately (facial expression before action completes).
-    if (action !== 'clean') {
-      triggerInteractionReaction(reactionType);
-    }
+      // Map inventory action to reaction type (feed/play/clean/medicine → reaction).
+      const reactionType = INVENTORY_TO_REACTION[action] ?? 'feed';
 
-    onUseItem(itemId, action).then(() => {
+      // For non-clean actions, trigger immediately (facial expression before action completes).
+      if (action !== 'clean') {
+        triggerInteractionReaction(reactionType);
+      }
+
+      await onUseItem(itemId, action);
+
       // Clear guide only after the action succeeds
       if (guideTargetRef.current?.targetItemId === itemId) setGuideTarget(null);
 
@@ -1845,8 +1891,7 @@ function PetsDashboard({
         // check whether the item's hygiene effect crossed the threshold.
         // The action result doesn't return the new hygiene value directly,
         // so we use the item's known effect + snapshot.
-        const shopItem = getShopItemById(itemId);
-        const hygieneGain = shopItem?.effect?.hygiene ?? 0;
+        const hygieneGain = shopItem.effect?.hygiene ?? 0;
         const projectedHygiene = currentStats.hygiene + hygieneGain;
         const isNowClean = projectedHygiene >= SEVERITY_THRESHOLDS.warning;
 
@@ -1856,11 +1901,11 @@ function PetsDashboard({
           triggerInteractionReaction('clean');
         }
       }
-    }).finally(() => {
+    } finally {
       setUsingItemId(null);
       actionCleanupRef.current = setTimeout(() => setActionOverrideEmotion(null), 1500);
-    });
-  }, [isUsingItem, onUseItem, currentStats.hygiene, triggerInteractionReaction]);
+    }
+  }, [isUsingItem, onUseItem, currentStats.hygiene, triggerInteractionReaction, profile?.storage, purchaseItem]);
 
   // ─── Food drag-to-feed ───────────────────────────────────────────────────
   //
@@ -2185,6 +2230,12 @@ function PetsDashboard({
               {activeDrawer === 'species' && (
                 <SpeciesTabContent />
               )}
+              {activeDrawer === 'shop' && (
+                <PetsShopDrawer profile={profile ?? null} externalWallet={baoWallet} />
+              )}
+              {activeDrawer === 'wallet' && (
+                <BaoWalletDrawer />
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -2218,6 +2269,18 @@ function PetsDashboard({
             <span className="flex items-center gap-1.5">
               <TrendingUp className="size-4" />
               <span className="text-sm">Earn</span>
+            </span>
+          </TabButton>
+          <TabButton label="Shop" active={activeDrawer === 'shop'} onClick={() => toggleDrawer('shop')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <ShoppingBag className="size-4" />
+              <span className="text-sm">Shop</span>
+            </span>
+          </TabButton>
+          <TabButton label="Wallet" active={activeDrawer === 'wallet'} onClick={() => toggleDrawer('wallet')} className="translate-y-0">
+            <span className="flex items-center gap-1.5">
+              <Wallet className="size-4" />
+              <span className="text-sm">Wallet</span>
             </span>
           </TabButton>
         </SubHeaderBar>
@@ -2661,7 +2724,7 @@ function HomeBar({
   const carouselItems = useMemo<CarouselEntry[]>(() => {
     const toys = getLiveShopItems()
       .filter(i => i.type === 'toy')
-      .map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name }));
+      .map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name, meta: `${i.price} sats` }));
     return [
       ...toys,
       {
@@ -2798,7 +2861,7 @@ function KitchenBar({
 
   // Combined carousel entries (food + energy drink)
   const kitchenEntries = useMemo<CarouselEntry[]>(() =>
-    allKitchenItems.map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name })),
+    allKitchenItems.map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name, meta: `${i.price} sats` })),
   [allKitchenItems]);
 
   // Set of food item IDs for quick lookup (overfeed only for these)

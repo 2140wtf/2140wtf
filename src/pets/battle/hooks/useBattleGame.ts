@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useBattleControls, consumeAttackTriggers } from '../lib/controls';
+import { computeAiInput } from '../lib/ai';
 import {
   createInitialState,
   createSetupState,
@@ -30,6 +31,7 @@ export function useBattleGame(
   options: BattleMatchOptions = {
     prizeAmount: 0,
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
+    isAiOpponent: false,
   },
 ): UseBattleGameReturn {
   const placeholder = createPlaceholderCompanion();
@@ -105,6 +107,9 @@ export function useBattleGame(
       if (stateRef.current.status === 'finished') return;
 
       const input = inputRef.current;
+      if (options.isAiOpponent) {
+        input.p2 = computeAiInput(stateRef.current, now);
+      }
       const next = stepBattleState(stateRef.current, input, now);
       consumeAttackTriggers(input);
       setState(next);
@@ -118,7 +123,7 @@ export function useBattleGame(
 
     rafRef.current = requestAnimationFrame(step);
     return stopLoop;
-  }, [displayState.status, inputRef, setState, stopLoop]);
+  }, [displayState.status, inputRef, options.isAiOpponent, setState, stopLoop]);
 
   return {
     state: displayState,

@@ -58,11 +58,14 @@ export interface BattleState {
   winner: BattlePlayerIndex | null;
   timeRemaining: number;
   lastFrameAt: number;
+  roundDurationSeconds: number;
 }
 
 export interface BattleMatchOptions {
   prizeAmount: number;
   roundDurationSeconds: number;
+  /** When true, player 2 is controlled by AI instead of keyboard/touch. */
+  isAiOpponent?: boolean;
 }
 
 export interface BattleMatchResult {

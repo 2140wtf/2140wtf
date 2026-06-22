@@ -56,7 +56,7 @@ export function useInitialSync() {
     if (isSyncDone(config.appId, user.pubkey)) return "complete";
     return "idle";
   });
-  const syncAttempted = useRef(false);
+  const syncedUserRef = useRef<string | null>(null);
 
   // Capture the config timestamps in refs so the main sync effect can compare
   // against the values at the moment it starts without depending on them.
@@ -82,26 +82,28 @@ export function useInitialSync() {
   useEffect(() => {
     if (!user) {
       setPhase("idle");
-      syncAttempted.current = false;
+      syncedUserRef.current = null;
       return;
     }
 
     // Skip sync if already completed for this user
     if (isSyncDone(config.appId, user.pubkey)) {
       setPhase("complete");
+      syncedUserRef.current = user.pubkey;
       return;
     }
 
-    // Don't re-run if we already attempted for this user
-    if (syncAttempted.current) return;
-    syncAttempted.current = true;
+    // Only start one sync attempt per logged-in user. The guard is keyed by
+    // pubkey so a changing user object reference (e.g. from context updates)
+    // doesn't restart the flow, while a genuine account change resets it.
+    if (syncedUserRef.current === user.pubkey) return;
+    syncedUserRef.current = user.pubkey;
 
     setPhase("syncing");
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
     let cancelled = false;
-    let completeTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const doSync = async () => {
       let foundSettings = false;
@@ -375,12 +377,6 @@ export function useInitialSync() {
 
       if (foundSettings) {
         setPhase("found");
-        // Auto-complete after a brief moment so user sees the success state
-        completeTimeout = setTimeout(() => {
-          if (cancelled) return;
-          markSyncComplete();
-          setPhase("complete");
-        }, 1200);
       } else {
         setPhase("not-found");
       }
@@ -391,7 +387,6 @@ export function useInitialSync() {
     return () => {
       cancelled = true;
       clearTimeout(timeout);
-      if (completeTimeout) clearTimeout(completeTimeout);
       controller.abort();
     };
   }, [
@@ -402,6 +397,19 @@ export function useInitialSync() {
     queryClient,
     markSyncComplete,
   ]);
+
+  // Once settings are found, auto-advance to "complete" after a short delay
+  // so the user sees the success state. Using a dedicated effect guarantees
+  // the transition happens even if React remounts the component (Strict Mode)
+  // between "found" and "complete".
+  useEffect(() => {
+    if (phase !== "found") return;
+    const id = setTimeout(() => {
+      markSyncComplete();
+      setPhase("complete");
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [phase, markSyncComplete]);
 
   const markComplete = useCallback(() => {
     markSyncComplete();
