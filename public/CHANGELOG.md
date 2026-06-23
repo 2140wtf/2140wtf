@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.24.0] - 2026-06-22
+
+This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade ₿AO prediction markets, vote in live poll cubes, chat in private groups, send encrypted messages, and carry a Cashu wallet — all under a fresh 2140.wtf look with light themes and a reorganized home.
+
+### Added
+- 2140 Pets — adopt Blobbonaut eggs, hatch them, browse species, train stats, battle rivals, and earn sats rewards
+- ₿AO Markets — explore prediction markets with price history, volume charts, and BTC Map links
+- Polls — vote on live polls and switch between card and 3D cube views
+- Group Chat — create private groups, manage members, and rotate secrets for safety
+- Direct Messages — encrypted inbox with unread notifications and cross-device read sync
+- Cashu Wallet — hold, send, and receive sats, with optional Nutzap receiver and BAO demo top-ups
+- Roadstr — discover geocached treasures, alerts, and reports on an interactive map
+- Public feed tabs and a polished guest feed for logged-out visitors
+- Fresh 2140.wtf branding and a light-themed default with new presets
+- Privacy & Publishing preferences to control what you share
+- Article cards with reading-time estimates and richer quoted-post previews
+- In-app release notes toast so you always know what's new
+
+### Changed
+- Home is now your Nostr feed; the landing page moved to /about
+- Main menu reorganized around Polls, ₿AO Markets, Chat, Store, and Pets
+- Market detail dialogs put the chart first and hide empty volume sections
+- Pets economy switched from demo coins to real satoshis
+- Default relay list focuses reads on Ditto Pub and writes across primal and damus
+
+### Fixed
+- Duplicate articles no longer appear in My Articles
+- Android WebView no longer gets stuck at half screen height
+- Search pagination stops correctly at the end of results
+- Market charts now synthesize history when a market has no trades yet
+
+### Removed
+- Old live Nostr feed preview removed from the about page
+- Stale Android SandboxPlugin removed
+
 ## [2.23.4] - 2026-06-18
 
 A performance tune-up that makes profiles and feeds load faster by trimming away redundant background network requests. Tabs, dialogs, and zap buttons now only fetch what they need, when you need it.
