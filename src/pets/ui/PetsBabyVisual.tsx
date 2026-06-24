@@ -24,6 +24,7 @@ import type { ExternalEyeOffset, PetsReactionState, PetsRenderMode } from './lib
 import type { PetsVisualRecipe } from './lib/recipe';
 import type { PetsEmotion } from './lib/emotion-types';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
+import type { PetsFacing } from './hooks/usePetsDirectInteraction';
 import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsBabySvgRenderer } from './PetsBabySvgRenderer';
@@ -46,6 +47,8 @@ export interface PetsBabyVisualProps {
   emotion?: PetsEmotion;
   /** Body-level visual effects — for manual/external use only. */
   bodyEffects?: BodyEffectsSpec;
+  /** Horizontal facing direction. `left` mirrors the visual with scaleX(-1). */
+  facing?: PetsFacing;
   className?: string;
 }
 
@@ -61,6 +64,7 @@ export function PetsBabyVisual({
   recipeLabel,
   emotion = 'neutral',
   bodyEffects,
+  facing,
   className,
 }: PetsBabyVisualProps) {
   const isSleeping = isPetsSleeping(pets);
@@ -71,13 +75,15 @@ export function PetsBabyVisual({
   const isCompanion = renderMode === 'companion';
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
+  const isFacingLeft = facing === 'left';
+  const effectiveLookMode = isFacingLeft ? 'forward' : lookMode;
 
   // ── Eye hooks ──────────────────────────────────────────────────────────────
 
   usePetsEyes(containerRef, {
     isSleeping,
     maxMovement: 2,
-    lookMode,
+    lookMode: effectiveLookMode,
     disableBlink,
     disableTracking: isCompanion,
   });
@@ -105,6 +111,7 @@ export function PetsBabyVisual({
         !isCompanion && effectiveReaction === 'singing' && 'animate-pets-bounce',
         className,
       )}
+      style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
     >
       <PetsBabySvgRenderer
         pets={pets}
