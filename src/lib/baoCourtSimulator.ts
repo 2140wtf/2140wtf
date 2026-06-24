@@ -5,6 +5,12 @@
  * selection events to the configured relay pool so a single real user can
  * experience the full peer-to-peer FROST appeal flow. All stakes use fake
  * sats; no real Bitcoin is required.
+ *
+ * NOTE: A coordinator-based design is intentionally NOT used here. Relying on a
+ * single coordinator is custodial and contradicts the protocol goal of a fully
+ * independent jury. Demo rooms therefore use deterministic, roster-derived
+ * values (room id, dispute id, jury selection, DKG seed) that every juror can
+ * compute locally without any privileged party.
  */
 
 import { generateSecretKey, getPublicKey } from 'nostr-tools';
@@ -31,7 +37,7 @@ export interface SimulatedJuror extends JurorProfile {
 export interface SimulatedJury {
   readonly jurors: SimulatedJuror[];
   readonly selected: SelectedJuror[];
-  /** Unsigned selection event template — must be signed and published by the coordinator. */
+  /** Unsigned selection event template — each juror signs and publishes their own copy. */
   readonly selectionTemplate: ReturnType<typeof buildSelectionEvent>;
 }
 
@@ -205,7 +211,7 @@ export async function publishSimulatedJury(
     })),
   ];
 
-  // Build selection event from the coordinator (we use juror #1 / the user).
+  // Build selection event independently (no coordinator; each juror publishes their own copy).
   const selectionTemplate = buildSelectionEvent({
     disputeId,
     marketId,
@@ -288,13 +294,6 @@ export function deriveMockDisputeId(
 ): string {
   const input = [roomId, String(round), ...[...memberPubkeys].sort()].join('|');
   return bytesToHex(sha256(new TextEncoder().encode(input)));
-}
-
-/** Elect the coordinator as the lexicographically smallest member pubkey. */
-export function electCoordinator(memberPubkeys: readonly string[]): string {
-  const sorted = [...memberPubkeys].sort();
-  if (sorted.length === 0) throw new Error('Cannot elect coordinator from empty roster');
-  return sorted[0];
 }
 
 /** Build deterministic selected juror profiles from a settled roster. */
@@ -388,12 +387,17 @@ export function parseDemoMembershipEvent(event: NostrEvent): DemoRoomMember | nu
   };
 }
 
-/** Build a mock BAO Court dispute event for a demo room. */
+/**
+ * Build a mock BAO Court dispute event for a demo room.
+ *
+ * Every juror publishes their own copy independently. There is no coordinator;
+ * the publishing juror is both challenger and publisher for their local view.
+ */
 export function buildMockDisputeEvent(params: {
   disputeId: string;
   roomId: string;
   category: string;
-  coordinatorPubkey: string;
+  publisherPubkey: string;
   originalOutcome?: string;
   proposedOutcome?: string;
   disputeDeadline?: number;
@@ -402,7 +406,7 @@ export function buildMockDisputeEvent(params: {
     disputeId,
     roomId,
     category,
-    coordinatorPubkey,
+    publisherPubkey,
     originalOutcome = 'Original outcome',
     proposedOutcome = `Demo dispute: ${category}`,
     disputeDeadline = nowSeconds() + 86_400,
@@ -413,10 +417,10 @@ export function buildMockDisputeEvent(params: {
     disputeId,
     originalOutcome,
     proposedOutcome,
-    challengerPubkey: coordinatorPubkey,
+    challengerPubkey: publisherPubkey,
     evidenceHashes: [],
     disputeDeadline,
-    publisherPubkey: coordinatorPubkey,
+    publisherPubkey,
   });
 
   template.tags.push(['demo', 'court-simulator']);

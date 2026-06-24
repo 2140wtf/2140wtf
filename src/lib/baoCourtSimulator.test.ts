@@ -10,7 +10,6 @@ import {
   deriveDkgSeed,
   deriveMockDisputeId,
   deriveRoomId,
-  electCoordinator,
   generateSimulatedJurors,
   loadSimulatedSelection,
   parseDemoMembershipEvent,
@@ -112,10 +111,6 @@ describe('BAO Court simulator', () => {
       const membersB = ['a'.repeat(64), 'c'.repeat(64)];
       expect(deriveMockDisputeId(roomId, membersA)).toBe(deriveMockDisputeId(roomId, membersA));
       expect(deriveMockDisputeId(roomId, membersA)).not.toBe(deriveMockDisputeId(roomId, membersB));
-    });
-
-    it('elects the lexicographically smallest pubkey as coordinator', () => {
-      expect(electCoordinator(['b'.repeat(64), 'a'.repeat(64), 'c'.repeat(64)])).toBe('a'.repeat(64));
     });
 
     it('builds and parses demo membership events', () => {

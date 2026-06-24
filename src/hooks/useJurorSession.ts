@@ -304,10 +304,12 @@ export function useJurorSession(
     setIsPending(true);
     try {
       if (!demoMode) {
-        // Real ceremonies perform aggregation through a coordinator that has
-        // collected threshold partial signatures from the selected jurors.
+        // NOTE: A coordinator-dependent aggregation design is not desired. In a
+        // fully independent ceremony any juror (or an aggregator they designate)
+        // can combine threshold partial signatures once they are available. The
+        // non-demo path is left unimplemented until that independent flow is wired.
         throw new Error(
-          "Attestation aggregation in non-demo mode is not implemented; it requires a coordinator.",
+          "Attestation aggregation in non-demo mode is not implemented; use the independent aggregator flow.",
         );
       }
       if (!demoSharesRef.current) {
