@@ -23,6 +23,7 @@ import type { PetsLookMode } from './lib/usePetsEyes';
 import type { PetsEmotion } from './lib/emotion-types';
 import type { PetsVisualRecipe } from './lib/recipe';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
+import type { PetsFacing } from './hooks/usePetsDirectInteraction';
 
 export type { PetsLookMode };
 
@@ -56,6 +57,14 @@ export interface PetsStageVisualProps {
   onTourEggClick?: () => void;
   /** Generic click callback for egg taps (passed through to EggGraphic) */
   onEggClick?: () => void;
+  /** Horizontal facing direction. `left` mirrors the visual with scaleX(-1). */
+  facing?: PetsFacing;
+  /** Optional pointer handlers for direct hover/click interactions. */
+  interactionProps?: {
+    onPointerEnter?: () => void;
+    onPointerLeave?: () => void;
+    onClick?: () => void;
+  };
   className?: string;
 }
 
@@ -83,6 +92,8 @@ export function PetsStageVisual({
   tourVisualState,
   onTourEggClick,
   onEggClick,
+  facing,
+  interactionProps,
   className,
 }: PetsStageVisualProps) {
   const { stage } = companion;
@@ -97,6 +108,8 @@ export function PetsStageVisual({
 
   const showMusicNotes = effectiveReaction === 'listening';
   const containerClass = SIZE_CONFIG[size];
+
+  const isFacingLeft = facing === 'left';
 
   if (stage === 'egg') {
     // Derive egg status effects from the recipe
@@ -113,7 +126,9 @@ export function PetsStageVisual({
     return (
       <div
         className={cn('relative', containerClass, className, onEggClick && 'pointer-events-auto cursor-pointer')}
+        style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
         onClick={onEggClick}
+        {...interactionProps}
       >
         <PetsEggVisual
           companion={companion}
@@ -132,11 +147,15 @@ export function PetsStageVisual({
 
   if (stage === 'baby' && petsForVisual) {
     return (
-      <div className={cn('relative', containerClass, className)}>
+      <div
+        className={cn('relative', containerClass, className)}
+        {...interactionProps}
+      >
         <PetsBabyVisual
           pets={petsForVisual}
           reaction={effectiveReaction}
           lookMode={lookMode}
+          facing={facing}
           disableBlink={disableBlink}
           recipe={recipe}
           recipeLabel={recipeLabel}
@@ -151,11 +170,15 @@ export function PetsStageVisual({
 
   if (stage === 'adult' && petsForVisual) {
     return (
-      <div className={cn('relative', containerClass, className)}>
+      <div
+        className={cn('relative', containerClass, className)}
+        {...interactionProps}
+      >
         <PetsAdultVisual
           pets={petsForVisual}
           reaction={effectiveReaction}
           lookMode={lookMode}
+          facing={facing}
           disableBlink={disableBlink}
           recipe={recipe}
           recipeLabel={recipeLabel}

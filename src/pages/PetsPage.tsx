@@ -159,8 +159,10 @@ import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonau
 import { buildGuideTarget, getGuideRoomDirection, type GuideTarget } from '@/pets/rooms/lib/stat-guide-config';
 import { getActionEmotion, SEVERITY_THRESHOLDS } from '@/pets/ui/lib/status-reactions';
 import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/pets/ui/hooks/useInteractionReaction';
+import { usePetsDirectInteraction } from '@/pets/ui/hooks/usePetsDirectInteraction';
 import { useFoodDrag, type UseFoodDragReturn } from '@/pets/rooms/hooks/useFoodDrag';
 import type { PetsEmotion } from '@/pets/ui/lib/emotions';
+import type { InteractionReactionState } from '@/pets/ui/hooks/useInteractionReaction';
 
 
 
@@ -1205,6 +1207,24 @@ function PetsDashboard({
   // Produces emotion overrides, body animations, and particle overlays.
   // Placed before useCanonicalSync so the trigger can be passed directly.
   const { state: interactionReaction, trigger: triggerInteractionReaction } = useInteractionReaction();
+
+  // Direct hover/click interactions on the room-stage pet (turn + reactions).
+  const {
+    facing: directFacing,
+    isHovered: isDirectHovered,
+    interactionReaction: directInteractionReaction,
+    interactionProps: directInteractionProps,
+  } = usePetsDirectInteraction({ disabled: isSleeping || isEgg });
+
+  // Blend care-action reactions with direct hover/poke reactions.
+  const blendedInteractionReaction = useMemo<InteractionReactionState>(() => ({
+    emotionOverride: directInteractionReaction.emotionOverride ?? interactionReaction.emotionOverride,
+    bodyAnimation: directInteractionReaction.bodyAnimation ?? interactionReaction.bodyAnimation,
+    sparkles: directInteractionReaction.sparkles || interactionReaction.sparkles,
+    bubbles: directInteractionReaction.bubbles || interactionReaction.bubbles,
+    hearts: directInteractionReaction.hearts || interactionReaction.hearts,
+    isActive: directInteractionReaction.isActive || interactionReaction.isActive,
+  }), [directInteractionReaction, interactionReaction]);
 
   // ─── Automatic Canonical Sync ───
   // On mount (or companion switch), persist accumulated decay and consolidate
@@ -2434,7 +2454,10 @@ function PetsDashboard({
               effectiveEmotion={effectiveEmotion}
               hasDevOverride={hasDevOverride}
               petsReaction={petsReaction}
-              interactionReaction={isEgg ? undefined : interactionReaction}
+              interactionReaction={isEgg ? undefined : blendedInteractionReaction}
+              facing={directFacing}
+              isHovered={isDirectHovered}
+              interactionProps={directInteractionProps}
               stageRef={stageRef}
               onEggClick={handleEggClick}
             />

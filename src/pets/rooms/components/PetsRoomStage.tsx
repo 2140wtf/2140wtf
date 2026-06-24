@@ -34,6 +34,7 @@ import type { PetsEmotion } from '@/pets/ui/lib/emotion-types';
 import type { PetsVisualRecipe } from '@/pets/ui/lib/recipe';
 import type { PetsReactionState } from '@/pets/actions';
 import type { InteractionReactionState } from '@/pets/ui/hooks/useInteractionReaction';
+import type { PetsFacing } from '@/pets/ui/hooks/usePetsDirectInteraction';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,16 @@ export interface PetsRoomStageProps {
   interactionReaction?: InteractionReactionState;
   /** Called when the egg is tapped on the room stage (starts/completes hatching). */
   onEggClick?: () => void;
+  /** Current horizontal facing direction. */
+  facing?: PetsFacing;
+  /** Whether the pointer is hovering the pet (drives hover-lean animation). */
+  isHovered?: boolean;
+  /** Pointer handlers for direct hover/click interactions. */
+  interactionProps?: {
+    onPointerEnter?: () => void;
+    onPointerLeave?: () => void;
+    onClick?: () => void;
+  };
   stageRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -78,6 +89,9 @@ export function PetsRoomStage({
   petsReaction,
   interactionReaction,
   onEggClick,
+  facing,
+  isHovered = false,
+  interactionProps,
   stageRef,
 }: PetsRoomStageProps) {
   // Body-bottom inset: how much of the visual box is empty below the body
@@ -211,37 +225,48 @@ export function PetsRoomStage({
                 />
               )}
 
-              {/* Sway wrapper (rotate animation) — separate from bob to avoid transform conflict. */}
+              {/* Interaction wrapper — receives pointer events and sways. */}
               <div
                 data-pets-visual
-                className={cn(
-                  'relative transition-all duration-500 pointer-events-none',
-                  interactionReaction?.bodyAnimation,
-                )}
+                className="relative transition-all duration-500 pointer-events-auto cursor-pointer"
                 style={{
                   width: '100%',
                   aspectRatio: '1',
+                  transformOrigin: 'center bottom',
                   ...(!isSleeping ? {
                     animation: `pets-sway ${6 - (currentStats.happiness / 100) * 2}s ease-in-out infinite`,
                   } : undefined),
                 }}
+                {...interactionProps}
               >
-                <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
-                <PetsStageVisual
-                  companion={companion}
-                  size="lg"
-                  animated={!isSleeping}
-                  reaction={petsReaction}
-                  recipe={hasDevOverride ? undefined : statusRecipe}
-                  recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
-                  emotion={effectiveEmotion}
-                  onEggClick={onEggClick}
-                  className="!size-full"
-                />
-                {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
-                <ReactionSparkles active={interactionReaction?.sparkles ?? false} />
-                <ReactionBubbles active={interactionReaction?.bubbles ?? false} showBackdrop={false} />
-                <FloatingSocialHearts active={interactionReaction?.hearts ?? false} />
+                {/* Body animation wrapper — isolated from sway so direct-interaction
+                    animations (hover-lean, poke-wiggle) don't override it. */}
+                <div
+                  className={cn(
+                    'absolute inset-0',
+                    interactionReaction?.bodyAnimation,
+                    isHovered && 'animate-pets-hover-lean',
+                  )}
+                  style={{ transformOrigin: 'center bottom' }}
+                >
+                  <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
+                  <PetsStageVisual
+                    companion={companion}
+                    size="lg"
+                    animated={!isSleeping}
+                    reaction={petsReaction}
+                    recipe={hasDevOverride ? undefined : statusRecipe}
+                    recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                    emotion={effectiveEmotion}
+                    onEggClick={onEggClick}
+                    facing={facing}
+                    className="!size-full"
+                  />
+                  {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
+                  <ReactionSparkles active={interactionReaction?.sparkles ?? false} />
+                  <ReactionBubbles active={interactionReaction?.bubbles ?? false} showBackdrop={false} />
+                  <FloatingSocialHearts active={interactionReaction?.hearts ?? false} />
+                </div>
               </div>
             </div>
           </div>

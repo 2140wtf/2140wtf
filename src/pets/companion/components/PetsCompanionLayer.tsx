@@ -30,6 +30,7 @@ import { DEFAULT_COMPANION_CONFIG } from '../core/companionConfig';
 import { calculateGroundY } from '../utils/movement';
 import { getPetsMouthAnchor } from '../utils/mouthAnchor';
 import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
+import { usePetsDirectInteraction } from '@/pets/ui/hooks/usePetsDirectInteraction';
 import { buildSleepingRecipe } from '@/pets/ui/lib/recipe';
 import type { ActionType } from '@/pets/ui/lib/status-reactions';
 import {
@@ -306,10 +307,35 @@ export function PetsCompanionLayer() {
     }
   }, [handleSleepAction, selectAction]);
 
+  const isSleeping = companion?.state === 'sleeping';
+
+  // Direct hover/click interactions on the companion.
+  const {
+    facing: directFacing,
+    interactionReaction: directInteractionReaction,
+    triggerPoke: triggerDirectPoke,
+    triggerHover: triggerDirectHover,
+    turn: turnDirect,
+  } = usePetsDirectInteraction({ disabled: isSleeping || isEntering });
+
   const handleCompanionClick = useCallback(() => {
     if (isEntering) return;
     toggleMenu();
   }, [isEntering, toggleMenu]);
+
+  const handleCompanionDoubleClick = useCallback(() => {
+    if (isEntering) return;
+    turnDirect();
+    triggerDirectPoke();
+  }, [isEntering, turnDirect, triggerDirectPoke]);
+
+  const handleCompanionHoverStart = useCallback(() => {
+    triggerDirectHover();
+  }, [triggerDirectHover]);
+
+  const handleCompanionHoverEnd = useCallback(() => {
+    // No-op: hover reaction is time-bounded by useInteractionReaction.
+  }, []);
 
   const handleClickOutside = useCallback(() => {
     closeMenu();
@@ -324,23 +350,29 @@ export function PetsCompanionLayer() {
   // extras (food icon) still resolve. The sleeping recipe overlay is applied
   // on top to override the face while preserving compatible body effects.
 
-  const isSleeping = companion?.state === 'sleeping';
   const companionStats = useMemo(() => companion?.stats ?? {
     hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100,
   }, [companion?.stats]);
 
+  // Merge item-use emotion override with direct interaction emotion override.
+  // Direct reactions (hover/poke) take precedence while active.
+  const effectiveActionOverride = isSleeping
+    ? null
+    : (directInteractionReaction.emotionOverride ?? actionOverride);
+
   const { recipe: statusRecipe, recipeLabel: statusRecipeLabel } = useStatusReaction({
     stats: companionStats,
     enabled: isVisible && companion?.stage !== 'egg',
-    actionOverride: isSleeping ? null : actionOverride,
+    actionOverride: effectiveActionOverride,
   });
 
   // Recipe priority chain (highest → lowest):
   //   1. Sleeping (always wins when companion is asleep)
   //   2. Overstimulation reaction (user spam-clicking)
   //   3. Shake reaction (dizzy / nausea from shaking)
-  //   4. Action override (item use: feed → happy, etc.)
-  //   5. Status recipe (stat-driven expressions)
+  //   4. Direct interaction override (hover/poke)
+  //   5. Action override (item use: feed → happy, etc.)
+  //   6. Status recipe (stat-driven expressions)
   let companionRecipe: typeof statusRecipe;
   let companionRecipeLabel: string;
 
@@ -353,6 +385,9 @@ export function PetsCompanionLayer() {
   } else if (shakeRecipe && shakeLabel) {
     companionRecipe = shakeRecipe;
     companionRecipeLabel = shakeLabel;
+  } else if (directInteractionReaction.emotionOverride) {
+    companionRecipe = statusRecipe;
+    companionRecipeLabel = statusRecipeLabel;
   } else {
     companionRecipe = statusRecipe;
     companionRecipeLabel = statusRecipeLabel;
@@ -415,8 +450,14 @@ export function PetsCompanionLayer() {
             onUpdateDrag={updateDrag}
             onEndDrag={handleEndDrag}
             onClick={handleCompanionClick}
+            onDoubleClick={handleCompanionDoubleClick}
+            onHoverStart={handleCompanionHoverStart}
+            onHoverEnd={handleCompanionHoverEnd}
+            facingOverride={directFacing}
             isClickBlocked={isOverstimBlocked}
             recipe={companionRecipe}
+            bodyAnimation={directInteractionReaction.bodyAnimation}
+            hearts={directInteractionReaction.hearts}
             recipeLabel={companionRecipeLabel}
             onPositionUpdate={handlePositionUpdate}
             onDragSample={handleDragSample}
