@@ -8,6 +8,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
+import { getBackgroundThemeMode } from '@/lib/colorUtils';
 import { resolveTheme } from '@/themes';
 
 export type CubeThemeMode = 'system' | 'light' | 'dark';
@@ -43,7 +44,9 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'syste
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const appResolvedTheme = resolveTheme(config.theme);
-  const resolvedTheme = theme === 'system' ? appResolvedTheme : theme;
+  const resolvedTheme = theme === 'system'
+    ? (appResolvedTheme === 'custom' ? getBackgroundThemeMode() : appResolvedTheme)
+    : theme;
 
   const embedUrl = useMemo(() => {
     const url = sanitizeUrl(design?.embedUrl);
@@ -52,9 +55,7 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'syste
     if (event) {
       embed.searchParams.set('event', encodeEventParam(event));
     }
-    if (resolvedTheme === 'light') {
-      embed.searchParams.set('theme', 'light');
-    }
+    embed.searchParams.set('theme', resolvedTheme);
     return embed.toString();
   }, [design?.embedUrl, event, resolvedTheme]);
 
