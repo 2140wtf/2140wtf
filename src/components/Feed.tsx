@@ -53,7 +53,7 @@ type FeedTab = CoreFeedTab | string; // string = saved feed id
 interface FeedProps {
   /** Override the kinds list instead of using feed settings. */
   kinds?: number[];
-  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }` for mini-apps). */
+  /** Additional tag filters to apply (e.g. `{ '#t': ['art'] }`). */
   tagFilters?: Record<string, string[]>;
   /** Header element rendered above the tabs (e.g. back-arrow + title). */
   header?: React.ReactNode;

@@ -35,7 +35,7 @@ export interface SandboxFrameProps
    */
   resolveFile: (pathname: string) => Promise<FileResponse | null>;
   /**
-   * Handle non-fetch, non-lifecycle JSON-RPC methods (e.g. `webxdc.*`).
+   * Handle non-fetch, non-lifecycle JSON-RPC methods.
    * Receives the method name, params, and a `post` function for sending
    * arbitrary messages back into the sandbox (e.g. push notifications).
    * Return the result value to send as the JSON-RPC response.
@@ -223,7 +223,7 @@ const SANDBOX_ALLOW = [
  *
  * All file serving is delegated to the `resolveFile` callback.
  * Custom RPC methods are delegated to the optional `onRpc` callback.
- * Consumers (Webxdc, NsitePreviewDialog) are platform-agnostic.
+ * Consumers (e.g. NsitePreviewDialog) are platform-agnostic.
  */
 export const SandboxFrame = forwardRef<SandboxFrameHandle, SandboxFrameProps>(
   function SandboxFrame(
