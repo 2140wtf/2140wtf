@@ -6,6 +6,7 @@ import { ZapPollVoteButton } from '@/components/ZapPollVoteButton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useHostedCubeEmbed } from '@/hooks/useHostedCubeEmbed';
+import { useBaoZapPollEvent } from '@/hooks/useBaoZapPoll';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import { getBackgroundThemeMode } from '@/lib/colorUtils';
@@ -47,6 +48,12 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'syste
   const resolvedTheme = theme === 'system'
     ? (appResolvedTheme === 'custom' ? getBackgroundThemeMode() : appResolvedTheme)
     : theme;
+
+  // For kind 38000 ₿AO markets, resolve the linked kind 6969 zap poll so the
+  // overlay "Zap to vote" button can use the same event the cube iframe does.
+  const isBaoMarket = event?.kind === 38000;
+  const { data: linkedZapPoll } = useBaoZapPollEvent(isBaoMarket ? event : undefined);
+  const voteEvent = event?.kind === 6969 ? event : linkedZapPoll;
 
   const embedUrl = useMemo(() => {
     const url = sanitizeUrl(design?.embedUrl);
@@ -105,9 +112,9 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'syste
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         onLoad={() => setLoaded(true)}
       />
-      {user && event?.kind === 6969 && (
+      {user && voteEvent && (
         <div className="absolute bottom-3 left-3 z-20">
-          <ZapPollVoteButton event={event} compact />
+          <ZapPollVoteButton event={voteEvent} compact />
         </div>
       )}
     </div>
