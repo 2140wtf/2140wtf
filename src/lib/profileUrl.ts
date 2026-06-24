@@ -2,18 +2,15 @@ import { nip19 } from 'nostr-tools';
 import type { NostrMetadata } from '@nostrify/nostrify';
 
 /**
- * Generates the profile URL for a user.
+ * Generates the canonical profile URL for a user.
  *
- * Uses the verified NIP-05 identifier as the URL path when available, because
- * it is human-readable. If the NIP-05 is not verified (or not present), the
- * URL falls back to the stable npub so an attacker cannot hijack profile links
- * by claiming someone else's identifier.
+ * Always uses the npub (`/npub1...`) as the canonical path because it is the
+ * only stable, self-certifying identifier. NIP-05 identifiers can be changed,
+ * expire, or be reassigned, so they are no longer used as canonical link paths.
  *
- * The app also *resolves* npub URLs (`/npub1...`) and raw-hex pubkeys, so both
- * forms always lead to the same profile page.
- *
- * `_@domain.com` users link to `/domain.com` — the profile page detects
- * bare domains as NIP-05 identifiers and resolves them correctly.
+ * The app still *resolves* NIP-05 URLs (`/user@domain.com`) for backwards
+ * compatibility and for the optional "short link" copy action, but any newly
+ * generated navigation link uses the npub form.
  *
  * **Precondition:** `pubkey` must be a valid 64-char lowercase hex string.
  * Callers extracting pubkeys from tag content must validate with
@@ -21,17 +18,8 @@ import type { NostrMetadata } from '@nostrify/nostrify';
  */
 export function getProfileUrl(
   pubkey: string,
-  metadata?: NostrMetadata,
-  nip05Verified = false,
+  _metadata?: NostrMetadata,
+  _nip05Verified = false,
 ): string {
-  if (nip05Verified && metadata?.nip05) {
-    const nip05 = metadata.nip05;
-    // _@domain.com → /domain.com (the profile page detects bare domains as NIP-05)
-    if (nip05.startsWith('_@')) {
-      return `/${nip05.slice(2)}`;
-    }
-    // user@domain.com → /user@domain.com
-    return `/${nip05}`;
-  }
   return `/${nip19.npubEncode(pubkey)}`;
 }
