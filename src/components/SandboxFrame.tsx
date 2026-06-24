@@ -305,7 +305,13 @@ export const SandboxFrame = forwardRef<SandboxFrameHandle, SandboxFrameProps>(
       // Ready handler: run consumer setup, then send init
       // ---------------------------------------------------------------
 
+      /** Only process the first ready notification; iframe.diy retries until init is ack'd. */
+      let readyHandled = false;
+
       async function handleReady() {
+        if (readyHandled) return;
+        readyHandled = true;
+
         try {
           await onReadyRef.current?.();
         } catch (err) {
