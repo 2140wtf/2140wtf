@@ -192,16 +192,22 @@ export function useZaps(
         ? nip57.makeZapRequest({ ...baseZapParams, event: target })
         : nip57.makeZapRequest(baseZapParams);
 
-      // NIP-69 zap poll vote: add the poll_option tag and ensure the `e` and
-      // `p` tags carry the same primary hosting relay hint.
+      // NIP-69 zap poll vote: ensure the zap request references the poll
+      // event (`e` tag) and the recipient (`p` tag) with the primary hosting
+      // relay hint, then append the selected option.
       if (pollOption !== undefined) {
         const relay = primaryRelay || config.relayMetadata.relays[0]?.url;
-        if (relay) {
-          zapRequest.tags = zapRequest.tags.map((tag) => {
-            if (tag[0] === 'p') return ['p', tag[1], relay];
-            if (tag[0] === 'e') return ['e', tag[1], relay];
-            return tag;
-          });
+        let hasETag = false;
+        zapRequest.tags = zapRequest.tags.map((tag) => {
+          if (tag[0] === 'p' && relay) return ['p', tag[1], relay];
+          if (tag[0] === 'e') {
+            hasETag = true;
+            return relay ? ['e', tag[1], relay] : tag;
+          }
+          return tag;
+        });
+        if (!hasETag) {
+          zapRequest.tags.push(relay ? ['e', target.id, relay] : ['e', target.id]);
         }
         zapRequest.tags.push(['poll_option', pollOption]);
       }
