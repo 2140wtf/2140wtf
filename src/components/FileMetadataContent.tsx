@@ -109,6 +109,7 @@ export function FileMetadataContent({ event, compact }: FileMetadataContentProps
         <WebxdcEmbed
           url={url}
           uuid={webxdcId}
+          name={appName}
           icon={thumb}
           showNameCard={false}
         />
