@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, LayoutList, Plus, Search, Sun, Moon, Monitor } from "lucide-react";
+import { Box, LayoutList, Plus, Search, Sun, Moon } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -112,7 +112,7 @@ function PollsFeedPage() {
   const [view, setView] = useState<'list' | 'cubes'>('cubes');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
-  const [cubeTheme, setCubeTheme] = useState<CubeThemeMode>('system');
+  const [cubeTheme, setCubeTheme] = useState<CubeThemeMode>('dark');
 
   const pollKinds = useMemo(() => {
     if (pollFilter === 'zap') return [6969];
@@ -188,9 +188,6 @@ function PollsFeedPage() {
                 </ToggleGroupItem>
                 <ToggleGroupItem value="dark" aria-label="Dark cubes" className="gap-1">
                   <Moon className="size-4" />
-                </ToggleGroupItem>
-                <ToggleGroupItem value="system" aria-label="System theme cubes" className="gap-1">
-                  <Monitor className="size-4" />
                 </ToggleGroupItem>
               </ToggleGroup>
             )}
