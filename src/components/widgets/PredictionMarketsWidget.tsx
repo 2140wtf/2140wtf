@@ -1,4 +1,4 @@
-import { BarChart3, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
@@ -54,14 +54,9 @@ export function PredictionMarketsWidget() {
   if (visibleMarkets.length === 0) {
     return (
       <div className="space-y-3 p-1">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">₿AO MARKETS</h3>
-        </div>
-
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Explore prediction markets powered by ₿AO MARKETS. All markets are for play only with
-          dummy bitcoin in demo mode — claim testnet bitcoin by visiting{' '}
+          Explore prediction markets. All markets are for play only with dummy bitcoin in demo
+          mode — claim testnet bitcoin by visiting{' '}
           <button
             type="button"
             onClick={() => openUrl('https://bao.markets')}
@@ -81,11 +76,6 @@ export function PredictionMarketsWidget() {
 
   return (
     <div className="space-y-3 p-1">
-      <div className="flex items-center gap-2">
-        <BarChart3 className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">₿AO MARKETS</h3>
-      </div>
-
       <div className="space-y-3">
         {visibleMarkets.map((market) => (
           <Link
