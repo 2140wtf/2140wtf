@@ -26,13 +26,18 @@ import {
   type JurorVote,
   type DkgRecord,
   type FrostAttestation,
-} from "@/lib/bao-court";
+} from "@bao/frost-court";
 
 export interface UseJurorSessionOptions {
   readonly dispute: DisputeCase;
   readonly selectedJurors: SelectedJuror[];
   readonly myJurorIdx: number;
   readonly demoMode: boolean;
+  /**
+   * Optional deterministic DKG seed. In demo mode, providing a seed lets every
+   * juror derive the same group public key and secret shares locally.
+   */
+  readonly seed?: string;
 }
 
 export interface JurorSessionActions {
@@ -68,7 +73,7 @@ function deriveThreshold(jurorCount: number): number {
 export function useJurorSession(
   options: UseJurorSessionOptions,
 ): { state: JurorSessionState; actions: JurorSessionActions; isPending: boolean } {
-  const { dispute, selectedJurors, myJurorIdx, demoMode } = options;
+  const { dispute, selectedJurors, myJurorIdx, demoMode, seed } = options;
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
 
@@ -140,6 +145,7 @@ export function useJurorSession(
           disputeId: dispute.disputeId,
           threshold,
           jurors: selectedJurors,
+          seed,
         });
         dkgRecordRef.current = record;
         demoSharesRef.current = shares;
@@ -151,7 +157,7 @@ export function useJurorSession(
     } finally {
       setIsPending(false);
     }
-  }, [user, dispute, myJurorIdx, demoMode, threshold, selectedJurors, publishEvent]);
+  }, [user, dispute, myJurorIdx, demoMode, threshold, selectedJurors, seed, publishEvent]);
 
   const publishVoteCommit = useCallback(
     async (outcome: string) => {
@@ -317,7 +323,7 @@ export function useJurorSession(
       setAttestation(attestation);
       const template = buildAttestationEvent({
         attestation,
-        marketEventId: dispute.marketEventId,
+        marketEventId: dispute.marketEventId ?? dispute.marketId,
       });
       await publishEvent(template);
       setPhase("attestation_published");

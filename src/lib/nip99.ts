@@ -206,7 +206,26 @@ export function dedupeNip99Listings(events: NostrEvent[]): Nip99Listing[] {
 export function formatNip99Price(price: Nip99Listing['price']): string {
   if (!price) return 'Price on request';
   const freq = price.frequency ? ` / ${price.frequency}` : '';
-  return `${price.value} ${price.currency}${freq}`;
+  const currency = price.currency.trim();
+  const normalized = currency.toLowerCase();
+
+  let amount: string;
+  if (normalized === 'usd') {
+    amount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(price.value);
+  } else if (normalized === 'btc') {
+    amount = `${(price.value).toFixed(8).replace(/\.?0+$/, '')} BTC`;
+  } else if (normalized === 'sats' || normalized === 'sat') {
+    amount = `${price.value.toLocaleString()} ${price.value === 1 ? 'sat' : 'sats'}`;
+  } else {
+    amount = `${price.value} ${currency}`;
+  }
+
+  return `${amount}${freq}`;
 }
 
 export const ART_CATEGORIES = new Set([
