@@ -21,6 +21,11 @@ export interface BaoCashuWalletUser {
   signer: NostrSigner;
 }
 
+export interface UseBaoCashuWalletOptions {
+  /** Whether to auto-claim the one-time BAO demo faucet grant for new seeds. Default true. */
+  enableAutoClaim?: boolean;
+}
+
 /**
  * Hook for the BAO signet/demo Cashu wallet.
  *
@@ -32,7 +37,9 @@ export function useBaoCashuWallet(
   userSeedPhrase: string,
   user: BaoCashuWalletUser,
   relayUrls: string[],
+  options: UseBaoCashuWalletOptions = {},
 ) {
+  const { enableAutoClaim = true } = options;
   const { config } = useAppContext();
   const currentUser = useCurrentUser().user;
   const nip60Sync = useNip60Sync();
@@ -72,6 +79,7 @@ export function useBaoCashuWallet(
   const walletRef = useRef(wallet);
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
   useEffect(() => {
+    if (!enableAutoClaim) return;
     const pubkey = currentUser?.pubkey;
     const faucetUrl = config.baoSignetFaucetUrl?.trim();
     if (!isNewBaoSeed || !pubkey || !faucetUrl || !baoSeedPhrase) return;
@@ -92,7 +100,7 @@ export function useBaoCashuWallet(
       .catch((e) => {
         devLog.error('BAO auto-faucet failed:', e);
       });
-  }, [isNewBaoSeed, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
+  }, [enableAutoClaim, isNewBaoSeed, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
 
   return wallet;
 }
