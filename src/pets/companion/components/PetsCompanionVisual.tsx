@@ -18,6 +18,7 @@ import { useMemo, useRef, memo, type RefObject } from 'react';
 import { PetsBabyVisual } from '@/pets/ui/PetsBabyVisual';
 import { PetsAdultVisual } from '@/pets/ui/PetsAdultVisual';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
+import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
 import { companionDataToPets } from '@/pets/ui/lib/adapters';
 import { useEffectiveEmotion } from '@/pets/dev/useEmotionDev';
 import { useRecipeFingerprint, useFillLevelUpdate } from '@/pets/ui/hooks/useFillLevelUpdate';
@@ -45,6 +46,10 @@ interface PetsCompanionVisualProps {
   recipeLabel?: string;
   emotion?: PetsEmotion;
   bodyEffects?: BodyEffectsSpec;
+  /** Optional CSS animation class applied to the inner body wrapper. */
+  bodyAnimation?: string | null;
+  /** Whether to show floating hearts. */
+  hearts?: boolean;
   className?: string;
   debugMode?: boolean;
 }
@@ -156,6 +161,8 @@ export function PetsCompanionVisual({
   recipeLabel: recipeLabelProp,
   emotion: emotionProp,
   bodyEffects: bodyEffectsProp,
+  bodyAnimation,
+  hearts = false,
   className,
   debugMode = false,
 }: PetsCompanionVisualProps) {
@@ -180,6 +187,8 @@ export function PetsCompanionVisual({
   useFillLevelUpdate(rootRef, pets.id, effectiveRecipe);
 
   // Float transform
+  const isFacingLeft = direction === 'left';
+
   const petsTransform = useMemo(() => {
     const transforms: string[] = [];
     if (floatOffset.x !== 0 || floatOffset.y !== 0) {
@@ -188,8 +197,11 @@ export function PetsCompanionVisual({
     if (floatOffset.rotation !== 0) {
       transforms.push(`rotate(${floatOffset.rotation}deg)`);
     }
+    if (isFacingLeft) {
+      transforms.push('scaleX(-1)');
+    }
     return transforms.length > 0 ? transforms.join(' ') : undefined;
-  }, [floatOffset]);
+  }, [floatOffset, isFacingLeft]);
 
   // Reaction state for CSS animations on the OUTER wrapper
   // When sleeping, always idle — no swaying/happy animation
@@ -207,9 +219,6 @@ export function PetsCompanionVisual({
   const shadowOpacity = SHADOW_MAX_OPACITY * groundFadeRatio * floatFadeRatio;
   const shadowScale = 0.9 + 0.1 * groundFadeRatio * floatFadeRatio;
 
-  // direction is accepted for API completeness but not currently used for rendering
-  // (Pets does not flip based on facing direction). Suppress unused warning.
-  void direction;
 
   return (
     <div
@@ -277,25 +286,34 @@ export function PetsCompanionVisual({
           )}
           style={{ transformOrigin: 'center bottom' }}
         >
-          {companion.stage === 'egg' ? (
-            <PetsStageVisual
-              companion={companion as unknown as PetsCompanion}
-              size="sm"
-              animated={false}
-              className="size-full"
-            />
-          ) : (
-            <MemoizedPetsVisual
-              stage={companion.stage}
-              pets={pets}
-              eyeOffsetRef={eyeOffsetRef}
-              recipe={effectiveRecipe}
-              recipeFingerprint={recipeFingerprint}
-              recipeLabel={effectiveRecipeLabel}
-              emotion={effectiveEmotion}
-              bodyEffects={effectiveBodyEffects}
-            />
-          )}
+          {/* Body animation wrapper — isolated from sway/direction transforms so
+              direct interaction animations (hover-lean, poke-wiggle) don't wipe
+              the parent's scaleX(-1) or rotation. */}
+          <div
+            className={cn('size-full', bodyAnimation)}
+            style={{ transformOrigin: 'center bottom' }}
+          >
+            {companion.stage === 'egg' ? (
+              <PetsStageVisual
+                companion={companion as unknown as PetsCompanion}
+                size="sm"
+                animated={false}
+                className="size-full"
+              />
+            ) : (
+              <MemoizedPetsVisual
+                stage={companion.stage}
+                pets={pets}
+                eyeOffsetRef={eyeOffsetRef}
+                recipe={effectiveRecipe}
+                recipeFingerprint={recipeFingerprint}
+                recipeLabel={effectiveRecipeLabel}
+                emotion={effectiveEmotion}
+                bodyEffects={effectiveBodyEffects}
+              />
+            )}
+            <FloatingSocialHearts active={hearts} />
+          </div>
         </div>
       </div>
     </div>

@@ -28,6 +28,7 @@ import type { ExternalEyeOffset, PetsReactionState, PetsRenderMode } from './lib
 import type { PetsVisualRecipe } from './lib/recipe';
 import type { PetsEmotion } from './lib/emotion-types';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
+import type { PetsFacing } from './hooks/usePetsDirectInteraction';
 import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
@@ -57,6 +58,8 @@ export interface PetsAdultVisualProps {
   emotion?: PetsEmotion;
   /** Body-level visual effects (manual/external use only). */
   bodyEffects?: BodyEffectsSpec;
+  /** Horizontal facing direction. `left` mirrors the visual with scaleX(-1). */
+  facing?: PetsFacing;
   /** Additional CSS classes for the container */
   className?: string;
 }
@@ -73,6 +76,7 @@ export function PetsAdultVisual({
   recipeLabel,
   emotion = 'neutral',
   bodyEffects,
+  facing,
   className,
 }: PetsAdultVisualProps) {
   const isSleeping = isPetsSleeping(pets);
@@ -85,6 +89,10 @@ export function PetsAdultVisual({
   const isCompanion = renderMode === 'companion';
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
+  const isFacingLeft = facing === 'left';
+  // Eye tracking follows the pointer only when facing forward; mirrored SVG
+  // would make the computed gaze direction look inverted.
+  const effectiveLookMode = isFacingLeft ? 'forward' : lookMode;
 
   // ── State + form classes for species-specific CSS animations ───────────────
 
@@ -103,7 +111,7 @@ export function PetsAdultVisual({
   usePetsEyes(containerRef, {
     isSleeping,
     maxMovement: 2.5,
-    lookMode,
+    lookMode: effectiveLookMode,
     disableBlink,
     disableTracking: isCompanion,
   });
@@ -135,6 +143,7 @@ export function PetsAdultVisual({
         !isCompanion && effectiveReaction === 'singing' && 'animate-pets-bounce',
         className,
       )}
+      style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
     >
       <PetsAdultSvgRenderer
         pets={pets}

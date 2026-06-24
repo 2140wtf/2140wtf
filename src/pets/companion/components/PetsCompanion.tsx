@@ -62,6 +62,14 @@ interface PetsCompanionProps {
   onEndDrag: () => void;
   /** Click callback (when interaction is a click, not a drag) */
   onClick?: () => void;
+  /** Double-click/tap callback (when set, suppresses `onClick` on the second tap). */
+  onDoubleClick?: () => void;
+  /** Called when the pointer enters the companion. */
+  onHoverStart?: () => void;
+  /** Called when the pointer leaves the companion. */
+  onHoverEnd?: () => void;
+  /** Manual facing override. When set, takes precedence over motion.direction. */
+  facingOverride?: 'left' | 'right';
   /** When true, Pets ignores click interactions (overstimulation block). */
   isClickBlocked?: boolean;
   /** Pre-resolved visual recipe. Takes precedence over `emotion`. */
@@ -85,6 +93,10 @@ interface PetsCompanionProps {
    * motion intensity without coupling this component to the tracker.
    */
   onDragSample?: (position: Position) => void;
+  /** Optional CSS animation class applied to the pet body for direct interactions. */
+  bodyAnimation?: string | null;
+  /** Whether to show floating hearts (direct interaction reward). */
+  hearts?: boolean;
 }
 
 export function PetsCompanion({
@@ -102,11 +114,17 @@ export function PetsCompanion({
   onUpdateDrag,
   onEndDrag,
   onClick,
+  onDoubleClick,
+  onHoverStart,
+  onHoverEnd,
+  facingOverride,
   isClickBlocked = false,
   recipe,
   recipeLabel,
   emotion,
   bodyEffects,
+  bodyAnimation,
+  hearts,
   onPositionUpdate,
   debugMode = false,
   onDragSample,
@@ -120,6 +138,7 @@ export function PetsCompanion({
   const effectiveOnClick = isClickBlocked ? undefined : onClick;
   const clickDetection = useClickDetection({
     onClick: effectiveOnClick,
+    onDoubleClick: isClickBlocked ? undefined : onDoubleClick,
     onDragStart: onStartDrag,
   });
   
@@ -207,6 +226,8 @@ export function PetsCompanion({
   // Calculate floating animation offset (gentle sway/float)
   // Skip during entry animation, dragging, debug mode, or sleeping
   const isSleeping = companion.state === 'sleeping';
+  const isHoverDisabled = isSleeping || isEntering || motion.isDragging;
+
   const floatOffset = (!useEntryPosition && !motion.isDragging && !debugMode && !isSleeping)
     ? calculateFloatAnimation(animationTime, state === 'walking')
     : { x: 0, y: 0, rotation: 0 };
@@ -234,6 +255,9 @@ export function PetsCompanion({
   // - Not being dragged  
   // - Position is at or very near the ground position
   const isOnGround = !useEntryPosition && !motion.isDragging && distanceFromGround < 5;
+
+  // Effective direction: manual override wins, otherwise use walking direction.
+  const effectiveDirection = facingOverride ?? (isEntering ? 'right' : motion.direction);
   
   // Build transform string
   const transform = useEntryPosition 
@@ -307,12 +331,18 @@ export function PetsCompanion({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onPointerEnter={() => {
+        if (!isHoverDisabled) onHoverStart?.();
+      }}
+      onPointerLeave={() => {
+        onHoverEnd?.();
+      }}
     >
       <PetsCompanionVisual
         companion={companion}
         size={config.size}
         eyeOffsetRef={eyeOffsetRef}
-        direction={isEntering ? 'right' : motion.direction}
+        direction={effectiveDirection}
         isDragging={motion.isDragging}
         isWalking={state === 'walking'}
         floatOffset={floatOffset}
@@ -322,6 +352,8 @@ export function PetsCompanion({
         recipeLabel={recipeLabel}
         emotion={emotion}
         bodyEffects={bodyEffects}
+        bodyAnimation={bodyAnimation}
+        hearts={hearts}
         debugMode={debugMode}
       />
     </div>
