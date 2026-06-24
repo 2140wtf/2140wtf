@@ -136,14 +136,16 @@ const hardcodedConfig: AppConfig = {
     feedIncludeGroups: false,
   },
   sidebarOrder: [
+    "feed",
     "messages",
-    "wallet",
     "prediction-markets",
     "polls",
     "pets",
     "events",
+    "wallet",
+    "btcmap",
   ],
-  sidebarOrderVersion: 9,
+  sidebarOrderVersion: 10,
   themeDefaultVersion: 1,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
