@@ -261,7 +261,7 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
           {nip05Verified && shortLink && (
             <MenuRow
               icon={<ClipboardCopy className="size-5" />}
-              label="Copy short link"
+              label="Copy short link (NIP-05)"
               onClick={handleCopyShortLink}
             />
           )}
