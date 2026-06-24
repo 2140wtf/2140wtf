@@ -35,14 +35,16 @@
     "feedIncludeEvents": true
   },
   "sidebarOrder": [
+    "feed",
     "messages",
-    "wallet",
     "prediction-markets",
     "polls",
     "pets",
-    "events"
+    "events",
+    "wallet",
+    "btcmap"
   ],
-  "sidebarOrderVersion": 9,
+  "sidebarOrderVersion": 10,
   "useAppRelays": true,
   "useUserRelays": false,
   "contentWarningPolicy": "blur"
