@@ -20,9 +20,6 @@ const CURATED_KINDS = [
   31124, // Pets
 ];
 
-/** Mini apps need a MIME-type tag filter, so they get their own filter object. */
-const WEBXDC_FILTER = { kinds: [1063], '#m': ['application/x-webxdc'] };
-
 /**
  * Official / featured 2140.wtf account(s) whose posts are always surfaced in the
  * curated feed, regardless of whether the curator follows them.
@@ -84,14 +81,6 @@ export function useCuratedDittoFeed(authors: string[] | undefined, enabled: bool
       };
       if (pageParam) base.until = pageParam;
 
-      // Mini apps need a separate filter with MIME-type tag constraint
-      const webxdcFilter: Record<string, unknown> = {
-        ...WEBXDC_FILTER,
-        authors: effectiveAuthors,
-        limit: 20,
-      };
-      if (pageParam) webxdcFilter.until = pageParam;
-
       // Featured accounts also get standard text-note kinds so their
       // announcements / posts show up even though those kinds are normally
       // excluded from the media-focused curated feed.
@@ -104,7 +93,7 @@ export function useCuratedDittoFeed(authors: string[] | undefined, enabled: bool
 
       const ditto = nostr.group(DITTO_RELAYS);
       return ditto.query(
-        [base, webxdcFilter, featuredFilter] as Parameters<typeof ditto.query>[0],
+        [base, featuredFilter] as Parameters<typeof ditto.query>[0],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
     },
@@ -121,4 +110,4 @@ export function useCuratedDittoFeed(authors: string[] | undefined, enabled: bool
 }
 
 /** Re-export for use in Feed.tsx landing hero / kind lists. */
-export { CURATED_KINDS, WEBXDC_FILTER };
+export { CURATED_KINDS };

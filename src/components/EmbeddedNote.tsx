@@ -751,7 +751,7 @@ function EmbeddedNoteCard({
     const images = imageMatches
       .map((u) => sanitizeUrl(u))
       .filter((u): u is string => !!u);
-    // First non-image embeddable media (video/webxdc) — prefer video preview.
+    // First non-image embeddable media (video) — prefer video preview.
     const videoUrls = extractVideoUrls(event.content)
       .map((u) => sanitizeUrl(u))
       .filter((u): u is string => !!u);
