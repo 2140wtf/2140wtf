@@ -3,6 +3,7 @@
 import {
   Archive,
   Award,
+  BarChart2,
   BarChart3,
   Bell,
   Bird,
@@ -127,7 +128,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
-  { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
+  { id: "polls", label: "Polls", path: "/polls", icon: BarChart2 },
   { id: "pets", label: "Pets", path: "/pets", icon: Cat },
   {
     id: "wallet",
