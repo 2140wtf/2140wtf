@@ -57,5 +57,10 @@ android/downloads/
 *.apk
 *.apk.sha256
 
+# Playwright E2E artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Local experimental-branch notes
 EXPERIMENTAL_BRANCHES.md
