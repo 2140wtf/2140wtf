@@ -21,7 +21,7 @@ interface KindFeedPageProps {
   alwaysShowBack?: boolean;
   /** If set, the FAB navigates to this URL instead of opening a compose dialog. */
   fabHref?: string;
-  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }` for mini-apps). */
+  /** Additional tag filters to apply (e.g. `{ '#t': ['art'] }`). */
   tagFilters?: Record<string, string[]>;
   /** Unique feed ID for tab persistence. Defaults to lowercase title. */
   feedId?: string;

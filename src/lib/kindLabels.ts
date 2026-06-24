@@ -271,10 +271,6 @@ export const KIND_LABELS: Record<number, string> = {
   28935: 'Invite request',
   28936: 'Leave request',
 
-  // Mini apps
-  4932: 'Mini app sync',
-  20932: 'Mini app sync',
-
   // ---- Addressable events (30000+) ----
 
   // NIP-51 Sets

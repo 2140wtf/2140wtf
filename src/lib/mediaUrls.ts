@@ -7,8 +7,8 @@ export const VIDEO_EXTS = 'mp4|webm|mov|qt|avi|mkv|flv';
 /** Audio extensions rendered as players. */
 export const AUDIO_EXTS = 'mp3|wav|ogg|flac|m4a|aac|opus';
 
-/** All media extensions (image + video + audio + mini-apps). */
-export const ALL_MEDIA_EXTS = `${IMAGE_EXTS}|${VIDEO_EXTS}|${AUDIO_EXTS}|xdc`;
+/** All media extensions (image + video + audio). */
+export const ALL_MEDIA_EXTS = `${IMAGE_EXTS}|${VIDEO_EXTS}|${AUDIO_EXTS}`;
 
 /** Matches image URLs. */
 export const IMAGE_URL_REGEX = new RegExp(
@@ -28,13 +28,13 @@ export const AUDIO_URL_REGEX = new RegExp(
   'gi',
 );
 
-/** Matches any media URL (video, audio, mini-app) that is rendered as an embed — not a link preview. */
+/** Matches any media URL (video or audio) that is rendered as an embed — not a link preview. */
 export const EMBED_MEDIA_URL_REGEX = new RegExp(
-  `https?:\\/\\/[^\\s]+\\.(${VIDEO_EXTS}|${AUDIO_EXTS}|xdc)(\\?[^\\s]*)?`,
+  `https?:\\/\\/[^\\s]+\\.(${VIDEO_EXTS}|${AUDIO_EXTS})(\\?[^\\s]*)?`,
   'i',
 );
 
-/** Matches all NIP-92 media URLs for imeta tag generation (images + video + audio + mini-apps). */
+/** Matches all NIP-92 media URLs for imeta tag generation (images + video + audio). */
 export const IMETA_MEDIA_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s]+\\.(${ALL_MEDIA_EXTS})(\\?[^\\s]*)?`,
   'gi',
@@ -76,7 +76,6 @@ export function mimeFromExt(ext: string): string {
     case 'm4a':  return 'audio/mp4';
     case 'aac':  return 'audio/aac';
     case 'opus': return 'audio/opus';
-    case 'xdc':  return 'application/x-webxdc';
     default:     return 'application/octet-stream';
   }
 }

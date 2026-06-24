@@ -6,7 +6,6 @@ import {
   BarChart3,
   Bell,
   Bird,
-  Blocks,
   BookMarked,
   Box,
   Bookmark,
@@ -196,7 +195,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "music", label: "Music", path: "/music", icon: Music },
   { id: "podcasts", label: "Podcasts", path: "/podcasts", icon: Podcast },
 
-  { id: "webxdc", label: "Mini apps", path: "/mini-apps", icon: Blocks },
   { id: "themes", label: "Themes", path: "/themes", icon: Sparkles },
   { id: "packs", label: "Follow Packs", path: "/packs", icon: PartyPopper },
   { id: "emojis", label: "Emojis", path: "/emojis", icon: SmilePlus },

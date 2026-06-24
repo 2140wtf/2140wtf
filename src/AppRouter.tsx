@@ -93,7 +93,6 @@ const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ defa
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
-const WebxdcFeedPage = lazy(() => import("./pages/WebxdcFeedPage").then(m => ({ default: m.WebxdcFeedPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
 const GroupChatPage = lazy(() => import("./pages/GroupChatPage").then(m => ({ default: m.GroupChatPage })));
@@ -312,8 +311,6 @@ export function AppRouter() {
                   />
                 }
               />
-              <Route path="/mini-apps" element={<WebxdcFeedPage />} />
-              <Route path="/webxdc" element={<Navigate to="/mini-apps" replace />} />
               <Route path="/art" element={<ArtFeedPage />} />
               <Route path="/articles/new" element={<ArticleEditorPage />} />
               <Route path="/articles/edit/:naddr" element={<ArticleEditorPage />} />
