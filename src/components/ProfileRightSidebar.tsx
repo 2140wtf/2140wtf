@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, QrCode, ExternalLink, Bitcoin, ShieldAlert, Mail } from 'lucide-react';
+import { Check, Copy, QrCode, ExternalLink, Bitcoin, ShieldAlert, Mail, MessageCircle } from 'lucide-react';
 import { LinkFooter } from '@/components/LinkFooter';
 import { Blurhash } from 'react-blurhash';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,8 @@ import { parseDimToAspectRatio } from '@/lib/mediaUtils';
 import { isWeatherFieldLabel } from '@/lib/weatherStation';
 import { WeatherStationCard } from '@/components/WeatherStationCard';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { QRCodeCanvas } from '@/components/ui/qrcode';
+import { openUrl } from '@/lib/downloadFile';
 
 /** Media-native kinds shown in the sidebar (excludes kind 1 text notes and kind 1111 comments). */
 const SIDEBAR_MEDIA_KINDS = [20, 21, 22, 36787, 34139, 30054, 30055];
@@ -304,11 +306,108 @@ function BitcoinQRModal({ address }: { address: string }) {
   );
 }
 
-/** A single profile field row. Handles $BTC specially. */
+/** SimpleX contact row with Open, Copy, and QR actions. */
+function SimpleXFieldRow({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const { toast } = useToast();
+  const trimmed = value.trim();
+  const canOpen = trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('simplex:');
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(trimmed);
+    setCopied(true);
+    toast({ title: 'Copied', description: 'SimpleX contact copied to clipboard' });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleOpen = () => {
+    if (!canOpen) {
+      toast({ title: 'Not a link', description: 'This SimpleX value cannot be opened as a link.', variant: 'destructive' });
+      return;
+    }
+    void openUrl(trimmed);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <div className="size-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+          <MessageCircle className="size-3 text-white" />
+        </div>
+        <span className="font-semibold text-sm">SimpleX</span>
+        <div className="ml-auto flex items-center gap-1">
+          <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+            <DialogTrigger asChild>
+              <button
+                className="p-1 rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-primary"
+                aria-label="Show SimpleX QR code"
+              >
+                <QrCode className="size-4" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[360px] p-6 overflow-hidden rounded-2xl [&>button]:top-6 [&>button]:right-6">
+              <div className="min-w-0">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <div className="size-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                      <MessageCircle className="size-4 text-white" />
+                    </div>
+                    <span>SimpleX</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex justify-center my-5">
+                  <div className="bg-white p-3 rounded-xl">
+                    <QRCodeCanvas value={trimmed} size={220} className="size-[220px]" />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex items-center gap-2 w-full bg-secondary/60 hover:bg-secondary/80 transition-colors rounded-lg pl-3 pr-2.5 py-2.5 text-left cursor-pointer overflow-hidden"
+                >
+                  <span className="min-w-0 font-mono text-xs truncate">{trimmed}</span>
+                  <span className="shrink-0 ml-auto">
+                    {copied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4 text-muted-foreground" />}
+                  </span>
+                </button>
+                <p className="text-xs text-muted-foreground text-center mt-4">Share this QR in incognito mode for private contact.</p>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <button
+            onClick={handleOpen}
+            disabled={!canOpen}
+            className="p-1 rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Open SimpleX link"
+          >
+            <ExternalLink className="size-4" />
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 bg-secondary/60 rounded-lg px-3 py-2 font-mono text-xs truncate">
+          {trimmed}
+        </div>
+        <Button
+          onClick={handleCopy}
+          size="sm"
+          className="shrink-0 rounded-lg font-semibold text-xs h-8"
+        >
+          {copied ? <Check className="size-3.5" /> : 'Copy'}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">Share this in incognito mode for private contact.</p>
+    </div>
+  );
+}
+
+/** A single profile field row. Handles $BTC and SimpleX specially. */
 function ProfileFieldRow({ field }: { field: ProfileField }) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const isBtc = field.label === '$BTC';
+  const isSimpleX = field.label.toLowerCase() === 'simplex';
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(field.value);
@@ -316,6 +415,10 @@ function ProfileFieldRow({ field }: { field: ProfileField }) {
     toast({ title: 'Copied', description: 'Bitcoin address copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (isSimpleX) {
+    return <SimpleXFieldRow value={field.value} />;
+  }
 
   if (isBtc) {
     return (
