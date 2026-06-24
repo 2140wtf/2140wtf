@@ -32,6 +32,7 @@ import { useZaps } from '@/hooks/useZaps';
 import { useWallet } from '@/hooks/useWallet';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePaymentTargets } from '@/hooks/usePaymentTargets';
+import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { canZap } from '@/lib/canZap';
 import { parseCampaign } from '@/lib/campaign';
 import {
@@ -471,6 +472,23 @@ export function ZapDialog({
   // Lightning has no local balance concept (the wallet / LNURL handles that),
   // so `insufficient` stays false — kept for symmetry with the onchain props.
   const insufficient = false;
+
+  // Listen for a kind 9735 zap receipt on the QR-code path (WebLN/NWC already
+  // report success through handleLightningSuccess).
+  const relayUrls = useMemo(
+    () => config.relayMetadata.relays.filter((r) => r.read).map((r) => r.url),
+    [config.relayMetadata.relays],
+  );
+  useZapPaymentListener(
+    invoice,
+    target,
+    relayUrls,
+    useCallback(() => {
+      if (success) return;
+      setSuccess({ kind: 'lightning', amountSats });
+      onZapSuccessProp?.({ amountSats });
+    }, [success, amountSats, onZapSuccessProp]),
+  );
 
   // Default method: Bitcoin. Users can switch to Lightning or any configured
   // payment target via the title dropdown. If the user's signer can't sign
