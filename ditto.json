@@ -35,18 +35,12 @@
     "feedIncludeEvents": true
   },
   "sidebarOrder": [
-    "feed",
     "events",
-    "prediction-markets",
-    "articles",
-    "photos",
-    "videos",
-    "market",
-    "pets",
     "messages",
-    "settings",
     "wallet",
-    "help"
+    "prediction-markets",
+    "polls",
+    "pets"
   ],
   "useAppRelays": true,
   "useUserRelays": false,
