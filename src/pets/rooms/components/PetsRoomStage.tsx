@@ -206,7 +206,7 @@ export function PetsRoomStage({
               {/* Birthday confetti shower for 100,000-block milestones. */}
               {showBirthdayConfetti && (
                 <PetBirthdayConfetti
-                  className="absolute -top-8 inset-x-0 h-40 z-30"
+                  className="absolute -top-8 -left-1/2 -right-1/2 h-48 z-30"
                   onComplete={() => setShowBirthdayConfetti(false)}
                 />
               )}
