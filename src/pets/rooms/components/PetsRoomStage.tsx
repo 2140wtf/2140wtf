@@ -23,6 +23,7 @@ import { EggTapTarget } from './EggTapTarget';
 import { ROOM_FLOOR_RATIO, getPetsBodyBottomInset } from '../lib/room-layout-schema';
 import { cn } from '@/lib/utils';
 import { usePetLife } from '@/pets/core/lib/pets-life';
+import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { PetsEmotion } from '@/pets/ui/lib/emotion-types';
@@ -83,6 +84,18 @@ export function PetsRoomStage({
 
   // Pet life in Bitcoin-block time (10 min blocks, 2016-block epochs).
   const petLife = usePetLife(companion.event.created_at);
+  const lastLifeToastAt = useReactRef<number>(0);
+
+  const handleLifeBadgeHover = useCallback(() => {
+    if (!petLife) return;
+    const now = Date.now();
+    if (now - lastLifeToastAt.current < 4000) return;
+    lastLifeToastAt.current = now;
+    toast({
+      title: petLife.label,
+      description: `Pet life in Bitcoin-block time. e = epoch (2016 blocks), b = block.`,
+    });
+  }, [petLife]);
 
   return (
     <div ref={stageRef} className="absolute inset-0 pointer-events-none">
@@ -151,13 +164,13 @@ export function PetsRoomStage({
               {/* Life badge — floats above the top-right corner of the pet visual. */}
               {petLife && (
                 <div
-                  className="absolute -top-7 right-0 z-20 pointer-events-none"
-                  title={`${petLife.totalBlocks.toLocaleString()} blocks lived`}
+                  className="absolute -top-7 right-0 z-20 pointer-events-auto cursor-help"
+                  onMouseEnter={handleLifeBadgeHover}
                 >
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/70 backdrop-blur-sm border border-border/20 shadow-sm">
                     <span className="text-[10px] leading-none text-amber-500 font-bold">₿</span>
                     <span className="text-[10px] sm:text-xs leading-none font-semibold text-foreground/80 whitespace-nowrap">
-                      {petLife.label}
+                      {petLife.shortLabel}
                     </span>
                   </div>
                 </div>
