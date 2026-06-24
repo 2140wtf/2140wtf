@@ -18,13 +18,14 @@
 
 import { useCallback, useRef } from 'react';
 
+import { useAppContext } from '@/hooks/useAppContext';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
 import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
 import { EggTapTarget } from './EggTapTarget';
 import { ROOM_FLOOR_RATIO, getPetsBodyBottomInset } from '../lib/room-layout-schema';
 import { cn } from '@/lib/utils';
-import { usePetLife } from '@/pets/core/lib/pets-life';
+import { usePetLife, useCurrentBlockHeight, getBirthBlockHeight } from '@/pets/core/lib/pets-life';
 import { toast } from '@/hooks/useToast';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -85,7 +86,10 @@ export function PetsRoomStage({
   const bobDuration = `${4 - (currentStats.happiness / 100) * 1.5}s`;
 
   // Pet life in Bitcoin-block time (10 min blocks, 2016-block epochs).
+  const { config } = useAppContext();
   const petLife = usePetLife(companion.event.created_at);
+  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
+  const birthBlockHeight = getBirthBlockHeight(companion.event.created_at, currentBlockHeight);
   const lastLifeToastAt = useRef<number>(0);
 
   const handleLifeBadgeHover = useCallback(() => {
@@ -93,11 +97,14 @@ export function PetsRoomStage({
     const now = Date.now();
     if (now - lastLifeToastAt.current < 4000) return;
     lastLifeToastAt.current = now;
+    const birthText = birthBlockHeight
+      ? ` Born at block ${birthBlockHeight.toLocaleString()}.`
+      : '';
     toast({
       title: petLife.label,
-      description: `Pet life in Bitcoin-block time. e = epoch (2016 blocks), b = block.`,
+      description: `Pet life in Bitcoin-block time. e = epoch (2016 blocks), b = block.${birthText}`,
     });
-  }, [petLife]);
+  }, [petLife, birthBlockHeight]);
 
   return (
     <div ref={stageRef} className="absolute inset-0 pointer-events-none">
