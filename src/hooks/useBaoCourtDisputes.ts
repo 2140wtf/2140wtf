@@ -238,9 +238,12 @@ export function useBaoCourtDisputes() {
 /**
  * Query the kind 39002 selection event for a specific dispute.
  *
- * Selection events are trust-sensitive. Callers SHOULD provide a list of
- * trusted coordinator pubkeys; without them the hook still validates the event
- * structure and dispute id, but it cannot protect against a malicious publisher.
+ * Selection events are trust-sensitive. Callers currently provide a list of
+ * trusted coordinator pubkeys for filtering, but a coordinator-based design is
+ * NOT the desired end state. The protocol target is a fully independent jury
+ * where selection events are validated through roster signatures, not a
+ * privileged publisher. Until that replaces the coordinator filter, callers
+ * should treat the pubkey list as a temporary compatibility aid.
  */
 export function useBaoCourtSelection(
   disputeId: string,

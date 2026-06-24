@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useDemoCourtRoom } from '@/hooks/useDemoCourtRoom';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { DEMO_BOND_AMOUNT_SATS, electCoordinator } from '@/lib/baoCourtSimulator';
+import { DEMO_BOND_AMOUNT_SATS } from '@/lib/baoCourtSimulator';
 import type { BaoCourtDispute } from '@/hooks/useBaoCourtDisputes';
 import type { JurorSettingsState } from './JurorSettings';
 import type { SelectedJuror } from '@bao/frost-court';
@@ -54,11 +54,6 @@ export function DemoCourtLobby({
     return room.selectedJurors.findIndex((j) => j.nostrPubkey === user.pubkey) + 1 || 1;
   }, [room.selectedJurors, user]);
 
-  const coordinatorPubkey = useMemo(
-    () => (room.members.length >= threshold ? electCoordinator(room.members.map((m) => m.pubkey)) : null),
-    [room.members, threshold],
-  );
-
   const sessionTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -84,9 +79,7 @@ export function DemoCourtLobby({
         return `Waiting for ${threshold - room.members.length} more juror${threshold - room.members.length === 1 ? '' : 's'}…`;
       case 'settling':
       case 'forming':
-        return room.isCoordinator
-          ? 'You are the coordinator. Publishing the mock dispute and jury selection…'
-          : 'Jury threshold reached. Waiting for the coordinator to publish the selection…';
+        return 'Jury threshold reached. Forming the mock dispute and selection…';
       case 'formed':
         return `Demo jury formed — you are Juror #${myJurorIdx}. Starting FROST ceremony…`;
       case 'error':
@@ -173,7 +166,6 @@ export function DemoCourtLobby({
                 </p>
                 <div className="grid gap-2">
                   {room.members.map((member) => {
-                    const isCoordinator = member.pubkey === coordinatorPubkey;
                     const jurorNumber = room.selectedJurors.findIndex((j) => j.nostrPubkey === member.pubkey) + 1 || undefined;
                     return (
                       <div
@@ -189,7 +181,6 @@ export function DemoCourtLobby({
                             <Badge variant="outline">#{jurorNumber}</Badge>
                           )}
                           {member.pubkey === user?.pubkey && <Badge variant="outline">You</Badge>}
-                          {isCoordinator && <Badge variant="secondary">Coordinator</Badge>}
                         </div>
                       </div>
                     );

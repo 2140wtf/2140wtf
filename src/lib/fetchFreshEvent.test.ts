@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
 import { fetchFreshEvent } from './fetchFreshEvent';
-import type { NIndexedDB } from './NIndexedDB';
+import type { NIndexedDB } from '@nostrify/indexeddb';
 
 const PK = 'a'.repeat(64);
 
