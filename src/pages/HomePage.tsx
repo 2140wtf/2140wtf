@@ -19,7 +19,6 @@ const PAGE_LOADERS: Record<string, React.LazyExoticComponent<React.ComponentType
   'videos': lazy(() => import('./VideosFeedPage').then(m => ({ default: m.VideosFeedPage }))),
   'music': lazy(() => import('./MusicFeedPage').then(m => ({ default: m.MusicFeedPage }))),
   'podcasts': lazy(() => import('./PodcastsFeedPage').then(m => ({ default: m.PodcastsFeedPage }))),
-  'webxdc': lazy(() => import('./WebxdcFeedPage').then(m => ({ default: m.WebxdcFeedPage }))),
   'themes': lazy(() => import('./ThemesPage').then(m => ({ default: m.ThemesPage }))),
   'books': lazy(() => import('./BooksPage').then(m => ({ default: m.BooksPage }))),
   'badges': lazy(() => import('./BadgesPage').then(m => ({ default: m.BadgesPage }))),

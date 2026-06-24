@@ -39,7 +39,6 @@ import type { EventStats } from '@/hooks/useTrending';
 import { cn } from '@/lib/utils';
 import { canZap } from '@/lib/canZap';
 import { notificationSuccess } from '@/lib/haptics';
-import { generateUUID } from '@/lib/uuid';
 import { extractVideoUrls, extractAudioUrls, IMETA_MEDIA_URL_REGEX, IMETA_MEDIA_URL_TEST_REGEX, mimeFromExt } from '@/lib/mediaUrls';
 
 /** Lazy-loaded EmojiPicker — keeps emoji-mart + its data out of the main bundle. */
@@ -254,10 +253,6 @@ export function ComposeBox({
   const [removedEmbeds, setRemovedEmbeds] = useState<Set<string>>(new Set());
   /** Maps uploaded file URLs to their NIP-94 tags (grouped per upload). */
   const [uploadedFileGroups, setUploadedFileGroups] = useState<Map<string, string[][]>>(new Map());
-  /** Maps .xdc URLs to their generated webxdc UUIDs. */
-  const [webxdcUuids, setWebxdcUuids] = useState<Map<string, string>>(new Map());
-  /** Maps .xdc URLs to extracted metadata (name + icon URL). */
-  const [webxdcMetas, setWebxdcMetas] = useState<Map<string, { name?: string; iconUrl?: string }>>(new Map());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { insertAtCursor, insertEmoji: insertEmojiAtCursor } = useInsertText(textareaRef, content, setContent);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -283,8 +278,6 @@ export function ComposeBox({
     setZapMax('');
     setRemovedEmbeds(new Set());
     setUploadedFileGroups(new Map());
-    setWebxdcUuids(new Map());
-    setWebxdcMetas(new Map());
     // Clear the auto-saved draft
     try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
   }, [initialMode, draftKey]);
@@ -480,13 +473,10 @@ export function ComposeBox({
     return false;
   }, [content, customEmojis]);
 
-  // Detect webxdc attachments for preview mode
-  const hasWebxdc = useMemo(() => webxdcUuids.size > 0, [webxdcUuids]);
-
-  // Check if content has any previewable content (link previews, images, videos, audio, webxdc, mentions, or custom emojis)
+  // Check if content has any previewable content (link previews, images, videos, audio, mentions, or custom emojis)
   const hasPreviewableContent = useMemo(() => {
-    return visibleEmbeds.length > 0 || hasPreviewImages || previewVideos.length > 0 || previewAudios.length > 0 || hasWebxdc || hasMentions || hasCustomEmojis;
-  }, [visibleEmbeds, hasPreviewImages, previewVideos, previewAudios, hasWebxdc, hasMentions, hasCustomEmojis]);
+    return visibleEmbeds.length > 0 || hasPreviewImages || previewVideos.length > 0 || previewAudios.length > 0 || hasMentions || hasCustomEmojis;
+  }, [visibleEmbeds, hasPreviewImages, previewVideos, previewAudios, hasMentions, hasCustomEmojis]);
 
   // Notify parent of previewable content changes
   useEffect(() => {
@@ -544,36 +534,16 @@ export function ComposeBox({
       if (processedUrls.has(url)) continue;
       processedUrls.add(url);
       const ext = m[1].toLowerCase();
-      const isWebxdc = ext === 'xdc';
       const fileTags = uploadedFileGroups.get(url);
       if (fileTags) {
         const imetaFields = fileTags.map(tag => `${tag[0]} ${tag[1]}`);
-        if (isWebxdc) {
-          const filtered = imetaFields.filter(f => !f.startsWith('m '));
-          filtered.push('m application/x-webxdc');
-          const uuid = webxdcUuids.get(url);
-          if (uuid) filtered.push(`webxdc ${uuid}`);
-          const meta = webxdcMetas.get(url);
-          if (meta?.name) filtered.push(`summary ${meta.name}`);
-          if (meta?.iconUrl) filtered.push(`image ${meta.iconUrl}`);
-          tags.push(['imeta', ...filtered]);
-        } else {
-          tags.push(['imeta', ...imetaFields]);
-        }
+        tags.push(['imeta', ...imetaFields]);
       } else {
         const mimeType = mimeFromExt(ext);
-        const imetaTag = ['imeta', `url ${url}`, `m ${mimeType}`];
-        if (isWebxdc) {
-          const uuid = webxdcUuids.get(url);
-          if (uuid) imetaTag.push(`webxdc ${uuid}`);
-          const meta = webxdcMetas.get(url);
-          if (meta?.name) imetaTag.push(`summary ${meta.name}`);
-          if (meta?.iconUrl) imetaTag.push(`image ${meta.iconUrl}`);
-        }
-        tags.push(imetaTag);
+        tags.push(['imeta', `url ${url}`, `m ${mimeType}`]);
       }
     }
-    
+
     return {
       id: 'preview',
       pubkey: user.pubkey,
@@ -583,7 +553,7 @@ export function ComposeBox({
       tags,
       sig: '',
     };
-  }, [user, content, customEmojis, uploadedFileGroups, webxdcUuids, webxdcMetas]);
+  }, [user, content, customEmojis, uploadedFileGroups]);
 
   const insertEmoji = useCallback((emoji: string) => {
     insertEmojiAtCursor(emoji);
@@ -596,18 +566,12 @@ export function ComposeBox({
 
   const handleFileUpload = useCallback(async (file: File) => {
     try {
-      // .xdc files are ZIP archives; browsers don't know their MIME type so file.type is ''.
-      // Blossom servers may reject uploads with an empty Content-Type, so we re-wrap the file
-      // with the correct MIME type before uploading.
-      const isXdc = file.name.endsWith('.xdc');
       const isImage = file.type.startsWith('image/');
 
       let uploadableFile: File;
       let resizedDim: string | undefined;
 
-      if (isXdc && !file.type) {
-        uploadableFile = new File([file], file.name, { type: 'application/x-webxdc' });
-      } else if (isImage && imageQuality === 'compressed') {
+      if (isImage && imageQuality === 'compressed') {
         // Resize & optimize images before uploading for better performance.
         const resized = await resizeImage(file);
         uploadableFile = resized.file;
@@ -617,20 +581,11 @@ export function ComposeBox({
       }
 
       const tags = await uploadFile(uploadableFile);
-      let [[, url]] = tags;
-
-      // Blossom returns hash-based URLs that may lack the original file extension.
-      // Append the extension so downstream media-URL detection and imeta generation work.
-      if (isXdc && !url.endsWith('.xdc')) {
-        url = url + '.xdc';
-        // Update the url tag in the NIP-94 tags to match
-        const urlTag = tags.find(t => t[0] === 'url');
-        if (urlTag) urlTag[1] = url;
-      }
+      const [[, url]] = tags;
 
       // Compute dim + blurhash and inject into NIP-94 tags.
       // Skip any the server already provided (Nostrify passes "dim" through).
-      if (!isXdc && isImage) {
+      if (isImage) {
         const hasTag = (name: string) => tags.some((t) => t[0] === name);
         // Use dimensions from resizeImage; compute blurhash from the resized file
         if (resizedDim && !hasTag('dim')) tags.push(['dim', resizedDim]);
@@ -643,34 +598,6 @@ export function ComposeBox({
       // Store the full NIP-94 tags for later use in imeta
       setUploadedFileGroups((prev) => new Map(prev).set(url, tags));
       setContent((prev) => (prev ? prev + '\n' + url : url));
-
-      // For .xdc files, generate a UUID and extract manifest metadata
-      if (isXdc) {
-        const uuid = generateUUID();
-        setWebxdcUuids((prev) => new Map(prev).set(url, uuid));
-
-        // Extract name and icon from the .xdc archive
-        try {
-          const { extractWebxdcMeta } = await import('@/lib/webxdcMeta');
-          const meta = await extractWebxdcMeta(file);
-          const metaEntry: { name?: string; iconUrl?: string } = { name: meta.name };
-
-          // Upload the icon to Blossom if present
-          if (meta.iconFile) {
-            try {
-              const iconTags = await uploadFile(meta.iconFile);
-              const [[, iconUrl]] = iconTags;
-              metaEntry.iconUrl = iconUrl;
-            } catch {
-              // Icon upload failed — continue without it
-            }
-          }
-
-          setWebxdcMetas((prev) => new Map(prev).set(url, metaEntry));
-        } catch {
-          // Metadata extraction failed — continue without it
-        }
-      }
 
       expand();
     } catch {
@@ -953,40 +880,17 @@ export function ComposeBox({
         processedUrls.add(url);
         
         const ext = match[1].toLowerCase();
-        const isWebxdc = ext === 'xdc';
 
         // Build imeta from grouped upload tags if available, otherwise infer
         const fileTags = uploadedFileGroups.get(url);
-        
+
         if (fileTags) {
           const imetaFields = fileTags.map(tag => `${tag[0]} ${tag[1]}`);
-
-          if (isWebxdc) {
-            // Override MIME type for .xdc files and add webxdc UUID + metadata
-            const filtered = imetaFields.filter(f => !f.startsWith('m '));
-            filtered.push('m application/x-webxdc');
-            const uuid = webxdcUuids.get(url);
-            if (uuid) filtered.push(`webxdc ${uuid}`);
-            const meta = webxdcMetas.get(url);
-            if (meta?.name) filtered.push(`summary ${meta.name}`);
-            if (meta?.iconUrl) filtered.push(`image ${meta.iconUrl}`);
-            tags.push(['imeta', ...filtered]);
-          } else {
-            tags.push(['imeta', ...imetaFields]);
-          }
+          tags.push(['imeta', ...imetaFields]);
         } else {
           // Fallback: basic imeta tag with URL and inferred mime type
           const mimeType = mimeFromExt(ext);
-          
-          const imetaTag = ['imeta', `url ${url}`, `m ${mimeType}`];
-          if (isWebxdc) {
-            const uuid = webxdcUuids.get(url);
-            if (uuid) imetaTag.push(`webxdc ${uuid}`);
-            const meta = webxdcMetas.get(url);
-            if (meta?.name) imetaTag.push(`summary ${meta.name}`);
-            if (meta?.iconUrl) imetaTag.push(`image ${meta.iconUrl}`);
-          }
-          tags.push(imetaTag);
+          tags.push(['imeta', `url ${url}`, `m ${mimeType}`]);
         }
       }
 
@@ -1637,7 +1541,7 @@ export function ComposeBox({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,video/*,audio/*,.xdc"
+                  accept="image/*,video/*,audio/*"
                   multiple
                   className="hidden"
                   onChange={(e) => {

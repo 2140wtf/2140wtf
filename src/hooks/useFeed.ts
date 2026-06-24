@@ -46,7 +46,7 @@ interface FeedPage {
 interface UseFeedOptions {
   /** Override the kinds list instead of using feed settings. Used by kind-specific pages. */
   kinds?: number[];
-  /** Additional tag filters to apply (e.g. `{ '#m': ['application/x-webxdc'] }` for mini-apps). */
+  /** Additional tag filters to apply (e.g. `{ '#t': ['art'] }`). */
   tagFilters?: Record<string, string[]>;
 }
 

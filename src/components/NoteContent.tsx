@@ -12,7 +12,6 @@ import { EmbeddedNaddr } from '@/components/EmbeddedNaddr';
 import { LightningInvoiceCard } from '@/components/LightningInvoiceCard';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
-import { WebxdcEmbed } from '@/components/WebxdcEmbed';
 import { Lightbox, ImageGallery } from '@/components/ImageGallery';
 import { ProfileHoverCard } from '@/components/ProfileHoverCard';
 import { EmojifiedText, CustomEmojiImg } from '@/components/CustomEmoji';
@@ -402,7 +401,7 @@ export function NoteContent({
           continue;
         }
 
-        // Non-image media URLs (video, audio, webxdc) — render inline at their position.
+        // Non-image media URLs (video or audio) — render inline at their position.
         if (EMBED_MEDIA_URL_REGEX.test(url)) {
           if (result.length > 0) {
             const prev = result[result.length - 1];
@@ -513,7 +512,7 @@ export function NoteContent({
     }
 
     // Append media-embed tokens for imeta-declared media URLs not found in the content.
-    // Some clients attach audio/video/webxdc via imeta tags without including the URL in
+    // Some clients attach audio/video via imeta tags without including the URL in
     // the content string. Without this, those attachments would be silently dropped.
     // Only scan for text note kinds — other kinds (DMs, calendar events, etc.) may use
     // imeta tags for different purposes.
@@ -535,8 +534,7 @@ export function NoteContent({
         }
         const url = sanitizeUrl(rawUrl);
         if (!url || contentMediaUrls.has(url)) continue;
-        const isEmbeddableMedia = mime?.startsWith('audio/') || mime?.startsWith('video/')
-          || mime === 'application/x-webxdc' || mime === 'application/vnd.webxdc+zip';
+        const isEmbeddableMedia = mime?.startsWith('audio/') || mime?.startsWith('video/');
         if (isEmbeddableMedia) {
           result.push({ type: 'media-embed', url });
         }
@@ -760,11 +758,7 @@ export function NoteContent({
             }
             const imeta = imetaMap.get(token.url);
             const mime = imeta?.mime ?? '';
-            const isWebxdc = mime === 'application/x-webxdc' || mime === 'application/vnd.webxdc+zip' || token.url.endsWith('.xdc');
             const isAudio = mime.startsWith('audio/') || /\.(mp3|wav|ogg|flac|m4a|aac|opus)(\?[^\s]*)?$/i.test(token.url);
-            if (isWebxdc && imeta) {
-              return <WebxdcEmbed key={i} url={token.url} uuid={imeta.webxdc} name={imeta.summary} icon={imeta.thumbnail} />;
-            }
             if (isAudio) {
               return (
                 <AudioVisualizer

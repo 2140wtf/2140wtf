@@ -2,7 +2,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { ALL_MEDIA_EXTS } from '@/lib/mediaUrls';
 
-/** Regex for media URLs (image, video, audio, webxdc) that render as inline
+/** Regex for media URLs (image, video, or audio) that render as inline
  *  embeds whose height comes from the media itself, not from long-form text. */
 const MEDIA_URL_REGEX = new RegExp(
   `https?:\\/\\/[^\\s]+\\.(?:${ALL_MEDIA_EXTS})(?:\\?[^\\s]*)?`,
