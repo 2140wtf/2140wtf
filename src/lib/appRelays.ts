@@ -12,6 +12,43 @@ export const DITTO_RELAYS: string[] = [
 /** Relay used for Zapstore app metadata (kind 32267) and releases (kind 30063). */
 export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev/';
 
+/**
+ * Extended relay set for NIP-99 classified listings (kind 30402).
+ *
+ * Marketplace listings are published to a mix of general relays, BAO's
+ * marketplace relay, and relays favoured by NIP-99 clients such as Shopstr.
+ * Querying this set on top of the user's configured relays gives the merchant
+ * feed the best chance of surfacing active offers.
+ */
+export const NIP99_RELAYS: string[] = [
+  'wss://relay.bao.network',
+  'wss://relay.ditto.pub',
+  'wss://relay.dreamith.to',
+  'wss://relay.nostr.band',
+  'wss://relay.noswhere.com',
+  'wss://nostr.wine',
+  'wss://antiprimal.net',
+  'wss://relay.primal.net',
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.snort.social',
+  'wss://relay.nostr.wirednet.jp',
+  'wss://nostr21.com',
+  'wss://offchain.pub',
+  'wss://bitcoiner.social',
+  'wss://nostr.bitcoiner.social',
+  'wss://eden.nostr.land',
+  'wss://atlas.nostr.land',
+  'wss://nostr.mom',
+  'wss://relay.nostr.bg',
+  'wss://relay.0xchat.com',
+  'wss://relay.nostrcn.com',
+  'wss://relay.nostrview.com',
+  'wss://relay.notoshi.io',
+  'wss://nostr.slothy.win',
+  'wss://relay.nostr.ro',
+];
+
 /** Normalize a relay URL for deduplication (lowercase, strip trailing slash). */
 function normalizeUrl(url: string): string {
   return url.toLowerCase().replace(/\/+$/, '');

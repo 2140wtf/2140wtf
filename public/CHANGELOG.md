@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.24.0] - 2026-06-22
+## [0.24.0] - 2026-06-22
 
 This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade ₿AO prediction markets, vote in live poll cubes, chat in private groups, send encrypted messages, and carry a Cashu wallet — all under a fresh 2140.wtf look with light themes and a reorganized home.
 
@@ -35,7 +35,7 @@ This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade �
 - Old live Nostr feed preview removed from the about page
 - Stale Android SandboxPlugin removed
 
-## [2.23.4] - 2026-06-18
+## [0.23.4] - 2026-06-18
 
 A performance tune-up that makes profiles and feeds load faster by trimming away redundant background network requests. Tabs, dialogs, and zap buttons now only fetch what they need, when you need it.
 

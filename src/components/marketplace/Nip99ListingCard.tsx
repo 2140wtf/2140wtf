@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download, DollarSign, Bitcoin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import LoginDialog from '@/components/auth/LoginDialog';
@@ -14,7 +14,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ImageGallery } from '@/components/ImageGallery';
+import { Switch } from '@/components/ui/switch';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMarkListingSold } from '@/hooks/useMarkListingSold';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
@@ -71,6 +73,57 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
   const isSeller = user?.pubkey === listing.pubkey;
   const canBuy = canCheckout(listing) && !isSeller;
   const [loginOpen, setLoginOpen] = useState(false);
+  const [showUsd, setShowUsd] = useState(false);
+
+  const { btcPrice } = useBtcPrice(!!listing.price);
+
+  const priceDisplay = useMemo(() => {
+    const price = listing.price;
+    if (!price) return { kind: 'no-price' as const };
+    if (!Number.isFinite(price.value) || price.value <= 0) return { kind: 'unsupported' as const };
+
+    const currency = price.currency.trim().toLowerCase();
+    const hasBtcPrice = btcPrice && Number.isFinite(btcPrice) && btcPrice > 0;
+
+    if (currency === 'sats' || currency === 'sat') {
+      const amountSats = Math.round(price.value);
+      const usdAmount = hasBtcPrice ? (amountSats / 100_000_000) * btcPrice : undefined;
+      return { kind: 'sats' as const, amountSats, usdAmount };
+    }
+
+    if (currency === 'btc') {
+      const amountSats = Math.round(price.value * 100_000_000);
+      if (amountSats <= 0) return { kind: 'unsupported' as const };
+      const usdAmount = hasBtcPrice ? price.value * btcPrice : undefined;
+      return { kind: 'sats' as const, amountSats, usdAmount };
+    }
+
+    if (currency === 'usd') {
+      if (!hasBtcPrice) {
+        return { kind: 'loading' as const };
+      }
+      const amountSats = Math.round((price.value / btcPrice) * 100_000_000);
+      if (amountSats <= 0) return { kind: 'unsupported' as const };
+      return { kind: 'sats' as const, amountSats, usdAmount: price.value };
+    }
+
+    return { kind: 'unsupported' as const };
+  }, [listing.price, btcPrice]);
+
+  const priceLabel = useMemo(() => {
+    if (priceDisplay.kind === 'no-price') return 'Price on request';
+    if (priceDisplay.kind === 'loading') return 'Converting…';
+    if (priceDisplay.kind === 'unsupported') return formatNip99Price(listing.price);
+    if (showUsd && priceDisplay.usdAmount !== undefined) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(priceDisplay.usdAmount);
+    }
+    return `${priceDisplay.amountSats.toLocaleString()} sats`;
+  }, [priceDisplay, showUsd, listing.price]);
 
   return (
     <>
@@ -105,11 +158,36 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
 
         <div className="p-4 space-y-3">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-sm line-clamp-2 flex-1">{listing.title}</h3>
+            <button
+              type="button"
+              onClick={() => setDetailOpen(true)}
+              className="font-semibold text-sm line-clamp-2 flex-1 text-left"
+            >
+              {listing.title}
+            </button>
             {listing.price && (
-              <Badge variant="outline" className="shrink-0 text-xs">
-                {formatNip99Price(listing.price)}
-              </Badge>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Badge variant="outline" className="text-xs">
+                  {priceLabel}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowUsd((v) => !v);
+                  }}
+                  aria-label={showUsd ? 'Show sats' : 'Show USD'}
+                  title={showUsd ? 'Show sats' : 'Show USD'}
+                >
+                  {showUsd ? (
+                    <Bitcoin className="w-3.5 h-3.5" />
+                  ) : (
+                    <DollarSign className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </div>
             )}
           </div>
 
@@ -170,8 +248,19 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
 
           <div className="space-y-4">
             {listing.price && (
-              <div className="text-2xl font-bold">
-                {formatNip99Price(listing.price)}
+              <div className="flex items-center gap-3">
+                <div className="text-2xl font-bold">{priceLabel}</div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Switch
+                    id={`price-toggle-${listing.id}`}
+                    checked={showUsd}
+                    onCheckedChange={setShowUsd}
+                    aria-label={showUsd ? 'Show sats' : 'Show USD'}
+                  />
+                  <label htmlFor={`price-toggle-${listing.id}`} className="cursor-pointer">
+                    {showUsd ? 'USD' : 'Sats'}
+                  </label>
+                </div>
               </div>
             )}
 

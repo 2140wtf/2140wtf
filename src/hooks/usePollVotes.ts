@@ -36,6 +36,17 @@ export const BAO_POLL_RELAYS = [
   'wss://relay.nsecbunker.com',
   'wss://relay.bao.network',
   'wss://purplepag.es',
+  // Expanded relay set for better poll discovery
+  'wss://relay.nostrich.land',
+  'wss://nostr.mom',
+  'wss://relay.nostr.bg',
+  'wss://relay.noswhere.com',
+  'wss://relay.0xchat.com',
+  'wss://relay.nostrcn.com',
+  'wss://relay.nostrview.com',
+  'wss://relay.notoshi.io',
+  'wss://nostr.slothy.win',
+  'wss://relay.nostr.ro',
 ];
 
 function normalizeUrl(url: string): string {
