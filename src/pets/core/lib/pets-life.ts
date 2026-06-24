@@ -29,6 +29,8 @@ export interface PetLife {
   blocksInEpoch: number;
   /** Human-readable label, e.g. "1 epoch 42 blocks". */
   label: string;
+  /** Compact label, e.g. "1b" or "2e+1b". */
+  shortLabel: string;
 }
 
 /**
@@ -55,12 +57,14 @@ export function getPetLife(
 
   const epochLabel = epochs === 1 ? '1 epoch' : `${epochs} epochs`;
   const blockLabel = blocksInEpoch === 1 ? '1 block' : `${blocksInEpoch} blocks`;
+  const shortLabel = epochs === 1 ? `${blocksInEpoch}b` : `${epochs}e+${blocksInEpoch}b`;
 
   return {
     totalBlocks,
     epochs,
     blocksInEpoch,
     label: `${epochLabel} ${blockLabel}`,
+    shortLabel,
   };
 }
 
