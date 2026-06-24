@@ -372,23 +372,18 @@ export function PrivacySettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Apps & recovery */}
+        {/* Recovery */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Eye className="size-4 text-primary" />
-              Apps & recovery
+              Recovery
             </CardTitle>
             <CardDescription>
-              Webxdc apps and recovery re-publishes.
+              Recovery re-publishes.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0 divide-y">
-            <ToggleRow
-              feature="webxdc"
-              title="Webxdc apps"
-              description="Publish Webxdc app uploads and mini-app updates (kinds 1063, 4932)."
-            />
+          <CardContent className="pt-0">
             <ToggleRow
               feature="recovery"
               title="Recovery re-publish"

@@ -89,8 +89,6 @@ const hardcodedConfig: AppConfig = {
     showPeopleLists: true,
     feedIncludePolls: true,
     feedIncludePeopleLists: true,
-    showWebxdc: true,
-    feedIncludeWebxdc: true,
     showPhotos: true,
     feedIncludePhotos: true,
     showVideos: true,

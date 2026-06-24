@@ -110,7 +110,6 @@ export interface EncryptedSettings {
     reports?: boolean;
     roadstr?: boolean;
     directMessages?: boolean;
-    webxdc?: boolean;
     recovery?: boolean;
     encryptedSettings?: boolean;
     deleteRequests?: boolean;

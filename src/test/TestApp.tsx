@@ -51,8 +51,6 @@ export function TestApp({ children }: TestAppProps) {
       showPeopleLists: true,
       feedIncludePolls: false,
       feedIncludePeopleLists: false,
-      showWebxdc: false,
-      feedIncludeWebxdc: false,
       showProfileThemes: false,
       feedIncludeProfileThemes: true,
       showThemeDefinitions: true,
