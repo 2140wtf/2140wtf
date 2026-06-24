@@ -47,6 +47,7 @@ import { LOVE_LIST_KIND } from '@/hooks/useLoveList';
 import { useWallComments } from '@/hooks/useWallComments';
 import { FlatThreadedReplyList } from '@/components/ThreadedReplyList';
 import { useNip05Resolve } from '@/hooks/useNip05Resolve';
+import { useNip05Verify } from '@/hooks/useNip05Verify';
 
 import { openUrl } from '@/lib/downloadFile';
 import { EmojifiedText } from '@/components/CustomEmoji';
@@ -151,6 +152,19 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
   const { user } = useCurrentUser();
   const shareOrigin = useShareOrigin();
   const npubEncoded = useMemo(() => nip19.npubEncode(pubkey), [pubkey]);
+  const metadataNip05 = useMemo(() => {
+    try {
+      return JSON.parse(authorEvent?.content ?? '{}').nip05 as string | undefined;
+    } catch {
+      return undefined;
+    }
+  }, [authorEvent]);
+  const { data: nip05Verified } = useNip05Verify(metadataNip05, pubkey);
+  const shortLink = useMemo(() => {
+    if (!metadataNip05) return '';
+    const path = metadataNip05.startsWith('_@') ? metadataNip05.slice(2) : metadataNip05;
+    return `${shareOrigin}/${path}`;
+  }, [metadataNip05, shareOrigin]);
   const { addMute, removeMute, isMuted } = useMuteList();
   const userMuted = isMuted('pubkey', pubkey);
   const { addToSidebar, removeFromSidebar, orderedItems } = useFeedSettings();
@@ -183,10 +197,16 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
     close();
   };
 
-  const handleCopyLink = () => {
+  const handleCopyShortLink = () => {
+    navigator.clipboard.writeText(shortLink);
+    toast({ title: 'Short profile link copied to clipboard' });
+    close();
+  };
+
+  const handleCopyLongLink = () => {
     const url = `${shareOrigin}/${npubEncoded}`;
     navigator.clipboard.writeText(url);
-    toast({ title: 'Profile link copied to clipboard' });
+    toast({ title: 'Long profile link copied to clipboard' });
     close();
   };
 
@@ -238,10 +258,17 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
             label="Copy public key"
             onClick={handleCopyPubkey}
           />
+          {nip05Verified && shortLink && (
+            <MenuRow
+              icon={<ClipboardCopy className="size-5" />}
+              label="Copy short link"
+              onClick={handleCopyShortLink}
+            />
+          )}
           <MenuRow
             icon={<ClipboardCopy className="size-5" />}
-            label="Copy profile link"
-            onClick={handleCopyLink}
+            label="Copy long link"
+            onClick={handleCopyLongLink}
           />
           <MenuRow
             icon={<ListPlus className="size-5" />}
