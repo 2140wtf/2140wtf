@@ -594,6 +594,25 @@ export interface FeeRates {
 }
 
 /**
+ * Fetch the current Bitcoin block height from an Esplora-compatible API.
+ *
+ * Endpoint: `/blocks/tip/height` returns the height of the current chain tip
+ * as plain text. Fails over through `baseUrls` using the same cool-down logic
+ * as the other Esplora helpers.
+ *
+ * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
+ * @param signal     Optional abort signal (e.g. from TanStack Query).
+ */
+export async function fetchBlockHeight(baseUrls: string[], signal?: AbortSignal): Promise<number> {
+  const response = await esploraFetch(baseUrls, `/blocks/tip/height`, { signal });
+  if (!response.ok) throw new Error('Failed to fetch block height');
+  const text = await response.text();
+  const height = Number(text.trim());
+  if (!Number.isFinite(height) || height < 0) throw new Error('Invalid block height response');
+  return height;
+}
+
+/**
  * Fetch recommended fee rates (sat/vB) from an Esplora-compatible API.
  *
  * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
