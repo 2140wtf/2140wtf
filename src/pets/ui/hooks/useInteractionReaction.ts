@@ -31,7 +31,9 @@ export type InteractionReactionType =
   | 'play'
   | 'clean'
   | 'clean_complete'
-  | 'social_hearts';
+  | 'social_hearts'
+  | 'hover'
+  | 'poke';
 
 /** Phase of a multi-phase reaction (e.g. clean_complete: bubbles → sparkles). */
 type ReactionPhase = 'primary' | 'secondary';
@@ -103,6 +105,8 @@ const REACTION_DURATIONS: Record<InteractionReactionType, { primary: number; sec
   clean:          { primary: 1500 },
   clean_complete: { primary: 1200, secondary: 1500 },
   social_hearts:  { primary: 2500 },
+  hover:          { primary: 900 },
+  poke:           { primary: 1400 },
 };
 
 /**
@@ -171,6 +175,24 @@ function buildReaction(type: InteractionReactionType, phase: ReactionPhase): Act
         type, phase,
         emotion: null,
         bodyAnimation: null,
+        sparkles: false, bubbles: false, hearts: true,
+      };
+
+    case 'hover':
+      // Cursor hover: curious look + gentle lean
+      return {
+        type, phase,
+        emotion: 'curious',
+        bodyAnimation: 'animate-pets-hover-lean',
+        sparkles: false, bubbles: false, hearts: false,
+      };
+
+    case 'poke':
+      // Direct click/tap: happy wiggle + hearts
+      return {
+        type, phase,
+        emotion: 'happy',
+        bodyAnimation: 'animate-pets-poke-wiggle',
         sparkles: false, bubbles: false, hearts: true,
       };
   }
