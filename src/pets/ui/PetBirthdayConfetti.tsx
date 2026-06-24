@@ -29,7 +29,8 @@ const CONFETTI_COLORS = [
 ];
 
 const PARTICLE_COUNT = 48;
-const ANIMATION_DURATION_MS = 3500;
+// Max particle lifetime: 600ms delay + 3000ms duration = 3600ms; add padding.
+const ANIMATION_DURATION_MS = 4000;
 
 interface Particle {
   id: number;
