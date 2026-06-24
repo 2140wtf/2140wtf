@@ -24,6 +24,9 @@ export const PET_BLOCK_TIME_SECONDS = 600;
 /** Blocks per Bitcoin difficulty epoch. */
 export const PET_EPOCH_BLOCKS = 2016;
 
+/** Block interval at which to celebrate a pet birthday. */
+export const BIRTHDAY_MILESTONE_BLOCKS = 100_000;
+
 export interface PetLife {
   /** Total blocks lived since birth (starts at 1). */
   totalBlocks: number;
@@ -35,6 +38,10 @@ export interface PetLife {
   label: string;
   /** Compact label, e.g. "1b" or "2e+1b". */
   shortLabel: string;
+  /** Whether the pet has hit a 100,000-block birthday milestone right now. */
+  isBirthdayMilestone: boolean;
+  /** The milestone block count, e.g. 100000, 200000, or undefined. */
+  milestoneBlocks: number | undefined;
 }
 
 /**
@@ -62,6 +69,10 @@ export function getPetLife(
   const epochLabel = epochs === 1 ? '1 epoch' : `${epochs} epochs`;
   const blockLabel = blocksInEpoch === 1 ? '1 block' : `${blocksInEpoch} blocks`;
   const shortLabel = epochs === 1 ? `${blocksInEpoch}b` : `${epochs}e+${blocksInEpoch}b`;
+  const milestoneBlocks =
+    totalBlocks > 0 && totalBlocks % BIRTHDAY_MILESTONE_BLOCKS === 0
+      ? totalBlocks
+      : undefined;
 
   return {
     totalBlocks,
@@ -69,6 +80,8 @@ export function getPetLife(
     blocksInEpoch,
     label: `${epochLabel} ${blockLabel}`,
     shortLabel,
+    isBirthdayMilestone: milestoneBlocks !== undefined,
+    milestoneBlocks,
   };
 }
 
