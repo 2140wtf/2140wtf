@@ -22,6 +22,7 @@ import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
 import { EggTapTarget } from './EggTapTarget';
 import { ROOM_FLOOR_RATIO, getPetsBodyBottomInset } from '../lib/room-layout-schema';
 import { cn } from '@/lib/utils';
+import { usePetLife } from '@/pets/core/lib/pets-life';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { PetsEmotion } from '@/pets/ui/lib/emotion-types';
@@ -79,6 +80,9 @@ export function PetsRoomStage({
 
   // Bob animation duration — shared between the Pets bob and the shadow breathe
   const bobDuration = `${4 - (currentStats.happiness / 100) * 1.5}s`;
+
+  // Pet life in Bitcoin-block time (10 min blocks, 2016-block epochs).
+  const petLife = usePetLife(companion.event.created_at);
 
   return (
     <div ref={stageRef} className="absolute inset-0 pointer-events-none">
@@ -141,39 +145,56 @@ export function PetsRoomStage({
                 </span>
               </div>
             )}
-            {/* Sway wrapper (rotate animation) — separate from bob to avoid transform conflict.
-                width: 30% resolves against the bob wrapper (w-full = canvas width),
-                so Pets scales proportionally with the room canvas. */}
-            <div
-              data-pets-visual
-              className={cn(
-                'relative transition-all duration-500 pointer-events-none',
-                interactionReaction?.bodyAnimation,
+            {/* Visual wrapper — same width as the pet, anchors the life badge to
+                the top-right corner of the pet visual (not the whole room). */}
+            <div className="relative" style={{ width: isEgg ? '24%' : '30%' }}>
+              {/* Life badge — floats above the top-right corner of the pet visual. */}
+              {petLife && (
+                <div
+                  className="absolute -top-7 right-0 z-20 pointer-events-none"
+                  title={`${petLife.totalBlocks.toLocaleString()} blocks lived`}
+                >
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/70 backdrop-blur-sm border border-border/20 shadow-sm">
+                    <span className="text-[10px] leading-none text-amber-500 font-bold">₿</span>
+                    <span className="text-[10px] sm:text-xs leading-none font-semibold text-foreground/80 whitespace-nowrap">
+                      {petLife.label}
+                    </span>
+                  </div>
+                </div>
               )}
-              style={{
-                width: isEgg ? '24%' : '30%',
-                aspectRatio: '1',
-                ...(!isSleeping ? {
-                  animation: `pets-sway ${6 - (currentStats.happiness / 100) * 2}s ease-in-out infinite`,
-                } : undefined),
-              }}
-            >
-              <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
-              <PetsStageVisual
-                companion={companion}
-                size="lg"
-                animated={!isSleeping}
-                reaction={petsReaction}
-                recipe={hasDevOverride ? undefined : statusRecipe}
-                recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
-                emotion={effectiveEmotion}
-                onEggClick={onEggClick}
-                className="!size-full"
-              />
-              {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
-              <ReactionSparkles active={interactionReaction?.sparkles ?? false} />
-              <ReactionBubbles active={interactionReaction?.bubbles ?? false} showBackdrop={false} />
-              <FloatingSocialHearts active={interactionReaction?.hearts ?? false} />
+
+              {/* Sway wrapper (rotate animation) — separate from bob to avoid transform conflict. */}
+              <div
+                data-pets-visual
+                className={cn(
+                  'relative transition-all duration-500 pointer-events-none',
+                  interactionReaction?.bodyAnimation,
+                )}
+                style={{
+                  width: '100%',
+                  aspectRatio: '1',
+                  ...(!isSleeping ? {
+                    animation: `pets-sway ${6 - (currentStats.happiness / 100) * 2}s ease-in-out infinite`,
+                  } : undefined),
+                }}
+              >
+                <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
+                <PetsStageVisual
+                  companion={companion}
+                  size="lg"
+                  animated={!isSleeping}
+                  reaction={petsReaction}
+                  recipe={hasDevOverride ? undefined : statusRecipe}
+                  recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                  emotion={effectiveEmotion}
+                  onEggClick={onEggClick}
+                  className="!size-full"
+                />
+                {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
+                <ReactionSparkles active={interactionReaction?.sparkles ?? false} />
+                <ReactionBubbles active={interactionReaction?.bubbles ?? false} showBackdrop={false} />
+                <FloatingSocialHearts active={interactionReaction?.hearts ?? false} />
+              </div>
             </div>
           </div>
         </div>
