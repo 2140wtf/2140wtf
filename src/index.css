@@ -979,6 +979,21 @@
   75% { transform: rotate(-1.5deg); }
 }
 
+/* 100,000-block birthday confetti shower */
+@keyframes pets-birthday-confetti {
+  0% {
+    opacity: 1;
+    transform: translateY(0) translateX(0) rotate(0deg);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(180px) translateX(calc(var(--confetti-drift, 0) * 80px)) rotate(720deg);
+  }
+}
+
 /* Hatch ceremony shake animations */
 @keyframes pets-shake-light {
   0%, 100% { transform: rotate(0deg); }

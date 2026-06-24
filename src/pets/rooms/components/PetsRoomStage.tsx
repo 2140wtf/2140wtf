@@ -16,12 +16,13 @@
  * Stats are rendered separately by PetsRoomStatusHud in the top HUD area.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
 import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
+import { PetBirthdayConfetti } from '@/pets/ui/PetBirthdayConfetti';
 import { EggTapTarget } from './EggTapTarget';
 import { ROOM_FLOOR_RATIO, getPetsBodyBottomInset } from '../lib/room-layout-schema';
 import { cn } from '@/lib/utils';
@@ -91,6 +92,23 @@ export function PetsRoomStage({
   const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
   const birthBlockHeight = getBirthBlockHeight(companion.event.created_at, currentBlockHeight);
   const lastLifeToastAt = useRef<number>(0);
+
+  // 100,000-block birthday celebration.
+  const [showBirthdayConfetti, setShowBirthdayConfetti] = useState(false);
+  const celebratedMilestone = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    const milestone = petLife?.milestoneBlocks;
+    if (!petLife?.isBirthdayMilestone || milestone === undefined || milestone === celebratedMilestone.current) {
+      return;
+    }
+    celebratedMilestone.current = milestone;
+    setShowBirthdayConfetti(true);
+    toast({
+      title: `🎉 Happy ${milestone.toLocaleString()} blocks!`,
+      description: `Your 2140 PET is celebrating another 100,000-block birthday.`,
+    });
+  }, [petLife]);
 
   const handleLifeBadgeHover = useCallback(() => {
     if (!petLife) return;
@@ -183,6 +201,14 @@ export function PetsRoomStage({
                     </span>
                   </div>
                 </div>
+              )}
+
+              {/* Birthday confetti shower for 100,000-block milestones. */}
+              {showBirthdayConfetti && (
+                <PetBirthdayConfetti
+                  className="absolute -top-8 inset-x-0 h-40 z-30"
+                  onComplete={() => setShowBirthdayConfetti(false)}
+                />
               )}
 
               {/* Sway wrapper (rotate animation) — separate from bob to avoid transform conflict. */}
