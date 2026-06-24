@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export interface JurorSettingsState {
   readonly categories: string[];
   readonly bondAmountSats: number;
   readonly demoMode: boolean;
+  readonly demoPace: 'guided' | 'fast';
 }
 
 interface JurorSettingsProps {
@@ -88,7 +90,8 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
               </Label>
             </div>
             <p className="text-sm text-muted-foreground">
-              Simulate the other jurors locally so the full GUI flow works with a single user.
+              Run a peer-to-peer simulation with fake sats and synthetic jurors. The full FROST
+              ceremony works from a single account for learning and testing.
             </p>
           </div>
           <Switch
@@ -97,6 +100,35 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
             onCheckedChange={(checked) => onChange({ ...value, demoMode: checked })}
           />
         </div>
+
+        {value.demoMode && (
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="demo-pace" className="text-base">
+                Demo ceremony pace
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Guided pauses at each step with explanations. Fast runs the full FROST ceremony
+                automatically.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={cn('text-sm', value.demoPace === 'guided' && 'font-medium')}>
+                Guided
+              </span>
+              <Switch
+                id="demo-pace"
+                checked={value.demoPace === 'fast'}
+                onCheckedChange={(checked) =>
+                  onChange({ ...value, demoPace: checked ? 'fast' : 'guided' })
+                }
+              />
+              <span className={cn('text-sm', value.demoPace === 'fast' && 'font-medium')}>
+                Fast
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

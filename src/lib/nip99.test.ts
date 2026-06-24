@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseNip99Listing } from '@/lib/nip99';
+import { formatNip99Price, parseNip99Listing } from '@/lib/nip99';
 
 function makeEvent(tags: string[][] = [], content = ''): Parameters<typeof parseNip99Listing>[0] {
   return {
@@ -76,5 +76,35 @@ describe('parseNip99Listing', () => {
     ]);
     const listing = parseNip99Listing(event)!;
     expect(listing.images).toEqual(['https://example.com/ok.png']);
+  });
+});
+
+describe('formatNip99Price', () => {
+  it('returns price on request when price is missing', () => {
+    expect(formatNip99Price(null)).toBe('Price on request');
+  });
+
+  it('formats USD without floating-point noise', () => {
+    expect(formatNip99Price({ value: 1.8808200000000002, currency: 'USD' })).toBe('$1.88');
+    expect(formatNip99Price({ value: 1234.5, currency: 'usd' })).toBe('$1,234.50');
+  });
+
+  it('formats sats with thousand separators', () => {
+    expect(formatNip99Price({ value: 1000, currency: 'sats' })).toBe('1,000 sats');
+    expect(formatNip99Price({ value: 1, currency: 'sat' })).toBe('1 sat');
+  });
+
+  it('formats BTC without trailing zeros', () => {
+    expect(formatNip99Price({ value: 1, currency: 'BTC' })).toBe('1 BTC');
+    expect(formatNip99Price({ value: 0.001, currency: 'btc' })).toBe('0.001 BTC');
+    expect(formatNip99Price({ value: 0.12345678, currency: 'btc' })).toBe('0.12345678 BTC');
+  });
+
+  it('appends frequency when present', () => {
+    expect(formatNip99Price({ value: 50, currency: 'USD', frequency: 'month' })).toBe('$50.00 / month');
+  });
+
+  it('falls back to raw value for unknown currencies', () => {
+    expect(formatNip99Price({ value: 10, currency: 'eur' })).toBe('10 eur');
   });
 });

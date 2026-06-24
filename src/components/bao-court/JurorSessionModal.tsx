@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 import type { BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
 import { useJurorSession } from "@/hooks/useJurorSession";
-import type { SelectedJuror, AppealPhase } from "@/lib/bao-court";
+import type { SelectedJuror, AppealPhase } from "@bao/frost-court";
 import { useToast } from "@/hooks/useToast";
 
 interface JurorSessionModalProps {
@@ -33,6 +33,8 @@ interface JurorSessionModalProps {
   selectedJurors: SelectedJuror[];
   myJurorIdx: number;
   demoMode: boolean;
+  demoPace?: 'guided' | 'fast';
+  seed?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -50,6 +52,25 @@ function phaseIndex(phase: AppealPhase): number {
   return PHASES.findIndex((p) => p.id === phase);
 }
 
+function phaseDescription(phase: AppealPhase): string {
+  switch (phase) {
+    case 'selection':
+      return 'The jury is selected and each juror locks fake sats. Next, jurors run a distributed key generation (DKG) ceremony to create a shared public key.';
+    case 'dkg':
+      return 'DKG complete. The group public key is derived from every juror\'s contribution. No single device knows the full secret.';
+    case 'vote-commit':
+      return 'Each juror commits to their vote by hashing it with a secret salt. Commitments are published before reveals so no one can change their vote later.';
+    case 'vote-reveal':
+      return 'Votes are revealed and tallied. The majority outcome wins. In this demo all jurors vote the same way so the result is unanimous.';
+    case 'signing':
+      return 'Jurors combine their FROST partial signatures to produce one valid attestation under the group public key.';
+    case 'attestation_published':
+      return 'The attestation is published. The dispute override is now signed by the threshold jury.';
+    default:
+      return '';
+  }
+}
+
 function truncatePubkey(pubkey: string): string {
   if (pubkey.length <= 12) return pubkey;
   return `${pubkey.slice(0, 6)}…${pubkey.slice(-6)}`;
@@ -60,6 +81,8 @@ export function JurorSessionModal({
   selectedJurors,
   myJurorIdx,
   demoMode,
+  demoPace = 'guided',
+  seed,
   open,
   onOpenChange,
 }: JurorSessionModalProps) {
@@ -68,6 +91,7 @@ export function JurorSessionModal({
     selectedJurors,
     myJurorIdx,
     demoMode,
+    seed,
   });
   const { toast } = useToast();
 
@@ -101,6 +125,69 @@ export function JurorSessionModal({
       });
     }
   };
+
+  // Fast-mode auto-advance: run the full ceremony with short delays.
+  const actionsRef = useRef(actions);
+  const phaseRef = useRef(state.phase);
+  const autoStartedRef = useRef(false);
+
+  useEffect(() => {
+    actionsRef.current = actions;
+  }, [actions]);
+
+  useEffect(() => {
+    phaseRef.current = state.phase;
+  }, [state.phase]);
+
+  useEffect(() => {
+    if (!open) {
+      autoStartedRef.current = false;
+      return;
+    }
+    if (!demoMode || demoPace !== 'fast') return;
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+
+    const STEP_DELAY_MS = 900;
+    const waitFor = (target: AppealPhase) =>
+      new Promise<void>((resolve) => {
+        if (phaseRef.current === target) {
+          resolve();
+          return;
+        }
+        const interval = setInterval(() => {
+          if (phaseRef.current === target) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 100);
+      });
+
+    const run = async () => {
+      try {
+        await actionsRef.current.publishDkgCommitment();
+        await waitFor('dkg');
+        actionsRef.current.advancePhase('vote-commit');
+        await waitFor('vote-commit');
+        await actionsRef.current.publishVoteCommit(dispute.proposedOutcome);
+        await waitFor('vote-reveal');
+        await actionsRef.current.publishVoteReveal();
+        await waitFor('signing');
+        await actionsRef.current.publishFrostCommitment();
+        await actionsRef.current.publishFrostReveal();
+        await actionsRef.current.aggregateAndPublishAttestation();
+      } catch (error) {
+        toast({
+          title: 'Fast demo failed',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    const timer = setTimeout(() => void run(), STEP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [open, demoMode, demoPace, dispute.proposedOutcome, toast]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -153,6 +240,12 @@ export function JurorSessionModal({
               })}
             </TabsList>
           </Tabs>
+
+          {demoMode && demoPace === 'guided' && (
+            <div className="rounded-md bg-muted p-4 text-sm text-muted-foreground">
+              {phaseDescription(state.phase)}
+            </div>
+          )}
 
           {state.phase === "selection" && (
             <div className="space-y-4">

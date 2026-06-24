@@ -197,6 +197,7 @@ export function getWidgetDefinition(id: string): WidgetDefinition | undefined {
 /** Default widgets shown in the right sidebar for new users. */
 export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
   { id: 'trends' },
+  { id: 'prediction-markets' },
   { id: 'hot-posts' },
   { id: 'wikipedia' },
 ];

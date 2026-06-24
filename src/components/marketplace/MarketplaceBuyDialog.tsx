@@ -1,9 +1,7 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 
 import { ZapDialog } from '@/components/ZapDialog';
-import { useAppContext } from '@/hooks/useAppContext';
-import { fetchBtcPrice } from '@/lib/bitcoin';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { getListingPriceState } from '@/lib/marketplace';
 import { type Nip99Listing } from '@/lib/nip99';
 
@@ -22,13 +20,7 @@ interface MarketplaceBuyDialogProps {
  * listing card disables the one-tap checkout button for those currencies.
  */
 export function MarketplaceBuyDialog({ listing, open, onOpenChange }: MarketplaceBuyDialogProps) {
-  const { config } = useAppContext();
-  const { data: btcPrice } = useQuery({
-    queryKey: ['btc-price', config.esploraApis],
-    queryFn: ({ signal }) => fetchBtcPrice(config.esploraApis, signal),
-    staleTime: 30_000,
-    enabled: open && !!listing.price,
-  });
+  const { btcPrice } = useBtcPrice(open && !!listing.price);
 
   const priceState = useMemo(
     () => getListingPriceState(listing, btcPrice),

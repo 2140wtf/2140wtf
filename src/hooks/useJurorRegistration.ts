@@ -6,7 +6,7 @@ import {
   buildJurorCandidacyEvent,
   type JurorProfile,
   type StakeCommitment,
-} from "@/lib/bao-court";
+} from "@bao/frost-court";
 
 export interface JurorRegistrationInput {
   readonly disputeId: string;

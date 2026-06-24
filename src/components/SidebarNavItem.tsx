@@ -1,5 +1,6 @@
-import { Link } from 'react-router-dom';
-import { GripVertical, X } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { GripVertical, X, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -14,6 +15,117 @@ import { useCallback } from 'react';
 import { NostrEventSidebarItem } from '@/components/NostrEventSidebarItem';
 import { NsiteSidebarItem } from '@/components/NsiteSidebarItem';
 import { ExternalContentSidebarItem } from '@/components/ExternalContentSidebarItem';
+
+// ── Collapsible group item ────────────────────────────────────────────────────
+
+interface GroupChild {
+  id: string;
+  label: string;
+  path: string;
+}
+
+interface SidebarGroupProps {
+  id: string;
+  active: boolean;
+  editing: boolean;
+  onRemove: (id: string) => void;
+  onClick?: (e: React.MouseEvent) => void;
+  compact?: boolean;
+  minimal?: boolean;
+  children: GroupChild[];
+}
+
+function SidebarGroup({ id, active, editing, onRemove, onClick, compact, minimal, children }: SidebarGroupProps) {
+  const [expanded, setExpanded] = useState(active);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  const icon = sidebarItemIcon(id, compact ? 'size-5' : minimal ? 'size-5' : 'size-6');
+  const label = itemLabel(id);
+  const location = useLocation();
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex flex-col transition-colors relative',
+        isDragging && 'z-10 opacity-80 shadow-lg',
+      )}
+    >
+      <div className={cn('flex items-center', minimal ? 'bg-transparent' : 'rounded-full bg-background/85')}>
+        {editing && (
+          <button
+            className="flex items-center justify-center w-8 shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            if (editing) return;
+            setExpanded((prev) => !prev);
+          }}
+          className={cn(
+            'flex items-center transition-colors min-w-0 flex-1 text-left',
+            minimal
+              ? 'gap-4 py-3 px-3 text-base text-foreground hover:text-[var(--2140-bitcoin)]'
+              : 'rounded-full hover:bg-secondary/60',
+            compact ? 'justify-center py-2.5 px-2' : minimal ? '' : 'gap-4 py-3 px-3',
+            active ? (minimal ? 'text-[var(--2140-bitcoin)] font-semibold' : 'font-bold text-primary') : (minimal ? '' : 'font-normal text-foreground'),
+            'text-lg',
+          )}
+        >
+          <span className={cn('shrink-0 relative', compact && 'flex items-center justify-center')}>
+            {icon}
+          </span>
+          {!compact && (
+            <>
+              <span className="truncate flex-1" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>{label}</span>
+              <ChevronDown className={cn('size-4 shrink-0 transition-transform', expanded && 'rotate-180')} />
+            </>
+          )}
+        </button>
+
+        {editing && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(id); }}
+            className="flex items-center justify-center size-8 shrink-0 rounded-full transition-all text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            title={`Remove ${label}`}
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {expanded && !compact && (
+        <div className={cn('ml-4 border-l border-border', minimal ? 'my-1' : 'my-1')}>
+          {children.map((child) => {
+            const childActive = location.pathname === child.path || location.pathname.startsWith(`${child.path}/`);
+            return (
+              <Link
+                key={child.id}
+                to={child.path}
+                onClick={onClick}
+                className={cn(
+                  'flex items-center gap-3 py-2.5 px-3 text-sm transition-colors rounded-md',
+                  childActive
+                    ? 'text-[var(--2140-bitcoin)] font-semibold bg-secondary/40'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30',
+                )}
+              >
+                <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>{child.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Sortable item ─────────────────────────────────────────────────────────────
 
@@ -242,6 +354,26 @@ export function SidebarNavList({
               />
             );
           }
+          if (id === 'prediction-markets') {
+            return (
+              <SidebarGroup
+                key={id}
+                id={id}
+                active={isActive(id)}
+                editing={editing}
+                onRemove={(removeId) => onRemove(removeId, i)}
+                onClick={getOnClick?.(id)}
+                compact={compact}
+                minimal={minimal}
+                children={[
+                  { id: 'prediction-markets', label: 'BAO Markets', path: '/prediction-markets' },
+                  { id: 'market', label: 'Merchants', path: '/market' },
+                ]}
+              />
+            );
+          }
+          // 'market' is rendered as a child of the MARKETS group, skip flat rendering.
+          if (id === 'market') return null;
           return (
             <SidebarNavItem
               key={id}

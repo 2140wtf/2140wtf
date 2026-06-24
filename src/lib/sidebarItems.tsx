@@ -16,6 +16,7 @@ import {
   Cat,
   Code,
   Film,
+  Gavel,
   HelpCircle,
   Info,
 
@@ -133,9 +134,9 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
-  { id: "prediction-markets", label: "₿AO MARKETS", path: "/prediction-markets", icon: BarChart3 },
-  { id: "pets", label: "Pets", path: "/pets", icon: Cat },
-  { id: "market", label: "Store", path: "/market", icon: ShoppingBag },
+  { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
+  { id: "court", label: "BAO Court", path: "/court", icon: Gavel, requiresAuth: true },
+  { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   {
     id: "btcmap",
     label: "BTC MAP",
@@ -196,6 +197,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "webxdc", label: "Mini apps", path: "/mini-apps", icon: Blocks },
   { id: "themes", label: "Themes", path: "/themes", icon: Sparkles },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
+  { id: "pets", label: "Pets", path: "/pets", icon: Cat },
   { id: "packs", label: "Follow Packs", path: "/packs", icon: PartyPopper },
   { id: "emojis", label: "Emojis", path: "/emojis", icon: SmilePlus },
   { id: "development", label: "Development", path: "/development", icon: Code },

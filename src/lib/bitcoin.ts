@@ -176,31 +176,115 @@ export function formatSats(sats: number): string {
 }
 
 /**
- * Fetch the current BTC price in USD from a mempool.space-compatible API.
+ * Ordered list of public BTC/USD price endpoints used as fallbacks when no
+ * configured Esplora backend exposes the mempool.space `/v1/prices` extension.
  *
- * Note: the `/v1/prices` endpoint is a mempool.space extension to the
- * standard Esplora REST surface. Backends like Blockstream's Esplora do
- * not expose it — those endpoints return `404` and the failover client
- * silently advances to the next URL (without penalising the endpoint).
+ * Each entry provides a `url` and a `parse` function that extracts the USD
+ * price (as a number) from the JSON response. Endpoints are tried in order;
+ * the first successful fetch wins. These are simple unauthenticated public
+ * APIs with permissive CORS, chosen for reliability over precision.
+ */
+interface BtcPriceFallback {
+  name: string;
+  url: string;
+  parse(data: unknown): number | undefined;
+}
+
+const BTC_PRICE_FALLBACKS: BtcPriceFallback[] = [
+  {
+    name: 'coinbase',
+    url: 'https://api.coinbase.com/v2/exchange-rates?currency=BTC',
+    parse(data) {
+      const rates = (data as { data?: { rates?: Record<string, string> } })?.data?.rates;
+      const usd = rates?.USD;
+      return usd ? Number(usd) : undefined;
+    },
+  },
+  {
+    name: 'kraken',
+    url: 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD',
+    parse(data) {
+      const result = (data as { result?: Record<string, { c?: string[] }> })?.result;
+      const pair = result?.XXBTZUSD ?? result?.XBTUSD;
+      const last = pair?.c?.[0];
+      return last ? Number(last) : undefined;
+    },
+  },
+  {
+    name: 'blockchain.info',
+    url: 'https://blockchain.info/ticker',
+    parse(data) {
+      const last = (data as { USD?: { last?: number } })?.USD?.last;
+      return last ? Number(last) : undefined;
+    },
+  },
+  {
+    name: 'coingecko',
+    url: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+    parse(data) {
+      const usd = (data as { bitcoin?: { usd?: number } })?.bitcoin?.usd;
+      return usd ? Number(usd) : undefined;
+    },
+  },
+];
+
+async function fetchJsonWithTimeout(url: string, signal?: AbortSignal, timeoutMs = 10_000): Promise<unknown> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const composed = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  const response = await fetch(url, { signal: composed });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+
+async function fetchBtcPriceFromFallbacks(signal?: AbortSignal): Promise<number> {
+  const errors: string[] = [];
+  for (const fallback of BTC_PRICE_FALLBACKS) {
+    try {
+      const data = await fetchJsonWithTimeout(fallback.url, signal, 8_000);
+      const price = fallback.parse(data);
+      if (price && Number.isFinite(price) && price > 0) {
+        return price;
+      }
+      errors.push(`${fallback.name}: unparseable`);
+    } catch (err) {
+      errors.push(`${fallback.name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error(`All BTC price fallbacks failed: ${errors.join('; ')}`);
+}
+
+/**
+ * Fetch the current BTC price in USD.
+ *
+ * First tries the configured Esplora APIs (`/v1/prices`), which works on
+ * mempool.space-compatible backends. If none of those expose the price
+ * endpoint, falls back to public exchange APIs (Coinbase, Kraken,
+ * Blockchain.info, CoinGecko).
  *
  * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
  * @param signal     Optional abort signal (e.g. from TanStack Query).
  */
 export async function fetchBtcPrice(baseUrls: string[], signal?: AbortSignal): Promise<number> {
-  const response = await esploraFetch(baseUrls, `/v1/prices`, {
-    // /v1/prices is a mempool.space extension — 404 means "endpoint doesn't
-    // speak this path", not "the endpoint is dead". Soft-failover to the
-    // next URL without putting this one in cool-down.
-    skipStatuses: [404],
-    signal,
-  });
+  try {
+    const response = await esploraFetch(baseUrls, `/v1/prices`, {
+      // /v1/prices is a mempool.space extension — 404 means "endpoint doesn't
+      // speak this path", not "the endpoint is dead". Soft-failover to the
+      // next URL without putting this one in cool-down.
+      skipStatuses: [404],
+      signal,
+    });
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch BTC price');
+    if (response.ok) {
+      const data = await response.json();
+      const price = Number(data.USD);
+      if (Number.isFinite(price) && price > 0) return price;
+    }
+  } catch {
+    // Esplora endpoints failed or don't expose /v1/prices; fall through to
+    // public exchange APIs so the marketplace can still show USD prices.
   }
 
-  const data = await response.json();
-  return data.USD;
+  return fetchBtcPriceFromFallbacks(signal);
 }
 
 /** Convert a BTC amount to satoshis (rounded to nearest integer). */
