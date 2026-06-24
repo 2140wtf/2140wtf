@@ -14,7 +14,6 @@ import {
   deriveDkgSeed,
   deriveMockDisputeId,
   deriveRoomId,
-  electCoordinator,
   loadDemoRoom,
   parseDemoMembershipEvent,
   saveDemoRoom,
@@ -22,10 +21,7 @@ import {
 } from '@/lib/baoCourtSimulator';
 import type { DemoRoomState } from '@/lib/baoCourtSimulator';
 import {
-  BAO_COURT_SELECTION_KIND,
   buildSelectionEvent,
-  parseSelectionEvent,
-  validateSelectionEvent,
 } from '@bao/frost-court';
 import type { SelectedJuror } from '@bao/frost-court';
 
@@ -49,7 +45,6 @@ export interface UseDemoCourtRoomOptions extends DemoRoomState {
 
 export interface UseDemoCourtRoomResult {
   readonly members: DemoRoomMember[];
-  readonly isCoordinator: boolean;
   readonly dispute: BaoCourtDispute | null;
   readonly selectedJurors: SelectedJuror[];
   readonly seed: string | null;
@@ -101,6 +96,12 @@ function buildDemoDispute(
 /**
  * Join a named demo jury room, discover other demo jurors by category, and
  * automatically form a mock dispute + selection when the threshold is reached.
+ *
+ * NOTE: This hook intentionally avoids a coordinator. A single coordinator is
+ * custodial and undesirable; the protocol target is a fully independent jury.
+ * Every juror derives the same deterministic dispute id, jury selection, and
+ * DKG seed from the roster, so each juror can form the demo locally and publish
+ * their own copy of the dispute + selection events.
  */
 export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourtRoomResult {
   const { roomName, category, threshold, pace, autoJoin = true } = options;
@@ -120,10 +121,6 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const memberPubkeys = useMemo(() => members.map((m) => m.pubkey), [members]);
-  const isCoordinator = useMemo(() => {
-    if (!user || members.length < threshold) return false;
-    return user.pubkey === electCoordinator(memberPubkeys);
-  }, [user, members, threshold, memberPubkeys]);
 
   const selectedJurors = useMemo(
     () => (members.length >= threshold ? buildDemoSelectedJurors(memberPubkeys, category) : []),
@@ -142,8 +139,6 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
         : null,
     [disputeId, members.length, roomId, memberPubkeys, threshold],
   );
-
-  const [selection, setSelection] = useState<ReturnType<typeof parseSelectionEvent> | null>(null);
 
   // Publish our membership event when joining a room.
   const join = useCallback(async () => {
@@ -291,8 +286,10 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
     };
   }, [hasJoined, roomId]);
 
-  // Coordinator forms the mock dispute and selection.
-  const formAsCoordinator = useCallback(async () => {
+  // Each juror independently forms the mock dispute and selection.
+  // No coordinator is involved; the deterministic roster guarantees every juror
+  // derives the same dispute id, jury selection, and DKG seed.
+  const formAsJuror = useCallback(async () => {
     if (!user || !seed) return;
     try {
       const id = deriveMockDisputeId(roomId, memberPubkeys);
@@ -300,7 +297,7 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
         disputeId: id,
         roomId,
         category,
-        coordinatorPubkey: user.pubkey,
+        publisherPubkey: user.pubkey,
       });
       const disputeEvent = await publishEvent(mockDisputeTemplate);
       setDispute(buildDemoDispute(disputeEvent, roomId, category));
@@ -334,7 +331,7 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
     }
   }, [user, seed, roomId, memberPubkeys, category, selectedJurors, publishEvent, toast]);
 
-  // Detect threshold and trigger formation.
+  // Detect threshold and trigger independent formation for every juror.
   useEffect(() => {
     if (!hasJoined || members.length < threshold) return;
     if (status === 'formed' || status === 'forming' || status === 'settling') return;
@@ -350,8 +347,8 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
       formingRef.current = true;
       setStatus('forming');
 
-      if (isCoordinator && user) {
-        void formAsCoordinator();
+      if (user) {
+        void formAsJuror();
       }
     }, SETTLE_MS);
 
@@ -361,102 +358,10 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
         settleTimerRef.current = null;
       }
     };
-  }, [hasJoined, members, threshold, status, isCoordinator, user, formAsCoordinator]);
-
-  // Live subscription for the selection event so non-coordinators are notified as
-  // soon as the coordinator publishes it.
-  useEffect(() => {
-    if (!hasJoined || isCoordinator || !disputeId) return;
-
-    const relay = new NRelay1(RELAY);
-    const controller = new AbortController();
-    const filter: NostrFilter = {
-      kinds: [BAO_COURT_SELECTION_KIND],
-      '#dispute': [disputeId],
-      limit: 20,
-    };
-
-    (async () => {
-      try {
-        // Bootstrap any existing selection.
-        const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
-        const events = await relay.query([filter], { signal: controller.signal });
-        clearTimeout(timeoutId);
-        for (const event of events) {
-          const validation = validateSelectionEvent(event, disputeId);
-          if (!validation.valid) continue;
-          const parsed = parseSelectionEvent(event);
-          if (parsed) {
-            setSelection(parsed);
-            break;
-          }
-        }
-
-        // Listen for new selections.
-        for await (const msg of relay.req([filter], { signal: controller.signal })) {
-          if (controller.signal.aborted) break;
-          if (msg[0] !== 'EVENT') continue;
-          const validation = validateSelectionEvent(msg[2], disputeId);
-          if (!validation.valid) continue;
-          const parsed = parseSelectionEvent(msg[2]);
-          if (parsed) {
-            setSelection(parsed);
-            break;
-          }
-        }
-      } catch {
-        // Best-effort subscription.
-      } finally {
-        relay.close().catch(() => {});
-      }
-    })();
-
-    return () => {
-      controller.abort();
-      relay.close().catch(() => {});
-    };
-  }, [hasJoined, isCoordinator, disputeId]);
-
-  // Non-coordinator waits for the published selection.
-  useEffect(() => {
-    if (!hasJoined || isCoordinator || !selection || selectedJurors.length < threshold) {
-      return;
-    }
-    if (dispute) return;
-
-    // Build a minimal BaoCourtDispute from the selection event and known room data.
-    const mockDispute: BaoCourtDispute = {
-      disputeId: selection.disputeId,
-      marketId: selection.marketId,
-      challengerPubkey: electCoordinator(memberPubkeys),
-      respondentPubkey: '',
-      evidenceHashes: [],
-      proposedOutcome: `Demo dispute: ${category}`,
-      originalOutcome: 'Original outcome',
-      createdAt: nowSeconds(),
-      deadline: nowSeconds() + 86_400,
-      rawEvent: {
-        id: selection.disputeId,
-        pubkey: electCoordinator(memberPubkeys),
-        kind: 38025,
-        created_at: nowSeconds(),
-        tags: [],
-        content: '',
-        sig: '',
-      },
-      status: 'open',
-    };
-    setDispute(mockDispute);
-    setStatus('formed');
-    toast({
-      title: 'Demo jury formed',
-      description: `${selectedJurors.length} jurors, ${DEMO_BOND_AMOUNT_SATS.toLocaleString()} fake sats locked. Starting FROST ceremony...`,
-    });
-  }, [hasJoined, isCoordinator, selection, selectedJurors, threshold, dispute, category, memberPubkeys, toast]);
+  }, [hasJoined, members, threshold, status, user, formAsJuror]);
 
   return {
     members,
-    isCoordinator,
     dispute,
     selectedJurors,
     seed,
