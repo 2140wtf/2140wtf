@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Loader2, Plus, Trash2, ChevronDown,
   Wallet, Upload, Music, ImageIcon, Film, Mail, Link2, Pencil, Eye, EyeOff, Copy, Check, Download, KeyRound, AlertTriangle, CloudSun,
+  QrCode, ExternalLink, MessageCircle,
 } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { useNostrLogin } from '@nostrify/react/login';
@@ -59,6 +60,15 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { QRCodeCanvas } from '@/components/ui/qrcode';
+import { openUrl } from '@/lib/downloadFile';
 import { isValidAvatarShape } from '@/lib/avatarShape';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -268,6 +278,7 @@ const formSchema = n.metadata().extend({
     placeholder: z.string().optional(),
   })).optional(),
   shape: z.string().optional(),
+  simplex: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -420,6 +431,164 @@ function SortableFieldRow({ id, index, type, accept, valuePlaceholder, isUploadi
   );
 }
 
+/** Returns true if a SimpleX value can be opened as a link. */
+function isSimplexLink(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('simplex:');
+}
+
+interface SimpleXContactFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
+
+/** SimpleX contact input with Open, Copy, and QR actions. */
+function SimpleXContactField({ value, onChange, disabled }: SimpleXContactFieldProps) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const trimmed = value.trim();
+  const canOpen = isSimplexLink(trimmed);
+
+  const handleCopy = useCallback(async () => {
+    if (!trimmed) return;
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      setCopied(true);
+      toast({ title: 'Copied', description: 'SimpleX contact copied to clipboard' });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: 'Copy failed', description: 'Could not access the clipboard.', variant: 'destructive' });
+    }
+  }, [trimmed, toast]);
+
+  const handleOpen = useCallback(() => {
+    if (!canOpen) {
+      toast({ title: 'Not a link', description: 'Save a SimpleX link to open it.', variant: 'destructive' });
+      return;
+    }
+    void openUrl(trimmed);
+  }, [canOpen, trimmed, toast]);
+
+  return (
+    <FormItem>
+      <div className="grid grid-cols-[auto,1fr,auto] gap-2 items-start">
+        <div className="w-6" />
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <MessageCircle className="size-4 text-muted-foreground" />
+            <FormLabel className="text-sm font-normal">SimpleX</FormLabel>
+            <HelpTip faqId="simplex-private-contact" iconSize="size-3.5" />
+          </div>
+          <FormControl>
+            <Input
+              placeholder="simplex:/contact#/?v=..."
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+              className="h-9"
+            />
+          </FormControl>
+          <FormDescription className="text-xs">Share this in incognito mode for private contact.</FormDescription>
+        </div>
+        <div className="flex items-center gap-1 pt-6">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={handleOpen}
+              disabled={!canOpen || disabled}
+              aria-label="Open SimpleX link"
+            >
+              <ExternalLink className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">Open SimpleX link</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={handleCopy}
+              disabled={!trimmed || disabled}
+              aria-label="Copy SimpleX contact"
+            >
+              {copied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">Copy</TooltipContent>
+        </Tooltip>
+
+        <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  disabled={!trimmed || disabled}
+                  aria-label="Show SimpleX QR code"
+                >
+                  <QrCode className="size-4" />
+                </Button>
+              </DialogTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">Show QR code</TooltipContent>
+          </Tooltip>
+          <DialogContent className="sm:max-w-[360px] p-6 overflow-hidden rounded-2xl [&>button]:top-6 [&>button]:right-6">
+            <div className="min-w-0">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className="size-7 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                    <MessageCircle className="size-4 text-white" />
+                  </div>
+                  <span>SimpleX</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="flex justify-center my-5">
+                <div className="bg-white p-3 rounded-xl">
+                  {trimmed ? (
+                    <QRCodeCanvas value={trimmed} size={220} className="size-[220px]" />
+                  ) : (
+                    <div className="size-[220px] bg-muted animate-pulse rounded" />
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-2 w-full bg-secondary/60 hover:bg-secondary/80 transition-colors rounded-lg pl-3 pr-2.5 py-2.5 text-left cursor-pointer overflow-hidden"
+              >
+                <span className="min-w-0 font-mono text-xs truncate">{trimmed}</span>
+                <span className="shrink-0 ml-auto">
+                  {copied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4 text-muted-foreground" />}
+                </span>
+              </button>
+
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                Share this QR in incognito mode for private contact.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+    </FormItem>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ProfileSettings() {
@@ -459,7 +628,7 @@ export function ProfileSettings() {
       const parsed = JSON.parse(event.content);
       if (Array.isArray(parsed.fields)) {
         return parsed.fields
-          .filter((f: unknown) => Array.isArray(f) && f.length >= 2)
+          .filter((f: unknown) => Array.isArray(f) && f.length >= 2 && String(f[0]).toLowerCase() !== 'simplex')
           .map((f: string[]) => {
             const type = inferFieldType(f[0], f[1]);
             // Ensure wallet labels carry the $ prefix so the Select value matches (e.g. "BTC" → "$BTC")
@@ -479,6 +648,18 @@ export function ProfileSettings() {
     try {
       const parsed = JSON.parse(event.content);
       if (isValidAvatarShape(parsed.shape)) return parsed.shape;
+    } catch { /* ignore */ }
+    return '';
+  };
+
+  const parseSimplex = (): string => {
+    if (!event) return '';
+    try {
+      const parsed = JSON.parse(event.content);
+      if (Array.isArray(parsed.fields)) {
+        const found = parsed.fields.find((f: unknown) => Array.isArray(f) && f.length >= 2 && String(f[0]).toLowerCase() === 'simplex');
+        if (found && typeof found[1] === 'string') return found[1];
+      }
     } catch { /* ignore */ }
     return '';
   };
@@ -547,6 +728,7 @@ export function ProfileSettings() {
         bot: metadata.bot ?? false,
         fields: parseFields(),
         shape: parseShape(),
+        simplex: parseSimplex(),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -573,6 +755,10 @@ export function ProfileSettings() {
     if (watched.website?.trim()) {
       result.push({ label: 'Website', value: watched.website.trim() });
     }
+    // Add SimpleX private contact if present
+    if (watched.simplex?.trim()) {
+      result.push({ label: 'SimpleX', value: watched.simplex.trim() });
+    }
     // Add custom fields that have both label and value
     if (watched.fields) {
       for (const f of watched.fields) {
@@ -582,7 +768,7 @@ export function ProfileSettings() {
       }
     }
     return result;
-  }, [watched.website, watched.fields]);
+  }, [watched.website, watched.simplex, watched.fields]);
 
   // Card onChange: patch individual fields
   const handleCardChange = (patch: Partial<NostrMetadata>) => {
@@ -656,7 +842,7 @@ export function ProfileSettings() {
       return;
     }
     try {
-      const { fields: customFields, shape, ...standardMetadata } = values;
+      const { fields: customFields, shape, simplex, ...standardMetadata } = values;
       const data: Record<string, unknown> = { ...metadata, ...standardMetadata };
 
       // Add shape only if set (an emoji string)
@@ -669,9 +855,16 @@ export function ProfileSettings() {
       for (const key in data) {
         if (data[key] === '') delete data[key];
       }
-      if (customFields && customFields.length > 0) {
-        const nonEmpty = customFields.filter((f) => f.label.trim() && f.value.trim());
-        if (nonEmpty.length > 0) data.fields = nonEmpty.map((f) => [f.label, f.value]);
+
+      // Build custom fields from scratch so removing all fields (or SimpleX) is reflected.
+      const nonEmpty = (customFields ?? []).filter((f) => f.label.trim() && f.value.trim());
+      if (simplex?.trim()) {
+        nonEmpty.push({ label: 'SimpleX', value: simplex.trim(), type: 'text' as const });
+      }
+      if (nonEmpty.length > 0) {
+        data.fields = nonEmpty.map((f) => [f.label, f.value]);
+      } else {
+        delete data.fields;
       }
       await publishEvent({ kind: 0, content: JSON.stringify(data) });
       queryClient.invalidateQueries({ queryKey: ['logins'] });
@@ -827,6 +1020,15 @@ export function ProfileSettings() {
                     <Input placeholder="you@walletofsatoshi.com" {...field} className="h-9" />
                     <div className="size-9" />
                   </div>
+                )}
+              />
+
+              {/* SimpleX private contact */}
+              <FormField
+                control={form.control}
+                name="simplex"
+                render={({ field }) => (
+                  <SimpleXContactField value={field.value ?? ''} onChange={field.onChange} disabled={busy} />
                 )}
               />
 
