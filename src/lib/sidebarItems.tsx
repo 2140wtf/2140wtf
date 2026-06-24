@@ -117,15 +117,18 @@ export interface SidebarItemDef {
  * shape. The order here is the default display order for fresh installs.
  */
 export const SIDEBAR_ITEMS: SidebarItemDef[] = [
-  // Top navigation
+  // Default top navigation
   { id: "feed", label: "Feed", path: "/feed", icon: Box },
   {
-    id: "profile",
-    label: "Profile",
-    path: "/profile",
-    icon: User,
+    id: "messages",
+    label: "Chat",
+    path: "/messages",
+    icon: MessageSquare,
     requiresAuth: true,
   },
+  { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
+  { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
+  { id: "pets", label: "Pets", path: "/pets", icon: Cat },
   {
     id: "wallet",
     label: "Wallet",
@@ -133,8 +136,16 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: WalletCards,
     requiresAuth: true,
   },
+  { id: "events", label: "Events", path: "/events", icon: CalendarDays },
+  // Remaining navigation & system pages
+  {
+    id: "profile",
+    label: "Profile",
+    path: "/profile",
+    icon: User,
+    requiresAuth: true,
+  },
   { id: "search", label: "Search", path: "/search", icon: Search },
-  { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
   { id: "court", label: "BAO Court", path: "/court", icon: Gavel, requiresAuth: true },
   { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   {
@@ -148,14 +159,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     label: "Roadstr",
     path: "/roadstr",
     icon: Navigation,
-  },
-  // System pages
-  {
-    id: "messages",
-    label: "Chat",
-    path: "/messages",
-    icon: MessageSquare,
-    requiresAuth: true,
   },
   {
     id: "notifications",
@@ -185,7 +188,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "help", label: "Help", path: "/help", icon: HelpCircle },
   { id: "about", label: "About", path: "/about", icon: Info },
   // Content types
-  { id: "events", label: "Events", path: "/events", icon: CalendarDays },
   { id: "photos", label: "Photos", path: "/photos", icon: Camera },
   { id: "videos", label: "Videos", path: "/videos", icon: Film },
   { id: "articles", label: "Articles", path: "/articles", icon: BookOpen },
@@ -196,8 +198,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
 
   { id: "webxdc", label: "Mini apps", path: "/mini-apps", icon: Blocks },
   { id: "themes", label: "Themes", path: "/themes", icon: Sparkles },
-  { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
-  { id: "pets", label: "Pets", path: "/pets", icon: Cat },
   { id: "packs", label: "Follow Packs", path: "/packs", icon: PartyPopper },
   { id: "emojis", label: "Emojis", path: "/emojis", icon: SmilePlus },
   { id: "development", label: "Development", path: "/development", icon: Code },
