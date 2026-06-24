@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, LayoutList, Plus, Search } from "lucide-react";
+import { Box, LayoutList, Plus, Search, Sun, Moon, Monitor } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,12 @@ import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
 import { PollsViewProvider } from "@/contexts/PollsViewContext";
+import type { CubeThemeMode } from "@/components/HostedPollCube";
+
+// Poll feed views: use the extended BAO poll relay set so the polls page sees
+// the same events as bao.markets.
+const PollListFeed = lazy(() => import("@/components/PollListFeed").then(m => ({ default: m.PollListFeed })));
+const PollCubeFeed = lazy(() => import("@/components/PollCubeFeed").then(m => ({ default: m.PollCubeFeed })));
 
 // Critical-path pages: eagerly loaded (landing + fallback)
 import Index from "./pages/Index";
@@ -86,6 +92,7 @@ const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default:
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
+const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WebxdcFeedPage = lazy(() => import("./pages/WebxdcFeedPage").then(m => ({ default: m.WebxdcFeedPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
@@ -102,9 +109,10 @@ const highlightsDef = getExtraKindDef("highlights")!;
 /** Polls feed page with a FAB that opens the compose modal (poll mode via + menu). */
 function PollsFeedPage() {
   const [composeOpen, setComposeOpen] = useState(false);
-  const [view, setView] = useState<'list' | 'cubes'>('list');
+  const [view, setView] = useState<'list' | 'cubes'>('cubes');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
+  const [cubeTheme, setCubeTheme] = useState<CubeThemeMode>('system');
 
   const pollKinds = useMemo(() => {
     if (pollFilter === 'zap') return [6969];
@@ -165,6 +173,27 @@ function PollsFeedPage() {
                 <span className="text-xs font-medium">txt</span>
               </ToggleGroupItem>
             </ToggleGroup>
+            {view === 'cubes' && (
+              <ToggleGroup
+                type="single"
+                value={cubeTheme}
+                onValueChange={(v) => {
+                  if (v) setCubeTheme(v as CubeThemeMode);
+                }}
+                variant="outline"
+                size="sm"
+              >
+                <ToggleGroupItem value="light" aria-label="Light cubes" className="gap-1">
+                  <Sun className="size-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dark" aria-label="Dark cubes" className="gap-1">
+                  <Moon className="size-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="system" aria-label="System theme cubes" className="gap-1">
+                  <Monitor className="size-4" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
             <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
               <Plus className="size-4" />
               Create poll
@@ -172,6 +201,13 @@ function PollsFeedPage() {
           </div>
         }
       >
+        <Suspense fallback={null}>
+          {view === 'cubes' ? (
+            <PollCubeFeed filter={pollFilter} searchQuery={searchQuery} theme={cubeTheme} />
+          ) : (
+            <PollListFeed filter={pollFilter} searchQuery={searchQuery} />
+          )}
+        </Suspense>
       </KindFeedPage>
       </PollsViewProvider>
       {composeOpen && (
@@ -329,6 +365,7 @@ export function AppRouter() {
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
               <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
+              <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="/groups" element={<GroupChatPage />} />
 

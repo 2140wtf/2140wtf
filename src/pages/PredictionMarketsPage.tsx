@@ -36,7 +36,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets } from "@/hooks/useBaoPredictionMarkets";
-import { PredictionMarketChart } from "@/components/PredictionMarketChart";
+import { BaoMarketChart } from "@/components/BaoMarketChart";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
 import type { BaoMarket } from "@/lib/baoMarketParser";
@@ -203,7 +203,7 @@ function MarketDetailDialog({
 
           <div className="space-y-1.5">
             <h3 className="text-sm font-semibold">Market chart</h3>
-            <PredictionMarketChart market={market} />
+            <BaoMarketChart market={market} />
           </div>
 
           <div className="space-y-3 pt-2">
