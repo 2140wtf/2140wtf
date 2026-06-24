@@ -300,6 +300,13 @@ export function determineWinner(
   if (p1Dead) return 1;
   if (p2Dead) return 0;
 
+  return null;
+}
+
+/** Winner when the round timer hits zero: higher health wins; ties are draws. */
+function determineTimeOutWinner(
+  fighters: [BattleFighter, BattleFighter],
+): BattlePlayerIndex | null {
   if (fighters[0].health === fighters[1].health) return null;
   return fighters[0].health > fighters[1].health ? 0 : 1;
 }
@@ -363,7 +370,7 @@ export function stepBattleState(
   const nextStatus: BattleStatus = finished ? 'finished' : 'fighting';
   const finalWinner: BattlePlayerIndex | null =
     nextStatus === 'finished' && winner === null
-      ? determineWinner(nextFighters)
+      ? determineTimeOutWinner(nextFighters)
       : winner;
 
   return {
