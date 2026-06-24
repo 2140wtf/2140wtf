@@ -12,7 +12,11 @@
  * value without changing callers.
  */
 
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+
+import { fetchBlockHeight } from '@/lib/bitcoin';
+import { DEFAULT_ESPLORA_APIS } from '@/lib/esplora';
 
 /** Average Bitcoin block time in seconds. */
 export const PET_BLOCK_TIME_SECONDS = 600;
@@ -90,4 +94,48 @@ export function usePetLife(birthTimestampSeconds: number | undefined): PetLife |
     () => getPetLife(birthTimestampSeconds, nowSeconds),
     [birthTimestampSeconds, nowSeconds],
   );
+}
+
+/**
+ * Fetch the current Bitcoin block height from Esplora APIs.
+ *
+ * Uses the provided URLs, or falls back to the public defaults. The result is
+ * cached for 60 seconds.
+ */
+export function useCurrentBlockHeight(baseUrls?: string[]): number | undefined {
+  const urls = baseUrls?.length ? baseUrls : [...DEFAULT_ESPLORA_APIS];
+  const { data } = useQuery({
+    queryKey: ['bitcoin', 'block-height', urls],
+    queryFn: async ({ signal }) => fetchBlockHeight(urls, signal),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+
+  return data;
+}
+
+/**
+ * Compute the approximate Bitcoin block height at which a pet was born.
+ *
+ * This assumes a constant 10-minute block time between the pet's birth and the
+ * current tip. In reality block times vary, so this is an estimate.
+ *
+ * @param birthTimestampSeconds - Unix timestamp (seconds) when the pet was born.
+ * @param currentBlockHeight - Current Bitcoin block height.
+ * @returns Estimated birth block height, or undefined if inputs are missing.
+ */
+export function getBirthBlockHeight(
+  birthTimestampSeconds: number | undefined,
+  currentBlockHeight: number | undefined,
+): number | undefined {
+  if (birthTimestampSeconds === undefined || currentBlockHeight === undefined) {
+    return undefined;
+  }
+
+  const life = getPetLife(birthTimestampSeconds, Math.floor(Date.now() / 1000));
+  if (!life) return undefined;
+
+  // Birth block = current tip minus blocks lived since birth.
+  return Math.max(0, currentBlockHeight - (life.totalBlocks - 1));
 }
