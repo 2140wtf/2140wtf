@@ -68,6 +68,7 @@ function computeOutcomeData(
   marketId: string,
   range: PriceHistoryRange,
   color: string,
+  mirroredValues?: number[],
 ): OutcomeChartData {
   const fallbackProb = outcome.probability ?? 0.5;
   let areaData: ChartPoint[];
@@ -79,7 +80,9 @@ function computeOutcomeData(
     const bucketCount = range === '1H' ? 12 : 20;
     const now = Math.floor(Date.now() / 1000);
     const step = 86400 / (bucketCount - 1);
-    const values = synthesizeBaoSparkline(prob, marketId, bucketCount);
+    const values = mirroredValues
+      ? mirroredValues.map((v) => 1 - v)
+      : synthesizeBaoSparkline(prob, `${marketId}:${outcome.label}`, bucketCount);
     areaData = values.map((v, i) => ({ time: now - 86400 + Math.floor(i * step), value: v * 100 }));
   }
 
@@ -192,10 +195,29 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
   const [isChartReady, setIsChartReady] = useState(false);
 
   const outcomeData = useMemo<OutcomeChartData[]>(() => {
+    const isBinary = market.outcomes.length === 2;
+    let yesValues: number[] | undefined;
+
     return market.outcomes.map((outcome, idx) => {
       const color = getOutcomeColor(outcome, idx);
       const points = history[outcome.label];
-      return computeOutcomeData(outcome, points, market.marketId, range, color);
+      const normalizedLabel = outcome.label.trim().toUpperCase();
+      const isNo = isBinary && normalizedLabel === 'NO';
+
+      if (isBinary && normalizedLabel === 'YES') {
+        const result = computeOutcomeData(outcome, points, market.marketId, range, color);
+        yesValues = result.areaData.map((p) => p.value / 100);
+        return result;
+      }
+
+      return computeOutcomeData(
+        outcome,
+        points,
+        market.marketId,
+        range,
+        color,
+        isNo ? yesValues : undefined,
+      );
     });
   }, [history, market, range]);
 
