@@ -9,12 +9,14 @@ import { useCallback, useEffect, useMemo } from "react";
 
 /** Default sidebar order for fresh installs. */
 const DEFAULT_SIDEBAR_ORDER = [
+  "feed",
   "messages",
-  "wallet",
   "prediction-markets",
   "polls",
   "pets",
   "events",
+  "wallet",
+  "btcmap",
 ];
 
 /** Map of legacy sidebar item IDs to their current replacements. */
