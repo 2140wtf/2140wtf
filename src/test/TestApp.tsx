@@ -124,8 +124,8 @@ export function TestApp({ children }: TestAppProps) {
     currencyDisplay: 'usd',
     sidebarWidgets: [],
     maxCachedEventAge: 604800,
-    baoSignetMintUrl: 'https://mint.bao.network',
-    baoSignetFaucetUrl: 'https://faucet.bao.network',
+    baoSignetMintUrl: 'https://relay.bao.network/cashu',
+    baoSignetFaucetUrl: 'https://relay.bao.network/faucet',
   };
 
   return (
