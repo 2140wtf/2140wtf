@@ -11,11 +11,11 @@ import { useCallback, useEffect, useMemo } from "react";
 const DEFAULT_SIDEBAR_ORDER = [
   "feed",
   "messages",
+  "wallet",
   "prediction-markets",
   "polls",
   "pets",
   "events",
-  "wallet",
   "btcmap",
 ];
 
