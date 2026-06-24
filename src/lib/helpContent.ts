@@ -278,6 +278,14 @@ const FAQ_TEMPLATE: FAQCategory[] = [
           'Images will display as linked thumbnails, and videos will be embedded inline on your profile.',
         ],
       },
+      {
+        id: 'simplex-private-contact',
+        question: 'What is the SimpleX private contact field?',
+        answer: [
+          'SimpleX is a private messaging app with no user IDs or metadata. Add your SimpleX contact link here so people can reach you privately.',
+          'Share it in **incognito mode** for the strongest privacy — that keeps the conversation off your regular contact list and metadata-free.',
+        ],
+      },
     ],
   },
 
