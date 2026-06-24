@@ -11,6 +11,7 @@ import { LoginArea } from '@/components/auth/LoginArea';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { SendBitcoinDialog } from '@/components/SendBitcoinDialog';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
+import { BaoDemoWalletTab } from '@/components/BaoDemoWalletTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
@@ -78,7 +79,7 @@ export function WalletPage() {
 
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
-    description: 'Your Bitcoin Taproot wallet and Cashu wallet.',
+    description: 'Your Bitcoin Taproot wallet, Cashu wallet, and BAO demo wallet.',
   });
 
   const copyAddress = async () => {
@@ -106,9 +107,9 @@ export function WalletPage() {
             <Bitcoin className="size-8 text-primary" />
           </div>
           <div className="space-y-2 max-w-xs">
-            <h2 className="text-xl font-bold">Your Bitcoin Wallet</h2>
+            <h2 className="text-xl font-bold">Your Wallet</h2>
             <p className="text-muted-foreground text-sm">
-              Log in to see your Bitcoin Taproot address and Cashu wallet.
+              Log in to see your Bitcoin Taproot address, Cashu wallet, and BAO demo wallet.
             </p>
           </div>
           <LoginArea className="max-w-60" />
@@ -116,9 +117,10 @@ export function WalletPage() {
       ) : (
         <div className="px-4 pt-6 pb-4 max-w-sm mx-auto">
           <Tabs defaultValue="bitcoin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="bitcoin">Bitcoin</TabsTrigger>
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
+              <TabsTrigger value="bao-demo">BAO Demo</TabsTrigger>
             </TabsList>
 
             <TabsContent value="bitcoin" className="flex flex-col items-center space-y-6">
@@ -266,6 +268,55 @@ export function WalletPage() {
                 <div className="py-12 flex flex-col items-center gap-4 text-center">
                   <p className="text-sm text-muted-foreground">
                     Cashu wallet could not be initialized.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Try again
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="bao-demo">
+              {cashuSeed.loading ? (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="size-5 animate-spin" />
+                    <p className="font-medium text-foreground">Sign in to wallet</p>
+                    <p className="text-xs text-muted-foreground/80 max-w-xs">
+                      Your signer may have opened a prompt in the background. Approve it to unlock your BAO demo wallet.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Retry after signing
+                  </Button>
+                </div>
+              ) : cashuSeed.error ? (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <p className="text-sm text-destructive">{cashuSeed.error}</p>
+                  <p className="text-xs text-muted-foreground max-w-xs">
+                    If your signer did not respond, unlock it and try again.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Retry
+                  </Button>
+                </div>
+              ) : !user.signer?.nip44 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Your signer does not support NIP-44, which is required for the BAO demo wallet.
+                </div>
+              ) : cashuSeed.available && cashuSeed.seedPhrase ? (
+                <BaoDemoWalletTab
+                  seedPhrase={cashuSeed.seedPhrase}
+                  user={user}
+                  relayUrls={relayUrls}
+                />
+              ) : (
+                <div className="py-12 flex flex-col items-center gap-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    BAO demo wallet could not be initialized.
                   </p>
                   <Button variant="outline" size="sm" onClick={cashuSeed.retry}>
                     <RefreshCw className="size-3.5 mr-1.5" />
