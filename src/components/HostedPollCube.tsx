@@ -10,11 +10,15 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import { resolveTheme } from '@/themes';
 
+export type CubeThemeMode = 'system' | 'light' | 'dark';
+
 interface HostedPollCubeProps {
   pollId: string;
   title?: string;
   event?: NostrEvent;
   className?: string;
+  /** Cube-specific theme override. When 'system' (default) the cube follows the app theme. */
+  theme?: CubeThemeMode;
 }
 
 function encodeEventParam(event: NostrEvent): string {
@@ -33,12 +37,13 @@ function encodeEventParam(event: NostrEvent): string {
  * When the raw poll event is provided, it is passed to the embed iframe so the
  * cube can render even if BAO's relays don't have the poll.
  */
-export function HostedPollCube({ pollId, title, event, className }: HostedPollCubeProps) {
+export function HostedPollCube({ pollId, title, event, className, theme = 'system' }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
   const { user } = useCurrentUser();
   const { config } = useAppContext();
-  const resolvedTheme = resolveTheme(config.theme);
+  const appResolvedTheme = resolveTheme(config.theme);
+  const resolvedTheme = theme === 'system' ? appResolvedTheme : theme;
 
   const embedUrl = useMemo(() => {
     const url = sanitizeUrl(design?.embedUrl);
@@ -89,6 +94,7 @@ export function HostedPollCube({ pollId, title, event, className }: HostedPollCu
         </div>
       )}
       <iframe
+        key={embedUrl}
         src={embedUrl}
         title={title || `Cube for poll ${pollId}`}
         className="w-full h-full transition-opacity duration-300"
