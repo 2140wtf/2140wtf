@@ -10,11 +10,12 @@ import { useCallback, useEffect, useMemo } from "react";
 /** Default sidebar order for fresh installs. */
 const DEFAULT_SIDEBAR_ORDER = [
   "feed",
+  "notifications",
   "messages",
-  "wallet",
   "prediction-markets",
   "polls",
   "pets",
+  "wallet",
   "events",
   "btcmap",
 ];
