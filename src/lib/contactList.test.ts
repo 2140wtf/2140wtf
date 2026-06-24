@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
 import { fetchContactList } from './contactList';
-import type { NIndexedDB } from './NIndexedDB';
+import type { NIndexedDB } from '@nostrify/indexeddb';
 
 function makeContactList(createdAt: number, pubkeys: string[]): NostrEvent {
   return {
