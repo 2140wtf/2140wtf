@@ -193,6 +193,7 @@ export default defineConfig(({ mode }) => {
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', 'e2e'],
     onConsoleLog(log) {
       return !log.includes("React Router Future Flag Warning");
     },
