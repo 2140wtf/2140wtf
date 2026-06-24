@@ -80,10 +80,6 @@ export interface FeedSettings {
   feedIncludePolls: boolean;
   /** Include People Lists (kind 3 follow lists, kind 30000 people sets, kind 39089 follow packs) in the follows/global feed */
   feedIncludePeopleLists: boolean;
-  /** Show Mini apps (NIP-94 kind 1063 with m=application/x-webxdc) link in sidebar */
-  showWebxdc: boolean;
-  /** Include Mini apps in the follows/global feed */
-  feedIncludeWebxdc: boolean;
   /** Show Themes link in sidebar */
   showProfileThemes: boolean;
   /** Include Profile Theme updates in the follows/global feed (legacy key, maps to feedIncludeThemeDefinitions + feedIncludeProfileThemeUpdates) */

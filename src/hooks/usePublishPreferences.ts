@@ -24,7 +24,6 @@ export type PublishFeature =
   | 'reports'
   | 'roadstr'
   | 'directMessages'
-  | 'webxdc'
   | 'recovery'
   | 'encryptedSettings'
   | 'deleteRequests'
@@ -63,7 +62,6 @@ const FEATURE_DEFAULTS: Record<PublishFeature, boolean> = {
   reports: true,
   roadstr: true,
   directMessages: true,
-  webxdc: true,
   recovery: true,
   encryptedSettings: true,
   deleteRequests: true,
