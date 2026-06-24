@@ -26,6 +26,9 @@ interface UseClickDetectionOptions {
   config?: ClickDetectionConfig;
   /** Callback when a click is detected */
   onClick?: () => void;
+  /** Callback when a double-click/tap is detected. When set, the second click
+   *  within the double-click window calls this instead of `onClick`. */
+  onDoubleClick?: () => void;
   /** Callback when drag starts (movement detected) */
   onDragStart?: () => void;
 }
@@ -57,9 +60,12 @@ function distance(a: Position, b: Position): number {
 /**
  * Hook to detect click vs drag interactions.
  */
+const DOUBLE_CLICK_THRESHOLD_MS = 300;
+
 export function useClickDetection({
   config = DEFAULT_CLICK_CONFIG,
   onClick,
+  onDoubleClick,
   onDragStart,
 }: UseClickDetectionOptions = {}): UseClickDetectionResult {
   const stateRef = useRef<PointerTrackingState>({
@@ -67,6 +73,7 @@ export function useClickDetection({
     startTime: null,
     hasMoved: false,
   });
+  const lastClickTimeRef = useRef<number>(0);
   
   /**
    * Start tracking a potential click.
@@ -123,11 +130,19 @@ export function useClickDetection({
     };
     
     if (wasClick) {
-      onClick?.();
+      const now = Date.now();
+      const isDoubleClick = onDoubleClick !== undefined && now - lastClickTimeRef.current <= DOUBLE_CLICK_THRESHOLD_MS;
+      if (isDoubleClick) {
+        lastClickTimeRef.current = 0;
+        onDoubleClick();
+      } else {
+        lastClickTimeRef.current = now;
+        onClick?.();
+      }
     }
-    
+
     return wasClick;
-  }, [config.timeThreshold, onClick]);
+  }, [config.timeThreshold, onClick, onDoubleClick]);
   
   /**
    * Reset tracking state.
