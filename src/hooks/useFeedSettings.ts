@@ -7,28 +7,15 @@ import { useCallback, useEffect, useMemo } from "react";
 
 // ── Order computation ─────────────────────────────────────────────────────────
 
-/** Default sidebar order for fresh installs (system pages only). */
+/** Default sidebar order for fresh installs. */
 const DEFAULT_SIDEBAR_ORDER = [
-  "search",
   "feed",
-  "music",
-  "videos",
-  "photos",
-  "wallet",
-  "events",
+  "messages",
   "prediction-markets",
   "polls",
   "pets",
-  "messages",
-  "market",
-  SIDEBAR_DIVIDER_ID,
-  "notifications",
-  "bookmarks",
-  "profile",
-  "themes",
-  "settings",
-  "help",
-  "about",
+  "wallet",
+  "events",
 ];
 
 /** Map of legacy sidebar item IDs to their current replacements. */
