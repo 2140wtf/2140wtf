@@ -16,6 +16,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "pets",
   "wallet",
   "events",
+  "btcmap",
 ];
 
 /** Map of legacy sidebar item IDs to their current replacements. */
