@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
 
 import { useAppContext } from '@/hooks/useAppContext';
-import { fetchBtcPrice, satsToUSD } from '@/lib/bitcoin';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
+import { satsToUSD } from '@/lib/bitcoin';
 import { formatNumber } from '@/lib/formatNumber';
 import type { CurrencyDisplay } from '@/contexts/AppContext';
 
@@ -29,7 +29,7 @@ export interface FormatMoneyResult {
 /**
  * Format a satoshi amount as a string according to the user's currency preference.
  *
- * When `currencyDisplay === 'usd'` (the default) and a BTC price is available,
+ * When `currencyDisplay === 'usd'` and a BTC price is available,
  * the amount is converted to USD. If the price hasn't loaded yet or the request
  * failed, the function falls back to the sats representation so we never block
  * the UI on a network round-trip.
@@ -43,15 +43,7 @@ export function useFormatMoney(): FormatMoneyResult {
   const currency: CurrencyDisplay = config.currencyDisplay ?? 'usd';
 
   // Reuse the shared price query so all callers share one cached fetch.
-  const { data: btcPrice } = useQuery({
-    queryKey: ['btc-price', config.esploraApis],
-    queryFn: ({ signal }) => fetchBtcPrice(config.esploraApis, signal),
-    // Prices move; 60 s is fine for display formatting.
-    staleTime: 60_000,
-    // Don't pop a UI error if the price endpoint is down; we just fall back to sats.
-    retry: 1,
-    enabled: currency === 'usd',
-  });
+  const { btcPrice } = useBtcPrice(currency === 'usd');
 
   const format = useCallback(
     (sats: number, options?: FormatMoneyOptions): string => {

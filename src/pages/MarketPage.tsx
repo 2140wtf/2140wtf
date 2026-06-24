@@ -33,7 +33,7 @@ const CATEGORIES = [
 export function MarketPage(): React.JSX.Element {
   const { config } = useAppContext();
   useSeoMeta({
-    title: `Store | ${config.appName}`,
+    title: `Merchants | ${config.appName}`,
     description: 'Bitcoin art and goods from Nostr NIP-99 classified listings.',
   });
 
@@ -85,7 +85,7 @@ export function MarketPage(): React.JSX.Element {
 
   return (
     <main>
-      <PageHeader title="Store" icon={<ShoppingBag className="size-5" />} />
+      <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />} />
 
       <div className="px-4 py-4 max-w-6xl mx-auto space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">

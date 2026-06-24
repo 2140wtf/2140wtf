@@ -1289,3 +1289,238 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 - Track ordering follows the order of `a` tags in the event
 - The same detail view, playback, and commenting features apply to both albums and playlists
 
+
+---
+
+## BAO Court / Juror Mode
+
+2140.wtf implements a browser-based **BAO Court** jury system for ₿AO prediction-market disputes. Jurors register candidacy, are selected deterministically from a Bitcoin block hash, run a Pedersen distributed key generation (DKG) ceremony, commit/reveal votes, and produce a FROST threshold-signed dispute override attestation.
+
+Because real cross-juror DKG requires multiple online participants, 2140.wtf includes a **demo simulation mode** that completes the ceremony locally while still publishing the current user's real events.
+
+### Event kinds
+
+| Kind  | Name                         | Description                                                            |
+|-------|------------------------------|------------------------------------------------------------------------|
+| 38025 | BAO Court Dispute            | A market outcome is disputed and an appeal is opened.                  |
+| 39001 | BAO Court Juror Candidacy    | A juror registers for a dispute with category coverage and stake bond. |
+| 39002 | BAO Court Jury Selection     | The selected jury and backups are announced for a dispute.             |
+| 38031 | BAO Court DKG Commitment     | A juror publishes their Pedersen polynomial commitments.               |
+| 39004 | BAO Court Vote Commit/Reveal | Commit/reveal phase for the juror's outcome vote.                      |
+| 39005 | BAO Court FROST Commitment   | A juror publishes their FROST signing nonce commitment.                |
+| 39006 | BAO Court FROST Reveal       | A juror reveals their FROST partial signature.                         |
+| 39007 | BAO Court Attestation        | Final aggregated FROST dispute override attestation.                   |
+
+### Kind 38025: BAO Court Dispute
+
+Regular event filed by a market participant to dispute a resolved or resolving market outcome.
+
+```json
+{
+  "kind": 38025,
+  "pubkey": "<challenger-pubkey>",
+  "content": "{\"marketId\":\"<market-d-tag>\",\"marketEventId\":\"<market-event-id>\",\"disputeId\":\"<32-byte-hex>\",\"originalOutcome\":\"YES\",\"proposedOutcome\":\"NO\",\"evidenceHashes\":[\"<sha256>\"]}",
+  "tags": [
+    ["e", "<market-event-id>", "", "root"],
+    ["p", "<challenger-pubkey>"],
+    ["dispute", "<32-byte-hex>"],
+    ["market", "<market-d-tag>"],
+    ["original", "YES"],
+    ["proposed", "NO"],
+    ["deadline", "<unix-seconds>"],
+    ["appeal_type", "frost"],
+    ["evidence", "<sha256>"],
+    ["alt", "BAO Court dispute abc123..."]
+  ]
+}
+```
+
+**Tags:**
+
+| Tag          | Required | Description                                                                 |
+|--------------|----------|-----------------------------------------------------------------------------|
+| `e`          | Yes      | Root reference to the disputed market event.                                |
+| `p`          | Yes      | Challenger pubkey.                                                          |
+| `dispute`    | Yes      | 32-byte lowercase hex dispute identifier.                                   |
+| `market`     | Yes      | Market d-tag / identifier.                                                  |
+| `original`   | Yes      | Original market outcome being disputed.                                     |
+| `proposed`   | Yes      | Outcome the challenger proposes.                                            |
+| `deadline`   | Yes      | Unix seconds by which the appeal must complete.                             |
+| `appeal_type`| Yes      | Always `frost` for this protocol.                                           |
+| `evidence`   | No       | SHA-256 hashes of supporting evidence (one tag per hash).                   |
+| `alt`        | Yes      | NIP-31 human-readable fallback.                                             |
+
+### Kind 39001: BAO Court Juror Candidacy
+
+Regular event published by a juror to opt into a dispute. The stake commitment is a mock bond for demo; production deployments require a confirmed on-chain bond.
+
+```json
+{
+  "kind": 39001,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"marketId\":\"<market-d-tag>\",\"disputeId\":\"<32-byte-hex>\",\"stakeCapacitySats\":100000,\"wotScore\":80,\"categories\":[\"world\",\"crypto\"],\"bondAmountSats\":10000,\"bondAddress\":\"bc1q...\"}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["market", "<market-d-tag>"],
+    ["bond", "10000"],
+    ["address", "bc1q..."],
+    ["t", "world"],
+    ["t", "crypto"],
+    ["alt", "BAO Court juror candidacy for dispute abc123..."]
+  ]
+}
+```
+
+### Kind 39002: BAO Court Jury Selection
+
+Regular event announcing the selected jury and backups for a dispute. This event is trust-sensitive; clients MUST filter by the dispute coordinator when querying.
+
+```json
+{
+  "kind": 39002,
+  "pubkey": "<coordinator-pubkey>",
+  "content": "{\"marketId\":\"<market-d-tag>\",\"disputeId\":\"<32-byte-hex>\",\"seed\":\"<hex>\",\"blockHash\":\"<32-byte-hex>\",\"selected\":[{\"idx\":1,\"pubkey\":\"<hex>\",\"stake\":10000}],\"backups\":[]}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["market", "<market-d-tag>"],
+    ["seed", "<hex>"],
+    ["block", "<32-byte-hex>"],
+    ["selected", "1", "<juror-pubkey>", "10000"],
+    ["backup", "2", "<juror-pubkey>", "10000"],
+    ["alt", "BAO Court jury selection for dispute abc123..."]
+  ]
+}
+```
+
+### Kind 38031: BAO Court DKG Commitment
+
+Regular event publishing a juror's Pedersen polynomial commitments.
+
+```json
+{
+  "kind": 38031,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"vssCommits\":[\"<33-byte-commit>\"]}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["p", "<juror-pubkey>"],
+    ["dispute", "<32-byte-hex>"],
+    ["juror", "1"],
+    ["commit", "<33-byte-commit>"],
+    ["alt", "BAO Court DKG commitment from juror 1"]
+  ]
+}
+```
+
+### Kind 39004: BAO Court Vote Commit / Reveal
+
+Regular events used for the commit/reveal vote phase.
+
+**Commit:**
+
+```json
+{
+  "kind": 39004,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"commitHash\":\"<sha256>\"}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["juror", "1"],
+    ["commit", "<sha256>"],
+    ["alt", "BAO Court vote commit from juror 1"]
+  ]
+}
+```
+
+**Reveal:**
+
+```json
+{
+  "kind": 39004,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"outcome\":\"NO\",\"salt\":\"<hex>\"}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["juror", "1"],
+    ["outcome", "NO"],
+    ["salt", "<hex>"],
+    ["alt", "BAO Court vote reveal from juror 1"]
+  ]
+}
+```
+
+### Kind 39005: BAO Court FROST Commitment
+
+Regular event publishing a juror's FROST signing nonce commitment.
+
+```json
+{
+  "kind": 39005,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"commitmentPackage\":{\"idx\":1,\"binder_pn\":\"<hex>\",\"hidden_pn\":\"<hex>\"}}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["juror", "1"],
+    ["binder_pn", "<hex>"],
+    ["hidden_pn", "<hex>"],
+    ["alt", "BAO Court FROST signing commitment from juror 1"]
+  ]
+}
+```
+
+### Kind 39006: BAO Court FROST Reveal
+
+Regular event revealing a juror's FROST partial signature.
+
+```json
+{
+  "kind": 39006,
+  "pubkey": "<juror-pubkey>",
+  "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"publicNonce\":{\"idx\":1,\"binder_pn\":\"<hex>\",\"hidden_pn\":\"<hex>\"},\"partialSig\":\"<hex>\"}",
+  "tags": [
+    ["e", "<dispute-id>", "", "root"],
+    ["dispute", "<32-byte-hex>"],
+    ["juror", "1"],
+    ["nonce_binder", "<hex>"],
+    ["nonce_hidden", "<hex>"],
+    ["psig", "<hex>"],
+    ["alt", "BAO Court FROST signing reveal from juror 1"]
+  ]
+}
+```
+
+### Kind 39007: BAO Court Attestation
+
+Regular event containing the final aggregated FROST dispute override attestation.
+
+```json
+{
+  "kind": 39007,
+  "pubkey": "<publisher-pubkey>",
+  "content": "{\"marketId\":\"<market-d-tag>\",\"outcome\":\"NO\",\"message\":\"<sha256>\",\"disputeEventId\":\"<32-byte-hex>\"}",
+  "tags": [
+    ["e", "<market-event-id>", "", "root"],
+    ["m", "<market-d-tag>"],
+    ["p", "<group-x-only-pubkey>"],
+    ["outcome", "NO"],
+    ["nonce", "<64-byte-hex>"],
+    ["sig", "<128-byte-hex>"],
+    ["ver", "FROST-BIP340-v1"],
+    ["dispute", "<32-byte-hex>"],
+    ["alt", "BAO Court FROST attestation: NO"]
+  ]
+}
+```
+
+### Client behavior
+
+- **Disputes** are public UGC; anyone can query `{ kinds: [38025] }`.
+- **Selection events** (kind 39002) are trust-sensitive. Clients SHOULD filter by a trusted coordinator pubkey or verify the selection deterministically from the published `seed` and `block` tags.
+- **DKG commitments, votes, and FROST messages** SHOULD be filtered by the selected jurors' pubkeys to prevent spam.
+- **Encrypted shares** between jurors are delivered as NIP-17 private messages (kind 14) wrapped in NIP-59 gift wraps (kind 1059).
+- **Demo mode** runs the full Pedersen DKG and FROST signing locally, publishes the current user's real events, and simulates peer juror events internally for GUI completeness.

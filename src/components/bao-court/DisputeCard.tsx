@@ -10,6 +10,7 @@ import type { BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
 interface DisputeCardProps {
   dispute: BaoCourtDispute;
   onSelect: (dispute: BaoCourtDispute) => void;
+  disabled?: boolean;
 }
 
 function formatDeadline(timestamp: number): string {
@@ -26,7 +27,7 @@ function truncatePubkey(pubkey: string): string {
   return `${pubkey.slice(0, 6)}…${pubkey.slice(-6)}`;
 }
 
-export const DisputeCard = memo(function DisputeCard({ dispute, onSelect }: DisputeCardProps) {
+export const DisputeCard = memo(function DisputeCard({ dispute, onSelect, disabled }: DisputeCardProps) {
   return (
     <Card className="flex flex-col hover:border-primary/50 transition-colors">
       <CardHeader>
@@ -65,8 +66,8 @@ export const DisputeCard = memo(function DisputeCard({ dispute, onSelect }: Disp
         </div>
 
         <div className="mt-auto">
-          <Button size="sm" className="w-full" onClick={() => onSelect(dispute)}>
-            View dispute
+          <Button size="sm" className="w-full" onClick={() => onSelect(dispute)} disabled={disabled}>
+            {disabled ? 'Assembling demo jury…' : 'View dispute'}
           </Button>
         </div>
       </CardContent>

@@ -60,6 +60,47 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+/**
+ * Compute a sensible Y-axis domain for the price history.
+ *
+ * lightweight-charts in bao.markets uses scale margins (8% top/bottom padding)
+ * and auto-scales to the data range rather than forcing 0-100%. That prevents
+ * oscillators like 40%-70% from looking squashed. We mirror that by adding
+ * padding around the observed min/max and clamping to [0, 1].
+ */
+function computePriceDomain(
+  data: ChartRow[],
+  series: string[],
+  minRange = 0.1,
+  padding = 0.08,
+): [number, number] {
+  let minValue = Infinity;
+  let maxValue = -Infinity;
+  let hasValue = false;
+
+  for (const row of data) {
+    for (const key of series) {
+      const value = row[key];
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      hasValue = true;
+      if (value < minValue) minValue = value;
+      if (value > maxValue) maxValue = value;
+    }
+  }
+
+  if (!hasValue) return [0, 1];
+
+  // Ensure a minimum vertical range so flat-ish lines still show movement.
+  const range = Math.max(maxValue - minValue, minRange);
+  const paddedMin = minValue - range * padding;
+  const paddedMax = maxValue + range * padding;
+
+  return [
+    Math.max(0, Math.min(paddedMin, minValue - minRange / 2)),
+    Math.min(1, Math.max(paddedMax, maxValue + minRange / 2)),
+  ];
+}
+
 function formatTime(value: number): string {
   const date = new Date(value * 1000);
   return date.toLocaleDateString(undefined, {
@@ -225,6 +266,11 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
     [history, market, range],
   );
 
+  const yDomain = useMemo(
+    () => computePriceDomain(data, series),
+    [data, series],
+  );
+
   if (isLoading) {
     return <Skeleton className={cn('h-80 w-full rounded-xl', className)} />;
   }
@@ -295,7 +341,7 @@ export function PredictionMarketChart({ market, className }: PredictionMarketCha
               minTickGap={24}
             />
             <YAxis
-              domain={[0, 1]}
+              domain={yDomain}
               tickFormatter={formatPercent}
               tick={{ fontSize: 10, fill: 'var(--2140-muted)' }}
               stroke="var(--2140-border)"

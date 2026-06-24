@@ -1,7 +1,5 @@
 import { useMemo, useState } from "react";
-import type { NostrEvent } from '@nostrify/nostrify';
-
-import { HostedPollCube, type CubeThemeMode } from '@/components/HostedPollCube';
+import { NoteCard } from '@/components/NoteCard';
 import { usePollFeed } from '@/hooks/usePollFeed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -12,27 +10,17 @@ const ZAP_POLL_KIND = 6969;
 const INITIAL_LIMIT = 200;
 const LOAD_MORE_INCREMENT = 100;
 
-interface PollCubeFeedProps {
+interface PollListFeedProps {
   filter?: 'all' | 'zap' | 'regular';
   searchQuery?: string;
   className?: string;
-  theme?: CubeThemeMode;
-}
-
-function extractTitle(event: NostrEvent): string {
-  const lines = event.content.split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed) return trimmed;
-  }
-  return '';
 }
 
 /**
  * Fetch poll events from default relays + BAO poll relays and render them
- * as hosted cube embeds.
+ * as a standard note list.
  */
-export function PollCubeFeed({ filter = 'all', searchQuery = '', className, theme = 'system' }: PollCubeFeedProps) {
+export function PollListFeed({ filter = 'all', searchQuery = '', className }: PollListFeedProps) {
   const [limit, setLimit] = useState(INITIAL_LIMIT);
 
   const kinds = useMemo(() => {
@@ -47,14 +35,19 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className, them
     if (!polls) return [];
     const q = searchQuery.trim().toLowerCase();
     if (!q) return polls;
-    return polls.filter((poll) => extractTitle(poll).toLowerCase().includes(q));
+    return polls.filter((poll) => {
+      if (poll.content.toLowerCase().includes(q)) return true;
+      return poll.tags.some(([name, , label]) =>
+        (name === 'option' || name === 'poll_option') && label?.toLowerCase().includes(q)
+      );
+    });
   }, [polls, searchQuery]);
 
   if (isLoading) {
     return (
-      <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-6 py-4', className)}>
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[420px] w-full rounded-xl" />
+      <div className={cn('space-y-4 py-4', className)}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 w-full rounded-xl" />
         ))}
       </div>
     );
@@ -71,17 +64,10 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className, them
   const canLoadMore = (polls?.length ?? 0) >= limit;
 
   return (
-    <div className={cn('space-y-6 py-4', className)}>
-      <div className="grid grid-cols-1 gap-6">
-        {filteredPolls.map((poll) => (
-          <div key={poll.id} className="flex flex-col gap-3">
-            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} event={poll} theme={theme} className="aspect-square min-h-[420px] max-h-[80vh]" />
-            <div className="text-center px-2">
-              <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className={cn('space-y-4 py-4', className)}>
+      {filteredPolls.map((poll) => (
+        <NoteCard key={poll.id} event={poll} />
+      ))}
       {canLoadMore && (
         <div className="flex justify-center">
           <Button
@@ -89,7 +75,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className, them
             size="sm"
             onClick={() => setLimit((prev) => prev + LOAD_MORE_INCREMENT)}
           >
-            Load more cubes
+            Load more polls
           </Button>
         </div>
       )}
