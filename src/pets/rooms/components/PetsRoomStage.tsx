@@ -16,6 +16,8 @@
  * Stats are rendered separately by PetsRoomStatusHud in the top HUD area.
  */
 
+import { useCallback, useRef } from 'react';
+
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
 import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
@@ -84,7 +86,7 @@ export function PetsRoomStage({
 
   // Pet life in Bitcoin-block time (10 min blocks, 2016-block epochs).
   const petLife = usePetLife(companion.event.created_at);
-  const lastLifeToastAt = useReactRef<number>(0);
+  const lastLifeToastAt = useRef<number>(0);
 
   const handleLifeBadgeHover = useCallback(() => {
     if (!petLife) return;
