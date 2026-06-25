@@ -127,7 +127,7 @@ export function useVideoThumbnail(src: string, poster: string | undefined): stri
           if (cancelled) { hls.destroy(); return; }
           grabFrame();
         });
-      });
+      }).catch(() => { /* hls.js failed to load */ });
 
       return () => { cancelled = true; hlsInstance?.destroy(); hlsInstance = null; video.src = ''; };
     }
