@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Swords, Trophy } from 'lucide-react';
+import { Swords, Trophy, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -13,6 +13,7 @@ import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
 import { createRivalCompanion } from '../lib/rival';
 import { DEFAULT_PRIZE_SATS } from '../lib/constants';
+import { RemoteBattleSetup } from './RemoteBattleSetup';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMode } from '../lib/battleInteraction';
 
@@ -24,6 +25,7 @@ export interface BattleSetupProps {
 
 export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProps) {
   const { companions, isLoading } = usePetssCollection();
+  const [mode, setMode] = useState<'local' | 'remote'>('local');
   const { profile } = useBlobbonautProfile();
 
   const eligiblePets = useMemo(
@@ -63,6 +65,10 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
     if (!pet1 || !pet2) return;
     onStart(pet1, pet2, DEFAULT_PRIZE_SATS, walletMode, pet2Id === 'rival');
   };
+
+  if (mode === 'remote') {
+    return <RemoteBattleSetup ownerPubkey={ownerPubkey} onBack={() => setMode('local')} className={className} />;
+  }
 
   if (isLoading) {
     return (
@@ -146,15 +152,27 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           </div>
         </div>
 
-        <Button
-          size="lg"
-          className="w-full"
-          onClick={handleStart}
-          disabled={!pet1 || !pet2}
-        >
-          <Swords className="mr-2 size-4" />
-          Start Battle
-        </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={handleStart}
+            disabled={!pet1 || !pet2}
+          >
+            <Swords className="mr-2 size-4" />
+            Start Battle
+          </Button>
+          <Button
+            size="lg"
+            variant="secondary"
+            className="w-full"
+            onClick={() => setMode('remote')}
+            disabled={eligiblePets.length === 0}
+          >
+            <Users className="mr-2 size-4" />
+            Battle a Friend
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

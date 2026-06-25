@@ -136,7 +136,7 @@ export function PetsRoomStage({
       title: `${companion.name} • ${petLife.ageLabel}`,
       description: `Bitcoin-block age: ${petLife.label}. e = epoch (2016 blocks), b = block.${birthText}`,
     });
-  }, [petLife, birthBlockHeight]);
+  }, [petLife, birthBlockHeight, companion.name]);
 
   return (
     <div ref={stageRef} className="absolute inset-0 pointer-events-none">
