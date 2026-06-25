@@ -12,6 +12,8 @@ export interface JurorSettingsState {
   readonly bondAmountSats: number;
   readonly demoMode: boolean;
   readonly demoPace: 'guided' | 'fast';
+  /** Required stake rail for juror bonds (Spark in the BAO Markets wallet). */
+  readonly rail: string;
 }
 
 interface JurorSettingsProps {
@@ -79,6 +81,18 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
             }}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="juror-rail">Juror stake rail</Label>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="capitalize">
+              {value.rail}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              Spark is the required rail for juror bonds.
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center justify-between rounded-lg border p-4">

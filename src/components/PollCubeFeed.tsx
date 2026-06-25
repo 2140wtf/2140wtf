@@ -32,7 +32,7 @@ function extractTitle(event: NostrEvent): string {
  * Fetch poll events from default relays + BAO poll relays and render them
  * as hosted cube embeds.
  */
-export function PollCubeFeed({ filter = 'all', searchQuery = '', className, theme = 'system' }: PollCubeFeedProps) {
+export function PollCubeFeed({ filter = 'all', searchQuery = '', className, theme = 'light' }: PollCubeFeedProps) {
   const [limit, setLimit] = useState(INITIAL_LIMIT);
 
   const kinds = useMemo(() => {

@@ -3,14 +3,14 @@
  *
  * Generates deterministic simulated jurors and publishes their candidacy and
  * selection events to the configured relay pool so a single real user can
- * experience the full peer-to-peer FROST appeal flow. All stakes use fake
+ * experience the full peer-to-peer dispute-appeal flow. All stakes use fake
  * sats; no real Bitcoin is required.
  *
  * NOTE: A coordinator-based design is intentionally NOT used here. Relying on a
  * single coordinator is custodial and contradicts the protocol goal of a fully
  * independent jury. Demo rooms therefore use deterministic, roster-derived
- * values (room id, dispute id, jury selection, DKG seed) that every juror can
- * compute locally without any privileged party.
+ * values (room id, dispute id, jury selection, key-ceremony seed) that every
+ * juror can compute locally without any privileged party.
  */
 
 import { generateSecretKey, getPublicKey } from 'nostr-tools';
@@ -60,7 +60,10 @@ const DEMO_ROOM_STORAGE_KEY = 'bao-court-demo-room';
 export const BAO_COURT_DEMO_MEMBERSHIP_KIND = 39008;
 
 /** Fake bond amount used in all demo-room simulations. */
-export const DEMO_BOND_AMOUNT_SATS = 1_000_000;
+export const DEMO_BOND_AMOUNT_SATS = 10_000;
+
+/** Required stake rail for demo-room jurors (Spark). */
+export const DEMO_RAIL = 'spark';
 
 function deterministicPrivateKey(index: number): Uint8Array {
   // Deterministic but obviously insecure — fine for demo peers.
@@ -261,6 +264,7 @@ export function loadSimulatedSelection(disputeId: string): SelectedJuror[] | nul
 export interface DemoRoomMember {
   readonly pubkey: string;
   readonly categories: readonly string[];
+  readonly rail: string;
   readonly joinedAt: number;
   readonly eventId: string;
 }
@@ -337,6 +341,7 @@ export function buildDemoMembershipEvent(params: {
     ['category', category],
     ['t', category],
     ['bond', String(DEMO_BOND_AMOUNT_SATS)],
+    ['rail', DEMO_RAIL],
     ['demo', 'court-simulator'],
     ['alt', `₿AO Court demo jury room ${roomId.slice(0, 12)}`],
   ];
@@ -350,6 +355,7 @@ export function buildDemoMembershipEvent(params: {
     content: JSON.stringify({
       categories: [category],
       bondAmountSats: DEMO_BOND_AMOUNT_SATS,
+      rail: DEMO_RAIL,
       demo: true,
     }),
   };
@@ -379,9 +385,15 @@ export function parseDemoMembershipEvent(event: NostrEvent): DemoRoomMember | nu
       ? [categoryTag[1]]
       : [];
 
+  const railTag = event.tags.find((t) => t[0] === 'rail');
+  const rail = typeof content.rail === 'string'
+    ? content.rail
+    : railTag?.[1] ?? DEMO_RAIL;
+
   return {
     pubkey: event.pubkey,
     categories,
+    rail,
     joinedAt: event.created_at,
     eventId: event.id,
   };
@@ -429,7 +441,7 @@ export function buildMockDisputeEvent(params: {
   return template;
 }
 
-/** Build a deterministic DKG seed from the room + dispute + sorted juror pubkeys. */
+/** Build a deterministic key-ceremony seed from the room + dispute + sorted juror pubkeys. */
 export function deriveDkgSeed(params: {
   roomId: string;
   disputeId: string;

@@ -171,7 +171,7 @@ const hardcodedConfig: AppConfig = {
   curatorPubkey: '932614571afcbad4d17a191ee281e39eebbb41b93fac8fd87829622aeb112f4d',
   sandboxDomain: 'iframe.diy',
   esploraApis: [...DEFAULT_ESPLORA_APIS],
-  currencyDisplay: 'usd',
+  currencyDisplay: 'sats',
   sidebarWidgets: DEFAULT_SIDEBAR_WIDGETS,
   sidebarWidgetsVersion: 3,
   maxCachedEventAge: 604800,
