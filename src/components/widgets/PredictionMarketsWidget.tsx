@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
 const ROTATION_INTERVAL_MS = 2 * 60 * 1000;
-const MARKETS_PER_VIEW = 2;
+const MARKETS_PER_VIEW = 4;
 
 /**
  * Compact ₿AO MARKETS widget for the right sidebar.
@@ -79,7 +79,7 @@ export function PredictionMarketsWidget() {
           )}
         >
           <TrendingUp className="size-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium line-clamp-2 leading-snug">
+          <span className="text-sm font-medium line-clamp-3 leading-snug">
             {market.title}
           </span>
         </button>

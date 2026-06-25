@@ -52,27 +52,40 @@ export function usePetsPurchaseItem(
         throw new Error('Item not found in shop catalog');
       }
 
-      // Validate price matches catalog (prevent client tampering)
-      if (item.price !== price) {
+      // Validate price matches one of the accepted currency prices.
+      const fiatPrice = item.fiatPrice ?? item.price;
+      const satsPrice = item.satsPrice ?? item.price;
+      const isValidPrice = price === fiatPrice || price === satsPrice;
+      if (!isValidPrice) {
         throw new Error('Item price mismatch. Please refresh and try again.');
       }
 
-      const isDemoSats = currentProfile.walletMode === 'demo-sats';
       const isBtcSats = currentProfile.walletMode === 'btc-sats';
+      const totalFiatCost = fiatPrice * quantity;
+      const totalSatsCost = satsPrice * quantity;
 
-      // Calculate total cost in sats
-      const totalCost = price * quantity;
-
-      // Check affordability and pay
-      if (isDemoSats) {
-        if (currentProfile.sats < totalCost) {
-          throw new Error(
-            `Insufficient demo sats. You need ${totalCost} demo sats but only have ${currentProfile.sats}.`
-          );
+      // Prefer fake fiat coins first; they can only decrease and never be replenished.
+      // In demo-sats mode fall back to profile demo sats; in btc-sats mode pay the
+      // external BAO wallet.
+      let currency: 'fiat coins' | 'demo sats' | 'sats' = 'fiat coins';
+      if (currentProfile.coins >= totalFiatCost) {
+        if (currentProfile.coins - totalFiatCost < 0) {
+          throw new Error('Fiat coins cannot go below zero.');
         }
       } else if (isBtcSats) {
-        // Pay with real BTC sats before updating storage
-        await paySats(totalCost, `Pets shop: ${item.name}`);
+        if (!externalWallet || externalWallet.totalBalance < totalSatsCost) {
+          throw new Error(
+            `Insufficient external wallet balance. You need ${totalSatsCost.toLocaleString()} sats but only have ${externalWallet?.totalBalance?.toLocaleString() ?? 0}.`
+          );
+        }
+        await paySats(totalSatsCost, `Pets shop: ${item.name}`);
+        currency = 'sats';
+      } else if (currentProfile.sats >= totalSatsCost) {
+        currency = 'demo sats';
+      } else {
+        throw new Error(
+          `Insufficient funds. You need ${totalFiatCost.toLocaleString()} fiat coins (or ${totalSatsCost.toLocaleString()} demo sats) but have ${currentProfile.coins.toLocaleString()} fiat coins and ${currentProfile.sats.toLocaleString()} demo sats.`
+        );
       }
 
       // Update storage (stack or add)
@@ -107,8 +120,10 @@ export function usePetsPurchaseItem(
       const updates: Record<string, string | string[]> = {
         storage: storageValues, // Array of 'itemId:quantity' strings
       };
-      if (isDemoSats) {
-        updates.sats = (currentProfile.sats - totalCost).toString();
+      if (currency === 'fiat coins') {
+        updates.coins = (currentProfile.coins - totalFiatCost).toString();
+      } else if (currency === 'demo sats') {
+        updates.sats = (currentProfile.sats - totalSatsCost).toString();
       }
 
       const updatedTags = updateBlobbonautTags(prev.tags, updates);
@@ -121,7 +136,7 @@ export function usePetsPurchaseItem(
         prev,
       });
 
-      return { event, item, quantity, totalCost, currency: isDemoSats ? 'demo sats' : 'sats' as const };
+      return { event, item, quantity, totalCost: currency === 'fiat coins' ? totalFiatCost : totalSatsCost, currency };
     },
     onSuccess: ({ item, quantity, totalCost, currency }) => {
       // Invalidate profile query to refetch fresh data

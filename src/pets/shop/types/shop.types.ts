@@ -31,7 +31,12 @@ export interface ShopItem {
   id: string;
   name: string;
   type: ShopItemCategory;
+  /** Default price used when currency-specific prices are omitted. */
   price: number;
+  /** Optional fiat-coin price. Defaults to `price`. */
+  fiatPrice?: number;
+  /** Optional BAO demo-sats price. Defaults to `price`. */
+  satsPrice?: number;
   icon: string;
   effect?: ItemEffect;
   status?: 'live' | 'disabled';
