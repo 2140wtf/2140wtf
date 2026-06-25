@@ -119,7 +119,7 @@ export function TestApp({ children }: TestAppProps) {
     imageQuality: 'compressed',
     sandboxDomain: 'iframe.diy',
     esploraApis: ['https://mempool.space/api'],
-    currencyDisplay: 'usd',
+    currencyDisplay: 'sats',
     sidebarWidgets: [],
     sidebarWidgetsVersion: 1,
     maxCachedEventAge: 604800,
