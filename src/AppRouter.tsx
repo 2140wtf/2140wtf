@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Box, LayoutList, Plus, Search, Sun, Moon } from "lucide-react";
+import { Box, LayoutList, Plus, Search } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,6 @@ import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
 import { PollsViewProvider } from "@/contexts/PollsViewContext";
-import type { CubeThemeMode } from "@/components/HostedPollCube";
 
 // Poll feed views: use the extended BAO poll relay set so the polls page sees
 // the same events as bao.markets.
@@ -112,7 +111,7 @@ function PollsFeedPage() {
   const [view, setView] = useState<'list' | 'cubes'>('cubes');
   const [searchQuery, setSearchQuery] = useState('');
   const [pollFilter, setPollFilter] = useState<'all' | 'zap' | 'regular'>('all');
-  const [cubeTheme, setCubeTheme] = useState<CubeThemeMode>('dark');
+
 
   const pollKinds = useMemo(() => {
     if (pollFilter === 'zap') return [6969];
@@ -173,24 +172,6 @@ function PollsFeedPage() {
                 <span className="text-xs font-medium">txt</span>
               </ToggleGroupItem>
             </ToggleGroup>
-            {view === 'cubes' && (
-              <ToggleGroup
-                type="single"
-                value={cubeTheme}
-                onValueChange={(v) => {
-                  if (v) setCubeTheme(v as CubeThemeMode);
-                }}
-                variant="outline"
-                size="sm"
-              >
-                <ToggleGroupItem value="light" aria-label="Light cubes" className="gap-1">
-                  <Sun className="size-4" />
-                </ToggleGroupItem>
-                <ToggleGroupItem value="dark" aria-label="Dark cubes" className="gap-1">
-                  <Moon className="size-4" />
-                </ToggleGroupItem>
-              </ToggleGroup>
-            )}
             <Button size="sm" className="rounded-full gap-1.5" onClick={() => setComposeOpen(true)}>
               <Plus className="size-4" />
               Create poll
@@ -200,7 +181,7 @@ function PollsFeedPage() {
       >
         <Suspense fallback={null}>
           {view === 'cubes' ? (
-            <PollCubeFeed filter={pollFilter} searchQuery={searchQuery} theme={cubeTheme} />
+            <PollCubeFeed filter={pollFilter} searchQuery={searchQuery} theme="light" />
           ) : (
             <PollListFeed filter={pollFilter} searchQuery={searchQuery} />
           )}
