@@ -32,7 +32,7 @@ export function MarketplaceBuyDialog({ listing, open, onOpenChange }: Marketplac
       target={listing.event as import('nostr-tools').Event}
       open={open}
       onOpenChange={onOpenChange}
-      initialUsdAmount={priceState.kind === 'ready' ? priceState.initialUsdAmount : undefined}
+      initialAmountSats={priceState.kind === 'ready' ? priceState.initialAmountSats : undefined}
     />
   );
 }
