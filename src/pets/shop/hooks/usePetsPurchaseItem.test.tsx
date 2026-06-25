@@ -144,7 +144,7 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient demo sats');
+    expect(result.current.error?.message).toContain('Insufficient funds');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 });
