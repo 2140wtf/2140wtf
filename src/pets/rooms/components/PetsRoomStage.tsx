@@ -133,8 +133,8 @@ export function PetsRoomStage({
       ? ` Born at block ${birthBlockHeight.toLocaleString()}.`
       : '';
     toast({
-      title: petLife.label,
-      description: `Pet life in Bitcoin-block time. e = epoch (2016 blocks), b = block.${birthText}`,
+      title: `${companion.name} • ${petLife.ageLabel}`,
+      description: `Bitcoin-block age: ${petLife.label}. e = epoch (2016 blocks), b = block.${birthText}`,
     });
   }, [petLife, birthBlockHeight]);
 
@@ -211,7 +211,7 @@ export function PetsRoomStage({
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/70 backdrop-blur-sm border border-border/20 shadow-sm">
                     <span className="text-[10px] leading-none text-amber-500 font-bold">₿</span>
                     <span className="text-[10px] sm:text-xs leading-none font-semibold text-foreground/80 whitespace-nowrap">
-                      {petLife.shortLabel}
+                      {petLife.ageLabel}
                     </span>
                   </div>
                 </div>

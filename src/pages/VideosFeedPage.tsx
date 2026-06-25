@@ -549,7 +549,6 @@ function LiveStreamCard({ event }: { event: NostrEvent }) {
 function LiveStreamsStrip({ tab }: { tab: FeedTab }) {
   const { data: streams } = useClassifiedStreams(tab);
   const [streamTab, setStreamTab] = useState<StreamTab>("live");
-  const drag = useDragScroll<HTMLDivElement>();
 
   const totalCount =
     streams.live.length + streams.planned.length + streams.past.length;
@@ -613,16 +612,8 @@ function LiveStreamsStrip({ tab }: { tab: FeedTab }) {
         )}
       </div>
 
-      {/* Horizontal scroll of stream cards */}
-      <div
-        ref={drag.ref}
-        className="flex gap-3 overflow-x-auto pb-1 cursor-grab"
-        style={{ scrollbarWidth: "none" }}
-        onMouseDown={drag.onMouseDown}
-        onMouseMove={drag.onMouseMove}
-        onMouseUp={drag.onMouseUp}
-        onMouseLeave={drag.onMouseLeave}
-      >
+      {/* Grid of stream cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {activeEvents.map((e) => (
           <LiveStreamCard key={e.id} event={e} />
         ))}
@@ -816,7 +807,6 @@ function ShortsSection({
   events: NostrEvent[];
   onOpen: (index: number) => void;
 }) {
-  const drag = useDragScroll<HTMLDivElement>();
   if (events.length === 0) return null;
 
   return (
@@ -824,17 +814,9 @@ function ShortsSection({
       <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 px-4">
         Shorts
       </h2>
-      <div
-        ref={drag.ref}
-        className="flex gap-2.5 overflow-x-auto px-4 pb-2 cursor-grab"
-        style={{ scrollbarWidth: "none" }}
-        onMouseDown={drag.onMouseDown}
-        onMouseMove={drag.onMouseMove}
-        onMouseUp={drag.onMouseUp}
-        onMouseLeave={drag.onMouseLeave}
-      >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pb-2">
         {events.map((e, i) => (
-          <div key={e.id} className="shrink-0 w-32">
+          <div key={e.id}>
             <ShortThumb event={e} onClick={() => onOpen(i)} />
           </div>
         ))}
