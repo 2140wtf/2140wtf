@@ -13,7 +13,7 @@ const STORAGE_KEY = "bao-court-settings";
 function loadSettings(): JurorSettingsState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided" };
+    if (!raw) return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided", rail: "spark" };
     const parsed = JSON.parse(raw) as unknown;
     if (
       parsed &&
@@ -25,14 +25,16 @@ function loadSettings(): JurorSettingsState {
       "demoMode" in parsed &&
       typeof parsed.demoMode === "boolean" &&
       "demoPace" in parsed &&
-      (parsed.demoPace === "guided" || parsed.demoPace === "fast")
+      (parsed.demoPace === "guided" || parsed.demoPace === "fast") &&
+      "rail" in parsed &&
+      typeof parsed.rail === "string"
     ) {
       return parsed as JurorSettingsState;
     }
   } catch {
     // Fall through to defaults.
   }
-  return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided" };
+  return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided", rail: "spark" };
 }
 
 export function CourtPage(): React.JSX.Element {
