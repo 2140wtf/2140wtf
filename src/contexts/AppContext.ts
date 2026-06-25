@@ -319,6 +319,8 @@ export interface AppConfig {
   currencyDisplay: CurrencyDisplay;
   /** Ordered list of right sidebar widget configs. Each entry is a widget type ID with optional display settings. */
   sidebarWidgets: WidgetConfig[];
+  /** Version counter used to reset existing users' sidebar widgets when defaults change. */
+  sidebarWidgetsVersion: number;
   /**
    * Maximum age, in seconds, of events kept in the local IndexedDB event
    * cache. After each write flush, events older than this are pruned based on
