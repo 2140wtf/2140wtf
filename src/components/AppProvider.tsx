@@ -54,6 +54,13 @@ export function AppProvider(props: AppProviderProps) {
           result.sidebarOrderVersion = currentSidebarVersion;
         }
 
+        // Reset right-sidebar widgets when the default widget set has changed.
+        const currentWidgetsVersion = defaultConfig.sidebarWidgetsVersion ?? 0;
+        if ((result.sidebarWidgetsVersion ?? 0) < currentWidgetsVersion) {
+          result.sidebarWidgets = defaultConfig.sidebarWidgets;
+          result.sidebarWidgetsVersion = currentWidgetsVersion;
+        }
+
         // Reset theme to the new default when the default theme version has changed.
         const currentThemeVersion = defaultConfig.themeDefaultVersion ?? 0;
         if ((result.themeDefaultVersion ?? 0) < currentThemeVersion) {
