@@ -46,7 +46,8 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
   const isBtcMode = profile?.walletMode === 'btc-sats';
   const walletBalance = externalWallet?.totalBalance ?? 0;
   const walletLoading = externalWallet?.loading ?? false;
-  const spendableSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
+  const fiatCoins = profile?.coins ?? 0;
+  const demoSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
 
   const storageMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -79,14 +80,24 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
           <ShoppingBag className="size-5 text-primary" />
           <h2 className="font-semibold">Pet Shop</h2>
         </div>
-        <Badge variant="secondary" className="flex items-center gap-1.5">
-          <WalletIcon className="size-3" />
-          {walletLoading && spendableSats === 0 ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <span>{spendableSats.toLocaleString()} {isBtcMode ? 'BAO sats' : 'demo sats'}</span>
-          )}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="flex items-center gap-1.5">
+            <WalletIcon className="size-3" />
+            {walletLoading && demoSats === 0 ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <span>{fiatCoins.toLocaleString()} fiat</span>
+            )}
+          </Badge>
+          <Badge variant="secondary" className="flex items-center gap-1.5">
+            <WalletIcon className="size-3" />
+            {walletLoading && demoSats === 0 ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <span>{demoSats.toLocaleString()} {isBtcMode ? 'BAO sats' : 'demo sats'}</span>
+            )}
+          </Badge>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
@@ -100,7 +111,11 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {items.map((item) => {
                     const owned = storageMap.get(item.id) ?? 0;
-                    const canAfford = spendableSats >= item.price;
+                    const fiatPrice = item.fiatPrice ?? item.price;
+                    const satsPrice = item.satsPrice ?? item.price;
+                    const canAffordFiat = fiatCoins >= fiatPrice;
+                    const canAffordSats = demoSats >= satsPrice;
+                    const canAfford = canAffordFiat || canAffordSats;
                     return (
                       <Card key={item.id} className={cn('overflow-hidden', !canAfford && 'opacity-70')}>
                         <CardContent className="p-3">
@@ -117,13 +132,21 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">{effectSummary(item.effect)}</p>
                               <div className="flex items-center justify-between mt-2 gap-2">
-                                <span className="text-sm font-semibold">{item.price.toLocaleString()} sats</span>
+                                <div className="text-xs leading-tight">
+                                  <span className={cn('font-semibold', !canAffordFiat && 'text-muted-foreground')}>
+                                    {fiatPrice.toLocaleString()} fiat
+                                  </span>
+                                  <span className="text-muted-foreground mx-1">or</span>
+                                  <span className={cn('font-semibold', !canAffordSats && 'text-muted-foreground')}>
+                                    {satsPrice.toLocaleString()} sats
+                                  </span>
+                                </div>
                                 <Button
                                   size="sm"
                                   variant="secondary"
                                   disabled={!canAfford || isPending}
-                                  onClick={() => purchase({ itemId: item.id, price: item.price, quantity: 1 })}
-                                  className="h-7 px-2 text-xs"
+                                  onClick={() => purchase({ itemId: item.id, price: fiatPrice, quantity: 1 })}
+                                  className="h-7 px-2 text-xs shrink-0"
                                 >
                                   <Plus className="size-3 mr-1" />
                                   Buy

@@ -734,7 +734,7 @@ export function VideosFeedPage() {
   const [feedTab, setFeedTab] = useFeedTab<FeedTab>("videos", [
     "follows",
     "global",
-  ]);
+  ], "global");
 
   useSeoMeta({
     title: `Videos | ${config.appName}`,

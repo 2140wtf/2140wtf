@@ -116,9 +116,10 @@ export function useChasePayout(
         };
       }
 
-      // Fiat mode: cost 100 coins, add collected coins back as score currency.
+      // Fiat mode: cost 100 coins. Collected coins are worthless score only and
+      // are never added back to the profile, so fiat can only decrease.
       const currentCoins = profile?.coins ?? 0;
-      const newCoinsTotal = currentCoins - 100 + Math.max(0, coinsCollected);
+      const newCoinsTotal = Math.max(0, currentCoins - 100);
       const tags = updateBlobbonautTags(prev?.tags ?? [], {
         coins: newCoinsTotal.toString(),
       });
