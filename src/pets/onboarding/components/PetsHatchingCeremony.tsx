@@ -17,10 +17,8 @@ import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 
@@ -122,8 +120,6 @@ export function PetsHatchingCeremony({
   const isExistingEgg = !!existingCompanion;
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
-  const { config } = useAppContext();
-  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
   const starterGrant = useBaoPetStarterGrant({ onProfileUpdate: updateProfileEvent });
@@ -153,12 +149,6 @@ export function PetsHatchingCeremony({
   profileRef.current = profile;
   const previewRef = useRef(preview);
   previewRef.current = preview;
-
-  const eggBirthTimestamp = isExistingEgg
-    ? existingCompanion?.event.created_at
-    : previewRef.current?.createdAt;
-  const eggTooYoung = !isPetOldEnough(eggBirthTimestamp, currentBlockHeight);
-
   const nameInputRef = useRef<HTMLInputElement>(null);
   const eggContainerRef = useRef<HTMLDivElement>(null);
   const entrancePlayed = useRef(false);
@@ -462,13 +452,6 @@ export function PetsHatchingCeremony({
       setPhase('crack_3');
     } else if (phase === 'crack_3') {
       // Final click -> hatch!
-      if (eggTooYoung) {
-        toast({
-          title: 'Egg not ready',
-          description: 'Wait until at least one Bitcoin block is mined (~10 min) before hatching.',
-        });
-        return;
-      }
       notificationSuccess();
       setPhase('hatching');
       setShowFlash(true);
@@ -493,7 +476,7 @@ export function PetsHatchingCeremony({
         }, 2200);
       }, 1400);
     }
-  }, [phase, triggerShake, executeHatch, eggTooYoung]);
+  }, [phase, triggerShake, executeHatch]);
 
   // ── Dialog click: complete line or advance ──
   const handleDialogClick = useCallback(() => {
