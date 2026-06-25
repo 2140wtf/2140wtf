@@ -71,6 +71,7 @@ const NotificationsPage = lazy(() => import("./pages/NotificationsPage").then(m 
 const PhotosFeedPage = lazy(() => import("./pages/PhotosFeedPage").then(m => ({ default: m.PhotosFeedPage })));
 const PetsPage = lazy(() => import("./pages/PetsPage").then(m => ({ default: m.PetsPage })));
 const PetsBattlePage = lazy(() => import("./pages/PetsBattlePage").then(m => ({ default: m.default })));
+const PetsChaseBtcPage = lazy(() => import("./pages/ChaseBtcPage").then(m => ({ default: m.default })));
 const PetsSettingsPage = lazy(() => import("./pages/PetsSettingsPage").then(m => ({ default: m.PetsSettingsPage })));
 const PodcastsFeedPage = lazy(() => import("./pages/PodcastsFeedPage").then(m => ({ default: m.PodcastsFeedPage })));
 const PrivacyPolicyPage = lazy(() => import("./pages/PrivacyPolicyPage").then(m => ({ default: m.PrivacyPolicyPage })));
@@ -365,6 +366,7 @@ export function AppRouter() {
 
               <Route path="/pets" element={<PetsPage />} />
               <Route path="/pets/battle" element={<PetsBattlePage />} />
+              <Route path="/pets/chase-btc" element={<PetsChaseBtcPage />} />
               <Route path="/badges" element={<BadgesPage />} />
               <Route path="/books" element={<BooksPage />} />
               <Route path="/archive" element={<ArchivePage />} />
