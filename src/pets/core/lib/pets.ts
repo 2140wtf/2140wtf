@@ -1496,6 +1496,8 @@ export function buildBlobbonautTags(pubkey: string): string[][] {
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
+    // New Blobbonauts start with 10,000 fiat coins for mini-games.
+    ['coins', '10000'],
     // New profiles default to the BAO signet/demo Cashu rail so the pet
     // economy shares the same wallet as bao.markets.
     ['wallet_mode', 'bao'],
