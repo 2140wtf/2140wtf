@@ -24,6 +24,7 @@ import { secureStorage } from "@/lib/secureStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
 import { DEFAULT_SIDEBAR_WIDGETS } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
+import { RemoteBattleProvider } from "@/pets/battle";
 import AppRouter from "./AppRouter";
 
 const head = createHead({
@@ -221,9 +222,11 @@ export function App() {
                       <EmotionDevProvider>
                         <TooltipProvider>
                           <DmInboxProvider>
-                            <GroupChatProvider>
-                              <AppRouter />
-                            </GroupChatProvider>
+                            <RemoteBattleProvider>
+                              <GroupChatProvider>
+                                <AppRouter />
+                              </GroupChatProvider>
+                            </RemoteBattleProvider>
                           </DmInboxProvider>
                         </TooltipProvider>
                       </EmotionDevProvider>
