@@ -6,6 +6,16 @@
  * feed alongside Follows / Global / etc.
  */
 
+import {
+  BITCOIN_TOPIC_AUTHORS,
+  NOSTR_TOPIC_AUTHORS,
+  FINANCE_TOPIC_AUTHORS,
+  TECH_TOPIC_AUTHORS,
+  WORLD_TOPIC_AUTHORS,
+  POLITICS_TOPIC_AUTHORS,
+  SPORTS_TOPIC_AUTHORS,
+} from './feedTopicAuthors';
+
 export type FeedTopicId =
   | 'bitcoin'
   | 'nostr'
@@ -36,43 +46,69 @@ export const FEED_TOPICS: FeedTopic[] = [
     id: 'bitcoin',
     label: 'Bitcoin',
     icon: '₿',
-    tags: ['bitcoin', 'btc', 'lightning', 'mining', 'halving', 'satoshi', 'bitcoi'],
+    authors: BITCOIN_TOPIC_AUTHORS,
+    tags: ['bitcoin', 'btc', 'sats', 'satoshi', 'lightning', 'ln', 'mining', 'hashrate',
+      'difficulty', 'halving', 'mempool', 'onchain', 'segwit', 'taproot', 'ordinals',
+      'inscriptions', 'runes', 'layer2', 'l2', 'sidechain', 'coldcard', 'hardwarewallet',
+      'hodl', 'bitcoindev', 'bitcoinnews', 'bitcoineconomics', 'macro', 'etf', 'blackrock',
+      'fidelity', 'microstrategy', 'saylor', 'fedimint', 'cashu', 'ecash', 'ark', 'vtxo',
+      'rgb', 'dlc', 'bitvm', 'stratum', 'asic', 'miner', 'foundry', 'mara', 'riots'],
   },
   {
     id: 'nostr',
     label: 'Nostr',
     icon: '🟣',
-    tags: ['nostr', 'nostrprotocol', 'nostrdev', 'nip', 'relays', 'npub'],
+    authors: NOSTR_TOPIC_AUTHORS,
+    tags: ['nostr', 'nostrprotocol', 'nostrdev', 'nip', 'relay', 'relays', 'zap', 'npub',
+      'primal', 'damus', 'amethyst', 'coracle', 'snort', 'nostrudel', 'njump', 'ndk',
+      'nwc', 'lnurl', 'cashu', 'ecash'],
   },
   {
     id: 'tech',
     label: 'Tech / AI',
     icon: '🤖',
-    tags: ['tech', 'technology', 'ai', 'llm', 'machinelearning', 'opensource', 'coding'],
+    authors: TECH_TOPIC_AUTHORS,
+    tags: ['tech', 'technology', 'ai', 'llm', 'machinelearning', 'deeplearning', 'opensource',
+      'coding', 'programming', 'developer', 'privacy', 'infosec', 'cybersecurity',
+      'openai', 'anthropic', 'gpt', 'claude', 'gemini', 'llama', 'hardware', 'robotics',
+      'quantum', 'semiconductor'],
   },
   {
     id: 'finance',
     label: 'Finance',
     icon: '📈',
-    tags: ['finance', 'markets', 'macro', 'inflation', 'stocks', 'trading', 'economy'],
+    authors: FINANCE_TOPIC_AUTHORS,
+    tags: ['finance', 'markets', 'macro', 'inflation', 'stocks', 'trading', 'economy',
+      'bonds', 'yield', 'treasury', 'wallstreet', 'nasdaq', 'sp500', 'dow', 'cpi', 'gdp',
+      'recession', 'liquidity', 'sovereigndebt', 'fed', 'federalreserve', 'fomc', 'rates'],
   },
   {
     id: 'politics',
     label: 'Politics',
     icon: '🗳️',
-    tags: ['politics', 'election', 'geopolitics', 'government', 'policy'],
+    authors: POLITICS_TOPIC_AUTHORS,
+    tags: ['politics', 'election', 'geopolitics', 'government', 'policy', 'regulation',
+      'legislation', 'sanctions', 'democracy', 'senate', 'parliament', 'vote', 'referendum',
+      'campaign', 'diplomat', 'tariff', 'executiveorder', 'supremecourt', 'immigration'],
   },
   {
     id: 'world',
     label: 'World',
     icon: '🌍',
-    tags: ['news', 'worldnews', 'world', 'international', 'geopolitics'],
+    authors: WORLD_TOPIC_AUTHORS,
+    tags: ['news', 'worldnews', 'world', 'international', 'geopolitics', 'breaking',
+      'diplomacy', 'nato', 'un', 'conflict', 'crisis', 'war', 'peace', 'summit', 'treaty',
+      'refugee', 'humanitarian', 'climate', 'journalist', 'ukraine', 'gaza'],
   },
   {
     id: 'sports',
     label: 'Sports',
     icon: '🏆',
-    tags: ['sports', 'soccer', 'football', 'nba', 'nfl', 'tennis', 'olympics'],
+    authors: SPORTS_TOPIC_AUTHORS,
+    tags: ['sports', 'soccer', 'football', 'nba', 'nfl', 'tennis', 'olympics',
+      'mma', 'ufc', 'baseball', 'mlb', 'nhl', 'hockey', 'boxing', 'esports', 'cricket',
+      'rugby', 'golf', 'pga', 'nascar', 'racing', 'motorsport', 'worldcup',
+      'premierleague', 'laliga', 'championsleague'],
   },
   {
     id: 'bao',
