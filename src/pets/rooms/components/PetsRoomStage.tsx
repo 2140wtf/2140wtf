@@ -201,7 +201,7 @@ export function PetsRoomStage({
             )}
             {/* Visual wrapper — same width as the pet, anchors the life badge to
                 the top-right corner of the pet visual (not the whole room). */}
-            <div className="relative" style={{ width: isEgg ? '24%' : '30%' }}>
+            <div className="relative" style={{ width: isEgg ? '34%' : '30%' }}>
               {/* Life badge — floats above the top-right corner of the pet visual. */}
               {petLife && (
                 <div
@@ -226,6 +226,14 @@ export function PetsRoomStage({
               )}
 
               {/* Interaction wrapper — receives pointer events and sways. */}
+              {isEgg && onEggClick && (
+                <div className="absolute inset-0 -m-6 pointer-events-none">
+                  <div className="absolute inset-0 rounded-full border-2 border-dashed border-primary/30 animate-pulse" />
+                  <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-primary/70">
+                    Tap to hatch
+                  </div>
+                </div>
+              )}
               <div
                 data-pets-visual
                 className="relative transition-all duration-500 pointer-events-auto cursor-pointer"

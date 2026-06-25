@@ -21,9 +21,11 @@ interface EggTapTargetProps {
   onClick?: () => void;
   /** Whether the tap target should be visible/active. */
   enabled: boolean;
+  /** Extra padding around the egg visual to expand the tap area (px). */
+  padding?: number;
 }
 
-export function EggTapTarget({ stageRef, onClick, enabled }: EggTapTargetProps) {
+export function EggTapTarget({ stageRef, onClick, enabled, padding = 24 }: EggTapTargetProps) {
   const [rect, setRect] = useState<DOMRect | null>(null);
 
   const updateRect = useCallback(() => {
@@ -32,15 +34,25 @@ export function EggTapTarget({ stageRef, onClick, enabled }: EggTapTargetProps) 
       return;
     }
 
-    // The egg visual is the only pointer-events-auto element inside the stage.
-    const egg = stageRef.current.querySelector('.pointer-events-auto') as HTMLElement | null;
+    // Target the explicit pets visual wrapper so we don't accidentally match
+    // other pointer-events-auto elements like the life badge.
+    const egg = stageRef.current.querySelector('[data-pets-visual]') as HTMLElement | null;
     if (!egg) {
       setRect(null);
       return;
     }
 
-    setRect(egg.getBoundingClientRect());
-  }, [enabled, stageRef]);
+    const rect = egg.getBoundingClientRect();
+    const pad = padding;
+    setRect(
+      new DOMRect(
+        rect.left - pad,
+        rect.top - pad,
+        rect.width + pad * 2,
+        rect.height + pad * 2,
+      ),
+    );
+  }, [enabled, padding, stageRef]);
 
   useEffect(() => {
     updateRect();
@@ -68,7 +80,7 @@ export function EggTapTarget({ stageRef, onClick, enabled }: EggTapTargetProps) 
       type="button"
       aria-label="Hatch egg"
       onClick={onClick}
-      className="fixed z-50 rounded-full bg-transparent p-0 m-0 border-0 touch-manipulation"
+      className="fixed z-50 rounded-full bg-transparent p-0 m-0 border-0 touch-manipulation outline-none focus:outline-none"
       style={{
         left: rect.left,
         top: rect.top,
