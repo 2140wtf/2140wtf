@@ -2,10 +2,15 @@ import { useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Building2,
+  Bitcoin,
   Check,
+  Coins,
   Copy,
+  Droplets,
+  Landmark,
   RefreshCw,
+  Ship,
+  Sparkles,
   Wallet as WalletIcon,
   Zap,
 } from 'lucide-react';
@@ -183,15 +188,20 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
   );
 }
 
+const RAIL_ICONS: Record<WalletRailId, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+  bitcoin: Bitcoin,
+  lightning: Zap,
+  cashu: Coins,
+  liquid: Droplets,
+  spark: Sparkles,
+  ark: Ship,
+  fedimint: Landmark,
+};
+
 function RailIcon({ rail, className }: { rail: WalletRailConfig; className?: string }) {
-  if (rail.id === 'fedimint') {
-    return <Building2 className={className} style={{ color: rail.color }} />;
-  }
-  return (
-    <span className={`font-bold ${className}`} style={{ color: rail.color, fontSize: '1.125rem' }}>
-      {rail.icon}
-    </span>
-  );
+  const Icon = RAIL_ICONS[rail.id];
+  if (!Icon) return null;
+  return <Icon className={className} style={{ color: rail.color }} />;
 }
 
 function BitcoinPanel({ bitcoin }: { bitcoin: ReturnType<typeof useBitcoinWallet> }) {
