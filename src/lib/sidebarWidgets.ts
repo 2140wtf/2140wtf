@@ -136,7 +136,6 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 700,
     category: 'personal',
     href: '/pets',
-    fillHeight: true,
   },
   // Content feeds
   {
