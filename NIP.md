@@ -1329,9 +1329,9 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 
 ---
 
-## BAO Court / Juror Mode
+## ₿AO Court / Juror Mode
 
-2140.wtf implements a browser-based **BAO Court** jury system for ₿AO prediction-market disputes. Jurors register candidacy, are selected deterministically from a Bitcoin block hash, run a Pedersen distributed key generation (DKG) ceremony, commit/reveal votes, and produce a FROST threshold-signed dispute override attestation.
+2140.wtf implements a browser-based **₿AO Court** jury system for ₿AO prediction-market disputes. Jurors register candidacy, are selected deterministically from a Bitcoin block hash, run a Pedersen distributed key generation (DKG) ceremony, commit/reveal votes, and produce a FROST threshold-signed dispute override attestation.
 
 Because real cross-juror DKG requires multiple online participants, 2140.wtf includes a **demo simulation mode** that completes the ceremony locally while still publishing the current user's real events.
 
@@ -1339,16 +1339,16 @@ Because real cross-juror DKG requires multiple online participants, 2140.wtf inc
 
 | Kind  | Name                         | Description                                                            |
 |-------|------------------------------|------------------------------------------------------------------------|
-| 38025 | BAO Court Dispute            | A market outcome is disputed and an appeal is opened.                  |
-| 39001 | BAO Court Juror Candidacy    | A juror registers for a dispute with category coverage and stake bond. |
-| 39002 | BAO Court Jury Selection     | The selected jury and backups are announced for a dispute.             |
-| 38031 | BAO Court DKG Commitment     | A juror publishes their Pedersen polynomial commitments.               |
-| 39004 | BAO Court Vote Commit/Reveal | Commit/reveal phase for the juror's outcome vote.                      |
-| 39005 | BAO Court FROST Commitment   | A juror publishes their FROST signing nonce commitment.                |
-| 39006 | BAO Court FROST Reveal       | A juror reveals their FROST partial signature.                         |
-| 39007 | BAO Court Attestation        | Final aggregated FROST dispute override attestation.                   |
+| 38025 | ₿AO Court Dispute            | A market outcome is disputed and an appeal is opened.                  |
+| 39001 | ₿AO Court Juror Candidacy    | A juror registers for a dispute with category coverage and stake bond. |
+| 39002 | ₿AO Court Jury Selection     | The selected jury and backups are announced for a dispute.             |
+| 38031 | ₿AO Court DKG Commitment     | A juror publishes their Pedersen polynomial commitments.               |
+| 39004 | ₿AO Court Vote Commit/Reveal | Commit/reveal phase for the juror's outcome vote.                      |
+| 39005 | ₿AO Court FROST Commitment   | A juror publishes their FROST signing nonce commitment.                |
+| 39006 | ₿AO Court FROST Reveal       | A juror reveals their FROST partial signature.                         |
+| 39007 | ₿AO Court Attestation        | Final aggregated FROST dispute override attestation.                   |
 
-### Kind 38025: BAO Court Dispute
+### Kind 38025: ₿AO Court Dispute
 
 Regular event filed by a market participant to dispute a resolved or resolving market outcome.
 
@@ -1367,7 +1367,7 @@ Regular event filed by a market participant to dispute a resolved or resolving m
     ["deadline", "<unix-seconds>"],
     ["appeal_type", "frost"],
     ["evidence", "<sha256>"],
-    ["alt", "BAO Court dispute abc123..."]
+    ["alt", "₿AO Court dispute abc123..."]
   ]
 }
 ```
@@ -1387,7 +1387,7 @@ Regular event filed by a market participant to dispute a resolved or resolving m
 | `evidence`   | No       | SHA-256 hashes of supporting evidence (one tag per hash).                   |
 | `alt`        | Yes      | NIP-31 human-readable fallback.                                             |
 
-### Kind 39001: BAO Court Juror Candidacy
+### Kind 39001: ₿AO Court Juror Candidacy
 
 Regular event published by a juror to opt into a dispute. The stake commitment is a mock bond for demo; production deployments require a confirmed on-chain bond.
 
@@ -1404,12 +1404,12 @@ Regular event published by a juror to opt into a dispute. The stake commitment i
     ["address", "bc1q..."],
     ["t", "world"],
     ["t", "crypto"],
-    ["alt", "BAO Court juror candidacy for dispute abc123..."]
+    ["alt", "₿AO Court juror candidacy for dispute abc123..."]
   ]
 }
 ```
 
-### Kind 39002: BAO Court Jury Selection
+### Kind 39002: ₿AO Court Jury Selection
 
 Regular event announcing the selected jury and backups for a dispute. This event is trust-sensitive; clients MUST filter by the dispute coordinator when querying.
 
@@ -1426,12 +1426,12 @@ Regular event announcing the selected jury and backups for a dispute. This event
     ["block", "<32-byte-hex>"],
     ["selected", "1", "<juror-pubkey>", "10000"],
     ["backup", "2", "<juror-pubkey>", "10000"],
-    ["alt", "BAO Court jury selection for dispute abc123..."]
+    ["alt", "₿AO Court jury selection for dispute abc123..."]
   ]
 }
 ```
 
-### Kind 38031: BAO Court DKG Commitment
+### Kind 38031: ₿AO Court DKG Commitment
 
 Regular event publishing a juror's Pedersen polynomial commitments.
 
@@ -1446,12 +1446,12 @@ Regular event publishing a juror's Pedersen polynomial commitments.
     ["dispute", "<32-byte-hex>"],
     ["juror", "1"],
     ["commit", "<33-byte-commit>"],
-    ["alt", "BAO Court DKG commitment from juror 1"]
+    ["alt", "₿AO Court DKG commitment from juror 1"]
   ]
 }
 ```
 
-### Kind 39004: BAO Court Vote Commit / Reveal
+### Kind 39004: ₿AO Court Vote Commit / Reveal
 
 Regular events used for the commit/reveal vote phase.
 
@@ -1467,7 +1467,7 @@ Regular events used for the commit/reveal vote phase.
     ["dispute", "<32-byte-hex>"],
     ["juror", "1"],
     ["commit", "<sha256>"],
-    ["alt", "BAO Court vote commit from juror 1"]
+    ["alt", "₿AO Court vote commit from juror 1"]
   ]
 }
 ```
@@ -1485,12 +1485,12 @@ Regular events used for the commit/reveal vote phase.
     ["juror", "1"],
     ["outcome", "NO"],
     ["salt", "<hex>"],
-    ["alt", "BAO Court vote reveal from juror 1"]
+    ["alt", "₿AO Court vote reveal from juror 1"]
   ]
 }
 ```
 
-### Kind 39005: BAO Court FROST Commitment
+### Kind 39005: ₿AO Court FROST Commitment
 
 Regular event publishing a juror's FROST signing nonce commitment.
 
@@ -1505,12 +1505,12 @@ Regular event publishing a juror's FROST signing nonce commitment.
     ["juror", "1"],
     ["binder_pn", "<hex>"],
     ["hidden_pn", "<hex>"],
-    ["alt", "BAO Court FROST signing commitment from juror 1"]
+    ["alt", "₿AO Court FROST signing commitment from juror 1"]
   ]
 }
 ```
 
-### Kind 39006: BAO Court FROST Reveal
+### Kind 39006: ₿AO Court FROST Reveal
 
 Regular event revealing a juror's FROST partial signature.
 
@@ -1526,12 +1526,12 @@ Regular event revealing a juror's FROST partial signature.
     ["nonce_binder", "<hex>"],
     ["nonce_hidden", "<hex>"],
     ["psig", "<hex>"],
-    ["alt", "BAO Court FROST signing reveal from juror 1"]
+    ["alt", "₿AO Court FROST signing reveal from juror 1"]
   ]
 }
 ```
 
-### Kind 39007: BAO Court Attestation
+### Kind 39007: ₿AO Court Attestation
 
 Regular event containing the final aggregated FROST dispute override attestation.
 
@@ -1549,7 +1549,7 @@ Regular event containing the final aggregated FROST dispute override attestation
     ["sig", "<128-byte-hex>"],
     ["ver", "FROST-BIP340-v1"],
     ["dispute", "<32-byte-hex>"],
-    ["alt", "BAO Court FROST attestation: NO"]
+    ["alt", "₿AO Court FROST attestation: NO"]
   ]
 }
 ```

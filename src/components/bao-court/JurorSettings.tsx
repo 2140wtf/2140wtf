@@ -90,7 +90,7 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
               </Label>
             </div>
             <p className="text-sm text-muted-foreground">
-              Run a peer-to-peer simulation with fake sats and synthetic jurors. The full FROST
+              Run a peer-to-peer simulation with fake sats and synthetic jurors. The full key
               ceremony works from a single account for learning and testing.
             </p>
           </div>
@@ -108,7 +108,7 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
                 Demo ceremony pace
               </Label>
               <p className="text-sm text-muted-foreground">
-                Guided pauses at each step with explanations. Fast runs the full FROST ceremony
+                Guided pauses at each step with explanations. Fast runs the full key ceremony
                 automatically.
               </p>
             </div>

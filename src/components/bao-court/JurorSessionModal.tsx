@@ -41,7 +41,7 @@ interface JurorSessionModalProps {
 
 const PHASES: { id: AppealPhase; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "selection", label: "Selected", icon: Users },
-  { id: "dkg", label: "DKG", icon: KeyRound },
+  { id: "dkg", label: "Key setup", icon: KeyRound },
   { id: "vote-commit", label: "Vote", icon: Vote },
   { id: "vote-reveal", label: "Reveal", icon: ScrollText },
   { id: "signing", label: "Sign", icon: FileSignature },
@@ -55,15 +55,15 @@ function phaseIndex(phase: AppealPhase): number {
 function phaseDescription(phase: AppealPhase): string {
   switch (phase) {
     case 'selection':
-      return 'The jury is selected and each juror locks fake sats. Next, jurors run a distributed key generation (DKG) ceremony to create a shared public key.';
+      return 'The jury is selected and each juror locks a Spark demo bond. Next, jurors run a key ceremony to create a shared public key.';
     case 'dkg':
-      return 'DKG complete. The group public key is derived from every juror\'s contribution. No single device knows the full secret.';
+      return 'Key setup complete. The group public key is derived from every juror\'s contribution. No single device knows the full secret.';
     case 'vote-commit':
       return 'Each juror commits to their vote by hashing it with a secret salt. Commitments are published before reveals so no one can change their vote later.';
     case 'vote-reveal':
       return 'Votes are revealed and tallied. The majority outcome wins. In this demo all jurors vote the same way so the result is unanimous.';
     case 'signing':
-      return 'Jurors combine their FROST partial signatures to produce one valid attestation under the group public key.';
+      return 'Jurors combine their partial signatures to produce one valid attestation under the group public key.';
     case 'attestation_published':
       return 'The attestation is published. The dispute override is now signed by the threshold jury.';
     default:
@@ -203,7 +203,7 @@ export function JurorSessionModal({
             )}
           </div>
           <DialogDescription className="sr-only">
-            FROST juror session for dispute {dispute.disputeId}
+            Juror session for dispute {dispute.disputeId}
           </DialogDescription>
         </DialogHeader>
 
@@ -289,7 +289,7 @@ export function JurorSessionModal({
                 disabled={isPending}
               >
                 {isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-                Start DKG ceremony
+                Start key ceremony
               </Button>
             </div>
           )}
@@ -297,7 +297,7 @@ export function JurorSessionModal({
           {state.phase === "dkg" && (
             <div className="space-y-4 text-center">
               <KeyRound className="size-12 mx-auto text-primary" />
-              <h3 className="text-lg font-semibold">DKG complete</h3>
+              <h3 className="text-lg font-semibold">Key setup complete</h3>
               <p className="text-sm text-muted-foreground">
                 Group public key derived and commitments published.
               </p>
@@ -361,7 +361,7 @@ export function JurorSessionModal({
                 disabled={isPending}
               >
                 {isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-                Commit FROST signing nonce
+                Commit signing nonce
               </Button>
             </div>
           )}
