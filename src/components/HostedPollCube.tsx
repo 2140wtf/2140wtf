@@ -39,7 +39,7 @@ function encodeEventParam(event: NostrEvent): string {
  * When the raw poll event is provided, it is passed to the embed iframe so the
  * cube can render even if BAO's relays don't have the poll.
  */
-export function HostedPollCube({ pollId, title, event, className, theme = 'system' }: HostedPollCubeProps) {
+export function HostedPollCube({ pollId, title, event, className, theme = 'light' }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
   const { user } = useCurrentUser();
@@ -63,6 +63,7 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'syste
       embed.searchParams.set('event', encodeEventParam(event));
     }
     embed.searchParams.set('theme', resolvedTheme);
+    embed.searchParams.set('currency', 'sats');
     return embed.toString();
   }, [design?.embedUrl, event, resolvedTheme]);
 

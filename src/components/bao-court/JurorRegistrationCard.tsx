@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Loader2 } from "lucide-react";
+import { Shield, Loader2, Zap } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { useJurorRegistration } from "@/hooks/useJurorRegistration";
 interface JurorRegistrationCardProps {
   disputeId: string;
   marketId: string;
+  defaultBondAmountSats?: number;
+  requiredRail?: string;
   onRegistered?: () => void;
 }
 
@@ -27,13 +29,16 @@ const DEFAULT_CATEGORIES = [
 export function JurorRegistrationCard({
   disputeId,
   marketId,
+  defaultBondAmountSats = 10_000,
+  requiredRail = "spark",
   onRegistered,
 }: JurorRegistrationCardProps) {
   const { toast } = useToast();
   const { mutateAsync: register, isPending } = useJurorRegistration();
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["world"]);
-  const [bondAmount, setBondAmount] = useState<string>("10000");
-  const [bondAddress, setBondAddress] = useState<string>("bc1q...");
+  const [bondAmount, setBondAmount] = useState<string>(String(defaultBondAmountSats));
+  const [bondAddress, setBondAddress] = useState<string>("spark:demo");
+  const [rail] = useState<string>(requiredRail);
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -50,7 +55,8 @@ export function JurorRegistrationCard({
         marketId,
         categories: selectedCategories,
         bondAmountSats: Number.parseInt(bondAmount, 10) || 10_000,
-        bondAddress: bondAddress.trim() || "bc1q...",
+        bondAddress: bondAddress.trim() || "spark:demo",
+        rail,
       });
       toast({
         title: "Registered as juror",
@@ -112,6 +118,15 @@ export function JurorRegistrationCard({
             value={bondAddress}
             onChange={(e) => setBondAddress(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="juror-rail">Stake rail</Label>
+          <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+            <Zap className="size-4 text-amber-500" />
+            <span className="text-sm font-medium capitalize">{rail}</span>
+            <span className="text-xs text-muted-foreground">(required)</span>
+          </div>
         </div>
 
         <Button onClick={handleRegister} disabled={isPending} className="w-full">
