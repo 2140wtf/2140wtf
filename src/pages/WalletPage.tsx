@@ -11,7 +11,7 @@ import { LoginArea } from '@/components/auth/LoginArea';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { SendBitcoinDialog } from '@/components/SendBitcoinDialog';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
-import { BaoDemoWalletTab } from '@/components/BaoDemoWalletTab';
+import { BaoWalletTab } from '@/components/BaoWalletTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
@@ -308,7 +308,7 @@ export function WalletPage() {
                   Your signer does not support NIP-44, which is required for the BAO demo wallet.
                 </div>
               ) : cashuSeed.available && cashuSeed.seedPhrase ? (
-                <BaoDemoWalletTab
+                <BaoWalletTab
                   seedPhrase={cashuSeed.seedPhrase}
                   user={user}
                   relayUrls={relayUrls}
