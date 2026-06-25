@@ -173,7 +173,7 @@ const hardcodedConfig: AppConfig = {
   esploraApis: [...DEFAULT_ESPLORA_APIS],
   currencyDisplay: 'usd',
   sidebarWidgets: DEFAULT_SIDEBAR_WIDGETS,
-  sidebarWidgetsVersion: 1,
+  sidebarWidgetsVersion: 2,
   maxCachedEventAge: 604800,
 };
 
