@@ -38,19 +38,19 @@ describe('getListingPriceState', () => {
     expect(getListingPriceState(makeListing({ value: 1000, currency: 'sats' }), undefined).kind).toBe('loading');
   });
 
-  it('converts sats to USD amount', () => {
+  it('converts sats to ready state', () => {
     const state = getListingPriceState(makeListing({ value: 100_000, currency: 'sats' }), 100_000);
-    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialUsdAmount: 100 });
+    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialAmountSats: 100_000 });
   });
 
-  it('converts BTC to sats and USD', () => {
+  it('converts BTC to sats', () => {
     const state = getListingPriceState(makeListing({ value: 0.001, currency: 'btc' }), 100_000);
-    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialUsdAmount: 100 });
+    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialAmountSats: 100_000 });
   });
 
   it('converts USD to sats', () => {
     const state = getListingPriceState(makeListing({ value: 50, currency: 'usd' }), 100_000);
-    expect(state).toEqual({ kind: 'ready', amountSats: 50_000, initialUsdAmount: 50 });
+    expect(state).toEqual({ kind: 'ready', amountSats: 50_000, initialAmountSats: 50_000 });
   });
 
   it('rejects unsupported currencies', () => {
@@ -63,7 +63,7 @@ describe('getListingPriceState', () => {
 
   it('is case-insensitive for currency', () => {
     const state = getListingPriceState(makeListing({ value: 100_000, currency: 'SATS' }), 100_000);
-    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialUsdAmount: 100 });
+    expect(state).toEqual({ kind: 'ready', amountSats: 100_000, initialAmountSats: 100_000 });
   });
 });
 
