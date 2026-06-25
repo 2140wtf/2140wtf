@@ -181,23 +181,3 @@ export function getBirthBlockHeight(
   return Math.max(0, currentBlockHeight - (life.totalBlocks - 1));
 }
 
-/**
- * Check whether a pet is old enough to hatch.
- *
- * Requires at least one Bitcoin block to have been mined since the pet's
- * estimated birth block. This ties hatching to real block time rather than
- * wall-clock time.
- */
-export function isPetOldEnough(
-  birthTimestampSeconds: number | undefined,
-  currentBlockHeight: number | undefined,
-): boolean {
-  if (birthTimestampSeconds === undefined || currentBlockHeight === undefined) {
-    return false;
-  }
-
-  const birthBlockHeight = getBirthBlockHeight(birthTimestampSeconds, currentBlockHeight);
-  if (birthBlockHeight === undefined) return false;
-
-  return currentBlockHeight > birthBlockHeight;
-}
