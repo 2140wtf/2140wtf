@@ -22,7 +22,7 @@ import { GroupChatProvider } from "@/contexts/GroupChatContext";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
-import { DEFAULT_SIDEBAR_WIDGETS } from "@/lib/sidebarWidgets";
+import { DEFAULT_SIDEBAR_WIDGETS, SIDEBAR_WIDGETS_VERSION } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
 import { RemoteBattleProvider } from "@/pets/battle";
 import AppRouter from "./AppRouter";
@@ -173,7 +173,7 @@ const hardcodedConfig: AppConfig = {
   esploraApis: [...DEFAULT_ESPLORA_APIS],
   currencyDisplay: 'sats',
   sidebarWidgets: DEFAULT_SIDEBAR_WIDGETS,
-  sidebarWidgetsVersion: 3,
+  sidebarWidgetsVersion: SIDEBAR_WIDGETS_VERSION,
   maxCachedEventAge: 604800,
 };
 
