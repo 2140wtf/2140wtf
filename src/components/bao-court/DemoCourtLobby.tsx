@@ -81,7 +81,7 @@ export function DemoCourtLobby({
       case 'forming':
         return 'Jury threshold reached. Forming the mock dispute and selection…';
       case 'formed':
-        return `Demo jury formed — you are Juror #${myJurorIdx}. Starting FROST ceremony…`;
+        return `Demo jury formed — you are Juror #${myJurorIdx}. Starting key ceremony…`;
       case 'error':
         return room.error ?? 'Something went wrong.';
       default:
@@ -192,7 +192,7 @@ export function DemoCourtLobby({
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Gavel className="size-3" />
               <span>
-                Fake bond locked: {DEMO_BOND_AMOUNT_SATS.toLocaleString()} sats per juror
+                Spark demo bond locked: {DEMO_BOND_AMOUNT_SATS.toLocaleString()} sats per juror
               </span>
             </div>
           </div>

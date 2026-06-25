@@ -17,7 +17,7 @@ import {
   saveSimulatedSelection,
 } from './baoCourtSimulator';
 
-describe('BAO Court simulator', () => {
+describe('₿AO Court simulator', () => {
   beforeEach(() => {
     localStorage.clear();
   });

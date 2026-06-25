@@ -1,5 +1,5 @@
 /**
- * BAO Court simulator — peer-to-peer demo environment.
+ * ₿AO Court simulator — peer-to-peer demo environment.
  *
  * Generates deterministic simulated jurors and publishes their candidacy and
  * selection events to the configured relay pool so a single real user can
@@ -338,7 +338,7 @@ export function buildDemoMembershipEvent(params: {
     ['t', category],
     ['bond', String(DEMO_BOND_AMOUNT_SATS)],
     ['demo', 'court-simulator'],
-    ['alt', `BAO Court demo jury room ${roomId.slice(0, 12)}`],
+    ['alt', `₿AO Court demo jury room ${roomId.slice(0, 12)}`],
   ];
   if (publisherPubkey) {
     tags.push(['p', publisherPubkey]);
@@ -388,7 +388,7 @@ export function parseDemoMembershipEvent(event: NostrEvent): DemoRoomMember | nu
 }
 
 /**
- * Build a mock BAO Court dispute event for a demo room.
+ * Build a mock ₿AO Court dispute event for a demo room.
  *
  * Every juror publishes their own copy independently. There is no coordinator;
  * the publishing juror is both challenger and publisher for their local view.

@@ -40,8 +40,8 @@ export function CourtPage(): React.JSX.Element {
   const [settings, setSettings] = useState<JurorSettingsState>(loadSettings);
 
   useSeoMeta({
-    title: `BAO Court | ${config.appName}`,
-    description: "Decentralized dispute jury for BAO prediction markets",
+    title: `₿AO Court | ${config.appName}`,
+    description: "Decentralized dispute jury for ₿AO prediction markets",
   });
 
   const handleSettingsChange = (next: JurorSettingsState) => {
@@ -55,7 +55,7 @@ export function CourtPage(): React.JSX.Element {
 
   return (
     <main>
-      <PageHeader title="BAO Court" icon={<Gavel className="size-5" />}>
+      <PageHeader title="₿AO Court" icon={<Gavel className="size-5" />}>
         <span className="text-sm text-muted-foreground hidden sm:inline">
           Decentralized dispute jury
         </span>
@@ -65,11 +65,10 @@ export function CourtPage(): React.JSX.Element {
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            BAO Court lets users register as jurors for ₿AO prediction-market disputes, participate
-            in a browser-based Pedersen DKG, vote, and FROST-sign dispute override attestations. Demo
-            mode opens a named jury room: 3–5 users choose a category, lock 1 000 000 fake sats, and
-            run a deterministic FROST ceremony together. Real appeals require multiple online
-            participants.
+            ₿AO Court lets users register as jurors for ₿AO prediction-market disputes and vote to
+            resolve them. Demo mode opens a named jury room: 3–5 users choose a category, lock
+            10,000 fake Spark sats, and run a practice key ceremony together. Real appeals require
+            multiple online participants.
           </AlertDescription>
         </Alert>
 

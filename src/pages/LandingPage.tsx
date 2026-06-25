@@ -103,15 +103,14 @@ function useAuthorCalendarEvents(pubkey: string, limit = 3) {
     }
 
     return Array.from(latest.values())
+      .filter((event) => {
+        const start = parseInt(getTag(event, 'start') ?? '0', 10);
+        return start >= now;
+      })
       .sort((a, b) => {
         const aStart = parseInt(getTag(a, 'start') ?? '0', 10);
         const bStart = parseInt(getTag(b, 'start') ?? '0', 10);
-        const aFuture = aStart >= now;
-        const bFuture = bStart >= now;
-        if (aFuture && !bFuture) return -1;
-        if (!aFuture && bFuture) return 1;
-        if (aFuture && bFuture) return aStart - bStart;
-        return bStart - aStart;
+        return aStart - bStart;
       })
       .slice(0, limit);
   }, [events, limit]);
@@ -164,26 +163,22 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Art */}
-      <section className="border-b border-[var(--2140-border)] px-4 py-16" id="art">
-        <div className="mx-auto max-w-[1100px]">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <div>
-              <p className="mb-2 font-[family-name:var(--font-mono)] text-[0.75rem] uppercase tracking-[0.08em] text-[var(--2140-muted)]">NIP-99 Listings</p>
-              <h2 className="flex items-center gap-2 text-2xl font-bold">
-                <Palette className="size-5 text-[var(--2140-bitcoin)]" /> Art
-              </h2>
+      {/* Art — only shown when there are listings to display */}
+      {!artLoading && artListings.length > 0 && (
+        <section className="border-b border-[var(--2140-border)] px-4 py-16" id="art">
+          <div className="mx-auto max-w-[1100px]">
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <p className="mb-2 font-[family-name:var(--font-mono)] text-[0.75rem] uppercase tracking-[0.08em] text-[var(--2140-muted)]">NIP-99 Listings</p>
+                <h2 className="flex items-center gap-2 text-2xl font-bold">
+                  <Palette className="size-5 text-[var(--2140-bitcoin)]" /> Art
+                </h2>
+              </div>
+              <Link to="/art" className="whitespace-nowrap text-sm font-medium text-[var(--2140-nostr)] hover:text-[var(--2140-nostr-hover)]">
+                Browse marketplace →
+              </Link>
             </div>
-            <Link to="/art" className="whitespace-nowrap text-sm font-medium text-[var(--2140-nostr)] hover:text-[var(--2140-nostr-hover)]">
-              Browse marketplace →
-            </Link>
-          </div>
 
-          {artLoading ? (
-            <SectionSpinner />
-          ) : artListings.length === 0 ? (
-            <LandingEmptyState message="Nothing is happening at the moment." />
-          ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               {artListings.map((listing) => (
                 <Link
@@ -195,9 +190,9 @@ export function LandingPage() {
                 </Link>
               ))}
             </div>
-          )}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
       {/* Events */}
       <section className="border-b border-[var(--2140-border)] px-4 py-16" id="events">
