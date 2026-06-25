@@ -292,6 +292,7 @@ export const AppConfigSchema = z.object({
     id: z.string(),
     height: z.number().optional(),
   })).optional(),
+  sidebarWidgetsVersion: z.number().int().nonnegative().optional(),
   maxCachedEventAge: z.number().int().nonnegative().optional(),
 });
 
@@ -402,6 +403,7 @@ export const EncryptedSettingsSchema = z.looseObject({
     id: z.string(),
     height: z.number().optional(),
   })).optional(),
+  sidebarWidgetsVersion: z.number().int().nonnegative().optional(),
   homePage: z.string().optional(),
   showGlobalFeed: z.boolean().optional(),
   showCommunityFeed: z.boolean().optional(),

@@ -36,8 +36,10 @@ export interface PetLife {
   blocksInEpoch: number;
   /** Human-readable label, e.g. "1 epoch 42 blocks". */
   label: string;
-  /** Compact label, e.g. "1b" or "2e+1b". */
+  /** Compact Bitcoin-block label, e.g. "1b" or "2e+1b". */
   shortLabel: string;
+  /** Human-readable chronological age, e.g. "12m" or "3h 4m". */
+  ageLabel: string;
   /** Whether the pet has hit a 100,000-block birthday milestone right now. */
   isBirthdayMilestone: boolean;
   /** The milestone block count, e.g. 100000, 200000, or undefined. */
@@ -69,6 +71,7 @@ export function getPetLife(
   const epochLabel = epochs === 1 ? '1 epoch' : `${epochs} epochs`;
   const blockLabel = blocksInEpoch === 1 ? '1 block' : `${blocksInEpoch} blocks`;
   const shortLabel = epochs === 1 ? `${blocksInEpoch}b` : `${epochs}e+${blocksInEpoch}b`;
+  const ageLabel = formatAgeLabel(elapsedSeconds);
   const milestoneBlocks =
     totalBlocks > 0 && totalBlocks % BIRTHDAY_MILESTONE_BLOCKS === 0
       ? totalBlocks
@@ -80,6 +83,7 @@ export function getPetLife(
     blocksInEpoch,
     label: `${epochLabel} ${blockLabel}`,
     shortLabel,
+    ageLabel,
     isBirthdayMilestone: milestoneBlocks !== undefined,
     milestoneBlocks,
   };
@@ -115,6 +119,30 @@ export function usePetLife(birthTimestampSeconds: number | undefined): PetLife |
  * Uses the provided URLs, or falls back to the public defaults. The result is
  * cached for 60 seconds.
  */
+/**
+ * Format a chronological age from elapsed seconds into a compact label.
+ *
+ * Examples: "new" (<1 min), "12m", "1h 5m", "2d", "3w", "1y".
+ */
+function formatAgeLabel(elapsedSeconds: number): string {
+  if (elapsedSeconds < 60) return 'new';
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const remMinutes = Math.floor((elapsedSeconds % 3600) / 60);
+  if (hours < 24) return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
+
+  const days = Math.floor(elapsedSeconds / 86400);
+  if (days < 7) return `${days}d`;
+
+  const weeks = Math.floor(elapsedSeconds / 604800);
+  if (weeks < 52) return `${weeks}w`;
+
+  const years = Math.floor(elapsedSeconds / 31_536_000);
+  return `${years}y`;
+}
+
 export function useCurrentBlockHeight(baseUrls?: string[]): number | undefined {
   const urls = baseUrls?.length ? baseUrls : [...DEFAULT_ESPLORA_APIS];
   const { data } = useQuery({
