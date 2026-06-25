@@ -199,11 +199,10 @@ export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
   { id: 'pets' },
   { id: 'prediction-markets' },
   { id: 'trends' },
-  { id: 'hot-posts' },
 ];
 
 /** Bump this to reset existing users' right-sidebar widgets to the default. */
-export const SIDEBAR_WIDGETS_VERSION = 2;
+export const SIDEBAR_WIDGETS_VERSION = 3;
 
 /** Category labels for display in the picker. */
 export const WIDGET_CATEGORIES: Record<string, string> = {
