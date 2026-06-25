@@ -40,7 +40,7 @@ export interface FormatMoneyResult {
  */
 export function useFormatMoney(): FormatMoneyResult {
   const { config } = useAppContext();
-  const currency: CurrencyDisplay = config.currencyDisplay ?? 'usd';
+  const currency: CurrencyDisplay = config.currencyDisplay ?? 'sats';
 
   // Reuse the shared price query so all callers share one cached fetch.
   const { btcPrice } = useBtcPrice(currency === 'usd');

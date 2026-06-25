@@ -14,6 +14,7 @@ export interface JurorRegistrationInput {
   readonly categories: readonly string[];
   readonly bondAmountSats: number;
   readonly bondAddress: string;
+  readonly rail?: string;
   readonly stakeCapacitySats?: number;
   readonly wotScore?: number;
 }
@@ -62,6 +63,16 @@ export function useJurorRegistration() {
         bondAmountSats: input.bondAmountSats,
         bondAddress: input.bondAddress,
       });
+      if (input.rail) {
+        template.tags.push(['rail', input.rail]);
+        try {
+          const content = JSON.parse(template.content || '{}') as Record<string, unknown>;
+          content.rail = input.rail;
+          template.content = JSON.stringify(content);
+        } catch {
+          // Ignore malformed content.
+        }
+      }
 
       const event = await publishEvent(template);
       return event;
