@@ -43,7 +43,7 @@ export interface CubeDesign {
 }
 
 function defaultEmbedUrl(pollId: string): string {
-  return `https://bao.markets/embed/cube/${encodeURIComponent(pollId)}`;
+  return `https://bao.markets/embed/cube/${encodeURIComponent(pollId)}?theme=light&currency=sats`;
 }
 
 async function fetchCubeDesign(
