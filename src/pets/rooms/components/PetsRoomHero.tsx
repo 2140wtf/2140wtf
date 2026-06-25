@@ -68,5 +68,6 @@ export const PetsRoomHero = memo(function PetsRoomHero({
   // Invisible flex spacer — occupies the visual area so the bottom bar
   // stays at the bottom. The actual Pets rendering happens in PetsRoomStage
   // which is absolutely positioned against the shell.
-  return <div className={cn('flex-1 min-h-0', className)} />;
+  // pointer-events-none lets taps pass through to the stage overlay (egg/pet).
+  return <div className={cn('flex-1 min-h-0 pointer-events-none', className)} />;
 });
