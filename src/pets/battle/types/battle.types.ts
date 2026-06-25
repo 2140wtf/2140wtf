@@ -1,5 +1,6 @@
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleFighterStats } from '../lib/fighterStats';
+import type { RemoteBattleStateSnapshot } from '../lib/battleMessages';
 
 export type BattlePlayerIndex = 0 | 1;
 
@@ -66,6 +67,14 @@ export interface BattleMatchOptions {
   roundDurationSeconds: number;
   /** When true, player 2 is controlled by AI instead of keyboard/touch. */
   isAiOpponent?: boolean;
+  /** Remote mode. 'host' runs the authoritative simulation; 'guest' renders host snapshots. */
+  remoteMode?: 'host' | 'guest';
+  /** Host-only: called every tick with a serializable state snapshot. */
+  onHostSnapshot?: (snapshot: RemoteBattleStateSnapshot) => void;
+  /** Guest-only: called every tick with the local player's P2 input. */
+  onGuestInput?: (input: PlayerInput) => void;
+  /** Host-only: ref to the latest remote P2 input received from the guest. */
+  remoteP2InputRef?: React.MutableRefObject<PlayerInput | null>;
 }
 
 export interface BattleMatchResult {
