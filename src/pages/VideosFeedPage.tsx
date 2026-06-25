@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Eye, Film, Play, Radio } from "lucide-react";
 import { nip19 } from "nostr-tools";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Blurhash } from "react-blurhash";
 import { Link } from "react-router-dom";
 import { isValidBlurhash } from "@/lib/blurhash";
@@ -113,107 +113,6 @@ function fmtDuration(s: string | undefined): string | undefined {
   return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
     : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
-
-// ── Drag-to-scroll + edge-hover-scroll for horizontal strips ─────────────────
-
-const EDGE_SIZE = 64; // px from edge that triggers auto-scroll
-const EDGE_SPEED = 8; // px per animation frame
-
-function useDragScroll<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const dragging = useRef(false);
-  const startX = useRef(0);
-  const scrollLeftRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
-  const edgeDir = useRef<-1 | 0 | 1>(0);
-
-  // Edge auto-scroll loop
-  const startEdgeScroll = useCallback(() => {
-    if (rafRef.current !== null) return;
-    const tick = () => {
-      const el = ref.current;
-      if (el && edgeDir.current !== 0) {
-        el.scrollLeft += edgeDir.current * EDGE_SPEED;
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        rafRef.current = null;
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-  }, []);
-
-  const stopEdgeScroll = useCallback(() => {
-    edgeDir.current = 0;
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-  }, []);
-
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      const el = ref.current;
-      if (!el) return;
-      dragging.current = true;
-      startX.current = e.pageX - el.offsetLeft;
-      scrollLeftRef.current = el.scrollLeft;
-      el.style.cursor = "grabbing";
-      el.style.userSelect = "none";
-      stopEdgeScroll();
-    },
-    [stopEdgeScroll],
-  );
-
-  const onMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      const el = ref.current;
-      if (!el) return;
-
-      if (dragging.current) {
-        e.preventDefault();
-        const x = e.pageX - el.offsetLeft;
-        el.scrollLeft = scrollLeftRef.current - (x - startX.current);
-        return;
-      }
-
-      // Edge detection: x relative to the element's bounding box
-      const rect = el.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      if (x < EDGE_SIZE) {
-        edgeDir.current = -1;
-        startEdgeScroll();
-      } else if (x > rect.width - EDGE_SIZE) {
-        edgeDir.current = 1;
-        startEdgeScroll();
-      } else {
-        stopEdgeScroll();
-      }
-    },
-    [startEdgeScroll, stopEdgeScroll],
-  );
-
-  const onMouseUp = useCallback(() => {
-    dragging.current = false;
-    if (ref.current) {
-      ref.current.style.cursor = "grab";
-      ref.current.style.userSelect = "";
-    }
-  }, []);
-
-  const onMouseLeave = useCallback(() => {
-    dragging.current = false;
-    if (ref.current) {
-      ref.current.style.cursor = "grab";
-      ref.current.style.userSelect = "";
-    }
-    stopEdgeScroll();
-  }, [stopEdgeScroll]);
-
-  // Clean up on unmount
-  useEffect(() => () => stopEdgeScroll(), [stopEdgeScroll]);
-
-  return { ref, onMouseDown, onMouseMove, onMouseUp, onMouseLeave };
 }
 
 // ── Video grid card (kind 21) — YouTube-style ────────────────────────────────
