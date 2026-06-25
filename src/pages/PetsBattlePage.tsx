@@ -18,15 +18,18 @@ import {
   BattleControlsHelp,
   BattleSetup,
   BattleResultOverlay,
+  BattleInvitePending,
   useBattleGame,
   useBattlePayout,
   emitBattleInteractionEvent,
 } from '@/pets/battle';
+import { useRemoteBattle } from '@/pets/battle';
 import {
   DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
 } from '@/pets/battle/lib/constants';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
+import type { BattleMatchOptions } from '@/pets/battle';
 
 export default function PetsBattlePage() {
   const { user } = useCurrentUser();
@@ -61,7 +64,7 @@ export default function PetsBattlePage() {
     rightSidebar: null,
   });
 
-  const [matchOptions, setMatchOptions] = useState({
+  const [matchOptions, setMatchOptions] = useState<BattleMatchOptions>({
     prizeAmount: DEFAULT_PRIZE_SATS,
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
     isAiOpponent: false,
@@ -69,16 +72,29 @@ export default function PetsBattlePage() {
   const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats'>('demo-sats');
   const [pendingPayout, setPendingPayout] = useState(false);
   const selectedPetsRef = useRef<{ pet1: PetsCompanion; pet2: PetsCompanion } | null>(null);
+  const remote = useRemoteBattle();
 
-  const { state, inputRef, startMatch, resetMatch, onFinishRef } = useBattleGame(matchOptions);
+  const { state, inputRef, startMatch, resetMatch, onFinishRef, applyHostSnapshot } = useBattleGame(matchOptions);
   const payout = useBattlePayout(updateProfileEvent, baoWallet);
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
 
+  const { role: remoteRole, sendFinished: sendRemoteFinished } = remote;
+
   useEffect(() => {
     onFinishRef.current = async (winner) => {
       if (winner === null || payout.isPending) return;
+
+      // In remote matches the authoritative host announces the result.
+      if (remoteRole === 'host') {
+        sendRemoteFinished(winner);
+      }
+
+      // Only the local player gets a prize when they win. Host is P1 (index 0),
+      // guest is P2 (index 1).
+      const localPlayerIndex = remoteRole === 'guest' ? 1 : 0;
+      if (winner !== localPlayerIndex) return;
 
       setPendingPayout(true);
       try {
@@ -120,6 +136,8 @@ export default function PetsBattlePage() {
     user,
     isEnabled,
     toast,
+    remoteRole,
+    sendRemoteFinished,
   ]);
 
   const handleStart = (
@@ -135,6 +153,48 @@ export default function PetsBattlePage() {
     startMatch(pet1, pet2);
   };
 
+  // Start a remote match once both sides have agreed on pets.
+  useEffect(() => {
+    if (remote.phase !== 'accepted' && remote.phase !== 'fighting') return;
+    if (!remote.localPet || !remote.opponentPet) return;
+    if (state.status !== 'setup') return;
+
+    const isHost = remote.role === 'host';
+    const pet1 = isHost ? remote.localPet : remote.opponentPet;
+    const pet2 = isHost ? remote.opponentPet : remote.localPet;
+    selectedPetsRef.current = { pet1, pet2 };
+
+    setMatchOptions({
+      prizeAmount: remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS,
+      roundDurationSeconds:
+        remote.matchOptions?.roundDurationSeconds ?? DEFAULT_ROUND_DURATION_SECONDS,
+      isAiOpponent: false,
+      remoteMode: isHost ? 'host' : 'guest',
+      onHostSnapshot: remote.sendHostSnapshot,
+      onGuestInput: remote.sendGuestInput,
+      remoteP2InputRef: isHost ? remote.guestInputRef : undefined,
+    });
+    setMatchMode('demo-sats');
+    startMatch(pet1, pet2);
+  }, [
+    remote.phase,
+    remote.localPet,
+    remote.opponentPet,
+    remote.role,
+    remote.matchOptions,
+    remote.sendHostSnapshot,
+    remote.sendGuestInput,
+    remote.guestInputRef,
+    state.status,
+    startMatch,
+  ]);
+
+  // Guest: apply authoritative host snapshots as they arrive.
+  useEffect(() => {
+    if (remote.role !== 'guest' || !remote.hostSnapshot) return;
+    applyHostSnapshot(remote.hostSnapshot);
+  }, [remote.role, remote.hostSnapshot, applyHostSnapshot]);
+
   const handleRematch = () => {
     const { pet1, pet2 } = selectedPetsRef.current ?? {};
     if (pet1 && pet2) {
@@ -148,6 +208,7 @@ export default function PetsBattlePage() {
     if (pet1 && pet2) {
       resetMatch(pet1, pet2);
     }
+    remote.reset();
     navigate('/pets');
   };
 
@@ -169,10 +230,13 @@ export default function PetsBattlePage() {
     <main className="flex min-h-screen flex-col p-2 sm:p-4">
       <div className="mx-auto w-full max-w-7xl">
         {state.status === 'setup' ? (
-          <BattleSetup
-            ownerPubkey={user.pubkey}
-            onStart={handleStart}
-          />
+          <>
+            <BattleSetup
+              ownerPubkey={user.pubkey}
+              onStart={handleStart}
+            />
+            <BattleInvitePending />
+          </>
         ) : (
           <div className="relative flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
