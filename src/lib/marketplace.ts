@@ -2,7 +2,7 @@ import { formatSats } from '@/lib/bitcoin';
 import { formatNip99Price, type Nip99Listing } from '@/lib/nip99';
 
 export type BuyDialogPriceState =
-  | { kind: 'ready'; amountSats: number; initialUsdAmount: number | undefined }
+  | { kind: 'ready'; amountSats: number; initialAmountSats: number | undefined }
   | { kind: 'unsupported' }
   | { kind: 'loading' }
   | { kind: 'no-price' };
@@ -19,24 +19,23 @@ export function getListingPriceState(
 
   if (currency === 'sats' || currency === 'sat') {
     if (!btcPrice) return { kind: 'loading' };
-    const usd = (price.value / 100_000_000) * btcPrice;
-    if (!Number.isFinite(usd) || usd <= 0) return { kind: 'unsupported' };
-    return { kind: 'ready', amountSats: Math.round(price.value), initialUsdAmount: usd };
+    const sats = Math.round(price.value);
+    if (sats <= 0) return { kind: 'unsupported' };
+    return { kind: 'ready', amountSats: sats, initialAmountSats: sats };
   }
 
   if (currency === 'btc') {
     if (!btcPrice) return { kind: 'loading' };
     const sats = Math.round(price.value * 100_000_000);
-    const usd = price.value * btcPrice;
-    if (sats <= 0 || !Number.isFinite(usd) || usd <= 0) return { kind: 'unsupported' };
-    return { kind: 'ready', amountSats: sats, initialUsdAmount: usd };
+    if (sats <= 0) return { kind: 'unsupported' };
+    return { kind: 'ready', amountSats: sats, initialAmountSats: sats };
   }
 
   if (currency === 'usd') {
     if (!btcPrice) return { kind: 'loading' };
     const sats = Math.round((price.value / btcPrice) * 100_000_000);
     if (sats <= 0) return { kind: 'unsupported' };
-    return { kind: 'ready', amountSats: sats, initialUsdAmount: price.value };
+    return { kind: 'ready', amountSats: sats, initialAmountSats: sats };
   }
 
   return { kind: 'unsupported' };

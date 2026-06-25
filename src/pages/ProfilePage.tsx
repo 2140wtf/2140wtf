@@ -2229,7 +2229,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                         </Link>
                       )}
                       {!isOwnProfile && canReceiveDonations && metadataEvent && (
-                        <ZapDialog target={metadataEvent} initialUsdAmount={1}>
+                        <ZapDialog target={metadataEvent} initialAmountSats={1000}>
                           <Button className="rounded-full font-bold bg-purple-500 hover:bg-purple-600 text-white">
                             <Zap className="size-4 mr-1.5" />
                             Donate

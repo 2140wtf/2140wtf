@@ -3,8 +3,6 @@ import { AlertTriangle, Loader2, Bitcoin, Copy, Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   Popover,
   PopoverContent,
@@ -12,6 +10,7 @@ import {
 } from '@/components/ui/popover';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ZapAmountInput } from '@/components/ZapAmountInput';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
@@ -19,6 +18,7 @@ import { useOnchainZap, type OnchainFeeSpeed } from '@/hooks/useOnchainZap';
 import { useCampaignZap } from '@/hooks/useCampaignZap';
 import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { useNostrLogin } from '@nostrify/react/login';
 import {
   nostrPubkeyToBitcoinAddress,
@@ -27,14 +27,11 @@ import {
   getFeeRates,
   estimateFee,
   isLargeAmount,
-  satsToUSD,
   formatSats,
 } from '@/lib/bitcoin';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { ParsedCampaign } from '@/lib/campaign';
 import type { BitcoinRecipientOverride } from '@/hooks/useOnchainZap';
-
-const USD_PRESETS = [1, 5, 10, 25, 100];
 
 /** Bitcoin dust limit in satoshis. Outputs below this are dropped by relay policy. */
 const DUST_LIMIT_SATS = 546;
@@ -47,6 +44,8 @@ const FEE_SPEED_LABELS: Record<OnchainFeeSpeed, string> = {
 };
 
 const FEE_SPEED_ORDER: OnchainFeeSpeed[] = ['fastest', 'halfHour', 'hour', 'economy'];
+
+const ONCHAIN_SATS_PRESETS = [1_000, 5_000, 10_000, 25_000, 100_000];
 
 /**
  * Given the raw mempool fee rates (sat/vB), return a deduplicated list of
@@ -126,17 +125,17 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   const { config } = useAppContext();
   const { esploraApis } = config;
   const loginType = logins[0]?.type;
+  const { format: formatMoney } = useFormatMoney();
+  const currencyDisplay = config.currencyDisplay ?? 'sats';
 
-  const [usdAmount, setUsdAmount] = useState<number | string>(5);
+  const [amountSats, setAmountSats] = useState<number | string>(5_000);
   const [feeSpeed, setFeeSpeed] = useState<OnchainFeeSpeed>('halfHour');
   const [error, setError] = useState('');
   const [feePopoverOpen, setFeePopoverOpen] = useState(false);
-  const [editingAmount, setEditingAmount] = useState(false);
-  const amountInputRef = useRef<HTMLInputElement>(null);
+  const feeSpeedUserChanged = useRef(false);
 
   // Tracks whether the user has manually picked a fee speed. Once true, we
   // stop auto-adjusting the fee in response to amount changes.
-  const feeSpeedUserChanged = useRef(false);
 
   const senderAddress = user ? nostrPubkeyToBitcoinAddress(user.pubkey) : '';
   // Recipient address used for the unsupported-signer QR fallback and for
@@ -184,36 +183,32 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     return getRateForSpeed(feeRates, feeSpeed);
   }, [feeRates, feeSpeed]);
 
-  // Convert the USD amount to sats
-  const amountSats = useMemo(() => {
-    if (!btcPrice) return 0;
-    const usd = typeof usdAmount === 'string' ? parseFloat(usdAmount) : usdAmount;
-    if (!Number.isFinite(usd) || usd <= 0) return 0;
-    const btc = usd / btcPrice;
-    return Math.round(btc * 100_000_000);
-  }, [usdAmount, btcPrice]);
+  const numericAmountSats = useMemo(() => {
+    const value = typeof amountSats === 'string' ? Number(amountSats.replace(/,/g, '')) : amountSats;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }, [amountSats]);
 
   const estimatedFeeSats = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || !amountSats) return 0;
+    if (!utxos?.length || !currentFeeRate || !numericAmountSats) return 0;
     const fee2 = estimateFee(utxos.length, 2, currentFeeRate);
-    const change = totalBalance - amountSats - fee2;
+    const change = totalBalance - numericAmountSats - fee2;
     const numOutputs = change > 546 ? 2 : 1;
     return estimateFee(utxos.length, numOutputs, currentFeeRate);
-  }, [utxos, currentFeeRate, amountSats, totalBalance]);
+  }, [utxos, currentFeeRate, numericAmountSats, totalBalance]);
 
-  const totalSats = amountSats + estimatedFeeSats;
+  const totalSats = numericAmountSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
-  const showBalance = insufficient || (amountSats > 0 && totalBalance === 0);
+  const showBalance = insufficient || (numericAmountSats > 0 && totalBalance === 0);
 
   // Warn when the transaction will have no change output because the leftover
   // is below the dust limit. In that case the leftover sats become extra fee
   // rather than returning as change.
   const noChangeDust = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || amountSats <= 0 || totalBalance <= 0) return false;
+    if (!utxos?.length || !currentFeeRate || numericAmountSats <= 0 || totalBalance <= 0) return false;
     const feeWithChange = estimateFee(utxos.length, 2, currentFeeRate);
-    const change = totalBalance - amountSats - feeWithChange;
+    const change = totalBalance - numericAmountSats - feeWithChange;
     return change > 0 && change <= DUST_LIMIT_SATS;
-  }, [utxos, currentFeeRate, amountSats, totalBalance]);
+  }, [utxos, currentFeeRate, numericAmountSats, totalBalance]);
 
   // Auto-adjust fee speed when the amount changes, unless the user has
   // already picked a speed manually. Aim for a fee below 40% of the amount
@@ -222,16 +217,16 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // least minimize the hit.
   useEffect(() => {
     if (feeSpeedUserChanged.current) return;
-    if (!utxos?.length || !feeRates || amountSats <= 0) return;
+    if (!utxos?.length || !feeRates || numericAmountSats <= 0) return;
 
     const uniqueSpeeds = getUniqueFeeSpeeds(feeRates);
-    const threshold = amountSats * 0.4;
+    const threshold = numericAmountSats * 0.4;
 
     let target: OnchainFeeSpeed = uniqueSpeeds[uniqueSpeeds.length - 1];
     for (const speed of uniqueSpeeds) {
       const rate = getRateForSpeed(feeRates, speed);
       const fee2 = estimateFee(utxos.length, 2, rate);
-      const change = totalBalance - amountSats - fee2;
+      const change = totalBalance - numericAmountSats - fee2;
       const outputs = change > 546 ? 2 : 1;
       const fee = estimateFee(utxos.length, outputs, rate);
       if (fee <= threshold) {
@@ -241,7 +236,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     }
 
     setFeeSpeed((prev) => (prev === target ? prev : target));
-  }, [amountSats, feeRates, utxos, totalBalance]);
+  }, [numericAmountSats, feeRates, utxos, totalBalance]);
 
   const handleFeeSpeedChange = useCallback((speed: OnchainFeeSpeed) => {
     feeSpeedUserChanged.current = true;
@@ -258,7 +253,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // moves — so editing after arming forces another deliberate click.
   useEffect(() => {
     setConfirmArmed(false);
-  }, [amountSats, currentFeeRate, btcPrice]);
+  }, [numericAmountSats, currentFeeRate, btcPrice]);
 
   // Always call both hooks (rules of hooks) — pass `null` to the
   // campaign hook when not in campaign mode so its mutation throws if
@@ -286,7 +281,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     // above; 'supported' and 'unknown' both proceed (the latter may fail at
     // sign time, which will then flip the UI to the unsupported state).
     if (!btcPrice) { setError('Waiting for BTC price…'); return; }
-    if (amountSats <= 0) { setError('Enter an amount.'); return; }
+    if (numericAmountSats <= 0) { setError('Enter an amount.'); return; }
     if (!utxos?.length) { setError("You don't have any Bitcoin yet. Receive some first."); return; }
     if (insufficient) { setError('Not enough Bitcoin for this amount + network fee.'); return; }
 
@@ -297,7 +292,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     }
 
     try {
-      await zapAsync({ amountSats, comment: '', feeSpeed });
+      await zapAsync({ amountSats: numericAmountSats, comment: '', feeSpeed });
       // onSuccess (passed to useOnchainZap) closes the dialog; toast is shown by the hook.
     } catch (err) {
       // Capability errors flip the UI via `reportSignerUnsupported` in the
@@ -306,7 +301,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
       const isCapability = /does not support|doesn't support|signpsbt|sign_psbt/i.test(msg);
       if (!isCapability) setError(msg);
     }
-  }, [user, target.pubkey, campaign, btcPrice, amountSats, utxos, insufficient, zapAsync, feeSpeed, isLarge, confirmArmed]);
+  }, [user, target.pubkey, campaign, btcPrice, numericAmountSats, utxos, insufficient, zapAsync, feeSpeed, isLarge, confirmArmed]);
 
   // ── Signer not supported ──────────────────────────────────────
   // The user's signer can't sign PSBTs locally (extension without signPsbt,
@@ -315,27 +310,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // resulting txid, so we don't publish a kind 8333 — the user is warned
   // that the zap won't be attributed to them on Nostr.
 
-  const currentUsd = typeof usdAmount === 'string' ? parseFloat(usdAmount) : usdAmount;
-  const hasValidAmount = Number.isFinite(currentUsd) && currentUsd > 0;
-  const totalUsdString = btcPrice ? satsToUSD(totalSats, btcPrice) : '';
   const uniqueFeeSpeeds = useMemo(() => getUniqueFeeSpeeds(feeRates), [feeRates]);
-
-  // Clicking the big amount flips it into edit mode. Auto-focus and
-  // select-all so typing overwrites the current value.
-  useEffect(() => {
-    if (editingAmount) {
-      amountInputRef.current?.focus();
-      amountInputRef.current?.select();
-    }
-  }, [editingAmount]);
-
-  const commitAmountEdit = useCallback(() => {
-    setEditingAmount(false);
-    // Normalize empty string to 0 so the display doesn't show "$" alone.
-    if (typeof usdAmount === 'string' && usdAmount.trim() === '') {
-      setUsdAmount(0);
-    }
-  }, [usdAmount]);
 
   if (user && capability === 'unsupported') {
     return (
@@ -345,8 +320,8 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
         isSilentPayment={bitcoinTarget?.mode === 'sp'}
         amountSats={amountSats}
         btcPrice={btcPrice}
-        usdAmount={usdAmount}
-        setUsdAmount={setUsdAmount}
+        currencyDisplay={currencyDisplay}
+        setAmountSats={setAmountSats}
         loginType={loginType}
         onClose={onClose}
       />
@@ -355,63 +330,14 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
 
   return (
     <div className="grid gap-4 px-4 py-4 w-full overflow-hidden">
-      {/* Amount — big number on top, editable by clicking. */}
-      <div className="flex flex-col items-center pt-2">
-        {editingAmount ? (
-          <div className="flex items-baseline justify-center">
-            <span className={`text-4xl font-semibold ${insufficient ? 'text-destructive' : 'text-muted-foreground'}`}>$</span>
-            <input
-              ref={amountInputRef}
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              value={usdAmount}
-              onChange={(e) => { setUsdAmount(e.target.value); setError(''); }}
-              onBlur={commitAmountEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitAmountEdit();
-                }
-              }}
-              aria-label="Amount in USD"
-              className={`bg-transparent border-0 outline-none text-4xl font-semibold text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${insufficient ? 'text-destructive' : ''}`}
-              style={{ width: `${Math.max(2, String(usdAmount).length + 1)}ch` }}
-            />
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setEditingAmount(true)}
-            aria-label="Edit amount"
-            className="flex items-baseline justify-center rounded-md px-2 -mx-2 hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-          >
-            <span className={`text-4xl font-semibold ${insufficient ? 'text-destructive' : 'text-muted-foreground'}`}>$</span>
-            <span className={`text-4xl font-semibold tabular-nums ${insufficient ? 'text-destructive' : ''}`}>
-              {hasValidAmount ? currentUsd : 0}
-            </span>
-          </button>
-        )}
-      </div>
-
-      {/* Preset buttons sit under the big number. */}
-      <ToggleGroup
-        type="single"
-        value={USD_PRESETS.includes(Number(usdAmount)) ? String(usdAmount) : ''}
-        onValueChange={(v) => { if (v) { setUsdAmount(Number(v)); setError(''); setEditingAmount(false); } }}
-        className="grid grid-cols-5 gap-1 w-full"
-      >
-        {USD_PRESETS.map((v) => (
-          <ToggleGroupItem
-            key={v}
-            value={String(v)}
-            className="h-8 min-w-0 text-xs font-semibold px-1"
-          >
-            ${v}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      <ZapAmountInput
+        amountSats={amountSats}
+        onChange={(value) => { setAmountSats(value); setError(''); }}
+        btcPrice={btcPrice}
+        currencyDisplay={currencyDisplay}
+        presets={ONCHAIN_SATS_PRESETS}
+        disabled={isZapping}
+      />
 
       {/* Error */}
       {error && (
@@ -432,7 +358,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
 
       <Button
         onClick={handleZap}
-        disabled={!btcPrice || amountSats <= 0 || isZapping || insufficient}
+        disabled={!btcPrice || numericAmountSats <= 0 || isZapping || insufficient}
         variant={(insufficient || isLarge) && !isZapping ? 'destructive' : 'default'}
         className="w-full"
       >
@@ -444,14 +370,14 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
         ) : insufficient ? (
           <>Not enough Bitcoin</>
         ) : isLarge && confirmArmed ? (
-          <>Tap again to send {totalUsdString}</>
+          <>Tap again to send {formatMoney(totalSats)}</>
         ) : (
-          <>Send {totalUsdString || (hasValidAmount ? `$${currentUsd}` : '')}</>
+          <>Send {formatMoney(totalSats)}</>
         )}
       </Button>
 
       {/* Fee line — click to open speed picker */}
-      {amountSats > 0 && (
+      {numericAmountSats > 0 && (
         <div className="flex items-center justify-center gap-3 -mt-1 text-xs">
           <Popover open={feePopoverOpen} onOpenChange={setFeePopoverOpen}>
             <PopoverTrigger asChild>
@@ -461,8 +387,8 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
               >
                 <span>
                   Fee{' '}
-                  {estimatedFeeSats > 0 && btcPrice
-                    ? `≈ ${satsToUSD(estimatedFeeSats, btcPrice)}`
+                  {estimatedFeeSats > 0
+                    ? `≈ ${formatMoney(estimatedFeeSats)}`
                     : '…'}
                   <span className="opacity-60"> · {FEE_SPEED_LABELS[feeSpeed]}</span>
                 </span>
@@ -489,9 +415,9 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
             </PopoverContent>
           </Popover>
 
-          {showBalance && !insufficient && btcPrice && (
+          {showBalance && !insufficient && (
             <span className="text-muted-foreground">
-              Balance: {satsToUSD(totalBalance, btcPrice)}
+              Balance: {formatMoney(totalBalance)}
             </span>
           )}
         </div>
@@ -519,10 +445,10 @@ interface UnsupportedSignerQRProps {
   truncatedRecipient: string;
   /** When true, `recipientAddress` is a BIP-352 silent-payment code. */
   isSilentPayment?: boolean;
-  amountSats: number;
+  amountSats: number | string;
   btcPrice: number | undefined;
-  usdAmount: number | string;
-  setUsdAmount: (v: number | string) => void;
+  currencyDisplay: 'usd' | 'sats';
+  setAmountSats: (v: number | string) => void;
   loginType: string | undefined;
   onClose?: () => void;
 }
@@ -539,13 +465,19 @@ function UnsupportedSignerQR({
   isSilentPayment,
   amountSats,
   btcPrice,
-  usdAmount,
-  setUsdAmount,
+  currencyDisplay,
+  setAmountSats,
   loginType,
   onClose,
 }: UnsupportedSignerQRProps) {
   const { toast } = useToast();
+  const { format: formatMoney } = useFormatMoney();
   const [copied, setCopied] = useState<'address' | 'uri' | null>(null);
+
+  const numericSats = useMemo(() => {
+    const value = typeof amountSats === 'string' ? Number(amountSats.replace(/,/g, '')) : amountSats;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }, [amountSats]);
 
   // BIP-21 URI. Include `amount` (in BTC, 8 decimals) only when > 0 so an
   // empty-amount placeholder QR doesn't include `?amount=0`. Silent-payment
@@ -554,8 +486,8 @@ function UnsupportedSignerQR({
   const bip21 = useMemo(() => {
     if (!recipientAddress) return '';
     const params = new URLSearchParams();
-    if (amountSats > 0) {
-      params.set('amount', (amountSats / 100_000_000).toFixed(8));
+    if (numericSats > 0) {
+      params.set('amount', (numericSats / 100_000_000).toFixed(8));
     }
     if (isSilentPayment) {
       params.set('sp', recipientAddress);
@@ -564,7 +496,7 @@ function UnsupportedSignerQR({
     }
     const qs = params.toString();
     return qs ? `bitcoin:${recipientAddress}?${qs}` : `bitcoin:${recipientAddress}`;
-  }, [recipientAddress, amountSats, isSilentPayment]);
+  }, [recipientAddress, numericSats, isSilentPayment]);
 
   const explanation =
     loginType === 'extension'
@@ -587,8 +519,13 @@ function UnsupportedSignerQR({
     [toast],
   );
 
-  const currentUsd = typeof usdAmount === 'string' ? parseFloat(usdAmount) : usdAmount;
-  const hasAmount = amountSats > 0;
+  const cornerText = useMemo(() => {
+    if (!btcPrice || numericSats <= 0) return null;
+    if (currencyDisplay === 'usd') {
+      return `${formatSats(numericSats)} sats`;
+    }
+    return undefined;
+  }, [currencyDisplay, numericSats, btcPrice]);
 
   return (
     <div className="grid gap-3 px-4 py-4 w-full overflow-hidden">
@@ -596,47 +533,17 @@ function UnsupportedSignerQR({
         {explanation} You can still zap by scanning this QR from any Bitcoin wallet.
       </p>
 
-      {/* Amount presets (USD) */}
-      <ToggleGroup
-        type="single"
-        value={USD_PRESETS.includes(Number(usdAmount)) ? String(usdAmount) : ''}
-        onValueChange={(v) => { if (v) setUsdAmount(Number(v)); }}
-        className="grid grid-cols-5 gap-1 w-full"
-      >
-        {USD_PRESETS.map((v) => (
-          <ToggleGroupItem
-            key={v}
-            value={String(v)}
-            className="h-8 min-w-0 text-xs font-semibold px-1"
-          >
-            ${v}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-
-      <div className="flex items-center gap-2">
-        <div className="h-px flex-1 bg-muted" />
-        <span className="text-xs text-muted-foreground">OR</span>
-        <div className="h-px flex-1 bg-muted" />
-      </div>
-
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-        <Input
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="0.01"
-          placeholder="Custom amount (USD)"
-          value={usdAmount}
-          onChange={(e) => setUsdAmount(e.target.value)}
-          className="pl-6"
-        />
-      </div>
+      <ZapAmountInput
+        amountSats={amountSats}
+        onChange={setAmountSats}
+        btcPrice={btcPrice}
+        currencyDisplay={currencyDisplay}
+        presets={[1_000, 5_000, 10_000, 25_000, 100_000]}
+      />
 
       {/* QR / placeholder */}
       <div className="flex justify-center">
-        {hasAmount && bip21 ? (
+        {numericSats > 0 && bip21 ? (
           <div className="bg-white p-3 rounded-xl" aria-label="Bitcoin payment QR code">
             <QRCodeCanvas value={bip21} size={220} level="M" className="block" />
           </div>
@@ -650,14 +557,16 @@ function UnsupportedSignerQR({
       </div>
 
       {/* Amount summary */}
-      {hasAmount && btcPrice && (
+      {numericSats > 0 && btcPrice && (
         <div className="text-center text-sm">
           <span className="font-medium">
-            {currentUsd > 0 ? `$${currentUsd}` : ''}
+            {formatMoney(numericSats)}
           </span>
-          <span className="text-muted-foreground">
-            {' · '}{formatSats(amountSats)} sats
-          </span>
+          {cornerText && (
+            <span className="text-muted-foreground">
+              {' · '}{cornerText}
+            </span>
+          )}
         </div>
       )}
 
@@ -690,7 +599,7 @@ function UnsupportedSignerQR({
           variant="outline"
           size="sm"
           onClick={() => copy(bip21, 'uri', 'Payment link')}
-          disabled={!hasAmount || !bip21}
+          disabled={!numericSats || !bip21}
           className="text-xs"
         >
           {copied === 'uri' ? <Check className="size-3.5 mr-1.5" /> : <Copy className="size-3.5 mr-1.5" />}
