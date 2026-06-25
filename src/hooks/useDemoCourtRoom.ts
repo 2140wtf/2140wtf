@@ -321,7 +321,7 @@ export function useDemoCourtRoom(options: UseDemoCourtRoomOptions): UseDemoCourt
 
       toast({
         title: 'Demo jury formed',
-        description: `${selectedJurors.length} jurors, ${DEMO_BOND_AMOUNT_SATS.toLocaleString()} fake sats locked. Starting FROST ceremony...`,
+        description: `${selectedJurors.length} jurors, ${DEMO_BOND_AMOUNT_SATS.toLocaleString()} Spark demo sats locked. Starting key ceremony...`,
       });
       setStatus('formed');
     } catch (err) {
