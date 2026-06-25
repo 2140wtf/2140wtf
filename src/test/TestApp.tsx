@@ -121,6 +121,7 @@ export function TestApp({ children }: TestAppProps) {
     esploraApis: ['https://mempool.space/api'],
     currencyDisplay: 'usd',
     sidebarWidgets: [],
+    sidebarWidgetsVersion: 1,
     maxCachedEventAge: 604800,
     baoSignetMintUrl: 'https://relay.bao.network/cashu',
     baoSignetFaucetUrl: 'https://relay.bao.network/faucet',
