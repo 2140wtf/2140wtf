@@ -227,12 +227,7 @@ export function PetsRoomStage({
 
               {/* Interaction wrapper — receives pointer events and sways. */}
               {isEgg && onEggClick && (
-                <div className="absolute inset-0 -m-6 pointer-events-none">
-                  <div className="absolute inset-0 rounded-full border-2 border-dashed border-primary/30 animate-pulse" />
-                  <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold text-primary/70">
-                    Tap to hatch
-                  </div>
-                </div>
+                <div className="absolute inset-0 -m-6 pointer-events-none rounded-full border-2 border-dashed border-primary/30 animate-pulse" />
               )}
               <div
                 data-pets-visual
