@@ -35,7 +35,7 @@ npm install
 npm run dev
 ```
 
-The dev server starts at `http://localhost:8080`.
+The dev server starts at `http://localhost:8081`.
 
 ### Build
 
