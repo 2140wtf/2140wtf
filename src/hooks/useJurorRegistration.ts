@@ -2,19 +2,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { useBondEscrow, type BondEscrowInput } from "@/hooks/useBondEscrow";
 import {
   buildJurorCandidacyEvent,
   type JurorProfile,
   type StakeCommitment,
 } from "@bao/frost-court";
 
-export interface JurorRegistrationInput {
-  readonly disputeId: string;
+export interface JurorRegistrationInput extends BondEscrowInput {
   readonly marketId: string;
   readonly categories: readonly string[];
-  readonly bondAmountSats: number;
-  readonly bondAddress: string;
-  readonly rail?: string;
   readonly stakeCapacitySats?: number;
   readonly wotScore?: number;
 }
@@ -34,6 +31,7 @@ function buildMockStakeCommitment(
 export function useJurorRegistration() {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
+  const { mutateAsync: verifyBond } = useBondEscrow();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -42,10 +40,17 @@ export function useJurorRegistration() {
         throw new Error("User is not logged in");
       }
 
-      const stakeCommitment = buildMockStakeCommitment(
-        input.bondAmountSats,
-        input.bondAddress,
-      );
+      const rail = input.rail?.toLowerCase() ?? 'spark';
+      let stakeCommitment: StakeCommitment;
+
+      if (rail === 'bitcoin' || rail === 'liquid') {
+        stakeCommitment = await verifyBond(input);
+      } else {
+        stakeCommitment = buildMockStakeCommitment(
+          input.bondAmountSats,
+          input.bondAddress,
+        );
+      }
 
       const juror: JurorProfile = {
         nostrPubkey: user.pubkey,
