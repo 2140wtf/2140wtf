@@ -155,20 +155,37 @@ export default defineConfig(({ mode }) => {
   const isNsite = mode === 'nsite';
 
   return {
-  server: {
-    host: "::",
-    port: 8081,
-    allowedHosts: env.ALLOWED_HOSTS === "*" ? true : undefined,
-    watch: {
-      ignored: [
-        '**/.tools/**',
-        '**/android/**',
-        '**/ios/**',
-        '**/dist/**',
-        '**/node_modules/**',
-      ],
+    server: {
+      host: "::",
+      port: 8081,
+      allowedHosts: env.ALLOWED_HOSTS === "*" ? true : undefined,
+      proxy: {
+        '/api/stacker-news': {
+          target: 'https://stacker.news',
+          changeOrigin: true,
+          rewrite: () => '/api/graphql',
+        },
+      },
+      watch: {
+        ignored: [
+          '**/.tools/**',
+          '**/android/**',
+          '**/ios/**',
+          '**/dist/**',
+          '**/node_modules/**',
+        ],
+      },
     },
-  },
+    preview: {
+      port: 8081,
+      proxy: {
+        '/api/stacker-news': {
+          target: 'https://stacker.news',
+          changeOrigin: true,
+          rewrite: () => '/api/graphql',
+        },
+      },
+    },
   plugins: [
     react(),
     ...(process.env.ANALYZE
