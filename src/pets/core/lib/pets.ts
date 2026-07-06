@@ -6,6 +6,8 @@ import { ADULT_FORMS, type AdultForm, deriveAdultFormFromSeed } from '@/pets/adu
 
 import { validateAndRepairPetsTags } from './pets-tag-schema';
 import { applyColorGuardrails, hexToHsl, hslToHex } from './color-guardrails';
+import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
+import { parseAsset3DTag } from '@/pets/three-d/lib/three-d-schema';
 import type { Mission } from './missions';
 import { parseEvolutionContent } from './missions';
 import { BREED_CATEGORIES, type PetsBreedCategory } from './pet-categories';
@@ -360,6 +362,8 @@ export interface PetsCompanion {
   tasksCompleted: string[];
   /** Evolution missions parsed from 31124 content JSON (per-Pets progression) */
   evolution: Mission[];
+  /** Optional Blossom-hosted 3D asset override for this adult pet. */
+  asset3d?: Asset3DEntry;
   /** All tags preserved for republishing */
   allTags: string[][];
 }
@@ -1404,6 +1408,7 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
     tasks,
     tasksCompleted,
     evolution,
+    asset3d: stage === 'adult' ? parseAsset3DTag(tags) ?? undefined : undefined,
     allTags: tags,
   };
 }
@@ -1588,7 +1593,7 @@ export const MANAGED_PETS_STATE_TAG_NAMES = new Set([
   // Evolution tags (adult only)
   'adult_type',
   // Extension tags (for themes/crossovers)
-  'theme', 'crossover_app',
+  'theme', 'crossover_app', 'asset_3d',
   // Cypherpunk 2140 theme extension tags
   'archetype', 'special_ability',
   // Phase B: breed category + breeding tags
@@ -2107,7 +2112,7 @@ export function buildMigrationTags(
     // Breed category / asset tags (preserve species selection across migration)
     'breed_category', 'breed_asset', 'bao_rarity',
     // Extension tags
-    'theme', 'crossover_app',
+    'theme', 'crossover_app', 'asset_3d',
   ];
   
   for (const tagName of persistentTagNames) {
