@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { generateSecretKey } from 'nostr-tools';
+import { getEncodedToken, CashuWallet } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey } from '@/lib/cashu/cashu';
@@ -15,6 +16,36 @@ import type { NostrEvent } from '@nostrify/nostrify';
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   publish: vi.fn(),
+  sendTracker: { active: 0, max: 0 },
+  sendCallCount: 0,
+  createMockWallet: (opts: { sendDelay?: number } = {}) => ({
+    loadMint: vi.fn().mockResolvedValue(undefined),
+    getInfo: vi.fn().mockResolvedValue({ name: 'Test Mint', nuts: {} }),
+    send: vi.fn().mockImplementation(async (amount: number, proofs: unknown[]) => {
+      const callId = ++mocks.sendCallCount;
+      if (opts.sendDelay) {
+        mocks.sendTracker.active++;
+        mocks.sendTracker.max = Math.max(mocks.sendTracker.max, mocks.sendTracker.active);
+        await new Promise((resolve) => setTimeout(resolve, opts.sendDelay));
+        mocks.sendTracker.active--;
+      }
+      // Return a fresh sent proof plus change so conservation/fee checks pass.
+      const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
+      return {
+        send: [{ id: 'ks', amount, secret: `send-secret-${callId}`, C: `C-send-${callId}` }],
+        keep: inputSum > amount ? [{ id: 'ks', amount: inputSum - amount, secret: `keep-secret-${callId}`, C: `C-keep-${callId}` }] : [],
+      };
+    }),
+    selectProofsToSend: vi.fn().mockImplementation((_proofs: unknown[], amountToSend: number) => ({
+      send: (Array.isArray(_proofs) ? _proofs : []).filter((p) => (p as { amount: number }).amount >= amountToSend),
+      keep: (Array.isArray(_proofs) ? _proofs : []).filter((p) => (p as { amount: number }).amount < amountToSend),
+    })),
+    receive: vi.fn().mockResolvedValue([]),
+    getFeesForProofs: vi.fn().mockReturnValue(0),
+    checkProofsStates: vi.fn().mockResolvedValue([]),
+    keysets: [{ active: true, id: 'ks' }],
+    keys: new Map(),
+  }),
 }));
 
 vi.mock('@/hooks/useAppContext', () => ({
@@ -31,23 +62,7 @@ vi.mock('@cashu/cashu-ts', async () => {
       };
     }),
     CashuWallet: vi.fn(function () {
-      return {
-        loadMint: vi.fn().mockResolvedValue(undefined),
-        getInfo: vi.fn().mockResolvedValue({ name: 'Test Mint', nuts: {} }),
-        send: vi.fn().mockImplementation((amount: number, proofs: unknown[]) => {
-          // Return a fresh sent proof plus change so conservation/fee checks pass.
-          const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
-          return Promise.resolve({
-            send: [{ id: 'ks', amount, secret: 'send-secret', C: 'C-send' }],
-            keep: inputSum > amount ? [{ id: 'ks', amount: inputSum - amount, secret: 'keep-secret', C: 'C-keep' }] : [],
-          });
-        }),
-        receive: vi.fn().mockResolvedValue([]),
-        getFeesForProofs: vi.fn().mockReturnValue(0),
-        checkProofsStates: vi.fn().mockResolvedValue([]),
-        keysets: [{ active: true, id: 'ks' }],
-        keys: new Map(),
-      };
+      return mocks.createMockWallet();
     }),
   };
 });
@@ -168,4 +183,173 @@ describe('useCashuWallet NIP-60 sync', () => {
     expect(deletion.tags.some((t) => t[0] === 'e' && t[1] === remoteToken!.id)).toBe(true);
   });
 
+});
+
+describe('useCashuWallet sendToken concurrency', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.sendTracker.active = 0;
+    mocks.sendTracker.max = 0;
+    mocks.sendCallCount = 0;
+    // Reset CashuWallet mock to default (no delay) between tests.
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    // Seed local storage with a spendable proof so sendToken can succeed.
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+  }
+
+  it('serializes overlapping sendToken calls so only one wallet.send is active at a time', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+
+    // Install a slow send implementation so concurrent calls would overlap
+    // if the mutex failed to serialize them.
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet({ sendDelay: 50 });
+    });
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    // Fire two sends inside a single act() so React updates are batched and
+    // we can start the second call before the first one finishes.
+    const [sendResult1, sendResult2] = await act(async () => {
+      const promise1 = result.current.sendToken(21);
+      const promise2 = result.current.sendToken(21);
+      return Promise.all([promise1, promise2]);
+    });
+
+    expect(sendResult1).not.toBeNull();
+    expect(sendResult2).not.toBeNull();
+    expect(mocks.sendTracker.max).toBe(1);
+    expect(mocks.sendTracker.active).toBe(0);
+  });
+});
+
+describe('useCashuWallet locked-token wrappers', () => {
+  const mintUrl = 'https://mint.example.com';
+  const validPubkey = 'a'.repeat(64);
+  const validPrivkey = 'b'.repeat(64);
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+  }
+
+  it('sendLockedToken rejects a non-64-hex recipient pubkey and sets an error', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const sendResult = await act(async () => result.current.sendLockedToken(10, 'not-a-valid-pubkey'));
+    expect(sendResult).toBeNull();
+    await waitFor(() => expect(result.current.error).toBe('Invalid recipient P2PK pubkey'));
+  });
+
+  it('sendLockedToken passes a valid recipient pubkey through to wallet.send', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    const sendSpy = vi.spyOn(wallet, 'send');
+
+    const sendResult = await act(async () => result.current.sendLockedToken(21, validPubkey, 'locked memo'));
+    expect(sendResult).not.toBeNull();
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      21,
+      expect.any(Array),
+      expect.objectContaining({ pubkey: validPubkey, includeDleq: true }),
+    );
+  });
+
+  it('receiveLockedToken rejects an invalid privkey and sets an error', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const token = getEncodedToken({
+      mint: mintUrl,
+      proofs: [{ id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', validPubkey]), C: 'C-recv' }],
+      unit: 'sat',
+    });
+
+    await act(async () => result.current.receiveLockedToken(token, 'bad-privkey'));
+    await waitFor(() => expect(result.current.error).toBe('Invalid P2PK private key'));
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    expect(wallet.receive).not.toHaveBeenCalled();
+  });
+
+  it('receiveLockedToken passes a valid privkey through to wallet.receive', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    const receiveSpy = vi.spyOn(wallet, 'receive');
+
+    const token = getEncodedToken({
+      mint: mintUrl,
+      proofs: [{ id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', validPubkey]), C: 'C-recv' }],
+      unit: 'sat',
+    });
+
+    await act(async () => result.current.receiveLockedToken(token, validPrivkey));
+
+    expect(receiveSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ privkey: validPrivkey }));
+  });
 });
