@@ -10,6 +10,7 @@ import {
   BarChart3,
   Cat,
   Navigation,
+  Newspaper,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 import type { WidgetConfig } from '@/contexts/AppContext';
@@ -68,6 +69,17 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 600,
     category: 'discovery',
     href: '/trends',
+  },
+  {
+    id: 'stacker-news',
+    label: 'Stacker News',
+    description: 'Hot posts from Stacker News',
+    icon: Newspaper,
+    defaultHeight: 320,
+    minHeight: 200,
+    maxHeight: 600,
+    category: 'discovery',
+    href: 'https://stacker.news/',
   },
   {
     id: 'wikipedia',
@@ -198,11 +210,11 @@ export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
   { id: 'pets' },
   { id: 'prediction-markets' },
   { id: 'trends' },
-  { id: 'wikipedia' },
+  { id: 'stacker-news' },
 ];
 
 /** Bump this to reset existing users' right-sidebar widgets to the default. */
-export const SIDEBAR_WIDGETS_VERSION = 4;
+export const SIDEBAR_WIDGETS_VERSION = 5;
 
 /** Category labels for display in the picker. */
 export const WIDGET_CATEGORIES: Record<string, string> = {
