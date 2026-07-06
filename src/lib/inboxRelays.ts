@@ -13,7 +13,7 @@ export function extractReadRelays(event: NostrEvent): string[] {
     if (name !== 'r' || marker === 'write' || !url) continue;
     try {
       const parsed = new URL(url);
-      if (parsed.protocol === 'wss:') {
+      if (parsed.protocol === 'wss:' || parsed.protocol === 'ws:') {
         relays.add(parsed.href);
       }
     } catch {

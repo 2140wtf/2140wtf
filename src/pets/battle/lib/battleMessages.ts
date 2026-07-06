@@ -15,7 +15,11 @@ export type BattleMessageType =
   | 'battle-cancel'
   | 'battle-state'
   | 'battle-input'
-  | 'battle-finished';
+  | 'battle-finished'
+  | 'battle-escrow-deposit'
+  | 'battle-escrow-ready';
+
+export type BattleMode = 'demo-sats' | 'btc-sats' | 'real-sats';
 
 export interface BattleInvitePayload {
   type: 'battle-invite';
@@ -26,12 +30,18 @@ export interface BattleInvitePayload {
   roundDurationSeconds: number;
   /** Unix ms when the invite was sent. */
   sentAt: number;
+  /** Battle economy mode. */
+  mode: BattleMode;
+  /** Host's Cashu P2PK pubkey used for escrow negotiation. */
+  hostEscrowPubkey?: string;
 }
 
 export interface BattleAcceptPayload {
   type: 'battle-accept';
   battleId: string;
   guestPet: PetsCompanion;
+  mode: BattleMode;
+  guestEscrowPubkey?: string;
 }
 
 export interface BattleDeclinePayload {
@@ -63,6 +73,21 @@ export interface BattleFinishedPayload {
   winner: 0 | 1 | null;
 }
 
+export interface BattleEscrowDepositPayload {
+  type: 'battle-escrow-deposit';
+  battleId: string;
+  /** 0 = host, 1 = guest */
+  playerIndex: 0 | 1;
+  /** Cashu token string locked to the operator escrow pubkey. */
+  token: string;
+  amount: number;
+}
+
+export interface BattleEscrowReadyPayload {
+  type: 'battle-escrow-ready';
+  battleId: string;
+}
+
 export type BattleMessagePayload =
   | BattleInvitePayload
   | BattleAcceptPayload
@@ -70,7 +95,9 @@ export type BattleMessagePayload =
   | BattleCancelPayload
   | BattleStatePayload
   | BattleInputPayload
-  | BattleFinishedPayload;
+  | BattleFinishedPayload
+  | BattleEscrowDepositPayload
+  | BattleEscrowReadyPayload;
 
 /**
  * Minimal serializable state snapshot sent by the host each tick.

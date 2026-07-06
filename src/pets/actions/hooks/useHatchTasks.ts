@@ -171,7 +171,12 @@ export function useHatchTasks(
       if (!pubkey) return null;
 
       const filters: NostrFilter[] = [
-        { kinds: [KIND_THEME_DEFINITION], authors: [pubkey], limit: 1 },
+        {
+          kinds: [KIND_THEME_DEFINITION],
+          authors: [pubkey],
+          limit: 1,
+          since: companion?.progressionStartedAt,
+        },
       ];
 
       const events = await nostr.query(filters);

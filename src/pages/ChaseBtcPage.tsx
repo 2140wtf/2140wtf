@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { useCashuSeed } from '@/hooks/useCashuSeed';
-import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Button } from '@/components/ui/button';
@@ -42,24 +40,10 @@ function DashboardLoadingState() {
 export default function ChaseBtcPage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
-  const { config } = useAppContext();
   const { profile, isLoading: profileLoading, updateProfileEvent } = useBlobbonautProfile();
   const { companions, isLoading: collectionLoading } = usePetssCollection();
 
-  const { seedPhrase: cashuSeedPhrase } = useCashuSeed();
-  const relayUrls = useMemo(
-    () =>
-      (config.relayMetadata?.relays ?? [])
-        .filter((r) => r.read !== false || r.write !== false)
-        .map((r) => r.url)
-        .filter(Boolean),
-    [config.relayMetadata?.relays],
-  );
-  const baoWallet = useBaoCashuWallet(
-    cashuSeedPhrase ?? '',
-    user ?? { pubkey: '', signer: {} as never },
-    relayUrls,
-  );
+  const { wallet: petsWallet, isReal } = usePetsWallet();
 
   const [mode, setMode] = useState<ChaseMode>('fiat');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,7 +95,14 @@ export default function ChaseBtcPage() {
     petHeight: PET_HEIGHT,
   });
 
-  const payout = useChasePayout(updateProfileEvent, baoWallet);
+  const payout = useChasePayout(updateProfileEvent, petsWallet);
+
+  // In real-money mode the BAO faucet is not available, so sats mode is disabled.
+  useEffect(() => {
+    if (isReal && mode === 'sats') {
+      setMode('fiat');
+    }
+  }, [isReal, mode]);
 
   const handleStart = useCallback(
     (selectedMode: ChaseMode) => {
@@ -233,7 +224,7 @@ export default function ChaseBtcPage() {
             {status === 'running' && <ChaseHud state={state} mode={mode} />}
 
             {status === 'idle' && (
-              <ChaseStartScreen coins={coins} sats={sats} onStart={handleStart} />
+              <ChaseStartScreen coins={coins} sats={sats} onStart={handleStart} allowSatsMode={!isReal} />
             )}
 
             {status === 'ended' && (

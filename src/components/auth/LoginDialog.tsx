@@ -124,10 +124,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
   useEffect(() => {
     if (!nostrConnectParams) return;
 
-    const startListening = async () => {
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
+    const startListening = async () => {
       try {
         await loginRef.current.nostrconnect(
           nostrConnectParams,
@@ -155,9 +155,12 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
 
     startListening();
 
-    // No cleanup here: we do NOT want a re-render-triggered effect teardown
-    // to cancel the in-flight subscription. Cancellation is handled
-    // explicitly by the `isOpen` effect and by handleRetry().
+    // Cleanup aborts the in-flight handshake when the params change (e.g. the
+    // user retried) or when the component unmounts. Because the deps are limited
+    // to `nostrConnectParams`, normal parent re-renders will NOT tear this down.
+    return () => {
+      controller.abort();
+    };
   }, [nostrConnectParams]);
 
   // Clean up on close
