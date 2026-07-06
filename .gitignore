@@ -64,3 +64,13 @@ playwright/.cache/
 
 # Local experimental-branch notes
 EXPERIMENTAL_BRANCHES.md
+
+# Claude local settings with credentials
+.claude/settings.local.json
+
+# Local scratch / upstream mirrors
+.tmp/
+
+# Escrow operator service
+services/escrow-operator/node_modules/
+services/escrow-operator/dist/
