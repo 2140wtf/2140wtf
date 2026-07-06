@@ -12,13 +12,15 @@ import {
   buildFrostCommitEvent,
   buildFrostRevealEvent,
   buildAttestationEvent,
-  generateFrostKeys,
+  PedersenDkgAdapter,
   runDisputeOverrideSigning,
   hashCommit,
   tallyVotes,
   randomHex32,
   randomScalar,
+  scalarToHex,
   buildAttestationMessage,
+  createProofOfKnowledge,
   type DisputeCase,
   type SelectedJuror,
   type AppealPhase,
@@ -55,13 +57,15 @@ interface LocalPolynomial {
   readonly pubkey: string;
   readonly coeffs: bigint[];
   readonly commitments: string[];
+  readonly pok: { nonce: string; response: string };
 }
 
 function createLocalPolynomial(idx: number, pubkey: string, threshold: number): LocalPolynomial {
   const Point = secp256k1.Point;
   const coeffs: bigint[] = Array.from({ length: threshold }, () => randomScalar());
   const commitments = coeffs.map((a) => Point.BASE.multiply(a).toHex(true));
-  return { idx, pubkey, coeffs, commitments };
+  const pok = createProofOfKnowledge(scalarToHex(coeffs[0]), commitments[0]);
+  return { idx, pubkey, coeffs, commitments, pok };
 }
 
 function deriveThreshold(jurorCount: number): number {
@@ -134,13 +138,15 @@ export function useJurorSession(
         disputeId: dispute.disputeId,
         jurorIdx: myJurorIdx,
         jurorPubkey: user.pubkey,
+        threshold,
         vssCommits: localPolyRef.current.commitments,
+        pok: localPolyRef.current.pok,
       });
       await publishEvent(template);
 
       if (demoMode) {
         // Run the full DKG locally so the GUI can proceed without peer jurors.
-        const { record, shares } = generateFrostKeys({
+        const { record, shares } = new PedersenDkgAdapter({ unsafeTestMode: true }).run({
           marketId: dispute.marketId,
           disputeId: dispute.disputeId,
           threshold,
@@ -292,6 +298,7 @@ export function useJurorSession(
           hidden_pn: myCommit.hidden_pn,
         },
         partialSig: sig.psig,
+        frostPubkey: sig.pubkey,
       });
       await publishEvent(template);
     } finally {
