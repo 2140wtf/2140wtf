@@ -46,9 +46,11 @@ import { sha256 } from '@noble/hashes/sha2.js';
  * `secp256k1.ProjectivePoint`; v2 moved it to `schnorr.Point`. We use the
  * v1 export to match the rest of the ditto codebase.
  */
-const Point = secp256k1.Point;
+/** secp256k1 projective point. Exported for the BIP-352 tweak scanner in `src/lib/sp/`. */
+export const Point = secp256k1.Point;
 
-function pointFromBytes(bytes: Uint8Array): InstanceType<typeof Point> {
+/** Parse a 33-byte compressed secp256k1 point. Exported for the tweak scanner. */
+export function pointFromBytes(bytes: Uint8Array): InstanceType<typeof Point> {
   const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   return Point.fromHex(hex);
 }
@@ -288,7 +290,8 @@ export function validateSilentPaymentAddress(addr: string): boolean {
 // We compute these manually because BIP-352 introduces custom tags that
 // aren't in any predefined table.
 
-function taggedHash(tag: string, msg: Uint8Array): Uint8Array {
+/** BIP-340/BIP-352 tagged hash. Exported for the tweak scanner. */
+export function taggedHash(tag: string, msg: Uint8Array): Uint8Array {
   // `new TextEncoder().encode()` returns a Uint8Array, but in jsdom the
   // returned instance is from a different realm than noble's internal
   // `u8a` check — so we copy into a fresh `new Uint8Array(…)` to ensure
@@ -306,7 +309,8 @@ function taggedHash(tag: string, msg: Uint8Array): Uint8Array {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function u32be(n: number): Uint8Array {
+/** Encode a non-negative integer as a 4-byte big-endian Uint8Array. */
+export function u32be(n: number): Uint8Array {
   if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) {
     throw new Error(`ser32: out of range (${n}).`);
   }
@@ -318,7 +322,8 @@ function u32be(n: number): Uint8Array {
   return b;
 }
 
-function concatBytes(...arrs: Uint8Array[]): Uint8Array {
+/** Concatenate one or more Uint8Arrays. */
+export function concatBytes(...arrs: Uint8Array[]): Uint8Array {
   let len = 0;
   for (const a of arrs) len += a.length;
   const out = new Uint8Array(len);
@@ -330,7 +335,8 @@ function concatBytes(...arrs: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function compareBytes(a: Uint8Array, b: Uint8Array): number {
+/** Lexicographic comparison of two Uint8Arrays. */
+export function compareBytes(a: Uint8Array, b: Uint8Array): number {
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) {
     if (a[i] !== b[i]) return a[i] - b[i];
@@ -338,7 +344,8 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
   return a.length - b.length;
 }
 
-function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+/** Constant-time-ish byte equality check. */
+export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
@@ -364,13 +371,15 @@ function bytesToHex(b: Uint8Array): string {
 }
 
 /** Bigint <-> 32-byte big-endian. */
-function bytesToScalar(b: Uint8Array): bigint {
+/** Interpret a big-endian Uint8Array as a secp256k1 scalar. */
+export function bytesToScalar(b: Uint8Array): bigint {
   let v = 0n;
   for (const byte of b) v = (v << 8n) | BigInt(byte);
   return v;
 }
 
-const SECP_N =
+/** secp256k1 curve order. */
+export const SECP_N =
   0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
 function scalarToBytes(s: bigint): Uint8Array {
@@ -468,16 +477,21 @@ export function extractEligibleInputPubKey(
   if (spk.length === 34 && spk[0] === 0x51 && spk[1] === 0x20) {
     const xonly = spk.subarray(2, 34);
 
-    // Script path with NUMS-H internal key → skip per BIP352.
-    if (wit.length >= 2) {
-      const controlBlock = wit[wit.length - 1];
-      // The annex (if present) is the last witness item starting with 0x50.
-      // Strip it before reading the control block.
-      let controlIdx = wit.length - 1;
-      if (controlBlock.length > 0 && controlBlock[0] === 0x50 && wit.length >= 3) {
-        controlIdx = wit.length - 2;
+    // Strip the optional BIP-341 annex first. It is always the last witness
+    // item and starts with 0x50. After stripping, length 1 means key-path,
+    // length >= 2 means script-path.
+    let strippedWitness = wit;
+    if (wit.length > 0) {
+      const lastItem = wit[wit.length - 1];
+      if (lastItem.length > 0 && lastItem[0] === 0x50) {
+        strippedWitness = wit.slice(0, wit.length - 1);
       }
-      const ctrl = wit[controlIdx];
+    }
+
+    // Script path with NUMS-H internal key → skip per BIP352.
+    if (strippedWitness.length >= 2) {
+      const controlBlock = strippedWitness[strippedWitness.length - 1];
+      const ctrl = controlBlock;
       // Control block: 1 byte (leaf version + parity) || 32-byte internal pk || merkle path
       if (ctrl.length >= 33 && (ctrl.length - 1) % 32 === 0) {
         const internal = ctrl.subarray(1, 33);
@@ -807,6 +821,176 @@ export function deriveSilentPaymentOutputs(
   }
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Receiver-side scanning (BIP-352)
+// ---------------------------------------------------------------------------
+
+/** A transaction input as seen by the receiver-side scanner. */
+export interface ScannableInput {
+  txid: string;
+  vout: number;
+  /** Hex of the prevout scriptPubKey. */
+  scriptPubKeyHex: string;
+  /** Hex of the input scriptSig (empty for segwit/taproot). */
+  scriptSigHex: string;
+  /** Witness stack items, if any. */
+  witness?: Uint8Array[];
+}
+
+/** A transaction output the scanner can match against. */
+export interface ScannableOutput {
+  txid: string;
+  vout: number;
+  /** Value in satoshis. */
+  value: number;
+  /** Hex of the output scriptPubKey. */
+  scriptPubKeyHex: string;
+}
+
+/** A discovered Silent Payment UTXO. */
+export interface ScannedUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  /** Counter used to derive the output key. */
+  k: number;
+}
+
+/**
+ * Scan a single transaction for outputs payable to a silent-payment receiver.
+ *
+ * Implements the receiver side of BIP-352:
+ *   1. Extract eligible input pubkeys from the transaction inputs.
+ *   2. Sum them to get aggregate `A`.
+ *   3. Compute `input_hash = hashBIP0352/Inputs(outpoint_L || A)`.
+ *   4. Compute `ecdh = input_hash · b_scan · A`.
+ *   5. Derive candidate output keys `P_k = B_spend + t_k·G` and match against
+ *      the transaction's P2TR outputs.
+ *
+ * @param inputs    All transaction inputs.
+ * @param outputs   All transaction outputs.
+ * @param scanPrivKey  32-byte scan private key scalar (`b_scan`).
+ * @param spendPubKey  33-byte compressed spend public key (`B_spend`).
+ * @returns Discovered UTXOs owned by this receiver.
+ */
+export function scanSilentPaymentTransaction(
+  inputs: ScannableInput[],
+  outputs: ScannableOutput[],
+  scanPrivKey: Uint8Array,
+  spendPubKey: Uint8Array,
+): ScannedUtxo[] {
+  if (inputs.length === 0 || outputs.length === 0) return [];
+
+  // 1. Extract eligible pubkeys and compute aggregate A.
+  const eligiblePubkeys: Uint8Array[] = [];
+  for (const input of inputs) {
+    const eligible = extractEligibleInputPubKey(
+      input.scriptPubKeyHex,
+      input.scriptSigHex,
+      input.witness,
+    );
+    if (eligible) {
+      eligiblePubkeys.push(eligible.pubkey);
+    }
+  }
+  if (eligiblePubkeys.length === 0) return [];
+
+  let A: InstanceType<typeof Point> | null = null;
+  for (const pk of eligiblePubkeys) {
+    const P = pointFromBytes(pk);
+    A = A ? A.add(P) : P;
+  }
+  if (!A) return [];
+
+  // Defensive: if the aggregate eligible pubkey is the point at infinity,
+  // BIP-352 says this transaction cannot produce a valid shared secret.
+  const Aaff = A.toAffine();
+  if (Aaff.x === 0n && Aaff.y === 0n) return [];
+
+  // 2. Find lex-smallest outpoint among ALL inputs.
+  let smallest: Uint8Array | null = null;
+  for (const input of inputs) {
+    const ser = serializeOutpoint(input.txid, input.vout);
+    if (smallest === null || compareBytes(ser, smallest) < 0) {
+      smallest = ser;
+    }
+  }
+  if (!smallest) return [];
+
+  // 3. Compute input_hash.
+  const aPub = A.toBytes(true);
+  const inputHash = taggedHash('BIP0352/Inputs', concatBytes(smallest, aPub));
+  const inputHashScalar = bytesToScalar(inputHash);
+  if (inputHashScalar === 0n || inputHashScalar >= SECP_N) return [];
+
+  const scanScalar = bytesToScalar(scanPrivKey);
+  if (scanScalar === 0n || scanScalar >= SECP_N) {
+    throw new Error('Invalid scan private key.');
+  }
+
+  // 4. Compute ecdh = input_hash · b_scan · A.
+  const combinedScalar = (inputHashScalar * scanScalar) % SECP_N;
+  if (combinedScalar === 0n) return [];
+  const ecdh = A.multiply(combinedScalar).toBytes(true);
+
+  // 5. Collect P2TR outputs as x-only pubkeys.
+  const remaining = new Map<number, ScannableOutput>();
+  const outputXOnlys = new Map<number, Uint8Array>();
+  for (let i = 0; i < outputs.length; i++) {
+    const spk = hexToBytes(outputs[i].scriptPubKeyHex);
+    if (spk.length === 34 && spk[0] === 0x51 && spk[1] === 0x20) {
+      remaining.set(i, outputs[i]);
+      outputXOnlys.set(i, spk.subarray(2, 34));
+    }
+  }
+  if (remaining.size === 0) return [];
+
+  const spendPoint = pointFromBytes(spendPubKey);
+  const found: ScannedUtxo[] = [];
+  let k = 0;
+  const MAX_K = 2323; // BIP-352 suggested upper bound for wallet scanning.
+
+  while (remaining.size > 0 && k < MAX_K) {
+    const tK = taggedHash('BIP0352/SharedSecret', concatBytes(ecdh, u32be(k)));
+    const tScalar = bytesToScalar(tK);
+    if (tScalar === 0n || tScalar >= SECP_N) {
+      k++;
+      continue;
+    }
+
+    const P = spendPoint.add(Point.BASE.multiply(tScalar));
+    const Paff = P.toAffine();
+    if (Paff.x === 0n && Paff.y === 0n) {
+      k++;
+      continue;
+    }
+    const Pbytes = P.toBytes(true);
+    const xonly = Pbytes.subarray(1, 33);
+
+    let matchedIndex: number | null = null;
+    for (const [idx, outXOnly] of outputXOnlys) {
+      if (equalBytes(xonly, outXOnly)) {
+        matchedIndex = idx;
+        break;
+      }
+    }
+
+    if (matchedIndex !== null) {
+      const out = remaining.get(matchedIndex);
+      if (out) {
+        found.push({ txid: out.txid, vout: out.vout, value: out.value, k });
+        remaining.delete(matchedIndex);
+        outputXOnlys.delete(matchedIndex);
+      }
+      k++;
+    } else {
+      break;
+    }
+  }
+
+  return found;
 }
 
 /** Encode an x-only key as a P2TR address using @scure/btc-signer. */

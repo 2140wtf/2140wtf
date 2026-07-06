@@ -6,7 +6,7 @@ import {
   type PetsInteraction,
 } from '@/pets/core/lib/pets-interaction';
 
-export type BattleMode = 'demo-sats' | 'btc-sats';
+export type BattleMode = 'demo-sats' | 'btc-sats' | 'real-sats';
 
 export interface PetsBattleInteraction extends PetsInteraction {
   action: 'battle';

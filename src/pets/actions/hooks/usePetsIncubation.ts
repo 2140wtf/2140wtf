@@ -159,74 +159,80 @@ export function useStartIncubation({
         }]);
         
         if (otherEvent) {
-          // Get name from the event for the result
-          const nameTag = otherEvent.tags.find(t => t[0] === 'name');
-          stoppedOtherName = nameTag?.[1] ?? stopOtherD;
-          
-          // Stop the other Pets's incubation
-          const now = Math.floor(Date.now() / 1000);
-          const nowStr = now.toString();
-          
-          // Parse stats from the event (defensive: malformed tag values fall back to defaults)
-          const getNumericTag = (tags: string[][], name: string, fallback = 50): number => {
-            const raw = tags.find(t => t[0] === name)?.[1];
-            if (!raw) return fallback;
-            const parsed = parseInt(raw, 10);
-            return Number.isNaN(parsed) ? fallback : parsed;
-          };
+          // Only stop the other pet if it is actually incubating.
+          const progressionTag = otherEvent.tags.find((t) => t[0] === 'progression_state');
+          const isIncubating = progressionTag?.[1] === 'incubating';
 
-          const otherStats = {
-            hunger: getNumericTag(otherEvent.tags, 'hunger'),
-            happiness: getNumericTag(otherEvent.tags, 'happiness'),
-            health: getNumericTag(otherEvent.tags, 'health'),
-            hygiene: getNumericTag(otherEvent.tags, 'hygiene'),
-            energy: getNumericTag(otherEvent.tags, 'energy'),
-          };
-          const otherLastDecayAt = getNumericTag(otherEvent.tags, 'last_decay_at', now);
-          
-          // Apply decay to the other Pets
-          const otherDecayResult = applyPetsDecay({
-            stage: 'egg',
-            state: 'active',
-            stats: otherStats,
-            lastDecayAt: otherLastDecayAt,
-            now,
-          });
-          
-          // Remove task tags and progression timing from the other Pets
-          const otherCleanedTags = otherEvent.tags.filter(tag => 
-            tag[0] !== 'task' && 
-            tag[0] !== 'task_completed' && 
-            tag[0] !== 'state_started_at' &&
-            tag[0] !== 'progression_started_at'
-          );
-          
-          const otherNewTags = updatePetsTags(otherCleanedTags, {
-            health: otherDecayResult.stats.health.toString(),
-            hygiene: otherDecayResult.stats.hygiene.toString(),
-            happiness: otherDecayResult.stats.happiness.toString(),
-            hunger: '100',
-            energy: '100',
-            progression_state: 'none',
-            last_interaction: nowStr,
-            last_decay_at: nowStr,
-          });
-          
-          // Clear evolution from the other Pets's content
-          const otherContent = serializeEvolutionContent(otherEvent.content, []);
+          if (isIncubating) {
+            // Get name from the event for the result
+            const nameTag = otherEvent.tags.find(t => t[0] === 'name');
+            stoppedOtherName = nameTag?.[1] ?? stopOtherD;
 
-          // Publish the stop event for the other Pets
-          const stopEvent = await publishEvent({
-            kind: KIND_PETS_STATE,
-            content: otherContent,
-            tags: otherNewTags,
-          });
-          
-          // Update the cache for the stopped Pets
-          updateCompanionEvent(stopEvent);
+            // Stop the other Pets's incubation
+            const now = Math.floor(Date.now() / 1000);
+            const nowStr = now.toString();
 
-          // Clear evolution session store for the stopped Pets
-          clearEvolutionFromStorage(user.pubkey, stopOtherD);
+            // Parse stats from the event (defensive: malformed tag values fall back to defaults)
+            const getNumericTag = (tags: string[][], name: string, fallback = 50): number => {
+              const raw = tags.find(t => t[0] === name)?.[1];
+              if (!raw) return fallback;
+              const parsed = parseInt(raw, 10);
+              return Number.isNaN(parsed) ? fallback : parsed;
+            };
+
+            const otherStats = {
+              hunger: getNumericTag(otherEvent.tags, 'hunger'),
+              happiness: getNumericTag(otherEvent.tags, 'happiness'),
+              health: getNumericTag(otherEvent.tags, 'health'),
+              hygiene: getNumericTag(otherEvent.tags, 'hygiene'),
+              energy: getNumericTag(otherEvent.tags, 'energy'),
+            };
+            const otherLastDecayAt = getNumericTag(otherEvent.tags, 'last_decay_at', now);
+
+            // Apply decay to the other Pets
+            const otherDecayResult = applyPetsDecay({
+              stage: 'egg',
+              state: 'active',
+              stats: otherStats,
+              lastDecayAt: otherLastDecayAt,
+              now,
+            });
+
+            // Remove task tags and progression timing from the other Pets
+            const otherCleanedTags = otherEvent.tags.filter(tag =>
+              tag[0] !== 'task' &&
+              tag[0] !== 'task_completed' &&
+              tag[0] !== 'state_started_at' &&
+              tag[0] !== 'progression_started_at'
+            );
+
+            const otherNewTags = updatePetsTags(otherCleanedTags, {
+              health: otherDecayResult.stats.health.toString(),
+              hygiene: otherDecayResult.stats.hygiene.toString(),
+              happiness: otherDecayResult.stats.happiness.toString(),
+              hunger: '100',
+              energy: '100',
+              progression_state: 'none',
+              last_interaction: nowStr,
+              last_decay_at: nowStr,
+            });
+
+            // Clear evolution from the other Pets's content
+            const otherContent = serializeEvolutionContent(otherEvent.content, []);
+
+            // Publish the stop event for the other Pets
+            const stopEvent = await publishEvent({
+              kind: KIND_PETS_STATE,
+              content: otherContent,
+              tags: otherNewTags,
+            });
+
+            // Update the cache for the stopped Pets
+            updateCompanionEvent(stopEvent);
+
+            // Clear evolution session store for the stopped Pets
+            clearEvolutionFromStorage(user.pubkey, stopOtherD);
+          }
         }
       }
 

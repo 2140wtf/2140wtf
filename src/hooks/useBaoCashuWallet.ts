@@ -8,7 +8,7 @@ import { useBaoCashuSeed } from '@/hooks/useBaoCashuSeed';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
 import { deriveBaoWalletKey } from '@/lib/cashu/cashu';
-import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
+import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
 import { devLog } from '@/lib/cashu/devLog';
 import { syncCashuState, restoreCashuState as fetchCashuBackup } from '@/lib/cashu/cashuBackup';
 import type { CashuBackupPayload } from '@/lib/cashu/cashuBackup';
@@ -24,6 +24,8 @@ export interface BaoCashuWalletUser {
 export interface UseBaoCashuWalletOptions {
   /** Whether to auto-claim the one-time BAO demo faucet grant for new seeds. Default true. */
   enableAutoClaim?: boolean;
+  /** When false the BAO wallet stays idle. Defaults to true. */
+  enabled?: boolean;
 }
 
 /**
@@ -39,11 +41,11 @@ export function useBaoCashuWallet(
   relayUrls: string[],
   options: UseBaoCashuWalletOptions = {},
 ) {
-  const { enableAutoClaim = true } = options;
+  const { enableAutoClaim = true, enabled } = options;
   const { config } = useAppContext();
   const currentUser = useCurrentUser().user;
   const nip60Sync = useNip60Sync();
-  const { seedPhrase: baoSeedPhrase, isNew: isNewBaoSeed } = useBaoCashuSeed(userSeedPhrase);
+  const { seedPhrase: baoSeedPhrase } = useBaoCashuSeed(userSeedPhrase);
 
   const defaultMints = useMemo(() => {
     const url = config.baoSignetMintUrl?.trim();
@@ -51,18 +53,24 @@ export function useBaoCashuWallet(
     return [{ name: 'BAO Signet Mint', url }];
   }, [config.baoSignetMintUrl]);
 
+  // Use a per-pubkey DPCS backup d-tag so different identities never share BAO backup state.
+  const backupDTag = useMemo(() => {
+    if (user?.pubkey) return `freedomid:cashu:bao:${user.pubkey}`;
+    return BAO_BACKUP_D_TAG;
+  }, [user?.pubkey]);
+
   const backupCashuState = useCallback(
     async (payload: CashuBackupPayload): Promise<string | null> => {
-      return syncCashuState(payload, user, relayUrls, BAO_BACKUP_D_TAG);
+      return syncCashuState(payload, user, relayUrls, backupDTag);
     },
-    [user, relayUrls],
+    [user, relayUrls, backupDTag],
   );
 
   const restoreCashuState = useCallback(
     async (): Promise<CashuBackupPayload | null> => {
-      return fetchCashuBackup(user, relayUrls, BAO_BACKUP_D_TAG);
+      return fetchCashuBackup(user, relayUrls, backupDTag);
     },
-    [user, relayUrls],
+    [user, relayUrls, backupDTag],
   );
 
   const wallet = useCashuWallet(baoSeedPhrase, {
@@ -73,34 +81,61 @@ export function useBaoCashuWallet(
     deriveWalletKey: deriveBaoWalletKey,
     walletLabel: 'BAO Demo',
     publishWalletConfig: false,
+    storageNamespace: 'freedomid_bao_',
+    enabled,
   });
 
-  // Auto-claim the one-time BAO demo faucet grant for new users.
+  // Auto-claim a small daily BAO demo faucet grant. The faucet enforces its own
+  // 24h rolling cap; we throttle clients locally using the same window so we do
+  // not hammer the endpoint. Existing BAO tokens are fetched from relays via the
+  // DPCS restore path in useCashuWallet.
   const walletRef = useRef(wallet);
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
   useEffect(() => {
-    if (!enableAutoClaim) return;
+    if (!enabled || !enableAutoClaim) return;
     const pubkey = currentUser?.pubkey;
     const faucetUrl = config.baoSignetFaucetUrl?.trim();
-    if (!isNewBaoSeed || !pubkey || !faucetUrl || !baoSeedPhrase) return;
-    const guardKey = `bao_faucet_claimed_${pubkey}`;
+    if (!pubkey || !faucetUrl || !baoSeedPhrase) return;
+
+    const guardKey = `bao_faucet_last_claim_${pubkey}`;
+    let lastClaim: { claimedAt: number; resetsAt?: number } | null = null;
     try {
-      if (localStorage.getItem(guardKey)) return;
-      localStorage.setItem(guardKey, 'true');
+      const raw = localStorage.getItem(guardKey);
+      lastClaim = raw ? (JSON.parse(raw) as { claimedAt: number; resetsAt?: number }) : null;
     } catch {
-      return;
+      lastClaim = null;
     }
+
+    const now = Date.now();
+    const canClaim =
+      !lastClaim ||
+      now >=
+        (lastClaim.resetsAt && lastClaim.resetsAt > 0
+          ? lastClaim.resetsAt * 1000
+          : lastClaim.claimedAt + 24 * 60 * 60 * 1000);
+    if (!canClaim) return;
+
     const npub = nip19.npubEncode(pubkey);
-    claimBaoSignetFaucet(faucetUrl, { npub, amount: 2_140 })
-      .then((res) => {
+    const amount = clampBaoFaucetAmount(2_140);
+    claimBaoSignetFaucet(faucetUrl, { npub, amount })
+      .then(async (res) => {
+        if (isBaoFaucetDailyExhausted(res)) return;
         if (res?.token) {
-          void walletRef.current.receiveToken(res.token.trim());
+          await walletRef.current.receiveToken(res.token.trim());
+          try {
+            localStorage.setItem(
+              guardKey,
+              JSON.stringify({ claimedAt: Date.now(), resetsAt: res.resetsAt }),
+            );
+          } catch {
+            // ignore storage errors
+          }
         }
       })
       .catch((e) => {
         devLog.error('BAO auto-faucet failed:', e);
       });
-  }, [enableAutoClaim, isNewBaoSeed, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
+  }, [enabled, enableAutoClaim, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
 
   return wallet;
 }

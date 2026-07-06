@@ -5,7 +5,7 @@ import { hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { pubSchnorr, taprootTweakPrivKey } from '@scure/btc-signer/utils.js';
 
-import { signPsbtLocal } from '@/lib/bitcoin';
+import { signPsbtLocal, signPsbtLocalHd } from '@/lib/bitcoin';
 import {
   encodePsbtV2,
   extractTxFromSignedPsbtV2,
@@ -23,6 +23,19 @@ import {
   type SilentPaymentRecipient,
 } from '@/lib/silentPayments';
 import { generateDLEQProof } from '@/lib/dleq';
+import { bitcoinWalletNodeFromNsec } from '@/lib/hdWallet';
+
+/**
+ * Cheap sniff: does the hex string contain at least one `PSBT_IN_TAP_BIP32_DERIVATION`
+ * row? Used to route legacy single-key PSBTs to `signPsbtLocal` and HD PSBTs to
+ * `signPsbtLocalHd`. A full parse follows only when the cheap check matches.
+ */
+function hasTapBip32Derivation(psbtHex: string): boolean {
+  // Look for the input-level tapBip32Derivation key prefix.
+  // @scure/btc-signer uses keytype 0x16 for tapBip32Derivation, with a
+  // 32-byte x-only pubkey as the keydata => key length 0x21.
+  return /2116/i.test(psbtHex);
+}
 
 // ---------------------------------------------------------------------------
 // BtcSigner interface
@@ -75,33 +88,51 @@ export class NSecSignerBtc extends NSecSigner implements BtcSigner {
   }
 
   async signPsbt(psbtHex: string): Promise<string> {
-    const privateKeyHex = hex.encode(this.#secretKeyBytes);
-
-    // Fast path: regular PSBT v0 — just sign and return.
-    if (!hasBip375SpOutputs(psbtHex)) {
-      return signPsbtLocal(psbtHex, privateKeyHex);
+    // BIP-375 silent payment path first — it resolves SP outputs to concrete
+    // P2TR scripts before signing.
+    if (hasBip375SpOutputs(psbtHex)) {
+      return signBip375PsbtV2Locally(psbtHex, hex.encode(this.#secretKeyBytes), this.#secretKeyBytes);
     }
 
-    // BIP-375 path: resolve SP outputs to P2TR, build a PSBT v0, sign it,
-    // and re-emit a finalized PSBT v2 so the caller's `extractTxFromSignedPsbtV2`
-    // produces the correct transaction (same outputs, same inputs, same
-    // amounts — just with the previously-blank SP scriptPubKeys filled in).
-    return signBip375PsbtV2Locally(psbtHex, privateKeyHex, this.#secretKeyBytes);
+    // HD wallet path: inputs carry tapBip32Derivation metadata. Derive the
+    // account node from the nsec and sign each input with its per-address key.
+    if (hasTapBip32Derivation(psbtHex)) {
+      const accountNode = bitcoinWalletNodeFromNsec(this.#secretKeyBytes);
+      return signPsbtLocalHd(psbtHex, accountNode, this.#secretKeyBytes);
+    }
+
+    // Legacy single-key path: every input shares the Nostr-derived Taproot key.
+    return signPsbtLocal(psbtHex, hex.encode(this.#secretKeyBytes));
   }
 }
 
 /**
  * Cheap sniff: does the hex string contain at least one `PSBT_OUT_SP_V0_INFO`
  * row? Used to decide whether to take the BIP-375 fast path. A full parse
- * follows only when the cheap check matches.
+ * follows only when the cheap version check matches, keeping us off the parser
+ * hot path for the common PSBT v0 case.
  */
 function hasBip375SpOutputs(psbtHex: string): boolean {
   // PSBT v2 only — peek at the version global. We look for the byte pattern
   // `0x01 0xfb 0x04 0x02 0x00 0x00 0x00` (key-len=1, keytype=0xfb VERSION,
-  // val-len=4, value=2) and the `PSBT_OUT_SP_V0_INFO` key prefix
-  // (`0x01 0x09`). Both heuristics keep us off the parser hot path for the
-  // common PSBT v0 case.
-  return /01fb0402000000/i.test(psbtHex) && /(?:^|[0-9a-f])0109/i.test(psbtHex);
+  // val-len=4, value=2). If this isn't a v2 PSBT we can skip BIP-375 entirely.
+  if (!/01fb0402000000/i.test(psbtHex)) return false;
+
+  // Hardened check: parse the v2 PSBT and look for an output-level unknown
+  // field with keytype 0x09 (PSBT_OUT_SP_V0_INFO) and the exact 67-byte value
+  // shape (1 version + 33 scan pubkey + 33 spend pubkey). This avoids false
+  // positives where the byte sequence `0109` happened to appear inside unrelated
+  // PSBT data.
+  try {
+    const psbt = parsePsbtV2(psbtHex);
+    return psbt.outputs.some((out) =>
+      out.unknown.some(
+        (u) => u.keyType === 0x09 && u.keyData.length === 0 && u.value.length === 67,
+      ),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

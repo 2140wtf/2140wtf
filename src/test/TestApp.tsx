@@ -124,7 +124,8 @@ export function TestApp({ children }: TestAppProps) {
     sidebarWidgetsVersion: 1,
     maxCachedEventAge: 604800,
     baoSignetMintUrl: 'https://relay.bao.network/cashu',
-    baoSignetFaucetUrl: 'https://relay.bao.network/faucet',
+    baoSignetFaucetUrl: 'https://relay.bao.network/faucet/',
+    bip352ScanConcurrency: 8,
   };
 
   return (
