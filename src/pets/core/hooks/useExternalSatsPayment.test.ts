@@ -7,10 +7,13 @@ import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWalle
 type MockExternalWallet = Partial<CashuWalletState & CashuWalletActions>;
 
 function mockWallet(overrides: MockExternalWallet = {}): CashuWalletState & CashuWalletActions {
+  const mintUrl = overrides.mintUrl ?? 'https://mock.mint';
   return {
     totalBalance: 0,
     loading: false,
     sendToken: vi.fn(),
+    mintUrl,
+    balances: { [mintUrl]: overrides.totalBalance ?? 0 },
     ...overrides,
   } as unknown as CashuWalletState & CashuWalletActions;
 }
@@ -30,7 +33,7 @@ describe('useExternalSatsPayment', () => {
     const wallet = mockWallet({ totalBalance: 50 });
     const { result } = renderHook(() => useExternalSatsPayment(wallet));
 
-    await expect(result.current.paySats(100)).rejects.toThrow('Insufficient external wallet balance');
+    await expect(result.current.paySats(100)).rejects.toThrow('Insufficient balance on the selected mint');
   });
 
   it('throws when sendToken returns null', async () => {
@@ -56,6 +59,6 @@ describe('paySatsWithWallet', () => {
 
   it('throws on insufficient balance', async () => {
     const wallet = mockWallet({ totalBalance: 10 });
-    await expect(paySatsWithWallet(wallet, 100)).rejects.toThrow('Insufficient external wallet balance');
+    await expect(paySatsWithWallet(wallet, 100)).rejects.toThrow('Insufficient balance on the selected mint');
   });
 });
