@@ -6,7 +6,7 @@ export interface BattleResultOverlayProps {
   winner: BattlePlayerIndex | null;
   fighterNames: [string, string];
   prizeAmount: number;
-  mode: 'demo-sats' | 'btc-sats';
+  mode: 'demo-sats' | 'btc-sats' | 'real-sats';
   isPayoutPending: boolean;
   onRematch: () => void;
   onExit: () => void;
@@ -23,6 +23,12 @@ export function BattleResultOverlay({
 }: BattleResultOverlayProps) {
   const winnerName = winner === null ? 'Draw' : fighterNames[winner];
 
+  const prizeLabel = (() => {
+    if (mode === 'real-sats') return `${prizeAmount * 2} real sats`;
+    if (mode === 'btc-sats') return `${prizeAmount} BAO sats`;
+    return `${prizeAmount} demo sats`;
+  })();
+
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-background p-6 text-center shadow-2xl">
@@ -38,7 +44,7 @@ export function BattleResultOverlay({
           <p className="mt-2 text-muted-foreground">
             {mode === 'btc-sats'
               ? 'Real sats payout is coming soon.'
-              : `+${prizeAmount} demo sats awarded to the winner.`}
+              : `+${prizeLabel} awarded to the winner.`}
           </p>
         )}
 

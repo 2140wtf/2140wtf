@@ -1,4 +1,5 @@
 import type { NostrEvent, NostrFilter, NPool } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import type { NIndexedDB } from '@nostrify/indexeddb';
 
@@ -68,7 +69,16 @@ export async function fetchFreshEvent(
       )
     : null;
 
+  function isTrusted(event: NostrEvent): boolean {
+    if (!verifyEvent(event)) return false;
+    if (filter.authors?.length && !filter.authors.includes(event.pubkey)) return false;
+    return true;
+  }
+
   if (!store) {
+    if (relayEvent && !isTrusted(relayEvent)) {
+      throw new Error('Fetched event has an invalid signature or unexpected author.');
+    }
     return relayEvent;
   }
 
@@ -76,7 +86,12 @@ export async function fetchFreshEvent(
   // a list older than the one we already have.
   const [cached] = await store.query([filter]);
 
-  if (!relayEvent) return cached ?? null;
-  if (!cached) return relayEvent;
+  if (!relayEvent) return cached && isTrusted(cached) ? cached : null;
+  if (!isTrusted(relayEvent)) {
+    // A forged relay event is rejected outright; still allow a trusted cached
+    // floor if one exists.
+    return cached && isTrusted(cached) ? cached : null;
+  }
+  if (!cached || !isTrusted(cached)) return relayEvent;
   return cached.created_at > relayEvent.created_at ? cached : relayEvent;
 }

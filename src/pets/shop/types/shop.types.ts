@@ -49,4 +49,6 @@ export interface PurchaseRequest {
   itemId: string;
   price: number;    // Single item price (for validation)
   quantity: number; // Number of items to purchase
+  /** Preferred currency. When omitted the hook falls back to legacy behavior. */
+  currency?: 'fiat' | 'sats';
 }

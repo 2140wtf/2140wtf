@@ -31,8 +31,8 @@ export const HIT_KNOCKBACK_X = 90;
 export const HIT_KNOCKBACK_Y = 60;
 
 export const DEFAULT_ROUND_DURATION_SECONDS = 60;
-// Tuned to the ~500-sat shop economy: a win covers several staples.
-export const DEFAULT_PRIZE_SATS = 500;
+// Tuned to the ~50-sat shop economy: a win covers several staples.
+export const DEFAULT_PRIZE_SATS = 50;
 export const COUNTDOWN_SECONDS = 3;
 
 export const KEYBOARD_CONTROLS = {

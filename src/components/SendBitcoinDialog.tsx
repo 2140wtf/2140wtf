@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import {
   AlertTriangle,
@@ -38,6 +39,7 @@ import { cn } from '@/lib/utils';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
+import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
@@ -55,18 +57,22 @@ import {
   fetchUTXOs,
   getFeeRates,
   buildUnsignedPsbt,
+  buildUnsignedPsbtHd,
   buildUnsignedSilentPaymentPsbt,
   finalizePsbt,
   broadcastTransaction,
   estimateFee,
   satsToUSD,
+  btcToSats,
   isLargeAmount,
   looksLikeSilentPaymentAddress,
   parseBitcoinUri,
   validateSilentPaymentAddress,
   MAX_FEE_RATE_SATS_PER_VB,
   type FeeRates,
+  type UTXO,
 } from '@/lib/bitcoin';
+import { selectUtxos, type HdUtxo } from '@/lib/hdWallet';
 import { extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
 
 // ---------------------------------------------------------------------------
@@ -186,6 +192,10 @@ interface SendResult {
   recipientPubkey?: string;
   /** Bitcoin network fee in satoshis. */
   fee: number;
+  /** The published kind 8333 zap receipt, if zaps were enabled and publishing succeeded. */
+  event?: NostrEvent;
+  /** True when the user has disabled zap receipt publishing in settings. */
+  zapsDisabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +217,7 @@ interface SendResult {
  */
 export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: SendBitcoinDialogProps) {
   const { user } = useCurrentUser();
-  const { canSignPsbt, signPsbt } = useBitcoinSigner();
+  const { canAttemptPsbt, canSignPsbt, signPsbt } = useBitcoinSigner();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
   const { isEnabled } = usePublishPreferences();
@@ -218,6 +228,10 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
   // ── Form state ───────────────────────────────────────────────
   const [recipient, setRecipient] = useState<ResolvedRecipient | null>(null);
   const [usdAmount, setUsdAmount] = useState<number | string>(5);
+  // When a BIP-21 URI carries an exact satoshi amount, we store it here and
+  // use it as the canonical send amount until the user edits the field. This
+  // avoids lossy USD↔sats round-trips that can shift the amount by a few sats.
+  const [uriAmountSats, setUriAmountSats] = useState<number | null>(null);
   const [feeSpeed, setFeeSpeed] = useState<FeeSpeed>('halfHour');
   /** Raw text for the custom sat/vB rate input (only used when feeSpeed === 'custom'). */
   const [customFeeRate, setCustomFeeRate] = useState('');
@@ -289,10 +303,9 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     initialUriHandled.current = true;
   }, [isOpen, initialUri]);
 
-  // Apply the pending amount once `btcPrice` is available. The form stores
-  // a USD value; we round to cents for a clean display, but the actual send
-  // amount comes from `amountSats` recomputed from the USD value, so tiny
-  // rounding differences (< $0.005) get smoothed out at send time.
+  // Apply the pending amount once `btcPrice` is available. We keep the exact
+  // satoshi amount from the URI as the canonical send amount until the user
+  // edits the field, avoiding lossy USD↔sats round-trips.
   useEffect(() => {
     if (!isOpen) return;
     const sats = pendingAmountSats.current;
@@ -301,20 +314,40 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     const usd = (sats / 100_000_000) * btcPrice;
     if (Number.isFinite(usd) && usd > 0) {
       setUsdAmount(Math.round(usd * 100) / 100);
+      setUriAmountSats(sats);
     }
     pendingAmountSats.current = null;
   }, [isOpen, btcPrice]);
 
   const senderAddress = user ? nostrPubkeyToBitcoinAddress(user.pubkey) : '';
+  const { bitcoinAddress, hd: hdWallet } = useBitcoinWallet();
+  const isHd = hdWallet?.accountNode != null;
 
   // ── Data fetching ────────────────────────────────────────────
 
-  const { data: utxos } = useQuery({
+  // For nsec logins we use the HD wallet's scanned UTXOs. For extension/
+  // bunker logins we fall back to the legacy single-address UTXO set because
+  // those signers can only sign inputs whose tapInternalKey matches the Nostr
+  // pubkey.
+  const legacyUtxosQuery = useQuery({
     queryKey: ['bitcoin-utxos', esploraApis, senderAddress],
     queryFn: ({ signal }) => fetchUTXOs(senderAddress, esploraApis, signal),
-    enabled: !!senderAddress && isOpen && canSignPsbt,
+    enabled: !!senderAddress && isOpen && canAttemptPsbt && !isHd,
     staleTime: 30_000,
   });
+
+  const hdUtxos: HdUtxo[] = useMemo(() => hdWallet?.utxos ?? [], [hdWallet?.utxos]);
+  const legacyUtxos: UTXO[] = useMemo(() => legacyUtxosQuery.data ?? [], [legacyUtxosQuery.data]);
+  const utxos: (HdUtxo | UTXO)[] = isHd ? hdUtxos : legacyUtxos;
+
+  // Silent-payment sends currently consume the legacy single-address UTXO set
+  // (the SP builder is not yet HD-aware), so balances/fee estimates for SP must
+  // be computed against legacy UTXOs even for HD users.
+  const isSpRecipient = recipient?.kind === 'sp';
+  const spUtxos: UTXO[] = useMemo(
+    () => (isSpRecipient ? (isHd ? (hdWallet?.legacyUtxos ?? []) : legacyUtxos) : []),
+    [isSpRecipient, isHd, hdWallet?.legacyUtxos, legacyUtxos],
+  );
 
   const {
     data: feeRates,
@@ -324,11 +357,15 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
   } = useQuery({
     queryKey: ['bitcoin-fee-rates', esploraApis],
     queryFn: ({ signal }) => getFeeRates(esploraApis, signal),
-    enabled: isOpen && canSignPsbt,
+    enabled: isOpen && canAttemptPsbt,
     staleTime: 30_000,
   });
 
-  const totalBalance = useMemo(() => utxos?.reduce((s, u) => s + u.value, 0) ?? 0, [utxos]);
+  const effectiveUtxos = isSpRecipient ? spUtxos : utxos;
+  const totalBalance = useMemo(
+    () => effectiveUtxos?.reduce((s, u) => s + u.value, 0) ?? 0,
+    [effectiveUtxos],
+  );
 
   const currentFeeRate = useMemo(
     () => resolveFeeRate(feeSpeed, feeRates, customFeeRate),
@@ -338,33 +375,44 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
   // ── USD → sats conversion ────────────────────────────────────
 
   const amountSats = useMemo(() => {
+    if (uriAmountSats != null) return uriAmountSats;
     if (!btcPrice) return 0;
     const usd = typeof usdAmount === 'string' ? parseFloat(usdAmount) : usdAmount;
     if (!Number.isFinite(usd) || usd <= 0) return 0;
     const btc = usd / btcPrice;
-    return Math.round(btc * 100_000_000);
-  }, [usdAmount, btcPrice]);
+    return btcToSats(btc);
+  }, [usdAmount, btcPrice, uriAmountSats]);
 
-  const estimatedFeeSats = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || !amountSats) return 0;
-    // Estimate with 2 outputs first, then check whether change would be dust
-    const fee2 = estimateFee(utxos.length, 2, currentFeeRate);
+  // Select the inputs that will actually be spent. For HD this uses coin
+  // selection (no sweeping); for legacy it mirrors the old sweep behavior.
+  const selection = useMemo(() => {
+    if (!effectiveUtxos?.length || !currentFeeRate || amountSats <= 0) return null;
+    if (isHd && !isSpRecipient) {
+      try {
+        return selectUtxos(hdUtxos, amountSats, currentFeeRate, 1);
+      } catch {
+        return null;
+      }
+    }
+    const inputs = isSpRecipient ? spUtxos : legacyUtxos;
+    const fee2 = estimateFee(inputs.length, 2, currentFeeRate);
     const change = totalBalance - amountSats - fee2;
-    const numOutputs = change > 546 ? 2 : 1;
-    return estimateFee(utxos.length, numOutputs, currentFeeRate);
-  }, [utxos, currentFeeRate, amountSats, totalBalance]);
+    const numOutputs = change >= DUST_LIMIT_SATS ? 2 : 1;
+    const fee = estimateFee(inputs.length, numOutputs, currentFeeRate);
+    return {
+      selected: inputs,
+      fee,
+      change: Math.max(0, change),
+      numOutputs,
+    };
+  }, [effectiveUtxos, currentFeeRate, amountSats, isHd, isSpRecipient, totalBalance, hdUtxos, spUtxos, legacyUtxos]);
+
+  const estimatedFeeSats = selection?.fee ?? 0;
+  const changeAmount = selection?.change;
 
   const totalSats = amountSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
   const showBalance = insufficient || (amountSats > 0 && totalBalance === 0);
-
-  // Estimated change if we include a change output. Used both for the dust
-  // warning and for the full-balance sweep warning.
-  const changeAmount = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || amountSats <= 0 || totalBalance <= 0) return undefined;
-    const feeWithChange = estimateFee(utxos.length, 2, currentFeeRate);
-    return totalBalance - amountSats - feeWithChange;
-  }, [utxos, currentFeeRate, amountSats, totalBalance]);
 
   // Warn when the transaction will have no change output because the leftover
   // is below the dust limit. In that case the leftover sats become extra fee
@@ -389,10 +437,19 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     let target: PresetFeeSpeed = uniqueSpeeds[uniqueSpeeds.length - 1];
     for (const speed of uniqueSpeeds) {
       const rate = getRateForSpeed(feeRates, speed);
-      const fee2 = estimateFee(utxos.length, 2, rate);
-      const change = totalBalance - amountSats - fee2;
-      const outputs = change > 546 ? 2 : 1;
-      const fee = estimateFee(utxos.length, outputs, rate);
+      let fee: number;
+      if (isHd) {
+        try {
+          fee = selectUtxos(hdUtxos, amountSats, rate, 1).fee;
+        } catch {
+          continue;
+        }
+      } else {
+        const fee2 = estimateFee(utxos.length, 2, rate);
+        const change = totalBalance - amountSats - fee2;
+        const outputs = change >= DUST_LIMIT_SATS ? 2 : 1;
+        fee = estimateFee(utxos.length, outputs, rate);
+      }
       if (fee <= threshold) {
         target = speed;
         break;
@@ -400,7 +457,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     }
 
     setFeeSpeed((prev) => (prev === target ? prev : target));
-  }, [amountSats, feeRates, utxos, totalBalance]);
+  }, [amountSats, feeRates, utxos, totalBalance, isHd, hdUtxos]);
 
   const handleFeeSpeedChange = useCallback((speed: FeeSpeed) => {
     feeSpeedUserChanged.current = true;
@@ -474,7 +531,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       if (rate > MAX_FEE_RATE_SATS_PER_VB) {
         throw new Error(`Fee rate is unreasonably high (max ${MAX_FEE_RATE_SATS_PER_VB} sat/vB).`);
       }
-      if (recipient.kind === 'onchain' && recipient.address === senderAddress) {
+      if (recipient.kind === 'onchain' && (recipient.address === senderAddress || recipient.address === bitcoinAddress)) {
         throw new Error("You can't send to your own address.");
       }
       if (recipient.kind === 'onchain' && !validateBitcoinAddress(recipient.address)) {
@@ -488,11 +545,30 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
         // hand it to the signer (NIP-07 / NIP-46 / local nsec — all assumed
         // to understand BIP-375 PSBTs, per the wallet's signer contract),
         // and extract a finalized raw transaction from the response.
+        //
+        // For HD users the SP builder currently only understands the legacy
+        // single-address key, so restrict SP sends to legacy UTXOs until the
+        // builder is made HD-aware.
+        const spUtxos = isHd ? (hdWallet?.legacyUtxos ?? []) : utxos;
+        if (isHd && spUtxos.length === 0) {
+          throw new Error('Silent Payments currently require funds at your legacy address. Send a small on-chain transaction to your legacy address first, or use an on-chain send.');
+        }
         ({ psbtHex, fee } = buildUnsignedSilentPaymentPsbt(
           user.pubkey,
           recipient.address,
           amountSats,
-          utxos,
+          spUtxos as UTXO[],
+          rate,
+        ));
+      } else if (isHd && hdWallet?.accountNode && hdWallet?.changeAddress) {
+        // HD wallet path: coin-select only the UTXOs we need and send change
+        // to the next unused change address.
+        const { selected } = selectUtxos(hdUtxos, amountSats, rate, 1);
+        ({ psbtHex, fee } = buildUnsignedPsbtHd(
+          hdWallet.accountNode,
+          [{ address: recipient.address, amountSats }],
+          selected,
+          hdWallet.changeAddress,
           rate,
         ));
       } else {
@@ -520,8 +596,11 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       // When the recipient is a Nostr identity, publish a kind 8333 profile zap
       // attesting the send. Per NIP.md, omitting `e`/`a` targets the recipient's
       // profile (a tip to the pubkey, not a specific event).
+      let publishedEvent: NostrEvent | undefined;
+      let zapsDisabled = false;
       if (recipient.pubkey) {
         if (!isEnabled('zaps')) {
+          zapsDisabled = true;
           toast({
             title: 'Zaps publishing disabled',
             description: 'Turn on “Zaps” in Settings → Privacy & Publishing to publish zap receipts.',
@@ -529,7 +608,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
         } else {
           setProgress('publishing');
           try {
-            await publishEvent({
+            publishedEvent = await publishEvent({
               kind: 8333,
               content: '',
               tags: [
@@ -553,25 +632,34 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
         amountSats,
         recipientPubkey: recipient.pubkey,
         fee,
+        event: publishedEvent,
+        zapsDisabled,
       };    },
     onSuccess: (result) => {
       notificationSuccess();
       setSuccess(result);
       // Invalidate caches that track balances / zaps
-      queryClient.invalidateQueries({ queryKey: ['bitcoin-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-utxos'] });
+      queryClient.invalidateQueries({ queryKey: ['hd-wallet-scan'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-balance'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-txs'] });
       if (result.recipientPubkey) {
         queryClient.invalidateQueries({ queryKey: ['onchain-zaps'] });
+      }
+      if (result.recipientPubkey && !result.event && !result.zapsDisabled) {
+        toast({
+          title: 'Zap receipt not published',
+          description: 'Bitcoin was sent, but the Nostr zap receipt could not be published.',
+          variant: 'destructive',
+        });
       }
     },
     onError: (err) => {
       // A send error can be caused by stale UTXO/balance data (e.g. the
       // displayed balance no longer reflects spendable outputs). Invalidate
       // the wallet caches so the next render shows the real state.
-      queryClient.invalidateQueries({ queryKey: ['bitcoin-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-utxos'] });
+      queryClient.invalidateQueries({ queryKey: ['hd-wallet-scan'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-balance'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-txs'] });
       toast({ title: 'Transaction failed', description: err.message, variant: 'destructive' });
@@ -603,7 +691,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       setError(`Fee rate is too high (max ${MAX_FEE_RATE_SATS_PER_VB} sat/vB).`);
       return;
     }
-    if (recipient.kind === 'onchain' && recipient.address === senderAddress) {
+    if (recipient.kind === 'onchain' && (recipient.address === senderAddress || recipient.address === bitcoinAddress)) {
       setError("You can't send to your own address.");
       return;
     }
@@ -619,13 +707,14 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
     } catch {
       // Toast handled in onError; nothing further to do here.
     }
-  }, [user, recipient, btcPrice, amountSats, utxos, currentFeeRate, feeSpeed, insufficient, requiresArm, confirmArmed, sendMutation, senderAddress]);
+  }, [user, recipient, btcPrice, amountSats, utxos, currentFeeRate, feeSpeed, insufficient, requiresArm, confirmArmed, sendMutation, senderAddress, bitcoinAddress]);
 
   // ── Reset on close ───────────────────────────────────────────
 
   const handleClose = useCallback(() => {
     setRecipient(null);
     setUsdAmount(5);
+    setUriAmountSats(null);
     setError('');
     setFeeSpeed('halfHour');
     setCustomFeeRate('');
@@ -721,7 +810,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
                       min={0}
                       step="0.01"
                       value={usdAmount}
-                      onChange={(e) => { setUsdAmount(e.target.value); setError(''); }}
+                      onChange={(e) => { setUsdAmount(e.target.value); setUriAmountSats(null); setError(''); }}
                       onBlur={commitAmountEdit}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') { e.preventDefault(); commitAmountEdit(); }
@@ -750,7 +839,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
               <ToggleGroup
                 type="single"
                 value={USD_PRESETS.includes(Number(usdAmount)) ? String(usdAmount) : ''}
-                onValueChange={(v) => { if (v) { setUsdAmount(Number(v)); setError(''); setEditingAmount(false); } }}
+                onValueChange={(v) => { if (v) { setUsdAmount(Number(v)); setUriAmountSats(null); setError(''); setEditingAmount(false); } }}
                 className="grid grid-cols-5 gap-1 w-full"
               >
                 {USD_PRESETS.map((v) => (
@@ -843,7 +932,7 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
                   || !recipient
                   || currentFeeRate < 1
                   || currentFeeRate > MAX_FEE_RATE_SATS_PER_VB
-                  || (recipient?.kind === 'onchain' && recipient?.address === senderAddress)
+                  || (recipient?.kind === 'onchain' && (recipient?.address === senderAddress || recipient?.address === bitcoinAddress))
                 }
                 variant={(insufficient || requiresArm) && !isPending ? 'destructive' : 'default'}
                 className="w-full"

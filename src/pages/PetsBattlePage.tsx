@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
-import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
@@ -28,29 +29,27 @@ import {
   DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
 } from '@/pets/battle/lib/constants';
+import { deriveBattleEscrowKeypair, requestEscrowRelease } from '@/pets/battle/lib/cashuEscrow';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
 
 export default function PetsBattlePage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
-  const { config } = useAppContext();
   const { updateProfileEvent } = useBlobbonautProfile();
 
-  const { seedPhrase: cashuSeedPhrase } = useCashuSeed();
-  const relayUrls = useMemo(
-    () =>
-      (config.relayMetadata?.relays ?? [])
-        .filter((r) => r.read !== false || r.write !== false)
-        .map((r) => r.url)
-        .filter(Boolean),
-    [config.relayMetadata?.relays],
-  );
-  const baoWallet = useBaoCashuWallet(
-    cashuSeedPhrase ?? '',
-    user ?? { pubkey: '', signer: {} as never },
-    relayUrls,
-  );
+  const { wallet: petsWallet, isTestnet } = usePetsWallet();
+  const { config } = useAppContext();
+  const { seedPhrase } = useCashuSeed();
+
+  const escrowKeypair = useMemo(() => {
+    if (!seedPhrase) return null;
+    try {
+      return deriveBattleEscrowKeypair(seedPhrase);
+    } catch {
+      return null;
+    }
+  }, [seedPhrase]);
 
   useSeoMeta({
     title: 'Battle Arena | 2140 Pets',
@@ -69,13 +68,13 @@ export default function PetsBattlePage() {
     roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
     isAiOpponent: false,
   });
-  const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats'>('demo-sats');
+  const [matchMode, setMatchMode] = useState<'demo-sats' | 'btc-sats' | 'real-sats'>('demo-sats');
   const [pendingPayout, setPendingPayout] = useState(false);
   const selectedPetsRef = useRef<{ pet1: PetsCompanion; pet2: PetsCompanion } | null>(null);
   const remote = useRemoteBattle();
 
   const { state, inputRef, startMatch, resetMatch, onFinishRef, applyHostSnapshot } = useBattleGame(matchOptions);
-  const payout = useBattlePayout(updateProfileEvent, baoWallet);
+  const payout = useBattlePayout(updateProfileEvent, petsWallet);
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
@@ -87,8 +86,9 @@ export default function PetsBattlePage() {
       if (winner === null || payout.isPending) return;
 
       // In remote matches the authoritative host announces the result.
+      let finishedEvent: NostrEvent | undefined;
       if (remoteRole === 'host') {
-        sendRemoteFinished(winner);
+        finishedEvent = await sendRemoteFinished(winner) ?? undefined;
       }
 
       // Only the local player gets a prize when they win. Host is P1 (index 0),
@@ -98,10 +98,46 @@ export default function PetsBattlePage() {
 
       setPendingPayout(true);
       try {
-        await payout.mutateAsync({
-          amount: matchOptions.prizeAmount,
-          mode: matchMode,
-        });
+        if (matchMode === 'real-sats') {
+          if (!escrowKeypair || !config.petsBattleEscrowServiceUrl || !config.petsBattleEscrowPubkey) {
+            toast({ title: 'Escrow not configured', description: 'Cannot claim real-sats prize.', variant: 'destructive' });
+            return;
+          }
+          const hostPubkey = remoteRole === 'host' ? escrowKeypair.pubkey : (remote.escrow.hostEscrowPubkey ?? '');
+          const guestPubkey = remoteRole === 'guest' ? escrowKeypair.pubkey : (remote.escrow.guestEscrowPubkey ?? '');
+          const release = await requestEscrowRelease({
+            serviceUrl: config.petsBattleEscrowServiceUrl,
+            battleId: remote.battleId ?? '',
+            winnerPubkey: escrowKeypair.pubkey,
+            hostPubkey,
+            guestPubkey,
+            hostDepositToken: remote.escrow.hostDepositToken ?? '',
+            guestDepositToken: remote.escrow.guestDepositToken ?? '',
+            finishedEvent: finishedEvent ? {
+              id: finishedEvent.id,
+              pubkey: finishedEvent.pubkey,
+              kind: finishedEvent.kind,
+              created_at: finishedEvent.created_at,
+              tags: finishedEvent.tags,
+              content: finishedEvent.content,
+              sig: finishedEvent.sig,
+            } : {},
+          });
+          if (release?.token && petsWallet && escrowKeypair) {
+            await petsWallet.receiveLockedToken(release.token, escrowKeypair.privkey);
+            toast({ title: 'Battle prize claimed!', description: `You received ${matchOptions.prizeAmount * 2} real sats.` });
+          } else {
+            toast({ title: 'Escrow release pending', description: 'The operator will release your prize shortly.', variant: 'default' });
+          }
+        } else {
+          await payout.mutateAsync({
+            amount: matchOptions.prizeAmount,
+            mode: matchMode,
+          });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Payout failed';
+        toast({ title: 'Payout failed', description: message, variant: 'destructive' });
       } finally {
         setPendingPayout(false);
       }
@@ -138,6 +174,15 @@ export default function PetsBattlePage() {
     toast,
     remoteRole,
     sendRemoteFinished,
+    escrowKeypair,
+    config.petsBattleEscrowServiceUrl,
+    config.petsBattleEscrowPubkey,
+    remote.battleId,
+    remote.escrow.hostEscrowPubkey,
+    remote.escrow.guestEscrowPubkey,
+    remote.escrow.hostDepositToken,
+    remote.escrow.guestDepositToken,
+    petsWallet,
   ]);
 
   const handleStart = (
@@ -174,7 +219,7 @@ export default function PetsBattlePage() {
       onGuestInput: remote.sendGuestInput,
       remoteP2InputRef: isHost ? remote.guestInputRef : undefined,
     });
-    setMatchMode('demo-sats');
+    setMatchMode(remote.escrow.mode === 'real-sats' ? 'real-sats' : 'demo-sats');
     startMatch(pet1, pet2);
   }, [
     remote.phase,
@@ -182,6 +227,7 @@ export default function PetsBattlePage() {
     remote.opponentPet,
     remote.role,
     remote.matchOptions,
+    remote.escrow.mode,
     remote.sendHostSnapshot,
     remote.sendGuestInput,
     remote.guestInputRef,
@@ -234,6 +280,7 @@ export default function PetsBattlePage() {
             <BattleSetup
               ownerPubkey={user.pubkey}
               onStart={handleStart}
+              allowBtcSats={isTestnet}
             />
             <BattleInvitePending />
           </>

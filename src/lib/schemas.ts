@@ -269,6 +269,10 @@ export const AppConfigSchema = z.object({
   baoSignetMintUrl: z.string().url().optional(),
   baoSignetFaucetUrl: z.string().url().optional(),
   baoApiUrl: z.string().url().optional(),
+  /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */
+  petsBattleEscrowPubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  /** Optional URL to request release of battle escrow funds to the winner. */
+  petsBattleEscrowServiceUrl: z.string().url().optional(),
   contentWarningPolicy: ContentWarningPolicySchema,
   sentryDsn: z.string(),
   sentryEnabled: z.boolean(),
@@ -294,6 +298,8 @@ export const AppConfigSchema = z.object({
   })).optional(),
   sidebarWidgetsVersion: z.number().int().nonnegative().optional(),
   maxCachedEventAge: z.number().int().nonnegative().optional(),
+  bip352IndexerUrl: z.string().url().optional(),
+  bip352ScanConcurrency: z.number().int().positive().optional(),
 });
 
 // ─── DittoConfigSchema (build-time ditto.json) ───────────────────────

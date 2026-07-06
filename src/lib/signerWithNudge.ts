@@ -340,6 +340,16 @@ export function signerWithNudge(
         decryptCache.delete(completed[i][0]);
       }
     }
+    // As a last resort, drop the oldest in-flight entries so a burst of
+    // concurrent decrypts cannot grow the cache without bound.
+    if (decryptCache.size > DECRYPT_CACHE_LIMIT) {
+      const inFlight = Array.from(decryptCache.entries())
+        .filter(([, p]) => p.resolvedAt === undefined);
+      const toDrop = decryptCache.size - DECRYPT_CACHE_LIMIT;
+      for (let i = 0; i < toDrop && i < inFlight.length; i++) {
+        decryptCache.delete(inFlight[i][0]);
+      }
+    }
   }
 
   function makeDecryptKey(algorithm: string, pubkey: string, ciphertext: string): string {
@@ -360,6 +370,8 @@ export function signerWithNudge(
       const key = makeDecryptKey(algorithm, pubkey, ciphertext);
       const cached = decryptCache.get(key);
       if (cached) return cached;
+
+      evictDecryptCache();
 
       const promise: DecryptPromise = crypto
         .decrypt(pubkey, ciphertext)

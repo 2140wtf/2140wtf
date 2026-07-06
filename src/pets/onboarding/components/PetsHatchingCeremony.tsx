@@ -36,10 +36,16 @@ import {
   buildBlobbonautTags,
   updateBlobbonautTags,
   updatePetsTags,
+  parsePetsEvent,
   type BlobbonautProfile,
   type PetsCompanion,
 } from '@/pets/core/lib/pets';
-import { useBaoPetStarterGrant } from '@/pets/core/hooks/useBaoPetStarterGrant';
+import { usePetsStarterGrant } from '@/pets/core/hooks/usePetsStarterGrant';
+import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
+import { serializeEvolutionContent } from '@/pets/core/lib/missions';
+import { createEvolveMissions } from '@/pets/actions/lib/evolution-missions';
+import { writeEvolutionToStorage } from '@/pets/actions/lib/daily-mission-tracker';
+import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
 
 import {
   generateEggPreview,
@@ -66,6 +72,7 @@ const NAMING_DIALOG = 'Every life deserves a name.\nWhat will you call this one?
 
 type CeremonyPhase =
   | 'loading'
+  | 'error'
   | 'egg'
   | 'crack_1'
   | 'crack_2'
@@ -81,8 +88,9 @@ type CeremonyPhase =
 // Tracks pubkeys that have already started setup in this browser session.
 const setupInFlightFor = new Set<string>();
 
-// Module-level guard: prevents duplicate BAO starter-grant claims for the same
-// egg if the component remounts. The BAO API still enforces the real cap.
+// Module-level guard: prevents duplicate starter-grant claims for the same
+// egg if the component remounts. The underlying grant handler still enforces
+// the real cap (BAO API for testnet, profile state for real mode).
 const starterGrantAttemptedFor = new Set<string>();
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -95,6 +103,8 @@ interface PetsHatchingCeremonyProps {
   invalidateCompanion: () => void;
   setStoredSelectedD: (d: string) => void;
   onComplete?: () => void;
+  /** If true, hatching is allowed. BAO testnet pets cannot mature. */
+  isRealWallet?: boolean;
   /** Breed category to constrain the newly created egg. */
   breedCategory?: PetsBreedCategory;
   /** If provided, skip egg creation and start from the cracking phase with this existing egg. */
@@ -116,13 +126,14 @@ export function PetsHatchingCeremony({
   breedCategory,
   existingCompanion,
   eggOnly = false,
+  isRealWallet = true,
 }: PetsHatchingCeremonyProps) {
   const isExistingEgg = !!existingCompanion;
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
-  const starterGrant = useBaoPetStarterGrant({ onProfileUpdate: updateProfileEvent });
+  const starterGrant = usePetsStarterGrant({ onProfileUpdate: updateProfileEvent });
 
   // ── Core state ──
   const [phase, setPhase] = useState<CeremonyPhase>('loading');
@@ -142,9 +153,29 @@ export function PetsHatchingCeremony({
   const [dialogActive, setDialogActive] = useState(false);
   const [namingVisible, setNamingVisible] = useState(false);
 
+  // Retry state: increments when the user presses Retry on the error screen.
+  const [retryCount, setRetryCount] = useState(0);
+
   // Refs
   const setupAttempted = useRef(false);
   const setupStarted = useRef(false);
+  const hatchTriggered = useRef(false);
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearAllTimeouts = useCallback(() => {
+    timeoutRefs.current.forEach(clearTimeout);
+    timeoutRefs.current = [];
+  }, []);
+  useEffect(() => () => clearAllTimeouts(), [clearAllTimeouts]);
+
+  const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timeoutRefs.current = timeoutRefs.current.filter((t) => t !== id);
+      fn();
+    }, ms);
+    timeoutRefs.current.push(id);
+    return id;
+  }, []);
+
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const previewRef = useRef(preview);
@@ -153,6 +184,13 @@ export function PetsHatchingCeremony({
   const eggContainerRef = useRef<HTMLDivElement>(null);
   const entrancePlayed = useRef(false);
   const eggTagsRef = useRef<string[][] | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
@@ -210,7 +248,7 @@ export function PetsHatchingCeremony({
     eggTagsRef.current = existingCompanion.allTags;
 
     setPhase('egg');
-    setTimeout(() => setEggVisible(true), 200);
+    scheduleTimeout(() => setEggVisible(true), 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExistingEgg, existingCompanion?.d]);
 
@@ -221,6 +259,11 @@ export function PetsHatchingCeremony({
     // a race where the component mounts before the picker state has propagated
     // and creates a random uncategorized egg.
     if (!breedCategory) return;
+    // On retry, reset the attempt guard so setup can run again.
+    if (retryCount > 0) {
+      setupAttempted.current = false;
+      if (user?.pubkey) setupInFlightFor.delete(user.pubkey);
+    }
     if (setupAttempted.current || !user?.pubkey) return;
     // Module-level guard: if another mount already started setup for this pubkey, skip
     if (setupInFlightFor.has(user.pubkey)) return;
@@ -234,11 +277,13 @@ export function PetsHatchingCeremony({
       setupStarted.current = true;
 
       try {
-        const currentProfile = profileRef.current;
-        let latestProfileTags: string[][] | null = currentProfile?.allTags ?? null;
+        // Re-read the latest profile from the ref before deciding whether to
+        // create one. The prop may have resolved while the initial timeout was
+        // pending.
+        const startingProfile = profileRef.current;
 
         // 1. Create profile if needed
-        if (!currentProfile) {
+        if (!startingProfile && !profileRef.current) {
           const suggestedName =
             authorData?.metadata?.name ||
             authorData?.metadata?.display_name ||
@@ -256,10 +301,10 @@ export function PetsHatchingCeremony({
             content: '',
             tags: tagsWithName,
           });
+          if (!mountedRef.current) return;
 
           updateProfileEvent(profileEvent);
           invalidateProfile();
-          latestProfileTags = tagsWithName;
         }
 
         // 2. Generate and publish egg
@@ -268,6 +313,7 @@ export function PetsHatchingCeremony({
           : generateEggPreview(user.pubkey, 'Egg');
         setPreview(eggPreview);
         previewRef.current = eggPreview;
+        if (!mountedRef.current) return;
 
         const eggTags = previewToEventTags(eggPreview);
         eggTagsRef.current = eggTags;
@@ -278,36 +324,38 @@ export function PetsHatchingCeremony({
           tags: eggTags,
           created_at: eggPreview.createdAt,
         });
+        if (!mountedRef.current) return;
 
         updateCompanionEvent(eggEvent);
 
-        // 3. Claim BAO starter sats for the new egg (best-effort; the BAO API
-        //    enforces the 21,400 sats / 24h cap). Never block hatching on this.
+        // 3. Award starter sats for the new egg (best-effort). In testnet mode
+        //    this claims from the BAO faucet; in real mode it credits fake
+        //    starter sats to the profile. Await it before writing the profile
+        //    `has[]` tag so the two profile updates are serialized and do not
+        //    overwrite each other.
         if (!starterGrantAttemptedFor.has(eggPreview.d)) {
           starterGrantAttemptedFor.add(eggPreview.d);
-          starterGrant.mutate(BAO_PET_STARTER_GRANT_SATS);
-        }
-
-        // 4. Update profile with has[] entry
-        if (latestProfileTags) {
-          // If profile already existed (not just created), fetch fresh from relays
-          // to avoid overwriting content with stale cache data
-          let baseTags = latestProfileTags;
-          let baseContent = '';
-          let prevEvent: NostrEvent | undefined;
-          
-          if (currentProfile) {
-            const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-            if (freshProfile) {
-              baseTags = freshProfile.allTags;
-              baseContent = freshProfile.event.content ?? '';
-              prevEvent = freshProfile.event;
-            } else {
-              baseContent = currentProfile.event.content ?? '';
-              prevEvent = currentProfile.event;
-            }
+          try {
+            await starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS);
+          } catch (grantError) {
+            // Grant failure must never block hatching.
+            console.warn('[HatchingCeremony] Starter grant failed:', grantError);
           }
-          
+        }
+        if (!mountedRef.current) return;
+
+        // 4. Update profile with has[] entry. Fetch fresh profile first because
+        //    the starter grant (or a concurrent update) may have changed it.
+        const profileBeforeHas = profileRef.current;
+        const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+        if (!mountedRef.current) return;
+
+        const baseProfile = freshProfile ?? profileBeforeHas;
+        if (baseProfile) {
+          const baseTags = baseProfile.allTags;
+          const baseContent = baseProfile.event.content ?? '';
+          const prevEvent = baseProfile.event;
+
           const existingHas = baseTags
             .filter(([k]) => k === 'has')
             .map(([, v]) => v);
@@ -323,6 +371,7 @@ export function PetsHatchingCeremony({
             tags: updatedTags,
             prev: prevEvent,
           });
+          if (!mountedRef.current) return;
 
           updateProfileEvent(updatedProfileEvent);
         }
@@ -332,23 +381,26 @@ export function PetsHatchingCeremony({
         invalidateCompanion();
 
         setPhase('egg');
-        setTimeout(() => setEggVisible(true), 200);
+        scheduleTimeout(() => setEggVisible(true), 200);
       } catch (error) {
         console.error('[HatchingCeremony] Setup failed:', error);
+        if (!mountedRef.current) return;
         toast({
           title: 'Something went wrong',
           description: 'Failed to set up your 2140 PET. Please try again.',
           variant: 'destructive',
         });
+        setPhase('error');
       } finally {
         // Clear module-level guard so future adoptions can create new eggs
         if (user?.pubkey) setupInFlightFor.delete(user.pubkey);
       }
     };
 
-    const timer = setTimeout(setup, 600);
+    const timer = scheduleTimeout(setup, 600);
     return () => {
       clearTimeout(timer);
+      timeoutRefs.current = timeoutRefs.current.filter((t) => t !== timer);
       // Only release the module-level guard if setup() never started.
       // If setup() already began, it owns the guard and will release it
       // in its own finally block when the async work completes.
@@ -357,7 +409,7 @@ export function PetsHatchingCeremony({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.pubkey, breedCategory]);
+  }, [user?.pubkey, breedCategory, retryCount]);
 
   useEffect(() => {
     if (profile) profileRef.current = profile;
@@ -368,12 +420,12 @@ export function PetsHatchingCeremony({
   // with a new inline callback reference.
   useEffect(() => {
     if (!eggOnly || !eggVisible) return;
-    const timer = setTimeout(() => {
+    const timer = scheduleTimeout(() => {
       setPhase('complete');
       onCompleteRef.current?.();
     }, 1500);
     return () => clearTimeout(timer);
-  }, [eggOnly, eggVisible]);
+  }, [eggOnly, eggVisible, scheduleTimeout]);
 
   // Play entrance animation once
   useEffect(() => {
@@ -404,40 +456,96 @@ export function PetsHatchingCeremony({
 
   // ── Execute the actual hatch: egg -> baby ──
   const executeHatch = useCallback(async () => {
+    if (!isRealWallet) {
+      toast({
+        title: 'Hatching unavailable',
+        description: 'BAO testnet pets cannot mature. Switch to real Cashu to hatch your 2140 PET.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const tags = eggTagsRef.current;
     if (!tags) return;
+    if (!user?.pubkey) return;
 
     const now = Math.floor(Date.now() / 1000);
     const nowStr = now.toString();
 
-    const babyTags = updatePetsTags(tags, {
+    // Build a synthetic event from the current egg tags so we can parse it into
+    // a companion, apply decay, validate tags, and seed evolution missions the
+    // same way the canonical usePetsHatch path does.
+    const syntheticEggEvent: NostrEvent = {
+      kind: KIND_PETS_STATE,
+      pubkey: user.pubkey,
+      created_at: now,
+      id: '',
+      sig: '',
+      content: '',
+      tags,
+    };
+
+    const eggCompanion = parsePetsEvent(syntheticEggEvent);
+    const streakUpdates = eggCompanion ? getStreakTagUpdates(eggCompanion) ?? {} : {};
+
+    // Hatching resets the baby to peak condition.
+    const babyStats = {
+      hunger: STAT_MAX,
+      happiness: STAT_MAX,
+      health: STAT_MAX,
+      hygiene: STAT_MAX,
+      energy: STAT_MAX,
+    };
+
+    const mergedTags = updatePetsTags(tags, {
       stage: 'baby',
       state: 'active',
-      progression_state: 'evolving',
-      progression_started_at: nowStr,
-      hunger: STAT_MAX.toString(),
-      happiness: STAT_MAX.toString(),
-      health: STAT_MAX.toString(),
-      hygiene: STAT_MAX.toString(),
-      energy: STAT_MAX.toString(),
+      hunger: babyStats.hunger.toString(),
+      happiness: babyStats.happiness.toString(),
+      health: babyStats.health.toString(),
+      hygiene: babyStats.hygiene.toString(),
+      energy: babyStats.energy.toString(),
+      ...streakUpdates,
       last_interaction: nowStr,
       last_decay_at: nowStr,
     });
 
-    const babyName = previewRef.current?.name ?? 'Egg';
+    // Validate and clean up task tags from the egg stage.
+    const repairResult = validateAndRepairPetsTags(mergedTags, tags, { cleanupTaskTags: true });
+    if (repairResult.errors.length > 0) {
+      console.error('[Hatch ceremony] Tag validation errors:', repairResult.errors);
+      throw new Error(`Tag validation failed: ${repairResult.errors.join(', ')}`);
+    }
+
+    // Auto-start evolution for the newly hatched baby.
+    const babyTags = updatePetsTags(repairResult.tags, {
+      progression_state: 'evolving',
+      progression_started_at: nowStr,
+    });
+
+    // Seed evolution missions into the 31124 content.
+    const evolveMissions = createEvolveMissions();
+    const content = serializeEvolutionContent(JSON.stringify({}), evolveMissions);
+
     const event = await publishEvent({
       kind: KIND_PETS_STATE,
-      content: `${babyName} is a baby Pets.`,
+      content,
       tags: babyTags,
     });
 
     eggTagsRef.current = babyTags;
     updateCompanionEvent(event);
     invalidateCompanion();
-  }, [publishEvent, updateCompanionEvent, invalidateCompanion]);
+
+    if (user?.pubkey) {
+      writeEvolutionToStorage(evolveMissions, user.pubkey, eggCompanion?.d ?? previewRef.current?.d ?? '');
+      window.dispatchEvent(new CustomEvent('daily-missions-updated', { detail: { evolution: true, d: eggCompanion?.d } }));
+    }
+  }, [publishEvent, updateCompanionEvent, invalidateCompanion, user?.pubkey, isRealWallet]);
 
   // ── Egg click ──
   const handleEggClick = useCallback(() => {
+    if (phase === 'hatching') return;
+
     if (phase === 'egg') {
       triggerShake('animate-egg-onboard-shake-light');
       impactLight();
@@ -451,32 +559,47 @@ export function PetsHatchingCeremony({
       impactHeavy();
       setPhase('crack_3');
     } else if (phase === 'crack_3') {
+      if (hatchTriggered.current) return;
+      hatchTriggered.current = true;
+
       // Final click -> hatch!
       notificationSuccess();
       setPhase('hatching');
       setShowFlash(true);
 
-      // Fire the actual hatch mutation
-      executeHatch().catch(console.error);
+      // Fire the actual hatch mutation and only reveal on success.
+      executeHatch()
+        .then(() => {
+          // After flash, reveal the baby
+          scheduleTimeout(() => {
+            setShowFlash(false);
+            setShowRevealGlow(true);
+            setPhase('reveal');
 
-      // After flash, reveal the baby
-      setTimeout(() => {
-        setShowFlash(false);
-        setShowRevealGlow(true);
-        setPhase('reveal');
+            // Fade in pets
+            scheduleTimeout(() => setPetsVisible(true), 400);
 
-        // Fade in pets
-        setTimeout(() => setPetsVisible(true), 400);
-
-        // After pets settles, start dialog
-        setTimeout(() => {
-          setPhase('dialog');
-          setDialogLineIndex(0);
-          setDialogActive(true);
-        }, 2200);
-      }, 1400);
+            // After pets settles, start dialog
+            scheduleTimeout(() => {
+              setPhase('dialog');
+              setDialogLineIndex(0);
+              setDialogActive(true);
+            }, 2200);
+          }, 1400);
+        })
+        .catch((err) => {
+          console.error('Hatch failed:', err);
+          hatchTriggered.current = false;
+          setShowFlash(false);
+          setPhase('crack_3');
+          toast({
+            title: 'Hatching failed',
+            description: err instanceof Error ? err.message : 'Could not hatch your pet. Please try again.',
+            variant: 'destructive',
+          });
+        });
     }
-  }, [phase, triggerShake, executeHatch]);
+  }, [phase, triggerShake, executeHatch, scheduleTimeout]);
 
   // ── Dialog click: complete line or advance ──
   const handleDialogClick = useCallback(() => {
@@ -494,58 +617,57 @@ export function PetsHatchingCeremony({
       setDialogActive(false);
       setDialogLineIndex(nextIndex);
       // Small pause before next line starts
-      setTimeout(() => setDialogActive(true), 150);
+      scheduleTimeout(() => setDialogActive(true), 150);
     } else {
       // All lines done -> naming
       setDialogActive(false);
-      setTimeout(() => {
+      scheduleTimeout(() => {
         setPhase('naming');
-        setTimeout(() => {
+        scheduleTimeout(() => {
           setNamingVisible(true);
-          setTimeout(() => nameInputRef.current?.focus(), 600);
+          scheduleTimeout(() => nameInputRef.current?.focus(), 600);
         }, 200);
       }, 400);
     }
-  }, [phase, dialogTypewriter, dialogLineIndex]);
+  }, [phase, dialogTypewriter, dialogLineIndex, scheduleTimeout]);
 
   // ── Complete ceremony ──
   const completeCeremony = useCallback(async (finalName: string) => {
-    try {
-      // Update egg/baby name if changed
-      const currentTags = eggTagsRef.current;
-      if (currentTags && finalName !== (previewRef.current?.name ?? 'Egg')) {
-        const namedTags = updatePetsTags(currentTags, { name: finalName });
-        const event = await publishEvent({
-          kind: KIND_PETS_STATE,
-          content: `${finalName} is a baby Pets.`,
-          tags: namedTags,
-        });
-        updateCompanionEvent(event);
-      }
-
-      // Mark onboarding done
-      const currentProfile = profileRef.current;
-      if (currentProfile && user?.pubkey) {
-        const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-        const baseEvent = freshProfile?.event ?? currentProfile.event;
-        
-        const updatedTags = updateBlobbonautTags(baseEvent.tags, {
-          pets_onboarding_done: 'true',
-        });
-        const profileEvent = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
-          content: baseEvent.content ?? '',
-          tags: updatedTags,
-          prev: baseEvent,
-        });
-        updateProfileEvent(profileEvent);
-      }
-
-      invalidateProfile();
-      invalidateCompanion();
-    } catch (error) {
-      console.error('[HatchingCeremony] Failed to persist completion:', error);
+    // Update egg/baby name if changed
+    const currentTags = eggTagsRef.current;
+    if (currentTags && finalName !== (previewRef.current?.name ?? 'Egg')) {
+      const namedTags = updatePetsTags(currentTags, { name: finalName });
+      const event = await publishEvent({
+        kind: KIND_PETS_STATE,
+        content: `${finalName} is a baby Pets.`,
+        tags: namedTags,
+      });
+      if (!mountedRef.current) return;
+      updateCompanionEvent(event);
     }
+
+    // Mark onboarding done
+    const currentProfile = profileRef.current;
+    if (currentProfile && user?.pubkey) {
+      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      if (!mountedRef.current) return;
+
+      const baseEvent = freshProfile?.event ?? currentProfile.event;
+      const updatedTags = updateBlobbonautTags(baseEvent.tags, {
+        pets_onboarding_done: 'true',
+      });
+      const profileEvent = await publishEvent({
+        kind: KIND_BLOBBONAUT_PROFILE,
+        content: baseEvent.content ?? '',
+        tags: updatedTags,
+        prev: baseEvent,
+      });
+      if (!mountedRef.current) return;
+      updateProfileEvent(profileEvent);
+    }
+
+    invalidateProfile();
+    invalidateCompanion();
   }, [nostr, user?.pubkey, publishEvent, updateCompanionEvent, updateProfileEvent, invalidateProfile, invalidateCompanion]);
 
   // ── Naming submit ──
@@ -557,9 +679,9 @@ export function PetsHatchingCeremony({
       await completeCeremony(name.trim());
       setNamingVisible(false);
       // Fade to white, then complete
-      setTimeout(() => {
+      scheduleTimeout(() => {
         setFadeOut(true);
-        setTimeout(() => {
+        scheduleTimeout(() => {
           setPhase('complete');
           onComplete?.();
         }, 2200);
@@ -568,18 +690,15 @@ export function PetsHatchingCeremony({
       console.error('[HatchingCeremony] Naming failed:', error);
       toast({
         title: 'Failed to save name',
-        description: 'Your 2140 PET was created, but the name could not be saved.',
+        description: error instanceof Error ? error.message : 'Your 2140 PET was created, but the name could not be saved. Please try again.',
         variant: 'destructive',
       });
-      setFadeOut(true);
-      setTimeout(() => {
-        setPhase('complete');
-        onComplete?.();
-      }, 2200);
+      // Keep the naming UI open so the user can retry instead of silently
+      // advancing to the complete phase and losing the chance to fix the name.
     } finally {
       setIsNaming(false);
     }
-  }, [name, isNaming, completeCeremony, onComplete]);
+  }, [name, isNaming, completeCeremony, onComplete, scheduleTimeout]);
 
   // ── Tour visual state for EggGraphic crack rendering ──
   const tourVisualState = useMemo(() => {
@@ -607,6 +726,30 @@ export function PetsHatchingCeremony({
           className="absolute size-32 rounded-full opacity-20 animate-pulse"
           style={{ background: `radial-gradient(circle, ${eggColor}40 0%, transparent 70%)` }}
         />
+      </div>
+    );
+  }
+
+  if (phase === 'error') {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 p-6"
+        style={{ background: 'radial-gradient(ellipse at center, #2a0a0a 0%, #150505 50%, #0a0202 100%)' }}
+      >
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-semibold text-white">Couldn’t hatch your PET</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Something went wrong while creating your egg. You can retry or come back later.
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setPhase('loading');
+            setRetryCount((c) => c + 1);
+          }}
+        >
+          Try Again
+        </Button>
       </div>
     );
   }
