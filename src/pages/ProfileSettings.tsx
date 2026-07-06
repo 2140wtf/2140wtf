@@ -866,7 +866,7 @@ export function ProfileSettings() {
       } else {
         delete data.fields;
       }
-      await publishEvent({ kind: 0, content: JSON.stringify(data) });
+      await publishEvent({ kind: 0, content: JSON.stringify(data), tags: [] });
       queryClient.invalidateQueries({ queryKey: ['logins'] });
       queryClient.invalidateQueries({ queryKey: ['author', user.pubkey] });
 

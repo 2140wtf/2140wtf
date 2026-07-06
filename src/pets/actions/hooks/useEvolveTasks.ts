@@ -143,10 +143,11 @@ export function useEvolveTasks(
     queryFn: async () => {
       if (!pubkey) return null;
 
+      const since = companion?.progressionStartedAt;
       const filters: NostrFilter[] = [
-        { kinds: [KIND_THEME_DEFINITION], authors: [pubkey], limit: EVOLVE_REQUIRED_THEMES },
-        { kinds: [KIND_PROFILE_TABS], authors: [pubkey], limit: 1 },
-        { kinds: [KIND_PROFILE_METADATA], authors: [pubkey], limit: 1 },
+        { kinds: [KIND_THEME_DEFINITION], authors: [pubkey], limit: EVOLVE_REQUIRED_THEMES, since },
+        { kinds: [KIND_PROFILE_TABS], authors: [pubkey], limit: 1, since },
+        { kinds: [KIND_PROFILE_METADATA], authors: [pubkey], limit: 1, since },
       ];
 
       const events = await nostr.query(filters);

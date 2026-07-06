@@ -1,4 +1,5 @@
 import type { NPool, NostrEvent } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { BATTLE_SYNC_KIND } from './battleMessages';
 
@@ -34,14 +35,18 @@ export function subscribeBattleMessages(options: BattleNetworkOptions): () => vo
             authors: [opponentPubkey],
             '#e': [battleId],
             since,
-            limit: 0,
+            limit: 1000,
           },
         ],
         { signal: ac.signal },
       )) {
         if (!alive) break;
         if (msg[0] === 'EVENT') {
-          onMessage(msg[2]);
+          const event = msg[2];
+          if (event.pubkey !== opponentPubkey || !verifyEvent(event)) {
+            continue;
+          }
+          onMessage(event);
         } else if (msg[0] === 'CLOSED') {
           break;
         }

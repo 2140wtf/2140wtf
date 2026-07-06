@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
+import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from './usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
@@ -14,13 +15,15 @@ import {
   fetchUTXOs,
   getFeeRates,
   buildUnsignedPsbt,
+  buildUnsignedPsbtHd,
   buildUnsignedSilentPaymentPsbt,
   finalizePsbt,
   broadcastTransaction,
-  estimateFee,
+  estimateFeeWithDustChange,
   validateBitcoinAddress,
 } from '@/lib/bitcoin';
-import type { FeeRates } from '@/lib/bitcoin';
+import type { FeeRates, UTXO } from '@/lib/bitcoin';
+import { selectUtxos, type HdUtxo } from '@/lib/hdWallet';
 import { extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
 
 export type OnchainFeeSpeed = 'fastest' | 'halfHour' | 'hour' | 'economy';
@@ -56,6 +59,9 @@ interface OnchainZapResult {
   /** The published kind 8333 event, when one was published (omitted for
    *  silent-payment sends, which intentionally publish no Nostr event). */
   event?: NostrEvent;
+  /** Payment rail used, so the success handler can tell an intentional
+   *  silent-payment omission from a failed receipt publish. */
+  mode: 'onchain' | 'sp';
 }
 
 /**
@@ -93,6 +99,8 @@ export function useOnchainZap(
 ) {
   const { user } = useCurrentUser();
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
+  const { hd: hdWallet } = useBitcoinWallet();
+  const isHd = hdWallet?.accountNode != null;
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const zapsEnabled = isEnabled('zaps');
@@ -116,20 +124,14 @@ export function useOnchainZap(
       if (!Number.isFinite(amountSats) || amountSats <= 0) {
         throw new Error('Invalid amount.');
       }
-      if (!zapsEnabled) {
-        throw new Error(
-          'Zaps are disabled in Settings → Privacy & Publishing. Turn on “Zap receipts” to send zaps.',
-        );
-      }
-
-      setIsZapping(true);
-      setProgress('building');
-
       // Resolve the recipient. A NIP-A3 Bitcoin payment target (if present)
       // overrides the derived Taproot address. A silent-payment (`sp1…`)
       // override switches the send onto the BIP-375 SP rail and suppresses
       // the kind 8333 attribution event.
       const useSilentPayment = recipientOverride?.mode === 'sp';
+
+      setIsZapping(true);
+      setProgress('building');
       const recipientAddress =
         recipientOverride?.value ?? nostrPubkeyToBitcoinAddress(target.pubkey);
 
@@ -144,11 +146,21 @@ export function useOnchainZap(
         throw new Error('Recipient Bitcoin address failed validation.');
       }
 
-      // Fetch UTXOs and fee rates
-      const [utxos, rates] = await Promise.all([
-        fetchUTXOs(senderAddress, esploraApis),
-        getFeeRates(esploraApis),
-      ]);
+      // Fetch UTXOs and fee rates. For nsec logins use the HD wallet's scanned
+      // UTXOs; otherwise fall back to the legacy single-address UTXO set.
+      let hdUtxos: HdUtxo[] = [];
+      let legacyUtxos: UTXO[] = [];
+      let rates: FeeRates;
+      if (isHd) {
+        hdUtxos = hdWallet.utxos;
+        rates = await getFeeRates(esploraApis);
+      } else {
+        [legacyUtxos, rates] = await Promise.all([
+          fetchUTXOs(senderAddress, esploraApis),
+          getFeeRates(esploraApis),
+        ]);
+      }
+      const utxos = isHd ? hdUtxos : legacyUtxos;
 
       if (utxos.length === 0) {
         throw new Error('Your Bitcoin wallet has no spendable funds.');
@@ -156,22 +168,57 @@ export function useOnchainZap(
 
       const feeRate = feeRateForSpeed(rates, feeSpeed);
       const totalBalance = utxos.reduce((s, u) => s + u.value, 0);
-      const estFee = estimateFee(utxos.length, 2, feeRate);
-      if (amountSats + estFee > totalBalance) {
-        throw new Error(
-          `Insufficient funds. Need ~${(amountSats + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
-        );
+
+      if (useSilentPayment && isHd) {
+        const spUtxos = hdWallet.legacyUtxos;
+        const spBalance = spUtxos.reduce((s, u) => s + u.value, 0);
+        if (spUtxos.length === 0) {
+          throw new Error('Silent Payments currently require funds at your legacy address. Use an on-chain send instead.');
+        }
+        const { fee: estFee } = estimateFeeWithDustChange(spUtxos.length, 1, feeRate, spBalance, amountSats);
+        if (amountSats + estFee > spBalance) {
+          throw new Error(
+            `Insufficient legacy funds. Need ~${(amountSats + estFee).toLocaleString()} sats, have ${spBalance.toLocaleString()}.`,
+          );
+        }
+      } else if (isHd) {
+        const estFee = selectUtxos(hdUtxos, amountSats, feeRate, 1).fee;
+        if (amountSats + estFee > totalBalance) {
+          throw new Error(
+            `Insufficient funds. Need ~${(amountSats + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
+          );
+        }
+      } else {
+        const { fee: estFee } = estimateFeeWithDustChange(utxos.length, 1, feeRate, totalBalance, amountSats);
+        if (amountSats + estFee > totalBalance) {
+          throw new Error(
+            `Insufficient funds. Need ~${(amountSats + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
+          );
+        }
       }
 
       // Build unsigned PSBT (on-chain or silent-payment rail)
       let psbtHex: string;
       let fee: number;
       if (useSilentPayment) {
+        const spUtxos = isHd ? hdWallet.legacyUtxos : (utxos as UTXO[]);
+        if (isHd && spUtxos.length === 0) {
+          throw new Error('Silent Payments currently require funds at your legacy address. Use an on-chain send instead.');
+        }
         ({ psbtHex, fee } = buildUnsignedSilentPaymentPsbt(
           user.pubkey,
           recipientAddress,
           amountSats,
-          utxos,
+          spUtxos as UTXO[],
+          feeRate,
+        ));
+      } else if (isHd && hdWallet.accountNode && hdWallet.changeAddress) {
+        const { selected } = selectUtxos(hdUtxos, amountSats, feeRate, 1);
+        ({ psbtHex, fee } = buildUnsignedPsbtHd(
+          hdWallet.accountNode,
+          [{ address: recipientAddress, amountSats }],
+          selected,
+          hdWallet.changeAddress,
           feeRate,
         ));
       } else {
@@ -179,7 +226,7 @@ export function useOnchainZap(
           user.pubkey,
           recipientAddress,
           amountSats,
-          utxos,
+          legacyUtxos,
           feeRate,
         ));
       }
@@ -198,44 +245,48 @@ export function useOnchainZap(
       // Silent-payment sends publish no Nostr event — doing so would defeat
       // the unlinkability the rail provides.
       if (useSilentPayment) {
-        return { txid, amountSats, fee };
+        return { txid, amountSats, fee, mode: 'sp' };
       }
 
-      // Publish kind 8333 event
-      setProgress('publishing');
-      const isAddressable = target.kind >= 30000 && target.kind < 40000;
-
-      const tags: string[][] = [
-        ['i', `bitcoin:tx:${txid}`],
-        ['p', target.pubkey],
-        ['amount', String(amountSats)],
-      ];
-
-      if (isAddressable) {
-        const dTag = target.tags.find(([n]) => n === 'd')?.[1] ?? '';
-        tags.push(['a', `${target.kind}:${target.pubkey}:${dTag}`]);
-      }
-
-      // Always include `e` for a concrete event reference (even for addressable events)
-      tags.push(['e', target.id]);
-
-      tags.push(['alt', `Bitcoin zap: ${amountSats.toLocaleString()} sats`]);
-
+      // Publish kind 8333 event when zap receipts are enabled. When disabled
+      // the Bitcoin send still stands and the success handler warns about the
+      // missing receipt, matching the batch/campaign/send flows.
       let event: NostrEvent | undefined;
-      try {
-        event = await publishEvent({
-          kind: 8333,
-          content: comment,
-          tags,
-        });
-      } catch (err) {
-        // The Bitcoin transaction already broadcast — the kind 8333 is a
-        // best-effort attestation. Surface the failure but don't roll back
-        // the success state.
-        console.warn('Failed to publish kind 8333 zap event:', err);
+      if (zapsEnabled) {
+        setProgress('publishing');
+        const isAddressable = target.kind >= 30000 && target.kind < 40000;
+
+        const tags: string[][] = [
+          ['i', `bitcoin:tx:${txid}`],
+          ['p', target.pubkey],
+          ['amount', String(amountSats)],
+        ];
+
+        if (isAddressable) {
+          const dTag = target.tags.find(([n]) => n === 'd')?.[1] ?? '';
+          tags.push(['a', `${target.kind}:${target.pubkey}:${dTag}`]);
+        }
+
+        // Always include `e` for a concrete event reference (even for addressable events)
+        tags.push(['e', target.id]);
+
+        tags.push(['alt', `Bitcoin zap: ${amountSats.toLocaleString()} sats`]);
+
+        try {
+          event = await publishEvent({
+            kind: 8333,
+            content: comment,
+            tags,
+          });
+        } catch (err) {
+          // The Bitcoin transaction already broadcast — the kind 8333 is a
+          // best-effort attestation. Surface the failure but don't roll back
+          // the success state.
+          console.warn('Failed to publish kind 8333 zap event:', err);
+        }
       }
 
-      return { txid, amountSats, fee, event };
+      return { txid, amountSats, fee, event, mode: 'onchain' };
     },
     onSuccess: (result) => {
       notificationSuccess();
@@ -243,6 +294,7 @@ export function useOnchainZap(
       queryClient.invalidateQueries({ queryKey: ['onchain-zaps'] });
       queryClient.invalidateQueries({ queryKey: ['event-interactions'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-utxos'] });
+      queryClient.invalidateQueries({ queryKey: ['hd-wallet-scan'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-balance'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-txs'] });
       // If the caller opted into handling success themselves (e.g. the
@@ -254,6 +306,13 @@ export function useOnchainZap(
         toast({
           title: 'Bitcoin zap sent!',
           description: `Broadcast txid ${result.txid.slice(0, 12)}… (fee ${result.fee.toLocaleString()} sats)`,
+        });
+      }
+      if (result.mode === 'onchain' && !result.event) {
+        toast({
+          title: 'Zap receipt not published',
+          description: 'Bitcoin was sent, but the Nostr zap receipt could not be published.',
+          variant: 'destructive',
         });
       }
     },
