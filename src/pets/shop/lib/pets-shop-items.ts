@@ -6,8 +6,9 @@ import type { ShopItem, ShopItemCategory } from '../types/shop.types';
  * Complete shop item catalog for the Pets Shop.
  * Based on the specification from /docs/pets/pets-shop-spec.md
  *
- * Prices are tuned for the 2,140-sat starter grant: staples cost ~500 sats so a
- * new pet can eat several times and still afford a battle entry fee.
+ * Prices are tuned so a user can keep a pet alive for ~500–1 000 sats a day:
+ * every price is 10% of the original demo-economy value (e.g. 500-sat sushi is
+ * now 50 sats).
  */
 export const PETS_SHOP_ITEMS: ShopItem[] = [
   // ─── Food Items ─────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'food_apple',
     name: 'Apple',
     type: 'food',
-    price: 250,
+    price: 25,
     icon: '🍎',
     effect: { hunger: 25, hygiene: -2, energy: 5 },
     status: 'live',
@@ -24,7 +25,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'food_burger',
     name: 'Burger',
     type: 'food',
-    price: 500,
+    price: 50,
     icon: '🍔',
     effect: { hunger: 45, happiness: 10, hygiene: -8, energy: 8 },
     status: 'live',
@@ -33,7 +34,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'food_cake',
     name: 'Cake',
     type: 'food',
-    price: 750,
+    price: 75,
     icon: '🎂',
     effect: { hunger: 25, happiness: 30, hygiene: -10, energy: 10 },
     status: 'live',
@@ -42,7 +43,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'food_pizza',
     name: 'Pizza',
     type: 'food',
-    price: 500,
+    price: 50,
     icon: '🍕',
     effect: { hunger: 40, happiness: 15, hygiene: -9, energy: 10 },
     status: 'live',
@@ -51,7 +52,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'food_sushi',
     name: 'Sushi',
     type: 'food',
-    price: 600,
+    price: 60,
     icon: '🍣',
     effect: { hunger: 35, health: 10, hygiene: -5, energy: 7 },
     status: 'live',
@@ -62,7 +63,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'toy_ball',
     name: 'Ball',
     type: 'toy',
-    price: 350,
+    price: 35,
     icon: '⚽',
     effect: { happiness: 25, energy: -10, hygiene: -5 },
     status: 'live',
@@ -71,7 +72,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'toy_teddy',
     name: 'Teddy Bear',
     type: 'toy',
-    price: 600,
+    price: 60,
     icon: '🧸',
     effect: { happiness: 45, energy: -5 },
     status: 'live',
@@ -80,7 +81,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'toy_blocks',
     name: 'Building Blocks',
     type: 'toy',
-    price: 450,
+    price: 45,
     icon: '🧱',
     effect: { happiness: 30, energy: -10 },
     status: 'live',
@@ -91,7 +92,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_vitamins',
     name: 'Vitamins',
     type: 'medicine',
-    price: 400,
+    price: 40,
     icon: '💊',
     effect: { health: 25, energy: 5 },
     status: 'live',
@@ -100,7 +101,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_super',
     name: 'Super Medicine',
     type: 'medicine',
-    price: 800,
+    price: 80,
     icon: '💉',
     effect: { health: 50, energy: 20, happiness: -10 },
     status: 'live',
@@ -109,7 +110,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_bandage',
     name: 'Bandage',
     type: 'medicine',
-    price: 300,
+    price: 30,
     icon: '🩹',
     effect: { health: 25 },
     status: 'live',
@@ -118,7 +119,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_elixir',
     name: 'Health Elixir',
     type: 'medicine',
-    price: 1_000,
+    price: 100,
     icon: '🧪',
     effect: { health: 75, happiness: 20, energy: 10 },
     status: 'live',
@@ -127,7 +128,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_shell_repair',
     name: 'Shell Repair Kit',
     type: 'medicine',
-    price: 500,
+    price: 50,
     icon: '🥚',
     effect: { health: 30 },
     status: 'live',
@@ -136,7 +137,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'med_calcium',
     name: 'Calcium Supplement',
     type: 'medicine',
-    price: 400,
+    price: 40,
     icon: '🦴',
     effect: { health: 35 },
     status: 'live',
@@ -147,7 +148,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'hyg_soap',
     name: 'Soap',
     type: 'hygiene',
-    price: 250,
+    price: 25,
     icon: '🧼',
     effect: { hygiene: 25 },
     status: 'live',
@@ -156,7 +157,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'hyg_shampoo',
     name: 'Shampoo',
     type: 'hygiene',
-    price: 400,
+    price: 40,
     icon: '🧴',
     effect: { hygiene: 50, happiness: 10 },
     status: 'live',
@@ -165,7 +166,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'hyg_bubble',
     name: 'Bubble Bath',
     type: 'hygiene',
-    price: 500,
+    price: 50,
     icon: '🛁',
     effect: { hygiene: 70, happiness: 25 },
     status: 'live',
@@ -174,7 +175,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'hyg_towel',
     name: 'Soft Towel',
     type: 'hygiene',
-    price: 300,
+    price: 30,
     icon: '🏖️',
     effect: { hygiene: 25, happiness: 5 },
     status: 'live',
@@ -185,7 +186,7 @@ export const PETS_SHOP_ITEMS: ShopItem[] = [
     id: 'nrg_drink',
     name: 'Energy Drink',
     type: 'energy',
-    price: 400,
+    price: 40,
     icon: '🧃',
     effect: { energy: 35, happiness: 5 },
     status: 'live',
@@ -219,7 +220,7 @@ export function getLiveShopItems(): ShopItem[] {
  */
 export function getShopCategories(): Array<{ type: ShopItemCategory; count: number; label: string }> {
   const categories: ShopItemCategory[] = ['food', 'toy', 'medicine', 'hygiene', 'energy'];
-  
+
   return categories.map(type => ({
     type,
     count: getShopItemsByType(type).length,

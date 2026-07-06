@@ -23,7 +23,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
 import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
@@ -382,27 +382,42 @@ export function usePetsOnboarding({
 
     try {
       if (isBtcSatsMode) {
-        // Pay with real BTC sats; no profile sats update needed for a reroll
-        await paySats(PETS_PREVIEW_REROLL_SATS, 'Pets reroll');
+        // Pay with real BTC sats; no profile sats update needed for a reroll.
+        // Skip the wallet call when the reroll cost is zero to avoid the
+        // external payment hook rejecting non-positive amounts.
+        if (rerollCostSats > 0) {
+          await paySats(rerollCostSats, 'Pets reroll');
+        }
       } else {
-        // Fetch fresh profile from relays (read-modify-write safety)
-        const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-        const baseEvent = freshProfile?.event ?? profile.event;
+        // Deduct demo sats through the serialized profile updater so concurrent
+        // actions cannot overwrite each other.
+        const updateResult = await updateBlobbonautProfile(
+          nostr,
+          publishEvent,
+          user.pubkey,
+          (freshProfile) => {
+            if (!freshProfile) {
+              throw new Error('Profile not found on relays');
+            }
+            if (freshProfile.sats < rerollCostSats) {
+              throw new Error(
+                `Not enough demo sats. You need ${rerollCostSats.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
+              );
+            }
+            const newSats = freshProfile.sats - rerollCostSats;
+            return {
+              tags: updateBlobbonautTags(freshProfile.event.tags, {
+                sats: newSats.toString(),
+              }),
+              content: freshProfile.event.content,
+              meta: { newSats },
+            };
+          }
+        );
 
-        // Deduct demo sats from profile
-        const newSats = sats - rerollCostSats;
-        const updatedTags = updateBlobbonautTags(baseEvent.tags, {
-          sats: newSats.toString(),
-        });
-        
-        const profileEvent = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
-          content: baseEvent.content ?? '',
-          tags: updatedTags,
-          prev: baseEvent,
-        });
-        
-        updateProfileEvent(profileEvent);
+        if (updateResult?.event) {
+          updateProfileEvent(updateResult.event);
+        }
       }
       
       // Preserve the current name when rerolling
@@ -470,9 +485,9 @@ export function usePetsOnboarding({
     setActionInProgress('adopt');
 
     try {
-      if (isBtcSatsMode) {
-        // Pay adoption cost with real BTC sats before creating the pet
-        await paySats(PETS_ADOPTION_SATS, 'Pets adoption');
+      if (isBtcSatsMode && adoptionCostSats > 0) {
+        // Pay adoption cost with real BTC sats before creating the pet.
+        await paySats(adoptionCostSats, 'Pets adoption');
       }
 
       // 1. Publish the Pets egg event using exact preview data
@@ -488,48 +503,59 @@ export function usePetsOnboarding({
       updateCompanionEvent(eggEvent);
 
       // 2. Update profile: add to has list (and deduct demo sats in demo-sats mode)
+      // through the serialized updater so concurrent changes are not lost.
       // NOTE: We do NOT set current_companion here because the adopted Pets
       // is still an egg. The companion mechanic only becomes available after hatching.
       // Eggs should never be auto-assigned as the floating companion.
       // NOTE: pets_onboarding_done is NOT set here — adoption alone does not
       // complete onboarding. It is set when the first-hatch tour finishes.
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-      const baseEvent = freshProfile?.event ?? profile.event;
+      const profileUpdateResult = await updateBlobbonautProfile(
+        nostr,
+        publishEvent,
+        user.pubkey,
+        (freshProfile) => {
+          if (!freshProfile) {
+            throw new Error('Profile not found on relays');
+          }
 
-      const newHas = [...(freshProfile?.has ?? profile.has), preview.d];
+          const newHas = [...(freshProfile.has ?? []), preview.d];
+          const updates: Record<string, string | string[]> = {
+            has: newHas,
+          };
 
-      const profileUpdates: Record<string, string | string[]> = {
-        has: newHas,
-      };
+          if (!isBtcSatsMode) {
+            if (freshProfile.sats < adoptionCostSats) {
+              throw new Error(
+                `Not enough demo sats. You need ${adoptionCostSats.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
+              );
+            }
+            updates.sats = (freshProfile.sats - adoptionCostSats).toString();
+          }
 
-      if (!isBtcSatsMode) {
-        const newSats = sats - adoptionCostSats;
-        profileUpdates.sats = newSats.toString();
+          return {
+            tags: updateBlobbonautTags(freshProfile.event.tags, updates),
+            content: freshProfile.event.content,
+            meta: { newHas },
+          };
+        }
+      );
+
+      if (profileUpdateResult?.event) {
+        updateProfileEvent(profileUpdateResult.event);
       }
-      
-      const updatedProfileTags = updateBlobbonautTags(baseEvent.tags, profileUpdates);
-      
-      const profileEvent = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
-        content: baseEvent.content ?? '',
-        tags: updatedProfileTags,
-        prev: baseEvent,
-      });
-      
-      updateProfileEvent(profileEvent);
-      
+
       // 3. Set localStorage selection to the new Pets
       setStoredSelectedD(preview.d);
-      
+
       // 4. Invalidate queries
       invalidateProfile();
       invalidateCompanion();
-      
+
       toast({
         title: 'Congratulations!',
         description: `You adopted ${preview.name}!`,
       });
-      
+
       // 5. Complete onboarding
       onComplete?.();
     } catch (error) {

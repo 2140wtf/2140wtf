@@ -135,7 +135,7 @@ function buildComponents(event: NostrEvent): Components {
       if (!safe) return null;
       return <img {...rest} src={safe} alt={alt ?? ''} loading="lazy" />;
     },
-  } as Components;
+  } as unknown as Components;
 }
 
 /** Renders kind 30023 long-form article content with Markdown. */

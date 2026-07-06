@@ -91,9 +91,17 @@ function isNearMouth(px: number, py: number): boolean {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+export interface UseFoodDragOptions {
+  /** If true, drag-to-feed is disabled and pointerdown is ignored. */
+  disabled?: boolean;
+  /** Restrict drag start to companions in these stages. Defaults to all stages. */
+  validStages?: string[];
+}
+
 export function useFoodDrag(
   onFeed: (itemId: string) => void,
   onNearMouthChange?: (near: boolean) => void,
+  options: UseFoodDragOptions = {},
 ): UseFoodDragReturn {
   // React state — only set on drag start (non-null) and end (null).
   const [drag, setDrag] = useState<FoodDragState | null>(null);
@@ -158,6 +166,15 @@ export function useFoodDrag(
   // ── Start ──────────────────────────────────────────────────────────────
 
   const onDragStart = useCallback((e: React.PointerEvent, itemId: string, emoji: string) => {
+    // Honor disabled and stage guards so food drag cannot start on eggs or
+    // when the caller explicitly disables it.
+    if (options.disabled) return;
+    if (options.validStages && options.validStages.length > 0) {
+      const stageEl = document.querySelector<HTMLElement>('[data-pets-stage]');
+      const currentStage = stageEl?.dataset.petsStage;
+      if (!currentStage || !options.validStages.includes(currentStage)) return;
+    }
+
     // If a drag is already active (shouldn't happen, but defensive), end it.
     if (activePointerIdRef.current !== NO_POINTER) {
       endSession('new-drag-while-active');
@@ -248,7 +265,7 @@ export function useFoodDrag(
       window.removeEventListener('blur', onBlur);
       dbg('listeners-detached', { session });
     };
-  }, [endSession, moveGhost]);
+  }, [endSession, moveGhost, options.disabled, options.validStages]);
 
   // Cleanup on unmount.
   useEffect(() => () => {

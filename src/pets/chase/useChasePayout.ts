@@ -7,15 +7,13 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
-import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
+import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
+import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import {
-  KIND_BLOBBONAUT_PROFILE,
-  parseBlobbonautEvent,
-  updateBlobbonautTags,
-} from '@/pets/core/lib/pets';
+import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
+
+import { CHASE_FIAT_COST } from './types';
 
 export interface ChasePayoutRequest {
   /** Number of demo sats won during the run. */
@@ -36,9 +34,10 @@ export interface ChasePayoutResult {
 /**
  * Hook to settle Chase BTC run rewards.
  *
- * - fiat: deducts the run cost and adds collected worthless coins back to the profile.
+ * - fiat: deducts the run cost from in-game worthless coins.
  * - sats: claims BAO signet/demo sats from the faucet, deposits them into the BAO
- *   wallet, and updates the profile sats balance.
+ *   wallet. The in-game `sats` tag is NOT changed so real and demo balances cannot
+ *   double-spend each other.
  */
 export function useChasePayout(
   updateProfileEvent: (event: NostrEvent) => void,
@@ -55,13 +54,6 @@ export function useChasePayout(
         throw new Error('You must be logged in to settle rewards.');
       }
 
-      const prev = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
-        authors: [user.pubkey],
-      });
-
-      const profile = prev ? parseBlobbonautEvent(prev) : undefined;
-
       if (mode === 'sats') {
         const faucetUrl = config.baoSignetFaucetUrl?.trim();
         if (!faucetUrl) {
@@ -73,18 +65,17 @@ export function useChasePayout(
 
         const npub = nip19.npubEncode(user.pubkey);
         const amount = Math.max(0, Math.floor(satsWon));
-        let claimedSats = amount;
+        const requestAmount = clampBaoFaucetAmount(amount);
+        if (requestAmount <= 0) {
+          throw new Error('BAO daily claim amount is too small or exhausted.');
+        }
 
-        const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount });
+        const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
         if (!result) {
           throw new Error('BAO faucet request failed.');
         }
 
-        if (result.remaining24h !== undefined && result.remaining24h < amount) {
-          claimedSats = Math.max(0, Math.floor(result.remaining24h));
-        }
-
-        if (claimedSats <= 0) {
+        if (isBaoFaucetDailyExhausted(result)) {
           throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
         }
 
@@ -94,48 +85,64 @@ export function useChasePayout(
 
         await externalWallet.receiveToken(result.token.trim());
 
-        const currentSats = profile?.sats ?? 0;
-        const newSatsTotal = currentSats + claimedSats;
-        const tags = updateBlobbonautTags(prev?.tags ?? [], {
-          sats: newSatsTotal.toString(),
+        // Credit the profile ledger with the actual amount that arrived in the
+        // wallet, not the faucet's `remaining24h` report, which can disagree.
+        const decoded = decodeCashuToken(result.token.trim());
+        const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+        if (depositedSats <= 0) {
+          throw new Error('BAO faucet returned an empty token.');
+        }
+        const claimedSats = clampBaoFaucetAmount(depositedSats, result.remaining24h);
+
+        // Record the real-sats claim on the profile, but do not touch the demo
+        // `sats` tag. This keeps the two economies separate.
+        const resultMeta = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+          const newSatsTotal = freshProfile?.sats ?? 0;
+          const content = serializeProfileContent(prevContent, {});
+          return { tags: prevTags, content, meta: { newSatsTotal, claimedSats } };
         });
-        const content = serializeProfileContent(prev?.content ?? '', {});
-        const event = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
-          content,
-          tags,
-          prev: prev ?? undefined,
-        });
-        updateProfileEvent(event);
+
+        if (resultMeta?.event) {
+          updateProfileEvent(resultMeta.event);
+        }
 
         return {
-          newCoinsTotal: profile?.coins ?? 0,
-          newSatsTotal,
+          newCoinsTotal: resultMeta?.profile?.coins ?? 0,
+          newSatsTotal: resultMeta?.meta?.newSatsTotal as number,
           amountAwarded: claimedSats,
           claimedSats,
         };
       }
 
-      // Fiat mode: cost 100 coins. Collected coins are worthless score only and
-      // are never added back to the profile, so fiat can only decrease.
-      const currentCoins = profile?.coins ?? 0;
-      const newCoinsTotal = Math.max(0, currentCoins - 100);
-      const tags = updateBlobbonautTags(prev?.tags ?? [], {
-        coins: newCoinsTotal.toString(),
+      // Fiat mode: deduct the run cost from in-game worthless coins.
+      const resultMeta = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+        const currentCoins = freshProfile?.coins ?? 0;
+        if (currentCoins < CHASE_FIAT_COST) {
+          throw new Error(
+            `Insufficient coins. You need ${CHASE_FIAT_COST} coins but only have ${currentCoins.toLocaleString()}.`
+          );
+        }
+        const newCoinsTotal = currentCoins - CHASE_FIAT_COST;
+        const content = serializeProfileContent(prevContent, {});
+        return {
+          tags: freshProfile?.event.tags ?? prevTags,
+          content,
+          meta: { newCoinsTotal, amountAwarded: Math.max(0, coinsCollected) },
+        };
       });
-      const content = serializeProfileContent(prev?.content ?? '', {});
-      const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
-        content,
-        tags,
-        prev: prev ?? undefined,
-      });
-      updateProfileEvent(event);
+
+      if (!resultMeta) {
+        throw new Error('Profile update returned no changes.');
+      }
+
+      if (resultMeta.event) {
+        updateProfileEvent(resultMeta.event);
+      }
 
       return {
-        newCoinsTotal,
-        newSatsTotal: profile?.sats ?? 0,
-        amountAwarded: Math.max(0, coinsCollected),
+        newCoinsTotal: resultMeta.meta?.newCoinsTotal as number,
+        newSatsTotal: resultMeta.profile?.sats ?? 0,
+        amountAwarded: (resultMeta.meta?.amountAwarded as number) ?? Math.max(0, coinsCollected),
         claimedSats: 0,
       };
     },
@@ -143,7 +150,7 @@ export function useChasePayout(
       if (mode === 'sats' && claimedSats > 0) {
         toast({
           title: 'BAO sats claimed!',
-          description: `Received ${claimedSats.toLocaleString()} demo sats. Balance: ${newSatsTotal.toLocaleString()}.`,
+          description: `Received ${claimedSats.toLocaleString()} BAO sats. Balance: ${newSatsTotal.toLocaleString()}.`,
         });
       } else if (mode === 'fiat') {
         toast({

@@ -290,6 +290,10 @@ export interface AppConfig {
    * Example for local dev: "http://localhost:3460".
    */
   baoApiUrl?: string;
+  /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */
+  petsBattleEscrowPubkey?: string;
+  /** Optional URL to request release of battle escrow funds to the winner. */
+  petsBattleEscrowServiceUrl?: string;
   /**
    * Ordered list of base URLs for Esplora-compatible Bitcoin REST APIs.
    * Used by the wallet, on-chain zap flows, and NIP-73 Bitcoin tx/address
@@ -332,6 +336,18 @@ export interface AppConfig {
    * Default: 604800 (7 days).
    */
   maxCachedEventAge: number;
+  /**
+   * URL of a BlindBit Oracle v2-compatible Silent Payments indexer.
+   * When set, the wallet can scan the chain for incoming BIP-352 payments
+   * to the user's static sp1… address. Example:
+   * `https://silentpayments.dev/blindbit`.
+   */
+  bip352IndexerUrl?: string;
+  /**
+   * Maximum number of concurrent block fetches when scanning for Silent
+   * Payments. Default: 8.
+   */
+  bip352ScanConcurrency: number;
 }
 
 /** Configuration for a single widget in the right sidebar. */
