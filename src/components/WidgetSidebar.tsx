@@ -36,6 +36,7 @@ const PetsWidget = lazy(() => import('@/components/widgets/PetsWidget').then((m)
 const StatusWidget = lazy(() => import('@/components/widgets/StatusWidget').then((m) => ({ default: m.StatusWidget })));
 
 const WikipediaWidget = lazy(() => import('@/components/widgets/WikipediaWidget').then((m) => ({ default: m.WikipediaWidget })));
+const StackerNewsWidget = lazy(() => import('@/components/widgets/StackerNewsWidget').then((m) => ({ default: m.StackerNewsWidget })));
 const NostrClientsWidget = lazy(() => import('@/components/widgets/NostrClientsWidget').then((m) => ({ default: m.NostrClientsWidget })));
 const PredictionMarketsWidget = lazy(() => import('@/components/widgets/PredictionMarketsWidget').then((m) => ({ default: m.PredictionMarketsWidget })));
 const RoadstrWidget = lazy(() => import('@/components/widgets/RoadstrWidget').then((m) => ({ default: m.RoadstrWidget })));
@@ -59,6 +60,8 @@ function WidgetContent({ id }: { id: string }) {
       return <StatusWidget />;
     case 'wikipedia':
       return <WikipediaWidget />;
+    case 'stacker-news':
+      return <StackerNewsWidget />;
     case 'nostr-clients':
       return <NostrClientsWidget />;
     case 'prediction-markets':
