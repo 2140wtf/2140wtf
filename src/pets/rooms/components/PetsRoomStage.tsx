@@ -16,7 +16,7 @@
  * Stats are rendered separately by PetsRoomStatusHud in the top HUD area.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
@@ -35,6 +35,12 @@ import type { PetsVisualRecipe } from '@/pets/ui/lib/recipe';
 import type { PetsReactionState } from '@/pets/actions';
 import type { InteractionReactionState } from '@/pets/ui/hooks/useInteractionReaction';
 import type { PetsFacing } from '@/pets/ui/hooks/usePetsDirectInteraction';
+import { usePets3DEnabled } from '@/pets/three-d/hooks/usePets3DEnabled';
+import { usePets3DAsset } from '@/pets/three-d/hooks/usePets3DAsset';
+
+const Pets3DVisual = lazy(() =>
+  import('@/pets/three-d/components/Pets3DVisual').then((m) => ({ default: m.Pets3DVisual })),
+);
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +100,12 @@ export function PetsRoomStage({
   interactionProps,
   stageRef,
 }: PetsRoomStageProps) {
+  // 3D rendering gate: only for adult pets when the user has enabled 3D and a
+  // valid Blossom-hosted GLB asset is resolved.
+  const pets3dEnabled = usePets3DEnabled();
+  const asset3d = usePets3DAsset(companion);
+  const show3D = pets3dEnabled && !isEgg && companion.stage === 'adult' && asset3d !== undefined;
+
   // Body-bottom inset: how much of the visual box is empty below the body
   const bodyBottomInset = getPetsBodyBottomInset(companion.stage, companion.adultType ?? undefined);
 
@@ -253,18 +265,43 @@ export function PetsRoomStage({
                   style={{ transformOrigin: 'center bottom' }}
                 >
                   <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
-                  <PetsStageVisual
-                    companion={companion}
-                    size="lg"
-                    animated={!isSleeping}
-                    reaction={petsReaction}
-                    recipe={hasDevOverride ? undefined : statusRecipe}
-                    recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
-                    emotion={effectiveEmotion}
-                    onEggClick={onEggClick}
-                    facing={facing}
-                    className="!size-full"
-                  />
+                  {show3D ? (
+                    <Suspense
+                      fallback={
+                        <PetsStageVisual
+                          companion={companion}
+                          size="lg"
+                          animated={!isSleeping}
+                          reaction={petsReaction}
+                          recipe={hasDevOverride ? undefined : statusRecipe}
+                          recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                          emotion={effectiveEmotion}
+                          onEggClick={onEggClick}
+                          facing={facing}
+                          className="!size-full"
+                        />
+                      }
+                    >
+                      <Pets3DVisual
+                        asset={asset3d}
+                        isSleeping={isSleeping}
+                        className="!size-full"
+                      />
+                    </Suspense>
+                  ) : (
+                    <PetsStageVisual
+                      companion={companion}
+                      size="lg"
+                      animated={!isSleeping}
+                      reaction={petsReaction}
+                      recipe={hasDevOverride ? undefined : statusRecipe}
+                      recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                      emotion={effectiveEmotion}
+                      onEggClick={onEggClick}
+                      facing={facing}
+                      className="!size-full"
+                    />
+                  )}
                   {/* Interaction reaction overlays — sparkles, bubbles, hearts */}
                   <ReactionSparkles active={interactionReaction?.sparkles ?? false} />
                   <ReactionBubbles active={interactionReaction?.bubbles ?? false} showBackdrop={false} />

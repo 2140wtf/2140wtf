@@ -76,6 +76,7 @@ export interface ProfileContent {
   missions?: MissionsContent;
   room_layouts?: import('@/pets/rooms/lib/room-layout-schema').RoomLayoutsContent;
   room_furniture?: import('@/pets/rooms/lib/room-furniture-schema').RoomFurnitureContent;
+  assets_3d?: import('@/pets/three-d/lib/three-d-schema').Assets3DContent;
   baoTradeStreak?: number;
   baoTradeStreakLastDay?: string;
 }
