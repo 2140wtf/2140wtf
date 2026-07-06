@@ -26,11 +26,13 @@ import {
   type InventoryAction,
   ACTION_METADATA,
 } from '../lib/pets-action-utils';
+import { calculateInventoryActionReward } from '../lib/pets-action-rewards';
 import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDailyActions } from '../lib/daily-mission-tracker';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '../lib/pets-streak';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
 import { consumeStorageItem } from '@/pets/core/lib/profile-sats';
+import { addProfileSats } from '@/pets/core/lib/profile-sats';
 
 // Import NostrEvent type
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -118,12 +120,6 @@ export function usePetsUseInventoryItem({
         throw new Error('Profile not found');
       }
 
-      // Check stage restrictions for this specific action
-      if (!canUseAction(companion, action)) {
-        const message = getStageRestrictionMessage(companion, action);
-        throw new Error(message ?? 'This companion cannot use this item');
-      }
-
       // Validate item exists in shop catalog
       const shopItem = getShopItemById(itemId);
       if (!shopItem) {
@@ -135,25 +131,36 @@ export function usePetsUseInventoryItem({
         throw new Error('This item has no effect');
       }
 
-      // Validate the user owns the item
-      const owned = profile.storage.find((s) => s.itemId === itemId);
-      if (!owned || owned.quantity <= 0) {
-        throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
-      }
-
-      // For eggs, validate that items have applicable effects
-      const isEgg = companion.stage === 'egg';
-      if (isEgg && action === 'medicine' && !hasMedicineEffectForEgg(shopItem.effect)) {
-        throw new Error('This medicine has no effect on eggs');
-      }
-      if (isEgg && action === 'clean' && !hasHygieneEffectForEgg(shopItem.effect)) {
-        throw new Error('This item has no cleaning effect on eggs');
-      }
-
       // ─── Ensure Canonical Before Action ───
       const canonical = await ensureCanonicalBeforeAction();
       if (!canonical) {
         throw new Error('Failed to prepare companion for action');
+      }
+
+      // Check stage restrictions for this specific action using the canonical
+      // companion, not the stale outer prop. This closes the bypass where the
+      // outer companion allowed an action that the freshly-read canonical state
+      // (e.g. an egg) should reject.
+      if (!canUseAction(canonical.companion, action)) {
+        const message = getStageRestrictionMessage(canonical.companion, action);
+        throw new Error(message ?? 'This companion cannot use this item');
+      }
+
+      // For eggs, validate that items have applicable effects
+      const isCanonicalEgg = canonical.companion.stage === 'egg';
+      if (isCanonicalEgg && action === 'medicine' && !hasMedicineEffectForEgg(shopItem.effect)) {
+        throw new Error('This medicine has no effect on eggs');
+      }
+      if (isCanonicalEgg && action === 'clean' && !hasHygieneEffectForEgg(shopItem.effect)) {
+        throw new Error('This item has no cleaning effect on eggs');
+      }
+
+      // ─── Validate ownership from the freshest canonical profile ───
+      // The canonical fetch already pulled the latest profile storage, so we can
+      // verify the user actually owns the item before mutating pet state.
+      const ownedQuantity = canonical.profileStorage.find((s) => s.itemId === itemId)?.quantity ?? 0;
+      if (ownedQuantity <= 0) {
+        throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
       }
 
       // ─── Apply Accumulated Decay First ───
@@ -292,6 +299,27 @@ export function usePetsUseInventoryItem({
 
       updateCompanionEvent(petsEvent);
 
+      // ─── Consume storage item only after the pet state event succeeds ───
+      // This prevents losing the item if publishing the pet state fails.
+      const consumeResult = await consumeStorageItem(nostr, publishEvent, user.pubkey, itemId);
+      if (!consumeResult.consumed) {
+        throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
+      }
+      updateProfileEvent(consumeResult.event);
+
+      // ─── Award the inventory action sats reward ───
+      const satsReward = calculateInventoryActionReward(action, 1);
+      let satsGained = 0;
+      if (satsReward > 0 && user?.pubkey) {
+        try {
+          const satsResult = await addProfileSats(nostr, publishEvent, user.pubkey, satsReward);
+          satsGained = satsResult.newSats;
+          updateProfileEvent(satsResult.event);
+        } catch (e) {
+          console.error('Failed to award inventory sats reward:', e);
+        }
+      }
+
       // ─── Emit kind 1124 interaction event (best-effort, fire-and-forget) ───
       // ownerPubkey comes from the target Pets event, not the logged-in user,
       // so the tags remain correct if this path is later reused for non-owner interactions.
@@ -304,13 +332,6 @@ export function usePetsUseInventoryItem({
           source: interactionSource,
           itemId,
         });
-      }
-
-      // Consume one unit from storage and update the profile cache
-      if (user?.pubkey) {
-        consumeStorageItem(nostr, publishEvent, user.pubkey, itemId)
-          .then(({ event }) => updateProfileEvent(event))
-          .catch((error) => console.error('[usePetsUseInventoryItem] Failed to consume storage:', error));
       }
 
       // The 31124 canonical state is already updated above. Invalidate the
@@ -326,14 +347,15 @@ export function usePetsUseInventoryItem({
         itemName: shopItem.name,
         action,
         statsChanged,
-        satsGained: 0,
+        satsGained,
       };
     },
-    onSuccess: ({ itemName, action }) => {
+    onSuccess: ({ itemName, action, satsGained }) => {
       const actionMeta = ACTION_METADATA[action];
+      const satsText = satsGained > 0 ? ` +${satsGained.toLocaleString()} sats` : '';
       toast({
         title: `${actionMeta.label} successful!`,
-        description: `Used ${itemName} on your Pets.`,
+        description: `Used ${itemName} on your Pets.${satsText}`,
       });
 
       // Track daily mission progress

@@ -60,16 +60,52 @@ export function EggTapTarget({ stageRef, onClick, enabled, padding = 24 }: EggTa
     window.addEventListener('resize', updateRect);
     window.addEventListener('scroll', updateRect, true);
 
-    // Re-measure periodically during animations (bob/sway) so the overlay stays
-    // aligned with the moving egg without running a full animation frame loop.
-    const interval = setInterval(updateRect, 250);
+    // Observe size changes on the egg element so we don't need to poll for them.
+    let resizeObserver: ResizeObserver | undefined;
+    const egg = stageRef?.current?.querySelector('[data-pets-visual]') as HTMLElement | null;
+    if (egg) {
+      resizeObserver = new ResizeObserver(updateRect);
+      resizeObserver.observe(egg);
+    }
+
+    // Only run an animation-frame loop while the egg is visible on screen.
+    // This avoids burning CPU when the room is off-screen or hidden.
+    let rafId = 0;
+    let lastFrame = 0;
+    const FPS = 10;
+    const frameInterval = 1000 / FPS;
+    let isVisible = true;
+
+    const loop = (time: number) => {
+      rafId = requestAnimationFrame(loop);
+      if (!isVisible) return;
+      if (time - lastFrame < frameInterval) return;
+      lastFrame = time;
+      updateRect();
+    };
+
+    let intersectionObserver: IntersectionObserver | undefined;
+    if (egg && 'IntersectionObserver' in window) {
+      intersectionObserver = new IntersectionObserver(
+        ([entry]) => {
+          isVisible = entry?.isIntersecting ?? true;
+          if (isVisible) updateRect();
+        },
+        { threshold: 0 },
+      );
+      intersectionObserver.observe(egg);
+    }
+
+    rafId = requestAnimationFrame(loop);
 
     return () => {
       window.removeEventListener('resize', updateRect);
       window.removeEventListener('scroll', updateRect, true);
-      clearInterval(interval);
+      resizeObserver?.disconnect();
+      intersectionObserver?.disconnect();
+      cancelAnimationFrame(rafId);
     };
-  }, [updateRect]);
+  }, [updateRect, stageRef]);
 
   if (!enabled || !rect || !onClick) {
     return null;

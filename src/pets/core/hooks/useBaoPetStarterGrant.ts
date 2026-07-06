@@ -10,7 +10,8 @@ import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { addProfileSats } from '@/pets/core/lib/profile-sats';
-import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
+import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
+import { decodeCashuToken } from '@/lib/cashu/cashu';
 import { devLog } from '@/lib/cashu/devLog';
 import type { NUser } from '@nostrify/react/login';
 
@@ -24,6 +25,8 @@ export interface BaoPetStarterGrantResult {
 interface UseBaoPetStarterGrantOptions {
   /** Called with the updated profile event after sats are credited. */
   onProfileUpdate?: (event: NostrEvent) => void;
+  /** If false, the BAO wallet is kept idle and the mutation will throw. Default true. */
+  enabled?: boolean;
 }
 
 /**
@@ -35,6 +38,7 @@ interface UseBaoPetStarterGrantOptions {
  * per npub; the client just reports the result.
  */
 export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}) {
+  const { onProfileUpdate, enabled = true } = options;
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -60,10 +64,12 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
     seedPhrase ?? '',
     baoWalletUser ?? ({ pubkey: '', signer: undefined } as unknown as NUser),
     relayUrls,
+    { enableAutoClaim: enabled },
   );
 
   return useMutation({
     mutationFn: async (amount: number): Promise<BaoPetStarterGrantResult> => {
+      if (!enabled) throw new Error('BAO starter grant is disabled in real-money mode.');
       if (!user?.pubkey) throw new Error('You must be logged in to claim starter sats.');
       if (!seedAvailable || !seedPhrase) {
         throw new Error('Cashu seed is not available; make sure your signer supports NIP-44.');
@@ -72,26 +78,41 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
       if (!faucetUrl) throw new Error('BAO faucet is not configured.');
 
       const npub = nip19.npubEncode(user.pubkey);
-      const res = await claimBaoSignetFaucet(faucetUrl, { npub, amount });
+      const requestAmount = clampBaoFaucetAmount(amount);
+      if (requestAmount <= 0) {
+        throw new Error('BAO daily claim amount is too small or exhausted.');
+      }
+      const res = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
 
       if (!res?.token) {
         const reason = res?.message || 'BAO faucet did not return a token.';
         throw new Error(reason);
       }
+      if (isBaoFaucetDailyExhausted(res)) {
+        throw new Error(res.message ?? 'BAO 24h limit reached. Try again later.');
+      }
 
       await baoWallet.receiveToken(res.token.trim());
 
-      const { event } = await addProfileSats(nostr, publishEvent, user.pubkey, amount);
+      // Credit the actual decoded token amount, capped to the faucet's 24h report.
+      const decoded = decodeCashuToken(res.token.trim());
+      const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+      const creditedAmount = clampBaoFaucetAmount(depositedSats, res.remaining24h);
+      if (creditedAmount <= 0) {
+        throw new Error(res.message ?? 'BAO faucet returned an empty token.');
+      }
+
+      const { event } = await addProfileSats(nostr, publishEvent, user.pubkey, creditedAmount);
 
       return {
-        amount,
+        amount: creditedAmount,
         remaining24h: res.remaining24h,
         resetsAt: res.resetsAt,
         profileEvent: event,
       };
     },
     onSuccess: (result) => {
-      options.onProfileUpdate?.(result.profileEvent);
+      onProfileUpdate?.(result.profileEvent);
       devLog.log(`BAO starter grant credited ${result.amount} sats to pet profile`);
     },
     onError: (error: Error) => {

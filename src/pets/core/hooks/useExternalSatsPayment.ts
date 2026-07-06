@@ -28,9 +28,14 @@ export function useExternalSatsPayment(
         throw new Error(`Invalid payment amount: ${amount}`);
       }
 
-      if (externalWallet.totalBalance < amount) {
+      const mintUrl = externalWallet.mintUrl;
+      if (!mintUrl) {
+        throw new Error('No mint is selected in the external wallet.');
+      }
+      const selectedMintBalance = externalWallet.balances?.[mintUrl] ?? 0;
+      if (selectedMintBalance < amount) {
         throw new Error(
-          `Insufficient external wallet balance. You need ${amount} sats but only have ${externalWallet.totalBalance}.`,
+          `Insufficient balance on the selected mint. You need ${amount} sats but only have ${selectedMintBalance} sats on ${mintUrl}.`,
         );
       }
 
@@ -60,13 +65,22 @@ export async function paySatsWithWallet(
     throw new Error('External wallet is not available.');
   }
 
-  if (externalWallet.totalBalance < amount) {
+  if (!externalWallet) {
+    throw new Error('External wallet is not available.');
+  }
+
+  const mintUrl = externalWallet.mintUrl;
+  if (!mintUrl) {
+    throw new Error('No mint is selected in the external wallet.');
+  }
+  const selectedMintBalance = externalWallet.balances?.[mintUrl] ?? 0;
+  if (selectedMintBalance < amount) {
     toast({
-      title: 'Insufficient external wallet balance',
-      description: `You need ${amount} sats but only have ${externalWallet.totalBalance}.`,
+      title: 'Insufficient balance on the selected mint',
+      description: `You need ${amount} sats but only have ${selectedMintBalance} sats on ${mintUrl}.`,
       variant: 'destructive',
     });
-    throw new Error('Insufficient external wallet balance');
+    throw new Error('Insufficient balance on the selected mint');
   }
 
   const token = await externalWallet.sendToken(amount, memo);

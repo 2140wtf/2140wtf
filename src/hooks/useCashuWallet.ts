@@ -18,8 +18,6 @@ import {
   deriveNip60WalletKey,
   DEFAULT_MINTS,
   decodeCashuToken,
-  encryptData,
-  decryptData,
   isAllowedMintUrl,
   normalizeMintUrl,
   MAX_PROOF_FIELD_LENGTH,
@@ -29,32 +27,9 @@ import {
   validateReceivedProofs,
 } from '@/lib/cashu/cashu';
 import {
-  loadSelectedMintUrl,
-  saveSelectedMintUrl,
-  loadCustomMints,
-  saveCustomMints,
-  getProofsForMint,
-  saveProofsForMint,
-  mintStorageKey,
-  loadTransactions,
-  saveTransactions,
-  addTransaction,
-  updateTransactionStatus,
-  isValidTransaction,
-  withTxLock,
-  withProofLock,
-  migratePlaintextTransactions,
-  migrateMintMetadata,
-  isProcessedTokenHash,
-  addProcessedTokenHash,
-  loadProcessedTokenHashes,
-  saveProcessedTokenHashes,
-  isProcessedNutzapId,
-  addProcessedNutzapId,
-  loadProcessedNutzapIds,
-  loadPendingNutzaps,
-  savePendingNutzap,
-  removePendingNutzap,
+  createCashuStorage,
+  type CashuStorage,
+  type RecoveryEntry,
   type PendingNutzapEntry,
   type Transaction,
   type StoredMint,
@@ -123,8 +98,10 @@ export interface CashuWalletActions {
   removeCustomMint: (url: string) => void;
   handleSeedBackupConfirm: () => Promise<void>;
   calculateAllBalances: () => Promise<void>;
-  receiveToken: (tokenStr: string) => Promise<void>;
-  sendToken: (amount: number, memo?: string) => Promise<string | null>;
+  receiveToken: (tokenStr: string, privkey?: string) => Promise<void>;
+  sendToken: (amount: number, memo?: string, recipientPubkey?: string) => Promise<string | null>;
+  sendLockedToken: (amount: number, recipientPubkey: string, memo?: string) => Promise<string | null>;
+  receiveLockedToken: (tokenStr: string, privkey: string) => Promise<void>;
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
@@ -137,254 +114,21 @@ export interface CashuWalletActions {
   restoreFromBackup: (payload: CashuBackupPayload) => Promise<void>;
 }
 
-/* ── Module-scope recovery helpers ───────────────────────────
-   These only read/write localStorage and do not depend on hook render
-   state, so they are stable across renders. Functions that decrypt data
-   accept an optional legacy key for migration support. */
+/* ── Module-scope helpers ─────────────────────────────────── */
 
-interface RecoveryEntry {
-  version: number;
-  timestamp: number;
-  proofs: any[];
-}
-
-const recoveryKey = (mint: string) => `freedomid_proof_recovery_${stringToBase64(mint)}`;
-const sendRecoveryKey = (mint: string) => `freedomid_send_recovery_${stringToBase64(mint)}`;
-const meltChangeRecoveryKey = (mint: string) => `freedomid_melt_change_recovery_${stringToBase64(mint)}`;
-const proofStoreTsKey = (mint: string) => `freedomid_proof_store_ts_${stringToBase64(mint)}`;
-const mintedQuotesKey = 'freedomid_minted_quotes';
 const VALID_PROOF_STATES = new Set(['UNSPENT', 'PENDING', 'SPENT']);
 
-const readProofStoreTimestamp = (mintUrl: string): number => {
+const PENDING_RECEIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PENDING_RECEIVE_MAX_ATTEMPTS = 5;
+
+const readProofStoreTimestamp = (mintUrl: string, namespace: string): number => {
   try {
-    const raw = localStorage.getItem(proofStoreTsKey(mintUrl));
+    const raw = localStorage.getItem(`${namespace}proof_store_ts_${stringToBase64(mintUrl)}`);
     const ts = raw ? Number(raw) : NaN;
     return Number.isFinite(ts) && ts > 0 ? ts : 0;
   } catch {
     return 0;
   }
-};
-
-const writeProofStoreTimestamp = (mintUrl: string) => {
-  try { localStorage.setItem(proofStoreTsKey(mintUrl), String(Date.now())); } catch { /* noop */ }
-};
-
-const writeProofRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
-  try {
-    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
-    const encrypted = await encryptData(JSON.stringify(payload), key);
-    localStorage.setItem(recoveryKey(mintUrl), encrypted);
-  } catch (e) {
-    devLog.warn('Failed to write proof recovery:', e);
-  }
-};
-
-const clearProofRecovery = (mintUrl: string) => {
-  try { localStorage.removeItem(recoveryKey(mintUrl)); } catch { /* noop */ }
-};
-
-const loadProofRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
-  let encrypted: string | null = null;
-  try { encrypted = localStorage.getItem(recoveryKey(mintUrl)); } catch { return null; }
-  if (!encrypted) return null;
-  try {
-    const decrypted = await decryptData(encrypted, key, legacyKey);
-    if (!decrypted) return null;
-    const parsed = JSON.parse(decrypted);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
-      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
-    }
-    // Backward compatibility: plaintext array
-    if (Array.isArray(parsed)) {
-      return { version: 0, timestamp: 0, proofs: parsed };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const writeSendRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
-  try {
-    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
-    const encrypted = await encryptData(JSON.stringify(payload), key);
-    localStorage.setItem(sendRecoveryKey(mintUrl), encrypted);
-  } catch (e) {
-    devLog.warn('Failed to write send recovery:', e);
-  }
-};
-
-const clearSendRecovery = (mintUrl: string) => {
-  try { localStorage.removeItem(sendRecoveryKey(mintUrl)); } catch { /* noop */ }
-};
-
-const loadSendRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
-  let encrypted: string | null = null;
-  try { encrypted = localStorage.getItem(sendRecoveryKey(mintUrl)); } catch { return null; }
-  if (!encrypted) return null;
-  try {
-    const decrypted = await decryptData(encrypted, key, legacyKey);
-    if (!decrypted) return null;
-    const parsed = JSON.parse(decrypted);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
-      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
-    }
-    if (Array.isArray(parsed)) {
-      return { version: 0, timestamp: 0, proofs: parsed };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const writeMeltChangeRecovery = async (mintUrl: string, proofs: any[], key: CryptoKey) => {
-  try {
-    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
-    const encrypted = await encryptData(JSON.stringify(payload), key);
-    localStorage.setItem(meltChangeRecoveryKey(mintUrl), encrypted);
-  } catch (e) {
-    devLog.warn('Failed to write melt change recovery:', e);
-  }
-};
-
-const clearMeltChangeRecovery = (mintUrl: string) => {
-  try { localStorage.removeItem(meltChangeRecoveryKey(mintUrl)); } catch { /* noop */ }
-};
-
-const loadMeltChangeRecovery = async (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<RecoveryEntry | null> => {
-  let encrypted: string | null = null;
-  try { encrypted = localStorage.getItem(meltChangeRecoveryKey(mintUrl)); } catch { return null; }
-  if (!encrypted) return null;
-  try {
-    const decrypted = await decryptData(encrypted, key, legacyKey);
-    if (!decrypted) return null;
-    const parsed = JSON.parse(decrypted);
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
-      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const loadMintedQuotes = async (key: CryptoKey, legacyKey?: CryptoKey): Promise<string[]> => {
-  let encrypted: string | null = null;
-  try { encrypted = localStorage.getItem(mintedQuotesKey); } catch { return []; }
-  if (!encrypted) return [];
-  try {
-    const decrypted = await decryptData(encrypted, key, legacyKey);
-    if (!decrypted) return [];
-    const parsed = JSON.parse(decrypted);
-    return Array.isArray(parsed) ? parsed.filter((q): q is string => typeof q === 'string') : [];
-  } catch {
-    return [];
-  }
-};
-
-const writeMintedQuote = async (quoteId: string, key: CryptoKey, maxAttempts = 2) => {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const existing = await loadMintedQuotes(key);
-      if (existing.includes(quoteId)) return;
-      existing.push(quoteId);
-      const encrypted = await encryptData(JSON.stringify(existing), key);
-      localStorage.setItem(mintedQuotesKey, encrypted);
-      return;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
-};
-
-const saveMintedQuotes = async (quoteIds: string[], key: CryptoKey, maxAttempts = 2) => {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const existing = await loadMintedQuotes(key);
-      const merged = [...new Set([...existing, ...quoteIds])];
-      const encrypted = await encryptData(JSON.stringify(merged), key);
-      localStorage.setItem(mintedQuotesKey, encrypted);
-      return;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw new Error(`Failed to persist minted quotes after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
-};
-
-/* ── Pending receive recovery ────────────────────────────────
-   Cashu.receive is not atomic: the mint can issue proofs but the response
-   may time out before we persist them. We write the original token to an
-   encrypted pending-receive journal before calling the mint. On success the
-   journal is cleared; on timeout/error it remains and is re-attempted on
-   startup (with an attempt cap so a permanently-failing token does not loop
-   forever).
-*/
-
-const PENDING_RECEIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const PENDING_RECEIVE_MAX_ATTEMPTS = 5;
-const pendingReceiveContext = 'freedomid:receive-pending';
-
-interface PendingReceiveEntry {
-  tokenStr: string;
-  tokenHash: string;
-  mintUrls: string[];
-  amount: number;
-  status: 'pending' | 'completed';
-  timestamp: number;
-  attempts: number;
-  /** Normalized mint URLs that have already been successfully received. */
-  succeededMintUrls?: string[];
-}
-
-const pendingReceiveKey = (tokenHash: string) => `freedomid_receive_pending_${stringToBase64(tokenHash)}`;
-
-const loadPendingReceive = async (tokenHash: string, key: CryptoKey, legacyKey?: CryptoKey): Promise<PendingReceiveEntry | null> => {
-  let raw: string | null = null;
-  try { raw = localStorage.getItem(pendingReceiveKey(tokenHash)); } catch { return null; }
-  if (!raw) return null;
-  try {
-    const decrypted = await decryptData(raw, key, legacyKey, pendingReceiveContext);
-    if (!decrypted) return null;
-    const parsed = JSON.parse(decrypted) as unknown;
-    if (parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).tokenStr === 'string') {
-      return parsed as PendingReceiveEntry;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const clearPendingReceive = (tokenHash: string) => {
-  try { localStorage.removeItem(pendingReceiveKey(tokenHash)); } catch { /* noop */ }
-};
-
-const writePendingReceive = async (
-  tokenStr: string,
-  tokenHash: string,
-  mintUrls: string[],
-  amount: number,
-  key: CryptoKey,
-  succeededMintUrls?: string[],
-) => {
-  const existing = await loadPendingReceive(tokenHash, key);
-  const entry: PendingReceiveEntry = {
-    tokenStr,
-    tokenHash,
-    mintUrls,
-    amount,
-    status: 'pending',
-    timestamp: Date.now(),
-    attempts: existing?.attempts ?? 0,
-    succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
-  };
-  const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
-  localStorage.setItem(pendingReceiveKey(tokenHash), encrypted);
 };
 
 /**
@@ -419,6 +163,10 @@ export interface UseCashuWalletOptions {
   baoWalletConfig?: Nip60WalletConfig;
   /** Whether to publish the kind:17375 wallet config. Set to false for secondary wallets (e.g. BAO) when a combined config is published elsewhere. */
   publishWalletConfig?: boolean;
+  /** When false the wallet stays idle. Defaults to true. */
+  enabled?: boolean;
+  /** localStorage key prefix. Defaults to "freedomid_". */
+  storageNamespace?: string;
 }
 
 export function useCashuWallet(
@@ -473,6 +221,9 @@ export function useCashuWallet(
   useEffect(() => { restoreCashuStateRef.current = options?.restoreCashuState; }, [options?.restoreCashuState]);
   useEffect(() => { nip60SyncRef.current = options?.nip60Sync; }, [options?.nip60Sync]);
   useEffect(() => { baoWalletConfigRef.current = options?.baoWalletConfig; }, [options?.baoWalletConfig]);
+  const storageNamespaceRef = useRef(options?.storageNamespace ?? 'freedomid_');
+  useEffect(() => { storageNamespaceRef.current = options?.storageNamespace ?? 'freedomid_'; }, [options?.storageNamespace]);
+  const storageRef = useRef<CashuStorage>(createCashuStorage(options?.storageNamespace ?? 'freedomid_'));
   const nip60WalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const nip60RestoredRef = useRef(false);
   const processedNutzapIdsRef = useRef<Set<string>>(new Set());
@@ -499,7 +250,7 @@ export function useCashuWallet(
   useEffect(() => {
     const encKey = encKeyRef.current;
     if (!encKey) return;
-    saveCustomMints(customMints, encKey).catch((e) => devLog.error('Failed to persist custom mints:', e));
+    storageRef.current.saveCustomMints(customMints, encKey).catch((e) => devLog.error('Failed to persist custom mints:', e));
   }, [customMints]);
 
   /** Sum the amounts of a list of proofs, ignoring invalid entries. */
@@ -552,7 +303,7 @@ export function useCashuWallet(
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith('freedomid_receive_pending_')) keys.push(k);
+        if (k && k.startsWith(`${storageNamespaceRef.current}receive_pending_`)) keys.push(k);
       }
     } catch {
       return;
@@ -560,30 +311,36 @@ export function useCashuWallet(
     for (const key of keys) {
       let tokenHash = '';
       try {
-        const base64Hash = key.slice('freedomid_receive_pending_'.length);
+        const base64Hash = key.slice((storageNamespaceRef.current + 'receive_pending_').length);
         tokenHash = atob(base64Hash);
       } catch {
         continue;
       }
-      const entry = await loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
+      const entry = await storageRef.current.loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
       if (!entry || entry.status !== 'pending') {
-        clearPendingReceive(tokenHash);
+        storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       if (Date.now() - entry.timestamp > PENDING_RECEIVE_TTL_MS) {
         devLog.warn('Pending receive entry expired, clearing:', tokenHash);
-        clearPendingReceive(tokenHash);
+        storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       if (entry.attempts >= PENDING_RECEIVE_MAX_ATTEMPTS) {
         devLog.warn('Pending receive exceeded max attempts, clearing:', tokenHash);
-        clearPendingReceive(tokenHash);
+        storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       entry.attempts += 1;
       try {
-        const encrypted = await encryptData(JSON.stringify(entry), encKey, pendingReceiveContext);
-        localStorage.setItem(key, encrypted);
+        await storageRef.current.writePendingReceive(
+          entry.tokenStr,
+          tokenHash,
+          entry.mintUrls,
+          entry.amount,
+          encKey,
+          entry.succeededMintUrls,
+        );
       } catch {
         // If we cannot persist the incremented attempt counter, skip this cycle.
         continue;
@@ -603,7 +360,7 @@ export function useCashuWallet(
     const bip39Seed = bip39SeedRef.current;
     if (!encKey) return;
     const normalized = normalizeMintUrl(mintUrl)!;
-    const recoveredEntry = await loadProofRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined);
+    const recoveredEntry = await storageRef.current.loadProofRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined);
     if (!recoveredEntry || recoveredEntry.proofs.length === 0) return;
     const seed = bip39Seed;
     let recovered = recoveredEntry.proofs;
@@ -615,11 +372,11 @@ export function useCashuWallet(
         return;
       }
     }
-    await withProofLock(async () => {
-      await saveProofsForMint(normalized, recovered, encKey);
-      writeProofStoreTimestamp(normalized);
-      clearProofRecovery(normalized);
-      clearMeltChangeRecovery(normalized);
+    await storageRef.current.withProofLock(async () => {
+      await storageRef.current.saveProofsForMint(normalized, recovered, encKey);
+      storageRef.current.writeProofStoreTimestamp(normalized);
+      storageRef.current.clearProofRecovery(normalized);
+      storageRef.current.clearMeltChangeRecovery(normalized);
     });
     await calculateAllBalances();
   };
@@ -714,11 +471,11 @@ export function useCashuWallet(
       // operation order (proofLock first, then txLock) to avoid deadlock.
       const perMint: Array<{ mintUrl: string; proofs: any[] }> = [];
       let txs: Transaction[] = [];
-      await withProofLock(async () => {
-        await withTxLock(async () => {
+      await storageRef.current.withProofLock(async () => {
+        await storageRef.current.withTxLock(async () => {
           for (const m of currentAllMints) {
             try {
-              const proofs = sanitizeProofs(await getProofsForMint(normalizeMintUrl(m.url)!, currentEncKey, legacyEncKeyRef.current ?? undefined));
+              const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalizeMintUrl(m.url)!, currentEncKey, legacyEncKeyRef.current ?? undefined));
               if (proofs.length > 0) perMint.push({ mintUrl: m.url, proofs });
             } catch (e) {
               devLog.warn('Failed to read proofs for backup:', m.url, e);
@@ -726,19 +483,19 @@ export function useCashuWallet(
             }
           }
           // Read transactions fresh from storage (encrypted if key available)
-          txs = await loadTransactions(currentEncKey, legacyEncKeyRef.current ?? undefined);
+          txs = await storageRef.current.loadTransactions(currentEncKey, legacyEncKeyRef.current ?? undefined);
         });
       });
       // Read auxiliary state outside the proof/tx locks; it has its own storage keys.
       let mintedQuoteIds: string[] = [];
       let processedTokenHashes: { hash: string; expiresAt: number }[] = [];
       try {
-        mintedQuoteIds = await loadMintedQuotes(currentEncKey, legacyEncKeyRef.current ?? undefined);
+        mintedQuoteIds = await storageRef.current.loadMintedQuotes(currentEncKey, legacyEncKeyRef.current ?? undefined);
       } catch (e) {
         devLog.warn('Failed to read minted quotes for backup:', e);
       }
       try {
-        processedTokenHashes = await loadProcessedTokenHashes(currentEncKey, legacyEncKeyRef.current ?? undefined);
+        processedTokenHashes = await storageRef.current.loadProcessedTokenHashes(currentEncKey, legacyEncKeyRef.current ?? undefined);
       } catch (e) {
         devLog.warn('Failed to read processed token hashes for backup:', e);
       }
@@ -833,7 +590,7 @@ export function useCashuWallet(
   // Save selected mint
   useEffect(() => {
     if (mintUrl && encKeyRef.current) {
-      saveSelectedMintUrl(mintUrl, encKeyRef.current!).catch((e) => devLog.error('Failed to persist selected mint:', e));
+      storageRef.current.saveSelectedMintUrl(mintUrl, encKeyRef.current!).catch((e) => devLog.error('Failed to persist selected mint:', e));
     }
   }, [mintUrl]);
 
@@ -845,17 +602,17 @@ export function useCashuWallet(
     let cancelled = false;
     (async () => {
       try {
-        await migrateMintMetadata(encKey, legacyEncKeyRef.current ?? undefined);
+        await storageRef.current.migrateMintMetadata(encKey, legacyEncKeyRef.current ?? undefined);
         const [savedUrl, savedMints] = await Promise.all([
-          loadSelectedMintUrl(encKey, legacyEncKeyRef.current ?? undefined),
-          loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined),
+          storageRef.current.loadSelectedMintUrl(encKey, legacyEncKeyRef.current ?? undefined),
+          storageRef.current.loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined),
         ]);
         if (cancelled) return;
         if (savedUrl) setMintUrlState(savedUrl);
         if (savedMints.length > 0) setCustomMints(savedMints);
 
-        await migratePlaintextTransactions(encKey, legacyEncKeyRef.current ?? undefined);
-        const txs = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        await storageRef.current.migratePlaintextTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
         if (cancelled) return;
         setTransactions(txs);
       } catch (e) {
@@ -867,6 +624,7 @@ export function useCashuWallet(
 
   // Initialize wallet from external seed (from NostrContext)
   useEffect(() => {
+    if (options?.enabled === false) return;
     let cancelled = false;
     const init = async () => {
       if (externalSeed) {
@@ -916,7 +674,7 @@ export function useCashuWallet(
         // Hydrate the in-memory duplicate-token guard from encrypted storage so
         // a token received before a restart cannot be double-credited.
         try {
-          const persisted = await loadProcessedTokenHashes(key, legacyEncKeyRef.current ?? undefined);
+          const persisted = await storageRef.current.loadProcessedTokenHashes(key, legacyEncKeyRef.current ?? undefined);
           for (const entry of persisted) processedTokenHashesRef.current.add(entry.hash);
         } catch {
           // Non-fatal: the persisted guard is a defense-in-depth optimization.
@@ -924,7 +682,7 @@ export function useCashuWallet(
         // Hydrate the in-memory Nutzap dedup guard so a restart does not re-attempt
         // redemption of an already-processed Nutzap.
         try {
-          const persistedNutzaps = await loadProcessedNutzapIds(key, legacyEncKeyRef.current ?? undefined);
+          const persistedNutzaps = await storageRef.current.loadProcessedNutzapIds(key, legacyEncKeyRef.current ?? undefined);
           for (const entry of persistedNutzaps) processedNutzapIdsRef.current.add(entry.id);
         } catch {
           // Non-fatal: the Nutzap guard is defense in depth.
@@ -936,7 +694,7 @@ export function useCashuWallet(
         // once the encryption key is available. We only need to refresh state
         // here in case the migration effect has already run.
         try {
-          const migratedTxs = await loadTransactions(key, legacyEncKeyRef.current ?? undefined);
+          const migratedTxs = await storageRef.current.loadTransactions(key, legacyEncKeyRef.current ?? undefined);
           if (cancelled) return;
           if (mountedRef.current) setTransactions(migratedTxs);
         } catch (e) {
@@ -944,9 +702,11 @@ export function useCashuWallet(
         }
 
         // NIP-60 restore and initial sync (before DPCS fallback)
-        if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current) {
+        // BAO demo wallets are isolated: they do not restore main-wallet
+        // kind:10019/17375 config and do not publish their own config.
+        if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current && !storageNamespaceRef.current.startsWith('freedomid_bao_')) {
           try {
-            const loadedCustomMints = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
+            const loadedCustomMints = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
             const priorAllMints = allMintsRef.current;
             allMintsRef.current = dedupeByKey(
               [...defaultMints, ...loadedCustomMints],
@@ -970,38 +730,38 @@ export function useCashuWallet(
         if (restoreFn && key) {
           try {
             // Use default mints + loaded custom mints directly (allMints state may be stale here)
-            const loadedCustomMints = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
+            const loadedCustomMints = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
             const knownMints = [...defaultMints, ...loadedCustomMints];
             const hasAnyProofs = await (async () => {
               for (const m of knownMints) {
-                const p = sanitizeProofs(await getProofsForMint(normalizeMintUrl(m.url)!, key, legacyEncKeyRef.current ?? undefined));
+                const p = sanitizeProofs(await storageRef.current.getProofsForMint(normalizeMintUrl(m.url)!, key, legacyEncKeyRef.current ?? undefined));
                 if (cancelled) return false;
                 if (p.length > 0) return true;
               }
               return false;
             })();
             if (cancelled) return;
-            const txs = await loadTransactions(key, legacyEncKeyRef.current ?? undefined);
+            const txs = await storageRef.current.loadTransactions(key, legacyEncKeyRef.current ?? undefined);
             if (cancelled) return;
             // Always attempt restore when restoreFn is available; merge logic is safe
             // (dedupes proofs, filters new transactions, merges custom mints).
-            const restoreAttempted = localStorage.getItem('freedomid_restore_attempted') === 'true';
+            const restoreAttempted = localStorage.getItem(storageNamespaceRef.current + 'restore_attempted') === 'true';
             if (!restoreAttempted || (!hasAnyProofs && txs.length === 0)) {
               devLog.log('Attempting relay restore');
               const restored = await restoreFn();
-              try { localStorage.setItem('freedomid_restore_attempted', 'true'); } catch { /* storage unavailable */ }
+              try { localStorage.setItem(storageNamespaceRef.current + 'restore_attempted', 'true'); } catch { /* storage unavailable */ }
               if (cancelled) return;
               if (restored && mountedRef.current) {
                 // Restore proofs per mint — MERGE with local rather than overwrite.
                 // Verify against the mint that backed-up proofs are still unspent.
                 if (Array.isArray(restored.proofs)) {
-                  await withProofLock(async () => {
+                  await storageRef.current.withProofLock(async () => {
                     const seed = bip39SeedRef.current;
                     for (const entry of restored.proofs) {
                       if (cancelled) return;
                       if (entry && typeof entry.mintUrl === 'string' && entry.mintUrl.length > 0 && isAllowedMintUrl(entry.mintUrl) && Array.isArray(entry.proofs) && entry.proofs.length > 0) {
                         const normalized = normalizeMintUrl(entry.mintUrl)!;
-                        const existing = sanitizeProofs(await getProofsForMint(normalized, key, legacyEncKeyRef.current ?? undefined));
+                        const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, key, legacyEncKeyRef.current ?? undefined));
                         let incoming = sanitizeProofs(entry.proofs);
                         if (seed) {
                           try {
@@ -1012,7 +772,7 @@ export function useCashuWallet(
                           }
                         }
                         const merged = dedupeProofs([...existing, ...incoming]);
-                        await saveProofsForMint(normalized, merged, key);
+                        await storageRef.current.saveProofsForMint(normalized, merged, key);
                       }
                     }
                   });
@@ -1021,25 +781,25 @@ export function useCashuWallet(
                 // Restore transactions — merge with local rather than overwrite.
                 // Cap imported transaction count and amounts; warn on very old txs.
                 if (Array.isArray(restored.transactions) && restored.transactions.length > 0) {
-                  await withTxLock(async () => {
+                  await storageRef.current.withTxLock(async () => {
                     const MAX_RESTORED_TXS = 500;
                     const MAX_TX_AMOUNT = Number.MAX_SAFE_INTEGER;
                     const VERY_OLD_MS = 180 * 24 * 60 * 60 * 1000;
                     const now = Date.now();
-                    let validTxs = restored.transactions.filter((t): t is Transaction => isValidTransaction(t));
+                    let validTxs = restored.transactions.filter((t): t is Transaction => storageRef.current.isValidTransaction(t));
                     validTxs = validTxs.filter((t) => t.amount <= MAX_TX_AMOUNT);
                     const veryOld = validTxs.filter((t) => now - t.createdAt > VERY_OLD_MS);
                     if (veryOld.length > 0) {
                       devLog.warn(`Restore contains ${veryOld.length} transactions older than 180 days`);
                     }
                     validTxs = validTxs.slice(0, MAX_RESTORED_TXS);
-                    const localTxs = await loadTransactions(key, legacyEncKeyRef.current ?? undefined);
+                    const localTxs = await storageRef.current.loadTransactions(key, legacyEncKeyRef.current ?? undefined);
                     const seen = new Set(localTxs.map((t) => t.id));
                     const newTxs = validTxs.filter((t) => !seen.has(t.id));
                     if (newTxs.length > 0) {
-                      await saveTransactions([...localTxs, ...newTxs], key);
+                      await storageRef.current.saveTransactions([...localTxs, ...newTxs], key);
                       if (cancelled) return;
-                      const finalTxs = await loadTransactions(key, legacyEncKeyRef.current ?? undefined);
+                      const finalTxs = await storageRef.current.loadTransactions(key, legacyEncKeyRef.current ?? undefined);
                       if (cancelled) return;
                       setTransactions(finalTxs);
                     }
@@ -1059,13 +819,13 @@ export function useCashuWallet(
                       isAllowedMintUrl(m.url),
                   );
                   if (valid.length > 0) {
-                    const existing = await loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
+                    const existing = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
                     const merged = dedupeByKey(
                       [...existing, ...valid],
                       (m) => normalizeMintUrl(m.url)!,
                     );
                     setCustomMints(merged);
-                    await saveCustomMints(merged, key);
+                    await storageRef.current.saveCustomMints(merged, key);
                   }
                 }
                 // Restore selected mint (validate host before adopting)
@@ -1080,14 +840,14 @@ export function useCashuWallet(
                 // Restore auxiliary state used to prevent double-spend/double-receive.
                 if (restored.version === 2 && Array.isArray(restored.mintedQuoteIds) && restored.mintedQuoteIds.length > 0) {
                   try {
-                    await saveMintedQuotes(restored.mintedQuoteIds, key);
+                    await storageRef.current.saveMintedQuotes(restored.mintedQuoteIds, key);
                   } catch (e) {
                     devLog.warn('Failed to restore minted quote IDs:', e);
                   }
                 }
                 if (restored.version === 2 && Array.isArray(restored.processedTokenHashes) && restored.processedTokenHashes.length > 0) {
                   try {
-                    const existing = await loadProcessedTokenHashes(key, legacyEncKeyRef.current ?? undefined);
+                    const existing = await storageRef.current.loadProcessedTokenHashes(key, legacyEncKeyRef.current ?? undefined);
                     const seen = new Set(existing.map((e) => e.hash));
                     const merged = [
                       ...existing,
@@ -1100,7 +860,7 @@ export function useCashuWallet(
                           !seen.has(h.hash),
                       ),
                     ];
-                    await saveProcessedTokenHashes(merged, key);
+                    await storageRef.current.saveProcessedTokenHashes(merged, key);
                   } catch (e) {
                     devLog.warn('Failed to restore processed token hashes:', e);
                   }
@@ -1123,7 +883,7 @@ export function useCashuWallet(
         await flushPendingBackup();
         if (cancelled) return;
         // No seed available yet — wallet stays uninitialized until unlocked
-        try { localStorage.removeItem('freedomid_restore_attempted'); } catch { /* ignore */ }
+        try { localStorage.removeItem(storageNamespaceRef.current + 'restore_attempted'); } catch { /* ignore */ }
         seedPhraseRef.current = '';
         if (bip39SeedRef.current) {
           bip39SeedRef.current.fill(0);
@@ -1181,7 +941,7 @@ export function useCashuWallet(
     const STALE_MS = 24 * 60 * 60 * 1000;
     (async () => {
       try {
-        const txs = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
         if (cancelled) return;
         const now = Date.now();
         let dirty = false;
@@ -1197,13 +957,13 @@ export function useCashuWallet(
         });
         if (dirty && !cancelled) {
           // Use withTxLock to avoid racing with addTransaction / updateTransactionStatus
-          await withTxLock(async () => {
+          await storageRef.current.withTxLock(async () => {
             if (cancelled) return;
-            const current = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+            const current = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
             const currentIds = new Set(current.map((t) => t.id));
             const safeUpdated = updated.filter((t) => currentIds.has(t.id));
             if (safeUpdated.length > 0) {
-              await saveTransactions(safeUpdated, encKey);
+              await storageRef.current.saveTransactions(safeUpdated, encKey);
             }
           });
         }
@@ -1332,7 +1092,7 @@ export function useCashuWallet(
     if (!normalized) return;
 
     try {
-      const proofs = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+      const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
       const lastEventId = await loadLastTokenEventId(normalized, encKey);
       const delIds = new Set<string>();
       if (lastEventId) delIds.add(lastEventId);
@@ -1464,7 +1224,7 @@ export function useCashuWallet(
     for (const m of allMints) {
       try {
         const normalized = normalizeMintUrl(m.url)!;
-        const proofs = sanitizeProofs(await getProofsForMint(normalized, activeKey, legacyEncKeyRef.current ?? undefined));
+        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, activeKey, legacyEncKeyRef.current ?? undefined));
         const bal = proofs.reduce((sum: number, p: any) => {
           const amt = Number(p.amount);
           return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
@@ -1497,7 +1257,7 @@ export function useCashuWallet(
       const hasAnyProofs = await (async () => {
         for (const m of allMintsRef.current) {
           const normalized = normalizeMintUrl(m.url)!;
-          const local = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+          const local = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
           if (local.length > 0) return true;
         }
         return false;
@@ -1505,16 +1265,16 @@ export function useCashuWallet(
 
       const seed = bip39SeedRef.current;
       if (!hasAnyProofs && seed) {
-        await withProofLock(async () => {
+        await storageRef.current.withProofLock(async () => {
           for (const [mint, remoteProofs] of Object.entries(restored.proofsByMint)) {
             const normalized = normalizeMintUrl(mint);
             if (!normalized || remoteProofs.length === 0) continue;
             try {
               const unspent = sanitizeProofs(dedupeProofs(await filterUnspentProofs(normalized, remoteProofs, seed)));
               if (unspent.length === 0) continue;
-              const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+              const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
               const merged = dedupeProofs([...existing, ...unspent]);
-              await saveProofsForMint(normalized, merged, encKey);
+              await storageRef.current.saveProofsForMint(normalized, merged, encKey);
             } catch (e) {
               devLog.warn('Failed to merge remote NIP-60 proofs for mint:', normalized, e);
             }
@@ -1524,19 +1284,20 @@ export function useCashuWallet(
       }
 
       // Adopt any mints from the remote config that we do not already know.
-      if (restored.config.mints.length > 0) {
+      // BAO demo wallets are pinned to the configured signet mint.
+      if (restored.config.mints.length > 0 && !storageNamespaceRef.current.startsWith('freedomid_bao_')) {
         const known = new Set(allMintsRef.current.map((m) => normalizeMintUrl(m.url)!));
         const newMints = restored.config.mints.filter((m) => !known.has(m));
         if (newMints.length > 0) {
           const valid = newMints.filter((m) => isAllowedMintUrl(m));
           if (valid.length > 0) {
-            const existing = await loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
+            const existing = await storageRef.current.loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
             const merged = dedupeByKey(
               [...existing, ...valid.map((url) => ({ name: url, url }))],
               (m) => normalizeMintUrl(m.url)!,
             );
             setCustomMints(merged);
-            await saveCustomMints(merged, encKey);
+            await storageRef.current.saveCustomMints(merged, encKey);
           }
         }
       }
@@ -1621,8 +1382,8 @@ export function useCashuWallet(
           devLog.warn(`Recovered ${label} for mint`, normalized);
           try {
             const seed = bip39SeedRef.current;
-            const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-            const storeTs = readProofStoreTimestamp(normalized);
+            const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+            const storeTs = readProofStoreTimestamp(normalized, storageNamespaceRef.current);
             if (existing.length > 0 && recovered.timestamp <= storeTs) {
               devLog.warn(`${label} is older than store, clearing stale recovery:`, normalized);
               clear(normalized);
@@ -1630,11 +1391,11 @@ export function useCashuWallet(
             }
             const merged = dedupeByKey([...existing, ...recovered.proofs], (p) => String(p?.secret));
             const canonical = seed ? sanitizeProofs(await filterUnspentProofs(normalized, merged, seed)) : sanitizeProofs(merged);
-            await withProofLock(async () => {
-              const current = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+            await storageRef.current.withProofLock(async () => {
+              const current = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
               const latest = dedupeByKey([...current, ...canonical], (p) => String(p?.secret));
-              await saveProofsForMint(normalized, latest, encKey);
-              writeProofStoreTimestamp(normalized);
+              await storageRef.current.saveProofsForMint(normalized, latest, encKey);
+              storageRef.current.writeProofStoreTimestamp(normalized);
               clear(normalized);
             });
           } catch (e) {
@@ -1643,9 +1404,9 @@ export function useCashuWallet(
           }
         };
 
-        await reconcileRecovery(() => loadProofRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), clearProofRecovery, 'proof recovery');
-        await reconcileRecovery(() => loadSendRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), clearSendRecovery, 'send recovery');
-        await reconcileRecovery(() => loadMeltChangeRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), clearMeltChangeRecovery, 'melt change recovery');
+        await reconcileRecovery(() => storageRef.current.loadProofRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), storageRef.current.clearProofRecovery, 'proof recovery');
+        await reconcileRecovery(() => storageRef.current.loadSendRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), storageRef.current.clearSendRecovery, 'send recovery');
+        await reconcileRecovery(() => storageRef.current.loadMeltChangeRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined), storageRef.current.clearMeltChangeRecovery, 'melt change recovery');
       }
       await calculateAllBalances();
     } catch (e) {
@@ -1759,11 +1520,11 @@ export function useCashuWallet(
     // Clean up stored proofs and recovery for this mint under the proof lock
     (async () => {
       try {
-        await withProofLock(async () => {
-          const key = mintStorageKey(normalized);
+        await storageRef.current.withProofLock(async () => {
+          const key = storageRef.current.mintStorageKey(normalized);
           localStorage.removeItem(key);
-          clearProofRecovery(normalized);
-          clearSendRecovery(normalized);
+          storageRef.current.clearProofRecovery(normalized);
+          storageRef.current.clearSendRecovery(normalized);
         });
       } catch (e) {
         devLog.error('Failed to clean up mint storage:', e);
@@ -1791,11 +1552,11 @@ export function useCashuWallet(
 
   const refreshTransactions = useCallback(async () => {
     const encKey = encKeyRef.current;
-    const txs = await loadTransactions(encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
+    const txs = await storageRef.current.loadTransactions(encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
     if (mountedRef.current) setTransactions(txs);
   }, []);
 
-  const receiveToken = useCallback(async (tokenStr: string) => {
+  const receiveToken = useCallback(async (tokenStr: string, privkey?: string) => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     if (typeof tokenStr !== 'string' || tokenStr.trim().length === 0) {
@@ -1821,9 +1582,9 @@ export function useCashuWallet(
       const tokenHash = hashDecodedToken(decodedEntries);
 
       // Defend against double-credit both within this session and across restarts.
-      if (processedTokenHashesRef.current.has(tokenHash) || await isProcessedTokenHash(tokenHash, encKey, legacyEncKeyRef.current ?? undefined)) {
+      if (processedTokenHashesRef.current.has(tokenHash) || await storageRef.current.isProcessedTokenHash(tokenHash, encKey, legacyEncKeyRef.current ?? undefined)) {
         devLog.warn('Token already processed, skipping:', tokenHash);
-        clearPendingReceive(tokenHash);
+        storageRef.current.clearPendingReceive(tokenHash);
         if (mountedRef.current) setSuccessTimed('Token already received');
         return;
       }
@@ -1851,12 +1612,12 @@ export function useCashuWallet(
 
       // Load any prior partial-receive progress so we can skip mints that
       // already succeeded and avoid an infinite retry loop.
-      const existingPending = await loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
+      const existingPending = await storageRef.current.loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
       const succeededMintUrls = new Set(existingPending?.succeededMintUrls ?? []);
       const groupedEntries = Array.from(grouped.values());
       const pendingMintUrls = groupedEntries.map((e) => normalizeMintUrl(e.mintUrl)!).filter(Boolean);
       const pendingAmount = groupedEntries.reduce((sum, e) => sum + sumProofAmounts(e.proofs), 0);
-      await writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
+      await storageRef.current.writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
 
       let totalReceived = 0;
       for (const [normalized, entry] of grouped) {
@@ -1875,11 +1636,11 @@ export function useCashuWallet(
             ? wallet
             : await withTimeout(getOrCreateWallet(normalized, bip39Seed, true), 15000, 'Foreign mint load');
 
-          const received = await withProofLock(async () => {
-            const existingProofs = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+          const received = await storageRef.current.withProofLock(async () => {
+            const existingProofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
             const tokenAmount = sumProofAmounts(entry.proofs);
             const received = await withTimeout(
-              targetWallet.receive(entryToken, { proofsWeHave: existingProofs, requireDleq: true }),
+              targetWallet.receive(entryToken, { proofsWeHave: existingProofs, requireDleq: true, privkey }),
               60000,
               'Receive',
               () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -1924,10 +1685,10 @@ export function useCashuWallet(
             receivedProofs = sanitizeProofs(unspent);
             const allProofs = dedupeProofs([...existingProofs, ...receivedProofs]);
             // Write recovery with merged proofs before save
-            await writeProofRecovery(normalized, allProofs, encKey);
-            await saveProofsForMint(normalized, allProofs, encKey);
-            writeProofStoreTimestamp(normalized);
-            clearProofRecovery(normalized);
+            await storageRef.current.writeProofRecovery(normalized, allProofs, encKey);
+            await storageRef.current.saveProofsForMint(normalized, allProofs, encKey);
+            storageRef.current.writeProofStoreTimestamp(normalized);
+            storageRef.current.clearProofRecovery(normalized);
             await calculateAllBalances();
 
             // Record the transaction while still holding the proof lock.
@@ -1938,8 +1699,8 @@ export function useCashuWallet(
             const receivedAmount = Array.isArray(received)
               ? received.reduce((sum: number, p: any) => sum + (Number.isInteger(p?.amount) ? p.amount : 0), 0)
               : 0;
-            await withTxLock(async () => {
-              await addTransaction({
+            await storageRef.current.withTxLock(async () => {
+              await storageRef.current.addTransaction({
                 type: 'receive',
                 amount: receivedAmount,
                 memo: 'Cashu token',
@@ -1950,7 +1711,7 @@ export function useCashuWallet(
             await refreshTransactions();
             await syncNip60TokenForMint(normalized, 'in', receivedAmount);
             succeededMintUrls.add(normalized);
-            await writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
+            await storageRef.current.writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
             return received;
           });
 
@@ -1980,12 +1741,12 @@ export function useCashuWallet(
       if (allEntriesSucceeded) {
         processedTokenHashesRef.current.add(tokenHash);
         try {
-          await addProcessedTokenHash(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
+          await storageRef.current.addProcessedTokenHash(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
         } catch (e) {
           devLog.warn('Failed to persist processed token hash:', e);
           // Do not fail the receive; the in-memory guard still protects this session.
         }
-        clearPendingReceive(tokenHash);
+        storageRef.current.clearPendingReceive(tokenHash);
       }
 
       if (mountedRef.current) {
@@ -2020,7 +1781,7 @@ export function useCashuWallet(
     return null;
   };
 
-  const sendToken = useCallback(async (amount: number, memo = ''): Promise<string | null> => {
+  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string): Promise<string | null> => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
@@ -2036,8 +1797,8 @@ export function useCashuWallet(
       setLoading(true);
       setError('');
 
-      const token = await withProofLock(async () => {
-        const proofs = sanitizeProofs(await getProofsForMint(normalizeMintUrl(mintUrl)!, encKey, legacyEncKeyRef.current ?? undefined));
+      const token = await storageRef.current.withProofLock(async () => {
+        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalizeMintUrl(mintUrl)!, encKey, legacyEncKeyRef.current ?? undefined));
         const available = proofs.reduce((sum, p) => {
           const amt = Number(p.amount);
           return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
@@ -2050,9 +1811,14 @@ export function useCashuWallet(
         // marks them spent but before we persist the change, the reconciliation loop
         // will ask the mint for spent-state rather than blindly restoring this snapshot.
         const normalizedMint = normalizeMintUrl(mintUrl)!;
-        await writeProofRecovery(normalizedMint, proofs, encKey);
+        await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
+        const sendOpts: import('@cashu/cashu-ts').SendOptions = { proofsWeHave: proofs };
+        if (recipientPubkey && recipientPubkey.length === 64) {
+          sendOpts.pubkey = recipientPubkey;
+          sendOpts.includeDleq = true;
+        }
         const sendResult = await withTimeout(
-          wallet.send(amount, proofs, { proofsWeHave: proofs }),
+          wallet.send(amount, proofs, sendOpts),
           60000,
           'Send',
           () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -2064,7 +1830,7 @@ export function useCashuWallet(
         const keepProofs = sanitizeProofs(dedupeProofs(sendResult.keep));
         // Persist keep proofs for crash recovery immediately after the mint
         // returned them, before any further validation or async work.
-        await writeProofRecovery(normalizedMint, keepProofs, encKey);
+        await storageRef.current.writeProofRecovery(normalizedMint, keepProofs, encKey);
         const inputAmount = available;
         const outputAmount = sumProofAmounts(sendProofs) + sumProofAmounts(keepProofs);
         if (sumProofAmounts(sendProofs) !== amount) {
@@ -2099,10 +1865,10 @@ export function useCashuWallet(
 
         // Save keep proofs (so user doesn't lose their change). Crash recovery
         // was already written immediately after the mint returned the outputs.
-        await saveProofsForMint(normalizedMint, keepProofs, encKey);
-        writeProofStoreTimestamp(normalizedMint);
+        await storageRef.current.saveProofsForMint(normalizedMint, keepProofs, encKey);
+        storageRef.current.writeProofStoreTimestamp(normalizedMint);
         // Proofs are persisted — clear the recovery journal
-        clearProofRecovery(normalizedMint);
+        storageRef.current.clearProofRecovery(normalizedMint);
 
         // Build token string — if this throws, proofs are already safe in storage
         let tokenStr: string;
@@ -2113,20 +1879,20 @@ export function useCashuWallet(
           // Save send proofs to a deterministic recovery key so they can be reconciled
           // on next load. The change (keepProofs) is already in storage.
           try {
-            await writeSendRecovery(normalizedMint, sendProofs, encKey);
+            await storageRef.current.writeSendRecovery(normalizedMint, sendProofs, encKey);
           } catch { /* best effort */ }
           throw new Error('Failed to encode token — your proofs have been saved for recovery');
         }
         // Encoding succeeded — clear any prior send-recovery for this mint.
-        clearSendRecovery(normalizedMint);
+        storageRef.current.clearSendRecovery(normalizedMint);
 
         // Record the transaction while still holding the proof lock. Both locks
         // are held in the documented order: proof first, then tx. We cannot roll
         // back the spent proofs (the token has already been issued by the mint),
         // so if recording fails we surface the error but still return the token.
         try {
-          await withTxLock(async () => {
-            await addTransaction({
+          await storageRef.current.withTxLock(async () => {
+            await storageRef.current.addTransaction({
               type: 'send',
               amount,
               memo: memo || 'Cashu send',
@@ -2166,7 +1932,7 @@ export function useCashuWallet(
           const toRemove: string[] = [];
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && k.startsWith('freedomid_recovery_')) toRemove.push(k);
+            if (k && k.startsWith(storageNamespaceRef.current + 'recovery_')) toRemove.push(k);
           }
           for (const k of toRemove) {
             try { localStorage.removeItem(k); } catch { /* ignore */ }
@@ -2175,6 +1941,22 @@ export function useCashuWallet(
       })();
     }
   }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
+
+  const sendLockedToken = useCallback(async (amount: number, recipientPubkey: string, memo = ''): Promise<string | null> => {
+    if (!recipientPubkey || recipientPubkey.length !== 64) {
+      setError('Invalid recipient P2PK pubkey');
+      return null;
+    }
+    return sendToken(amount, memo, recipientPubkey);
+  }, [sendToken]);
+
+  const receiveLockedToken = useCallback(async (tokenStr: string, privkey: string): Promise<void> => {
+    if (!privkey || privkey.length !== 64) {
+      setError('Invalid P2PK private key');
+      return;
+    }
+    await receiveToken(tokenStr, privkey);
+  }, [receiveToken]);
 
   const requestInvoice = useCallback(async (amount: number, description = 'Freedom ID'): Promise<MintQuoteResponse | null> => {
     const encKey = encKeyRef.current;
@@ -2201,8 +1983,8 @@ export function useCashuWallet(
       // Record the pending invoice transaction under the tx lock. There is no
       // proof update here, so the tx lock alone is sufficient for atomicity.
       try {
-        await withTxLock(async () => {
-          await addTransaction({
+        await storageRef.current.withTxLock(async () => {
+          await storageRef.current.addTransaction({
             type: 'mint',
             amount,
             memo: 'Lightning deposit',
@@ -2247,7 +2029,7 @@ export function useCashuWallet(
 
       const markPendingMint = async (status: Transaction['status']) => {
         try {
-          const txs = await loadTransactions(encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
+          const txs = await storageRef.current.loadTransactions(encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
           const pendingIdx = txs.findIndex(
             (t) =>
               t.type === 'mint' &&
@@ -2256,7 +2038,7 @@ export function useCashuWallet(
               (t.quoteId === quoteId || (t.amount === amount && !t.quoteId)),
           );
           if (pendingIdx >= 0) {
-            await updateTransactionStatus(txs[pendingIdx].id, status, encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
+            await storageRef.current.updateTransactionStatus(txs[pendingIdx].id, status, encKey ?? undefined, legacyEncKeyRef.current ?? undefined);
             await refreshTransactions();
           }
         } catch (e) {
@@ -2264,7 +2046,7 @@ export function useCashuWallet(
         }
       };
 
-      await withProofLock(async () => {
+      await storageRef.current.withProofLock(async () => {
         // Verify quote is paid inside the lock to prevent race-conditioned double-mint
         const quoteCheck = await withTimeout(
           wallet.checkMintQuote(quoteId),
@@ -2283,7 +2065,7 @@ export function useCashuWallet(
           throw new Error('Payment is still being processed. Wait a moment and try again.');
         }
 
-        const mintedQuotes = await loadMintedQuotes(encKey, legacyEncKeyRef.current ?? undefined);
+        const mintedQuotes = await storageRef.current.loadMintedQuotes(encKey, legacyEncKeyRef.current ?? undefined);
         if (mintedQuotes.includes(quoteId)) {
           throw new Error('This quote has already been minted');
         }
@@ -2300,20 +2082,20 @@ export function useCashuWallet(
         if (sumProofAmounts(newProofs) !== amount) {
           throw new Error('Mint returned proofs with incorrect total amount');
         }
-        await writeMintedQuote(quoteId, encKey);
-        const existing = sanitizeProofs(await getProofsForMint(normalizeMintUrl(mintUrl)!, encKey, legacyEncKeyRef.current ?? undefined));
+        await storageRef.current.writeMintedQuote(quoteId, encKey);
+        const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalizeMintUrl(mintUrl)!, encKey, legacyEncKeyRef.current ?? undefined));
         const merged = sanitizeProofs(dedupeProofs([...existing, ...newProofs]));
-        await writeProofRecovery(normalizeMintUrl(mintUrl)!, merged, encKey);
-        await saveProofsForMint(normalizeMintUrl(mintUrl)!, merged, encKey);
-        writeProofStoreTimestamp(normalizeMintUrl(mintUrl)!);
-        clearProofRecovery(normalizeMintUrl(mintUrl)!);
+        await storageRef.current.writeProofRecovery(normalizeMintUrl(mintUrl)!, merged, encKey);
+        await storageRef.current.saveProofsForMint(normalizeMintUrl(mintUrl)!, merged, encKey);
+        storageRef.current.writeProofStoreTimestamp(normalizeMintUrl(mintUrl)!);
+        storageRef.current.clearProofRecovery(normalizeMintUrl(mintUrl)!);
 
         // Record the completed mint transaction while still holding the proof
         // lock. Both locks are held in the documented order: proof first, then
         // tx. If recording fails, the proof update stays committed and the
         // operation is surfaced as failed.
-        await withTxLock(async () => {
-          const txs = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        await storageRef.current.withTxLock(async () => {
+          const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
           const pendingIdx = txs.findIndex(
             (t) =>
               t.type === 'mint' &&
@@ -2322,9 +2104,9 @@ export function useCashuWallet(
               (t.quoteId === quoteId || (t.amount === amount && !t.quoteId)),
           );
           if (pendingIdx >= 0) {
-            await updateTransactionStatus(txs[pendingIdx].id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
+            await storageRef.current.updateTransactionStatus(txs[pendingIdx].id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
           } else {
-            await addTransaction(
+            await storageRef.current.addTransaction(
               { type: 'mint', amount, memo: 'Lightning deposit', mintUrl, status: 'completed', quoteId },
               encKey,
               legacyEncKeyRef.current ?? undefined
@@ -2363,9 +2145,9 @@ export function useCashuWallet(
       setLoading(true);
       setError('');
 
-      const { amount: paidAmount, preimage, quote, state } = await withProofLock(async () => {
+      const { amount: paidAmount, preimage, quote, state } = await storageRef.current.withProofLock(async () => {
         const quote = await withTimeout(wallet.createMeltQuote(invoice), 30000, 'Melt quote creation');
-        const proofs = sanitizeProofs(await getProofsForMint(normalizeMintUrl(mintUrl)!, encKeyRef.current!, legacyEncKeyRef.current ?? undefined));
+        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalizeMintUrl(mintUrl)!, encKeyRef.current!, legacyEncKeyRef.current ?? undefined));
         const available = proofs.reduce((sum, p) => {
           const amt = Number(p.amount);
           return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
@@ -2390,7 +2172,7 @@ export function useCashuWallet(
         // marks them spent but before we persist the change, the reconciliation loop
         // will ask the mint for spent-state rather than blindly restoring this snapshot.
         const normalizedMint = normalizeMintUrl(mintUrl)!;
-        await writeProofRecovery(normalizedMint, proofs, encKeyRef.current!);
+        await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKeyRef.current!);
         const inputAmount = available;
         const meltResult = await withTimeout(
           wallet.meltProofs(quote, proofs),
@@ -2416,7 +2198,7 @@ export function useCashuWallet(
         const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
         // Persist change for crash recovery immediately after the mint returns it.
         if (changeProofs.length > 0) {
-          await writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+          await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
         }
 
         const state = meltResult.quote?.state;
@@ -2428,9 +2210,9 @@ export function useCashuWallet(
         // we surface the error but still return the payment result.
         const recordMeltTx = async () => {
           try {
-            await withTxLock(async () => {
+            await storageRef.current.withTxLock(async () => {
               if (state === 'UNPAID') {
-                await addTransaction({
+                await storageRef.current.addTransaction({
                   type: 'melt',
                   amount: paidAmount,
                   memo: 'Lightning payment (failed)',
@@ -2439,7 +2221,7 @@ export function useCashuWallet(
                   quoteId: quote.quote,
                 }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
               } else if (state === 'PENDING') {
-                await addTransaction({
+                await storageRef.current.addTransaction({
                   type: 'melt',
                   amount: paidAmount,
                   memo: 'Lightning payment (pending)',
@@ -2449,7 +2231,7 @@ export function useCashuWallet(
                   expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
                 }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
               } else if (state === 'PAID') {
-                await addTransaction({
+                await storageRef.current.addTransaction({
                   type: 'melt',
                   amount: paidAmount,
                   memo: 'Lightning payment',
@@ -2459,7 +2241,7 @@ export function useCashuWallet(
                 }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
               } else {
                 // Unknown state — treat as pending to be safe.
-                await addTransaction({
+                await storageRef.current.addTransaction({
                   type: 'melt',
                   amount: paidAmount,
                   memo: 'Lightning payment (pending)',
@@ -2481,7 +2263,7 @@ export function useCashuWallet(
           // Mint did not spend the invoice: input proofs are still unspent.
           // Restore them from the recovery snapshot and drop any change. If we
           // cannot verify spent-state, leave the journal in place for a later retry.
-          const recoveredEntry = await loadProofRecovery(normalizedMint, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
+          const recoveredEntry = await storageRef.current.loadProofRecovery(normalizedMint, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
           if (recoveredEntry && recoveredEntry.proofs.length > 0) {
             const seed = bip39SeedRef.current;
             if (!seed) {
@@ -2502,11 +2284,11 @@ export function useCashuWallet(
                 state,
               };
             }
-            await saveProofsForMint(normalizedMint, recovered, encKeyRef.current!);
-            writeProofStoreTimestamp(normalizedMint);
+            await storageRef.current.saveProofsForMint(normalizedMint, recovered, encKeyRef.current!);
+            storageRef.current.writeProofStoreTimestamp(normalizedMint);
           }
-          clearProofRecovery(normalizedMint);
-          clearMeltChangeRecovery(normalizedMint);
+          storageRef.current.clearProofRecovery(normalizedMint);
+          storageRef.current.clearMeltChangeRecovery(normalizedMint);
           await calculateAllBalances();
           await recordMeltTx();
           return {
@@ -2522,8 +2304,8 @@ export function useCashuWallet(
         // mint returned it.
         if (state === 'PENDING' || (state !== 'PAID' && state !== 'UNPAID')) {
           // Keep the input-proof recovery journal until the quote resolves.
-          await saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
-          writeProofStoreTimestamp(normalizedMint);
+          await storageRef.current.saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
+          storageRef.current.writeProofStoreTimestamp(normalizedMint);
           await calculateAllBalances();
           await recordMeltTx();
           return {
@@ -2535,10 +2317,10 @@ export function useCashuWallet(
         }
 
         // PAID: input proofs are spent; persist change and clear all recovery journals.
-        await saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
-        writeProofStoreTimestamp(normalizedMint);
-        clearProofRecovery(normalizedMint);
-        clearMeltChangeRecovery(normalizedMint);
+        await storageRef.current.saveProofsForMint(normalizedMint, changeProofs, encKeyRef.current!);
+        storageRef.current.writeProofStoreTimestamp(normalizedMint);
+        storageRef.current.clearProofRecovery(normalizedMint);
+        storageRef.current.clearMeltChangeRecovery(normalizedMint);
         await calculateAllBalances();
         await recordMeltTx();
         return {
@@ -2592,7 +2374,7 @@ export function useCashuWallet(
       return;
     }
     if (processedNutzapIdsRef.current.has(event.id)) return;
-    if (await isProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined)) return;
+    if (await storageRef.current.isProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined)) return;
 
     try {
       if (!verifyEvent(event)) {
@@ -2615,8 +2397,8 @@ export function useCashuWallet(
         ? wallet
         : await withTimeout(getOrCreateWallet(normalized, bip39SeedRef.current!, true), 15000, 'Foreign mint load');
 
-      await withProofLock(async () => {
-        const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+      await storageRef.current.withProofLock(async () => {
+        const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
         const tokenStr = getEncodedToken({ mint: normalized, proofs: parsed.proofs as unknown[], unit: 'sat' });
         const nutzapInputProofs = sanitizeProofs(parsed.proofs);
         const nutzapInputAmount = sumProofAmounts(nutzapInputProofs);
@@ -2663,12 +2445,12 @@ export function useCashuWallet(
         }
         receivedProofs = sanitizeProofs(unspent);
         const merged = dedupeProofs([...existing, ...receivedProofs]);
-        await saveProofsForMint(normalized, merged, encKey);
-        writeProofStoreTimestamp(normalized);
+        await storageRef.current.saveProofsForMint(normalized, merged, encKey);
+        storageRef.current.writeProofStoreTimestamp(normalized);
         await calculateAllBalances();
 
-        await withTxLock(async () => {
-          await addTransaction({
+        await storageRef.current.withTxLock(async () => {
+          await storageRef.current.addTransaction({
             type: 'receive',
             amount: receivedAmount,
             memo: 'Nutzap',
@@ -2694,7 +2476,7 @@ export function useCashuWallet(
 
       processedNutzapIdsRef.current.add(event.id);
       try {
-        await addProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined);
+        await storageRef.current.addProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined);
       } catch (e) {
         devLog.warn('Failed to persist processed Nutzap id:', e);
       }
@@ -2785,8 +2567,8 @@ export function useCashuWallet(
         ? wallet
         : await withTimeout(getOrCreateWallet(normalizedMint, bip39SeedRef.current!, true), 15000, 'Foreign mint load');
 
-      const sendProofs = await withProofLock(async () => {
-        const proofs = dedupeProofs(sanitizeProofs(await getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined)));
+      const sendProofs = await storageRef.current.withProofLock(async () => {
+        const proofs = dedupeProofs(sanitizeProofs(await storageRef.current.getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined)));
         if (proofs.length === 0) {
           throw new Error('No proofs available for this mint');
         }
@@ -2805,7 +2587,7 @@ export function useCashuWallet(
           throw new Error('Mint fee exceeds maximum allowed');
         }
 
-        await writeProofRecovery(normalizedMint, proofs, encKey);
+        await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
         const sendResult = await withTimeout(
           targetWallet.send(amount, proofs, {
             proofsWeHave: proofs,
@@ -2823,7 +2605,7 @@ export function useCashuWallet(
         const keepProofs = sanitizeProofs(dedupeProofs(sendResult.keep));
         // Persist keep proofs for crash recovery immediately after the mint
         // returned them, before any further validation or async work.
-        await writeProofRecovery(normalizedMint, keepProofs, encKey);
+        await storageRef.current.writeProofRecovery(normalizedMint, keepProofs, encKey);
         if (sumProofAmounts(sendProofs) !== amount) {
           throw new Error('Mint returned send proofs with incorrect total amount');
         }
@@ -2844,11 +2626,11 @@ export function useCashuWallet(
 
         // Save keep proofs. Crash recovery was already written immediately after
         // the mint returned the outputs.
-        await saveProofsForMint(normalizedMint, keepProofs, encKey);
-        writeProofStoreTimestamp(normalizedMint);
-        clearProofRecovery(normalizedMint);
-        await withTxLock(async () => {
-          await addTransaction({
+        await storageRef.current.saveProofsForMint(normalizedMint, keepProofs, encKey);
+        storageRef.current.writeProofStoreTimestamp(normalizedMint);
+        storageRef.current.clearProofRecovery(normalizedMint);
+        await storageRef.current.withTxLock(async () => {
+          await storageRef.current.addTransaction({
             type: 'send',
             amount,
             memo: opts?.memo || 'Nutzap',
@@ -2894,7 +2676,7 @@ export function useCashuWallet(
       if (!event) {
         pendingEntry.id = `build-failed-${pendingEntry.timestamp}`;
         try {
-          await savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
+          await storageRef.current.savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
         } catch (saveErr) {
           devLog.error('Failed to save pending Nutzap after build failure:', saveErr);
         }
@@ -2907,7 +2689,7 @@ export function useCashuWallet(
       if (!publishedId) {
         pendingEntry.attempts = 1;
         try {
-          await savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
+          await storageRef.current.savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
         } catch (saveErr) {
           devLog.error('Failed to save pending Nutzap after publish failure:', saveErr);
         }
@@ -2915,7 +2697,7 @@ export function useCashuWallet(
         return false;
       }
       try {
-        await removePendingNutzap(event.id, encKey, legacyEncKeyRef.current ?? undefined);
+        await storageRef.current.removePendingNutzap(event.id, encKey, legacyEncKeyRef.current ?? undefined);
       } catch (e) {
         devLog.warn('Failed to clear pending Nutzap after successful publish:', e);
       }
@@ -2938,7 +2720,7 @@ export function useCashuWallet(
     if (!sync || !encKey || pendingNutzapInFlightRef.current) return;
     pendingNutzapInFlightRef.current = true;
     try {
-      const pending = await loadPendingNutzaps(encKey, legacyEncKeyRef.current ?? undefined);
+      const pending = await storageRef.current.loadPendingNutzaps(encKey, legacyEncKeyRef.current ?? undefined);
       if (pending.length === 0) return;
       const now = Date.now();
       for (const entry of pending) {
@@ -2954,10 +2736,10 @@ export function useCashuWallet(
         if (!event) continue;
         const id = await sync.publish(event);
         if (id) {
-          await removePendingNutzap(entry.id, encKey, legacyEncKeyRef.current ?? undefined);
+          await storageRef.current.removePendingNutzap(entry.id, encKey, legacyEncKeyRef.current ?? undefined);
           devLog.log('Published pending Nutzap:', id);
         } else {
-          await savePendingNutzap({ ...entry, attempts: entry.attempts + 1, lastAttemptAt: now }, encKey, legacyEncKeyRef.current ?? undefined);
+          await storageRef.current.savePendingNutzap({ ...entry, attempts: entry.attempts + 1, lastAttemptAt: now }, encKey, legacyEncKeyRef.current ?? undefined);
         }
       }
     } catch (e) {
@@ -2994,12 +2776,12 @@ export function useCashuWallet(
       // Ask the mint to drop any spent proofs from the backup before merging,
       // otherwise a stale backup could re-introduce double-spend inputs.
       if (Array.isArray(payload.proofs)) {
-        await withProofLock(async () => {
+        await storageRef.current.withProofLock(async () => {
           const seed = bip39Seed;
           for (const entry of payload.proofs) {
             if (entry && typeof entry.mintUrl === 'string' && entry.mintUrl.length > 0 && isAllowedMintUrl(entry.mintUrl) && Array.isArray(entry.proofs) && entry.proofs.length > 0) {
               const normalized = normalizeMintUrl(entry.mintUrl)!;
-              const existing = sanitizeProofs(await getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+              const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
               let incoming = sanitizeProofs(entry.proofs);
               if (seed) {
                 try {
@@ -3010,7 +2792,7 @@ export function useCashuWallet(
                 }
               }
               const merged = dedupeProofs([...existing, ...incoming]);
-              await saveProofsForMint(normalized, merged, encKey);
+              await storageRef.current.saveProofsForMint(normalized, merged, encKey);
             }
           }
         });
@@ -3018,24 +2800,24 @@ export function useCashuWallet(
       // Restore transactions — merge with local rather than overwrite.
       // Cap imported transaction count and amounts; warn on very old txs.
       if (Array.isArray(payload.transactions) && payload.transactions.length > 0) {
-        await withTxLock(async () => {
+        await storageRef.current.withTxLock(async () => {
           const MAX_RESTORED_TXS = 500;
           const MAX_TX_AMOUNT = Number.MAX_SAFE_INTEGER;
           const VERY_OLD_MS = 180 * 24 * 60 * 60 * 1000;
           const now = Date.now();
-          let validTxs = payload.transactions.filter((t): t is Transaction => isValidTransaction(t));
+          let validTxs = payload.transactions.filter((t): t is Transaction => storageRef.current.isValidTransaction(t));
           validTxs = validTxs.filter((t) => t.amount <= MAX_TX_AMOUNT);
           const veryOld = validTxs.filter((t) => now - t.createdAt > VERY_OLD_MS);
           if (veryOld.length > 0) {
             devLog.warn(`Restore contains ${veryOld.length} transactions older than 180 days`);
           }
           validTxs = validTxs.slice(0, MAX_RESTORED_TXS);
-          const localTxs = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+          const localTxs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
           const seen = new Set(localTxs.map((t) => t.id));
           const newTxs = validTxs.filter((t) => !seen.has(t.id));
           if (newTxs.length > 0) {
-            await saveTransactions([...localTxs, ...newTxs], encKey);
-            if (mountedRef.current) setTransactions(await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined));
+            await storageRef.current.saveTransactions([...localTxs, ...newTxs], encKey);
+            if (mountedRef.current) setTransactions(await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined));
           }
         });
       }
@@ -3052,13 +2834,13 @@ export function useCashuWallet(
             isAllowedMintUrl(m.url),
         );
         if (valid.length > 0) {
-          const existing = await loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
+          const existing = await storageRef.current.loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
           const merged = dedupeByKey(
             [...existing, ...valid],
             (m) => normalizeMintUrl(m.url)!,
           );
           setCustomMints(merged);
-          await saveCustomMints(merged, encKey);
+          await storageRef.current.saveCustomMints(merged, encKey);
         }
       }
       // Restore selected mint (validate host before adopting it from backup)
@@ -3116,7 +2898,7 @@ export function useCashuWallet(
     const interval = setInterval(() => {
       (async () => {
         try {
-          const txs = await loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+          const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
           const pendingMelts = txs.filter(
             (t): t is Transaction & { quoteId: string } =>
               t.type === 'melt' && t.status === 'pending' && typeof t.quoteId === 'string' && t.quoteId.length > 0
@@ -3126,17 +2908,17 @@ export function useCashuWallet(
             const updated = await checkMeltQuote({ quote: t.quoteId } as MeltQuoteResponse);
             const state = updated?.state;
             if (state === 'PAID') {
-              await updateTransactionStatus(t.id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
-              clearProofRecovery(normalizeMintUrl(t.mintUrl)!);
-              clearMeltChangeRecovery(normalizeMintUrl(t.mintUrl)!);
+              await storageRef.current.updateTransactionStatus(t.id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
+              storageRef.current.clearProofRecovery(normalizeMintUrl(t.mintUrl)!);
+              storageRef.current.clearMeltChangeRecovery(normalizeMintUrl(t.mintUrl)!);
               await calculateAllBalances();
               if (mountedRef.current) setSuccessTimed('Lightning payment confirmed');
             } else if (state === 'UNPAID') {
-              await updateTransactionStatus(t.id, 'failed', encKey, legacyEncKeyRef.current ?? undefined);
+              await storageRef.current.updateTransactionStatus(t.id, 'failed', encKey, legacyEncKeyRef.current ?? undefined);
               await restoreMeltInputProofs(t.mintUrl);
               await calculateAllBalances();
             } else if (typeof updated?.expiry === 'number' && updated.expiry > 0 && Date.now() > updated.expiry * 1000) {
-              await updateTransactionStatus(t.id, 'expired', encKey, legacyEncKeyRef.current ?? undefined);
+              await storageRef.current.updateTransactionStatus(t.id, 'expired', encKey, legacyEncKeyRef.current ?? undefined);
               await restoreMeltInputProofs(t.mintUrl);
               await calculateAllBalances();
             }
@@ -3175,6 +2957,8 @@ export function useCashuWallet(
     calculateAllBalances,
     receiveToken,
     sendToken,
+    sendLockedToken,
+    receiveLockedToken,
     requestInvoice,
     mintFromQuote,
     payInvoice,

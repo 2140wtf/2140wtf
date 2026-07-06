@@ -17,6 +17,234 @@ import { devLog } from '@/lib/cashu/devLog';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import type { NostrEvent } from '@nostrify/nostrify';
 
+/* ── Recovery helpers (moved from useCashuWallet for namespacing) ── */
+
+export interface RecoveryEntry {
+  version: number;
+  timestamp: number;
+  proofs: unknown[];
+}
+
+const recoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}proof_recovery_${stringToBase64(mint)}`;
+const sendRecoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}send_recovery_${stringToBase64(mint)}`;
+const meltChangeRecoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}melt_change_recovery_${stringToBase64(mint)}`;
+const proofStoreTsKey = (mint: string, namespace = 'freedomid_') => `${namespace}proof_store_ts_${stringToBase64(mint)}`;
+const mintedQuotesKey = (namespace = 'freedomid_') => `${namespace}minted_quotes`;
+
+export function writeProofStoreTimestamp(mintUrl: string, namespace?: string): void {
+  try { localStorage.setItem(proofStoreTsKey(mintUrl, namespace), String(Date.now())); } catch { /* noop */ }
+}
+
+export async function writeProofRecovery(mintUrl: string, proofs: unknown[], key: CryptoKey, namespace?: string): Promise<void> {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(recoveryKey(mintUrl, namespace), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write proof recovery:', e);
+  }
+}
+
+export function clearProofRecovery(mintUrl: string, namespace?: string): void {
+  try { localStorage.removeItem(recoveryKey(mintUrl, namespace)); } catch { /* noop */ }
+}
+
+export async function loadProofRecovery(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<RecoveryEntry | null> {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(recoveryKey(mintUrl, namespace)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    if (Array.isArray(parsed)) {
+      return { version: 0, timestamp: 0, proofs: parsed };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeSendRecovery(mintUrl: string, proofs: unknown[], key: CryptoKey, namespace?: string): Promise<void> {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(sendRecoveryKey(mintUrl, namespace), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write send recovery:', e);
+  }
+}
+
+export function clearSendRecovery(mintUrl: string, namespace?: string): void {
+  try { localStorage.removeItem(sendRecoveryKey(mintUrl, namespace)); } catch { /* noop */ }
+}
+
+export async function loadSendRecovery(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<RecoveryEntry | null> {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(sendRecoveryKey(mintUrl, namespace)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    if (Array.isArray(parsed)) {
+      return { version: 0, timestamp: 0, proofs: parsed };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeMeltChangeRecovery(mintUrl: string, proofs: unknown[], key: CryptoKey, namespace?: string): Promise<void> {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(meltChangeRecoveryKey(mintUrl, namespace), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write melt change recovery:', e);
+  }
+}
+
+export function clearMeltChangeRecovery(mintUrl: string, namespace?: string): void {
+  try { localStorage.removeItem(meltChangeRecoveryKey(mintUrl, namespace)); } catch { /* noop */ }
+}
+
+export async function loadMeltChangeRecovery(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<RecoveryEntry | null> {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(meltChangeRecoveryKey(mintUrl, namespace)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadMintedQuotes(key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<string[]> {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(mintedQuotesKey(namespace)); } catch { return []; }
+  if (!encrypted) return [];
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return [];
+    const parsed = JSON.parse(decrypted);
+    return Array.isArray(parsed) ? parsed.filter((q): q is string => typeof q === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function writeMintedQuote(quoteId: string, key: CryptoKey, maxAttempts = 2, namespace?: string): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const existing = await loadMintedQuotes(key, undefined, namespace);
+      if (existing.includes(quoteId)) return;
+      existing.push(quoteId);
+      const encrypted = await encryptData(JSON.stringify(existing), key);
+      localStorage.setItem(mintedQuotesKey(namespace), encrypted);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+}
+
+export async function saveMintedQuotes(quoteIds: string[], key: CryptoKey, maxAttempts = 2, namespace?: string): Promise<void> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const existing = await loadMintedQuotes(key, undefined, namespace);
+      const merged = [...new Set([...existing, ...quoteIds])];
+      const encrypted = await encryptData(JSON.stringify(merged), key);
+      localStorage.setItem(mintedQuotesKey(namespace), encrypted);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(`Failed to persist minted quotes after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+}
+
+/* ── Pending receive recovery ───────────────────────────────────── */
+
+export const PENDING_RECEIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const PENDING_RECEIVE_MAX_ATTEMPTS = 5;
+const pendingReceiveContext = 'freedomid:receive-pending';
+
+export interface PendingReceiveEntry {
+  tokenStr: string;
+  tokenHash: string;
+  mintUrls: string[];
+  amount: number;
+  status: 'pending' | 'completed';
+  timestamp: number;
+  attempts: number;
+  succeededMintUrls?: string[];
+}
+
+const pendingReceiveKey = (tokenHash: string, namespace?: string) => `${namespace ?? 'freedomid_'}receive_pending_${stringToBase64(tokenHash)}`;
+
+export async function loadPendingReceive(tokenHash: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<PendingReceiveEntry | null> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(pendingReceiveKey(tokenHash, namespace)); } catch { return null; }
+  if (!raw) return null;
+  try {
+    const decrypted = await decryptData(raw, key, legacyKey, pendingReceiveContext);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).tokenStr === 'string') {
+      return parsed as PendingReceiveEntry;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingReceive(tokenHash: string, namespace?: string): void {
+  try { localStorage.removeItem(pendingReceiveKey(tokenHash, namespace)); } catch { /* noop */ }
+}
+
+export async function writePendingReceive(
+  tokenStr: string,
+  tokenHash: string,
+  mintUrls: string[],
+  amount: number,
+  key: CryptoKey,
+  succeededMintUrls?: string[],
+  namespace?: string,
+): Promise<void> {
+  const existing = await loadPendingReceive(tokenHash, key, undefined, namespace);
+  const entry: PendingReceiveEntry = {
+    tokenStr,
+    tokenHash,
+    mintUrls,
+    amount,
+    status: 'pending',
+    timestamp: Date.now(),
+    attempts: existing?.attempts ?? 0,
+    succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
+  };
+  const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
+  localStorage.setItem(pendingReceiveKey(tokenHash, namespace), encrypted);
+}
+
 const DEFAULT_PREFIX = 'freedomid_';
 
 function resolvePrefix(namespace?: string): string {
@@ -489,8 +717,8 @@ export async function migrateMintMetadata(encKey: CryptoKey, _legacyKey?: Crypto
   try {
     const plaintextMints = loadItem<StoredMint[]>(CUSTOM_MINTS_KEY, [], namespace);
     const plaintextUrl = localStorage.getItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY) || '';
-    const encryptedMints = await encryptData(JSON.stringify(plaintextMints), encKey);
-    const encryptedUrl = plaintextUrl ? await encryptData(plaintextUrl, encKey) : '';
+    const encryptedMints = await encryptData(JSON.stringify(plaintextMints), encKey, 'freedomid:custom-mints');
+    const encryptedUrl = plaintextUrl ? await encryptData(plaintextUrl, encKey, 'freedomid:selected-mint') : '';
     setItem(CUSTOM_MINTS_KEY, encryptedMints, namespace);
     if (encryptedUrl) {
       safeLocalStorageSetItem(resolvePrefix(namespace) + SELECTED_MINT_URL_KEY, encryptedUrl);
@@ -1175,6 +1403,7 @@ export function createCashuStorage(namespace?: string) {
     loadProcessedTokenHashes: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadProcessedTokenHashes(encKey, legacyKey, namespace),
     isProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => isProcessedTokenHash(hash, encKey, legacyKey, namespace),
     addProcessedTokenHash: (hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => addProcessedTokenHash(hash, encKey, legacyKey, namespace),
+    saveProcessedTokenHashes: (entries: ProcessedTokenEntry[], encKey?: CryptoKey) => saveProcessedTokenHashes(entries, encKey, namespace),
     loadProcessedNutzapIds: (encKey?: CryptoKey, legacyKey?: CryptoKey) => loadProcessedNutzapIds(encKey, legacyKey, namespace),
     isProcessedNutzapId: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => isProcessedNutzapId(id, encKey, legacyKey, namespace),
     addProcessedNutzapId: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => addProcessedNutzapId(id, encKey, legacyKey, namespace),
@@ -1182,6 +1411,24 @@ export function createCashuStorage(namespace?: string) {
     savePendingNutzap: (entry: PendingNutzapEntry, encKey?: CryptoKey, legacyKey?: CryptoKey) => savePendingNutzap(entry, encKey, legacyKey, namespace),
     removePendingNutzap: (id: string, encKey?: CryptoKey, legacyKey?: CryptoKey) => removePendingNutzap(id, encKey, legacyKey, namespace),
     pendingNutzapCooldownRemaining: (entry: PendingNutzapEntry, now?: number) => pendingNutzapCooldownRemaining(entry, now),
+    // Recovery helpers
+    writeProofStoreTimestamp: (mintUrl: string) => writeProofStoreTimestamp(mintUrl, namespace),
+    writeProofRecovery: (mintUrl: string, proofs: unknown[], key: CryptoKey) => writeProofRecovery(mintUrl, proofs, key, namespace),
+    clearProofRecovery: (mintUrl: string) => clearProofRecovery(mintUrl, namespace),
+    loadProofRecovery: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadProofRecovery(mintUrl, key, legacyKey, namespace),
+    writeSendRecovery: (mintUrl: string, proofs: unknown[], key: CryptoKey) => writeSendRecovery(mintUrl, proofs, key, namespace),
+    clearSendRecovery: (mintUrl: string) => clearSendRecovery(mintUrl, namespace),
+    loadSendRecovery: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadSendRecovery(mintUrl, key, legacyKey, namespace),
+    writeMeltChangeRecovery: (mintUrl: string, proofs: unknown[], key: CryptoKey) => writeMeltChangeRecovery(mintUrl, proofs, key, namespace),
+    clearMeltChangeRecovery: (mintUrl: string) => clearMeltChangeRecovery(mintUrl, namespace),
+    loadMeltChangeRecovery: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadMeltChangeRecovery(mintUrl, key, legacyKey, namespace),
+    loadMintedQuotes: (key: CryptoKey, legacyKey?: CryptoKey) => loadMintedQuotes(key, legacyKey, namespace),
+    writeMintedQuote: (quoteId: string, key: CryptoKey, maxAttempts?: number) => writeMintedQuote(quoteId, key, maxAttempts, namespace),
+    saveMintedQuotes: (quoteIds: string[], key: CryptoKey, maxAttempts?: number) => saveMintedQuotes(quoteIds, key, maxAttempts, namespace),
+    // Pending receive helpers
+    loadPendingReceive: (tokenHash: string, key: CryptoKey, legacyKey?: CryptoKey) => loadPendingReceive(tokenHash, key, legacyKey, namespace),
+    clearPendingReceive: (tokenHash: string) => clearPendingReceive(tokenHash, namespace),
+    writePendingReceive: (tokenStr: string, tokenHash: string, mintUrls: string[], amount: number, key: CryptoKey, succeededMintUrls?: string[]) => writePendingReceive(tokenStr, tokenHash, mintUrls, amount, key, succeededMintUrls, namespace),
     wipeAllAppData: () => wipeAllAppData(),
   };
 }

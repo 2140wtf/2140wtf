@@ -36,6 +36,10 @@ const LOCAL_TOKEN_HASH_KEY_PREFIX = 'ditto_nip60_token_hash_';
 const LOCAL_CONFIG_HASH_KEY = 'ditto_nip60_config_hash';
 const LOCAL_NUTZAP_INFO_HASH_KEY = 'ditto_nip60_nutzap_info_hash';
 
+function resolveNip60Key(key: string, namespace?: string): string {
+  return namespace ? `${namespace}${key}` : key;
+}
+
 export type Nip60EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig'>;
 
 /** Minimal signer abstraction so this module does not depend on React context. */
@@ -180,9 +184,9 @@ export function computeContentHash(payload: unknown): string {
   return bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(payload))));
 }
 
-export async function loadLastWalletConfigHash(encKey: CryptoKey): Promise<string | null> {
+export async function loadLastWalletConfigHash(encKey: CryptoKey, namespace?: string): Promise<string | null> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(LOCAL_CONFIG_HASH_KEY); } catch { return null; }
+  try { raw = localStorage.getItem(resolveNip60Key(LOCAL_CONFIG_HASH_KEY, namespace)); } catch { return null; }
   if (!raw) return null;
   try {
     return await decryptData(raw, encKey);
@@ -191,18 +195,18 @@ export async function loadLastWalletConfigHash(encKey: CryptoKey): Promise<strin
   }
 }
 
-export async function saveLastWalletConfigHash(hash: string, encKey: CryptoKey): Promise<void> {
+export async function saveLastWalletConfigHash(hash: string, encKey: CryptoKey, namespace?: string): Promise<void> {
   try {
     const encrypted = await encryptData(hash, encKey);
-    localStorage.setItem(LOCAL_CONFIG_HASH_KEY, encrypted);
+    localStorage.setItem(resolveNip60Key(LOCAL_CONFIG_HASH_KEY, namespace), encrypted);
   } catch (e) {
     devLog.warn('Failed to save NIP-60 wallet config hash:', e);
   }
 }
 
-export async function loadLastNutzapInfoHash(encKey: CryptoKey): Promise<string | null> {
+export async function loadLastNutzapInfoHash(encKey: CryptoKey, namespace?: string): Promise<string | null> {
   let raw: string | null = null;
-  try { raw = localStorage.getItem(LOCAL_NUTZAP_INFO_HASH_KEY); } catch { return null; }
+  try { raw = localStorage.getItem(resolveNip60Key(LOCAL_NUTZAP_INFO_HASH_KEY, namespace)); } catch { return null; }
   if (!raw) return null;
   try {
     return await decryptData(raw, encKey);
@@ -211,23 +215,23 @@ export async function loadLastNutzapInfoHash(encKey: CryptoKey): Promise<string 
   }
 }
 
-export async function saveLastNutzapInfoHash(hash: string, encKey: CryptoKey): Promise<void> {
+export async function saveLastNutzapInfoHash(hash: string, encKey: CryptoKey, namespace?: string): Promise<void> {
   try {
     const encrypted = await encryptData(hash, encKey);
-    localStorage.setItem(LOCAL_NUTZAP_INFO_HASH_KEY, encrypted);
+    localStorage.setItem(resolveNip60Key(LOCAL_NUTZAP_INFO_HASH_KEY, namespace), encrypted);
   } catch (e) {
     devLog.warn('Failed to save NIP-60 Nutzap info hash:', e);
   }
 }
 
-function makeLocalMintKey(prefix: string, mintUrl: string): string | null {
+function makeLocalMintKey(prefix: string, mintUrl: string, namespace?: string): string | null {
   const normalized = normalizeMintUrl(mintUrl);
   if (!normalized) return null;
-  return prefix + bytesToHex(new TextEncoder().encode(normalized)).slice(0, 32);
+  return (namespace || '') + prefix + bytesToHex(new TextEncoder().encode(normalized)).slice(0, 32);
 }
 
-export async function loadLastTokenEventId(mintUrl: string, encKey: CryptoKey): Promise<string | null> {
-  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+export async function loadLastTokenEventId(mintUrl: string, encKey: CryptoKey, namespace?: string): Promise<string | null> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl, namespace);
   if (!key) return null;
   let raw: string | null = null;
   try { raw = localStorage.getItem(key); } catch { return null; }
@@ -239,8 +243,8 @@ export async function loadLastTokenEventId(mintUrl: string, encKey: CryptoKey): 
   }
 }
 
-export async function saveLastTokenEventId(mintUrl: string, eventId: string, encKey: CryptoKey): Promise<void> {
-  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+export async function saveLastTokenEventId(mintUrl: string, eventId: string, encKey: CryptoKey, namespace?: string): Promise<void> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl, namespace);
   if (!key) return;
   try {
     const encrypted = await encryptData(eventId, encKey);
@@ -250,8 +254,8 @@ export async function saveLastTokenEventId(mintUrl: string, eventId: string, enc
   }
 }
 
-export async function loadLastTokenEventHash(mintUrl: string, encKey: CryptoKey): Promise<string | null> {
-  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl);
+export async function loadLastTokenEventHash(mintUrl: string, encKey: CryptoKey, namespace?: string): Promise<string | null> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl, namespace);
   if (!key) return null;
   let raw: string | null = null;
   try { raw = localStorage.getItem(key); } catch { return null; }
@@ -263,8 +267,8 @@ export async function loadLastTokenEventHash(mintUrl: string, encKey: CryptoKey)
   }
 }
 
-export async function saveLastTokenEventHash(mintUrl: string, hash: string, encKey: CryptoKey): Promise<void> {
-  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl);
+export async function saveLastTokenEventHash(mintUrl: string, hash: string, encKey: CryptoKey, namespace?: string): Promise<void> {
+  const key = makeLocalMintKey(LOCAL_TOKEN_HASH_KEY_PREFIX, mintUrl, namespace);
   if (!key) return;
   try {
     const encrypted = await encryptData(hash, encKey);
@@ -274,8 +278,8 @@ export async function saveLastTokenEventHash(mintUrl: string, hash: string, encK
   }
 }
 
-export function clearLastTokenEventId(mintUrl: string): void {
-  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl);
+export function clearLastTokenEventId(mintUrl: string, namespace?: string): void {
+  const key = makeLocalMintKey(LOCAL_TOKEN_EVENT_KEY_PREFIX, mintUrl, namespace);
   if (!key) return;
   try { localStorage.removeItem(key); } catch { /* ignore */ }
 }

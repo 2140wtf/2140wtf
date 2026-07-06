@@ -4,18 +4,43 @@ import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
-import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { toast } from '@/hooks/useToast';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
+import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+
+import type { CashuWallet, MintKeyset } from '@cashu/cashu-ts';
 
 import type { PurchaseRequest } from '../types/shop.types';
 import type { BlobbonautProfile, StorageItem } from '@/pets/core/lib/pets';
 import {
-  KIND_BLOBBONAUT_PROFILE,
   updateBlobbonautTags,
   createStorageTags,
 } from '@/pets/core/lib/pets';
 import { getShopItemById } from '../lib/pets-shop-items';
+
+function getSelectedMintBalance(wallet?: (CashuWalletState & CashuWalletActions) | null): number {
+  if (!wallet?.mintUrl) return 0;
+  return wallet.balances?.[wallet.mintUrl] ?? 0;
+}
+
+/**
+ * Estimate the Cashu mint fee for sending a given amount of sats from the
+ * active keyset. The real fee depends on the actual proofs selected, so this
+ * returns a conservative reserve based on the active keyset's input_fee_ppk.
+ * A small buffer is added so the UI does not advertise an item as affordable
+ * when the wallet would fail due to rounding or a minimal fee.
+ */
+export function estimateCashuSendFee(amount: number, wallet: CashuWallet | null): number {
+  if (!wallet || amount <= 0) return 0;
+  try {
+    const activeKeyset = wallet.keysets.find((k: MintKeyset) => k.id === wallet.keysetId);
+    const ppk = activeKeyset?.input_fee_ppk ?? 0;
+    return Math.max(1, Math.ceil((amount * ppk) / 1000) + 1);
+  } catch {
+    // If keysets are unavailable, reserve 1% as a safe fallback.
+    return Math.max(1, Math.ceil(amount * 0.01));
+  }
+}
 
 /**
  * Hook to purchase items from the Pets Shop.
@@ -37,7 +62,7 @@ export function usePetsPurchaseItem(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ itemId, price, quantity }: PurchaseRequest) => {
+    mutationFn: async ({ itemId, price, quantity, currency: requestedCurrency }: PurchaseRequest) => {
       if (!user?.pubkey) {
         throw new Error('You must be logged in to purchase items');
       }
@@ -46,97 +71,179 @@ export function usePetsPurchaseItem(
         throw new Error('Profile not found');
       }
 
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error('Invalid quantity. Quantity must be a positive whole number.');
+      }
+
       // Validate item exists in catalog
       const item = getShopItemById(itemId);
       if (!item) {
         throw new Error('Item not found in shop catalog');
       }
 
-      // Validate price matches one of the accepted currency prices.
-      const fiatPrice = item.fiatPrice ?? item.price;
-      const satsPrice = item.satsPrice ?? item.price;
-      const isValidPrice = price === fiatPrice || price === satsPrice;
-      if (!isValidPrice) {
-        throw new Error('Item price mismatch. Please refresh and try again.');
+      if (item.status !== 'live') {
+        throw new Error('This item is not currently available for purchase.');
       }
 
-      const isBtcSats = currentProfile.walletMode === 'btc-sats';
+      const fiatPrice = item.fiatPrice ?? item.price;
+      const satsPrice = item.satsPrice ?? item.price;
       const totalFiatCost = fiatPrice * quantity;
       const totalSatsCost = satsPrice * quantity;
 
-      // Prefer fake fiat coins first; they can only decrease and never be replenished.
-      // In demo-sats mode fall back to profile demo sats; in btc-sats mode pay the
-      // external BAO wallet.
-      let currency: 'fiat coins' | 'demo sats' | 'sats' = 'fiat coins';
-      if (currentProfile.coins >= totalFiatCost) {
-        if (currentProfile.coins - totalFiatCost < 0) {
-          throw new Error('Fiat coins cannot go below zero.');
+      // Use the current profile for initial wallet-mode decisions; the serialized
+      // update below re-reads the freshest profile before publishing.
+      const isBtcSats = currentProfile.walletMode === 'btc-sats';
+
+      // Determine the intended currency from the explicit request or the price.
+      // Reject mismatched price/currency pairs so the button price always
+      // matches the currency actually deducted.
+      let resolvedCurrency: 'fiat' | 'sats';
+      if (requestedCurrency) {
+        if (requestedCurrency === 'fiat' && price === fiatPrice) {
+          resolvedCurrency = 'fiat';
+        } else if (requestedCurrency === 'sats' && price === satsPrice) {
+          resolvedCurrency = 'sats';
+        } else {
+          throw new Error('Item price and currency do not match. Please refresh and try again.');
         }
-      } else if (isBtcSats) {
-        if (!externalWallet || externalWallet.totalBalance < totalSatsCost) {
+      } else {
+        // For real-sats wallets default to sats when a price is ambiguous;
+        // otherwise prefer the in-game fiat coin price.
+        if (isBtcSats) {
+          if (price === satsPrice) {
+            resolvedCurrency = 'sats';
+          } else if (price === fiatPrice) {
+            resolvedCurrency = 'fiat';
+          } else {
+            throw new Error('Item price mismatch. Please refresh and try again.');
+          }
+        } else {
+          if (price === fiatPrice) {
+            resolvedCurrency = 'fiat';
+          } else if (price === satsPrice) {
+            resolvedCurrency = 'sats';
+          } else {
+            throw new Error('Item price mismatch. Please refresh and try again.');
+          }
+        }
+      }
+
+      let currency: 'fiat coins' | 'demo sats' | 'sats' = 'fiat coins';
+      let totalCost = 0;
+      let paymentToken: string | undefined;
+
+      if (resolvedCurrency === 'sats' && isBtcSats) {
+        currency = 'sats';
+        totalCost = totalSatsCost;
+        if (!externalWallet) {
+          throw new Error('External wallet is not available.');
+        }
+        const selectedMintBalance = getSelectedMintBalance(externalWallet);
+        const feeReserve = estimateCashuSendFee(totalSatsCost, externalWallet.wallet ?? null);
+        const totalNeeded = totalSatsCost + feeReserve;
+        if (selectedMintBalance < totalNeeded) {
           throw new Error(
-            `Insufficient external wallet balance. You need ${totalSatsCost.toLocaleString()} sats but only have ${externalWallet?.totalBalance?.toLocaleString() ?? 0}.`
+            `Insufficient balance on the selected mint. You need ${totalSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats on ${externalWallet.mintUrl ?? 'the selected mint'}.`
           );
         }
-        await paySats(totalSatsCost, `Pets shop: ${item.name}`);
-        currency = 'sats';
-      } else if (currentProfile.sats >= totalSatsCost) {
+        // Burn real sats BEFORE updating the profile so a payment failure cannot
+        // grant a free item. If the profile update fails after the token is spent,
+        // attempt to refund the token so the user does not lose sats.
+        paymentToken = await paySats(totalSatsCost, `Pets shop: ${item.name}`);
+      } else if (resolvedCurrency === 'sats') {
         currency = 'demo sats';
+        totalCost = totalSatsCost;
       } else {
-        throw new Error(
-          `Insufficient funds. You need ${totalFiatCost.toLocaleString()} fiat coins (or ${totalSatsCost.toLocaleString()} demo sats) but have ${currentProfile.coins.toLocaleString()} fiat coins and ${currentProfile.sats.toLocaleString()} demo sats.`
-        );
+        currency = 'fiat coins';
+        totalCost = totalFiatCost;
       }
 
-      // Update storage (stack or add)
-      const existingIndex = currentProfile.storage.findIndex(s => s.itemId === itemId);
-      let newStorage: StorageItem[];
+      // Serialize the profile update so concurrent purchases/missions cannot
+      // overwrite each other and double-spend in-game currency. The wallet mode
+      // used for deductions is pinned to the mode at the time the user clicked
+      // buy; if it changed between the UI render and the serialized update we
+      // still honor the real-sats payment that was already made and do not
+      // double-charge (or grant a free item) by re-deriving the currency.
+      let result;
+      try {
+        result = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile) => {
+        if (!freshProfile) {
+          throw new Error('Profile not found on relays');
+        }
 
-      if (existingIndex >= 0) {
-        // Stack: increase quantity of existing item
-        newStorage = [...currentProfile.storage];
-        newStorage[existingIndex] = {
-          ...newStorage[existingIndex],
-          quantity: newStorage[existingIndex].quantity + quantity,
+        if (resolvedCurrency === 'fiat') {
+          if (freshProfile.coins < totalFiatCost) {
+            throw new Error(
+              `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
+            );
+          }
+        } else if (!isBtcSats) {
+          // Demo-sats purchase: the real wallet was not charged, so deduct the
+          // in-game demo sats from the freshest profile.
+          if (freshProfile.sats < totalSatsCost) {
+            throw new Error(
+              `Insufficient demo sats. You need ${totalSatsCost.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
+            );
+          }
+        }
+
+        // Recompute the purchase deltas from the fresh profile so concurrent
+        // updates on other devices are not silently overwritten.
+        const existingIndex = freshProfile.storage.findIndex((s) => s.itemId === itemId);
+        let newStorage: StorageItem[];
+
+        if (existingIndex >= 0) {
+          // Stack: increase quantity of existing item
+          newStorage = [...freshProfile.storage];
+          newStorage[existingIndex] = {
+            ...newStorage[existingIndex],
+            quantity: newStorage[existingIndex].quantity + quantity,
+          };
+        } else {
+          // Add: append new item to storage
+          newStorage = [...freshProfile.storage, { itemId, quantity }];
+        }
+
+        // Build updated tags
+        // createStorageTags returns [['storage', 'itemId:quantity'], ...], we need just the values
+        const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
+
+        const updates: Record<string, string | string[]> = {
+          storage: storageValues,
         };
-      } else {
-        // Add: append new item to storage
-        newStorage = [...currentProfile.storage, { itemId, quantity }];
-      }
+        if (resolvedCurrency === 'fiat') {
+          updates.coins = (freshProfile.coins - totalFiatCost).toString();
+        } else if (!isBtcSats) {
+          updates.sats = (freshProfile.sats - totalSatsCost).toString();
+        }
 
-      // Build updated tags
-      // createStorageTags returns [['storage', 'itemId:quantity'], ...], we need just the values
-      const storageValues = createStorageTags(newStorage).map(tag => tag[1]);
-
-      // Fetch fresh profile from relays to avoid stale-read overwrites
-      const prev = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
-        authors: [user.pubkey],
+        const tags = updateBlobbonautTags(freshProfile.event.tags, updates);
+        return { tags, content: freshProfile.event.content, meta: { currency, totalCost } };
       });
-      if (!prev) {
-        throw new Error('Profile not found on relays');
+      } catch (profileError) {
+        if (paymentToken && externalWallet) {
+          try {
+            await externalWallet.receiveToken(paymentToken);
+            console.warn('[usePetsPurchaseItem] Refunded Cashu token after profile update failure:', profileError);
+          } catch (refundError) {
+            console.error('[usePetsPurchaseItem] Failed to refund Cashu token after profile update failure:', refundError);
+          }
+        }
+        throw profileError;
       }
 
-      const updates: Record<string, string | string[]> = {
-        storage: storageValues, // Array of 'itemId:quantity' strings
+      if (!result) {
+        throw new Error('Profile update returned no changes.');
+      }
+
+      return {
+        event: result.event,
+        item,
+        quantity,
+        totalCost: (result.meta?.totalCost as number | undefined) ?? totalCost,
+        currency: (result.meta?.currency as typeof currency | undefined) ?? currency,
+        paymentToken,
       };
-      if (currency === 'fiat coins') {
-        updates.coins = (currentProfile.coins - totalFiatCost).toString();
-      } else if (currency === 'demo sats') {
-        updates.sats = (currentProfile.sats - totalSatsCost).toString();
-      }
-
-      const updatedTags = updateBlobbonautTags(prev.tags, updates);
-
-      // Publish updated profile event
-      const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
-        content: prev.content,
-        tags: updatedTags,
-        prev,
-      });
-
-      return { event, item, quantity, totalCost: currency === 'fiat coins' ? totalFiatCost : totalSatsCost, currency };
     },
     onSuccess: ({ item, quantity, totalCost, currency }) => {
       // Invalidate profile query to refetch fresh data

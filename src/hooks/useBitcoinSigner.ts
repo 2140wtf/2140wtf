@@ -169,6 +169,14 @@ export function useBitcoinSigner() {
   return {
     /** Detailed capability state. See {@link BitcoinSignerCapability}. */
     capability,
+    /**
+     * True when the signer is at least PSBT-capable enough to attempt a send.
+     * This is the predicate that data-fetching queries should use: it matches
+     * `'supported'` and `'unknown'` (e.g. NIP-46 bunkers) while excluding the
+     * known-unsupported state. Kept separate from `canSignPsbt` so action UI
+     * can still require an actual signer instance.
+     */
+    canAttemptPsbt: capability !== 'unsupported',
     /** True when capability is `'supported'` or `'unknown'` (attempt allowed). */
     canSignPsbt: capability !== 'unsupported' && btcSigner !== null,
     /**
