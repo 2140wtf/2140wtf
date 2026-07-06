@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { nip19 } from 'nostr-tools';
 import { Check, Swords, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,20 +10,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useBattleInvites } from '../hooks/useBattleInvites';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import type { PetsCompanion } from '@/pets/core/lib/pets';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { DEFAULT_PRIZE_SATS } from '../lib/constants';
+import { deriveBattleEscrowKeypair } from '../lib/cashuEscrow';
 
 export function BattleInvitePending() {
   const { pendingInvite, isLoading, accept, decline } = useBattleInvites();
   const { companions, isLoading: petsLoading } = usePetssCollection();
+  const { config } = useAppContext();
+  const { isReal } = usePetsWallet();
+  const { seedPhrase, available: seedAvailable } = useCashuSeed();
   const [petId, setPetId] = useState<string>('');
+
+  const escrowKeypair = useMemo(() => {
+    if (!seedPhrase) return null;
+    try {
+      return deriveBattleEscrowKeypair(seedPhrase);
+    } catch {
+      return null;
+    }
+  }, [seedPhrase]);
+
+  const escrowConfigured = !!config.petsBattleEscrowPubkey && !!config.petsBattleEscrowServiceUrl;
+  const isRealSatsInvite = pendingInvite?.mode === 'real-sats';
+  const canAcceptRealSats = isRealSatsInvite && isReal && seedAvailable && escrowConfigured && !!escrowKeypair;
 
   const eligiblePets = companions.filter(
     (pet) => pet.stage === 'baby' || pet.stage === 'adult',
@@ -62,12 +80,18 @@ export function BattleInvitePending() {
 
           <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
             <p>
-              <span className="font-medium">Prize:</span> {DEFAULT_PRIZE_SATS.toLocaleString()} demo sats
+              <span className="font-medium">Prize:</span> {DEFAULT_PRIZE_SATS.toLocaleString()} {' '}
+              {isRealSatsInvite ? 'real sats' : 'demo sats'}
             </p>
             <p>
               <span className="font-medium">Their fighter:</span>{' '}
               {pendingInvite.inviterPet.name} ({pendingInvite.inviterPet.stage})
             </p>
+            {isRealSatsInvite && !canAcceptRealSats && (
+              <p className="text-destructive">
+                Switch to real Cashu and configure battle escrow to accept real-sats battles.
+              </p>
+            )}
           </div>
 
           {petsLoading ? (
@@ -108,8 +132,8 @@ export function BattleInvitePending() {
             </Button>
             <Button
               className="flex-1"
-              disabled={!selectedPet || isLoading}
-              onClick={() => selectedPet && accept(selectedPet)}
+              disabled={!selectedPet || isLoading || (isRealSatsInvite && !canAcceptRealSats)}
+              onClick={() => selectedPet && accept(selectedPet, escrowKeypair?.pubkey)}
             >
               <Check className="mr-2 size-4" />
               Accept

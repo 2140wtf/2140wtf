@@ -20,10 +20,12 @@ import type { BattleMode } from '../lib/battleInteraction';
 export interface BattleSetupProps {
   ownerPubkey: string;
   onStart: (pet1: PetsCompanion, pet2: PetsCompanion, prizeAmount: number, mode: BattleMode, isAiOpponent: boolean) => void;
+  /** If false, BAO/real-sats battles are disabled and only demo-sats mode is offered. */
+  allowBtcSats?: boolean;
   className?: string;
 }
 
-export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProps) {
+export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, className }: BattleSetupProps) {
   const { companions, isLoading } = usePetssCollection();
   const [mode, setMode] = useState<'local' | 'remote'>('local');
   const { profile } = useBlobbonautProfile();
@@ -60,10 +62,11 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
   }, [eligiblePets, ownerPubkey, pet2Id]);
 
   const walletMode = profile?.walletMode ?? 'demo-sats';
+  const effectiveMode: BattleMode = allowBtcSats ? walletMode : 'demo-sats';
 
   const handleStart = () => {
     if (!pet1 || !pet2) return;
-    onStart(pet1, pet2, DEFAULT_PRIZE_SATS, walletMode, pet2Id === 'rival');
+    onStart(pet1, pet2, DEFAULT_PRIZE_SATS, effectiveMode, pet2Id === 'rival');
   };
 
   if (mode === 'remote') {
@@ -142,12 +145,14 @@ export function BattleSetup({ ownerPubkey, onStart, className }: BattleSetupProp
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} {walletMode === 'btc-sats' ? 'BAO sats' : 'demo sats'}
+              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} {effectiveMode === 'btc-sats' ? 'BAO sats' : 'demo sats'}
             </p>
             <p className="text-muted-foreground">
-              {walletMode === 'btc-sats'
+              {effectiveMode === 'btc-sats'
                 ? 'Real BAO signet/demo sats paid from your BAO wallet.'
-                : 'One prize per day in demo mode.'}
+                : allowBtcSats
+                  ? 'One prize per day in demo mode.'
+                  : 'Real-sats battles are disabled in real-money mode. Switch to BAO testnet to play for BAO sats.'}
             </p>
           </div>
         </div>

@@ -70,8 +70,8 @@ export interface ChaseGameState {
   obstacles: ChaseObstacle[];
 }
 
-export const CHASE_FIAT_COST = 100;
-export const CHASE_SATS_PER_COIN = 10;
+export const CHASE_FIAT_COST = 10;
+export const CHASE_SATS_PER_COIN = 1;
 export const CHASE_RUN_TIMEOUT_MS = 60_000;
 export const CHASE_JUMP_VELOCITY = -13;
 export const CHASE_GRAVITY = 0.65;

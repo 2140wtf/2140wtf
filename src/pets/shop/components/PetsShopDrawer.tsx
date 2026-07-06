@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
-import { usePetsPurchaseItem } from '../hooks/usePetsPurchaseItem';
+import { usePetsPurchaseItem, estimateCashuSendFee } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import type { BlobbonautProfile } from '@/pets/core/lib/pets';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import type { ShopItem, ShopItemCategory } from '../types/shop.types';
@@ -42,12 +43,17 @@ function effectSummary(effect: ShopItem['effect']): string {
 
 export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps) {
   const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, externalWallet);
+  const { isReal, isTestnet } = usePetsWallet();
 
   const isBtcMode = profile?.walletMode === 'btc-sats';
-  const walletBalance = externalWallet?.totalBalance ?? 0;
+  const walletBalance = isBtcMode
+    ? (externalWallet?.balances?.[externalWallet?.mintUrl ?? ''] ?? 0)
+    : 0;
   const walletLoading = externalWallet?.loading ?? false;
   const fiatCoins = profile?.coins ?? 0;
   const demoSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
+
+  const satsLabel = isReal ? 'real sats' : isTestnet ? 'BAO sats' : 'demo sats';
 
   const storageMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -94,7 +100,7 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
             {walletLoading && demoSats === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{demoSats.toLocaleString()} {isBtcMode ? 'BAO sats' : 'demo sats'}</span>
+              <span>{demoSats.toLocaleString()} {satsLabel}</span>
             )}
           </Badge>
         </div>
@@ -113,8 +119,12 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
                     const owned = storageMap.get(item.id) ?? 0;
                     const fiatPrice = item.fiatPrice ?? item.price;
                     const satsPrice = item.satsPrice ?? item.price;
+                    const feeReserve = isBtcMode
+                      ? estimateCashuSendFee(satsPrice, externalWallet?.wallet ?? null)
+                      : 0;
+                    const satsNeeded = satsPrice + feeReserve;
                     const canAffordFiat = fiatCoins >= fiatPrice;
-                    const canAffordSats = demoSats >= satsPrice;
+                    const canAffordSats = demoSats >= satsNeeded;
                     const canAfford = canAffordFiat || canAffordSats;
                     return (
                       <Card key={item.id} className={cn('overflow-hidden', !canAfford && 'opacity-70')}>
@@ -145,7 +155,19 @@ export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps)
                                   size="sm"
                                   variant="secondary"
                                   disabled={!canAfford || isPending}
-                                  onClick={() => purchase({ itemId: item.id, price: fiatPrice, quantity: 1 })}
+                                  onClick={() => {
+                                    // In btc-sats mode always charge real sats;
+                                    // otherwise prefer fiat coins and fall back to
+                                    // demo sats so the button price matches the
+                                    // currency actually deducted.
+                                    const useFiat = !isBtcMode && canAffordFiat;
+                                    purchase({
+                                      itemId: item.id,
+                                      price: useFiat ? fiatPrice : satsPrice,
+                                      quantity: 1,
+                                      currency: useFiat ? 'fiat' : 'sats',
+                                    });
+                                  }}
                                   className="h-7 px-2 text-xs shrink-0"
                                 >
                                   <Plus className="size-3 mr-1" />

@@ -23,6 +23,7 @@ import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
 import { useOnchainZapMany } from '@/hooks/useOnchainZapMany';
 import { type OnchainFeeSpeed } from '@/hooks/useOnchainZap';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useHdWallet } from '@/hooks/useHdWallet';
 import { impactMedium } from '@/lib/haptics';
 import {
   nostrPubkeyToBitcoinAddress,
@@ -32,8 +33,11 @@ import {
   estimateFee,
   isLargeAmount,
   satsToUSD,
+  btcToSats,
   type FeeRates,
+  type UTXO,
 } from '@/lib/bitcoin';
+import { selectUtxos, type HdUtxo } from '@/lib/hdWallet';
 
 /**
  * Total USD presets — the user picks how much they want to spend in total
@@ -106,7 +110,7 @@ export function ZapAllOnchainDialog({
   onOpenChange,
 }: ZapAllOnchainDialogProps) {
   const { user } = useCurrentUser();
-  const { capability } = useBitcoinSigner();
+  const { capability, canAttemptPsbt } = useBitcoinSigner();
   const { config } = useAppContext();
   const { esploraApis } = config;
 
@@ -140,6 +144,8 @@ export function ZapAllOnchainDialog({
   }, [recipientPubkeys, user?.pubkey]);
 
   const senderAddress = user ? nostrPubkeyToBitcoinAddress(user.pubkey) : '';
+  const hd = useHdWallet();
+  const isHd = hd.isHd;
 
   const { data: btcPrice } = useQuery({
     queryKey: ['btc-price', esploraApis],
@@ -147,17 +153,23 @@ export function ZapAllOnchainDialog({
     staleTime: 30_000,
   });
 
-  const { data: utxos } = useQuery({
+  // For nsec logins use the HD wallet's scanned UTXOs; otherwise fall back to
+  // the legacy single-address UTXO set.
+  const legacyUtxosQuery = useQuery({
     queryKey: ['bitcoin-utxos', esploraApis, senderAddress],
     queryFn: ({ signal }) => fetchUTXOs(senderAddress, esploraApis, signal),
-    enabled: !!senderAddress && capability !== 'unsupported' && open,
+    enabled: !!senderAddress && canAttemptPsbt && open && !isHd,
     staleTime: 30_000,
   });
+
+  const hdUtxos = useMemo(() => hd.utxos ?? [], [hd.utxos]);
+  const legacyUtxos = useMemo(() => legacyUtxosQuery.data ?? [], [legacyUtxosQuery.data]);
+  const utxos: (HdUtxo | UTXO)[] = isHd ? hdUtxos : legacyUtxos;
 
   const { data: feeRates } = useQuery({
     queryKey: ['bitcoin-fee-rates', esploraApis],
     queryFn: ({ signal }) => getFeeRates(esploraApis, signal),
-    enabled: capability !== 'unsupported' && open,
+    enabled: canAttemptPsbt && open,
     staleTime: 30_000,
   });
 
@@ -178,7 +190,7 @@ export function ZapAllOnchainDialog({
     const usd = typeof usdTotal === 'string' ? parseFloat(usdTotal) : usdTotal;
     if (!Number.isFinite(usd) || usd <= 0) return 0;
     const btc = usd / btcPrice;
-    return Math.round(btc * 100_000_000);
+    return btcToSats(btc);
   }, [usdTotal, btcPrice]);
 
   const amountPerRecipientSats = useMemo(() => {
@@ -190,12 +202,19 @@ export function ZapAllOnchainDialog({
 
   const estimatedFeeSats = useMemo(() => {
     if (!utxos?.length || !currentFeeRate || !amountPerRecipientSats || recipientCount === 0) return 0;
+    if (isHd) {
+      try {
+        return selectUtxos(hdUtxos, totalRecipientSats, currentFeeRate, recipientCount).fee;
+      } catch {
+        return 0;
+      }
+    }
     // N recipients + change output.
     const feeWithChange = estimateFee(utxos.length, recipientCount + 1, currentFeeRate);
     const change = totalBalance - totalRecipientSats - feeWithChange;
-    const numOutputs = change > DUST_LIMIT_SATS ? recipientCount + 1 : recipientCount;
+    const numOutputs = change >= DUST_LIMIT_SATS ? recipientCount + 1 : recipientCount;
     return estimateFee(utxos.length, numOutputs, currentFeeRate);
-  }, [utxos, currentFeeRate, amountPerRecipientSats, recipientCount, totalBalance, totalRecipientSats]);
+  }, [utxos, currentFeeRate, amountPerRecipientSats, recipientCount, totalBalance, totalRecipientSats, isHd, hdUtxos]);
 
   const totalSats = totalRecipientSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
@@ -206,10 +225,18 @@ export function ZapAllOnchainDialog({
   // rather than returning as change.
   const noChangeDust = useMemo(() => {
     if (!utxos?.length || !currentFeeRate || totalRecipientSats <= 0 || totalBalance <= 0) return false;
+    if (isHd) {
+      try {
+        const change = selectUtxos(hdUtxos, totalRecipientSats, currentFeeRate, recipientCount).change;
+        return change > 0 && change <= DUST_LIMIT_SATS;
+      } catch {
+        return false;
+      }
+    }
     const feeWithChange = estimateFee(utxos.length, recipientCount + 1, currentFeeRate);
     const change = totalBalance - totalRecipientSats - feeWithChange;
     return change > 0 && change <= DUST_LIMIT_SATS;
-  }, [utxos, currentFeeRate, totalRecipientSats, totalBalance, recipientCount]);
+  }, [utxos, currentFeeRate, totalRecipientSats, totalBalance, recipientCount, isHd, hdUtxos]);
 
   // Per-recipient dust check — every output MUST be at or above the 546 sat
   // dust limit, otherwise the tx won't relay. When the user picks a total
@@ -231,17 +258,26 @@ export function ZapAllOnchainDialog({
     let nextSpeed: OnchainFeeSpeed = uniqueSpeeds[uniqueSpeeds.length - 1];
     for (const speed of uniqueSpeeds) {
       const rate = feeRateForSpeed(feeRates, speed);
-      const feeWithChange = estimateFee(utxos.length, recipientCount + 1, rate);
-      const change = totalBalance - totalRecipientSats - feeWithChange;
-      const outputs = change > DUST_LIMIT_SATS ? recipientCount + 1 : recipientCount;
-      const fee = estimateFee(utxos.length, outputs, rate);
+      let fee: number;
+      if (isHd) {
+        try {
+          fee = selectUtxos(hdUtxos, totalRecipientSats, rate, recipientCount).fee;
+        } catch {
+          continue;
+        }
+      } else {
+        const feeWithChange = estimateFee(utxos.length, recipientCount + 1, rate);
+        const change = totalBalance - totalRecipientSats - feeWithChange;
+        const outputs = change >= DUST_LIMIT_SATS ? recipientCount + 1 : recipientCount;
+        fee = estimateFee(utxos.length, outputs, rate);
+      }
       if (fee <= threshold) {
         nextSpeed = speed;
         break;
       }
     }
     setFeeSpeed((prev) => (prev === nextSpeed ? prev : nextSpeed));
-  }, [totalRecipientSats, feeRates, utxos, totalBalance, recipientCount]);
+  }, [totalRecipientSats, feeRates, utxos, totalBalance, recipientCount, isHd, hdUtxos]);
 
   const handleFeeSpeedChange = useCallback((speed: OnchainFeeSpeed) => {
     feeSpeedUserChanged.current = true;

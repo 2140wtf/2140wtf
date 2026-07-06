@@ -31,10 +31,13 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
+  KIND_BLOBBONAUT_PROFILE,
   updatePetsTags,
   parsePetsEvent,
   isValidPetsEvent,
+  parseBlobbonautEvent,
 } from '@/pets/core/lib/pets';
+import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getEffectiveStatCap } from '@/pets/core/lib/category-abilities';
 import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
@@ -252,11 +255,22 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       
       // Fetch fresh companion data
       const companion = await fetchCurrentCompanion();
-      
+
       if (!companion) {
         throw new Error('No companion selected');
       }
-      
+
+      // Fetch fresh profile so a purchase/consumption elsewhere does not leave
+      // the ownership check stale.
+      const freshProfileEvent = await fetchFreshPetsEvent(nostr, {
+        kinds: [KIND_BLOBBONAUT_PROFILE],
+        authors: [user.pubkey],
+      });
+      const freshProfile = freshProfileEvent ? parseBlobbonautEvent(freshProfileEvent) : profile;
+      if (!freshProfile) {
+        throw new Error('Profile data is invalid');
+      }
+
       // Check stage restrictions
       if (!canUseAction(companion, action)) {
         const message = getStageRestrictionMessage(companion, action);
@@ -281,8 +295,8 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
         throw new Error('This item has no effect');
       }
 
-      // Validate the user owns the item
-      const owned = profile.storage.find((s) => s.itemId === itemId);
+      // Validate the user owns the item using the freshly fetched profile
+      const owned = freshProfile.storage.find((s) => s.itemId === itemId);
       if (!owned || owned.quantity <= 0) {
         throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
       }
@@ -393,14 +407,39 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
         last_decay_at: nowStr,
       });
       
+      // Consume one unit from storage BEFORE applying the pet stat update. This
+      // prevents the pet from receiving a free stat boost if the storage
+      // decrement cannot be published.
+      if (user?.pubkey) {
+        const { consumed } = await consumeStorageItem(nostr, publishEvent, user.pubkey, itemId);
+        if (!consumed) {
+          throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
+        }
+      }
+
       const petsEvent = await publishEvent({
         kind: KIND_PETS_STATE,
         content,
         tags: petsTags,
         prev: companion.event,
       });
-      
+
       updateCompanionInCache(petsEvent);
+
+      // Update the profile cache with the freshly published profile event.
+      if (user?.pubkey) {
+        const freshEventAfterConsume = await fetchFreshPetsEvent(nostr, {
+          kinds: [KIND_BLOBBONAUT_PROFILE],
+          authors: [user.pubkey],
+        });
+        if (freshEventAfterConsume) {
+          if (updateProfileEvent) {
+            updateProfileEvent(freshEventAfterConsume);
+          } else if (user?.pubkey) {
+            queryClient.setQueryData(['blobbonaut-profile', user.pubkey], freshEventAfterConsume);
+          }
+        }
+      }
 
       // ─── Emit kind 1124 interaction event (best-effort, fire-and-forget) ───
       // ownerPubkey comes from the target Pets event, not the logged-in user,
@@ -414,19 +453,6 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
           source: 'companion',
           itemId,
         });
-      }
-      
-      // Consume one unit from storage and update the profile cache
-      if (user?.pubkey) {
-        consumeStorageItem(nostr, publishEvent, user.pubkey, itemId)
-          .then(({ event }) => {
-            if (updateProfileEvent) {
-              updateProfileEvent(event);
-            } else if (user?.pubkey) {
-              queryClient.setQueryData(['blobbonaut-profile', user.pubkey], event);
-            }
-          })
-          .catch((error) => console.error('[usePetsItemUse] Failed to consume storage:', error));
       }
 
       // ─── Invalidate Queries ───
