@@ -1,20 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
+import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
+
 import { fetchFreshEvent } from './fetchFreshEvent';
 import type { NIndexedDB } from '@nostrify/indexeddb';
 
-const PK = 'a'.repeat(64);
+const sk = generateSecretKey();
+const PK = getPublicKey(sk);
 
 function makeEvent(createdAt: number, content = ''): NostrEvent {
-  return {
-    id: `id-${createdAt}`,
-    pubkey: PK,
-    kind: 10000,
-    created_at: createdAt,
-    tags: [],
-    content,
-    sig: 'sig',
-  };
+  return finalizeEvent(
+    {
+      kind: 10000,
+      created_at: createdAt,
+      tags: [],
+      content,
+    },
+    sk,
+  );
 }
 
 function mockStore(event: NostrEvent | null): NIndexedDB {
