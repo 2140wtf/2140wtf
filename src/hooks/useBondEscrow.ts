@@ -33,7 +33,7 @@ function buildStakeCommitment(input: BondEscrowInput): StakeCommitment {
 /**
  * Verify a juror bond UTXO and return a confirmed `StakeCommitment`.
  *
- * For Bitcoin / Liquid rails the hook queries the configured BAO custom signet
+ * For Bitcoin / Liquid rails the hook queries the configured BAO Markets custom signet
  * Esplora endpoint and validates the UTXO amount and confirmations. For rails
  * that are still demo placeholders it returns a mock confirmed commitment and
  * logs a warning.
@@ -53,7 +53,7 @@ export function useBondEscrow() {
 
         const esploraUrl = config.baoCustomSignetEsploraUrl;
         if (!esploraUrl) {
-          throw new Error('BAO custom signet Esplora URL is not configured.');
+          throw new Error('BAO Markets custom signet Esplora URL is not configured.');
         }
         const verifier = createEsploraVerifier(esploraUrl);
         const result = await verifyBond({
