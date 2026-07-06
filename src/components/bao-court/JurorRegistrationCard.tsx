@@ -14,6 +14,7 @@ interface JurorRegistrationCardProps {
   marketId: string;
   defaultBondAmountSats?: number;
   requiredRail?: string;
+  realMode?: boolean;
   onRegistered?: () => void;
 }
 
@@ -31,13 +32,16 @@ export function JurorRegistrationCard({
   marketId,
   defaultBondAmountSats = 10_000,
   requiredRail = "spark",
+  realMode = false,
   onRegistered,
 }: JurorRegistrationCardProps) {
   const { toast } = useToast();
   const { mutateAsync: register, isPending } = useJurorRegistration();
   const [selectedCategories, setSelectedCategories] = useState<string[]>(["world"]);
   const [bondAmount, setBondAmount] = useState<string>(String(defaultBondAmountSats));
-  const [bondAddress, setBondAddress] = useState<string>("spark:demo");
+  const [bondAddress, setBondAddress] = useState<string>(realMode ? "" : "spark:demo");
+  const [bondTxid, setBondTxid] = useState<string>("");
+  const [bondVout, setBondVout] = useState<string>("");
   const [rail] = useState<string>(requiredRail);
 
   const toggleCategory = (category: string) => {
@@ -55,7 +59,9 @@ export function JurorRegistrationCard({
         marketId,
         categories: selectedCategories,
         bondAmountSats: Number.parseInt(bondAmount, 10) || 10_000,
-        bondAddress: bondAddress.trim() || "spark:demo",
+        bondAddress: bondAddress.trim() || (realMode ? "" : "spark:demo"),
+        bondTxid: bondTxid.trim() || undefined,
+        bondVout: bondVout.trim() ? Number.parseInt(bondVout, 10) : undefined,
         rail,
       });
       toast({
@@ -98,7 +104,7 @@ export function JurorRegistrationCard({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="bond-amount">Mock bond amount (sats)</Label>
+          <Label htmlFor="bond-amount">{realMode ? "Bond amount (sats)" : "Mock bond amount (sats)"}</Label>
           <Input
             id="bond-amount"
             type="number"
@@ -107,18 +113,45 @@ export function JurorRegistrationCard({
             onChange={(e) => setBondAmount(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            Demo mode: this is a mock stake commitment for UI testing.
+            {realMode
+              ? "The on-chain UTXO must pay at least this amount to the bond address."
+              : "Demo mode: this is a mock stake commitment for UI testing."}
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="bond-address">Mock bond address</Label>
+          <Label htmlFor="bond-address">{realMode ? "Bond address" : "Mock bond address"}</Label>
           <Input
             id="bond-address"
             value={bondAddress}
             onChange={(e) => setBondAddress(e.target.value)}
+            placeholder={realMode ? "tb1q…" : "spark:demo"}
           />
         </div>
+
+        {realMode && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="bond-txid">Bond UTXO txid</Label>
+              <Input
+                id="bond-txid"
+                value={bondTxid}
+                onChange={(e) => setBondTxid(e.target.value)}
+                placeholder="0000…"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bond-vout">Bond UTXO vout</Label>
+              <Input
+                id="bond-vout"
+                type="number"
+                min={0}
+                value={bondVout}
+                onChange={(e) => setBondVout(e.target.value)}
+              />
+            </div>
+          </>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="juror-rail">Stake rail</Label>

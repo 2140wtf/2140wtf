@@ -11,9 +11,10 @@ import type { JurorSettingsState } from "@/components/bao-court/JurorSettings";
 const STORAGE_KEY = "bao-court-settings";
 
 function loadSettings(): JurorSettingsState {
+  const defaults: JurorSettingsState = { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided", rail: "spark", realMode: false };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided", rail: "spark" };
+    if (!raw) return defaults;
     const parsed = JSON.parse(raw) as unknown;
     if (
       parsed &&
@@ -29,12 +30,15 @@ function loadSettings(): JurorSettingsState {
       "rail" in parsed &&
       typeof parsed.rail === "string"
     ) {
-      return parsed as JurorSettingsState;
+      return {
+        ...parsed,
+        realMode: "realMode" in parsed && typeof parsed.realMode === "boolean" ? parsed.realMode : false,
+      } as JurorSettingsState;
     }
   } catch {
     // Fall through to defaults.
   }
-  return { categories: ["world"], bondAmountSats: 10_000, demoMode: true, demoPace: "guided", rail: "spark" };
+  return defaults;
 }
 
 export function CourtPage(): React.JSX.Element {
