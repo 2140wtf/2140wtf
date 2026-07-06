@@ -2200,15 +2200,64 @@ function PetsDashboard({
 
       {/* ─── Drawer + Tab Bar — overlays the room ─── */}
       <div className={cn(
-        'absolute top-0 left-0 right-0 z-[70] transition-opacity duration-200',
+        'absolute left-0 right-0 z-[70] flex flex-col transition-all duration-250 ease-in-out',
+        activeDrawer === 'wallet' ? 'inset-y-0' : 'top-0',
         isFurnitureEditorOpen && 'opacity-40 pointer-events-none',
       )}>
+        <SubHeaderBar className="relative !top-0 shrink-0" innerClassName="md:min-h-0 min-h-[50px]">
+          <TabButton label="Activity" active={activeDrawer === 'activity'} onClick={() => toggleDrawer('activity')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <Activity className="size-4" />
+              <span className="text-sm">Activity</span>
+            </span>
+          </TabButton>
+          <TabButton label="Pets" active={activeDrawer === 'pets'} onClick={() => toggleDrawer('pets')} className="translate-y-0">
+            <span className="flex items-center gap-1.5">
+              <Egg className="size-4" />
+              <span className="text-sm">Pets</span>
+            </span>
+          </TabButton>
+          <TabButton label="Species" active={activeDrawer === 'species'} onClick={() => toggleDrawer('species')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <Cat className="size-4" />
+              <span className="text-sm">Species</span>
+            </span>
+          </TabButton>
+          <TabButton label="Earn" active={activeDrawer === 'earn'} onClick={() => toggleDrawer('earn')} className="translate-y-0">
+            <span className="flex items-center gap-1.5">
+              <TrendingUp className="size-4" />
+              <span className="text-sm">Earn</span>
+            </span>
+          </TabButton>
+          <TabButton label="Shop" active={activeDrawer === 'shop'} onClick={() => toggleDrawer('shop')} className="translate-y-2">
+            <span className="flex items-center gap-1.5">
+              <ShoppingBag className="size-4" />
+              <span className="text-sm">Shop</span>
+            </span>
+          </TabButton>
+          <TabButton label="Wallet" active={activeDrawer === 'wallet'} onClick={() => toggleDrawer('wallet')} className="translate-y-0">
+            <span className="flex items-center gap-1.5">
+              <Wallet className="size-4" />
+              <span className="text-sm">Wallet</span>
+            </span>
+          </TabButton>
+        </SubHeaderBar>
+
         <div
-          className="bg-background/90 backdrop-blur-sm overflow-hidden transition-[max-height] duration-250 ease-in-out"
-          style={{ maxHeight: activeDrawer !== 'none' ? '256px' : '0' }}
+          className={cn(
+            'bg-background/95 backdrop-blur-sm overflow-hidden transition-[max-height] duration-250 ease-in-out',
+            activeDrawer !== 'none'
+              ? activeDrawer === 'wallet'
+                ? 'flex-1 max-h-none'
+                : 'max-h-[256px]'
+              : 'max-h-0',
+          )}
         >
-          <ScrollArea style={{ height: 248 }}>
-            <div className="max-w-2xl mx-auto w-full pb-4 pt-2">
+          <ScrollArea className={cn(activeDrawer === 'wallet' ? 'h-full' : 'h-[248px]')}>
+            <div className={cn(
+              'max-w-2xl mx-auto w-full pb-4 pt-2',
+              activeDrawer === 'wallet' && 'h-full flex flex-col',
+            )}>
               {activeDrawer === 'earn' && (
                 <MissionsTabContent
                   initialPane="bao-markets"
@@ -2273,50 +2322,13 @@ function PetsDashboard({
                 <PetsShopDrawer profile={profile ?? null} externalWallet={petsWallet} />
               )}
               {activeDrawer === 'wallet' && (
-                <PetsWalletDrawer />
+                <div className="flex-1 min-h-0">
+                  <PetsWalletDrawer />
+                </div>
               )}
             </div>
           </ScrollArea>
         </div>
-
-        <SubHeaderBar className="relative !top-0" innerClassName="md:min-h-0 min-h-[50px]">
-          <TabButton label="Activity" active={activeDrawer === 'activity'} onClick={() => toggleDrawer('activity')} className="translate-y-2">
-            <span className="flex items-center gap-1.5">
-              <Activity className="size-4" />
-              <span className="text-sm">Activity</span>
-            </span>
-          </TabButton>
-          <TabButton label="Pets" active={activeDrawer === 'pets'} onClick={() => toggleDrawer('pets')} className="translate-y-0">
-            <span className="flex items-center gap-1.5">
-              <Egg className="size-4" />
-              <span className="text-sm">Pets</span>
-            </span>
-          </TabButton>
-          <TabButton label="Species" active={activeDrawer === 'species'} onClick={() => toggleDrawer('species')} className="translate-y-2">
-            <span className="flex items-center gap-1.5">
-              <Cat className="size-4" />
-              <span className="text-sm">Species</span>
-            </span>
-          </TabButton>
-          <TabButton label="Earn" active={activeDrawer === 'earn'} onClick={() => toggleDrawer('earn')} className="translate-y-0">
-            <span className="flex items-center gap-1.5">
-              <TrendingUp className="size-4" />
-              <span className="text-sm">Earn</span>
-            </span>
-          </TabButton>
-          <TabButton label="Shop" active={activeDrawer === 'shop'} onClick={() => toggleDrawer('shop')} className="translate-y-2">
-            <span className="flex items-center gap-1.5">
-              <ShoppingBag className="size-4" />
-              <span className="text-sm">Shop</span>
-            </span>
-          </TabButton>
-          <TabButton label="Wallet" active={activeDrawer === 'wallet'} onClick={() => toggleDrawer('wallet')} className="translate-y-0">
-            <span className="flex items-center gap-1.5">
-              <Wallet className="size-4" />
-              <span className="text-sm">Wallet</span>
-            </span>
-          </TabButton>
-        </SubHeaderBar>
       </div>
 
       {/* ─── Room View (always visible behind drawer) ─── */}
