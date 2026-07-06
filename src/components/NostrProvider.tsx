@@ -48,9 +48,20 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // it here lets the AppPool and
   // the rest of the app share a single connection. The cache is append-only;
   // it is never automatically pruned.
-  const eventStore = useRef<NIndexedDB | undefined>(undefined);
-  eventStore.current ??= new NIndexedDB(EVENTS_DB_NAME);
-
+  //
+  // `null` is a sentinel meaning "we already tried and failed"; `undefined`
+  // means "not attempted yet". This prevents a render-time retry loop if
+  // IndexedDB is blocked or throws on open.
+  const eventStore = useRef<NIndexedDB | null | undefined>(undefined);
+  if (eventStore.current === undefined) {
+    try {
+      eventStore.current = new NIndexedDB(EVENTS_DB_NAME);
+    } catch {
+      // IndexedDB may be unavailable or blocked. Degrade gracefully to a
+      // memory-only pool so the rest of the app can still render.
+      eventStore.current = null;
+    }
+  }
 
   // Use refs so the pool always has the latest data
   const effectiveRelays = useRef(getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays));
@@ -86,7 +97,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   }, [currentLogin]);
 
   // Keep the ref in sync so the AUTH callback always sees the latest signer.
-  signerRef.current = currentSigner;
+  useEffect(() => {
+    signerRef.current = currentSigner;
+  }, [currentSigner]);
 
   // Update effective relays ref when config changes. The NPool reads from
   // this ref, so new queries automatically use the updated relay set.
@@ -101,7 +114,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   }, [config.relayMetadata, config.useAppRelays, config.useUserRelays]);
 
   // Initialize NPool only once
-  if (!pool.current) {
+  if (pool.current === undefined) {
     pool.current = new NPool({
       open(relayUrl: string) {
         const url = new URL(relayUrl);
@@ -173,9 +186,8 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // REQs, and results are mirrored into the local cache. All other methods pass
   // through directly to the underlying pool.
   const appPool = useRef<AppPool | undefined>(undefined);
-  if (!appPool.current && pool.current) {
-    appPool.current = new AppPool(pool.current, eventStore.current);
-    appPool.current.setLoggedInPubkeys(logins.map((l) => l.pubkey));
+  if (appPool.current === undefined && pool.current !== undefined) {
+    appPool.current = new AppPool(pool.current, eventStore.current || undefined);
   }
 
   // Keep the AppPool's notion of "who is logged in" current. It uses this to
@@ -206,7 +218,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // all the same methods hooks use: query, event, req, relay, group, close.
   return (
     <NostrContext.Provider value={{ nostr: (appPool.current ?? pool.current) as unknown as NPool }}>
-      <NostrStorageContext.Provider value={eventStore.current}>
+      <NostrStorageContext.Provider value={eventStore.current ?? null}>
         {children}
       </NostrStorageContext.Provider>
     </NostrContext.Provider>

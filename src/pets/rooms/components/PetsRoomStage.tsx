@@ -139,7 +139,7 @@ export function PetsRoomStage({
   }, [petLife, birthBlockHeight, companion.name]);
 
   return (
-    <div ref={stageRef} className="absolute inset-0 pointer-events-none">
+    <div ref={stageRef} data-pets-stage={companion.stage} className="absolute inset-0 pointer-events-none">
       {/* Pets anchor: full-width at the ground line.
           Uses inset-x-0 so descendant percentage widths resolve against
           room canvas width — keeping Pets proportional with furniture.
@@ -240,7 +240,7 @@ export function PetsRoomStage({
                     animation: `pets-sway ${6 - (currentStats.happiness / 100) * 2}s ease-in-out infinite`,
                   } : undefined),
                 }}
-                {...interactionProps}
+                {...(isEgg ? { onPointerEnter: interactionProps?.onPointerEnter, onPointerLeave: interactionProps?.onPointerLeave } : interactionProps)}
               >
                 {/* Body animation wrapper — isolated from sway so direct-interaction
                     animations (hover-lean, poke-wiggle) don't override it. */}

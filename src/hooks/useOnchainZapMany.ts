@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
+import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
@@ -14,12 +15,15 @@ import {
   fetchUTXOs,
   getFeeRates,
   buildUnsignedPsbtMulti,
+  buildUnsignedPsbtHd,
   finalizePsbt,
   broadcastTransaction,
-  estimateFee,
+  estimateFeeWithDustChange,
   type PsbtRecipient,
   type FeeRates,
+  type UTXO,
 } from '@/lib/bitcoin';
+import { selectUtxos, type HdUtxo } from '@/lib/hdWallet';
 import type { OnchainFeeSpeed } from '@/hooks/useOnchainZap';
 
 /**
@@ -69,9 +73,12 @@ interface OnchainZapManyResult {
   fee: number;
   /**
    * The published kind 8333 event, or `null` if the relay rejected the
-   * publish. The on-chain payment has already cleared regardless.
+   * publish or zap receipts are disabled. The on-chain payment has already
+   * cleared regardless.
    */
   event: NostrEvent | null;
+  /** Whether zap receipt publishing was attempted (false when disabled). */
+  zapsEnabled: boolean;
 }
 
 /**
@@ -97,6 +104,8 @@ export function useOnchainZapMany(
 ) {
   const { user } = useCurrentUser();
   const { canSignPsbt, signPsbt } = useBitcoinSigner();
+  const { hd: hdWallet } = useBitcoinWallet();
+  const isHd = hdWallet?.accountNode != null;
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
   const { isEnabled } = usePublishPreferences();
@@ -143,13 +152,16 @@ export function useOnchainZapMany(
         throw new Error('Failed to derive your Bitcoin address.');
       }
 
-      // Resolve each recipient to a Taproot address. Drop any that fail to
-      // derive (shouldn't happen for valid 32-byte hex pubkeys, but be safe).
+      // Resolve each recipient to a Taproot address. Validate every input
+      // pubkey up front so a single invalid recipient fails the whole zap
+      // instead of silently dropping paid recipients.
       const psbtRecipients: PsbtRecipient[] = [];
       const recipientPubkeysOrdered: string[] = [];
       for (const pk of recipients) {
         const addr = nostrPubkeyToBitcoinAddress(pk);
-        if (!addr) continue;
+        if (!addr) {
+          throw new Error(`Could not derive a Bitcoin address for recipient ${pk.slice(0, 12)}…`);
+        }
         psbtRecipients.push({ address: addr, amountSats: amountPerRecipientSats });
         recipientPubkeysOrdered.push(pk);
       }
@@ -157,11 +169,22 @@ export function useOnchainZapMany(
         throw new Error('Failed to derive Bitcoin addresses for any recipient.');
       }
 
-      // Fetch UTXOs and fee rates in parallel.
-      const [utxos, rates] = await Promise.all([
-        fetchUTXOs(senderAddress, esploraApis),
-        getFeeRates(esploraApis),
-      ]);
+      // Fetch UTXOs and fee rates in parallel. For nsec logins use the HD
+      // wallet's scanned UTXOs; otherwise fall back to the legacy single-address
+      // UTXO set.
+      let hdUtxos: HdUtxo[] = [];
+      let legacyUtxos: UTXO[] = [];
+      let rates: FeeRates;
+      if (isHd) {
+        hdUtxos = hdWallet.utxos;
+        rates = await getFeeRates(esploraApis);
+      } else {
+        [legacyUtxos, rates] = await Promise.all([
+          fetchUTXOs(senderAddress, esploraApis),
+          getFeeRates(esploraApis),
+        ]);
+      }
+      const utxos = isHd ? hdUtxos : legacyUtxos;
 
       if (utxos.length === 0) {
         throw new Error('Your Bitcoin wallet has no spendable funds.');
@@ -170,20 +193,43 @@ export function useOnchainZapMany(
       const feeRate = feeRateForSpeed(rates, feeSpeed);
       const totalBalance = utxos.reduce((s, u) => s + u.value, 0);
       const totalOut = amountPerRecipientSats * psbtRecipients.length;
-      const estFee = estimateFee(utxos.length, psbtRecipients.length + 1, feeRate);
-      if (totalOut + estFee > totalBalance) {
-        throw new Error(
-          `Insufficient funds. Need ~${(totalOut + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
-        );
+
+      if (isHd) {
+        const estFee = selectUtxos(hdUtxos, totalOut, feeRate, psbtRecipients.length).fee;
+        if (totalOut + estFee > totalBalance) {
+          throw new Error(
+            `Insufficient funds. Need ~${(totalOut + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
+          );
+        }
+      } else {
+        const { fee: estFee } = estimateFeeWithDustChange(utxos.length, psbtRecipients.length, feeRate, totalBalance, totalOut);
+        if (totalOut + estFee > totalBalance) {
+          throw new Error(
+            `Insufficient funds. Need ~${(totalOut + estFee).toLocaleString()} sats, have ${totalBalance.toLocaleString()}.`,
+          );
+        }
       }
 
       // Build the multi-output PSBT.
-      const { psbtHex, fee } = buildUnsignedPsbtMulti(
-        user.pubkey,
-        psbtRecipients,
-        utxos,
-        feeRate,
-      );
+      let psbtHex: string;
+      let fee: number;
+      if (isHd && hdWallet.accountNode && hdWallet.changeAddress) {
+        const { selected } = selectUtxos(hdUtxos, totalOut, feeRate, psbtRecipients.length);
+        ({ psbtHex, fee } = buildUnsignedPsbtHd(
+          hdWallet.accountNode,
+          psbtRecipients,
+          selected,
+          hdWallet.changeAddress,
+          feeRate,
+        ));
+      } else {
+        ({ psbtHex, fee } = buildUnsignedPsbtMulti(
+          user.pubkey,
+          psbtRecipients,
+          legacyUtxos,
+          feeRate,
+        ));
+      }
 
       // Sign + finalize + broadcast.
       setProgress('signing');
@@ -199,13 +245,9 @@ export function useOnchainZapMany(
       // Verifiers recompute per-recipient amounts on demand by matching each
       // pubkey's derived Taproot address against the tx outputs.
       const totalAmountSats = amountPerRecipientSats * recipientPubkeysOrdered.length;
+      const zapsEnabled = isEnabled('zaps');
       let publishedEvent: NostrEvent | null = null;
-      if (!isEnabled('zaps')) {
-        toast({
-          title: 'Zaps publishing disabled',
-          description: 'Turn on “Zaps” in Settings → Privacy & Publishing to publish zap receipts.',
-        });
-      } else {
+      if (zapsEnabled) {
         setProgress('publishing');
         const isAddressable = target && target.kind >= 30000 && target.kind < 40000;
         const aCoord = isAddressable
@@ -260,6 +302,7 @@ export function useOnchainZapMany(
         recipientCount: recipientPubkeysOrdered.length,
         fee,
         event: publishedEvent,
+        zapsEnabled,
       };
     },
     onSuccess: (result) => {
@@ -269,6 +312,7 @@ export function useOnchainZapMany(
       queryClient.invalidateQueries({ queryKey: ['onchain-zaps'] });
       queryClient.invalidateQueries({ queryKey: ['event-interactions'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-utxos'] });
+      queryClient.invalidateQueries({ queryKey: ['hd-wallet-scan'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-balance'] });
       queryClient.invalidateQueries({ queryKey: ['bitcoin-txs'] });
 
@@ -280,6 +324,13 @@ export function useOnchainZapMany(
           description: `Sent ${result.totalAmountSats.toLocaleString()} sats to ${result.recipientCount} ${
             result.recipientCount === 1 ? 'account' : 'accounts'
           }. Tx ${result.txid.slice(0, 12)}…`,
+        });
+      }
+      if (result.zapsEnabled && !result.event) {
+        toast({
+          title: 'Zap receipt not published',
+          description: 'Bitcoin was sent, but the Nostr zap receipt could not be published.',
+          variant: 'destructive',
         });
       }
     },

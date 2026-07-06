@@ -74,17 +74,19 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 5_000 },
       sendToken,
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(sendToken).toHaveBeenCalledWith(250, 'Pets shop: Apple');
+    expect(sendToken).toHaveBeenCalledWith(25, 'Pets shop: Apple');
 
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
     expect(published).toBeDefined();
@@ -92,20 +94,22 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('20000');
   });
 
-  it('throws when external wallet balance is insufficient', async () => {
+  it('throws when the selected mint balance is insufficient', async () => {
     const externalWallet = {
-      totalBalance: 5,
+      totalBalance: 5_000,
       loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 0 },
       sendToken: vi.fn(),
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient external wallet balance');
+    expect(result.current.error?.message).toContain('Insufficient balance on the selected mint');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 });
@@ -128,23 +132,24 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(sendToken).not.toHaveBeenCalled();
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
-    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19750');
+    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19975');
   });
 
   it('validates that the demo-sats cost is affordable', async () => {
-    const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 100))!;
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('demo-sats', 10));
+    const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 10))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null), { wrapper });
 
-    result.current.mutate({ itemId: 'food_apple', price: 250, quantity: 1 });
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient funds');
+    expect(result.current.error?.message).toContain('Insufficient demo sats');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 });

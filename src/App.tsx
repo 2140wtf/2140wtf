@@ -158,7 +158,7 @@ const hardcodedConfig: AppConfig = {
   linkPreviewUrl: "",
   corsProxy: "",
   baoSignetMintUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL) ?? 'https://relay.bao.network/cashu',
-  baoSignetFaucetUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL) ?? 'https://relay.bao.network/faucet',
+  baoSignetFaucetUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL) ?? 'https://relay.bao.network/faucet/',
   baoApiUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_API_URL) ?? 'https://relay.bao.network/bao-api',
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
@@ -175,6 +175,8 @@ const hardcodedConfig: AppConfig = {
   sidebarWidgets: DEFAULT_SIDEBAR_WIDGETS,
   sidebarWidgetsVersion: SIDEBAR_WIDGETS_VERSION,
   maxCachedEventAge: 604800,
+  bip352IndexerUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BIP352_INDEXER_URL) ?? undefined,
+  bip352ScanConcurrency: 8,
 };
 
 /**

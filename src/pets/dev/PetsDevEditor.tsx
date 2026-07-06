@@ -144,7 +144,7 @@ function StatSlider({ label, icon, value, onChange, color }: StatSliderProps) {
             min={0}
             max={100}
             value={value}
-            onChange={(e) => onChange(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+            onChange={(e) => onChange(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
             className="w-16 h-7 text-sm text-center"
           />
           <span className="text-xs text-muted-foreground w-6">%</span>
@@ -187,6 +187,9 @@ export function PetsDevEditor({
   const [careStreak, setCareStreak] = useState(companion.careStreak ?? 0);
   const [breedingReady, setBreedingReady] = useState(companion.breedingReady);
   const [generation, setGeneration] = useState(companion.generation ?? 1);
+
+  // Daily-missions reset confirmation state
+  const [confirmResetMissions, setConfirmResetMissions] = useState(false);
 
   // Reset state when companion changes or modal opens
   const resetToCompanion = useCallback(() => {
@@ -272,6 +275,12 @@ export function PetsDevEditor({
     resetToCompanion();
     onClose();
   }, [resetToCompanion, onClose]);
+
+  // Self-gate: this component must never render outside a Vite dev build.
+  if (!import.meta.env.DEV) {
+    console.error('PetsDevEditor is only available in development mode');
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
@@ -503,7 +512,7 @@ export function PetsDevEditor({
                   type="number"
                   min={0}
                   value={careStreak}
-                  onChange={(e) => setCareStreak(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={(e) => setCareStreak(Math.max(0, parseInt(e.target.value, 10) || 0))}
                   className="h-8"
                 />
               </div>
@@ -515,7 +524,7 @@ export function PetsDevEditor({
                   type="number"
                   min={1}
                   value={generation}
-                  onChange={(e) => setGeneration(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => setGeneration(Math.max(1, parseInt(e.target.value, 10) || 1))}
                   className="h-8"
                 />
               </div>
@@ -546,12 +555,19 @@ export function PetsDevEditor({
                 <p className="text-xs text-muted-foreground">Reset account-level daily bounties</p>
               </div>
               <Button
-                variant="outline"
+                variant={confirmResetMissions ? 'destructive' : 'outline'}
                 size="sm"
-                onClick={onResetDailyMissions}
+                onClick={() => {
+                  if (!confirmResetMissions) {
+                    setConfirmResetMissions(true);
+                    return;
+                  }
+                  setConfirmResetMissions(false);
+                  onResetDailyMissions();
+                }}
               >
                 <RotateCcw className="size-3 mr-1.5" />
-                Reset Daily Missions
+                {confirmResetMissions ? 'Confirm Reset' : 'Reset Daily Missions'}
               </Button>
             </div>
           </>

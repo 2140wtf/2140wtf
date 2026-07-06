@@ -47,6 +47,11 @@ export function usePetsDevUpdate({
 
   return useMutation({
     mutationFn: async (updates: PetsDevUpdates): Promise<DevUpdateResult> => {
+      // Self-gate: this hook must never run outside a Vite dev build.
+      if (!import.meta.env.DEV) {
+        throw new Error('usePetsDevUpdate is only available in development mode');
+      }
+
       // ─── Validation ───
       if (!user?.pubkey) {
         throw new Error('You must be logged in');
