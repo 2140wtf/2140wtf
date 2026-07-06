@@ -18,6 +18,7 @@ import {
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { PetsStageVisual, type PetsReaction } from '@/pets/ui/PetsStageVisual';
 import { adjustSeedForAdultType } from '@/pets/core/lib/pets';
@@ -35,6 +36,7 @@ const REACTIONS: PetsReaction[] = ['idle', 'listening', 'swaying', 'singing', 'h
 export function PetsSettingsPage() {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const { settings, updateSettings } = useEncryptedSettings();
   const { companions, isLoading } = usePetssCollection();
 
   useSeoMeta({
@@ -227,6 +229,28 @@ export function PetsSettingsPage() {
                   id="pets-preview-animated"
                   checked={animated}
                   onCheckedChange={setAnimated}
+                />
+              </div>
+
+              {/* 3D rendering toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="pets-3d-enabled"
+                    className="text-xs font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer"
+                  >
+                    Enable 3D pets
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Render adult pets as Blossom-hosted GLB models. Falls back to SVG when off or unavailable.
+                  </p>
+                </div>
+                <Switch
+                  id="pets-3d-enabled"
+                  checked={settings?.pets3dEnabled ?? false}
+                  onCheckedChange={(checked) =>
+                    updateSettings.mutate({ pets3dEnabled: checked })
+                  }
                 />
               </div>
             </div>
