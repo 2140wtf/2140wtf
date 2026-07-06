@@ -268,7 +268,7 @@ export const AppConfigSchema = z.object({
   corsProxy: z.string(),
   baoSignetMintUrl: z.string().url().optional(),
   baoSignetFaucetUrl: z.string().url().optional(),
-  /** BAO custom signet Esplora-compatible REST root (no trailing /api). */
+  /** BAO Markets custom signet Mempool/Esplora API root, e.g. https://mempool.bao.markets/api */
   baoCustomSignetEsploraUrl: z.string().url().optional(),
   baoApiUrl: z.string().url().optional(),
   /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */

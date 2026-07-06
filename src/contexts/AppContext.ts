@@ -285,7 +285,7 @@ export interface AppConfig {
   /** URL of the BAO signet faucet used to fund demo wallets. Empty/disabled if not set. */
   baoSignetFaucetUrl?: string;
   /**
-   * Base URL of the BAO custom signet Esplora-compatible REST API used to verify
+   * Base URL of the BAO Markets custom signet Esplora-compatible REST API used to verify
    * juror bonds. Example: "https://relay.bao.network/esplora/api".
    */
   baoCustomSignetEsploraUrl?: string;

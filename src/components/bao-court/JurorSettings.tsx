@@ -129,11 +129,11 @@ export function JurorSettings({ value, onChange }: JurorSettingsProps) {
               <div className="flex items-center gap-2">
                 <Scale className="size-4 text-blue-500" />
                 <Label htmlFor="real-mode" className="text-base">
-                  Live peer ceremony (BAO custom signet, dev only)
+                  Live peer ceremony (BAO Markets custom signet, dev only)
                 </Label>
               </div>
               <p className="text-sm text-muted-foreground">
-                Run the real independent-juror protocol on the BAO custom signet network: live DKG
+                Run the real independent-juror protocol on the BAO Markets custom signet network: live DKG
                 shares over Nostr, BAO bond verification, and threshold signing. Requires an nsec
                 login and all jurors online. Hidden in production until mainnet infra is ready.
               </p>
