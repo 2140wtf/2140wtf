@@ -712,6 +712,18 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     format: 'glitch-step | overclock | firewall | synesthesia | recursion | mirror-self',
     notes: 'Derived from seed. Theme extension for the Cypherpunk 2140 visual system.',
   },
+  {
+    tag: 'asset_3d',
+    description: 'Blossom URL of a 3D model override for this adult 2140 PET',
+    category: 'extension',
+    required: false,
+    stages: ['adult'],
+    persistent: true,
+    source: 'user',
+    regenerable: false,
+    format: '["asset_3d", "<url>", "<sha256>", "<mime>"]',
+    notes: 'Adult-only. Points to a GLB/glTF asset hosted on Blossom. Other clients fall back to the SVG renderer.',
+  },
 ] as const;
 
 // ─── Deprecated Tags ──────────────────────────────────────────────────────────
@@ -913,6 +925,7 @@ const NEVER_INVENT_TAGS = new Set([
   // Extension tags - set by specific features only
   'theme',
   'crossover_app',
+  'asset_3d',
   // Identity tags that are user-set or derived once
   'name',
   'seed',

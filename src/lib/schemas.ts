@@ -427,6 +427,7 @@ export const EncryptedSettingsSchema = z.looseObject({
   linkPreviewUrl: z.string().optional(),
   sentryDsn: z.string().optional(),
   currencyDisplay: z.enum(['usd', 'sats']).optional(),
+  pets3dEnabled: z.boolean().optional(),
   savedFeeds: z.array(z.unknown()).transform((arr) =>
     arr.flatMap((item) => {
       if (typeof item !== 'object' || item === null) return [];
