@@ -125,6 +125,7 @@ export function TestApp({ children }: TestAppProps) {
     maxCachedEventAge: 604800,
     baoSignetMintUrl: 'https://relay.bao.network/cashu',
     baoSignetFaucetUrl: 'https://relay.bao.network/faucet/',
+    baoCustomSignetEsploraUrl: undefined,
     bip352ScanConcurrency: 8,
   };
 

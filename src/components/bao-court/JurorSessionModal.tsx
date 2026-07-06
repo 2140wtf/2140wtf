@@ -20,6 +20,7 @@ import {
   FileSignature,
   ScrollText,
   Beaker,
+  Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ interface JurorSessionModalProps {
   selectedJurors: SelectedJuror[];
   myJurorIdx: number;
   demoMode: boolean;
+  realMode?: boolean;
   demoPace?: 'guided' | 'fast';
   seed?: string;
   open: boolean;
@@ -81,16 +83,18 @@ export function JurorSessionModal({
   selectedJurors,
   myJurorIdx,
   demoMode,
+  realMode = false,
   demoPace = 'guided',
   seed,
   open,
   onOpenChange,
 }: JurorSessionModalProps) {
-  const { state, actions, isPending } = useJurorSession({
+  const { state, actions, isPending, progress: sessionProgress } = useJurorSession({
     dispute,
     selectedJurors,
     myJurorIdx,
     demoMode,
+    realMode,
     seed,
   });
   const { toast } = useToast();
@@ -195,12 +199,17 @@ export function JurorSessionModal({
         <DialogHeader>
           <div className="flex items-start justify-between gap-3 pr-6">
             <DialogTitle className="leading-snug">Juror session</DialogTitle>
-            {demoMode && (
+            {demoMode ? (
               <Badge variant="outline" className="shrink-0 gap-1 text-amber-600 border-amber-600">
                 <Beaker className="size-3" />
                 Demo
               </Badge>
-            )}
+            ) : realMode ? (
+              <Badge variant="outline" className="shrink-0 gap-1 text-blue-600 border-blue-600">
+                <Scale className="size-3" />
+                Live peer
+              </Badge>
+            ) : null}
           </div>
           <DialogDescription className="sr-only">
             Juror session for dispute {dispute.disputeId}
@@ -297,16 +306,38 @@ export function JurorSessionModal({
           {state.phase === "dkg" && (
             <div className="space-y-4 text-center">
               <KeyRound className="size-12 mx-auto text-primary" />
-              <h3 className="text-lg font-semibold">Key setup complete</h3>
-              <p className="text-sm text-muted-foreground">
-                Group public key derived and commitments published.
-              </p>
+              <h3 className="text-lg font-semibold">
+                {sessionProgress.dkgPhase === 'complete' ? 'Key setup complete' : 'Key setup in progress'}
+              </h3>
+              {realMode ? (
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    Peer commitments: {sessionProgress.dkgCounts.commitments} / {state.selectedJurors.length - 1}
+                  </p>
+                  <p>
+                    Encrypted shares: {sessionProgress.dkgCounts.shares} / {state.selectedJurors.length - 1}
+                  </p>
+                  {sessionProgress.dkgCounts.complaints > 0 && (
+                    <p className="text-destructive">
+                      Complaints: {sessionProgress.dkgCounts.complaints}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Group public key derived and commitments published.
+                </p>
+              )}
               {state.groupPubkeyXOnly && (
                 <div className="font-mono text-xs break-all rounded-md bg-muted p-3">
                   {state.groupPubkeyXOnly}
                 </div>
               )}
-              <Button className="w-full" onClick={() => actions.advancePhase("vote-commit")}>
+              <Button
+                className="w-full"
+                onClick={() => actions.advancePhase("vote-commit")}
+                disabled={realMode && sessionProgress.dkgPhase !== 'complete'}
+              >
                 Proceed to vote
               </Button>
             </div>
@@ -370,9 +401,20 @@ export function JurorSessionModal({
             <div className="space-y-4 text-center">
               <FileSignature className="size-12 mx-auto text-primary" />
               <h3 className="text-lg font-semibold">Signing round</h3>
-              <p className="text-sm text-muted-foreground">
-                Reveal your partial signature so the group can aggregate the attestation.
-              </p>
+              {realMode ? (
+                <div className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    Commitments: {sessionProgress.signingCounts.commitments} / {state.selectedJurors.length}
+                  </p>
+                  <p>
+                    Reveals: {sessionProgress.signingCounts.reveals} / {state.selectedJurors.length}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Reveal your partial signature so the group can aggregate the attestation.
+                </p>
+              )}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button
                   className="flex-1"

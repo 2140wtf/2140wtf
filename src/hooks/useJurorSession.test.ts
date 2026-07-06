@@ -18,6 +18,14 @@ vi.mock("@/hooks/useNostrPublish", () => ({
   useNostrPublish: () => ({ mutateAsync: publishEventMock }),
 }));
 
+vi.mock("@/hooks/useUserSeckey", () => ({
+  useUserSeckey: () => undefined,
+}));
+
+vi.mock("@nostrify/react", () => ({
+  useNostr: () => ({ nostr: {} }),
+}));
+
 function makeJuror(idx: number, nostrPubkey: string) {
   const committedAt = 1_700_000_000;
   return {
@@ -136,5 +144,15 @@ describe("useJurorSession", () => {
     });
     expect(returnValue).toBeUndefined();
     expect(publishEventMock).not.toHaveBeenCalled();
+  });
+
+  it("throws a clear error when starting a real ceremony without an nsec login", async () => {
+    const { result } = renderHook(() => useJurorSession({ ...makeOptions(false), realMode: true }));
+
+    await expect(
+      act(async () => {
+        await result.current.actions.publishDkgCommitment();
+      }),
+    ).rejects.toThrow(/Real ceremony requires a local nsec login/);
   });
 });

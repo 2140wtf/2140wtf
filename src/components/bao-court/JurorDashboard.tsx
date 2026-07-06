@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Gavel, List, Settings, Beaker } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 import { useBaoCourtDisputes, type BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
+import { useBaoCourtSelection } from "@/hooks/useBaoCourtSelection";
 import { DisputeCard } from "./DisputeCard";
 import { JurorRegistrationCard } from "./JurorRegistrationCard";
 import { JurorSessionModal } from "./JurorSessionModal";
@@ -38,6 +39,8 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
 
+  const realSelection = useBaoCourtSelection(selectedDispute?.disputeId);
+
   const openDisputes = disputes.filter((d) => d.status === "open");
 
   const handleStartSession = (dispute: BaoCourtDispute) => {
@@ -58,7 +61,16 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
     [],
   );
 
-  const activeSession = demoSession ?? (selectedDispute ? { dispute: selectedDispute, selectedJurors: [], seed: '', myJurorIdx: 1 } : null);
+  const activeSession = useMemo(() => {
+    if (demoSession) return demoSession;
+    if (!selectedDispute) return null;
+    return {
+      dispute: selectedDispute,
+      selectedJurors: realSelection.selectedJurors,
+      seed: '',
+      myJurorIdx: realSelection.myJurorIdx,
+    };
+  }, [demoSession, selectedDispute, realSelection.selectedJurors, realSelection.myJurorIdx]);
 
   return (
     <Tabs defaultValue={settings.demoMode ? "lobby" : "disputes"} className="w-full">
@@ -167,6 +179,7 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
           <JurorRegistrationCard
             disputeId={activeSession?.dispute.disputeId ?? "demo-dispute"}
             marketId={activeSession?.dispute.marketId ?? "demo-market"}
+            realMode={settings.realMode && !settings.demoMode && import.meta.env.DEV}
           />
         </div>
       </TabsContent>
@@ -178,6 +191,7 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
           selectedJurors={activeSession.selectedJurors}
           myJurorIdx={activeSession.myJurorIdx}
           demoMode={settings.demoMode}
+          realMode={settings.realMode && !settings.demoMode && import.meta.env.DEV}
           demoPace={settings.demoPace}
           seed={activeSession.seed}
           open={sessionOpen}
