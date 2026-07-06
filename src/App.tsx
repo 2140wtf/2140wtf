@@ -159,7 +159,9 @@ const hardcodedConfig: AppConfig = {
   corsProxy: "",
   baoSignetMintUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL) ?? 'https://relay.bao.network/cashu',
   baoSignetFaucetUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL) ?? 'https://relay.bao.network/faucet/',
-  baoCustomSignetEsploraUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_CUSTOM_SIGNET_ESPLORA_URL) ?? undefined,
+  baoCustomSignetEsploraUrl:
+    safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_CUSTOM_SIGNET_ESPLORA_URL) ??
+    'https://mempool.bao.markets/api',
   baoApiUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_API_URL) ?? 'https://relay.bao.network/bao-api',
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
