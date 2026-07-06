@@ -205,9 +205,10 @@ describe('parseBitcoinUri', () => {
     });
   });
 
-  it('rounds the amount down rather than overstating it', () => {
-    // 0.000000019 BTC = 1.9 sats — must floor to 1, never round up to 2.
-    expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=0.000000019')?.amountSats).toBe(1);
+  it('parses the smallest satoshi amount exactly without floating-point rounding loss', () => {
+    // Regression: 0.00000001 BTC * 1e8 used to evaluate to 0.9999999999999999
+    // and floor to 0. It must be exactly 1 sat.
+    expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=0.00000001')?.amountSats).toBe(1);
   });
 
   it('omits amountSats when the parameter is malformed or non-positive', () => {
@@ -215,6 +216,7 @@ describe('parseBitcoinUri', () => {
     expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=0')?.amountSats).toBeUndefined();
     expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=-1')?.amountSats).toBeUndefined();
     expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=')?.amountSats).toBeUndefined();
+    expect(parseBitcoinUri('bitcoin:1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2?amount=0.000000019')?.amountSats).toBeUndefined();
   });
 });
 

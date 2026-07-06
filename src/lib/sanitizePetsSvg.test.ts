@@ -20,7 +20,7 @@ describe('sanitizePetsSvg', () => {
     expect(sanitized).toContain('data-clip-id="pets-blink-clip-abc123-left"');
   });
 
-  it('preserves SMIL animation attributes', () => {
+  it('blocks SMIL animation elements and attributes', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <rect x="10" y="20" width="30" height="25">
         <animate attributeName="y" values="20;40;20" keyTimes="0;0.5;1" dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1;0.4 0 0.6 1" />
@@ -29,14 +29,14 @@ describe('sanitizePetsSvg', () => {
 
     const sanitized = sanitizePetsSvg(svg);
 
-    expect(sanitized).toContain('attributeName="y"');
-    expect(sanitized).toContain('keyTimes="0;0.5;1"');
-    expect(sanitized).toContain('calcMode="spline"');
-    expect(sanitized).toContain('keySplines="0.4 0 0.6 1;0.4 0 0.6 1"');
-    expect(sanitized).toContain('repeatCount="indefinite"');
+    expect(sanitized).not.toContain('<animate');
+    expect(sanitized).not.toContain('attributeName');
+    expect(sanitized).not.toContain('keyTimes');
+    expect(sanitized).not.toContain('repeatCount');
+    expect(sanitized).toContain('<rect');
   });
 
-  it('preserves animateTransform with type attribute', () => {
+  it('blocks animateTransform elements', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <path d="M 35 45 L 40 50" stroke="#1f2937">
         <animateTransform attributeName="transform" type="rotate" from="360 35 45" to="0 35 45" dur="2s" repeatCount="indefinite" />
@@ -45,13 +45,13 @@ describe('sanitizePetsSvg', () => {
 
     const sanitized = sanitizePetsSvg(svg);
 
-    expect(sanitized).toContain('<animateTransform');
-    expect(sanitized).toContain('type="rotate"');
-    expect(sanitized).toContain('from="360 35 45"');
-    expect(sanitized).toContain('to="0 35 45"');
+    expect(sanitized).not.toContain('<animateTransform');
+    expect(sanitized).not.toContain('type="rotate"');
+    expect(sanitized).not.toContain('repeatCount');
+    expect(sanitized).toContain('<path');
   });
 
-  it('preserves style tags with @keyframes', () => {
+  it('blocks style tags with @keyframes', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <defs>
         <style type="text/css">
@@ -66,9 +66,10 @@ describe('sanitizePetsSvg', () => {
 
     const sanitized = sanitizePetsSvg(svg);
 
-    expect(sanitized).toContain('<style');
-    expect(sanitized).toContain('@keyframes sleepy-zzz');
-    expect(sanitized).toContain('animation: sleepy-zzz');
+    expect(sanitized).not.toContain('<style');
+    expect(sanitized).not.toContain('@keyframes');
+    expect(sanitized).not.toContain('animation:');
+    expect(sanitized).toContain('<text');
   });
 
   it('preserves clipPath with references', () => {
@@ -107,7 +108,7 @@ describe('sanitizePetsSvg', () => {
     expect(sanitized).toContain('fill="url(#tearGradient)"');
   });
 
-  it('preserves transform-origin and transform-box in style', () => {
+  it('blocks inline style attributes', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <g class="pets-eye" style="transform-box: fill-box; transform-origin: center;">
         <circle cx="35" cy="45" r="5" fill="#1f2937" />
@@ -116,8 +117,10 @@ describe('sanitizePetsSvg', () => {
 
     const sanitized = sanitizePetsSvg(svg);
 
-    expect(sanitized).toContain('transform-box: fill-box');
-    expect(sanitized).toContain('transform-origin: center');
+    expect(sanitized).not.toContain('style=');
+    expect(sanitized).not.toContain('transform-box');
+    expect(sanitized).not.toContain('transform-origin');
+    expect(sanitized).toContain('<circle');
   });
 
   it('blocks event handlers', () => {
@@ -230,8 +233,7 @@ describe('sanitizer isolation', () => {
     expect(sanitized).toContain('data-cy="45"');
   });
 
-  it('sanitizeSvg blocks style tags (Pets allows them)', () => {
-    // This is a key difference: Pets needs <style> for @keyframes, generic doesn't
+  it('both sanitizers block style tags', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <style>.test { fill: red; }</style>
       <circle cx="50" cy="50" r="10" fill="blue" />
@@ -240,17 +242,14 @@ describe('sanitizer isolation', () => {
     const genericSanitized = sanitizeSvg(svg);
     const petsSanitized = sanitizePetsSvg(svg);
 
-    // Generic sanitizer blocks <style>
+    // Both sanitizers block <style>
     expect(genericSanitized).not.toContain('<style');
     expect(genericSanitized).not.toContain('.test');
-
-    // Pets sanitizer allows <style>
-    expect(petsSanitized).toContain('<style');
-    expect(petsSanitized).toContain('.test');
+    expect(petsSanitized).not.toContain('<style');
+    expect(petsSanitized).not.toContain('.test');
   });
 
-  it('sanitizeSvg blocks animate elements (Pets allows them)', () => {
-    // This is a key difference: Pets needs SMIL animations, generic doesn't
+  it('both sanitizers block animate elements', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <rect x="10" y="20" width="30" height="25">
         <animate attributeName="y" values="20;40;20" dur="2s" />
@@ -260,17 +259,14 @@ describe('sanitizer isolation', () => {
     const genericSanitized = sanitizeSvg(svg);
     const petsSanitized = sanitizePetsSvg(svg);
 
-    // Generic sanitizer blocks <animate>
+    // Both sanitizers block <animate>
     expect(genericSanitized).not.toContain('<animate');
     expect(genericSanitized).not.toContain('attributeName');
-
-    // Pets sanitizer allows <animate>
-    expect(petsSanitized).toContain('<animate');
-    expect(petsSanitized).toContain('attributeName="y"');
+    expect(petsSanitized).not.toContain('<animate');
+    expect(petsSanitized).not.toContain('attributeName');
   });
 
-  it('sanitizeSvg blocks style attribute (Pets allows it)', () => {
-    // This is a key difference: Pets needs inline styles for animations, generic blocks them
+  it('both sanitizers block style attributes', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
       <circle cx="50" cy="50" r="10" fill="blue" style="transform-origin: center; animation: pulse 2s infinite;" />
     </svg>`;
@@ -278,13 +274,11 @@ describe('sanitizer isolation', () => {
     const genericSanitized = sanitizeSvg(svg);
     const petsSanitized = sanitizePetsSvg(svg);
 
-    // Generic sanitizer blocks style attribute (explicitly forbidden)
+    // Both sanitizers block style attribute (explicitly forbidden)
     expect(genericSanitized).not.toContain('style=');
     expect(genericSanitized).not.toContain('transform-origin');
-
-    // Pets sanitizer allows style attribute for animations
-    expect(petsSanitized).toContain('style=');
-    expect(petsSanitized).toContain('transform-origin');
+    expect(petsSanitized).not.toContain('style=');
+    expect(petsSanitized).not.toContain('transform-origin');
   });
 
   it('both sanitizers allow defs/gradients (SVG profile includes them)', () => {
