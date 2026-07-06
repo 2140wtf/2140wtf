@@ -16,8 +16,7 @@ import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import { timeAgo } from '@/lib/timeAgo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
-import { useCashuSeed } from '@/hooks/useCashuSeed';
-import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
@@ -72,7 +71,7 @@ import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
 import { usePetsPurchaseItem } from '@/pets/shop/hooks/usePetsPurchaseItem';
 import { PetsShopDrawer } from '@/pets/shop/components/PetsShopDrawer';
-import { BaoWalletDrawer } from '@/pets/wallet/components/BaoWalletDrawer';
+import { PetsWalletDrawer } from '@/pets/wallet/components/PetsWalletDrawer';
 
 import {
   PlayMusicModal,
@@ -336,7 +335,6 @@ function BreedCategoryPicker({
 
 function PetsContent() {
   const { user } = useCurrentUser();
-  const { config } = useAppContext();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent, isPending: isPublishing } = usePetsNostrPublish();
   const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
@@ -348,22 +346,11 @@ function PetsContent() {
     updateProfileEvent,
   } = useBlobbonautProfile();
 
-  // BAO Cashu wallet shared with bao.markets (same seed, same signet mint).
-  const { seedPhrase: cashuSeedPhrase } = useCashuSeed();
-  const relayUrls = useMemo(
-    () =>
-      (config.relayMetadata?.relays ?? [])
-        .filter((r) => r.read !== false || r.write !== false)
-        .map((r) => r.url)
-        .filter(Boolean),
-    [config.relayMetadata?.relays],
-  );
-  const baoWallet = useBaoCashuWallet(
-    cashuSeedPhrase ?? '',
-    user ?? { pubkey: '', signer: {} as never },
-    relayUrls,
-  );
-  
+  // Active Pets wallet: real Cashu (NIP-60/NWC) by default, or BAO signet/testnet.
+  const petsWalletResult = usePetsWallet();
+  const petsWallet = petsWalletResult.wallet;
+  const isRealPetsWallet = petsWalletResult.isReal;
+
   // Auto-normalize profiles missing pettingLevel tag
   useBlobbonautProfileNormalization({
     profile,
@@ -599,7 +586,7 @@ function PetsContent() {
   }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
   
   // ─── Shop Purchase Hook ───
-  const { mutateAsync: purchaseItem, isPending: isPurchasingItem } = usePetsPurchaseItem(profile ?? null, baoWallet);
+  const { mutateAsync: purchaseItem, isPending: isPurchasingItem } = usePetsPurchaseItem(profile ?? null, petsWallet);
 
   // ─── Use Inventory Item Hook ───
   const { mutateAsync: executeUseItem, isPending: itemUsePending } = usePetsUseInventoryItem({
@@ -648,13 +635,15 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
+    isRealWallet: isRealPetsWallet,
   });
-  
+
   const { mutateAsync: executeEvolve, isPending: isEvolving } = usePetsEvolve({
     companion,
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
+    isRealWallet: isRealPetsWallet,
   });
   
   // Handler for evolution (baby -> adult)
@@ -1051,7 +1040,8 @@ function PetsContent() {
       onDirectAction={handleDirectAction}
       isUsingItem={isUsingItem}
       purchaseItem={purchaseItem}
-      baoWallet={baoWallet}
+      petsWallet={petsWallet}
+      isRealWallet={isRealPetsWallet}
       isDirectActionPending={isDirectActionPending}
       actionInProgress={actionInProgress}
       isPublishing={isPublishing}
@@ -1115,8 +1105,9 @@ interface PetsDashboardProps {
   onUseItem: (itemId: string, action: InventoryAction) => Promise<void>;
   onDirectAction: (action: DirectAction) => Promise<void>;
   isUsingItem: boolean;
-  purchaseItem: (req: { itemId: string; price: number; quantity: number }) => Promise<unknown>;
-  baoWallet: (CashuWalletState & CashuWalletActions) | null | undefined;
+  purchaseItem: (req: { itemId: string; price: number; quantity: number; currency?: 'fiat' | 'sats' }) => Promise<unknown>;
+  petsWallet: (CashuWalletState & CashuWalletActions) | null | undefined;
+  isRealWallet: boolean;
   isDirectActionPending: boolean;
   actionInProgress: string | null;
   isPublishing: boolean;
@@ -1159,7 +1150,8 @@ function PetsDashboard({
   onDirectAction,
   isUsingItem,
   purchaseItem,
-  baoWallet,
+  petsWallet,
+  isRealWallet,
   isDirectActionPending,
   actionInProgress,
   isPublishing,
@@ -1636,7 +1628,7 @@ function PetsDashboard({
   const [isUpdatingCompanion, setIsUpdatingCompanion] = useState(false);
   
   // Check if this Pets can be set as companion (must be baby or adult, not egg)
-  const canBeCompanion = companion.stage === 'egg' || companion.stage === 'baby' || companion.stage === 'adult';
+  const canBeCompanion = companion.stage === 'baby' || companion.stage === 'adult';
   
   // Handler for toggling the current companion
   const handleSetAsCompanion = useCallback(async () => {
@@ -1844,6 +1836,15 @@ function PetsDashboard({
   const pendingPoopSatsRef = useRef(0);
   const poopSatsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Clear any pending poop-sats timer on unmount to avoid leaking a setTimeout
+  // and (if it fired late) updating profile state after this dashboard is gone.
+  useEffect(() => () => {
+    if (poopSatsTimerRef.current) {
+      clearTimeout(poopSatsTimerRef.current);
+      poopSatsTimerRef.current = null;
+    }
+  }, []);
+
   const handlePoopCleaned = useCallback(() => {
     pendingPoopSatsRef.current += POOP_CLEANUP_REWARD;
     toast({ title: `+${POOP_CLEANUP_REWARD} sats`, description: 'Cleaned up!' });
@@ -1889,10 +1890,15 @@ function PetsDashboard({
     setUsingItemId(itemId);
 
     try {
-      // Auto-purchase if the player doesn't own the item.
+      // Auto-purchase if the player doesn't own the item. Pass an explicit
+      // currency so the shop hook doesn't have to guess from `price`.
       const owned = profile?.storage.find((s) => s.itemId === itemId);
       if (!owned || owned.quantity <= 0) {
-        await purchaseItem({ itemId, price: shopItem.price, quantity: 1 });
+        const autoPurchaseCurrency: 'fiat' | 'sats' =
+          shopItem.fiatPrice !== undefined && shopItem.price === shopItem.fiatPrice
+            ? 'fiat'
+            : 'sats';
+        await purchaseItem({ itemId, price: shopItem.price, quantity: 1, currency: autoPurchaseCurrency });
       }
 
       // Snapshot hygiene before the action for clean_complete detection.
@@ -2140,7 +2146,10 @@ function PetsDashboard({
     }, 5000);
   }, [isUsingItem, onUseItem, guideTarget, clearFeedTimers, companion.stats.hunger, poopStateRef]);
 
-  const foodDragHook = useFoodDrag(handleFeedFromDrag, handleNearMouthChange);
+  const foodDragHook = useFoodDrag(handleFeedFromDrag, handleNearMouthChange, {
+    disabled: companion.stage === 'egg',
+    validStages: ['baby', 'adult'],
+  });
 
   // ─── Kitchen fridge overlay (lifted here so it renders via roomOverlay, not inside the dock) ───
   const [showFridge, setShowFridge] = useState(false);
@@ -2261,10 +2270,10 @@ function PetsDashboard({
                 <SpeciesTabContent />
               )}
               {activeDrawer === 'shop' && (
-                <PetsShopDrawer profile={profile ?? null} externalWallet={baoWallet} />
+                <PetsShopDrawer profile={profile ?? null} externalWallet={petsWallet} />
               )}
               {activeDrawer === 'wallet' && (
-                <BaoWalletDrawer />
+                <PetsWalletDrawer />
               )}
             </div>
           </ScrollArea>
@@ -2594,6 +2603,7 @@ function PetsDashboard({
             invalidateCompanion={invalidateCompanion}
             setStoredSelectedD={setStoredSelectedD}
             existingCompanion={companion}
+            isRealWallet={isRealWallet}
             onComplete={() => setShowHatchCeremony(false)}
           />
         </div>,

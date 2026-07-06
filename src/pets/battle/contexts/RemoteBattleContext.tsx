@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo } from 'react';
 
 import { DmInboxContext } from '@/contexts/DmInboxContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import {
   BATTLE_INVITE_SUBJECT,
   type BattleInvitePayload,
@@ -12,6 +13,7 @@ import {
   useRemoteBattleState,
   type UseRemoteBattleReturn,
 } from '../hooks/useRemoteBattleState';
+import { validateEscrowDeposit } from '../lib/cashuEscrow';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 export interface RemoteBattleContextValue extends UseRemoteBattleReturn {
@@ -20,7 +22,7 @@ export interface RemoteBattleContextValue extends UseRemoteBattleReturn {
   /** True while the DM inbox is still loading. */
   isLoadingInbox: boolean;
   /** Accept the pending invite with the chosen local pet. */
-  acceptPendingInvite: (localPet: PetsCompanion) => Promise<void>;
+  acceptPendingInvite: (localPet: PetsCompanion, guestEscrowPubkey?: string) => Promise<void>;
   /** Decline the pending invite. */
   declinePendingInvite: () => Promise<void>;
 }
@@ -30,12 +32,24 @@ export const RemoteBattleContext = createContext<RemoteBattleContextValue | null
 
 export function RemoteBattleProvider({ children }: { children: React.ReactNode }) {
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const { conversations, isLoading: isLoadingInbox } = useContext(DmInboxContext);
+
+  const validateDeposit = useCallback(
+    (token: string, _playerIndex: 0 | 1, amount: number) => {
+      const escrowPubkey = config.petsBattleEscrowPubkey;
+      if (!escrowPubkey) return 'Battle escrow is not configured.';
+      const result = validateEscrowDeposit(token, amount, escrowPubkey);
+      return result.valid ? null : (result.reason ?? 'Invalid escrow deposit.');
+    },
+    [config.petsBattleEscrowPubkey],
+  );
+
   const {
     acceptInvite,
     declineInvite,
     ...remote
-  } = useRemoteBattleState();
+  } = useRemoteBattleState({ validateEscrowDeposit: validateDeposit });
 
   const pendingInvite = useMemo<BattleInvitePayload | null>(() => {
     if (!user || remote.phase !== 'idle') return null;
@@ -59,9 +73,9 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
   }, [conversations, remote.phase, user]);
 
   const acceptPendingInvite = useCallback(
-    async (localPet: PetsCompanion) => {
+    async (localPet: PetsCompanion, guestEscrowPubkey?: string) => {
       if (!pendingInvite) return;
-      await acceptInvite(pendingInvite, localPet);
+      await acceptInvite(pendingInvite, localPet, guestEscrowPubkey);
     },
     [pendingInvite, acceptInvite],
   );

@@ -29,7 +29,19 @@ import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '../lib/evolution-missions';
-import { writeEvolutionToStorage, clearEvolutionFromStorage } from '../lib/daily-mission-tracker';
+import {
+  EVOLVE_MISSIONS,
+  EVOLVE_STAT_THRESHOLD,
+  findEvolutionMission,
+  evolutionMatchesDefinitions,
+  migrateEvolutionMissions,
+} from '../lib/evolution-missions';
+import { missionProgress } from '@/pets/core/lib/missions';
+import {
+  readEvolutionFromStorage,
+  writeEvolutionToStorage,
+  clearEvolutionFromStorage,
+} from '../lib/daily-mission-tracker';
 import { getStreakTagUpdates } from '../lib/pets-streak';
 
 // ─── Content Helpers ──────────────────────────────────────────────────────────
@@ -72,6 +84,8 @@ export interface UsePetsStageTransitionParams {
   ensureCanonicalBeforeAction: () => Promise<CanonicalActionResult | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
+  /** When false the transition is blocked. Defaults to true for backwards compatibility. */
+  isRealWallet?: boolean;
 }
 
 /**
@@ -112,6 +126,7 @@ export function usePetsHatch({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
+  isRealWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -131,14 +146,20 @@ export function usePetsHatch({
         throw new Error('Profile not found');
       }
 
-      if (companion.stage !== 'egg') {
-        throw new Error('Only eggs can be hatched');
+      if (!isRealWallet) {
+        throw new Error('BAO testnet pets cannot mature. Switch to real Cashu to grow your 2140 PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
       const canonical = await ensureCanonicalBeforeAction();
       if (!canonical) {
         throw new Error('Failed to prepare companion for hatching');
+      }
+
+      // Validate stage using the freshly fetched canonical companion, not the
+      // stale prop, so a concurrent hatch on another client is not republished.
+      if (canonical.companion.stage !== 'egg') {
+        throw new Error('Only eggs can be hatched');
       }
 
       // ─── Apply Accumulated Decay First ───
@@ -270,6 +291,7 @@ export function usePetsEvolve({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
+  isRealWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -289,14 +311,8 @@ export function usePetsEvolve({
         throw new Error('Profile not found');
       }
 
-      if (companion.stage !== 'baby') {
-        if (companion.stage === 'egg') {
-          throw new Error('Eggs must hatch before they can evolve');
-        }
-        if (companion.stage === 'adult') {
-          throw new Error('This 2140 PET is already fully evolved');
-        }
-        throw new Error('Only baby 2140 PETS can evolve');
+      if (!isRealWallet) {
+        throw new Error('BAO testnet pets cannot mature. Switch to real Cashu to grow your 2140 PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -305,11 +321,55 @@ export function usePetsEvolve({
         throw new Error('Failed to prepare companion for evolution');
       }
 
+      // Validate stage using the freshly fetched canonical companion, not the
+      // stale prop, so a concurrent evolution on another client is not republished.
+      if (canonical.companion.stage !== 'baby') {
+        if (canonical.companion.stage === 'egg') {
+          throw new Error('Eggs must hatch before they can evolve');
+        }
+        if (canonical.companion.stage === 'adult') {
+          throw new Error('This 2140 PET is already fully evolved');
+        }
+        throw new Error('Only baby 2140 PETS can evolve');
+      }
+
       // ─── Apply Accumulated Decay First ───
       // Per decay-system.md: Always apply accumulated decay from persisted state
       // before any stage transition.
       const now = Math.floor(Date.now() / 1000);
       const decayResult = applyPetsDecayForCompanion(canonical.companion, now);
+
+      // ─── Enforce evolution task completion ───
+      // The domain hook is the authoritative gate: both persistent missions and
+      // the dynamic stat task must be complete before a baby can evolve.
+      const evolution = (() => {
+        const fromStore = readEvolutionFromStorage(user?.pubkey, canonical.companion.d);
+        let current = fromStore ?? canonical.companion.evolution ?? [];
+        if (current.length === 0) {
+          current = createEvolveMissions();
+        } else if (!evolutionMatchesDefinitions(current, EVOLVE_MISSIONS)) {
+          current = migrateEvolutionMissions(current, EVOLVE_MISSIONS);
+        }
+        return current;
+      })();
+
+      const persistentTasksComplete = EVOLVE_MISSIONS.every((def) => {
+        const mission = findEvolutionMission(evolution, def.id);
+        const progress = mission ? missionProgress(mission) : 0;
+        return progress >= def.target;
+      });
+
+      const statsAfterDecay = decayResult.stats;
+      const dynamicTaskComplete =
+        statsAfterDecay.hunger >= EVOLVE_STAT_THRESHOLD &&
+        statsAfterDecay.happiness >= EVOLVE_STAT_THRESHOLD &&
+        statsAfterDecay.health >= EVOLVE_STAT_THRESHOLD &&
+        statsAfterDecay.hygiene >= EVOLVE_STAT_THRESHOLD &&
+        statsAfterDecay.energy >= EVOLVE_STAT_THRESHOLD;
+
+      if (!persistentTasksComplete || !dynamicTaskComplete) {
+        throw new Error('Evolution tasks are not complete yet. Keep caring for your 2140 PET!');
+      }
 
       // ─── Adult Stats ───
       // Adult inherits all decayed stats from baby

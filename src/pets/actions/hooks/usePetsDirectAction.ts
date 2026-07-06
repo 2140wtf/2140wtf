@@ -229,17 +229,23 @@ export function usePetsDirectAction({
         });
       }
 
-      // Award sats to the player's profile (best-effort; failures are logged, not thrown)
+      // Award sats to the player's profile. The pet event is already committed,
+      // so a profile-sats failure must not report the whole action as failed.
+      let profileEvent: NostrEvent | undefined;
       if (satsGained > 0 && user?.pubkey) {
-        addProfileSats(nostr, publishEvent, user.pubkey, satsGained)
-          .then(({ event }) => updateProfileEvent(event))
-          .catch((error) => console.error('[usePetsDirectAction] Failed to add sats:', error));
+        try {
+          const result = await addProfileSats(nostr, publishEvent, user.pubkey, satsGained);
+          profileEvent = result.event;
+          updateProfileEvent(profileEvent);
+        } catch (error) {
+          console.error('[usePetsDirectAction] Failed to add sats:', error);
+        }
       }
 
       return {
         action,
         happinessChange: happinessDelta,
-        satsGained,
+        satsGained: profileEvent ? satsGained : 0,
       };
     },
     onSuccess: ({ action, happinessChange, satsGained }) => {

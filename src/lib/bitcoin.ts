@@ -17,6 +17,7 @@
 import * as btc from '@scure/btc-signer';
 import { hex } from '@scure/base';
 import { nip19 } from 'nostr-tools';
+import { HDKey } from '@scure/bip32';
 import { esploraFetch } from './esplora';
 import {
   decodeSilentPaymentAddress,
@@ -25,22 +26,19 @@ import {
   type SilentPaymentAddress,
 } from './silentPayments';
 import { encodePsbtV2, type PsbtV2Input, type PsbtV2Output } from './psbtV2';
+import type { TransactionInputUpdate } from '@scure/btc-signer/psbt.js';
+import {
+  type DerivedAddress,
+  type HdUtxo,
+  buildTapBip32Derivation,
+  type LegacyUtxo,
+} from './hdWallet';
+import { DUST_LIMIT, estimateFee } from './feeEstimation';
+export { estimateFee, estimateFeeWithDustChange, DUST_LIMIT } from './feeEstimation';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-/** Standard Bitcoin dust limit in satoshis. */
-const DUST_LIMIT = 546;
-
-/** Estimated vBytes per P2TR input. */
-const VBYTES_PER_INPUT = 57.5;
-
-/** Estimated vBytes per P2TR output. */
-const VBYTES_PER_OUTPUT = 43;
-
-/** Estimated vBytes for transaction overhead (version, locktime, etc.). */
-const VBYTES_OVERHEAD = 10.5;
 
 /** Sanity cap for fee rate (sat/vB). Prevents accidental or malicious fee drains. */
 export const MAX_FEE_RATE_SATS_PER_VB = 10_000;
@@ -287,9 +285,14 @@ export async function fetchBtcPrice(baseUrls: string[], signal?: AbortSignal): P
   return fetchBtcPriceFromFallbacks(signal);
 }
 
-/** Convert a BTC amount to satoshis (rounded to nearest integer). */
+/** Convert a BTC amount to satoshis (rounded to nearest integer).
+ *
+ * Uses integer-friendly parsing to avoid IEEE-754 floating-point rounding
+ * errors (e.g. 0.00000001 * 1e8 is not exactly 1).
+ */
 export function btcToSats(btc: number): number {
-  return Math.round(btc * 100_000_000);
+  if (!Number.isFinite(btc) || btc <= 0) return 0;
+  return parseBtcAmountToSats(btc.toFixed(8));
 }
 
 /**
@@ -569,6 +572,27 @@ export interface UTXO {
  * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
  * @param signal     Optional abort signal (e.g. from TanStack Query).
  */
+function isValidUtxo(u: unknown): u is UTXO {
+  if (!u || typeof u !== 'object') return false;
+  const txid = (u as Record<string, unknown>).txid;
+  const vout = (u as Record<string, unknown>).vout;
+  const value = (u as Record<string, unknown>).value;
+  const status = (u as Record<string, unknown>).status;
+  return (
+    typeof txid === 'string' &&
+    txid.length > 0 &&
+    typeof vout === 'number' &&
+    Number.isInteger(vout) &&
+    vout >= 0 &&
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    !!status &&
+    typeof status === 'object' &&
+    typeof (status as Record<string, unknown>).confirmed === 'boolean'
+  );
+}
+
 export async function fetchUTXOs(
   address: string,
   baseUrls: string[],
@@ -576,7 +600,11 @@ export async function fetchUTXOs(
 ): Promise<UTXO[]> {
   const response = await esploraFetch(baseUrls, `/address/${address}/utxo`, { signal, retryStatuses: [404] });
   if (!response.ok) throw new Error('Failed to fetch UTXOs');
-  return response.json();
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid UTXO response');
+  }
+  return data.filter(isValidUtxo);
 }
 
 /** Fee rate estimates keyed by confirmation speed. */
@@ -618,6 +646,19 @@ export async function fetchBlockHeight(baseUrls: string[], signal?: AbortSignal)
  * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
  * @param signal     Optional abort signal (e.g. from TanStack Query).
  */
+const FEE_RATE_TARGETS = ['1', '3', '6', '144', '504'] as const;
+
+function isValidFeeRates(data: unknown): data is Record<string, number> {
+  if (!data || typeof data !== 'object') return false;
+  return FEE_RATE_TARGETS.every(
+    (target) =>
+      target in data &&
+      typeof (data as Record<string, unknown>)[target] === 'number' &&
+      Number.isFinite((data as Record<string, number>)[target]) &&
+      (data as Record<string, number>)[target] > 0,
+  );
+}
+
 export async function getFeeRates(baseUrls: string[], signal?: AbortSignal): Promise<FeeRates> {
   // `/fee-estimates` is always present on a healthy Esplora backend, so a 404
   // never means "not found" — it means the endpoint is misbehaving (notably
@@ -628,26 +669,17 @@ export async function getFeeRates(baseUrls: string[], signal?: AbortSignal): Pro
   if (!response.ok) throw new Error('Failed to fetch fee estimates');
 
   const data = await response.json();
+  if (!isValidFeeRates(data)) {
+    throw new Error('Invalid fee estimates response');
+  }
 
   return {
-    fastestFee: Math.ceil(data['1'] || 1),
-    halfHourFee: Math.ceil(data['3'] || 1),
-    hourFee: Math.ceil(data['6'] || 1),
-    economyFee: Math.ceil(data['144'] || 1),
-    minimumFee: Math.ceil(data['504'] || 1),
+    fastestFee: Math.ceil(data['1']),
+    halfHourFee: Math.ceil(data['3']),
+    hourFee: Math.ceil(data['6']),
+    economyFee: Math.ceil(data['144']),
+    minimumFee: Math.ceil(data['504']),
   };
-}
-
-/**
- * Estimate the fee for a P2TR transaction in satoshis.
- *
- * @param numInputs  Number of Taproot inputs.
- * @param numOutputs Number of outputs (recipient + optional change).
- * @param feeRate    Fee rate in sat/vB.
- */
-export function estimateFee(numInputs: number, numOutputs: number, feeRate: number): number {
-  const vBytes = numInputs * VBYTES_PER_INPUT + numOutputs * VBYTES_PER_OUTPUT + VBYTES_OVERHEAD;
-  return Math.ceil(vBytes * feeRate);
 }
 
 /**
@@ -687,6 +719,24 @@ export interface ParsedBitcoinUri {
 }
 
 /**
+ * Parse a BTC decimal string (e.g. "0.00000001") into an integer number of
+ * satoshis without using floating-point multiplication, avoiding rounding
+ * errors like `0.00000001 * 1e8 === 0.9999999999999999`. Rejects malformed
+ * input, values with more than 8 decimal places, and non-positive amounts.
+ * Returns 0 for invalid input.
+ */
+export function parseBtcAmountToSats(amountRaw: string): number {
+  if (!amountRaw || !/^\d+(\.\d{1,8})?$/.test(amountRaw)) return 0;
+  const [wholeStr, fracStr = ''] = amountRaw.split('.');
+  const whole = Number.parseInt(wholeStr, 10);
+  if (!Number.isFinite(whole) || whole < 0) return 0;
+  const fracPadded = (fracStr + '00000000').slice(0, 8);
+  const frac = Number.parseInt(fracPadded, 10);
+  const sats = whole * 100_000_000 + frac;
+  return Number.isFinite(sats) && sats > 0 ? sats : 0;
+}
+
+/**
  * Parse a `bitcoin:` BIP-21 URI without committing to any particular address
  * format. Returns `null` for anything that isn't `bitcoin:…`.
  *
@@ -711,10 +761,9 @@ export function parseBitcoinUri(input: string): ParsedBitcoinUri | null {
 
     const amountRaw = params.get('amount')?.trim();
     if (amountRaw) {
-      const btc = Number(amountRaw);
-      if (Number.isFinite(btc) && btc > 0) {
-        // Round down — never overstate the requested amount.
-        amountSats = Math.floor(btc * 100_000_000);
+      const sats = parseBtcAmountToSats(amountRaw);
+      if (sats > 0) {
+        amountSats = sats;
       }
     }
   }
@@ -856,9 +905,9 @@ export function buildUnsignedPsbtMulti(
     if (!validateBitcoinAddress(r.address)) {
       throw new Error(`Invalid recipient Bitcoin address: ${r.address}`);
     }
-    if (!Number.isFinite(r.amountSats) || r.amountSats < DUST_LIMIT) {
+    if (!Number.isFinite(r.amountSats) || !Number.isInteger(r.amountSats) || r.amountSats < DUST_LIMIT) {
       throw new Error(
-        `Each recipient must receive at least ${DUST_LIMIT} sats (dust limit). Got ${r.amountSats}.`,
+        `Each recipient must receive an integer amount of at least ${DUST_LIMIT} sats (dust limit). Got ${r.amountSats}.`,
       );
     }
   }
@@ -916,6 +965,127 @@ export function buildUnsignedPsbtMulti(
   }
 
   return { psbtHex: hex.encode(tx.toPSBT()), fee };
+}
+
+/** HD-derived UTXO accepted by {@link buildUnsignedPsbtHd}. */
+export type BuildUnsignedPsbtHdUtxo = HdUtxo | LegacyUtxo;
+
+/** Result of building an unsigned HD PSBT. */
+export interface UnsignedPsbtHd extends UnsignedPsbt {
+  /** The change output address, when one was included. */
+  changeAddress?: string;
+}
+
+/**
+ * Build an unsigned Taproot PSBT from HD-derived (or legacy) UTXOs.
+ *
+ * Unlike {@link buildUnsignedPsbtMulti}, this function:
+ *   - takes already-selected HD UTXOs (it does not sweep all UTXOs),
+ *   - derives change to a fresh HD change address,
+ *   - records `tapBip32Derivation` on each input so a local signer can derive
+ *     the per-input private key from the wallet account node.
+ *
+ * Legacy single-address UTXOs (path === 'legacy') are supported alongside
+ * HD-derived UTXOs for backwards compatibility.
+ *
+ * @param accountNode HD account node (m/86'/0'/0').
+ * @param recipients Recipient addresses and amounts.
+ * @param hdUtxos Selected HD UTXOs covering the spend.
+ * @param changeAddress Fresh HD change address (or legacy address for a
+ *                    legacy-only spend).
+ * @param feeRate Fee rate in sat/vB.
+ */
+export function buildUnsignedPsbtHd(
+  accountNode: HDKey,
+  recipients: PsbtRecipient[],
+  hdUtxos: BuildUnsignedPsbtHdUtxo[],
+  changeAddress: DerivedAddress | { address: string; pubkeyHex: string },
+  feeRate: number,
+): UnsignedPsbtHd {
+  if (recipients.length === 0) throw new Error('At least one recipient is required.');
+  if (hdUtxos.length === 0) throw new Error('At least one UTXO is required.');
+
+  if (!Number.isFinite(feeRate) || feeRate < 1 || feeRate > MAX_FEE_RATE_SATS_PER_VB) {
+    throw new Error(
+      `Fee rate must be between 1 and ${MAX_FEE_RATE_SATS_PER_VB} sat/vB. Got ${feeRate}.`,
+    );
+  }
+
+  for (const r of recipients) {
+    if (!validateBitcoinAddress(r.address)) {
+      throw new Error(`Invalid recipient Bitcoin address: ${r.address}`);
+    }
+    if (!Number.isFinite(r.amountSats) || !Number.isInteger(r.amountSats) || r.amountSats < DUST_LIMIT) {
+      throw new Error(
+        `Each recipient must receive an integer amount of at least ${DUST_LIMIT} sats (dust limit). Got ${r.amountSats}.`,
+      );
+    }
+  }
+
+  const tx = new btc.Transaction();
+  let totalInput = 0;
+
+  for (const utxo of hdUtxos) {
+    const internalPubkey = hexToBytes(utxo.pubkeyHex);
+    const payment = btc.p2tr(internalPubkey, undefined, btc.NETWORK);
+    const script = payment.script;
+    if (!script) throw new Error(`Failed to derive script for ${utxo.address}`);
+
+    const input: TransactionInputUpdate = {
+      txid: utxo.txid,
+      index: utxo.vout,
+      witnessUtxo: {
+        script,
+        amount: BigInt(utxo.value),
+      },
+      tapInternalKey: internalPubkey,
+    };
+
+    if (utxo.path !== 'legacy') {
+      // HD-derived input: attach BIP-32 derivation info so the signer can
+      // re-derive the private key without scanning addresses.
+      input.tapBip32Derivation = [buildTapBip32Derivation(accountNode, {
+        address: utxo.address,
+        path: utxo.path,
+        pubkeyHex: utxo.pubkeyHex,
+        index: 0,
+        chain: 0,
+      })];
+    }
+
+    tx.addInput(input);
+    totalInput += utxo.value;
+  }
+
+  const totalOut = recipients.reduce((s, r) => s + r.amountSats, 0);
+
+  // Assume a change output, then check if the change is dust.
+  const feeWithChange = estimateFee(hdUtxos.length, recipients.length + 1, feeRate);
+  const changeWithChange = totalInput - totalOut - feeWithChange;
+  const hasChange = changeWithChange >= DUST_LIMIT;
+  const numOutputs = hasChange ? recipients.length + 1 : recipients.length;
+  const fee = estimateFee(hdUtxos.length, numOutputs, feeRate);
+  const change = totalInput - totalOut - fee;
+
+  if (change < 0) {
+    throw new Error(
+      `Insufficient funds. Need ${(totalOut + fee).toLocaleString()} sats, have ${totalInput.toLocaleString()} sats.`,
+    );
+  }
+
+  for (const r of recipients) {
+    tx.addOutputAddress(r.address, BigInt(r.amountSats), btc.NETWORK);
+  }
+
+  if (hasChange) {
+    tx.addOutputAddress(changeAddress.address, BigInt(change), btc.NETWORK);
+  }
+
+  return {
+    psbtHex: hex.encode(tx.toPSBT()),
+    fee,
+    changeAddress: hasChange ? changeAddress.address : undefined,
+  };
 }
 
 /** Allowed sighash types for the local Taproot signer. */
@@ -1033,6 +1203,140 @@ export function signPsbtLocal(psbtHex: string, privateKeyHex: string): string {
     // Best-effort wipe of the decoded private key from this stack frame.
     privKey.fill(0);
   }
+}
+
+/**
+ * Sign a PSBT locally using an HD wallet account node.
+ *
+ * Each input is expected to carry `tapBip32Derivation` metadata binding its
+ * `tapInternalKey` to a BIP-32 path under `accountNode`. The signer derives the
+ * per-input private key, verifies the input is owned by the derived pubkey, and
+ * signs it.
+ *
+ * For backwards compatibility, inputs without `tapBip32Derivation` (legacy
+ * single-key inputs derived directly from the Nostr pubkey) can be signed by
+ * passing the raw 32-byte legacy private key as `legacyPrivateKey`.
+ *
+ * @param psbtHex          Hex-encoded unsigned PSBT.
+ * @param accountNode      Bitcoin wallet account node (m/86'/0'/0').
+ * @param legacyPrivateKey Optional 32-byte private key for legacy inputs.
+ * @returns Hex-encoded signed PSBT (not finalized).
+ */
+export function signPsbtLocalHd(
+  psbtHex: string,
+  accountNode: HDKey,
+  legacyPrivateKey?: Uint8Array,
+): string {
+  const tx = btc.Transaction.fromPSBT(hexToBytes(psbtHex));
+
+  if (tx.inputsLength === 0) {
+    throw new Error('PSBT has no inputs.');
+  }
+  if (tx.outputsLength === 0) {
+    throw new Error('PSBT has no outputs.');
+  }
+
+  let inputSum = 0n;
+  let outputSum = 0n;
+  for (let i = 0; i < tx.outputsLength; i++) {
+    outputSum += tx.getOutput(i).amount ?? 0n;
+  }
+
+  const derivedKeys = new Map<string, Uint8Array>();
+  const accountFingerprint = accountNode.fingerprint;
+
+  for (let i = 0; i < tx.inputsLength; i++) {
+    const inp = tx.getInput(i);
+    if (!inp.witnessUtxo) {
+      throw new Error(`PSBT input ${i} is missing its witness UTXO.`);
+    }
+    if (inp.witnessUtxo.amount <= 0n) {
+      throw new Error(`PSBT input ${i} has a zero or negative value.`);
+    }
+    if (!inp.tapInternalKey) {
+      throw new Error(`PSBT input ${i} is not a Taproot key-path spend.`);
+    }
+    if (inp.sighashType !== undefined && !ALLOWED_SIGHASH_TYPES.has(inp.sighashType)) {
+      throw new Error(`PSBT input ${i} requests a non-standard sighash type (${inp.sighashType}).`);
+    }
+    inputSum += inp.witnessUtxo.amount;
+
+    const derivations = inp.tapBip32Derivation;
+    if (!derivations || derivations.length === 0) {
+      if (!legacyPrivateKey) {
+        throw new Error(`PSBT input ${i} is missing tapBip32Derivation and no legacy private key was provided.`);
+      }
+      const derivedPubkey = btc.utils.pubSchnorr(legacyPrivateKey);
+      if (!bytesEqual(derivedPubkey, inp.tapInternalKey)) {
+        throw new Error(`PSBT input ${i}: legacy private key does not match tapInternalKey.`);
+      }
+      const keyHex = hex.encode(legacyPrivateKey);
+      if (!derivedKeys.has(keyHex)) {
+        derivedKeys.set(keyHex, new Uint8Array(legacyPrivateKey));
+      }
+      continue;
+    }
+
+    // Find the derivation entry that matches this input's tapInternalKey and
+    // is rooted at our account node.
+    const match = derivations.find((d) => bytesEqual(d[0], inp.tapInternalKey!));
+    if (!match) {
+      throw new Error(`PSBT input ${i}: no tapBip32Derivation matches tapInternalKey.`);
+    }
+    const { der } = match[1];
+    if (der.fingerprint !== accountFingerprint) {
+      throw new Error(`PSBT input ${i}: derivation fingerprint does not match the account node.`);
+    }
+
+    // The BIP-174 path is the full path from the master. The last two elements
+    // are the chain (receive/change) and address index under the account node.
+    const path = der.path;
+    if (path.length < 2) {
+      throw new Error(`PSBT input ${i}: derivation path is too short.`);
+    }
+    const chain = path[path.length - 2];
+    const index = path[path.length - 1];
+
+    const childNode = accountNode.deriveChild(chain).deriveChild(index);
+    if (!childNode.privateKey) {
+      throw new Error(`PSBT input ${i}: failed to derive private key.`);
+    }
+    const derivedPubkey = btc.utils.pubSchnorr(childNode.privateKey);
+    if (!bytesEqual(derivedPubkey, inp.tapInternalKey)) {
+      throw new Error(`PSBT input ${i}: derived pubkey does not match tapInternalKey.`);
+    }
+
+    const keyHex = hex.encode(childNode.privateKey);
+    if (!derivedKeys.has(keyHex)) {
+      derivedKeys.set(keyHex, new Uint8Array(childNode.privateKey));
+    }
+  }
+
+  if (outputSum > inputSum) {
+    throw new Error('PSBT outputs exceed inputs; transaction is invalid.');
+  }
+
+  // Sign each input with its derived private key. Because every HD input has a
+  // distinct tapInternalKey, each `tx.sign` call affects exactly the matching
+  // input.
+  let signedCount = 0;
+  for (const privKey of derivedKeys.values()) {
+    signedCount += tx.sign(privKey, [btc.SigHash.DEFAULT, btc.SigHash.ALL]);
+  }
+
+  if (signedCount === 0) {
+    throw new Error('No inputs in this PSBT were signed.');
+  }
+  if (signedCount < tx.inputsLength) {
+    throw new Error(`Only ${signedCount} of ${tx.inputsLength} inputs were signed.`);
+  }
+
+  // Best-effort wipe of derived keys.
+  for (const privKey of derivedKeys.values()) {
+    privKey.fill(0);
+  }
+
+  return hex.encode(tx.toPSBT());
 }
 
 /**
@@ -1171,8 +1475,8 @@ export function buildUnsignedSilentPaymentPsbt(
   if (utxos.length === 0) {
     throw new Error('Silent payment send: no UTXOs available.');
   }
-  if (!Number.isFinite(amountSats) || amountSats < 546) {
-    throw new Error(`Silent payment send: amount must be at least 546 sats (got ${amountSats}).`);
+  if (!Number.isFinite(amountSats) || !Number.isInteger(amountSats) || amountSats < 546) {
+    throw new Error(`Silent payment send: amount must be an integer amount of at least 546 sats (got ${amountSats}).`);
   }
   if (!Number.isFinite(feeRate) || feeRate < 1 || feeRate > MAX_FEE_RATE_SATS_PER_VB) {
     throw new Error(

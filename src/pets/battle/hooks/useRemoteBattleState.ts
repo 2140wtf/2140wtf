@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { generateUUID } from '@/lib/uuid';
 import { isNostrId } from '@/lib/nostrId';
@@ -16,15 +17,16 @@ import {
   type BattleStatePayload,
   type BattleInputPayload,
   type BattleFinishedPayload,
+  type BattleEscrowDepositPayload,
   type BattleMessagePayload,
   type RemoteBattleStateSnapshot,
+  type BattleMode,
 } from '../lib/battleMessages';
 import { subscribeBattleMessages } from '../lib/battleNetwork';
 import type { PlayerInput } from '../types/battle.types';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 export const INVITE_TIMEOUT_MS = 42_000;
-const SYNC_TIMEOUT_MS = 3_000;
 
 export type RemoteBattlePhase =
   | 'idle'
@@ -41,6 +43,16 @@ export type RemoteBattlePhase =
 export interface RemoteBattleMatchOptions {
   prizeAmount: number;
   roundDurationSeconds: number;
+  mode: BattleMode;
+}
+
+export interface BattleEscrowState {
+  mode: BattleMode;
+  hostEscrowPubkey?: string;
+  guestEscrowPubkey?: string;
+  hostDepositToken?: string;
+  guestDepositToken?: string;
+  phase: 'none' | 'awaiting_pubkeys' | 'locking' | 'awaiting_deposits' | 'ready';
 }
 
 export interface RemoteBattleState {
@@ -58,6 +70,12 @@ export interface RemoteBattleState {
   /** Latest input received from the guest (host only). */
   guestInput: PlayerInput | null;
   winner: 0 | 1 | null;
+  escrow: BattleEscrowState;
+}
+
+export interface UseRemoteBattleOptions {
+  /** Validate an incoming escrow deposit token. Return an error message if invalid. */
+  validateEscrowDeposit?: (token: string, playerIndex: 0 | 1, amount: number) => string | null;
 }
 
 export interface UseRemoteBattleReturn extends RemoteBattleState {
@@ -65,10 +83,12 @@ export interface UseRemoteBattleReturn extends RemoteBattleState {
     opponentPubkey: string,
     localPet: PetsCompanion,
     matchOptions: RemoteBattleMatchOptions,
+    hostEscrowPubkey?: string,
   ) => Promise<void>;
-  acceptInvite: (invite: BattleInvitePayload, localPet: PetsCompanion) => Promise<void>;
+  acceptInvite: (invite: BattleInvitePayload, localPet: PetsCompanion, guestEscrowPubkey?: string) => Promise<void>;
   declineInvite: (invite: BattleInvitePayload) => Promise<void>;
   cancelInvite: () => Promise<void>;
+  sendEscrowDeposit: (token: string) => void;
   startFight: () => void;
   sendHostSnapshot: (snapshot: RemoteBattleStateSnapshot) => void;
   sendGuestInput: (input: PlayerInput) => void;
@@ -91,10 +111,12 @@ function nowMs(): number {
   return Date.now();
 }
 
-export function useRemoteBattleState(): UseRemoteBattleReturn {
+export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseRemoteBattleReturn {
+  const { validateEscrowDeposit } = options;
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { sendMessage } = useNip17SendMessage();
+  const { mutateAsync: publishEvent } = useNostrPublish();
 
   const [state, setState] = useState<RemoteBattleState>({
     phase: 'idle',
@@ -109,12 +131,14 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
     hostSnapshot: null,
     guestInput: null,
     winner: null,
+    escrow: { mode: 'demo-sats', phase: 'none' },
   });
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const inviteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inviteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const syncCleanupRef = useRef<(() => void) | null>(null);
   const lastGuestInputRef = useRef<PlayerInput>(DEFAULT_INPUT);
   const guestInputRef = useRef<PlayerInput>(DEFAULT_INPUT);
@@ -129,6 +153,10 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       clearTimeout(inviteTimerRef.current);
       inviteTimerRef.current = null;
     }
+    if (inviteIntervalRef.current) {
+      clearInterval(inviteIntervalRef.current);
+      inviteIntervalRef.current = null;
+    }
   }, []);
 
   const stopSync = useCallback(() => {
@@ -142,14 +170,34 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
     setState((prev) => ({ ...prev, phase: 'error', error: message }));
   }, []);
 
+  const updateEscrow = useCallback((update: Partial<BattleEscrowState>) => {
+    setState((prev) => {
+      const nextEscrow = { ...prev.escrow, ...update };
+      const ready =
+        nextEscrow.mode === 'demo-sats' ||
+        (!!nextEscrow.hostDepositToken && !!nextEscrow.guestDepositToken);
+      return {
+        ...prev,
+        escrow: {
+          ...nextEscrow,
+          phase: ready ? 'ready' : nextEscrow.phase,
+        },
+      };
+    });
+  }, []);
+
+  const resetEscrow = useCallback((): BattleEscrowState => {
+    return { mode: 'demo-sats', phase: 'none' };
+  }, []);
+
   const publishSync = useCallback(
     async (payload: BattleMessagePayload) => {
       const current = stateRef.current;
-      if (!user?.signer.nip44 || !current.opponentPubkey || !current.battleId) return;
+      if (!user?.signer.nip44 || !current.opponentPubkey || !current.battleId) return undefined;
 
       try {
         const content = await encryptBattleMessage(user.signer, current.opponentPubkey, payload);
-        const event = await user.signer.signEvent({
+        const event = await publishEvent({
           kind: BATTLE_SYNC_KIND,
           content,
           tags: [
@@ -157,20 +205,21 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
             ['e', current.battleId],
             ['t', 'battle-sync'],
           ],
-          created_at: Math.floor(Date.now() / 1000),
         });
-        await nostr.event(event, { signal: AbortSignal.timeout(SYNC_TIMEOUT_MS) });
+        return event;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Sync publish failed';
         console.error('[useRemoteBattle] publishSync error:', message);
+        return undefined;
       }
     },
-    [nostr, user],
+    [publishEvent, user],
   );
 
   const startFight = useCallback(() => {
     const current = stateRef.current;
     if (current.role !== 'host' || !current.battleId || !current.opponentPubkey) return;
+    if (current.escrow.mode === 'real-sats' && current.escrow.phase !== 'ready') return;
 
     setState((prev) => ({ ...prev, phase: 'fighting' }));
   }, []);
@@ -196,6 +245,11 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
                 ...prev,
                 phase: 'accepted',
                 opponentPet: payload.guestPet,
+                escrow: {
+                  ...prev.escrow,
+                  guestEscrowPubkey: payload.guestEscrowPubkey,
+                  phase: prev.escrow.mode === 'real-sats' ? 'locking' : 'none',
+                },
               }));
               // Give both clients a moment to render the accepted state, then
               // the host automatically starts the fight.
@@ -208,9 +262,25 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
               lastGuestInputRef.current = payload.input;
               guestInputRef.current = payload.input;
               setState((prev) => ({ ...prev, guestInput: payload.input }));
+            } else if (payload.type === 'battle-decline') {
+              setState((prev) => ({ ...prev, phase: 'declined' }));
+              stopSync();
             } else if (payload.type === 'battle-cancel') {
               setState((prev) => ({ ...prev, phase: 'cancelled' }));
               stopSync();
+            } else if (payload.type === 'battle-escrow-deposit') {
+              const deposit = payload as BattleEscrowDepositPayload;
+              const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
+              const error = validateEscrowDeposit?.(deposit.token, deposit.playerIndex, expectedAmount);
+              if (error) {
+                console.warn('[useRemoteBattle] invalid escrow deposit:', error);
+                return;
+              }
+              updateEscrow(
+                deposit.playerIndex === 0
+                  ? { hostDepositToken: deposit.token }
+                  : { guestDepositToken: deposit.token },
+              );
             }
           } else {
             if (payload.type === 'battle-state') {
@@ -222,12 +292,25 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
             } else if (payload.type === 'battle-cancel') {
               setState((prev) => ({ ...prev, phase: 'cancelled' }));
               stopSync();
+            } else if (payload.type === 'battle-escrow-deposit') {
+              const deposit = payload as BattleEscrowDepositPayload;
+              const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
+              const error = validateEscrowDeposit?.(deposit.token, deposit.playerIndex, expectedAmount);
+              if (error) {
+                console.warn('[useRemoteBattle] invalid escrow deposit:', error);
+                return;
+              }
+              updateEscrow(
+                deposit.playerIndex === 0
+                  ? { hostDepositToken: deposit.token }
+                  : { guestDepositToken: deposit.token },
+              );
             }
           }
         },
       });
     },
-    [nostr, stopSync, user?.signer, startFight],
+    [nostr, stopSync, user?.signer, startFight, validateEscrowDeposit, updateEscrow],
   );
 
   const sendInvite = useCallback(
@@ -235,6 +318,7 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       opponentPubkey: string,
       localPet: PetsCompanion,
       matchOptions: RemoteBattleMatchOptions,
+      hostEscrowPubkey?: string,
     ) => {
       if (!user) {
         setError('You must be logged in to challenge someone.');
@@ -246,6 +330,10 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       }
       if (opponentPubkey === user.pubkey) {
         setError('You cannot battle yourself.');
+        return;
+      }
+      if (matchOptions.mode === 'real-sats' && (!hostEscrowPubkey || hostEscrowPubkey.length !== 64)) {
+        setError('Real-sats battles require a valid escrow pubkey.');
         return;
       }
 
@@ -264,6 +352,11 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
         error: null,
         timeLeftMs: INVITE_TIMEOUT_MS,
         winner: null,
+        escrow: {
+          mode: matchOptions.mode,
+          phase: matchOptions.mode === 'real-sats' ? 'awaiting_pubkeys' : 'none',
+          hostEscrowPubkey,
+        },
       });
 
       try {
@@ -275,6 +368,8 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
           prizeAmount: matchOptions.prizeAmount,
           roundDurationSeconds: matchOptions.roundDurationSeconds,
           sentAt,
+          mode: matchOptions.mode,
+          hostEscrowPubkey,
         };
 
         // Start listening for the guest's accept/decline/cancel on the sync
@@ -289,15 +384,21 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
 
         // Countdown update interval.
         const start = nowMs();
-        const interval = setInterval(() => {
+        inviteIntervalRef.current = setInterval(() => {
           const elapsed = nowMs() - start;
           const remaining = Math.max(0, INVITE_TIMEOUT_MS - elapsed);
           setState((prev) => ({ ...prev, timeLeftMs: remaining }));
-          if (remaining <= 0) clearInterval(interval);
+          if (remaining <= 0 && inviteIntervalRef.current) {
+            clearInterval(inviteIntervalRef.current);
+            inviteIntervalRef.current = null;
+          }
         }, 250);
 
         inviteTimerRef.current = setTimeout(() => {
-          clearInterval(interval);
+          if (inviteIntervalRef.current) {
+            clearInterval(inviteIntervalRef.current);
+            inviteIntervalRef.current = null;
+          }
           setState((prev) =>
             prev.phase === 'inviting' ? { ...prev, phase: 'expired', timeLeftMs: 0 } : prev,
           );
@@ -305,6 +406,7 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
         }, INVITE_TIMEOUT_MS);
       } catch (err) {
         clearInviteTimer();
+        stopSync();
         const message = err instanceof Error ? err.message : 'Failed to send invite';
         setError(message);
       }
@@ -313,7 +415,7 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
   );
 
   const acceptInvite = useCallback(
-    async (invite: BattleInvitePayload, localPet: PetsCompanion) => {
+    async (invite: BattleInvitePayload, localPet: PetsCompanion, guestEscrowPubkey?: string) => {
       if (!user) {
         setError('You must be logged in to accept a battle.');
         return;
@@ -323,6 +425,10 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       const elapsed = nowMs() - invite.sentAt;
       if (elapsed > INVITE_TIMEOUT_MS) {
         setError('This battle request has expired.');
+        return;
+      }
+      if (invite.mode === 'real-sats' && (!guestEscrowPubkey || guestEscrowPubkey.length !== 64)) {
+        setError('Real-sats battles require a valid escrow pubkey.');
         return;
       }
 
@@ -337,10 +443,17 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
         matchOptions: {
           prizeAmount: invite.prizeAmount,
           roundDurationSeconds: invite.roundDurationSeconds,
+          mode: invite.mode,
         },
         error: null,
         timeLeftMs: 0,
         winner: null,
+        escrow: {
+          mode: invite.mode,
+          phase: invite.mode === 'real-sats' ? 'locking' : 'none',
+          hostEscrowPubkey: invite.hostEscrowPubkey,
+          guestEscrowPubkey,
+        },
       });
 
       try {
@@ -348,6 +461,8 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
           type: 'battle-accept',
           battleId: invite.battleId,
           guestPet: localPet,
+          mode: invite.mode,
+          guestEscrowPubkey,
         };
         // Send both a formal NIP-17 DM and an ephemeral sync accept so the host
         // sees it immediately even if DM relays are slow.
@@ -363,9 +478,10 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to accept invite';
         setError(message);
+        stopSync();
       }
     },
-    [clearInviteTimer, sendMessage, publishSync, setError, startSyncListener, user],
+    [clearInviteTimer, sendMessage, publishSync, setError, startSyncListener, stopSync, user],
   );
 
   const declineInvite = useCallback(
@@ -400,17 +516,45 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
         type: 'battle-cancel',
         battleId: current.battleId,
       };
-      await sendMessage({
-        recipientPubkey: current.opponentPubkey,
-        content: JSON.stringify(payload),
-        subject: BATTLE_INVITE_SUBJECT,
-      });
+      // Send both a DM and an ephemeral sync cancel so the guest sees it
+      // immediately even if DM relays are slow.
+      await Promise.all([
+        sendMessage({
+          recipientPubkey: current.opponentPubkey,
+          content: JSON.stringify(payload),
+          subject: BATTLE_INVITE_SUBJECT,
+        }),
+        publishSync(payload),
+      ]);
       setState((prev) => ({ ...prev, phase: 'cancelled' }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to cancel invite';
       setError(message);
+    } finally {
+      stopSync();
     }
-  }, [clearInviteTimer, sendMessage, setError]);
+  }, [clearInviteTimer, publishSync, sendMessage, setError, stopSync]);
+
+  const sendEscrowDeposit = useCallback(
+    (token: string) => {
+      const current = stateRef.current;
+      if (!current.battleId || !current.opponentPubkey) return;
+      if (current.escrow.mode !== 'real-sats') return;
+      if (typeof token !== 'string' || token.length === 0) return;
+
+      const playerIndex = current.role === 'host' ? 0 : 1;
+      const payload: BattleEscrowDepositPayload = {
+        type: 'battle-escrow-deposit',
+        battleId: current.battleId,
+        playerIndex,
+        token,
+        amount: current.matchOptions?.prizeAmount ?? 0,
+      };
+      void publishSync(payload);
+      updateEscrow(playerIndex === 0 ? { hostDepositToken: token } : { guestDepositToken: token });
+    },
+    [publishSync, updateEscrow],
+  );
 
   const sendHostSnapshot = useCallback(
     (snapshot: RemoteBattleStateSnapshot) => {
@@ -466,17 +610,18 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
   );
 
   const sendFinished = useCallback(
-    (winner: 0 | 1 | null) => {
+    async (winner: 0 | 1 | null) => {
       const current = stateRef.current;
-      if (current.role !== 'host' || !current.battleId) return;
+      if (current.role !== 'host' || !current.battleId) return undefined;
       const payload: BattleFinishedPayload = {
         type: 'battle-finished',
         battleId: current.battleId,
         winner,
       };
-      void publishSync(payload);
+      const event = await publishSync(payload);
       setState((prev) => ({ ...prev, phase: 'finished', winner }));
       stopSync();
+      return event;
     },
     [publishSync, stopSync],
   );
@@ -497,8 +642,9 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       hostSnapshot: null,
       guestInput: null,
       winner: null,
+      escrow: resetEscrow(),
     });
-  }, [clearInviteTimer, stopSync]);
+  }, [clearInviteTimer, stopSync, resetEscrow]);
 
 
 
@@ -517,6 +663,7 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       acceptInvite,
       declineInvite,
       cancelInvite,
+      sendEscrowDeposit,
       startFight,
       sendHostSnapshot,
       sendGuestInput,
@@ -524,6 +671,6 @@ export function useRemoteBattleState(): UseRemoteBattleReturn {
       reset,
       guestInputRef,
     }),
-    [state, sendInvite, acceptInvite, declineInvite, cancelInvite, startFight, sendHostSnapshot, sendGuestInput, sendFinished, reset, guestInputRef],
+    [state, sendInvite, acceptInvite, declineInvite, cancelInvite, sendEscrowDeposit, startFight, sendHostSnapshot, sendGuestInput, sendFinished, reset, guestInputRef],
   );
 }
