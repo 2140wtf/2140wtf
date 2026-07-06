@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { nip19 } from 'nostr-tools';
-import { ArrowLeft, Swords, UserSearch } from 'lucide-react';
+import { ArrowLeft, Swords, UserSearch, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,10 +13,15 @@ import {
 } from '@/components/ui/select';
 import { useFollows } from '@/hooks/useFollows';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useRemoteBattle } from '../hooks/useRemoteBattle';
 import { genUserName } from '@/lib/genUserName';
 import { DEFAULT_PRIZE_SATS, DEFAULT_ROUND_DURATION_SECONDS } from '../lib/constants';
+import { deriveBattleEscrowKeypair } from '../lib/cashuEscrow';
+import type { BattleMode } from '../lib/battleMessages';
 
 export interface RemoteBattleSetupProps {
   ownerPubkey: string;
@@ -41,6 +46,23 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   const { companions, isLoading: petsLoading } = usePetssCollection();
   const { data: follows, isLoading: followsLoading } = useFollows();
   const remote = useRemoteBattle();
+  const { config } = useAppContext();
+  const { wallet: petsWallet, isReal } = usePetsWallet();
+  const { seedPhrase, available: seedAvailable } = useCashuSeed();
+
+  const escrowKeypair = useMemo(() => {
+    if (!seedPhrase) return null;
+    try {
+      return deriveBattleEscrowKeypair(seedPhrase);
+    } catch {
+      return null;
+    }
+  }, [seedPhrase]);
+
+  const escrowConfigured = !!config.petsBattleEscrowPubkey && !!config.petsBattleEscrowServiceUrl;
+  const canUseRealSats = isReal && seedAvailable && escrowConfigured;
+  const battleMode: BattleMode = canUseRealSats ? 'real-sats' : 'demo-sats';
+  const operatorPubkey = config.petsBattleEscrowPubkey;
 
   const eligiblePets = useMemo(
     () => companions.filter((pet) => pet.stage === 'baby' || pet.stage === 'adult'),
@@ -51,36 +73,31 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   const [opponentMode, setOpponentMode] = useState<'follows' | 'npub'>('follows');
   const [followPubkey, setFollowPubkey] = useState<string>('');
   const [npubInput, setNpubInput] = useState('');
-  const [npubError, setNpubError] = useState<string | null>(null);
 
   const localPet = useMemo(
     () => eligiblePets.find((pet) => pet.d === petId),
     [eligiblePets, petId],
   );
 
-  const opponentPubkey = useMemo<string | null>(() => {
+  const { opponentPubkey, npubError } = useMemo(() => {
     if (opponentMode === 'follows') {
-      return followPubkey || null;
+      return { opponentPubkey: followPubkey || null, npubError: null };
+    }
+    const trimmed = npubInput.trim();
+    if (!trimmed) {
+      return { opponentPubkey: null, npubError: null };
     }
     try {
-      const decoded = nip19.decode(npubInput.trim());
-      if (decoded.type === 'npub') {
-        setNpubError(null);
-        return decoded.data;
+      const decoded = nip19.decode(trimmed);
+      if (decoded.type === 'npub' || decoded.type === 'nprofile') {
+        return {
+          opponentPubkey: decoded.type === 'npub' ? decoded.data : decoded.data.pubkey,
+          npubError: null,
+        };
       }
-      if (decoded.type === 'nprofile') {
-        setNpubError(null);
-        return decoded.data.pubkey;
-      }
-      setNpubError('Only npub/nprofile identifiers are supported.');
-      return null;
+      return { opponentPubkey: null, npubError: 'Only npub/nprofile identifiers are supported.' };
     } catch {
-      if (npubInput.trim()) {
-        setNpubError('Invalid Nostr identifier.');
-      } else {
-        setNpubError(null);
-      }
-      return null;
+      return { opponentPubkey: null, npubError: 'Invalid Nostr identifier.' };
     }
   }, [opponentMode, followPubkey, npubInput]);
 
@@ -88,11 +105,57 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
 
   const handleSendInvite = async () => {
     if (!localPet || !opponentPubkey) return;
+    if (battleMode === 'real-sats' && !escrowKeypair) return;
     await remote.sendInvite(opponentPubkey, localPet, {
       prizeAmount: DEFAULT_PRIZE_SATS,
       roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
-    });
+      mode: battleMode,
+    }, escrowKeypair?.pubkey);
   };
+
+  const [isDepositing, setIsDepositing] = useState(false);
+  const depositAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (remote.escrow.mode !== 'real-sats') return;
+    if (remote.phase !== 'accepted' && remote.phase !== 'inviting') return;
+    if (depositAttemptedRef.current || isDepositing) return;
+    if (!petsWallet || !operatorPubkey) return;
+    if (remote.role === 'host' && !remote.escrow.guestEscrowPubkey) return;
+    if (remote.role === 'guest' && !remote.escrow.hostEscrowPubkey) return;
+    const myDeposit = remote.role === 'host'
+      ? remote.escrow.hostDepositToken
+      : remote.escrow.guestDepositToken;
+    if (myDeposit) return;
+
+    const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
+    if (petsWallet.totalBalance < amount) return;
+
+    depositAttemptedRef.current = true;
+    setIsDepositing(true);
+    petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`)
+      .then((token) => {
+        if (token) {
+          remote.sendEscrowDeposit(token);
+        }
+      })
+      .catch((err) => console.error('[RemoteBattleSetup] escrow deposit failed:', err))
+      .finally(() => setIsDepositing(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    remote.escrow.mode,
+    remote.phase,
+    remote.role,
+    remote.escrow.guestEscrowPubkey,
+    remote.escrow.hostEscrowPubkey,
+    remote.escrow.hostDepositToken,
+    remote.escrow.guestDepositToken,
+    remote.matchOptions?.prizeAmount,
+    remote.battleId,
+    petsWallet,
+    operatorPubkey,
+    isDepositing,
+  ]);
 
   if (remote.phase === 'inviting') {
     return (
@@ -114,11 +177,26 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   }
 
   if (remote.phase === 'accepted') {
+    const escrowReady = remote.escrow.mode === 'demo-sats' || remote.escrow.phase === 'ready';
     return (
       <Card className={className}>
         <CardContent className="py-12 text-center space-y-4">
           <p className="font-semibold">Opponent accepted!</p>
-          <p className="text-sm text-muted-foreground">Starting the battle…</p>
+          {remote.escrow.mode === 'real-sats' ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Lock className="size-4" />
+                {escrowReady
+                  ? 'Escrow deposits ready. Starting the battle…'
+                  : isDepositing
+                    ? 'Locking your stake in escrow…'
+                    : 'Waiting for escrow deposits…'}
+              </div>
+              {!escrowReady && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Starting the battle…</p>
+          )}
         </CardContent>
       </Card>
     );
@@ -223,6 +301,22 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
         {remote.error && (
           <p className="text-sm text-destructive">{remote.error}</p>
         )}
+
+        <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+          <p>
+            <span className="font-medium">Prize:</span> {DEFAULT_PRIZE_SATS.toLocaleString()}{' '}
+            {battleMode === 'real-sats' ? 'real sats' : 'demo sats'}
+          </p>
+          {battleMode === 'real-sats' ? (
+            <p className="text-muted-foreground">
+              Both players lock {DEFAULT_PRIZE_SATS.toLocaleString()} real sats in escrow before the battle. The winner claims both stakes.
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              Real-sats battles require real Cashu mode and a configured escrow operator.
+            </p>
+          )}
+        </div>
 
         <Button
           size="lg"

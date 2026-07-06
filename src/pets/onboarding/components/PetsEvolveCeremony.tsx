@@ -8,10 +8,11 @@
  *   4. Brief dialog, then fade to white and complete
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 
 import { notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -25,6 +26,7 @@ type EvolvePhase =
   | 'gather'     // baby visible, energy gathering with spiraling particles
   | 'flash'      // screen flash, mutation fires
   | 'reveal'     // flash clears, adult revealed with sparkles + text
+  | 'error'      // mutation failed, do not continue the reveal
   | 'complete';  // fade out
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -36,6 +38,11 @@ interface PetsEvolveCeremonyProps {
   /** Called when the animation is complete and the overlay should close. */
   onComplete: () => void;
 }
+
+const FLASH_MIN_MS = 400;
+const GATHER_MS = 2800;
+const REVEAL_BEFORE_FADE_MS = 3200;
+const FADE_OUT_MS = 2000;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -49,11 +56,27 @@ export function PetsEvolveCeremony({
   const [adultVisible, setAdultVisible] = useState(false);
   const [textVisible, setTextVisible] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const evolveTriggered = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
   const onEvolveRef = useRef(onEvolve);
   onEvolveRef.current = onEvolve;
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearAllTimeouts = () => {
+    timeoutRefs.current.forEach(clearTimeout);
+    timeoutRefs.current = [];
+  };
+
+  const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timeoutRefs.current = timeoutRefs.current.filter((t) => t !== id);
+      fn();
+    }, ms);
+    timeoutRefs.current.push(id);
+    return id;
+  }, []);
 
   const baseColor = companion.visualTraits.baseColor ?? '#8b5cf6';
   const { r, g, b } = useMemo(() => hexToRgb(baseColor), [baseColor]);
@@ -84,48 +107,70 @@ export function PetsEvolveCeremony({
   }, [r, g, b]);
 
   // ── Phase timeline ──
-  // Uses onCompleteRef so parent re-renders (from the evolve mutation updating
-  // companion data) don't restart the timer chain.
   useEffect(() => {
-    // gather -> flash after 2.8s
-    const t1 = setTimeout(() => {
+    const t1 = scheduleTimeout(() => {
       setPhase('flash');
       setShowFlash(true);
       notificationSuccess();
-    }, 2800);
-    // flash -> reveal after 3.2s total (near-instant swap)
-    const t2 = setTimeout(() => {
-      setShowFlash(false);
-      setPhase('reveal');
-      setAdultVisible(true);
-      setTextVisible(true);
-    }, 3200);
-    // fadeout starts at 6s, takes 2s to complete, ceremony closes at 8s
-    const t4 = setTimeout(() => {
-      setFadeOut(true);
-      setTimeout(() => {
-        setPhase('complete');
-        onCompleteRef.current();
-      }, 2000);
-    }, 6000);
+    }, GATHER_MS);
 
     return () => {
       clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t4);
+      clearAllTimeouts();
     };
-  }, []);
+  }, [scheduleTimeout]);
 
   // ── Fire evolve mutation during flash ──
   useEffect(() => {
-    if (phase === 'flash' && !evolveTriggered.current) {
-      evolveTriggered.current = true;
-      onEvolveRef.current().catch(console.error);
-    }
-  }, [phase]);
+    if (phase !== 'flash' || evolveTriggered.current) return;
+    evolveTriggered.current = true;
+
+    const evolvePromise = onEvolveRef.current();
+    const minFlashPromise = new Promise((resolve) => setTimeout(resolve, FLASH_MIN_MS));
+
+    Promise.all([evolvePromise, minFlashPromise])
+      .then(() => {
+        setShowFlash(false);
+        setPhase('reveal');
+        setAdultVisible(true);
+        setTextVisible(true);
+
+        scheduleTimeout(() => {
+          setFadeOut(true);
+          scheduleTimeout(() => {
+            setPhase('complete');
+            onCompleteRef.current();
+          }, FADE_OUT_MS);
+        }, REVEAL_BEFORE_FADE_MS);
+      })
+      .catch((err) => {
+        console.error('Evolve failed:', err);
+        setShowFlash(false);
+        setErrorMessage(err instanceof Error ? err.message : 'Evolution failed.');
+        setPhase('error');
+      });
+  }, [phase, scheduleTimeout]);
 
   const showBaby = phase === 'gather';
   const showAdult = phase === 'reveal';
+  const isError = phase === 'error';
+
+  if (isError) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 p-6"
+        style={{ background: 'radial-gradient(ellipse at center, #2a0a0a 0%, #150505 50%, #0a0202 100%)' }}
+      >
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-semibold text-white">Evolution failed</h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            {errorMessage ?? 'Something went wrong while evolving your pet.'}
+          </p>
+        </div>
+        <Button onClick={() => onCompleteRef.current()}>Close</Button>
+      </div>
+    );
+  }
 
   return (
     <div

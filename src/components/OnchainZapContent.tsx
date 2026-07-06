@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { useNostrLogin } from '@nostrify/react/login';
+import { useHdWallet } from '@/hooks/useHdWallet';
 import {
   nostrPubkeyToBitcoinAddress,
   fetchUTXOs,
@@ -28,7 +29,9 @@ import {
   estimateFee,
   isLargeAmount,
   formatSats,
+  looksLikeSilentPaymentAddress,
 } from '@/lib/bitcoin';
+import { selectUtxos } from '@/lib/hdWallet';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { ParsedCampaign } from '@/lib/campaign';
 import type { BitcoinRecipientOverride } from '@/hooks/useOnchainZap';
@@ -120,7 +123,7 @@ interface OnchainZapContentProps {
  */
 export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, onClose }: OnchainZapContentProps) {
   const { user } = useCurrentUser();
-  const { capability } = useBitcoinSigner();
+  const { capability, canAttemptPsbt } = useBitcoinSigner();
   const { logins } = useNostrLogin();
   const { config } = useAppContext();
   const { esploraApis } = config;
@@ -138,6 +141,9 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // stop auto-adjusting the fee in response to amount changes.
 
   const senderAddress = user ? nostrPubkeyToBitcoinAddress(user.pubkey) : '';
+  const hd = useHdWallet();
+  const isHd = hd.isHd;
+
   // Recipient address used for the unsupported-signer QR fallback and for
   // the post-zap details row. Campaigns prefer the on-chain endpoint (the
   // SP path can't be QR-fallback'd here — donor wallets must derive the
@@ -152,6 +158,10 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     }
     return nostrPubkeyToBitcoinAddress(target.pubkey);
   }, [campaign, bitcoinTarget, target.pubkey]);
+  const isSilentPayment = useMemo(
+    () => looksLikeSilentPaymentAddress(recipientAddress),
+    [recipientAddress],
+  );
   const truncatedRecipient = recipientAddress
     ? `${recipientAddress.slice(0, 10)}…${recipientAddress.slice(-8)}`
     : '';
@@ -162,21 +172,29 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     staleTime: 30_000,
   });
 
-  const { data: utxos } = useQuery({
+  // For nsec logins use the HD wallet's scanned UTXOs; otherwise fall back to
+  // the legacy single-address UTXO set.
+  const legacyUtxosQuery = useQuery({
     queryKey: ['bitcoin-utxos', esploraApis, senderAddress],
     queryFn: ({ signal }) => fetchUTXOs(senderAddress, esploraApis, signal),
-    enabled: !!senderAddress && capability !== 'unsupported',
+    enabled: !!senderAddress && canAttemptPsbt && !isHd,
     staleTime: 30_000,
   });
+
+  const hdUtxos = useMemo(() => hd.utxos ?? [], [hd.utxos]);
+  const hdLegacyUtxos = useMemo(() => hd.legacyUtxos ?? [], [hd.legacyUtxos]);
+  const legacyUtxos = useMemo(() => legacyUtxosQuery.data ?? [], [legacyUtxosQuery.data]);
+  // Silent payments spend the legacy single-address UTXO set even for HD users.
+  const spendUtxos = isHd ? (isSilentPayment ? hdLegacyUtxos : hdUtxos) : legacyUtxos;
 
   const { data: feeRates } = useQuery({
     queryKey: ['bitcoin-fee-rates', esploraApis],
     queryFn: ({ signal }) => getFeeRates(esploraApis, signal),
-    enabled: capability !== 'unsupported',
+    enabled: canAttemptPsbt,
     staleTime: 30_000,
   });
 
-  const totalBalance = useMemo(() => utxos?.reduce((s, u) => s + u.value, 0) ?? 0, [utxos]);
+  const totalBalance = useMemo(() => spendUtxos?.reduce((s, u) => s + u.value, 0) ?? 0, [spendUtxos]);
 
   const currentFeeRate = useMemo(() => {
     if (!feeRates) return 0;
@@ -189,12 +207,20 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   }, [amountSats]);
 
   const estimatedFeeSats = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || !numericAmountSats) return 0;
-    const fee2 = estimateFee(utxos.length, 2, currentFeeRate);
+    if (!spendUtxos?.length || !currentFeeRate || !numericAmountSats) return 0;
+    if (isHd) {
+      const hdSpendUtxos = isSilentPayment ? hdLegacyUtxos : hdUtxos;
+      try {
+        return selectUtxos(hdSpendUtxos, numericAmountSats, currentFeeRate, 1).fee;
+      } catch {
+        return 0;
+      }
+    }
+    const fee2 = estimateFee(spendUtxos.length, 2, currentFeeRate);
     const change = totalBalance - numericAmountSats - fee2;
-    const numOutputs = change > 546 ? 2 : 1;
-    return estimateFee(utxos.length, numOutputs, currentFeeRate);
-  }, [utxos, currentFeeRate, numericAmountSats, totalBalance]);
+    const numOutputs = change >= DUST_LIMIT_SATS ? 2 : 1;
+    return estimateFee(spendUtxos.length, numOutputs, currentFeeRate);
+  }, [spendUtxos, currentFeeRate, numericAmountSats, totalBalance, isHd, hdUtxos, hdLegacyUtxos, isSilentPayment]);
 
   const totalSats = numericAmountSats + estimatedFeeSats;
   const insufficient = totalBalance > 0 && totalSats > totalBalance;
@@ -204,11 +230,20 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // is below the dust limit. In that case the leftover sats become extra fee
   // rather than returning as change.
   const noChangeDust = useMemo(() => {
-    if (!utxos?.length || !currentFeeRate || numericAmountSats <= 0 || totalBalance <= 0) return false;
-    const feeWithChange = estimateFee(utxos.length, 2, currentFeeRate);
+    if (!spendUtxos?.length || !currentFeeRate || numericAmountSats <= 0 || totalBalance <= 0) return false;
+    if (isHd) {
+      const hdSpendUtxos = isSilentPayment ? hdLegacyUtxos : hdUtxos;
+      try {
+        const change = selectUtxos(hdSpendUtxos, numericAmountSats, currentFeeRate, 1).change;
+        return change > 0 && change <= DUST_LIMIT_SATS;
+      } catch {
+        return false;
+      }
+    }
+    const feeWithChange = estimateFee(spendUtxos.length, 2, currentFeeRate);
     const change = totalBalance - numericAmountSats - feeWithChange;
     return change > 0 && change <= DUST_LIMIT_SATS;
-  }, [utxos, currentFeeRate, numericAmountSats, totalBalance]);
+  }, [spendUtxos, currentFeeRate, numericAmountSats, totalBalance, isHd, hdUtxos, hdLegacyUtxos, isSilentPayment]);
 
   // Auto-adjust fee speed when the amount changes, unless the user has
   // already picked a speed manually. Aim for a fee below 40% of the amount
@@ -217,7 +252,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
   // least minimize the hit.
   useEffect(() => {
     if (feeSpeedUserChanged.current) return;
-    if (!utxos?.length || !feeRates || numericAmountSats <= 0) return;
+    if (!spendUtxos?.length || !feeRates || numericAmountSats <= 0) return;
 
     const uniqueSpeeds = getUniqueFeeSpeeds(feeRates);
     const threshold = numericAmountSats * 0.4;
@@ -225,10 +260,20 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     let target: OnchainFeeSpeed = uniqueSpeeds[uniqueSpeeds.length - 1];
     for (const speed of uniqueSpeeds) {
       const rate = getRateForSpeed(feeRates, speed);
-      const fee2 = estimateFee(utxos.length, 2, rate);
-      const change = totalBalance - numericAmountSats - fee2;
-      const outputs = change > 546 ? 2 : 1;
-      const fee = estimateFee(utxos.length, outputs, rate);
+      let fee: number;
+      if (isHd) {
+        const hdSpendUtxos = isSilentPayment ? hdLegacyUtxos : hdUtxos;
+        try {
+          fee = selectUtxos(hdSpendUtxos, numericAmountSats, rate, 1).fee;
+        } catch {
+          continue;
+        }
+      } else {
+        const fee2 = estimateFee(spendUtxos.length, 2, rate);
+        const change = totalBalance - numericAmountSats - fee2;
+        const outputs = change >= DUST_LIMIT_SATS ? 2 : 1;
+        fee = estimateFee(spendUtxos.length, outputs, rate);
+      }
       if (fee <= threshold) {
         target = speed;
         break;
@@ -236,7 +281,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     }
 
     setFeeSpeed((prev) => (prev === target ? prev : target));
-  }, [numericAmountSats, feeRates, utxos, totalBalance]);
+  }, [numericAmountSats, feeRates, spendUtxos, totalBalance, isHd, hdUtxos, hdLegacyUtxos, isSilentPayment]);
 
   const handleFeeSpeedChange = useCallback((speed: OnchainFeeSpeed) => {
     feeSpeedUserChanged.current = true;
@@ -282,7 +327,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     // sign time, which will then flip the UI to the unsupported state).
     if (!btcPrice) { setError('Waiting for BTC price…'); return; }
     if (numericAmountSats <= 0) { setError('Enter an amount.'); return; }
-    if (!utxos?.length) { setError("You don't have any Bitcoin yet. Receive some first."); return; }
+    if (!spendUtxos?.length) { setError("You don't have any Bitcoin yet. Receive some first."); return; }
     if (insufficient) { setError('Not enough Bitcoin for this amount + network fee.'); return; }
 
     // Two-tap safety for large amounts: first click arms, second click sends.
@@ -301,7 +346,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
       const isCapability = /does not support|doesn't support|signpsbt|sign_psbt/i.test(msg);
       if (!isCapability) setError(msg);
     }
-  }, [user, target.pubkey, campaign, btcPrice, numericAmountSats, utxos, insufficient, zapAsync, feeSpeed, isLarge, confirmArmed]);
+  }, [user, target.pubkey, campaign, btcPrice, numericAmountSats, spendUtxos, insufficient, zapAsync, feeSpeed, isLarge, confirmArmed]);
 
   // ── Signer not supported ──────────────────────────────────────
   // The user's signer can't sign PSBTs locally (extension without signPsbt,
@@ -317,7 +362,7 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
       <UnsupportedSignerQR
         recipientAddress={recipientAddress}
         truncatedRecipient={truncatedRecipient}
-        isSilentPayment={bitcoinTarget?.mode === 'sp'}
+        isSilentPayment={looksLikeSilentPaymentAddress(recipientAddress)}
         amountSats={amountSats}
         btcPrice={btcPrice}
         currencyDisplay={currencyDisplay}

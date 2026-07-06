@@ -8,16 +8,24 @@ const seedStorageKey = (pubkey: string) => `2140_bao_seed_${pubkey}`;
 const SEED_OP_TIMEOUT_MS = 15_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return Promise.race([
-    promise.finally(() => clearTimeout(timer)),
-    new Promise<never>((_, reject) => {
-      controller.signal.addEventListener('abort', () => {
-        reject(new Error(`${label} timed out after ${ms}ms`));
-      });
-    }),
-  ]);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+
+    // Attach handlers directly to the underlying promise so the timeout branch
+    // never leaves the original rejection unhandled if the timer fires first.
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (reason) => {
+        clearTimeout(timer);
+        reject(reason);
+      },
+    );
+  });
 }
 
 export interface UseBaoCashuSeedResult {
