@@ -8,9 +8,11 @@ interface ChaseStartScreenProps {
   coins: number;
   sats: number;
   onStart: (mode: ChaseMode) => void;
+  /** If false, the BAO sats mode is disabled (e.g. in real-money mode). */
+  allowSatsMode?: boolean;
 }
 
-export function ChaseStartScreen({ coins, sats, onStart }: ChaseStartScreenProps) {
+export function ChaseStartScreen({ coins, sats, onStart, allowSatsMode = true }: ChaseStartScreenProps) {
   const canPlayFiat = coins >= CHASE_FIAT_COST;
 
   return (
@@ -65,11 +67,14 @@ export function ChaseStartScreen({ coins, sats, onStart }: ChaseStartScreenProps
               variant="outline"
               className="w-full justify-between h-auto py-4"
               onClick={() => onStart('sats')}
+              disabled={!allowSatsMode}
             >
               <span className="flex flex-col items-start">
-                <span className="font-semibold">Play for BAO Sats</span>
+                <span className="font-semibold">{allowSatsMode ? 'Play for BAO Sats' : 'BAO Sats disabled'}</span>
                 <span className="text-xs text-muted-foreground font-normal">
-                  Free to play · {CHASE_SATS_PER_COIN} sats per coin collected
+                  {allowSatsMode
+                    ? `Free to play · ${CHASE_SATS_PER_COIN} sats per coin collected`
+                    : 'Switch to BAO testnet mode to play for demo sats.'}
                 </span>
               </span>
               <Zap className="size-5" />

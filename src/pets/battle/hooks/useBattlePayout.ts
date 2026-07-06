@@ -7,16 +7,12 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
-import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
-import { claimBaoSignetFaucet } from '@/lib/cashu/baoFaucet';
+import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
+import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import {
-  KIND_BLOBBONAUT_PROFILE,
-  parseBlobbonautEvent,
-  updateBlobbonautTags,
-  getLocalDayString,
-} from '@/pets/core/lib/pets';
+import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
+import { getLocalDayString, updateBlobbonautTags } from '@/pets/core/lib/pets';
 
 export interface BattlePayoutRequest {
   /** Number of sats to award to the winner. */
@@ -54,22 +50,6 @@ export function useBattlePayout(
         throw new Error('You must be logged in to collect battle rewards.');
       }
 
-      const prev = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
-        authors: [user.pubkey],
-      });
-
-      const profile = prev ? parseBlobbonautEvent(prev) : undefined;
-      const today = getLocalDayString();
-
-      // Daily cap: one battle prize per day.
-      if (profile?.allTags.some((tag) => tag[0] === 'battle_rewards_claimed_at' && tag[1] === today)) {
-        return {
-          amountAwarded: 0,
-          newSatsTotal: profile?.sats ?? 0,
-        };
-      }
-
       if (mode === 'btc-sats') {
         const faucetUrl = config.baoSignetFaucetUrl?.trim();
         if (!faucetUrl) {
@@ -79,49 +59,100 @@ export function useBattlePayout(
           throw new Error('BAO wallet is not available.');
         }
 
-        const npub = nip19.npubEncode(user.pubkey);
-        const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount });
-        if (!result?.token) {
-          throw new Error(result?.message ?? 'BAO faucet did not return a token.');
+        // Check the daily cap and claim the faucet inside the serialized profile
+        // updater so concurrent callers cannot claim twice before the tag is set.
+        const updateResult = await updateBlobbonautProfile(
+          nostr,
+          publishEvent,
+          user.pubkey,
+          async (freshProfile, prevTags, prevContent) => {
+            const today = getLocalDayString();
+            if (
+              freshProfile?.allTags.some(
+                (tag) => tag[0] === 'battle_rewards_claimed_at' && tag[1] === today
+              )
+            ) {
+              return {
+                tags: prevTags,
+                content: serializeProfileContent(prevContent, {}),
+                meta: { alreadyClaimed: true, newSatsTotal: freshProfile.sats },
+              };
+            }
+
+            const npub = nip19.npubEncode(user.pubkey);
+            const requestAmount = clampBaoFaucetAmount(amount);
+            if (requestAmount <= 0) {
+              throw new Error('BAO daily claim amount is too small or exhausted.');
+            }
+            const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
+            if (!result?.token) {
+              throw new Error(result?.message ?? 'BAO faucet did not return a token.');
+            }
+            if (isBaoFaucetDailyExhausted(result)) {
+              throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
+            }
+
+            await externalWallet.receiveToken(result.token.trim());
+
+            // Credit the actual token amount, capping to the faucet's 24h report.
+            const decoded = decodeCashuToken(result.token.trim());
+            const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+            const claimedSats = clampBaoFaucetAmount(depositedSats, result.remaining24h);
+            if (claimedSats <= 0) {
+              throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
+            }
+
+            const tags = updateBlobbonautTags(freshProfile?.event.tags ?? prevTags, {
+              battle_rewards_claimed_at: today,
+            });
+            return {
+              tags,
+              content: serializeProfileContent(prevContent, {}),
+              meta: { amountAwarded: claimedSats, newSatsTotal: freshProfile?.sats ?? 0 },
+            };
+          }
+        );
+
+        if (updateResult?.event) {
+          updateProfileEvent(updateResult.event);
         }
-        await externalWallet.receiveToken(result.token.trim());
 
-        // Record the daily claim on the profile (no demo-sats change).
-        const tags = updateBlobbonautTags(prev?.tags ?? [], {
-          battle_rewards_claimed_at: today,
-        });
-        const content = serializeProfileContent(prev?.content ?? '', {});
-        const event = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
-          content,
-          tags,
-          prev: prev ?? undefined,
-        });
-        updateProfileEvent(event);
-
-        return { amountAwarded: amount, newSatsTotal: profile?.sats ?? 0 };
+        const alreadyClaimed = updateResult?.meta?.alreadyClaimed as boolean | undefined;
+        const amountAwarded = (updateResult?.meta?.amountAwarded as number | undefined) ?? 0;
+        const newSatsTotal =
+          (updateResult?.meta?.newSatsTotal as number | undefined) ??
+          (updateResult?.profile?.sats ?? 0);
+        return { amountAwarded: alreadyClaimed ? 0 : amountAwarded, newSatsTotal };
       }
 
-      const currentSats = profile?.sats ?? 0;
-      const newSatsTotal = currentSats + amount;
+      // Demo-sats mode: add to the in-game profile balance under the serialized
+      // update helper so concurrent rewards cannot double-spend.
+      const updateResult = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+        const today = getLocalDayString();
+        if (freshProfile?.allTags.some((tag) => tag[0] === 'battle_rewards_claimed_at' && tag[1] === today)) {
+          return { tags: prevTags, content: serializeProfileContent(prevContent, {}), meta: { alreadyClaimed: true, newSatsTotal: freshProfile?.sats ?? 0 } };
+        }
 
-      const tags = updateBlobbonautTags(prev?.tags ?? [], {
-        sats: newSatsTotal.toString(),
-        battle_rewards_claimed_at: today,
+        const currentSats = freshProfile?.sats ?? 0;
+        const newSatsTotal = currentSats + amount;
+        const tags = updateBlobbonautTags(freshProfile?.event.tags ?? prevTags, {
+          sats: newSatsTotal.toString(),
+          battle_rewards_claimed_at: today,
+        });
+        return { tags, content: serializeProfileContent(prevContent, {}), meta: { newSatsTotal } };
       });
 
-      const content = serializeProfileContent(prev?.content ?? '', {});
+      if (!updateResult) {
+        throw new Error('Profile update returned no changes.');
+      }
 
-      const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
-        content,
-        tags,
-        prev: prev ?? undefined,
-      });
+      if (updateResult.event) {
+        updateProfileEvent(updateResult.event);
+      }
 
-      updateProfileEvent(event);
-
-      return { amountAwarded: amount, newSatsTotal };
+      const alreadyClaimed = updateResult.meta?.alreadyClaimed as boolean | undefined;
+      const newSatsTotal = (updateResult.meta?.newSatsTotal as number | undefined) ?? (updateResult.profile?.sats ?? 0);
+      return { amountAwarded: alreadyClaimed ? 0 : amount, newSatsTotal };
     },
     onSuccess: ({ amountAwarded, newSatsTotal }, { mode }) => {
       if (amountAwarded > 0) {

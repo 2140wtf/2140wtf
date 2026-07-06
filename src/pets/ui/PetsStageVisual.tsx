@@ -123,12 +123,19 @@ export function PetsStageVisual({
       happy: effectiveReaction === 'happy' && !recipe.extras?.tears?.enabled,
     } : undefined;
 
+    const handleEggClick = onEggClick
+      ? (e: React.MouseEvent) => {
+          e.stopPropagation();
+          onEggClick();
+        }
+      : interactionProps?.onClick;
+
     return (
       <div
         className={cn('relative', containerClass, className, onEggClick && 'pointer-events-auto cursor-pointer')}
         style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
-        onClick={onEggClick}
-        {...interactionProps}
+        onClick={handleEggClick}
+        {...(onEggClick ? undefined : interactionProps)}
       >
         <PetsEggVisual
           companion={companion}
