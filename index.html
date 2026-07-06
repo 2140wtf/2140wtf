@@ -23,6 +23,12 @@
     <meta name="twitter:description" content="Bitcoin culture collective built on Nostr." />
     <meta name="twitter:image" content="/og-image.png" />
 
+    <!-- CSP: frame-src is kept as https: because 2140.wtf embeds arbitrary
+         HTTPS content (e.g. external media, nsite iframes). A build-time
+         allowlist could tighten this for deployments that do not need
+         arbitrary embedding. See .security-audit-final-report.md risk #4.
+         Changing this to a specific allowlist requires verifying every
+         embeddable origin used by the app. -->
     <meta http-equiv="content-security-policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self' https:; base-uri 'self'; manifest-src 'self'; form-action 'none'; upgrade-insecure-requests; connect-src 'self' blob: https: wss:; img-src 'self' data: blob: https:; media-src 'self' blob: https:">
     <link rel="icon" type="image/jpeg" href="/logo.jpg">
     <link rel="apple-touch-icon" href="/logo.jpg">

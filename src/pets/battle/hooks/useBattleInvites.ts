@@ -1,3 +1,4 @@
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import { useRemoteBattle } from './useRemoteBattle';
 
 /**
@@ -16,7 +17,7 @@ export function useBattleInvites() {
   return {
     pendingInvite,
     isLoading: isLoadingInbox,
-    accept: acceptPendingInvite,
+    accept: (pet: PetsCompanion, guestEscrowPubkey?: string) => acceptPendingInvite(pet, guestEscrowPubkey),
     decline: declinePendingInvite,
   };
 }

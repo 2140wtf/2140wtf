@@ -255,6 +255,7 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ onValuesChange
       await publishEvent({
         kind: 0,
         content: JSON.stringify(data),
+        tags: [],
       });
 
       // Invalidate queries to refresh the data

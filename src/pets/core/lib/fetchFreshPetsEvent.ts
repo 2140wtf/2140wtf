@@ -1,4 +1,5 @@
 import type { NostrEvent, NostrFilter, NPool } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { queryPetsRelay } from './pets-relay';
 
@@ -9,7 +10,7 @@ interface FetchFreshPetsEventOptions {
 
 /**
  * Fetches the freshest version of a pets-related replaceable/addressable event
- * directly from the BAO pets relay.
+ * directly from the BAO pets relay and verifies its signature and author.
  *
  * Use this instead of the generic `fetchFreshEvent` for any kind 31124 or 11125
  * read-modify-write so the mutation reads from the same relay it writes to.
@@ -27,9 +28,22 @@ export async function fetchFreshPetsEvent(
     signal: querySignal,
   });
 
-  return events.length
+  const latest = events.length
     ? events.reduce((latest, current) =>
         current.created_at > latest.created_at ? current : latest,
       )
     : null;
+
+  if (!latest) return null;
+
+  // Reject events with invalid signatures or unexpected authors. This prevents
+  // a compromised/malicious relay from injecting fake pet state or profiles.
+  if (!verifyEvent(latest)) {
+    throw new Error('Fetched pets event has an invalid signature.');
+  }
+  if (filter.authors?.length && !filter.authors.includes(latest.pubkey)) {
+    throw new Error('Fetched pets event author does not match the requested pubkey.');
+  }
+
+  return latest;
 }

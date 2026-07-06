@@ -25,7 +25,8 @@ export function parseArticleEvent(event: NostrEvent): ArticleFields & { publishe
   const getTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
 
   const publishedAtTag = getTag('published_at');
-  const publishedAt = publishedAtTag ? parseInt(publishedAtTag) * 1000 : event.created_at * 1000;
+  const parsed = publishedAtTag ? parseInt(publishedAtTag, 10) : NaN;
+  const publishedAt = Number.isFinite(parsed) ? parsed * 1000 : event.created_at * 1000;
 
   return {
     title: getTag('title'),

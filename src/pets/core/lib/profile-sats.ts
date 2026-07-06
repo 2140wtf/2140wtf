@@ -17,7 +17,10 @@ import {
   parseBlobbonautEvent,
   updateBlobbonautTags,
   createStorageTags,
+  getBlobbonautQueryDValues,
+  getCanonicalBlobbonautD,
   type StorageItem,
+  type BlobbonautProfile,
 } from './pets';
 
 export type PublishEventFn = (template: EventTemplate) => Promise<NostrEvent>;
@@ -33,6 +36,84 @@ export interface ConsumeStorageItemResult {
   prevStorage: StorageItem[];
   newStorage: StorageItem[];
   consumed: boolean;
+}
+
+/** Default tags for a brand-new Blobbonaut profile when no prior event exists. */
+function createDefaultProfileTags(pubkey: string): string[][] {
+  return [
+    ['d', getCanonicalBlobbonautD(pubkey)],
+    ['b', 'pets:ecosystem:v1'],
+  ];
+}
+
+export type ProfileUpdateFn = (
+  profile: BlobbonautProfile | undefined,
+  prevTags: string[][],
+  prevContent: string,
+) =>
+  | { tags?: string[][]; content?: string; meta?: Record<string, unknown> }
+  | null
+  | Promise<{ tags?: string[][]; content?: string; meta?: Record<string, unknown> } | null>;
+
+export interface UpdateBlobbonautProfileResult {
+  event: NostrEvent;
+  profile: BlobbonautProfile | undefined;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Fetch the freshest kind 11125 profile and apply a serialized update.
+ *
+ * All callers that read the profile, compute a delta, and publish an update
+ * should go through this helper. It serializes per pubkey so concurrent
+ * updates (shop purchases, mission rewards, poop cleanup, etc.) cannot
+ * overwrite each other and double-spend in-game currency.
+ */
+export async function updateBlobbonautProfile(
+  nostr: NPool,
+  publishEvent: PublishEventFn,
+  pubkey: string,
+  update: ProfileUpdateFn,
+): Promise<UpdateBlobbonautProfileResult | null> {
+  return runSerialized(pubkey, async () => {
+    const prev = await fetchFreshPetsEvent(nostr, {
+      kinds: [KIND_BLOBBONAUT_PROFILE],
+      authors: [pubkey],
+      '#d': getBlobbonautQueryDValues(pubkey),
+    });
+
+    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const updateResult = await update(profile, prev?.tags ?? createDefaultProfileTags(pubkey), prev?.content ?? '');
+    if (!updateResult) return null;
+
+    const tags = updateResult.tags ?? prev?.tags ?? createDefaultProfileTags(pubkey);
+    const content = updateResult.content ?? prev?.content ?? '';
+
+    const event = await publishEvent({
+      kind: KIND_BLOBBONAUT_PROFILE,
+      content,
+      tags,
+      prev: prev ?? undefined,
+    });
+
+    return { event, profile, meta: updateResult.meta };
+  });
+}
+
+// Serialize all profile-sats mutations per pubkey so concurrent read-modify-write
+// operations do not overwrite each other (e.g. two actions rewarding sats at the
+// same time, or a purchase and a consume running in parallel).
+const profileUpdateQueue = new Map<string, Promise<unknown>>();
+
+function runSerialized<T>(pubkey: string, operation: () => Promise<T>): Promise<T> {
+  const pending = profileUpdateQueue.get(pubkey) ?? Promise.resolve();
+  const next = pending.then(
+    () => operation(),
+    () => operation(),
+  );
+  // Keep the queue moving even if an individual operation fails.
+  profileUpdateQueue.set(pubkey, next.catch(() => undefined));
+  return next;
 }
 
 /**
@@ -51,27 +132,30 @@ export async function addProfileSats(
   pubkey: string,
   delta: number,
 ): Promise<AddProfileSatsResult> {
-  const prev = await fetchFreshPetsEvent(nostr, {
-    kinds: [KIND_BLOBBONAUT_PROFILE],
-    authors: [pubkey],
+  return runSerialized(pubkey, async () => {
+    const prev = await fetchFreshPetsEvent(nostr, {
+      kinds: [KIND_BLOBBONAUT_PROFILE],
+      authors: [pubkey],
+      '#d': getBlobbonautQueryDValues(pubkey),
+    });
+
+    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const prevSats = profile?.sats ?? 0;
+    const newSats = Math.max(0, prevSats + delta);
+
+    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+      sats: newSats.toString(),
+    });
+
+    const event = await publishEvent({
+      kind: KIND_BLOBBONAUT_PROFILE,
+      content: prev?.content ?? profile?.content ?? '',
+      tags,
+      prev: prev ?? undefined,
+    });
+
+    return { event, prevSats, newSats };
   });
-
-  const profile = prev ? parseBlobbonautEvent(prev) : undefined;
-  const prevSats = profile?.sats ?? 0;
-  const newSats = Math.max(0, prevSats + delta);
-
-  const tags = updateBlobbonautTags(prev?.tags ?? [], {
-    sats: newSats.toString(),
-  });
-
-  const event = await publishEvent({
-    kind: KIND_BLOBBONAUT_PROFILE,
-    content: prev?.content ?? profile?.content ?? '',
-    tags,
-    prev: prev ?? undefined,
-  });
-
-  return { event, prevSats, newSats };
 }
 
 /**
@@ -87,34 +171,37 @@ export async function consumeStorageItem(
   pubkey: string,
   itemId: string,
 ): Promise<ConsumeStorageItemResult> {
-  const prev = await fetchFreshPetsEvent(nostr, {
-    kinds: [KIND_BLOBBONAUT_PROFILE],
-    authors: [pubkey],
+  return runSerialized(pubkey, async () => {
+    const prev = await fetchFreshPetsEvent(nostr, {
+      kinds: [KIND_BLOBBONAUT_PROFILE],
+      authors: [pubkey],
+      '#d': getBlobbonautQueryDValues(pubkey),
+    });
+
+    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const prevStorage = profile?.storage ?? [];
+    const existingIndex = prevStorage.findIndex((s) => s.itemId === itemId);
+
+    if (existingIndex < 0 || prevStorage[existingIndex].quantity <= 0) {
+      return { event: prev ?? profile?.event ?? ({} as NostrEvent), prevStorage, newStorage: prevStorage, consumed: false };
+    }
+
+    const newStorage = prevStorage.map((s, i) =>
+      i === existingIndex ? { ...s, quantity: s.quantity - 1 } : s,
+    ).filter((s) => s.quantity > 0);
+
+    const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
+    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+      storage: storageValues,
+    });
+
+    const event = await publishEvent({
+      kind: KIND_BLOBBONAUT_PROFILE,
+      content: prev?.content ?? profile?.content ?? '',
+      tags,
+      prev: prev ?? undefined,
+    });
+
+    return { event, prevStorage, newStorage, consumed: true };
   });
-
-  const profile = prev ? parseBlobbonautEvent(prev) : undefined;
-  const prevStorage = profile?.storage ?? [];
-  const existingIndex = prevStorage.findIndex((s) => s.itemId === itemId);
-
-  if (existingIndex < 0 || prevStorage[existingIndex].quantity <= 0) {
-    return { event: prev ?? profile?.event ?? ({} as NostrEvent), prevStorage, newStorage: prevStorage, consumed: false };
-  }
-
-  const newStorage = prevStorage.map((s, i) =>
-    i === existingIndex ? { ...s, quantity: s.quantity - 1 } : s,
-  ).filter((s) => s.quantity > 0);
-
-  const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
-  const tags = updateBlobbonautTags(prev?.tags ?? [], {
-    storage: storageValues,
-  });
-
-  const event = await publishEvent({
-    kind: KIND_BLOBBONAUT_PROFILE,
-    content: prev?.content ?? profile?.content ?? '',
-    tags,
-    prev: prev ?? undefined,
-  });
-
-  return { event, prevStorage, newStorage, consumed: true };
 }
