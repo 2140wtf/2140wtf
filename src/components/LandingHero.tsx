@@ -284,6 +284,11 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
       {onTabChange && (
         <div className="landing-hero-fade" style={{ animationDelay: '320ms' }}>
           <SubHeaderBar noArc innerClassName="px-4">
+            <TabButton
+              label="All"
+              active={activeTab === 'all'}
+              onClick={() => onTabChange('all')}
+            />
             {showDittoFeed && (
               <TabButton
                 label={appName}
