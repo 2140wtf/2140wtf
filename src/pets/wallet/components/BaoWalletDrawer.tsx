@@ -33,7 +33,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
-import { normalizeMintUrl } from '@/lib/cashu/cashu';
+import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
 
 export function BaoWalletDrawer() {
@@ -147,7 +147,7 @@ export function BaoWalletDrawer() {
               </SelectTrigger>
               <SelectContent>
                 {wallet.allMints.map((m) => (
-                  <SelectItem key={normalizeMintUrl(m.url)} value={normalizeMintUrl(m.url)!}>
+                  <SelectItem key={normalizeMintUrl(m.url)} value={safeNormalizeMintUrl(m.url)}>
                     {m.name}
                   </SelectItem>
                 ))}

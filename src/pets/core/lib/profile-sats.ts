@@ -111,8 +111,14 @@ function runSerialized<T>(pubkey: string, operation: () => Promise<T>): Promise<
     () => operation(),
     () => operation(),
   );
-  // Keep the queue moving even if an individual operation fails.
-  profileUpdateQueue.set(pubkey, next.catch(() => undefined));
+  // Keep the queue moving even if an individual operation fails, then remove
+  // the entry once the chain settles so the Map does not grow without bound.
+  const stored = next.catch(() => undefined).finally(() => {
+    if (profileUpdateQueue.get(pubkey) === stored) {
+      profileUpdateQueue.delete(pubkey);
+    }
+  });
+  profileUpdateQueue.set(pubkey, stored);
   return next;
 }
 
