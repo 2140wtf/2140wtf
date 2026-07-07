@@ -1148,7 +1148,7 @@ function PrivacyNoticeStep({
         <div className="flex gap-3">
           <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
           <p className="text-sm text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">2140 PETS.</span>{" "}
+            <span className="font-medium text-foreground">NOSTR PETS.</span>{" "}
             Pet state and Blobbonaut profiles are public events (kinds 31124
             and 11125) sent only to the ₿AO pets relay at this stage of
             development.

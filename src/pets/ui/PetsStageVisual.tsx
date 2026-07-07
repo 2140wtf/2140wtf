@@ -24,6 +24,8 @@ import type { PetsEmotion } from './lib/emotion-types';
 import type { PetsVisualRecipe } from './lib/recipe';
 import type { BodyEffectsSpec } from './lib/bodyEffects';
 import type { PetsFacing } from './hooks/usePetsDirectInteraction';
+import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
+import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 
 export type { PetsLookMode };
 
@@ -59,6 +61,8 @@ export interface PetsStageVisualProps {
   onEggClick?: () => void;
   /** Horizontal facing direction. `left` mirrors the visual with scaleX(-1). */
   facing?: PetsFacing;
+  /** Optional custom species map for previewing unsaved forms. */
+  customForms?: Record<string, CustomPetForm>;
   /** Optional pointer handlers for direct hover/click interactions. */
   interactionProps?: {
     onPointerEnter?: () => void;
@@ -93,11 +97,14 @@ export function PetsStageVisual({
   onTourEggClick,
   onEggClick,
   facing,
+  customForms: customFormsProp,
   interactionProps,
   className,
 }: PetsStageVisualProps) {
   const { stage } = companion;
   const isSleeping = companion.state === 'sleeping';
+  const profileCustomForms = useCustomForms();
+  const customForms = customFormsProp ?? profileCustomForms;
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
 
@@ -191,6 +198,7 @@ export function PetsStageVisual({
           recipeLabel={recipeLabel}
           emotion={emotion}
           bodyEffects={bodyEffects}
+          customForms={customForms}
           className="size-full"
         />
         <FloatingMusicNotes active={showMusicNotes} />

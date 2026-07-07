@@ -223,7 +223,7 @@ export const KIND_LABELS: Record<number, string> = {
   10073: 'Read books',
   10074: 'Currently reading',
   10075: 'To be read',
-  // 2140 PETS
+  // NOSTR PETS
   11125: 'Blobbonaut profile',
 
   // 2140.wtf custom kinds
@@ -236,10 +236,10 @@ export const KIND_LABELS: Record<number, string> = {
   // Corny Chat
   14388: 'User sound effect lists',
 
-  // 2140 PETS
-  14919: '2140 PETS interaction',
-  14920: '2140 PETS breeding',
-  14921: '2140 PETS record',
+  // NOSTR PETS
+  14919: 'NOSTR PETS interaction',
+  14920: 'NOSTR PETS breeding',
+  14921: 'NOSTR PETS record',
 
   // NIP-5A nsites
   15128: 'Nsite',
@@ -352,8 +352,8 @@ export const KIND_LABELS: Record<number, string> = {
   31990: 'App',
   // Bookstr
   31985: 'Book review',
-  // 2140 PETS
-  31124: '2140 PETS',
+  // NOSTR PETS
+  31124: 'NOSTR PETS',
   // Zapstore
   32267: 'Zapstore app',
   // Corny Chat

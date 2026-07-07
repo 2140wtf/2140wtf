@@ -24,7 +24,7 @@ import { PetsStageVisual, type PetsReaction } from '@/pets/ui/PetsStageVisual';
 import { adjustSeedForAdultType } from '@/pets/core/lib/pets';
 import { ADULT_FORMS, type AdultForm } from '@/pets/adult-pets/types/adult.types';
 import type { PetsCompanion, PetsStage } from '@/pets/core/lib/pets';
-import { Pets3DAssetUploader } from '@/pets/three-d/components/Pets3DAssetUploader';
+import { PetsSpeciesCreator } from '@/pets/creator/components/PetsSpeciesCreator';
 
 const STAGES: { id: PetsStage; label: string; icon: typeof Egg }[] = [
   { id: 'egg', label: 'Egg', icon: Egg },
@@ -42,7 +42,7 @@ export function PetsSettingsPage() {
 
   useSeoMeta({
     title: `Pets | Settings | ${config.appName}`,
-    description: 'Preview and test every 2140 PET form',
+    description: 'Preview and test every NOSTR PET form',
   });
 
   const baseCompanion = companions[0];
@@ -78,7 +78,7 @@ export function PetsSettingsPage() {
         alwaysShowBack
         titleContent={
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold">2140 PETS Preview</h1>
+            <h1 className="text-xl font-bold">NOSTR PETS Preview</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               Swap stage and adult form locally to test how every pet looks and behaves.
             </p>
@@ -124,7 +124,7 @@ export function PetsSettingsPage() {
               You don&apos;t have a pet yet. Adopt one first to use the preview sandbox.
             </p>
             <Button asChild>
-              <Link to="/pets">Adopt a 2140 PET</Link>
+              <Link to="/pets">Adopt a NOSTR PET</Link>
             </Button>
           </div>
         )}
@@ -256,7 +256,7 @@ export function PetsSettingsPage() {
               </div>
             </div>
 
-            <Pets3DAssetUploader />
+            <PetsSpeciesCreator baseCompanion={previewCompanion ?? baseCompanion} />
           </div>
         )}
       </div>

@@ -15,6 +15,7 @@ import {
   isRepostKind,
   isReactionKind,
   isZapKind,
+  isMastodonBridgeEvent,
   buildFeedItems,
   dedupeFeedItems,
   type FeedItem,
@@ -226,7 +227,10 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
-        const items = await buildFeedItems(validEvents, nostr, signal);
+        // Drop Mastodon / ActivityPub bridged content from the default feed.
+        const filteredEvents = validEvents.filter((ev) => !isMastodonBridgeEvent(ev));
+
+        const items = await buildFeedItems(filteredEvents, nostr, signal);
         let dedupedItems = dedupeFeedItems(items);
 
         if (!showReplies) {
@@ -442,7 +446,10 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
-        const items = validEvents
+        // Drop Mastodon / ActivityPub bridged content from the global feed.
+        const filteredEvents = validEvents.filter((ev) => !isMastodonBridgeEvent(ev));
+
+        const items = filteredEvents
           .sort((a, b) => b.created_at - a.created_at)
           .map((ev) => ({ event: ev, sortTimestamp: ev.created_at }));
 

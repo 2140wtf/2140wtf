@@ -27,6 +27,8 @@ import { resolveAdultSvgWithForm, customizeAdultSvgFromPets } from '@/pets/adult
 import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
 import { generateBaoSvg, customizeBaoSvg } from '@/pets/adult-pets/lib/bao-svg';
 import { sanitizePetsSvg } from '@/lib/sanitizePetsSvg';
+import { useCustomFormSvg } from '@/pets/three-d/hooks/useCustomFormSvg';
+import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 
 import { addEyeAnimation } from './lib/eye-animation';
 import { resolveVisualRecipe, applyVisualRecipe, type PetsVisualRecipe } from './lib/recipe';
@@ -50,6 +52,8 @@ export interface PetsAdultSvgRendererProps {
   emotion?: PetsEmotion;
   /** Body-level visual effects (manual/external use only — not from status reaction). */
   bodyEffects?: BodyEffectsSpec;
+  /** Optional owner custom species map. If omitted, the current user's profile is used. */
+  customForms?: Record<string, CustomPetForm>;
   /** Additional CSS classes for the container */
   className?: string;
 }
@@ -72,19 +76,21 @@ export function PetsAdultSvgRenderer({
   recipeLabel,
   emotion = 'neutral',
   bodyEffects,
+  customForms,
   className,
 }: PetsAdultSvgRendererProps) {
   const recipeFingerprint = useRecipeFingerprint(recipeProp);
 
   const instanceId = usePetsInstanceId(pets.id);
 
+  const customSvg = useCustomFormSvg(pets, customForms);
+
   const customizedSvg = useMemo(() => {
     debugPets('svg-rebuild', 'adult customizedSvg rebuild');
 
-    // Resolve the correct adult art. 2140 Pets / Ditto Blobbi use the standard
+    // Resolve the correct adult art. NOSTR Pets / Ditto Blobbi use the standard
     // adult-form SVGs; ₿AO Pets (identified by a known breed_asset recipe) render
-    // a generated trading-card variation. This also covers legacy pets whose
-    // breed_category was stored as '2140-pets' but whose breed_asset is a bao-* id.
+    // a generated trading-card variation. Custom species use their uploaded SVG.
     let form: string;
     let colorizedSvg: string;
 
@@ -93,6 +99,12 @@ export function PetsAdultSvgRenderer({
     if (baoRecipe) {
       form = pets.breedAsset!;
       colorizedSvg = customizeBaoSvg(generateBaoSvg(baoRecipe), baoRecipe, instanceId);
+    } else if (pets.breedCategory === 'custom' && pets.breedAsset) {
+      // Custom species render the user-uploaded SVG directly. We do not run the
+      // built-in colorizer or eye-animation mutators on it because the uploaded
+      // art is self-contained and may not follow the built-in element contract.
+      form = pets.breedAsset;
+      colorizedSvg = customSvg.svg ?? getFallbackCustomSvg(form);
     } else if (pets.breedCategory === 'bao' && pets.breedAsset) {
       return '<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><text x="100" y="110" text-anchor="middle" font-size="12" fill="#666">Unknown ₿AO</text></svg>';
     } else {
@@ -101,26 +113,25 @@ export function PetsAdultSvgRenderer({
       colorizedSvg = customizeAdultSvgFromPets(resolved.svg, resolved.form, pets, false);
     }
 
-    let animatedSvg = addEyeAnimation(colorizedSvg, { baseColor: pets.baseColor, instanceId });
+    let animatedSvg =
+      pets.breedCategory === 'custom'
+        ? colorizedSvg
+        : addEyeAnimation(colorizedSvg, { baseColor: pets.baseColor, instanceId });
 
-    if (recipeProp) {
+    if (recipeProp && pets.breedCategory !== 'custom') {
       animatedSvg = applyVisualRecipe(animatedSvg, recipeProp, recipeLabel ?? 'status', 'adult', form, instanceId);
-    } else if (emotion !== 'neutral') {
+    } else if (emotion !== 'neutral' && pets.breedCategory !== 'custom') {
       const resolved = resolveVisualRecipe(emotion);
       animatedSvg = applyVisualRecipe(animatedSvg, resolved, emotion, 'adult', form, instanceId);
     }
 
-    if (bodyEffects && !recipeProp) {
+    if (bodyEffects && !recipeProp && pets.breedCategory !== 'custom') {
       animatedSvg = applyBodyEffects(animatedSvg, { ...bodyEffects, idPrefix: bodyEffects.idPrefix ?? instanceId });
     }
 
     return animatedSvg;
-  // Deps use stable primitives from pets (not the object reference) and
-  // recipeFingerprint (not recipeProp) so that level-only changes and
-  // upstream reference churn do NOT trigger full SVG rebuilds. The closure
-  // captures the current pets/recipeProp for the rare structural rebuilds.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pets.id, pets.baseColor, pets.secondaryColor, pets.eyeColor, pets.adult?.evolutionForm, pets.seed, pets.breedCategory, pets.breedAsset, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects]);
+  }, [pets.id, pets.baseColor, pets.secondaryColor, pets.eyeColor, pets.adult?.evolutionForm, pets.seed, pets.breedCategory, pets.breedAsset, instanceId, recipeFingerprint, recipeLabel, emotion, bodyEffects, customSvg.svg]);
 
   const safeSvg = useMemo(() => sanitizePetsSvg(customizedSvg), [customizedSvg]);
 
@@ -130,4 +141,29 @@ export function PetsAdultSvgRenderer({
       dangerouslySetInnerHTML={{ __html: safeSvg }}
     />
   );
+}
+
+// ─── Fallback ─────────────────────────────────────────────────────────────────
+
+function getFallbackCustomSvg(form: string): string {
+  return `
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="fallbackCustomGradient" cx="0.3" cy="0.25">
+          <stop offset="0%" style="stop-color:#f472b6"/>
+          <stop offset="60%" style="stop-color:#db2777"/>
+          <stop offset="100%" style="stop-color:#be185d"/>
+        </radialGradient>
+      </defs>
+      <ellipse cx="100" cy="110" rx="50" ry="60" fill="url(#fallbackCustomGradient)" />
+      <ellipse cx="82" cy="95" rx="10" ry="12" fill="#fff" />
+      <ellipse cx="118" cy="95" rx="10" ry="12" fill="#fff" />
+      <circle cx="82" cy="96" r="7" fill="#374151" />
+      <circle cx="118" cy="96" r="7" fill="#374151" />
+      <circle cx="84" cy="94" r="2.5" fill="white" />
+      <circle cx="120" cy="94" r="2.5" fill="white" />
+      <path d="M 88 120 Q 100 130 112 120" stroke="#374151" stroke-width="3" fill="none" stroke-linecap="round" />
+      <text x="100" y="180" text-anchor="middle" font-size="12" fill="#666">${form}</text>
+    </svg>
+  `;
 }

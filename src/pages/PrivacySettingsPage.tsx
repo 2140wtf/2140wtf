@@ -82,7 +82,7 @@ export function PrivacySettingsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Eye className="size-4 text-primary" />
-              2140 PETS
+              NOSTR PETS
             </CardTitle>
             <CardDescription>
               Pet state and interactions are already sandboxed to the ₿AO relay.

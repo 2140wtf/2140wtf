@@ -317,7 +317,7 @@ export function PetsHatchingCeremony({
 
         const eggEvent = await publishEvent({
           kind: KIND_PETS_STATE,
-          content: 'A new 2140 PET egg!',
+          content: 'A new NOSTR PET egg!',
           tags: eggTags,
           created_at: eggPreview.createdAt,
         });
@@ -384,7 +384,7 @@ export function PetsHatchingCeremony({
         if (!mountedRef.current) return;
         toast({
           title: 'Something went wrong',
-          description: 'Failed to set up your 2140 PET. Please try again.',
+          description: 'Failed to set up your NOSTR PET. Please try again.',
           variant: 'destructive',
         });
         setPhase('error');
@@ -679,7 +679,7 @@ export function PetsHatchingCeremony({
       console.error('[HatchingCeremony] Naming failed:', error);
       toast({
         title: 'Failed to save name',
-        description: error instanceof Error ? error.message : 'Your 2140 PET was created, but the name could not be saved. Please try again.',
+        description: error instanceof Error ? error.message : 'Your NOSTR PET was created, but the name could not be saved. Please try again.',
         variant: 'destructive',
       });
       // Keep the naming UI open so the user can retry instead of silently
