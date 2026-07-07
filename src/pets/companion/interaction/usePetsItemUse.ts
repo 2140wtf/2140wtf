@@ -57,7 +57,7 @@ import { trackEvolutionMissionTally, readEvolutionFromStorage, trackInventoryDai
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
 import { INTERNAL_TO_INTERACTION_ACTION, emitInteractionEvent } from '@/pets/core/lib/pets-interaction';
-import { consumeStorageItem } from '@/pets/core/lib/profile-sats';
+import { consumeStorageItem, restoreStorageItem } from '@/pets/core/lib/profile-sats';
 
 import type { UseItemFunction } from './PetsActionsContextDef';
 
@@ -409,20 +409,35 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       
       // Consume one unit from storage BEFORE applying the pet stat update. This
       // prevents the pet from receiving a free stat boost if the storage
-      // decrement cannot be published.
+      // decrement cannot be published. If the pet-state publish fails after the
+      // decrement, we restore the item so it is not lost.
+      let consumed = false;
       if (user?.pubkey) {
-        const { consumed } = await consumeStorageItem(nostr, publishEvent, user.pubkey, itemId);
-        if (!consumed) {
+        const { consumed: ok } = await consumeStorageItem(nostr, publishEvent, user.pubkey, itemId);
+        if (!ok) {
           throw new Error(`You don't own ${shopItem.name}. Buy it in the shop first.`);
         }
+        consumed = true;
       }
 
-      const petsEvent = await publishEvent({
-        kind: KIND_PETS_STATE,
-        content,
-        tags: petsTags,
-        prev: companion.event,
-      });
+      let petsEvent: NostrEvent;
+      try {
+        petsEvent = await publishEvent({
+          kind: KIND_PETS_STATE,
+          content,
+          tags: petsTags,
+          prev: companion.event,
+        });
+      } catch (petEventError) {
+        if (consumed && user?.pubkey) {
+          try {
+            await restoreStorageItem(nostr, publishEvent, user.pubkey, itemId);
+          } catch (restoreError) {
+            console.error('[usePetsItemUse] Failed to restore storage item after pet event failure:', restoreError);
+          }
+        }
+        throw petEventError;
+      }
 
       updateCompanionInCache(petsEvent);
 
