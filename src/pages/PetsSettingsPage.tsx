@@ -24,6 +24,7 @@ import { PetsStageVisual, type PetsReaction } from '@/pets/ui/PetsStageVisual';
 import { adjustSeedForAdultType } from '@/pets/core/lib/pets';
 import { ADULT_FORMS, type AdultForm } from '@/pets/adult-pets/types/adult.types';
 import type { PetsCompanion, PetsStage } from '@/pets/core/lib/pets';
+import { Pets3DAssetUploader } from '@/pets/three-d/components/Pets3DAssetUploader';
 
 const STAGES: { id: PetsStage; label: string; icon: typeof Egg }[] = [
   { id: 'egg', label: 'Egg', icon: Egg },
@@ -254,6 +255,8 @@ export function PetsSettingsPage() {
                 />
               </div>
             </div>
+
+            <Pets3DAssetUploader />
           </div>
         )}
       </div>

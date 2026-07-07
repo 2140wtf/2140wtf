@@ -1041,7 +1041,6 @@ function PetsContent() {
       isUsingItem={isUsingItem}
       purchaseItem={purchaseItem}
       petsWallet={petsWallet}
-      isRealWallet={isRealPetsWallet}
       isDirectActionPending={isDirectActionPending}
       actionInProgress={actionInProgress}
       isPublishing={isPublishing}
@@ -1107,7 +1106,6 @@ interface PetsDashboardProps {
   isUsingItem: boolean;
   purchaseItem: (req: { itemId: string; price: number; quantity: number; currency?: 'fiat' | 'sats' }) => Promise<unknown>;
   petsWallet: (CashuWalletState & CashuWalletActions) | null | undefined;
-  isRealWallet: boolean;
   isDirectActionPending: boolean;
   actionInProgress: string | null;
   isPublishing: boolean;
@@ -1151,7 +1149,6 @@ function PetsDashboard({
   isUsingItem,
   purchaseItem,
   petsWallet,
-  isRealWallet,
   isDirectActionPending,
   actionInProgress,
   isPublishing,
@@ -2619,7 +2616,6 @@ function PetsDashboard({
             invalidateCompanion={invalidateCompanion}
             setStoredSelectedD={setStoredSelectedD}
             existingCompanion={companion}
-            isRealWallet={isRealWallet}
             onComplete={() => setShowHatchCeremony(false)}
           />
         </div>,
