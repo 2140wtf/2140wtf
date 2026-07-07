@@ -7,7 +7,6 @@ import { useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Loader2,
   RefreshCw,
   Wallet as WalletIcon,
 } from 'lucide-react';

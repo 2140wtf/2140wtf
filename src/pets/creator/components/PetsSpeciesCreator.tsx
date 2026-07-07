@@ -11,9 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Box,
   ExternalLink,
-  Image,
   Loader2,
   Minus,
   Plus,
@@ -304,7 +302,6 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
       <div className="space-y-3">
         <FileSlot
           label="Base SVG"
-          icon={Image}
           accept=".svg"
           asset={baseSvgEntry}
           isBusy={isBusy}
@@ -316,7 +313,6 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
         />
         <FileSlot
           label="Sleeping SVG"
-          icon={Image}
           accept=".svg"
           asset={sleepingSvgEntry}
           isBusy={isBusy}
@@ -336,7 +332,6 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
 
         <FileSlot
           label="Pet GLB model"
-          icon={Box}
           accept=".glb"
           asset={glbEntry}
           isBusy={isBusy}
@@ -361,7 +356,6 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
 
         <FileSlot
           label="Room GLB model"
-          icon={Box}
           accept=".glb"
           asset={roomGlbEntry}
           isBusy={isBusy}
@@ -562,7 +556,6 @@ function ScaleEditor({
 
 interface FileSlotProps {
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
   accept: string;
   asset: Asset3DEntry | undefined;
   isBusy: boolean;
@@ -575,7 +568,6 @@ interface FileSlotProps {
 
 function FileSlot({
   label,
-  icon: Icon,
   accept,
   asset,
   isBusy,
