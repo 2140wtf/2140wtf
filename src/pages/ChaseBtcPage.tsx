@@ -43,7 +43,7 @@ export default function ChaseBtcPage() {
   const { profile, isLoading: profileLoading, updateProfileEvent } = useBlobbonautProfile();
   const { companions, isLoading: collectionLoading } = usePetssCollection();
 
-  const { wallet: petsWallet, isReal } = usePetsWallet();
+  const { wallet: petsWallet, isBitcoin } = usePetsWallet();
 
   const [mode, setMode] = useState<ChaseMode>('fiat');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -99,10 +99,10 @@ export default function ChaseBtcPage() {
 
   // In real-money mode the BAO faucet is not available, so sats mode is disabled.
   useEffect(() => {
-    if (isReal && mode === 'sats') {
+    if (isBitcoin && mode === 'sats') {
       setMode('fiat');
     }
-  }, [isReal, mode]);
+  }, [isBitcoin, mode]);
 
   const handleStart = useCallback(
     (selectedMode: ChaseMode) => {
@@ -224,7 +224,7 @@ export default function ChaseBtcPage() {
             {status === 'running' && <ChaseHud state={state} mode={mode} />}
 
             {status === 'idle' && (
-              <ChaseStartScreen coins={coins} sats={sats} onStart={handleStart} allowSatsMode={!isReal} />
+              <ChaseStartScreen coins={coins} sats={sats} onStart={handleStart} allowSatsMode={!isBitcoin} />
             )}
 
             {status === 'ended' && (

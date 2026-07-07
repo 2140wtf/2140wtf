@@ -26,7 +26,7 @@ export function BattleInvitePending() {
   const { pendingInvite, isLoading, accept, decline } = useBattleInvites();
   const { companions, isLoading: petsLoading } = usePetssCollection();
   const { config } = useAppContext();
-  const { isReal } = usePetsWallet();
+  const { isBitcoin } = usePetsWallet();
   const { seedPhrase, available: seedAvailable } = useCashuSeed();
   const [petId, setPetId] = useState<string>('');
 
@@ -41,7 +41,7 @@ export function BattleInvitePending() {
 
   const escrowConfigured = !!config.petsBattleEscrowPubkey && !!config.petsBattleEscrowServiceUrl;
   const isRealSatsInvite = pendingInvite?.mode === 'real-sats';
-  const canAcceptRealSats = isRealSatsInvite && isReal && seedAvailable && escrowConfigured && !!escrowKeypair;
+  const canAcceptRealSats = isRealSatsInvite && isBitcoin && seedAvailable && escrowConfigured && !!escrowKeypair;
 
   const eligiblePets = companions.filter(
     (pet) => pet.stage === 'baby' || pet.stage === 'adult',
