@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { useSecureLocalStorage } from '@/hooks/useSecureLocalStorage';
+import { useEncryptedSecureLocalStorage } from '@/hooks/useEncryptedSecureLocalStorage';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import { redactSecrets } from '@/lib/redactSecrets';
 import { LN } from '@getalby/sdk';
@@ -64,17 +65,20 @@ export function validateNwcUri(rawUri: string): NwcUriParts | null {
 
 export function useNWCInternal(userPubkey?: string) {
   const { toast } = useToast();
+  const { user } = useCurrentUser();
   // Scope wallet connections per user so switching accounts doesn't leak wallets.
   // When no user is logged in, use a 'global' fallback key (connections won't
   // be accessible without a user anyway since zap actions require login).
-  const storagePrefix = userPubkey ? `nwc-connections:${userPubkey}` : 'nwc-connections';
-  const activePrefix = userPubkey ? `nwc-active-connection:${userPubkey}` : 'nwc-active-connection';
-  // NWC connection strings embed a secret that authorizes Lightning payments,
-  // so on native platforms we store them in Keychain/KeyStore via secureStorage
-  // rather than plaintext localStorage. On web the behavior matches the
-  // previous useLocalStorage implementation (plaintext localStorage).
-  const [connections, setConnections] = useSecureLocalStorage<NWCConnection[]>(storagePrefix, []);
-  const [activeConnection, setActiveConnection] = useSecureLocalStorage<string | null>(activePrefix, null);
+  const pubkey = userPubkey ?? user?.pubkey ?? '';
+  const nip44 = user?.signer?.nip44;
+  const storagePrefix = pubkey ? `nwc-connections:${pubkey}` : 'nwc-connections';
+  const activePrefix = pubkey ? `nwc-active-connection:${pubkey}` : 'nwc-active-connection';
+  // NWC connection strings embed a secret that authorizes Lightning payments.
+  // On native platforms they land in Keychain/KeyStore via secureStorage; on
+  // web they are encrypted at rest with NIP-44 self-encryption before being
+  // written to localStorage.
+  const [connections, setConnections] = useEncryptedSecureLocalStorage<NWCConnection[]>(storagePrefix, [], nip44, pubkey);
+  const [activeConnection, setActiveConnection] = useEncryptedSecureLocalStorage<string | null>(activePrefix, null, nip44, pubkey);
   const [connectionInfo, setConnectionInfo] = useState<Record<string, NWCInfo>>({});
 
   // Add new connection

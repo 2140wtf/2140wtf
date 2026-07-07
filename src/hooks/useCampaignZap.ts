@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
@@ -126,6 +127,9 @@ export function useCampaignZap(
       if (!Number.isFinite(amountSats) || amountSats <= 0) {
         throw new Error('Invalid amount.');
       }
+      if (!verifyEvent(campaign.event)) {
+        throw new Error('Campaign event failed signature verification.');
+      }
 
       // Per the plan, prefer the on-chain rail when both are declared.
       const useOnchain = !!campaign.wallets.onchain;
@@ -237,7 +241,15 @@ export function useCampaignZap(
       }
 
       setProgress('signing');
-      const signedHex = await signPsbt(psbtHex);
+      const changeAddress = useOnchain
+        ? isHd && hdWallet.changeAddress
+          ? hdWallet.changeAddress.address
+          : senderAddress
+        : senderAddress;
+      const signedHex = await signPsbt(psbtHex, {
+        paymentIntents: [{ address: wallet.value, amountSats }],
+        changeAddresses: [changeAddress],
+      });
 
       // BIP-375 signers return a finalized PSBT v2 for SP sends; the legacy
       // signer path returns a PSBT v0 we hand to `finalizePsbt`.

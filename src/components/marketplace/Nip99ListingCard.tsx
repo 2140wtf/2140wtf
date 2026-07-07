@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ImageGallery } from '@/components/ImageGallery';
+import { SafeImage } from '@/components/SafeImage';
 import { Switch } from '@/components/ui/switch';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
@@ -135,7 +136,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
         >
           <div className="aspect-[4/3] bg-muted relative overflow-hidden">
             {firstImage ? (
-              <img
+              <SafeImage
                 src={firstImage}
                 alt={listing.title}
                 loading="lazy"

@@ -46,3 +46,80 @@ export function displayHost(url: string): string {
     return url;
   }
 }
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+/**
+ * Validate that a relay URL uses a safe WebSocket scheme.
+ *
+ * Allows `wss://` everywhere and `ws://` only for localhost/loopback so dev
+ * relays still work. Rejects `javascript:`, `data:`, and other non-relay URLs.
+ */
+export function isAllowedRelayUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'wss:') return true;
+    if (parsed.protocol === 'ws:' && isLocalhost(parsed.hostname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate that an HTTPS API/service URL uses a safe scheme.
+ *
+ * Allows `https://` everywhere and `http://` only for localhost/loopback. Empty
+ * strings are accepted for optional config fields.
+ */
+export function isAllowedHttpsUrl(url: string | undefined | null): boolean {
+  if (!url) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:') return true;
+    if (parsed.protocol === 'http:' && isLocalhost(parsed.hostname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate a share/canonical-origin URL.
+ *
+ * Must be `https://`, must not contain a path, query, or fragment, and must
+ * not include a trailing slash.
+ */
+export function isAllowedShareOrigin(url: string | undefined | null): boolean {
+  if (!url) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate an RFC-6570-style URL template (e.g. CORS proxy, favicon, link
+ * preview). Empty strings are allowed. Non-empty templates must begin with an
+ * allowed HTTPS (or localhost HTTP) prefix after stripping `{placeholder}`
+ * segments, preventing `javascript:` injection via template expansion.
+ */
+export function isAllowedUrlTemplate(template: string | undefined | null): boolean {
+  if (!template) return true;
+  const stripped = template.replace(/\{[^}]*\}/g, '').trim();
+  if (stripped.startsWith('https://')) return true;
+  if (
+    stripped.startsWith('http://localhost') ||
+    stripped.startsWith('http://127.0.0.1')
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NRelay1, type NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { isVerifiedEvent } from '@/lib/nostrEvents';
 import {
   BAO_COURT_SELECTION_KIND,
   parseSelectionEvent,
@@ -23,8 +24,17 @@ export interface BaoCourtSelectionResult {
  * Fetch the kind 38030 jury-selection event for a dispute and map it to the
  * `SelectedJuror[]` shape expected by `useJurorSession`. Non-selected users
  * get `myJurorIdx = -1`.
+ *
+ * Selection events are trust-sensitive and SHOULD be filtered to a trusted
+ * coordinator pubkey allowlist. If `coordinatorPubkeys` is provided, only
+ * events authored by those pubkeys are considered. Callers are encouraged to
+ * supply an allowlist; without one the hook falls back to verifying signatures
+ * only.
  */
-export function useBaoCourtSelection(disputeId: string | undefined): BaoCourtSelectionResult {
+export function useBaoCourtSelection(
+  disputeId: string | undefined,
+  coordinatorPubkeys?: readonly string[],
+): BaoCourtSelectionResult {
   const { user } = useCurrentUser();
 
   const query = useQuery<SelectedJuror[], Error>({
@@ -48,10 +58,18 @@ export function useBaoCourtSelection(disputeId: string | undefined): BaoCourtSel
         };
         const events = await relay.query([filter], { signal: controller.signal });
 
-        // Pick the latest valid selection event.
+        // Pick the latest valid selection event from a trusted coordinator.
         let selected: SelectedJuror[] = [];
         let latest = 0;
         for (const event of events) {
+          if (!isVerifiedEvent(event)) continue;
+          if (
+            coordinatorPubkeys &&
+            coordinatorPubkeys.length > 0 &&
+            !coordinatorPubkeys.includes(event.pubkey)
+          ) {
+            continue;
+          }
           const parsed = parseSelectionEvent(event);
           if (!parsed || parsed.disputeId !== disputeId) continue;
           const validation = validateSelectionEvent(event, parsed.disputeId);

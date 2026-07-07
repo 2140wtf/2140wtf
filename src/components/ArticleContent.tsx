@@ -8,6 +8,7 @@ import { NoteContent } from '@/components/NoteContent';
 import { formatReadingTime } from '@/lib/articleHelpers';
 import { highlightSourceAttrs } from '@/lib/highlightSource';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { SafeImage } from '@/components/SafeImage';
 import { cn } from '@/lib/utils';
 
 /** Gets a tag value by name. */
@@ -153,7 +154,7 @@ export function ArticleContent({ event, preview, className }: ArticleContentProp
           <h3 dir="auto" className="text-base font-bold leading-snug">{title}</h3>
         )}
         {image && (
-          <img
+          <SafeImage
             src={image}
             alt={title ?? 'Article image'}
             className="w-full rounded-lg object-cover max-h-64 mt-2"
@@ -196,7 +197,7 @@ export function ArticleContent({ event, preview, className }: ArticleContentProp
         </p>
       )}
       {image && (
-        <img
+        <SafeImage
           src={image}
           alt={title ?? 'Article image'}
           className="w-full rounded-xl object-cover max-h-96 mb-6"

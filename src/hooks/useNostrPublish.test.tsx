@@ -3,6 +3,12 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { finalizeEvent, getPublicKey } from 'nostr-tools';
+import { hexToBytes } from '@noble/hashes/utils.js';
+
+const sk = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
+const pubkey = getPublicKey(sk);
+const otherSk = hexToBytes('0000000000000000000000000000000000000000000000000000000000000002');
 
 const mocks = vi.hoisted(() => ({
   currentUser: null as { pubkey: string; signer: { signEvent: (t: unknown) => Promise<NostrEvent> } } | null,
@@ -39,18 +45,32 @@ vi.mock('@nostrify/react', () => ({
   }),
 }));
 
-function createSigner(pubkey: string) {
+function createSigner(expectedPubkey: string) {
   return {
     signEvent: async (template: unknown) => {
       const t = template as Omit<NostrEvent, 'id' | 'pubkey' | 'sig'>;
-      return {
-        ...t,
-        id: 'signed-id',
-        pubkey,
-        sig: 'sig',
-      } as NostrEvent;
+      return finalizeEvent(
+        { kind: t.kind, content: t.content, tags: t.tags, created_at: t.created_at },
+        expectedPubkey === pubkey ? sk : otherSk,
+      );
     },
   };
+}
+
+function createPrevEvent(overrides?: Partial<NostrEvent>): NostrEvent {
+  return finalizeEvent(
+    {
+      kind: 30078,
+      content: '',
+      tags: [
+        ['d', 'ditto/metadata'],
+        ['published_at', '900'],
+      ],
+      created_at: 900,
+      ...overrides,
+    },
+    sk,
+  );
 }
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -64,8 +84,8 @@ describe('useNostrPublish', () => {
     mocks.groupEvent.mockReset();
     mocks.sendToInboxRelays.mockReset();
     mocks.currentUser = {
-      pubkey: '0000000000000000000000000000000000000000000000000000000000000001',
-      signer: createSigner('0000000000000000000000000000000000000000000000000000000000000001'),
+      pubkey,
+      signer: createSigner(pubkey),
     };
   });
 
@@ -111,5 +131,75 @@ describe('useNostrPublish', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const signed = mocks.nostrEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
     expect(signed?.tags.some((t) => t[0] === 'published_at' && t[1] === '1000')).toBe(true);
+  });
+
+  it('preserves published_at from a verified prev event of the same kind and author', async () => {
+    const prev = createPrevEvent();
+    const { result } = renderHook(() => useNostrPublish(), { wrapper });
+    result.current.mutate({
+      kind: 30078,
+      content: 'updated',
+      tags: [['d', 'ditto/metadata']],
+      created_at: 1000,
+      prev,
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const signed = mocks.nostrEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
+    expect(signed?.tags.some((t) => t[0] === 'published_at' && t[1] === '900')).toBe(true);
+  });
+
+  it('rejects a prev event with an invalid signature', async () => {
+    const prev = JSON.parse(JSON.stringify(createPrevEvent())) as NostrEvent;
+    prev.sig = prev.sig.slice(0, -1) + (prev.sig.slice(-1) === '0' ? '1' : '0');
+    const { result } = renderHook(() => useNostrPublish(), { wrapper });
+    result.current.mutate({
+      kind: 30078,
+      content: 'updated',
+      tags: [['d', 'ditto/metadata']],
+      created_at: 1000,
+      prev,
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toMatch(/forged or mismatched prev event/i);
+  });
+
+  it('rejects a prev event from a different author', async () => {
+    const prev = finalizeEvent(
+      {
+        kind: 30078,
+        content: '',
+        tags: [['d', 'ditto/metadata'], ['published_at', '900']],
+        created_at: 900,
+      },
+      otherSk,
+    );
+    const { result } = renderHook(() => useNostrPublish(), { wrapper });
+    result.current.mutate({
+      kind: 30078,
+      content: 'updated',
+      tags: [['d', 'ditto/metadata']],
+      created_at: 1000,
+      prev,
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toMatch(/forged or mismatched prev event/i);
+  });
+
+  it('rejects a prev event with a mismatched kind', async () => {
+    const prev = createPrevEvent({ kind: 30063 });
+    const { result } = renderHook(() => useNostrPublish(), { wrapper });
+    result.current.mutate({
+      kind: 30078,
+      content: 'updated',
+      tags: [['d', 'ditto/metadata']],
+      created_at: 1000,
+      prev,
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toMatch(/forged or mismatched prev event/i);
   });
 });

@@ -7,7 +7,7 @@ import { hexToBytes } from '@noble/hashes/utils.js';
 import { AppPool } from './AppPool';
 
 const sk = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
-const pubkey = getPublicKey(sk);
+const _pubkey = getPublicKey(sk);
 
 function createValidEvent(overrides?: Partial<NostrEvent>): NostrEvent {
   return finalizeEvent(
@@ -22,7 +22,7 @@ function createValidEvent(overrides?: Partial<NostrEvent>): NostrEvent {
   );
 }
 
-function createEvent(overrides?: Partial<NostrEvent>): NostrEvent {
+function _createEvent(overrides?: Partial<NostrEvent>): NostrEvent {
   const event = createValidEvent(overrides);
   return {
     ...event,
