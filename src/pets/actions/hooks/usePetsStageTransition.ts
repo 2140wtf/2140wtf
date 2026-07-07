@@ -84,8 +84,8 @@ export interface UsePetsStageTransitionParams {
   ensureCanonicalBeforeAction: () => Promise<CanonicalActionResult | null>;
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
-  /** When false the transition is blocked. Defaults to true for backwards compatibility. */
-  isRealWallet?: boolean;
+  /** When true, BTC-stage transitions are enabled. Defaults to true for backwards compatibility. */
+  isBitcoinPetsWallet?: boolean;
 }
 
 /**
@@ -126,7 +126,7 @@ export function usePetsHatch({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  isRealWallet: _isRealWallet = true,
+  isBitcoinPetsWallet: _isBitcoinPetsWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -288,7 +288,7 @@ export function usePetsEvolve({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  isRealWallet = true,
+  isBitcoinPetsWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -308,7 +308,7 @@ export function usePetsEvolve({
         throw new Error('Profile not found');
       }
 
-      if (!isRealWallet) {
+      if (!isBitcoinPetsWallet) {
         throw new Error('Testnet pets cannot reach the adult stage. Switch to real Bitcoin sats to evolve your NOSTR PET.');
       }
 
