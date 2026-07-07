@@ -40,27 +40,27 @@ export const ACTION_TO_ITEM_TYPE: Record<InventoryAction, ShopItemCategory> = {
 export const ACTION_METADATA: Record<InventoryAction, { label: string; description: string; icon: string }> = {
   feed: {
     label: 'Feed',
-    description: 'Feed your 2140 PET',
+    description: 'Feed your NOSTR PET',
     icon: '🍎',
   },
   play: {
     label: 'Play',
-    description: 'Play with your 2140 PET',
+    description: 'Play with your NOSTR PET',
     icon: '⚽',
   },
   clean: {
     label: 'Clean',
-    description: 'Clean your 2140 PET',
+    description: 'Clean your NOSTR PET',
     icon: '🧼',
   },
   medicine: {
     label: 'Medicine',
-    description: 'Heal your 2140 PET',
+    description: 'Heal your NOSTR PET',
     icon: '💊',
   },
   boost: {
     label: 'Boost',
-    description: 'Recharge your 2140 PET\'s energy',
+    description: 'Recharge your NOSTR PET\'s energy',
     icon: '⚡',
   },
 };
@@ -71,12 +71,12 @@ export const ACTION_METADATA: Record<InventoryAction, { label: string; descripti
 export const DIRECT_ACTION_METADATA: Record<DirectAction, { label: string; description: string; icon: string }> = {
   play_music: {
     label: 'Play Music',
-    description: 'Play music for your 2140 PET',
+    description: 'Play music for your NOSTR PET',
     icon: '🎵',
   },
   sing: {
     label: 'Sing',
-    description: 'Sing to your 2140 PET',
+    description: 'Sing to your NOSTR PET',
     icon: '🎤',
   },
 };
@@ -405,7 +405,7 @@ export function getStageRestrictionMessage(companion: PetsCompanion, action?: In
     if (action && EGG_ALLOWED_INVENTORY_ACTIONS.includes(action)) {
       return null; // Medicine and clean are allowed for eggs
     }
-    return 'Eggs cannot use this item. Wait for your 2140 PET to hatch!';
+    return 'Eggs cannot use this item. Wait for your NOSTR PET to hatch!';
   }
   return null;
 }

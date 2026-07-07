@@ -9,16 +9,16 @@
  * - Loads the bundled demo GLB when no user asset is configured.
  * - Renders a procedural 3D environment (sky, ground, simple props).
  * - Lets the user rotate/zoom around the pet instead of auto-orbiting it.
+ * - The pet can be moved with arrow keys or the on-screen D-pad.
  */
 
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import {
   ContactShadows,
   Environment,
   OrbitControls,
   Sky,
-  useAnimations,
   useGLTF,
 } from '@react-three/drei';
 import type { Group } from 'three';
@@ -29,6 +29,7 @@ import {
   DEFAULT_ROOM_SKY_AZIMUTH,
   DEFAULT_ROOM_SKY_INCLINATION,
 } from '@/pets/three-d/lib/default-assets';
+import { usePet3DControls } from '@/pets/three-d/hooks/usePet3DControls';
 
 interface Pets3DVisualProps {
   /** Pet model asset (user-configured or bundled default). */
@@ -86,43 +87,33 @@ function Pets3DRoom() {
  * Optional room GLB. Loaded separately so it can fail without taking down
  * the pet.
  */
-function Pets3DRoomModel({ url }: { url: string }) {
+function Pets3DRoomModel({ url, scale }: { url: string; scale?: number }) {
   const { scene } = useGLTF(url);
-  return <primitive object={scene} scale={1.5} position={[0, -1.35, 0]} />;
+  return <primitive object={scene} scale={scale ?? 1} position={[0, -1.35, 0]} />;
 }
 
 /**
  * The loaded GLB pet. `useGLTF` caches the loader result, so re-renders of
- * the parent don't re-fetch the asset. Plays the first available animation
- * and stays at the center of the room; the user can rotate the view with
- * the mouse or touch instead.
+ * the parent don't re-fetch the asset. The model is positioned by the parent
+ * and faces the direction of movement; animations are not auto-played so the
+ * model does not walk or rotate on its own.
  */
 function PetModel({
   url,
   scale,
-  _isSleeping,
+  position,
+  rotationY,
 }: {
   url: string;
   scale?: number;
-  _isSleeping?: boolean;
+  position: [number, number, number];
+  rotationY: number;
 }) {
-  const { scene, animations } = useGLTF(url);
+  const { scene } = useGLTF(url);
   const groupRef = useRef<Group>(null);
-  const { actions } = useAnimations(animations, groupRef);
-
-  useEffect(() => {
-    if (!actions) return;
-    const name = animations[0]?.name;
-    const action = name ? actions[name] : Object.values(actions)[0];
-    if (!action) return;
-    action.reset().fadeIn(0.5).play();
-    return () => {
-      action.fadeOut(0.5);
-    };
-  }, [actions, animations]);
 
   return (
-    <group ref={groupRef} position={[0, PET_Y, 0]}>
+    <group ref={groupRef} position={position} rotation={[0, rotationY, 0]}>
       <primitive
         object={scene}
         // Scale the loaded model to pet size inside the full-room world.
@@ -141,44 +132,59 @@ function PetModel({
  */
 export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3DVisualProps) {
   const key = useMemo(() => `${asset.url}:${roomAsset?.url ?? ''}`, [asset.url, roomAsset?.url]);
+  const { position, facingAngle, MovementPad } = usePet3DControls();
+
+  const petPosition: [number, number, number] = useMemo(
+    () => [position.x, PET_Y, position.z],
+    [position],
+  );
 
   return (
-    <Canvas
-      key={key}
-      className={className}
-      camera={{ position: [0, 0.8, 4.5], fov: 60 }}
-      shadows
-      dpr={[1, 2]}
-      gl={{ antialias: true, alpha: false }}
-    >
-      <color attach="background" args={['#87CEEB']} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[6, 8, 4]} intensity={1.2} castShadow shadow-mapSize={1024} />
-      <directionalLight position={[-3, 2, -3]} intensity={0.3} />
+    <div className="relative w-full h-full">
+      <Canvas
+        key={key}
+        className={className}
+        camera={{ position: [0, 0.8, 4.5], fov: 60 }}
+        shadows
+        dpr={[1, 2]}
+        gl={{ antialias: true, alpha: false }}
+      >
+        <color attach="background" args={['#87CEEB']} />
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[6, 8, 4]} intensity={1.2} castShadow shadow-mapSize={1024} />
+        <directionalLight position={[-3, 2, -3]} intensity={0.3} />
 
-      <Suspense fallback={null}>
-        <Pets3DRoom />
-        {roomAsset && <Pets3DRoomModel url={roomAsset.url} />}
-        <PetModel url={asset.url} scale={asset.scale} _isSleeping={isSleeping} />
-        <ContactShadows
-          position={[0, -1.35, 0]}
-          opacity={0.35}
-          scale={12}
-          blur={2.5}
-          far={6}
+        <Suspense fallback={null}>
+          <Pets3DRoom />
+          {roomAsset && <Pets3DRoomModel url={roomAsset.url} scale={roomAsset.scale} />}
+          <PetModel
+            url={asset.url}
+            scale={asset.scale}
+            position={petPosition}
+            rotationY={isSleeping ? 0 : facingAngle}
+          />
+          <ContactShadows
+            position={[0, -1.35, 0]}
+            opacity={0.35}
+            scale={12}
+            blur={2.5}
+            far={6}
+          />
+          <Environment preset="sunset" />
+        </Suspense>
+
+        <OrbitControls
+          enablePan={false}
+          enableZoom={false}
+          enableRotate
+          minPolarAngle={Math.PI / 3}
+          maxPolarAngle={Math.PI / 2.05}
+          enableDamping
+          dampingFactor={0.05}
         />
-        <Environment preset="sunset" />
-      </Suspense>
+      </Canvas>
 
-      <OrbitControls
-        enablePan={false}
-        enableZoom={false}
-        enableRotate
-        minPolarAngle={Math.PI / 3}
-        maxPolarAngle={Math.PI / 2.05}
-        enableDamping
-        dampingFactor={0.05}
-      />
-    </Canvas>
+      <MovementPad className="absolute bottom-4 right-4 z-10" />
+    </div>
   );
 }

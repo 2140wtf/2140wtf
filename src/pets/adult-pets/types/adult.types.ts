@@ -30,6 +30,7 @@ export const ADULT_FORMS = [
   'glitchfox',
   'biomechmoth',
   'liquidblob',
+  'honey-badger',
 ] as const;
 
 export type AdultForm = typeof ADULT_FORMS[number];

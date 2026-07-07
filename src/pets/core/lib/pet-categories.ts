@@ -10,7 +10,7 @@
 
 import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
 
-export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao';
+export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao' | 'custom';
 
 export interface BreedCategoryMeta {
   id: PetsBreedCategory;
@@ -49,6 +49,11 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
     id: 'bao',
     label: '₿AO Pets',
     description: 'Animated market-born companions unlocked through ₿AO trading energy.',
+  },
+  {
+    id: 'custom',
+    label: 'Custom',
+    description: 'Species you design and host yourself: your own GLB, SVG, and world.',
   },
 ] as const;
 
@@ -95,6 +100,11 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       form: 'liquidblob',
       label: 'Liquid Blob',
     },
+    {
+      kind: 'adult-form',
+      form: 'honey-badger',
+      label: 'Honey Badger',
+    },
   ],
   'ditto-blobbi': [
     { kind: 'adult-form', form: 'bloomi', label: 'Bloomi' },
@@ -115,6 +125,7 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
     { kind: 'adult-form', form: 'starri', label: 'Starri' },
   ],
   bao: BAO_MEMBERS,
+  custom: [],
 };
 
 export function isAdultFormMember(member: CategoryMember): member is AdultFormMember {
@@ -125,6 +136,17 @@ export function getCategoryMembers(category: PetsBreedCategory): CategoryMember[
   return CATEGORY_MEMBERS[category];
 }
 
+/** Build dynamic members for the custom category from the owner's custom species. */
+export function getCustomCategoryMembers(
+  forms: ReadonlyArray<{ id: string; label: string }>,
+): AdultFormMember[] {
+  return forms.map((form) => ({
+    kind: 'adult-form' as const,
+    form: form.id as AdultForm,
+    label: form.label,
+  }));
+}
+
 export function getRandomCategoryMember(category: PetsBreedCategory): CategoryMember {
   const members = getCategoryMembers(category);
   if (members.length === 0) {
@@ -132,6 +154,10 @@ export function getRandomCategoryMember(category: PetsBreedCategory): CategoryMe
   }
   const index = crypto.getRandomValues(new Uint32Array(1))[0] % members.length;
   return members[index];
+}
+
+export function isCustomCategory(category: PetsBreedCategory): boolean {
+  return category === 'custom';
 }
 
 export function getCategoryMeta(category: PetsBreedCategory): BreedCategoryMeta {

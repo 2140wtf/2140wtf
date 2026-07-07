@@ -1,5 +1,5 @@
 /**
- * 2140 PETS 3D Asset Schema
+ * NOSTR PETS 3D Asset Schema
  *
  * Defines how 3D pet/room assets are referenced from Nostr events.
  *

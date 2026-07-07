@@ -1,7 +1,7 @@
 import type { NPool, NostrFilter, NostrEvent } from '@nostrify/nostrify';
 
 /**
- * Relay used exclusively for 2140 PETS data.
+ * Relay used exclusively for NOSTR PETS data.
  *
  * All pet state (kind 31124), Blobbonaut profile (kind 11125), and pet
  * interaction (kind 1124) events are read from and written to this relay so

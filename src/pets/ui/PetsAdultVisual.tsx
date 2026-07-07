@@ -34,6 +34,7 @@ import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
 import { resolveAdultForm } from '@/pets/adult-pets';
 import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
+import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 
 export interface PetsAdultVisualProps {
   /** The Pets data */
@@ -60,6 +61,8 @@ export interface PetsAdultVisualProps {
   bodyEffects?: BodyEffectsSpec;
   /** Horizontal facing direction. `left` mirrors the visual with scaleX(-1). */
   facing?: PetsFacing;
+  /** Optional owner custom species map. If omitted, the current user's profile is used. */
+  customForms?: Record<string, CustomPetForm>;
   /** Additional CSS classes for the container */
   className?: string;
 }
@@ -77,6 +80,7 @@ export function PetsAdultVisual({
   emotion = 'neutral',
   bodyEffects,
   facing,
+  customForms,
   className,
 }: PetsAdultVisualProps) {
   const isSleeping = isPetsSleeping(pets);
@@ -98,9 +102,11 @@ export function PetsAdultVisual({
 
   const baoRecipe = pets.breedAsset ? getBaoRecipeById(pets.breedAsset) : undefined;
   const formClass =
-    baoRecipe
-      ? `pets-bao-${pets.breedAsset}`
-      : `pets-form-${resolveAdultForm(pets)}`;
+    pets.breedCategory === 'custom' && pets.breedAsset
+      ? `pets-form-custom-${pets.breedAsset}`
+      : baoRecipe
+        ? `pets-bao-${pets.breedAsset}`
+        : `pets-form-${resolveAdultForm(pets)}`;
 
   const stateClass = isSleeping
     ? 'pets-state-sleeping'
@@ -152,6 +158,7 @@ export function PetsAdultVisual({
         recipeLabel={recipeLabel}
         emotion={emotion}
         bodyEffects={bodyEffects}
+        customForms={customForms}
         className="size-full"
       />
     </div>
