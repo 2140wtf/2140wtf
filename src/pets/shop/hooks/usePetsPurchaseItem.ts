@@ -167,66 +167,71 @@ export function usePetsPurchaseItem(
       let result;
       try {
         result = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile) => {
-        if (!freshProfile) {
-          throw new Error('Profile not found on relays');
-        }
-
-        if (resolvedCurrency === 'fiat') {
-          if (freshProfile.coins < totalFiatCost) {
-            throw new Error(
-              `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
-            );
+          if (!freshProfile) {
+            throw new Error('Profile not found on relays');
           }
-        } else if (!isBtcSats) {
-          // Demo-sats purchase: the real wallet was not charged, so deduct the
-          // in-game demo sats from the freshest profile.
-          if (freshProfile.sats < totalSatsCost) {
-            throw new Error(
-              `Insufficient demo sats. You need ${totalSatsCost.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
-            );
+
+          if (resolvedCurrency === 'fiat') {
+            if (freshProfile.coins < totalFiatCost) {
+              throw new Error(
+                `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
+              );
+            }
+          } else if (!isBtcSats) {
+            // Demo-sats purchase: the real wallet was not charged, so deduct the
+            // in-game demo sats from the freshest profile.
+            if (freshProfile.sats < totalSatsCost) {
+              throw new Error(
+                `Insufficient demo sats. You need ${totalSatsCost.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
+              );
+            }
           }
-        }
 
-        // Recompute the purchase deltas from the fresh profile so concurrent
-        // updates on other devices are not silently overwritten.
-        const existingIndex = freshProfile.storage.findIndex((s) => s.itemId === itemId);
-        let newStorage: StorageItem[];
+          // Recompute the purchase deltas from the fresh profile so concurrent
+          // updates on other devices are not silently overwritten.
+          const existingIndex = freshProfile.storage.findIndex((s) => s.itemId === itemId);
+          let newStorage: StorageItem[];
 
-        if (existingIndex >= 0) {
-          // Stack: increase quantity of existing item
-          newStorage = [...freshProfile.storage];
-          newStorage[existingIndex] = {
-            ...newStorage[existingIndex],
-            quantity: newStorage[existingIndex].quantity + quantity,
+          if (existingIndex >= 0) {
+            // Stack: increase quantity of existing item
+            newStorage = [...freshProfile.storage];
+            newStorage[existingIndex] = {
+              ...newStorage[existingIndex],
+              quantity: newStorage[existingIndex].quantity + quantity,
+            };
+          } else {
+            // Add: append new item to storage
+            newStorage = [...freshProfile.storage, { itemId, quantity }];
+          }
+
+          // Build updated tags
+          // createStorageTags returns [['storage', 'itemId:quantity'], ...], we need just the values
+          const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
+
+          const updates: Record<string, string | string[]> = {
+            storage: storageValues,
           };
-        } else {
-          // Add: append new item to storage
-          newStorage = [...freshProfile.storage, { itemId, quantity }];
-        }
+          if (resolvedCurrency === 'fiat') {
+            updates.coins = (freshProfile.coins - totalFiatCost).toString();
+          } else if (!isBtcSats) {
+            updates.sats = (freshProfile.sats - totalSatsCost).toString();
+          }
 
-        // Build updated tags
-        // createStorageTags returns [['storage', 'itemId:quantity'], ...], we need just the values
-        const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
-
-        const updates: Record<string, string | string[]> = {
-          storage: storageValues,
-        };
-        if (resolvedCurrency === 'fiat') {
-          updates.coins = (freshProfile.coins - totalFiatCost).toString();
-        } else if (!isBtcSats) {
-          updates.sats = (freshProfile.sats - totalSatsCost).toString();
-        }
-
-        const tags = updateBlobbonautTags(freshProfile.event.tags, updates);
-        return { tags, content: freshProfile.event.content, meta: { currency, totalCost } };
-      });
+          const tags = updateBlobbonautTags(freshProfile.event.tags, updates);
+          return { tags, content: freshProfile.event.content, meta: { currency, totalCost } };
+        });
       } catch (profileError) {
         if (paymentToken && externalWallet) {
           try {
             await externalWallet.receiveToken(paymentToken);
             console.warn('[usePetsPurchaseItem] Refunded Cashu token after profile update failure:', profileError);
           } catch (refundError) {
+            const refundMessage = refundError instanceof Error ? refundError.message : 'unknown error';
             console.error('[usePetsPurchaseItem] Failed to refund Cashu token after profile update failure:', refundError);
+            throw new Error(
+              `Profile update failed and the Cashu refund could not be completed (${refundMessage}). ` +
+                `Save this token if possible: ${paymentToken.slice(0, 40)}...`,
+            );
           }
         }
         throw profileError;

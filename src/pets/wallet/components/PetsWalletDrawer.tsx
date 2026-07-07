@@ -27,7 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { usePetsWallet, type PetsWalletMode } from '@/pets/core/hooks/usePetsWallet';
 import { BaoWalletDrawer } from './BaoWalletDrawer';
-import { normalizeMintUrl } from '@/lib/cashu/cashu';
+import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 
 export function PetsWalletDrawer() {
   const { wallet, mode, setMode, isReal, isTestnet } = usePetsWallet();
@@ -121,7 +121,7 @@ export function PetsWalletDrawer() {
                 </SelectTrigger>
                 <SelectContent>
                   {allMints.map((m) => (
-                    <SelectItem key={normalizeMintUrl(m.url)} value={normalizeMintUrl(m.url)!}>
+                    <SelectItem key={normalizeMintUrl(m.url)} value={safeNormalizeMintUrl(m.url)}>
                       {m.name}
                     </SelectItem>
                   ))}

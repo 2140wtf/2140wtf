@@ -207,14 +207,14 @@ export function getWidgetDefinition(id: string): WidgetDefinition | undefined {
 
 /** Default widgets shown in the right sidebar for new users. */
 export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
+  { id: 'stacker-news' },
   { id: 'pets' },
   { id: 'prediction-markets' },
   { id: 'trends' },
-  { id: 'stacker-news' },
 ];
 
 /** Bump this to reset existing users' right-sidebar widgets to the default. */
-export const SIDEBAR_WIDGETS_VERSION = 5;
+export const SIDEBAR_WIDGETS_VERSION = 6;
 
 /** Category labels for display in the picker. */
 export const WIDGET_CATEGORIES: Record<string, string> = {

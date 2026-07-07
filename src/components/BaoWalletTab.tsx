@@ -34,7 +34,7 @@ import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
-import { normalizeMintUrl } from '@/lib/cashu/cashu';
+import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
@@ -474,7 +474,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
         </SelectTrigger>
         <SelectContent>
           {wallet.allMints.map((m) => (
-            <SelectItem key={normalizeMintUrl(m.url)} value={normalizeMintUrl(m.url)!}>
+            <SelectItem key={normalizeMintUrl(m.url)} value={safeNormalizeMintUrl(m.url)}>
               {m.name}
             </SelectItem>
           ))}
