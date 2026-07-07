@@ -10,6 +10,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// This file intentionally exports a hook that returns a JSX fragment (the
+// on-screen movement pad). Fast refresh does not apply here because the file
+// exports a non-component hook; disable the component-only rule.
+/* eslint-disable react-refresh/only-export-components */
+
 const STEP = 0.15;
 const FLOOR_BOUNDS = 4.5;
 

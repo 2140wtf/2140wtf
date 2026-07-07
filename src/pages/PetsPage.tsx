@@ -637,7 +637,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isRealWallet: isBitcoinPetsWallet,
+    isBitcoinPetsWallet: isBitcoinPetsWallet,
   });
 
   const { mutateAsync: executeEvolve, isPending: isEvolving } = usePetsEvolve({
@@ -645,7 +645,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isRealWallet: isBitcoinPetsWallet,
+    isBitcoinPetsWallet: isBitcoinPetsWallet,
   });
   
   // Handler for evolution (baby -> adult)
