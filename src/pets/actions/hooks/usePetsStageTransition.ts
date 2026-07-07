@@ -236,6 +236,7 @@ export function usePetsHatch({
         kind: KIND_PETS_STATE,
         content: newContent,
         tags: newTags,
+        prev: canonical.companion.event,
       });
 
       updateCompanionEvent(event);
@@ -428,6 +429,7 @@ export function usePetsEvolve({
         kind: KIND_PETS_STATE,
         content: newContent,
         tags: newTags,
+        prev: canonical.companion.event,
       });
 
       updateCompanionEvent(event);
