@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import {
-  createEsploraVerifier,
+  createBaoMempoolVerifier,
   verifyBond,
   type StakeCommitment,
 } from '@bao/frost-court';
@@ -34,7 +34,7 @@ function buildStakeCommitment(input: BondEscrowInput): StakeCommitment {
  * Verify a juror bond UTXO and return a confirmed `StakeCommitment`.
  *
  * For Bitcoin / Liquid rails the hook queries the configured BAO Markets custom signet
- * Esplora endpoint and validates the UTXO amount and confirmations. For rails
+ * Mempool endpoint and validates the UTXO amount and confirmations. For rails
  * that are still demo placeholders it returns a mock confirmed commitment and
  * logs a warning.
  */
@@ -51,11 +51,11 @@ export function useBondEscrow() {
           throw new Error(`Real ${rail} bond verification requires a txid and vout.`);
         }
 
-        const esploraUrl = config.baoCustomSignetEsploraUrl;
-        if (!esploraUrl) {
-          throw new Error('BAO Markets custom signet Esplora URL is not configured.');
+        const mempoolUrl = config.baoCustomSignetMempoolUrl;
+        if (!mempoolUrl) {
+          throw new Error('BAO Markets custom signet Mempool URL is not configured.');
         }
-        const verifier = createEsploraVerifier(esploraUrl);
+        const verifier = createBaoMempoolVerifier(mempoolUrl);
         const result = await verifyBond({
           commitment,
           minAmountSats: input.requiredBondSats ?? input.bondAmountSats,
