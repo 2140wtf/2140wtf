@@ -46,7 +46,7 @@ function effectSummary(effect: ShopItem['effect']): string {
 
 export function PetsShopDrawer({ profile, companion, externalWallet, onCompanionUpdated }: PetsShopDrawerProps) {
   const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated);
-  const { isReal, isTestnet } = usePetsWallet();
+  const { realWallet, baoWallet } = usePetsWallet();
 
   const isBtcMode = profile?.walletMode === 'btc-sats';
   const walletBalance = isBtcMode
@@ -56,7 +56,11 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
   const fiatCoins = profile?.coins ?? 0;
   const demoSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
 
-  const satsLabel = isReal ? 'real sats' : isTestnet ? 'BAO sats' : 'demo sats';
+  // Independent balance tracking for the two rails shown in the shop header.
+  const baoTestnetBalance = baoWallet?.totalBalance ?? profile?.sats ?? 0;
+  const baoTestnetLoading = baoWallet?.loading ?? false;
+  const bitcoinSatsBalance = realWallet?.totalBalance ?? 0;
+  const bitcoinSatsLoading = realWallet?.loading ?? false;
 
   const storageMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -100,10 +104,18 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
             <WalletIcon className="size-3" />
-            {walletLoading && demoSats === 0 ? (
+            {baoTestnetLoading && baoTestnetBalance === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{demoSats.toLocaleString()} {satsLabel}</span>
+              <span>{baoTestnetBalance.toLocaleString()} Bao Testnet</span>
+            )}
+          </Badge>
+          <Badge variant="secondary" className="flex items-center gap-1.5">
+            <WalletIcon className="size-3" />
+            {bitcoinSatsLoading && bitcoinSatsBalance === 0 ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <span>{bitcoinSatsBalance.toLocaleString()} Bitcoin sats</span>
             )}
           </Badge>
         </div>
