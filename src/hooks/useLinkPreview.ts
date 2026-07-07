@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useAppContext } from '@/hooks/useAppContext';
 import { templateUrl } from '@/lib/faviconUrl';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 /** Zod schema for OEmbed responses from the link preview endpoint. */
 const OEmbedSchema = z.object({
@@ -12,7 +13,7 @@ const OEmbedSchema = z.object({
   author_url: z.url().optional(),
   provider_name: z.string().optional(),
   provider_url: z.url().optional(),
-  thumbnail_url: z.url().optional(),
+  thumbnail_url: z.url().optional().transform(sanitizeUrl),
   thumbnail_width: z.number().optional(),
   thumbnail_height: z.number().optional(),
   url: z.url().optional(),

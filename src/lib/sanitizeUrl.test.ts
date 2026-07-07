@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeUrl } from './sanitizeUrl';
+import {
+  sanitizeUrl,
+  isAllowedHttpsUrl,
+  isAllowedRelayUrl,
+  isAllowedShareOrigin,
+  isAllowedUrlTemplate,
+} from './sanitizeUrl';
 
 describe('sanitizeUrl', () => {
   it('returns the href for valid https URLs', () => {
@@ -35,5 +41,80 @@ describe('sanitizeUrl', () => {
 
   it('rejects protocol-relative URLs', () => {
     expect(sanitizeUrl('//evil.com')).toBeUndefined();
+  });
+});
+
+describe('URL allowlist helpers', () => {
+  describe('isAllowedRelayUrl', () => {
+    it('accepts wss:// relays', () => {
+      expect(isAllowedRelayUrl('wss://relay.example.com')).toBe(true);
+    });
+
+    it('rejects ws:// relays outside localhost', () => {
+      expect(isAllowedRelayUrl('ws://relay.example.com')).toBe(false);
+    });
+
+    it('accepts ws:// localhost relays for dev', () => {
+      expect(isAllowedRelayUrl('ws://localhost:7777')).toBe(true);
+      expect(isAllowedRelayUrl('ws://127.0.0.1:7777')).toBe(true);
+    });
+
+    it('rejects non-relay URLs', () => {
+      expect(isAllowedRelayUrl('https://relay.example.com')).toBe(false);
+      expect(isAllowedRelayUrl('javascript:alert(1)')).toBe(false);
+      expect(isAllowedRelayUrl('')).toBe(false);
+    });
+  });
+
+  describe('isAllowedHttpsUrl', () => {
+    it('accepts https:// URLs', () => {
+      expect(isAllowedHttpsUrl('https://example.com')).toBe(true);
+    });
+
+    it('accepts empty values for optional fields', () => {
+      expect(isAllowedHttpsUrl('')).toBe(true);
+      expect(isAllowedHttpsUrl(undefined)).toBe(true);
+    });
+
+    it('rejects http:// outside localhost', () => {
+      expect(isAllowedHttpsUrl('http://example.com')).toBe(false);
+    });
+
+    it('accepts http:// localhost for dev', () => {
+      expect(isAllowedHttpsUrl('http://localhost:3000')).toBe(true);
+    });
+
+    it('rejects javascript: URLs', () => {
+      expect(isAllowedHttpsUrl('javascript:alert(1)')).toBe(false);
+    });
+  });
+
+  describe('isAllowedShareOrigin', () => {
+    it('accepts bare https origins', () => {
+      expect(isAllowedShareOrigin('https://ditto.pub')).toBe(true);
+    });
+
+    it('rejects origins with path or query', () => {
+      expect(isAllowedShareOrigin('https://ditto.pub/path')).toBe(false);
+      expect(isAllowedShareOrigin('https://ditto.pub?x=1')).toBe(false);
+    });
+
+    it('rejects non-https origins', () => {
+      expect(isAllowedShareOrigin('http://ditto.pub')).toBe(false);
+    });
+  });
+
+  describe('isAllowedUrlTemplate', () => {
+    it('accepts empty templates', () => {
+      expect(isAllowedUrlTemplate('')).toBe(true);
+    });
+
+    it('accepts https templates with placeholders', () => {
+      expect(isAllowedUrlTemplate('https://proxy.example.com/{href}')).toBe(true);
+    });
+
+    it('rejects templates starting with javascript:', () => {
+      expect(isAllowedUrlTemplate('javascript:alert({href})')).toBe(false);
+    });
   });
 });

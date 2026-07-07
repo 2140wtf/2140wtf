@@ -11,6 +11,7 @@ import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { parseMusicTrack, parseMusicPlaylist, toAudioTrack } from '@/lib/musicHelpers';
 import { parsePodcastEpisode, parsePodcastTrailer, episodeToAudioTrack, trailerToAudioTrack } from '@/lib/podcastHelpers';
 import { useAuthor } from '@/hooks/useAuthor';
+import { SafeImage } from '@/components/SafeImage';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { formatTime } from '@/lib/formatTime';
 import { cn } from '@/lib/utils';
@@ -79,7 +80,7 @@ export function MusicTrackContent({ event }: { event: NostrEvent }) {
       {/* Cover artwork — clicking anywhere here plays/pauses */}
       {parsed.artwork ? (
         <div className="relative aspect-square max-h-[280px] w-full overflow-hidden cursor-pointer" onClick={handlePlay}>
-          <img src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
+          <SafeImage src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors">
             <PlayButton isPlaying={player.isPlaying} isActive={isNowPlaying} onClick={handlePlay} size="lg" />
           </div>
@@ -122,7 +123,7 @@ export function MusicPlaylistContent({ event }: { event: NostrEvent }) {
       {/* Cover artwork — clicks bubble up to NoteCard for navigation */}
       {parsed.artwork ? (
         <div className="aspect-video max-h-[200px] w-full overflow-hidden">
-          <img src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
+          <SafeImage src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
         </div>
       ) : (
         <div className="flex items-center justify-center bg-gradient-to-br from-primary/10 via-primary/5 to-transparent h-[100px]">
@@ -182,7 +183,7 @@ export function PodcastEpisodeContent({ event }: { event: NostrEvent }) {
       {/* Cover artwork — clicking anywhere here plays/pauses */}
       {parsed.artwork ? (
         <div className="relative aspect-square max-h-[280px] w-full overflow-hidden cursor-pointer" onClick={handlePlay}>
-          <img src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
+          <SafeImage src={parsed.artwork} alt={parsed.title} className="w-full h-full object-cover" loading="lazy" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors">
             <PlayButton isPlaying={player.isPlaying} isActive={isNowPlaying} onClick={handlePlay} size="lg" />
           </div>

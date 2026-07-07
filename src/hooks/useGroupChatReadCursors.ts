@@ -1,18 +1,19 @@
 import { useCallback, useMemo } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useEncryptedSecureLocalStorage } from '@/hooks/useEncryptedSecureLocalStorage';
 import type { GroupChatGroup } from '@/lib/groupChatService';
 
 export function useGroupChatReadCursors() {
   const { user } = useCurrentUser();
   const pubkey = user?.pubkey ?? '';
+  const nip44 = user?.signer?.nip44;
   const storageKey = useMemo(
     () => (pubkey ? `ditto:group-read-cursors:${pubkey}` : 'ditto:group-read-cursors:'),
     [pubkey],
   );
 
-  const [cursors, setCursors] = useLocalStorage<Record<string, number>>(storageKey, {});
+  const [cursors, setCursors] = useEncryptedSecureLocalStorage<Record<string, number>>(storageKey, {}, nip44, pubkey);
 
   const getCursor = useCallback(
     (groupId: string) => cursors[groupId] ?? 0,
