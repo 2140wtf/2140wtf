@@ -2,7 +2,7 @@ import type { NostrEvent, NostrSigner } from '@nostrify/types';
 import { createElement } from 'react';
 import { toast } from '@/hooks/useToast';
 import { NudgeToastContent } from '@/components/SignerToastContent';
-import { type BtcSigner, hasBtcSigning } from '@/lib/bitcoin-signers';
+import { type BtcSigner, hasBtcSigning, type PsbtSigningOptions } from '@/lib/bitcoin-signers';
 import { getKindLabel } from '@/lib/kindLabels';
 
 // ---------------------------------------------------------------------------
@@ -419,8 +419,8 @@ export function signerWithNudge(
   if (hasBtcSigning(signer)) {
     const btcWrapped = wrapped as BtcSigner;
     const btcSigner = signer;
-    btcWrapped.signPsbt = (psbtHex: string) =>
-      run(() => btcSigner.signPsbt(psbtHex), undefined, 'sign');
+    btcWrapped.signPsbt = (psbtHex: string, options?: PsbtSigningOptions) =>
+      run(() => btcSigner.signPsbt(psbtHex, options), undefined, 'sign');
   }
 
   return wrapped;

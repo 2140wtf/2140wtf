@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 
 import { useDmReadCursors } from './useDmReadCursors';
+import { makeNip44 } from '@/test/helpers';
 
 const viewerPubkey = 'v'.repeat(64);
 const otherPubkey = 'o'.repeat(64);
+
+const nip44 = makeNip44();
 
 const conversation = {
   id: 'nip17:aaa',
@@ -14,12 +17,13 @@ const conversation = {
 };
 
 vi.mock('@/hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { pubkey: viewerPubkey } }),
+  useCurrentUser: () => ({ user: { pubkey: viewerPubkey, signer: { nip44 } } }),
 }));
 
 describe('useDmReadCursors', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
   });
 
   it('starts with empty cursors', () => {
@@ -61,13 +65,15 @@ describe('useDmReadCursors', () => {
     expect(result.current.getCursor('b')).toBe(20);
   });
 
-  it('persists cursors to localStorage', () => {
+  it('persists cursors to localStorage', async () => {
     const { result } = renderHook(() => useDmReadCursors());
 
     act(() => {
       result.current.setCursor(conversation.id, 42);
     });
 
-    expect(localStorage.getItem(`ditto:dm-read-cursors:${viewerPubkey}`)).toContain('42');
+    await waitFor(() => {
+      expect(localStorage.getItem(`ditto:dm-read-cursors:${viewerPubkey}`)).toContain('42');
+    });
   });
 });

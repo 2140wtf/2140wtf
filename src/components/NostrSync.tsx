@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useEncryptedSettings, setLocalSettingsSync } from "@/hooks/useEncryptedSettings";
+import { useEncryptedSettings, setLocalSettingsSync, setLocalSettingsCreatedAt, getLocalSettingsCreatedAt } from "@/hooks/useEncryptedSettings";
 import { isSyncDone } from "@/hooks/useInitialSync";
 import { parseBlossomServerList } from "@/lib/appBlossom";
+import { isVerifiedOwnEvent } from "@/lib/nostrEvents";
 import { getStorageKey } from "@/lib/storageKey";
 import { ACTIVE_THEME_KIND, parseActiveProfileTheme } from "@/lib/themeEvent";
 import { DEFAULT_SIDEBAR_WIDGETS } from "@/lib/sidebarWidgets";
+import { isAllowedHttpsUrl, isAllowedRelayUrl, isAllowedUrlTemplate } from "@/lib/sanitizeUrl";
 import type { ThemeConfig } from "@/themes";
 
 
@@ -30,15 +32,16 @@ export function NostrSync() {
   const queryClient = useQueryClient();
   const {
     settings: encryptedSettings,
+    settingsCreatedAt,
     isLoading: settingsLoading,
     recentlyWritten,
   } = useEncryptedSettings();
 
-  // Track the last synced settings timestamp to prevent re-syncing the same data.
-  // Seeded to the remote lastSync on first load so that a stale relay event
-  // (older than what useInitialSync already applied) does not overwrite local
-  // settings after a page reload.
-  const lastSyncedTimestamp = useRef<number>(0);
+  // Track the created_at of the last applied encrypted-settings event so stale
+  // relay events (older than what useInitialSync already applied) cannot roll
+  // local settings back. This is keyed by event.created_at rather than the
+  // client-controlled lastSync field inside the encrypted payload.
+  const lastSyncedCreatedAt = useRef<number>(0);
   const [seededTimestamp, setSeededTimestamp] = useState(false);
   const profileThemeSynced = useRef(false);
 
@@ -55,7 +58,7 @@ export function NostrSync() {
   useEffect(() => {
     const pubkey = user?.pubkey;
     if (prevPubkey.current !== undefined && pubkey !== prevPubkey.current) {
-      lastSyncedTimestamp.current = 0;
+      lastSyncedCreatedAt.current = 0;
       profileThemeSynced.current = false;
       accountSwitched.current = true;
 
@@ -119,7 +122,8 @@ export function NostrSync() {
         [{ kinds: [10002], authors: [user.pubkey], limit: 1 }],
         { signal },
       );
-      return events[0] ?? null;
+      const event = events[0];
+      return event && isVerifiedOwnEvent(event, user.pubkey) ? event : null;
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -138,7 +142,8 @@ export function NostrSync() {
           url: url.replace(/\/+$/, ""),
           read: !marker || marker === "read",
           write: !marker || marker === "write",
-        }));
+        }))
+        .filter((relay) => isAllowedRelayUrl(relay.url));
 
       if (fetchedRelays.length > 0) {
         console.log("Syncing relay list from Nostr:", fetchedRelays);
@@ -163,7 +168,8 @@ export function NostrSync() {
         [{ kinds: [10063], authors: [user.pubkey], limit: 1 }],
         { signal },
       );
-      return events[0] ?? null;
+      const event = events[0];
+      return event && isVerifiedOwnEvent(event, user.pubkey) ? event : null;
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -178,7 +184,9 @@ export function NostrSync() {
     if (
       blossomServerListEvent.created_at > config.blossomServerMetadata.updatedAt
     ) {
-      const fetchedServers = parseBlossomServerList(blossomServerListEvent);
+      const fetchedServers = parseBlossomServerList(blossomServerListEvent).filter(
+        (url) => isAllowedHttpsUrl(url),
+      );
 
       if (fetchedServers.length > 0) {
         console.log(
@@ -252,15 +260,15 @@ export function NostrSync() {
       return;
     }
 
-    // Get the remote sync timestamp
-    const remoteSync = encryptedSettings.lastSync || 0;
+    // Get the verified event's created_at; this is the authoritative freshness
+    // key because it is signed by the user, unlike lastSync inside the payload.
+    const remoteCreatedAt = settingsCreatedAt ?? 0;
 
-    // On first load, mark seeded so this block only runs once.
-    // We intentionally do NOT pre-set lastSyncedTimestamp here — leaving it
-    // at 0 lets the `remoteSync <= lastSyncedTimestamp` guard below fall
-    // through so the settings are actually applied on this first pass.
-    // Line 277 then records the timestamp to prevent re-application.
+    // On first load, seed the cursor from localStorage so a stale relay event
+    // (older than what useInitialSync already applied) does not overwrite local
+    // settings after a page reload.
     if (!seededTimestamp) {
+      lastSyncedCreatedAt.current = getLocalSettingsCreatedAt(config.appId, user.pubkey);
       setSeededTimestamp(true);
     }
 
@@ -270,17 +278,19 @@ export function NostrSync() {
       console.log("Skipping settings sync - recent write");
       // Advance the cursor so this snapshot is never re-applied once the write
       // window expires and the effect fires again.
-      lastSyncedTimestamp.current = remoteSync;
+      if (remoteCreatedAt > 0) {
+        lastSyncedCreatedAt.current = remoteCreatedAt;
+      }
       return;
     }
 
     // Skip if the remote snapshot is older than what we last applied.
-    if (remoteSync <= lastSyncedTimestamp.current) {
+    if (remoteCreatedAt <= lastSyncedCreatedAt.current) {
       return;
     }
 
-    console.log("Syncing encrypted settings from Nostr", remoteSync);
-    lastSyncedTimestamp.current = remoteSync;
+    console.log("Syncing encrypted settings from Nostr", remoteCreatedAt);
+    lastSyncedCreatedAt.current = remoteCreatedAt;
     const isSwitch = accountSwitched.current;
     accountSwitched.current = false;
 
@@ -410,6 +420,7 @@ export function NostrSync() {
 
       if (
         encryptedSettings.corsProxy &&
+        isAllowedUrlTemplate(encryptedSettings.corsProxy) &&
         encryptedSettings.corsProxy !== current.corsProxy
       ) {
         updates.corsProxy = encryptedSettings.corsProxy;
@@ -418,6 +429,7 @@ export function NostrSync() {
 
       if (
         encryptedSettings.faviconUrl &&
+        isAllowedUrlTemplate(encryptedSettings.faviconUrl) &&
         encryptedSettings.faviconUrl !== current.faviconUrl
       ) {
         updates.faviconUrl = encryptedSettings.faviconUrl;
@@ -426,6 +438,7 @@ export function NostrSync() {
 
       if (
         encryptedSettings.linkPreviewUrl &&
+        isAllowedUrlTemplate(encryptedSettings.linkPreviewUrl) &&
         encryptedSettings.linkPreviewUrl !== current.linkPreviewUrl
       ) {
         updates.linkPreviewUrl = encryptedSettings.linkPreviewUrl;
@@ -488,12 +501,16 @@ export function NostrSync() {
 
     // Persist the sync timestamp so the next page load can render immediately
     // from localStorage without showing the spinner.
-    if (user && remoteSync > 0) {
-      setLocalSettingsSync(config.appId, user.pubkey, remoteSync);
+    if (user && encryptedSettings.lastSync && encryptedSettings.lastSync > 0) {
+      setLocalSettingsSync(config.appId, user.pubkey, encryptedSettings.lastSync);
+    }
+    if (user && remoteCreatedAt > 0) {
+      setLocalSettingsCreatedAt(config.appId, user.pubkey, remoteCreatedAt);
     }
   }, [
     user,
     encryptedSettings,
+    settingsCreatedAt,
     settingsLoading,
     updateConfig,
     recentlyWritten,
@@ -523,7 +540,10 @@ export function NostrSync() {
 
         if (events.length === 0) return;
 
-        const parsed = parseActiveProfileTheme(events[0]);
+        const event = events[0];
+        if (!isVerifiedOwnEvent(event, user.pubkey)) return;
+
+        const parsed = parseActiveProfileTheme(event);
         if (!parsed) return;
 
         // Convert ActiveProfileTheme to ThemeConfig

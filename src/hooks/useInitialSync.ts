@@ -2,11 +2,12 @@ import { useNostr } from "@nostrify/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseBlossomServerList } from "@/lib/appBlossom";
+import { isVerifiedOwnEvent } from "@/lib/nostrEvents";
 import { EncryptedSettingsSchema } from "@/lib/schemas";
 import { getStorageKey } from "@/lib/storageKey";
 import { useAppContext } from "./useAppContext";
 import { useCurrentUser } from "./useCurrentUser";
-import { type EncryptedSettings, setLocalSettingsSync } from "./useEncryptedSettings";
+import { type EncryptedSettings, setLocalSettingsSync, setLocalSettingsCreatedAt } from "./useEncryptedSettings";
 import {
   type MuteListItem,
   parseMuteTags,
@@ -145,8 +146,8 @@ export function useInitialSync() {
         // Abort if the component unmounted or the account changed while fetching.
         if (cancelled) return;
 
-        // Apply relay list if found
-        if (relayEvents.length > 0) {
+        // Apply relay list if found and verified (author == current user)
+        if (relayEvents.length > 0 && isVerifiedOwnEvent(relayEvents[0], user.pubkey)) {
           const event = relayEvents[0];
           // Seed into cache so NostrSync can read it without re-fetching
           queryClient.setQueryData(["relayList", user.pubkey], event);
@@ -172,8 +173,8 @@ export function useInitialSync() {
           }
         }
 
-        // Apply BUD-03 Blossom server list (kind 10063) if found
-        if (blossomServerEvents.length > 0) {
+        // Apply BUD-03 Blossom server list (kind 10063) if found and verified
+        if (blossomServerEvents.length > 0 && isVerifiedOwnEvent(blossomServerEvents[0], user.pubkey)) {
           const event = blossomServerEvents[0];
           // Seed into cache so NostrSync can read it without re-fetching
           queryClient.setQueryData(["blossomServerList", user.pubkey], event);
@@ -193,11 +194,12 @@ export function useInitialSync() {
           }
         }
 
-        // Decrypt and apply encrypted settings if found
+        // Decrypt and apply encrypted settings if found and verified
         if (
           settingsEvents.length > 0 &&
           settingsEvents[0].content &&
-          user.signer.nip44
+          user.signer.nip44 &&
+          isVerifiedOwnEvent(settingsEvents[0], user.pubkey)
         ) {
           const settingsEvent = settingsEvents[0];
 
@@ -289,6 +291,8 @@ export function useInitialSync() {
             if (parsed.lastSync) {
               setLocalSettingsSync(config.appId, user.pubkey, parsed.lastSync);
             }
+            // Persist the event created_at so NostrSync can order by event time.
+            setLocalSettingsCreatedAt(config.appId, user.pubkey, settingsEvent.created_at);
 
             foundSettings = true;
           } catch (error) {
@@ -305,8 +309,8 @@ export function useInitialSync() {
         // awaiting network/decryption, don't write stale state.
         if (cancelled) return;
 
-        // Seed mute list cache if found
-        if (muteEvents.length > 0) {
+        // Seed mute list cache if found and verified
+        if (muteEvents.length > 0 && isVerifiedOwnEvent(muteEvents[0], user.pubkey)) {
           const muteEvent = muteEvents[0];
 
           // Seed the raw event into the muteList query cache

@@ -37,6 +37,34 @@ describe('isTokenLockedToPubkey', () => {
   it('returns false for an invalid token', () => {
     expect(isTokenLockedToPubkey('not-a-token', escrowPubkey)).toBe(false);
   });
+
+  it('rejects array secrets with extra NUT-11 tags by default', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', escrowPubkey, ['refund', otherPubkey]]), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(false);
+  });
+
+  it('accepts array secrets with explicitly allowed extra tags', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', escrowPubkey, ['refund', otherPubkey]]), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(token, escrowPubkey, { allowedTags: ['refund'] })).toBe(true);
+  });
+
+  it('rejects object secrets with unexpected keys', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify({ pubkey: escrowPubkey, refund: otherPubkey }), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(false);
+  });
+
+  it('accepts object secrets with only the pubkey key', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify({ pubkey: escrowPubkey }), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(true);
+  });
 });
 
 describe('getTokenAmount', () => {

@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
 import { useGroupChatHasUnread } from './useGroupChatHasUnread';
+import { makeNip44 } from '@/test/helpers';
 
 const viewerPubkey = 'v'.repeat(64);
 const otherPubkey = 'o'.repeat(64);
 
+const nip44 = makeNip44();
+
 vi.mock('@/hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { pubkey: viewerPubkey } }),
+  useCurrentUser: () => ({ user: { pubkey: viewerPubkey, signer: { nip44 } } }),
 }));
 
 vi.mock('@/hooks/useGroupChatContext', () => ({
@@ -97,7 +100,7 @@ describe('useGroupChatHasUnread', () => {
     expect(result.current.unreadCount).toBe(0);
   });
 
-  it('counts messages newer than the stored cursor as unread', () => {
+  it('counts messages newer than the stored cursor as unread', async () => {
     localStorage.setItem(
       `ditto:group-read-cursors:${viewerPubkey}`,
       JSON.stringify({ g1: 50 }),
@@ -145,7 +148,9 @@ describe('useGroupChatHasUnread', () => {
     });
 
     const { result } = renderHook(() => useGroupChatHasUnread());
+    await waitFor(() => {
+      expect(result.current.unreadCount).toBe(1);
+    });
     expect(result.current.hasUnread).toBe(true);
-    expect(result.current.unreadCount).toBe(1);
   });
 });

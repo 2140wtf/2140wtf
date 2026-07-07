@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import { isNostrId } from "@/lib/nostrId";
+import { isVerifiedEvent } from "@/lib/nostrEvents";
 import {
   BAO_COURT_DISPUTE_KIND,
   BAO_COURT_SELECTION_KIND,
@@ -33,6 +34,12 @@ export interface BaoCourtDispute extends DisputeCase {
 
 function parseBaoCourtDispute(event: NostrEvent): BaoCourtDispute | null {
   if (event.kind !== BAO_COURT_DISPUTE_KIND) return null;
+
+  try {
+    if (!isVerifiedEvent(event)) return null;
+  } catch {
+    return null;
+  }
 
   const tags = event.tags ?? [];
   const getTag = (name: string): string | undefined =>
@@ -271,6 +278,7 @@ export function useBaoCourtSelection(
         };
         const events = await relay.query([filter], { signal: controller.signal });
         for (const event of events) {
+          if (!isVerifiedEvent(event)) continue;
           const validation = validateSelectionEvent(event, disputeId);
           if (!validation.valid) continue;
           const parsed = parseSelectionEvent(event);

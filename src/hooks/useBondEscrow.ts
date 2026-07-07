@@ -1,4 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
+import * as btc from '@scure/btc-signer';
+import { hex } from '@scure/base';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import {
@@ -31,6 +33,21 @@ function buildStakeCommitment(input: BondEscrowInput): StakeCommitment {
 }
 
 /**
+ * Derive the expected Bitcoin scriptPubKey (hex) from a bond address. Returns
+ * undefined for non-Bitcoin rails or if the address cannot be decoded.
+ */
+function expectedBondScriptPubKey(rail: string, address: string): string | undefined {
+  if (rail !== 'bitcoin') return undefined;
+  try {
+    const decoded = btc.Address(btc.NETWORK).decode(address);
+    if (!decoded) return undefined;
+    return hex.encode(btc.OutScript.encode(decoded));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Verify a juror bond UTXO and return a confirmed `StakeCommitment`.
  *
  * For Bitcoin / Liquid rails the hook queries the configured BAO Markets custom signet
@@ -56,8 +73,13 @@ export function useBondEscrow() {
           throw new Error('BAO Markets custom signet Mempool URL is not configured.');
         }
         const verifier = createBaoMempoolVerifier(mempoolUrl);
+        const expectedScriptPubKey = expectedBondScriptPubKey(rail, input.bondAddress);
+        if (rail === 'bitcoin' && !expectedScriptPubKey) {
+          throw new Error('Failed to derive expected scriptPubKey from bond address.');
+        }
         const result = await verifyBond({
           commitment,
+          expectedScriptPubKey,
           minAmountSats: input.requiredBondSats ?? input.bondAmountSats,
           minConfirmations: input.minConfirmations ?? 1,
           verifier,

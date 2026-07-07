@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 
 import { useGroupChatReadCursors } from './useGroupChatReadCursors';
+import { makeNip44 } from '@/test/helpers';
 
 const viewerPubkey = 'v'.repeat(64);
+
+const nip44 = makeNip44();
 
 const group = {
   nostrGroupId: 'g1',
@@ -17,12 +20,13 @@ const group = {
 };
 
 vi.mock('@/hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { pubkey: viewerPubkey } }),
+  useCurrentUser: () => ({ user: { pubkey: viewerPubkey, signer: { nip44 } } }),
 }));
 
 describe('useGroupChatReadCursors', () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.clearAllMocks();
   });
 
   it('starts with empty cursors', () => {
@@ -72,13 +76,15 @@ describe('useGroupChatReadCursors', () => {
     expect(result.current.getCursor('b')).toBe(0);
   });
 
-  it('persists cursors to localStorage', () => {
+  it('persists cursors to localStorage', async () => {
     const { result } = renderHook(() => useGroupChatReadCursors());
 
     act(() => {
       result.current.setCursor(group.nostrGroupId, 42);
     });
 
-    expect(localStorage.getItem(`ditto:group-read-cursors:${viewerPubkey}`)).toContain('42');
+    await waitFor(() => {
+      expect(localStorage.getItem(`ditto:group-read-cursors:${viewerPubkey}`)).toContain('42');
+    });
   });
 });

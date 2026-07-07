@@ -4,6 +4,7 @@ import { AppContext, type AppConfig, type AppContextType, type Theme } from '@/c
 import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfig, type ThemeConfig, type ThemesConfig } from '@/themes';
 import { AppConfigSchema } from '@/lib/schemas';
 import { loadAndApplyFont, loadAndApplyTitleFont } from '@/lib/fontLoader';
+import { isAllowedHttpsUrl } from '@/lib/sanitizeUrl';
 
 import { z } from 'zod';
 
@@ -72,7 +73,9 @@ export function AppProvider(props: AppProviderProps) {
         if (!result.blossomServerMetadata) {
           const legacyServers = parsed.blossomServers;
           if (Array.isArray(legacyServers)) {
-            const parsed2 = z.array(z.string().url()).safeParse(legacyServers);
+            const parsed2 = z
+              .array(z.string().url().refine(isAllowedHttpsUrl, { message: 'Blossom server URL must use https://' }))
+              .safeParse(legacyServers);
             if (parsed2.success && parsed2.data.length > 0) {
               result.blossomServerMetadata = {
                 servers: parsed2.data,

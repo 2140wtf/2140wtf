@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
@@ -124,6 +125,9 @@ export function useOnchainZap(
       if (!Number.isFinite(amountSats) || amountSats <= 0) {
         throw new Error('Invalid amount.');
       }
+      if (!verifyEvent(target)) {
+        throw new Error('Payment target event failed signature verification.');
+      }
       // Resolve the recipient. A NIP-A3 Bitcoin payment target (if present)
       // overrides the derived Taproot address. A silent-payment (`sp1…`)
       // override switches the send onto the BIP-375 SP rail and suppresses
@@ -233,7 +237,15 @@ export function useOnchainZap(
 
       // Sign
       setProgress('signing');
-      const signedHex = await signPsbt(psbtHex);
+      const changeAddress = useSilentPayment
+        ? senderAddress
+        : isHd && hdWallet.changeAddress
+          ? hdWallet.changeAddress.address
+          : senderAddress;
+      const signedHex = await signPsbt(psbtHex, {
+        paymentIntents: [{ address: recipientAddress, amountSats }],
+        changeAddresses: [changeAddress],
+      });
       const txHex = useSilentPayment
         ? extractTxFromSignedPsbtV2(signedHex)
         : finalizePsbt(signedHex);
