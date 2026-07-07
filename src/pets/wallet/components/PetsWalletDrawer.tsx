@@ -15,7 +15,7 @@ import { BaoWalletDrawer } from './BaoWalletDrawer';
 import { CashuWalletDrawer } from './CashuWalletDrawer';
 
 export function PetsWalletDrawer() {
-  const { wallet, mode, setMode, isBitcoin, isTestnet } = usePetsWallet();
+  const { wallet, mode, setMode, isTestnet } = usePetsWallet();
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
     () => [
