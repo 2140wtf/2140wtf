@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize, Settings } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -68,7 +68,7 @@ import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
 import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
-import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
+import { getLiveShopItems, getOwnedLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
 import { usePetsPurchaseItem } from '@/pets/shop/hooks/usePetsPurchaseItem';
 import { PetsShopDrawer } from '@/pets/shop/components/PetsShopDrawer';
 import { PetsWalletDrawer } from '@/pets/wallet/components/PetsWalletDrawer';
@@ -2172,12 +2172,12 @@ function PetsDashboard({
   const isKitchenDisabled = isPublishing || actionInProgress !== null || isUsingItem;
 
   const foodItems = useMemo(() => {
-    const items = getLiveShopItems().filter(i => i.type === 'food');
+    const items = getOwnedLiveShopItems(profile).filter(i => i.type === 'food');
     return items.map(item => ({
       ...item,
       statChanges: previewStatChangesWithSegments(currentStats, item.effect, companion.stage),
     }));
-  }, [currentStats, companion.stage]);
+  }, [profile, currentStats, companion.stage]);
 
   const handleFeedItem = useCallback((itemId: string) => {
     const action = getActionForItem(itemId);
@@ -2807,6 +2807,7 @@ function HomeBar({
   handleUseItemFromTab,
   handleDirectAction,
   setShowPhotoModal,
+  profile,
   guideHighlightId,
   carouselKeyPrefix,
 }: RoomBottomBarProps) {
@@ -2815,7 +2816,7 @@ function HomeBar({
   const handleFocusChange = useCallback((entry: CarouselEntry) => setStoredFocusId(entry.id), [setStoredFocusId]);
 
   const carouselItems = useMemo<CarouselEntry[]>(() => {
-    const toys = getLiveShopItems()
+    const toys = getOwnedLiveShopItems(profile)
       .filter(i => i.type === 'toy')
       .map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name, meta: `${i.price} sats` }));
     return [
@@ -2831,7 +2832,7 @@ function HomeBar({
         label: 'Sing',
       },
     ];
-  }, []);
+  }, [profile]);
 
   const isDisabled = isPublishing || actionInProgress !== null || isUsingItem;
 
@@ -2921,6 +2922,7 @@ function maybeOverfeedPoop(
 function KitchenBar({
   companion,
   currentStats,
+  profile,
   isUsingItem,
   usingItemId,
   isPublishing,
@@ -2942,12 +2944,12 @@ function KitchenBar({
 
   // Energy drink item (tap-only, no drag, no overfeed)
   const energyDrinkItems = useMemo(() => {
-    const items = getLiveShopItems().filter(i => i.id === 'nrg_drink');
+    const items = getOwnedLiveShopItems(profile).filter(i => i.id === 'nrg_drink');
     return items.map(item => ({
       ...item,
       statChanges: previewStatChangesWithSegments(currentStats, item.effect, companion.stage),
     }));
-  }, [currentStats, companion.stage]);
+  }, [profile, currentStats, companion.stage]);
 
   // Combined items for the fridge grid (food + energy drink)
   const allKitchenItems = useMemo(() => [...(foodItems ?? []), ...energyDrinkItems], [foodItems, energyDrinkItems]);
@@ -3027,23 +3029,24 @@ function CareBar({
   usingItemId,
   isPublishing,
   actionInProgress,
+  profile,
   handleUseItemFromTab,
   guideHighlightId,
   carouselKeyPrefix,
 }: RoomBottomBarProps) {
-  const allShopItems = useMemo(() => getLiveShopItems(), []);
-  const hygieneItems = useMemo(() => allShopItems.filter(i => i.type === 'hygiene'), [allShopItems]);
-  const treatItem = useMemo(() => allShopItems.find(i => i.type === 'food'), [allShopItems]);
+  const ownedItems = useMemo(() => getOwnedLiveShopItems(profile), [profile]);
+  const hygieneItems = useMemo(() => ownedItems.filter(i => i.type === 'hygiene'), [ownedItems]);
+  const treatItem = useMemo(() => ownedItems.find(i => i.type === 'food'), [ownedItems]);
 
   const carouselEntries = useMemo<CarouselEntry[]>(() => {
     const hygiene = hygieneItems
       .filter(i => i.id !== 'hyg_towel')
       .map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name, meta: 'hygiene' }));
-    const medicine = allShopItems
+    const medicine = ownedItems
       .filter(i => i.type === 'medicine')
       .map(i => ({ id: i.id, icon: <span>{i.icon}</span>, label: i.name, meta: 'medicine' }));
     return [...hygiene, ...medicine];
-  }, [hygieneItems, allShopItems]);
+  }, [hygieneItems, ownedItems]);
 
   const [storedFocusId, setStoredFocusId] = useLocalStorage<string | null>(`${carouselKeyPrefix}:care`, null);
   const [focusedMeta, setFocusedMeta] = useState(() => {
@@ -3638,6 +3641,10 @@ function PetsTabContent({
         <Link to={`/${petsNaddr}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
           <ExternalLink className="size-5" />
           <span className="text-[10px]">View</span>
+        </Link>
+        <Link to="/settings/pets" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+          <Settings className="size-5" />
+          <span className="text-[10px]">Settings</span>
         </Link>
         <Link to="/pets/battle" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
           <Swords className="size-5" />

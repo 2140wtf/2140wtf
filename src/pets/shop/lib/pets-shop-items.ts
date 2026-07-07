@@ -1,6 +1,7 @@
 // src/pets/shop/lib/pets-shop-items.ts
 
 import type { ShopItem, ShopItemCategory } from '../types/shop.types';
+import type { BlobbonautProfile } from '@/pets/core/lib/pets';
 
 /**
  * Complete shop item catalog for the Pets Shop.
@@ -213,6 +214,19 @@ export function getShopItemsByType(type: ShopItemCategory): ShopItem[] {
  */
 export function getLiveShopItems(): ShopItem[] {
   return PETS_SHOP_ITEMS.filter(item => item.status === 'live');
+}
+
+/**
+ * Get all live (non-disabled) shop items the user currently owns.
+ * Only items with a positive quantity in profile.storage are returned,
+ * so carousels never display items that cannot actually be used.
+ */
+export function getOwnedLiveShopItems(profile: BlobbonautProfile | null): ShopItem[] {
+  const storage = profile?.storage ?? [];
+  const ownedIds = new Set(
+    storage.filter((s) => s.quantity > 0).map((s) => s.itemId),
+  );
+  return getLiveShopItems().filter((item) => ownedIds.has(item.id));
 }
 
 /**
