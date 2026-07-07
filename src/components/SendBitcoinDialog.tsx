@@ -582,7 +582,15 @@ export function SendBitcoinDialog({ isOpen, onClose, btcPrice, initialUri }: Sen
       }
 
       setProgress('signing');
-      const signedHex = await signPsbt(psbtHex);
+      const changeAddress = recipient.kind === 'sp'
+        ? senderAddress
+        : isHd && hdWallet?.changeAddress
+          ? hdWallet.changeAddress.address
+          : senderAddress;
+      const signedHex = await signPsbt(psbtHex, {
+        paymentIntents: [{ address: recipient.address, amountSats }],
+        changeAddresses: [changeAddress],
+      });
       // BIP-375 signers return a finalized PSBT v2; the legacy signer path
       // returns a PSBT v0 we hand to `finalizePsbt`. We pick by the input
       // PSBT shape we sent.

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const SYNC_DEBOUNCE_MS = 5000;
 
@@ -38,9 +39,24 @@ export function cursorsEqual(
  * given conversation.
  */
 export function useDmReadCursorsSync() {
-  const { settings, updateSettings, isLoading, hasNip44Support } = useEncryptedSettings();
+  const { settings, settingsCreatedAt, updateSettings, isLoading, hasNip44Support } = useEncryptedSettings();
   const { cursors, setCursors } = useDmReadCursors();
+  const { user } = useCurrentUser();
   const lastLocalWriteTs = useRef(0);
+  // Track the created_at of the last remote settings event we merged cursors
+  // from, so a stale relay event cannot roll read cursors back.
+  const lastMergedCreatedAt = useRef(0);
+  const prevPubkey = useRef<string | undefined>(undefined);
+
+  // Reset the ordering cursor when the user changes so the new account's
+  // settings are applied immediately.
+  useEffect(() => {
+    const pubkey = user?.pubkey;
+    if (prevPubkey.current !== undefined && pubkey !== prevPubkey.current) {
+      lastMergedCreatedAt.current = 0;
+    }
+    prevPubkey.current = pubkey;
+  }, [user?.pubkey]);
 
   // Merge remote cursors into local state when encrypted settings load or update.
   // Skip the merge right after we wrote local -> encrypted to avoid a useless loop.
@@ -49,11 +65,16 @@ export function useDmReadCursorsSync() {
     const remote = settings?.dmReadCursors;
     if (!remote || Object.keys(remote).length === 0) return;
 
+    const remoteCreatedAt = settingsCreatedAt ?? 0;
+    if (remoteCreatedAt <= 0) return;
+    if (remoteCreatedAt <= lastMergedCreatedAt.current) return;
+
     const remoteLastSync = settings?.lastSync ?? 0;
     if (remoteLastSync > 0 && remoteLastSync <= lastLocalWriteTs.current) return;
 
+    lastMergedCreatedAt.current = remoteCreatedAt;
     setCursors((prev) => mergeCursors(prev, remote));
-  }, [settings?.dmReadCursors, settings?.lastSync, isLoading, hasNip44Support, setCursors]);
+  }, [settings?.dmReadCursors, settingsCreatedAt, settings?.lastSync, isLoading, hasNip44Support, setCursors]);
 
   // Debounced local -> encrypted sync.
   useEffect(() => {

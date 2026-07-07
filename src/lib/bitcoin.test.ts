@@ -593,6 +593,73 @@ describe('NSecSignerBtc.signPsbt — BIP-375 path', () => {
 
     await expect(signer.signPsbt(maliciousPsbt)).rejects.toThrow(/not a change output/i);
   });
+
+  it('accepts a BIP-375 PSBT whose output matches the supplied payment intent', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+
+    const { psbtHex } = buildUnsignedSilentPaymentPsbt(
+      senderPubkey,
+      REFERENCE_SP_ADDRESS,
+      40_000,
+      utxos,
+      5,
+    );
+
+    const signed = await signer.signPsbt(psbtHex, {
+      paymentIntents: [{ address: REFERENCE_SP_ADDRESS, amountSats: 40_000 }],
+    });
+
+    const txHex = extractTxFromSignedPsbtV2(signed);
+    expect(txHex.startsWith('020000000001')).toBe(true);
+  });
+
+  it('rejects a BIP-375 PSBT whose output amount does not match the payment intent', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+
+    const { psbtHex } = buildUnsignedSilentPaymentPsbt(
+      senderPubkey,
+      REFERENCE_SP_ADDRESS,
+      40_000,
+      utxos,
+      5,
+    );
+
+    await expect(
+      signer.signPsbt(psbtHex, {
+        paymentIntents: [{ address: REFERENCE_SP_ADDRESS, amountSats: 39_999 }],
+      }),
+    ).rejects.toThrow(/BIP-375 transaction/i);
+  });
 });
 
 import * as btc from '@scure/btc-signer';
@@ -699,6 +766,95 @@ describe('signPsbtLocal', () => {
 
     const signed = signPsbtLocal(psbtHex, SENDER_NSEC_HEX);
     expect(() => finalizePsbt(signed)).not.toThrow();
+  });
+
+  it('accepts payment intents that match the transaction outputs', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+    const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+    const amountSats = 40_000;
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+
+    const { psbtHex } = buildUnsignedPsbt(senderPubkey, recipientAddress, amountSats, utxos, 5);
+
+    expect(() =>
+      signPsbtLocal(psbtHex, SENDER_NSEC_HEX, {
+        paymentIntents: [{ address: recipientAddress, amountSats }],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects payment intents whose amount does not match the output', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const senderPubkey = await signer.getPublicKey();
+    const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+    const utxos: UTXO[] = [
+      {
+        txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+        vout: 0,
+        value: 100_000,
+        status: { confirmed: true },
+      },
+    ];
+
+    const { psbtHex } = buildUnsignedPsbt(senderPubkey, recipientAddress, 40_000, utxos, 5);
+
+    expect(() =>
+      signPsbtLocal(psbtHex, SENDER_NSEC_HEX, {
+        paymentIntents: [{ address: recipientAddress, amountSats: 39_999 }],
+      }),
+    ).toThrow(/approved payment intent/);
+  });
+
+  it('rejects unexpected extra outputs beyond the payment intent and change', async () => {
+    function hexToBytes(h: string): Uint8Array {
+      const out = new Uint8Array(h.length / 2);
+      for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+      return out;
+    }
+
+    const signer = new NSecSignerBtc(hexToBytes(SENDER_NSEC_HEX));
+    const _senderPubkey = await signer.getPublicKey();
+    const senderPrivKey = hexToBytes(SENDER_NSEC_HEX);
+    const senderInternal = btc.utils.pubSchnorr(senderPrivKey);
+    const senderScript = btc.p2tr(senderInternal, undefined, btc.NETWORK).script;
+    const recipientAddress = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+    const otherAddress = 'bc1pjxzw9tm6qatyapu3c409dg8k23p4hjlk4ehwwlsum3emjqsaetrqppyu2z';
+
+    const tx = new btc.Transaction();
+    tx.addInput({
+      txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+      index: 0,
+      witnessUtxo: { amount: 100_000n, script: senderScript },
+      tapInternalKey: senderInternal,
+    });
+    tx.addOutputAddress(recipientAddress, 40_000n, btc.NETWORK);
+    tx.addOutputAddress(otherAddress, 10_000n, btc.NETWORK);
+
+    expect(() =>
+      signPsbtLocal(hex.encode(tx.toPSBT()), SENDER_NSEC_HEX, {
+        paymentIntents: [{ address: recipientAddress, amountSats: 40_000 }],
+      }),
+    ).toThrow(/approved payment intent/);
   });
 });
 

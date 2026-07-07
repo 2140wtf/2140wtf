@@ -2,7 +2,10 @@ import { ExternalLink, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ExternalFavicon } from '@/components/ExternalFavicon';
+import { SafeImage } from '@/components/SafeImage';
+import { SafeLink } from '@/components/SafeLink';
 import { useLinkPreview } from '@/hooks/useLinkPreview';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 interface LinkPreviewProps {
@@ -31,11 +34,17 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
   const { data, isLoading } = useLinkPreview(url);
   const navigate = useNavigate();
 
+  const safeHref = sanitizeUrl(url);
+
   if (isLoading) {
     return <LinkPreviewSkeleton className={className} />;
   }
 
-  const domain = data?.provider_name || displayDomain(url);
+  if (!safeHref) {
+    return null;
+  }
+
+  const domain = data?.provider_name || displayDomain(safeHref);
   const image = data?.thumbnail_url;
 
   const handleClick = (e: React.MouseEvent) => {
@@ -47,7 +56,7 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
 
   return (
     <a
-      href={url}
+      href={safeHref}
       target={navigateToComments ? undefined : '_blank'}
       rel={navigateToComments ? undefined : 'noopener noreferrer'}
       className={cn(
@@ -60,7 +69,7 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
       {/* Thumbnail image */}
       {image && !hideImage && (
         <div className="w-full overflow-hidden">
-          <img
+          <SafeImage
             src={image}
             alt=""
             className="w-full h-[180px] object-cover"
@@ -82,8 +91,8 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
 
           {showActions && (navigateToComments ? (
             /* Open externally — card navigates to /i/, so offer the external link */
-            <a
-              href={url}
+            <SafeLink
+              href={safeHref}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(
@@ -95,7 +104,7 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
             >
               <ExternalLink className="size-3" />
               <span>Open</span>
-            </a>
+            </SafeLink>
           ) : (
             /* Discuss — card opens externally, so offer navigation to /i/ */
             <button

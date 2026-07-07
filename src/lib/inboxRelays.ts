@@ -1,4 +1,5 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
+import { isVerifiedEvent } from '@/lib/nostrEvents';
 
 /**
  * Extract read (inbox) relay URLs from a NIP-65 (kind 10002) relay list event.
@@ -57,6 +58,9 @@ export async function sendToInboxRelays(
     // Collect all unique inbox relay URLs
     const inboxRelays = new Set<string>();
     for (const relayListEvent of relayListEvents) {
+      // Verify signature and confirm the relay list belongs to one of the tagged users.
+      if (!isVerifiedEvent(relayListEvent)) continue;
+      if (!uniquePubkeys.includes(relayListEvent.pubkey)) continue;
       for (const url of extractReadRelays(relayListEvent)) {
         inboxRelays.add(url);
       }

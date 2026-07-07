@@ -3,7 +3,7 @@ import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 
-import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM } from './cashu';
+import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl } from './cashu';
 
 describe('isFeeWithinMaxPpm', () => {
   it('allows zero fees', () => {
@@ -26,6 +26,43 @@ describe('isFeeWithinMaxPpm', () => {
   it('uses the default 5% cap when ppm is omitted', () => {
     expect(isFeeWithinMaxPpm(50_000, 1_000_000)).toBe(true);
     expect(isFeeWithinMaxPpm(50_001, 1_000_000)).toBe(false);
+  });
+});
+
+describe('isAllowedMintUrl', () => {
+  it('allows HTTPS mint URLs', () => {
+    expect(isAllowedMintUrl('https://mint.example.com')).toBe(true);
+  });
+
+  it('rejects HTTP mint URLs', () => {
+    expect(isAllowedMintUrl('http://mint.example.com')).toBe(false);
+  });
+
+  it('rejects non-HTTP(S) schemes', () => {
+    expect(isAllowedMintUrl('ftp://mint.example.com')).toBe(false);
+    expect(isAllowedMintUrl('javascript:alert(1)')).toBe(false);
+  });
+
+  it('rejects localhost and private networks', () => {
+    expect(isAllowedMintUrl('https://localhost')).toBe(false);
+    expect(isAllowedMintUrl('https://127.0.0.1')).toBe(false);
+    expect(isAllowedMintUrl('https://10.0.0.1')).toBe(false);
+    expect(isAllowedMintUrl('https://192.168.1.1')).toBe(false);
+  });
+
+  it('requires membership in the allow-list when one is provided', () => {
+    const allowed = ['https://trusted.mint.com', 'https://another.mint.com'];
+    expect(isAllowedMintUrl('https://trusted.mint.com', allowed)).toBe(true);
+    expect(isAllowedMintUrl('https://untrusted.mint.com', allowed)).toBe(false);
+  });
+
+  it('normalizes allow-list entries before comparing', () => {
+    const allowed = ['https://trusted.mint.com/'];
+    expect(isAllowedMintUrl('https://trusted.mint.com', allowed)).toBe(true);
+  });
+
+  it('rejects invalid URLs', () => {
+    expect(isAllowedMintUrl('not a url')).toBe(false);
   });
 });
 

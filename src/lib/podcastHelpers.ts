@@ -1,6 +1,7 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import type { AudioTrack } from '@/contexts/audioPlayerContextDef';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 /** Gets a tag value by name. */
 function getTag(tags: string[][], name: string): string | undefined {
@@ -46,7 +47,8 @@ export function parsePodcastEpisode(event: NostrEvent): ParsedPodcastEpisode | n
 
   // The spec uses ["audio", "url", "mime"] tag
   const audioTag = event.tags.find(([n]) => n === 'audio');
-  const audioUrl = audioTag?.[1] ?? imeta.url ?? getTag(event.tags, 'url') ?? getTag(event.tags, 'media');
+  const rawAudioUrl = audioTag?.[1] ?? imeta.url ?? getTag(event.tags, 'url') ?? getTag(event.tags, 'media');
+  const audioUrl = sanitizeUrl(rawAudioUrl);
   if (!audioUrl) return null;
 
   const audioMimeFromTag = audioTag?.[2];
@@ -75,7 +77,7 @@ export function parsePodcastEpisode(event: NostrEvent): ParsedPodcastEpisode | n
     audioMime: audioMimeFromTag ?? imeta.mime ?? getTag(event.tags, 'm'),
     pubdate: pubdate && isFinite(pubdate) ? pubdate : undefined,
     description: getTag(event.tags, 'description') || event.content || '',
-    artwork: getTag(event.tags, 'image') ?? imeta.thumbnail ?? getTag(event.tags, 'thumb'),
+    artwork: sanitizeUrl(getTag(event.tags, 'image') ?? imeta.thumbnail ?? getTag(event.tags, 'thumb')),
     duration: duration && isFinite(duration) ? duration : undefined,
   };
 }
@@ -92,7 +94,8 @@ export interface ParsedPodcastTrailer {
 export function parsePodcastTrailer(event: NostrEvent): ParsedPodcastTrailer | null {
   const title = getTag(event.tags, 'title') ?? getTag(event.tags, 'subject') ?? 'Trailer';
   const imeta = parseImeta(event.tags);
-  const url = imeta.url ?? getTag(event.tags, 'url') ?? getTag(event.tags, 'media');
+  const rawUrl = imeta.url ?? getTag(event.tags, 'url') ?? getTag(event.tags, 'media');
+  const url = sanitizeUrl(rawUrl);
   if (!url) return null;
 
   return {

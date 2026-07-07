@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { ExternalImage, ExternalExternal, ExternalPostData } from '@/components/ExternalPostCard';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 /** Raw Mastodon API status shape (subset of fields we use). */
 interface RawMastodonStatus {
@@ -77,14 +78,15 @@ export function useMastodonPost(url: string) {
           ? status.media_attachments
             .filter((a) => a.type === 'image')
             .map((a) => ({
-              thumb: a.preview_url || a.url,
+              thumb: sanitizeUrl(a.preview_url || a.url),
               alt: a.description || '',
             }))
+            .filter((img): img is ExternalImage => !!img.thumb)
           : undefined;
 
       const external: ExternalExternal | undefined =
         !images && status.card?.title
-          ? { title: status.card.title, thumb: status.card.image ?? undefined }
+          ? { title: status.card.title, thumb: sanitizeUrl(status.card.image ?? undefined) }
           : undefined;
 
       // For remote users, acct includes @domain; for local users it's just the username
@@ -95,11 +97,11 @@ export function useMastodonPost(url: string) {
       return {
         displayName: status.account.display_name || status.account.username,
         handle,
-        avatar: status.account.avatar,
+        avatar: sanitizeUrl(status.account.avatar),
         text: htmlToPlaintext(status.content),
         createdAt: status.created_at,
-        postUrl: status.url || url,
-        profileUrl: status.account.url,
+        postUrl: sanitizeUrl(status.url || url) ?? '',
+        profileUrl: sanitizeUrl(status.account.url) ?? '',
         replyCount: status.replies_count,
         repostCount: status.reblogs_count,
         likeCount: status.favourites_count,

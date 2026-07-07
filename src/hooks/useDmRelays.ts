@@ -2,6 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
 import { extractReadRelays } from '@/lib/inboxRelays';
+import { isVerifiedOwnEvent } from '@/lib/nostrEvents';
 
 /**
  * Extract DM relay URLs from a kind 10050 event.
@@ -45,7 +46,7 @@ export function useDmRelays(pubkey: string | undefined) {
         { signal },
       );
 
-      if (dmListEvents.length > 0) {
+      if (dmListEvents.length > 0 && isVerifiedOwnEvent(dmListEvents[0], pubkey)) {
         const relays = extractDmRelays(dmListEvents[0]);
         if (relays.length > 0) return relays;
       }
@@ -56,7 +57,7 @@ export function useDmRelays(pubkey: string | undefined) {
         { signal },
       );
 
-      if (nip65Events.length > 0) {
+      if (nip65Events.length > 0 && isVerifiedOwnEvent(nip65Events[0], pubkey)) {
         const relays = extractReadRelays(nip65Events[0]);
         if (relays.length > 0) return relays;
       }

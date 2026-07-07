@@ -34,18 +34,48 @@ interface P2PKSecret {
   pubkey?: string;
 }
 
-function parseP2PKSecret(secret: unknown): P2PKSecret | null {
+interface ParseP2PKOptions {
+  /**
+   * Extra NUT-11 tags (e.g. "refund", "locktime") that are allowed beyond the
+   * required ["P2PK", <pubkey>]. Defaults to none — only the bare P2PK secret is
+   * accepted.
+   */
+  allowedTags?: string[];
+}
+
+function parseP2PKSecret(secret: unknown, options?: ParseP2PKOptions): P2PKSecret | null {
+  const allowedTags = options?.allowedTags ?? [];
   if (typeof secret !== 'string') return null;
   try {
     const parsed = JSON.parse(secret);
     if (Array.isArray(parsed)) {
       // NUT-11 P2PK secrets look like ["P2PK", <pubkey>, ...tags]
-      if (parsed[0] === 'P2PK' && typeof parsed[1] === 'string') {
-        return { pubkey: parsed[1] };
+      if (parsed.length < 2) return null;
+      if (parsed[0] !== 'P2PK') return null;
+      if (typeof parsed[1] !== 'string') return null;
+      // Reject extra tags unless every one is explicitly allowed.
+      if (parsed.length > 2) {
+        const tags = parsed.slice(2);
+        if (
+          !tags.every((tag) => {
+            if (!Array.isArray(tag) || tag.length === 0) return false;
+            return allowedTags.includes(tag[0]);
+          })
+        ) {
+          return null;
+        }
       }
+      return { pubkey: parsed[1] };
     } else if (parsed && typeof parsed === 'object') {
       const obj = parsed as Record<string, unknown>;
-      if (typeof obj.pubkey === 'string') return { pubkey: obj.pubkey };
+      if (typeof obj.pubkey !== 'string') return null;
+      // Reject object secrets carrying unexpected keys.
+      const allowedKeys = new Set(['pubkey']);
+      for (const tag of allowedTags) allowedKeys.add(tag);
+      for (const key of Object.keys(obj)) {
+        if (!allowedKeys.has(key)) return null;
+      }
+      return { pubkey: obj.pubkey };
     }
   } catch {
     // ignore
@@ -56,13 +86,17 @@ function parseP2PKSecret(secret: unknown): P2PKSecret | null {
 /**
  * Return true if every proof in the token is P2PK-locked to the given pubkey.
  */
-export function isTokenLockedToPubkey(tokenStr: string, pubkey: string): boolean {
+export function isTokenLockedToPubkey(
+  tokenStr: string,
+  pubkey: string,
+  options?: ParseP2PKOptions,
+): boolean {
   const entries = decodeCashuToken(tokenStr);
   if (!entries || entries.length === 0) return false;
   for (const entry of entries) {
     for (const proof of entry.proofs) {
       const p = proof as { secret?: unknown } | undefined;
-      const lock = parseP2PKSecret(p?.secret);
+      const lock = parseP2PKSecret(p?.secret, options);
       if (lock?.pubkey !== pubkey) return false;
     }
   }
