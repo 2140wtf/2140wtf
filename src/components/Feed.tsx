@@ -28,6 +28,7 @@ import { useInterests } from '@/hooks/useInterests';
 import { useMuteList } from '@/hooks/useMuteList';
 import { useLoveList } from '@/hooks/useLoveList';
 import { useTabFeed } from '@/hooks/useProfileFeed';
+import { useTopicAuthors } from '@/hooks/useTopicAuthors';
 import { useSavedFeeds } from '@/hooks/useSavedFeeds';
 import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
 import { useCuratorFollowList } from '@/hooks/useCuratorFollowList';
@@ -47,7 +48,7 @@ import type { FeedItem } from '@/lib/feedUtils';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { SavedFeed } from '@/contexts/AppContext';
 
-type CoreFeedTab = 'follows' | 'loved' | 'global' | 'communities' | 'ditto';
+type CoreFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities' | 'ditto';
 type FeedTab = CoreFeedTab | string; // string = saved feed id
 
 interface FeedProps {
@@ -132,7 +133,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     return 'Community';
   })();
 
-  const [rawActiveTab, handleSetActiveTab] = useFeedTab<FeedTab>(feedId, undefined, globalFirst ? 'global' : undefined);
+  const [rawActiveTab, handleSetActiveTab] = useFeedTab<FeedTab>(feedId, undefined, globalFirst ? 'global' : 'all');
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { startSignup } = useOnboarding();
 
@@ -146,12 +147,12 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const showSavedFeedTabs = user && !isKindSpecificPage && !tagFilters;
 
   // Kind-specific pages only support Follows + Global. Clamp any other
-  // persisted tab (e.g. 'ditto', 'communities') back to the appropriate default.
-  // Logged-out users must land on 'global' since 'follows' requires a user.
+  // persisted tab (e.g. 'ditto', 'communities', 'all') back to the appropriate default.
+  // Logged-out users must land on 'all' (public tab bar) since 'follows' requires a user.
   const activeTab: FeedTab = (() => {
     // 'loved' is only valid on the home feed while the Love List is non-empty.
     if (rawActiveTab === 'loved' && (kinds || !hasLovedPeople)) {
-      return user ? 'follows' : 'global';
+      return user ? 'all' : 'global';
     }
     // Saved feeds, hashtags, and geotags are only available on the home feed
     // and only while the extra-tabs row is shown. Clamp a persisted saved-feed
@@ -160,14 +161,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     const isHashtag = rawActiveTab.startsWith('hashtag:');
     const isGeotag = rawActiveTab.startsWith('geotag:');
     if (!showSavedFeedTabs && (isSavedFeed || isHashtag || isGeotag)) {
-      return globalFirst ? 'global' : (user ? 'follows' : 'global');
+      return globalFirst ? 'global' : (user ? 'all' : 'global');
     }
     if (!kinds) {
       // Home feed: no clamping for logged-in users. For guests, make sure the
       // persisted tab is actually visible in the public LandingHero tab bar.
       if (!user) {
-        if (rawActiveTab === 'ditto' && !showDittoFeed) return 'global';
-        if (rawActiveTab === 'communities' && !showCommunityFeed) return 'global';
+        if (rawActiveTab === 'ditto' && !showDittoFeed) return 'all';
+        if (rawActiveTab === 'communities' && !showCommunityFeed) return 'all';
       }
       return rawActiveTab;
     }
@@ -175,7 +176,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     if (rawActiveTab === 'follows' && user) return 'follows';
     // `globalFirst` pages default to Global even when logged in.
     if (globalFirst) return 'global';
-    return user ? 'follows' : 'global';
+    return user ? 'all' : 'global';
   })();
 
   // Is the active tab a saved feed?
@@ -193,7 +194,15 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // Is the active tab a topic feed (e.g. Bitcoin, Nostr, Tech/AI)?
   const activeTopic = useMemo(() => getFeedTopic(activeTab), [activeTab]);
   const isTopicTab = !!activeTopic;
-  const isAuthorTopic = !!activeTopic?.authors && activeTopic.authors.length > 0;
+
+  // Discover active authors for the current topic. While discovery is still
+  // loading we fall back to the static author list so the tab renders
+  // immediately and upgrades once the dynamic list resolves.
+  const { data: dynamicTopicAuthors } = useTopicAuthors(activeTopic ?? null);
+  const topicAuthors = activeTopic
+    ? (dynamicTopicAuthors ?? activeTopic.authors)
+    : undefined;
+  const hasTopicAuthors = (topicAuthors?.length ?? 0) > 0;
 
   // When logged out and the 2140.wtf (Ditto) tab is active, show the "hot"
   // sorted curated feed instead of the noisy global feed. Guests can now switch
@@ -206,24 +215,25 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
   // Standard feed query (used when logged in, or on kind-specific pages, or core tabs)
   const isCoreFeedTab =
-    activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'ditto' || isTopicTab;
-  type UseFeedTab = 'follows' | 'loved' | 'global' | 'communities';
+    activeTab === 'all' || activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'ditto' || isTopicTab;
+  type UseFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities';
   const feedTabForQuery: UseFeedTab =
-    activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities'
+    activeTab === 'all' || activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities'
       ? (activeTab as UseFeedTab)
       : 'global';
   const feedQueryOptions = useMemo(() => {
-    if (activeTopic && !isAuthorTopic) return { tagFilters: getTopicTagFilter(activeTopic) };
+    if (activeTopic && !hasTopicAuthors) return { tagFilters: getTopicTagFilter(activeTopic) };
     if (kinds || tagFilters) return { kinds, tagFilters };
     return undefined;
-  }, [activeTopic, isAuthorTopic, kinds, tagFilters]);
+  }, [activeTopic, hasTopicAuthors, kinds, tagFilters]);
   const feedQuery = useFeed(feedTabForQuery, feedQueryOptions);
 
-  // Author-filtered topic feeds (e.g. BAO) show posts from specific pubkeys.
+  // Author-filtered topic feeds (e.g. Bitcoin, Nostr, BAO) show posts from
+  // discovered authors, falling back to the static list while discovery loads.
   const authorTopicQuery = useTabFeed(
-    isAuthorTopic ? { authors: activeTopic.authors } : null,
-    isAuthorTopic ? `topic-${activeTopic.id}` : '',
-    isAuthorTopic,
+    hasTopicAuthors ? { authors: topicAuthors } : null,
+    activeTopic ? `topic-${activeTopic.id}` : '',
+    hasTopicAuthors,
   );
 
   // Curated 2140.wtf feed: latest content from the curator's follow list.
@@ -236,14 +246,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const useDittoQuery = useTopFeedForLoggedOut || useDittoTab;
   const activeQuery = useDittoQuery
     ? topQuery
-    : isAuthorTopic
+    : hasTopicAuthors
       ? authorTopicQuery
       : feedQuery;
   const queryKey = useMemo(() => {
     if (useDittoQuery) return ['ditto-curated-feed'];
-    if (isAuthorTopic) return ['tab-feed', `topic-${activeTopic!.id}`];
+    if (hasTopicAuthors) return ['tab-feed', `topic-${activeTopic!.id}`];
     return ['feed', activeTab];
-  }, [useDittoQuery, isAuthorTopic, activeTopic, activeTab]);
+  }, [useDittoQuery, hasTopicAuthors, activeTopic, activeTab]);
 
   const handleRefresh = usePageRefresh(queryKey);
 
@@ -471,9 +481,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           rendered inside LandingHero. */}
       {user && !kinds && (
         <SubHeaderBar>
-          {globalFirst && user && (
-            <TabButton label="All" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
-          )}
+          <TabButton label="All" active={activeTab === 'all'} onClick={() => handleSetActiveTab('all')} />
           {!isKindSpecificPage && user && hasLovedPeople && (
             <TabButton label="Loved" active={activeTab === 'loved'} onClick={() => handleSetActiveTab('loved')}>
               <span className="flex items-center justify-center gap-1">
@@ -491,9 +499,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {!isKindSpecificPage && showCommunityFeed && (
             <TabButton label={communityLabel} active={activeTab === 'communities'} onClick={() => handleSetActiveTab('communities')} />
           )}
-          {!globalFirst && (isKindSpecificPage || showGlobalFeed) && (
-            <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
-          )}
+          <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
           {!isKindSpecificPage && !tagFilters && FEED_TOPICS.map((topic) => (
             <TabButton
               key={`topic:${topic.id}`}

@@ -1048,6 +1048,9 @@ export function ProfilePage() {
     return user?.pubkey;
   }, [npub, user, isNip05Param, nip05Pubkey]);
 
+  // App account (e.g. 2140.wtf) should only show its own kind-1 posts/replies.
+  const isAppAccount = pubkey === config.curatorPubkey;
+
   // Custom profile tabs from kind 16769
   const profileTabsQuery = useProfileTabs(pubkey);
 
@@ -1212,7 +1215,14 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   // - null (no kind 16769 event) → show all 5 defaults
   // - [] (event exists, all removed) → show nothing
   // - [...] (event with tabs) → show exactly those
+  // - App account (e.g. 2140.wtf) → force only Posts and Posts & replies
   const viewTabs: EditableTab[] = useMemo(() => {
+    if (isAppAccount) {
+      return [
+        { label: 'Posts', isCore: true },
+        { label: 'Posts & replies', isCore: true },
+      ];
+    }
     if (profileTabsData === null) {
       // No event yet — show defaults (subset of core tabs)
       return DEFAULT_TAB_LABELS.map((label) => ({ label, isCore: true }));
@@ -1223,7 +1233,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         ? { label: t.label, isCore: true }
         : { label: t.label, isCore: false, tab: t },
     );
-  }, [profileTabsData]);
+  }, [isAppAccount, profileTabsData]);
 
   // Derive the ID of the first visible tab (used as default selection).
   const firstTabId = useMemo(() => {
@@ -1334,6 +1344,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     pubkey,
     (['posts', 'replies', 'media', 'likes', 'wall', 'badges'].includes(activeTab) ? activeTab : 'posts') as CoreProfileTab,
     hasTabs,
+    isAppAccount ? [1] : undefined,
   );
 
   // Kind 0 — resolved from the author cache (seeded by the feed query above).
@@ -2420,7 +2431,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           )}
 
           {/* Visitor controls — show missing default tabs when profile has customised tab list */}
-          {!isOwnProfile && !tabEditMode && profileTabsQuery.isFetched && profileTabsQuery.data !== null && (() => {
+          {!isAppAccount && !isOwnProfile && !tabEditMode && profileTabsQuery.isFetched && profileTabsQuery.data !== null && (() => {
             const missingDefaults = CORE_TAB_LABELS.filter(
               (label) => !viewTabs.some((t) => t.label === label),
             );
@@ -2452,7 +2463,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           })()}
 
           {/* Own-profile controls */}
-          {isOwnProfile && (
+          {isOwnProfile && !isAppAccount && (
             <div className="flex items-center shrink-0 ml-auto">
               {/* + dropdown — only visible in edit mode */}
               {tabEditMode && (
@@ -2511,7 +2522,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         <div style={{ height: ARC_OVERHANG_PX }} />
 
         {/* Add/edit single tab modal */}
-        {pubkey && tabModalOpen && (
+        {pubkey && tabModalOpen && !isAppAccount && (
           <ProfileTabEditModal
             open={tabModalOpen}
             onOpenChange={setTabModalOpen}

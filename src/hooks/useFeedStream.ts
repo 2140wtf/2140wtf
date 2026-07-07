@@ -19,7 +19,7 @@ const SCROLL_THRESHOLD = 200;
 const MAX_STREAM_RELAYS = 10;
 
 /** Which core feed tabs support live auto-refresh. */
-type StreamableTab = 'follows' | 'loved' | 'global' | 'communities';
+type StreamableTab = 'all' | 'follows' | 'loved' | 'global' | 'communities';
 
 interface UseFeedStreamOptions {
   /** The active core feed tab. */
@@ -129,7 +129,7 @@ export function useFeedStream(options: UseFeedStreamOptions): {
     if (!enabled || streamKinds.length === 0 || relayUrls.length === 0) return;
     // Author-scoped tabs (follows / loved / communities) need a non-empty
     // authors list — an empty array would match everyone.
-    if (tab !== 'global' && (!authors || authors.length === 0)) return;
+    if (tab !== 'global' && tab !== 'all' && (!authors || authors.length === 0)) return;
 
     const ac = new AbortController();
     let alive = true;
@@ -139,7 +139,7 @@ export function useFeedStream(options: UseFeedStreamOptions): {
 
     const now = Math.floor(Date.now() / 1000);
     const filter: NostrFilter = { kinds: streamKinds, since: now, limit: 0 };
-    if (tab !== 'global' && authors && authors.length > 0) {
+    if (tab !== 'global' && tab !== 'all' && authors && authors.length > 0) {
       filter.authors = authors;
     }
 
