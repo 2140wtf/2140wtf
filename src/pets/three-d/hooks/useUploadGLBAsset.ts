@@ -8,6 +8,13 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 import { toast } from '@/hooks/useToast';
 import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
 
+export interface UploadGLBAssetMetadata {
+  title?: string;
+  author?: string;
+  license?: string;
+  sourceUrl?: string;
+}
+
 /** Maximum GLB file size (25 MB). */
 const MAX_GLB_SIZE = 25 * 1024 * 1024;
 
@@ -42,7 +49,13 @@ export function useUploadGLBAsset() {
   const { mutateAsync: uploadFile, isPending } = useUploadFile();
 
   const mutation = useMutation({
-    mutationFn: async (file: File): Promise<Asset3DEntry> => {
+    mutationFn: async ({
+      file,
+      metadata,
+    }: {
+      file: File;
+      metadata?: UploadGLBAssetMetadata;
+    }): Promise<Asset3DEntry> => {
       assertGLBFile(file);
 
       const buffer = await file.arrayBuffer();
@@ -61,6 +74,10 @@ export function useUploadGLBAsset() {
         sha256: hash,
         mime: inferGLBMime(file),
         size: file.size,
+        ...(metadata?.title ? { title: metadata.title } : undefined),
+        ...(metadata?.author ? { author: metadata.author } : undefined),
+        ...(metadata?.license ? { license: metadata.license } : undefined),
+        ...(metadata?.sourceUrl ? { sourceUrl: metadata.sourceUrl } : undefined),
       };
     },
     onError: (error: Error) => {
