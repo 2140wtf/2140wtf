@@ -16,6 +16,8 @@ export function useZapPaymentListener(
   onPaid: () => void,
 ): void {
   const paidRef = useRef(false);
+  const onPaidRef = useRef(onPaid);
+  onPaidRef.current = onPaid;
 
   useEffect(() => {
     if (!invoice || !target || paidRef.current) return;
@@ -41,7 +43,7 @@ export function useZapPaymentListener(
           const event = msg[2];
           if (matchesInvoice(event)) {
             paidRef.current = true;
-            onPaid();
+            onPaidRef.current();
             break;
           }
         }
@@ -56,5 +58,5 @@ export function useZapPaymentListener(
       abortController.abort();
       void Promise.allSettled(listeners);
     };
-  }, [invoice, target, relayUrls, onPaid]);
+  }, [invoice, target, relayUrls]);
 }

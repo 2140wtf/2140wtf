@@ -43,7 +43,7 @@ import {
   restoreCashuState as fetchCashuBackup,
   type CashuBackupPayload,
 } from '@/lib/cashu/cashuBackup';
-import { DEFAULT_MINTS, normalizeMintUrl } from '@/lib/cashu/cashu';
+import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
 import type { NostrSigner } from '@nostrify/types';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
@@ -287,7 +287,7 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
             </SelectTrigger>
             <SelectContent>
               {wallet.allMints.map((m) => (
-                <SelectItem key={normalizeMintUrl(m.url)} value={normalizeMintUrl(m.url)!}>
+                <SelectItem key={normalizeMintUrl(m.url)} value={safeNormalizeMintUrl(m.url)}>
                   {m.name}
                 </SelectItem>
               ))}

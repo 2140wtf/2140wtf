@@ -644,6 +644,10 @@ export function normalizeMintUrl(url: string): string | null {
   }
 }
 
+export function safeNormalizeMintUrl(url: string): string {
+  return normalizeMintUrl(url) ?? url.trim();
+}
+
 function isValidProof(p: unknown): p is { id: string; amount: number; secret: string; C: string } {
   if (!p || typeof p !== 'object') return false;
   const proof = p as Record<string, unknown>;
