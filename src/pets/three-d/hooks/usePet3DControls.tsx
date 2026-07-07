@@ -6,7 +6,7 @@
  * the last direction it moved.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -90,7 +90,7 @@ export function usePet3DControls(): UsePet3DControlsResult {
     ({ className }: { className?: string }) => (
       <div
         className={cn(
-          'grid grid-cols-3 gap-1 p-2 rounded-xl bg-background/80 backdrop-blur-sm border shadow-sm select-none',
+          'grid grid-cols-3 gap-0.5 p-1 rounded-lg bg-background/80 backdrop-blur-sm border shadow-sm select-none',
           className,
         )}
         onTouchStart={(e) => e.preventDefault()}
@@ -99,7 +99,7 @@ export function usePet3DControls(): UsePet3DControlsResult {
         <PadButton onClick={moveForward} icon={ChevronUp} label="Forward" />
         <div />
         <PadButton onClick={moveLeft} icon={ChevronLeft} label="Left" />
-        <div className="size-10 rounded-full bg-muted/50" />
+        <div className="size-5 rounded-full bg-muted/50" />
         <PadButton onClick={moveRight} icon={ChevronRight} label="Right" />
         <div />
         <PadButton onClick={moveBackward} icon={ChevronDown} label="Backward" />
@@ -134,9 +134,9 @@ function PadButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="size-10 flex items-center justify-center rounded-lg bg-muted hover:bg-muted/80 active:scale-95 transition-transform"
+      className="size-6 flex items-center justify-center rounded-md bg-muted hover:bg-muted/80 active:scale-95 transition-transform"
     >
-      <Icon className="size-5" />
+      <Icon className="size-3.5" />
     </button>
   );
 }
