@@ -40,8 +40,10 @@ interface Pets3DVisualProps {
   className?: string;
 }
 
-const WALK_RADIUS = 1.6;
+const WALK_RADIUS = 1.0;
 const WALK_SPEED = 0.35;
+/** Base scale for the loaded pet GLB. Tuned so the pet feels pet-sized inside the full-room world. */
+const PET_SCALE = 0.015;
 
 /**
  * Low-poly procedural room environment: sky dome, ground plane, and a few
@@ -137,8 +139,8 @@ function PetModel({
     <group ref={groupRef}>
       <primitive
         object={scene}
-        // Demo Fox model is large; scale it down to pet size.
-        scale={0.025}
+        // Scale the loaded model to pet size inside the full-room world.
+        scale={PET_SCALE}
         position={[0, 0, 0]}
         castShadow
         receiveShadow
