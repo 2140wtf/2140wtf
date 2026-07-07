@@ -1522,6 +1522,8 @@ export function buildBlobbonautTags(pubkey: string): string[][] {
     // New profiles default to the BAO signet/demo Cashu rail so the pet
     // economy shares the same wallet as bao.markets.
     ['wallet_mode', 'bao'],
+    // Starter inventory so new owners can feed their pet immediately.
+    ['storage', 'food_apple:1'],
   ];
 }
 

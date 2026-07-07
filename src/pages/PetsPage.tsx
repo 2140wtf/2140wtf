@@ -350,6 +350,24 @@ function PetsContent() {
   const petsWallet = petsWalletResult.wallet;
   const isBitcoinPetsWallet = petsWalletResult.isBitcoin;
 
+  // Align the active wallet mode with the profile on first load when the user
+  // has never explicitly chosen a mode. This prevents a new profile (which
+  // defaults to BAO/demo) from showing the Bitcoin-sats wallet by default.
+  useEffect(() => {
+    if (!profile) return;
+    const hasStoredMode = (() => {
+      try {
+        return localStorage.getItem('pets:walletMode') !== null;
+      } catch {
+        return false;
+      }
+    })();
+    if (hasStoredMode) return;
+    petsWalletResult.setMode(profile.walletMode === 'btc-sats' ? 'bitcoin' : 'testnet');
+    // Only run once when the profile first becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.walletMode]);
+
   // Auto-normalize profiles missing pettingLevel tag
   useBlobbonautProfileNormalization({
     profile,
@@ -1159,6 +1177,13 @@ function PetsDashboard({
 
   // ─── Full-screen game mode ───
   const [gameMode, setGameMode] = useState(false);
+  useEffect(() => {
+    const onChange = () => {
+      setGameMode(document.fullscreenElement === document.documentElement);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
   useLayoutOptions({
     hasSubHeader: true,
     noOverscroll: true,
