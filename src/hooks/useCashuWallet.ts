@@ -175,7 +175,15 @@ export function useCashuWallet(
   options?: UseCashuWalletOptions,
 ): CashuWalletState & CashuWalletActions {
   const { config } = useAppContext();
-  const defaultMints = useMemo(() => options?.defaultMints ?? DEFAULT_MINTS, [options?.defaultMints]);
+  const defaultMintsInput = options?.defaultMints;
+  const defaultMintsKey = JSON.stringify(defaultMintsInput);
+  const defaultMints = useMemo(
+    () => defaultMintsInput ?? DEFAULT_MINTS,
+    // Deep-stable dependency so callers can pass a fresh array literal each
+    // render without re-triggering wallet initialization.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [defaultMintsKey],
+  );
   const deriveWalletKey = useMemo(() => options?.deriveWalletKey ?? deriveNip60WalletKey, [options?.deriveWalletKey]);
   const _walletLabel = options?.walletLabel ?? 'Cashu';
   const enabled = options?.enabled !== false;
@@ -907,7 +915,7 @@ export function useCashuWallet(
     init();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalSeed, enabled]);
+  }, [externalSeed, enabled, defaultMints]);
 
   // Re-publish NIP-60 wallet config and Nutzap info when the mint list or sync adapter changes.
   useEffect(() => {
