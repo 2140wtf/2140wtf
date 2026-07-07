@@ -14,7 +14,11 @@ import { usePetsWallet, type PetsWalletMode } from '@/pets/core/hooks/usePetsWal
 import { BaoWalletDrawer } from './BaoWalletDrawer';
 import { CashuWalletDrawer } from './CashuWalletDrawer';
 
-export function PetsWalletDrawer() {
+interface PetsWalletDrawerProps {
+  onModeChange?: (profileMode: 'btc-sats' | 'demo-sats') => void;
+}
+
+export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
   const { wallet, mode, setMode, isTestnet } = usePetsWallet();
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
@@ -25,10 +29,15 @@ export function PetsWalletDrawer() {
     [],
   );
 
+  const handleModeChange = (next: PetsWalletMode) => {
+    setMode(next);
+    onModeChange?.(next === 'bitcoin' ? 'btc-sats' : 'demo-sats');
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 pb-2">
-        <ModeSwitch mode={mode} setMode={setMode} options={modeOptions} />
+        <ModeSwitch mode={mode} setMode={handleModeChange} options={modeOptions} />
       </div>
       <div className="flex-1 min-h-0">
         {isTestnet ? (

@@ -485,26 +485,6 @@ function PetsContent() {
     setStoredSelectedD(d);
   }, [setStoredSelectedD, storedSelectedD]);
 
-  // Toggle between demo-sats (in-game demo sats) and btc-sats (real BTC sats) wallet mode.
-  // Always republish from a freshly fetched profile to avoid clobbering tags.
-  const _handleWalletModeChange = useCallback(
-    async (mode: 'demo-sats' | 'btc-sats') => {
-      if (!user?.pubkey || !profile) return;
-      try {
-        const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-        if (!fresh) return;
-        const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
-        await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
-        await invalidateProfile();
-        const modeLabel = mode === 'btc-sats' ? 'BTC sats' : 'demo sats';
-        toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
-      } catch {
-        toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
-      }
-    },
-    [user?.pubkey, profile, nostr, publishEvent, invalidateProfile],
-  );
-  
   // ─── Helper: Ensure Canonical Before Action ───
   // Centralized migration helper that auto-migrates legacy pets before any action
   const ensureCanonicalBeforeAction = useCallback(async () => {
@@ -2345,7 +2325,22 @@ function PetsDashboard({
               )}
               {activeDrawer === 'wallet' && (
                 <div className="flex-1 min-h-0">
-                  <PetsWalletDrawer />
+                  <PetsWalletDrawer
+                    onModeChange={async (mode) => {
+                      if (!user?.pubkey || !profile) return;
+                      try {
+                        const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+                        if (!fresh) return;
+                        const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
+                        await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
+                        await invalidateProfile();
+                        const modeLabel = mode === 'btc-sats' ? 'BTC sats' : 'demo sats';
+                        toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
+                      } catch {
+                        toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
+                      }
+                    }}
+                  />
                 </div>
               )}
             </div>
