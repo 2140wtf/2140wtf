@@ -2201,8 +2201,8 @@ function PetsDashboard({
       {/* ─── Drawer + Tab Bar — overlays the room ─── */}
       <div className={cn(
         'absolute left-0 right-0 z-[70] flex flex-col transition-all duration-250 ease-in-out',
-        activeDrawer === 'wallet'
-          ? 'top-0 bottom-[var(--pets-room-dock-height)]'
+        activeDrawer === 'wallet' || activeDrawer === 'shop'
+          ? 'inset-y-0'
           : 'top-0',
         isFurnitureEditorOpen && 'opacity-40 pointer-events-none',
       )}>
@@ -2249,16 +2249,16 @@ function PetsDashboard({
           className={cn(
             'bg-background/95 backdrop-blur-sm overflow-hidden transition-[max-height] duration-250 ease-in-out',
             activeDrawer !== 'none'
-              ? activeDrawer === 'wallet'
+              ? activeDrawer === 'wallet' || activeDrawer === 'shop'
                 ? 'flex-1 h-full max-h-none'
                 : 'max-h-[256px]'
               : 'max-h-0',
           )}
         >
-          <ScrollArea className={cn(activeDrawer === 'wallet' ? 'h-full' : 'h-[248px]')}>
+          <ScrollArea className={cn(activeDrawer === 'wallet' || activeDrawer === 'shop' ? 'h-full' : 'h-[248px]')}>
             <div className={cn(
               'max-w-2xl mx-auto w-full pb-4 pt-2',
-              activeDrawer === 'wallet' && 'h-full flex flex-col',
+              (activeDrawer === 'wallet' || activeDrawer === 'shop') && 'h-full flex flex-col',
             )}>
               {activeDrawer === 'earn' && (
                 <MissionsTabContent
@@ -2321,7 +2321,9 @@ function PetsDashboard({
                 <SpeciesTabContent />
               )}
               {activeDrawer === 'shop' && (
-                <PetsShopDrawer profile={profile ?? null} externalWallet={petsWallet} />
+                <div className="flex-1 min-h-0">
+                  <PetsShopDrawer profile={profile ?? null} externalWallet={petsWallet} />
+                </div>
               )}
               {activeDrawer === 'wallet' && (
                 <div className="flex-1 min-h-0">
