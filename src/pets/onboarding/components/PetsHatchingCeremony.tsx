@@ -103,8 +103,6 @@ interface PetsHatchingCeremonyProps {
   invalidateCompanion: () => void;
   setStoredSelectedD: (d: string) => void;
   onComplete?: () => void;
-  /** If true, hatching is allowed. BAO testnet pets cannot mature. */
-  isRealWallet?: boolean;
   /** Breed category to constrain the newly created egg. */
   breedCategory?: PetsBreedCategory;
   /** If provided, skip egg creation and start from the cracking phase with this existing egg. */
@@ -126,7 +124,6 @@ export function PetsHatchingCeremony({
   breedCategory,
   existingCompanion,
   eggOnly = false,
-  isRealWallet = true,
 }: PetsHatchingCeremonyProps) {
   const isExistingEgg = !!existingCompanion;
   const { user } = useCurrentUser();
@@ -456,14 +453,6 @@ export function PetsHatchingCeremony({
 
   // ── Execute the actual hatch: egg -> baby ──
   const executeHatch = useCallback(async () => {
-    if (!isRealWallet) {
-      toast({
-        title: 'Hatching unavailable',
-        description: 'BAO testnet pets cannot mature. Switch to real Cashu to hatch your 2140 PET.',
-        variant: 'destructive',
-      });
-      return;
-    }
     const tags = eggTagsRef.current;
     if (!tags) return;
     if (!user?.pubkey) return;
@@ -540,7 +529,7 @@ export function PetsHatchingCeremony({
       writeEvolutionToStorage(evolveMissions, user.pubkey, eggCompanion?.d ?? previewRef.current?.d ?? '');
       window.dispatchEvent(new CustomEvent('daily-missions-updated', { detail: { evolution: true, d: eggCompanion?.d } }));
     }
-  }, [publishEvent, updateCompanionEvent, invalidateCompanion, user?.pubkey, isRealWallet]);
+  }, [publishEvent, updateCompanionEvent, invalidateCompanion, user?.pubkey]);
 
   // ── Egg click ──
   const handleEggClick = useCallback(() => {
