@@ -144,7 +144,7 @@ describe('resolveTheme', () => {
 
 describe('themePresets', () => {
   it('includes the redesigned preset set', () => {
-    expect(Object.keys(themePresets).sort()).toEqual(['aquarium', 'banana', 'hacker', 'pink', 'space', 'sunset']);
+    expect(Object.keys(themePresets).sort()).toEqual(['aquarium', 'banana', 'hacker', 'pink', 'space', 'sunset', 'whitepaper']);
   });
 
   it('includes generated background assets for presets that have one', () => {
