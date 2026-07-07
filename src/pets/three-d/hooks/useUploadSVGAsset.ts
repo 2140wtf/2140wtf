@@ -68,7 +68,7 @@ export function useUploadSVGAsset() {
       const sanitizedFile = new File([sanitized], file.name, {
         type: 'image/svg+xml',
       });
-      const hash = bytesToHex(sha256(new Uint8Array(await sanitizedFile.arrayBuffer())));
+      const hash = bytesToHex(sha256(new TextEncoder().encode(sanitized)));
 
       const tags = await uploadFile(sanitizedFile);
       const url = getUrlTag(tags);
@@ -78,11 +78,21 @@ export function useUploadSVGAsset() {
         throw new Error('Upload did not return a Blossom URL');
       }
 
+      const normalizedServerHash = serverHash?.toLowerCase() ?? '';
+      if (normalizedServerHash) {
+        if (!/^[0-9a-f]{64}$/.test(normalizedServerHash)) {
+          throw new Error('Upload returned an invalid SHA-256 hash');
+        }
+        if (normalizedServerHash !== hash) {
+          throw new Error(
+            'Upload hash mismatch: the server returned a SHA-256 that does not match the uploaded SVG. The asset has been rejected.',
+          );
+        }
+      }
+
       return {
         url,
-        sha256: serverHash && /^[0-9a-fA-F]{64}$/.test(serverHash)
-          ? serverHash.toLowerCase()
-          : hash,
+        sha256: normalizedServerHash || hash,
         mime: 'image/svg+xml',
         ...(metadata?.title ? { title: metadata.title } : undefined),
         ...(metadata?.author ? { author: metadata.author } : undefined),
