@@ -12,7 +12,7 @@
  * - The pet can be moved with arrow keys or the on-screen D-pad.
  */
 
-import { Suspense, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import {
   ContactShadows,
@@ -21,6 +21,7 @@ import {
   Sky,
   useGLTF,
 } from '@react-three/drei';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import type { Group } from 'three';
 
 import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
@@ -133,6 +134,30 @@ function PetModel({
 export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3DVisualProps) {
   const key = useMemo(() => `${asset.url}:${roomAsset?.url ?? ''}`, [asset.url, roomAsset?.url]);
   const { position, facingAngle, MovementPad } = usePet3DControls();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(document.fullscreenElement === wrapperRef.current);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await el.requestFullscreen();
+      }
+    } catch {
+      // Ignore browsers that block fullscreen or unsupported contexts.
+    }
+  };
 
   const petPosition: [number, number, number] = useMemo(
     () => [position.x, PET_Y, position.z],
@@ -140,7 +165,10 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
   );
 
   return (
-    <div className="relative w-full h-full">
+    <div
+      ref={wrapperRef}
+      className="relative w-full h-full"
+    >
       <Canvas
         key={key}
         className={className}
@@ -186,6 +214,15 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
           dampingFactor={0.05}
         />
       </Canvas>
+
+      <button
+        type="button"
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        onClick={toggleFullscreen}
+        className="absolute top-4 right-4 z-20 size-9 flex items-center justify-center rounded-full bg-background/80 backdrop-blur-sm border shadow-sm hover:bg-background transition-colors"
+      >
+        {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+      </button>
 
       <MovementPad className="absolute bottom-4 right-4 z-10" />
     </div>
