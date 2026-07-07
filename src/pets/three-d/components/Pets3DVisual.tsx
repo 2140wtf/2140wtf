@@ -157,11 +157,12 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
     <Canvas
       key={key}
       className={className}
-      camera={{ position: [0, 0.6, 5], fov: 35 }}
+      camera={{ position: [0, 0.8, 4.5], fov: 60 }}
       shadows
       dpr={[1, 2]}
-      gl={{ antialias: true, alpha: true }}
+      gl={{ antialias: true, alpha: false }}
     >
+      <color attach="background" args={['#87CEEB']} />
       <ambientLight intensity={0.5} />
       <directionalLight position={[6, 8, 4]} intensity={1.2} castShadow shadow-mapSize={1024} />
       <directionalLight position={[-3, 2, -3]} intensity={0.3} />
@@ -184,10 +185,10 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
         enablePan={false}
         enableZoom={false}
         enableRotate={!isSleeping}
-        minPolarAngle={Math.PI / 2.8}
+        minPolarAngle={Math.PI / 3}
         maxPolarAngle={Math.PI / 2.05}
-        minAzimuthAngle={-Math.PI / 3}
-        maxAzimuthAngle={Math.PI / 3}
+        minAzimuthAngle={-Math.PI / 2}
+        maxAzimuthAngle={Math.PI / 2}
       />
     </Canvas>
   );
