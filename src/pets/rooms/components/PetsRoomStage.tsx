@@ -154,6 +154,37 @@ export function PetsRoomStage({
 
   return (
     <div ref={stageRef} data-pets-stage={companion.stage} className="absolute inset-0 pointer-events-none">
+      {/* Full-room 3D world — rendered behind the 2D pet wrapper so labels and
+          the life badge still float on top. Only active for adult pets with a
+          resolved 3D asset and 3D mode enabled. */}
+      {show3D && (
+        <div className="absolute inset-0 z-0 pointer-events-auto">
+          <Suspense
+            fallback={
+              <PetsStageVisual
+                companion={companion}
+                size="lg"
+                animated={!isSleeping}
+                reaction={petsReaction}
+                recipe={hasDevOverride ? undefined : statusRecipe}
+                recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                emotion={effectiveEmotion}
+                onEggClick={onEggClick}
+                facing={facing}
+                className="!size-full"
+              />
+            }
+          >
+            <Pets3DVisual
+              asset={asset3d}
+              roomAsset={roomAsset3d}
+              isSleeping={isSleeping}
+              className="!size-full"
+            />
+          </Suspense>
+        </div>
+      )}
+
       {/* Pets anchor: full-width at the ground line.
           Uses inset-x-0 so descendant percentage widths resolve against
           room canvas width — keeping Pets proportional with furniture.
@@ -267,31 +298,7 @@ export function PetsRoomStage({
                   style={{ transformOrigin: 'center bottom' }}
                 >
                   <div className="absolute inset-0 -m-16 sm:-m-20 bg-primary/5 rounded-full blur-3xl" />
-                  {show3D ? (
-                    <Suspense
-                      fallback={
-                        <PetsStageVisual
-                          companion={companion}
-                          size="lg"
-                          animated={!isSleeping}
-                          reaction={petsReaction}
-                          recipe={hasDevOverride ? undefined : statusRecipe}
-                          recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
-                          emotion={effectiveEmotion}
-                          onEggClick={onEggClick}
-                          facing={facing}
-                          className="!size-full"
-                        />
-                      }
-                    >
-                      <Pets3DVisual
-                        asset={asset3d}
-                        roomAsset={roomAsset3d}
-                        isSleeping={isSleeping}
-                        className="!size-full"
-                      />
-                    </Suspense>
-                  ) : (
+                  {!show3D && (
                     <PetsStageVisual
                       companion={companion}
                       size="lg"
