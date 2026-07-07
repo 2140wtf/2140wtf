@@ -25,14 +25,14 @@ import {
 } from '@/lib/cashu/cashuBackup';
 import type { NUser } from '@nostrify/react/login';
 
-export type PetsWalletMode = 'real' | 'testnet';
+export type PetsWalletMode = 'real' | 'testnet' | 'bitcoin';
 
 const STORAGE_KEY = 'pets:walletMode';
 
 function loadStoredMode(): PetsWalletMode {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === 'testnet') return 'testnet';
+    if (raw === 'testnet' || raw === 'bitcoin') return raw;
   } catch {
     // localStorage may be unavailable in private mode / SSR.
   }
@@ -52,10 +52,12 @@ export interface UsePetsWalletResult {
   wallet: (CashuWalletState & CashuWalletActions) | null;
   /** Current mode. */
   mode: PetsWalletMode;
-  /** Switch between real and testnet mode. */
+  /** Switch between real, bitcoin and testnet mode. */
   setMode: (mode: PetsWalletMode) => void;
   /** True when the active wallet is the main real Cashu wallet. */
   isReal: boolean;
+  /** True when the active wallet is the main Cashu wallet in Bitcoin-sats mode. */
+  isBitcoin: boolean;
   /** True when the active wallet is the BAO signet/demo wallet. */
   isTestnet: boolean;
 }
@@ -130,7 +132,7 @@ export function usePetsWallet(): UsePetsWalletResult {
     { enableAutoClaim: mode === 'testnet', enabled: mode === 'testnet' },
   );
 
-  const wallet = mode === 'real' ? realWallet : baoWallet;
+  const wallet = mode === 'testnet' ? baoWallet : realWallet;
 
   // If the Cashu seed is not available, surface a null wallet so callers can
   // show a clear "wallet unavailable" state instead of a broken wallet object.
@@ -142,6 +144,7 @@ export function usePetsWallet(): UsePetsWalletResult {
       mode,
       setMode,
       isReal: mode === 'real',
+      isBitcoin: mode === 'bitcoin',
       isTestnet: mode === 'testnet',
     }),
     [safeWallet, mode, setMode],

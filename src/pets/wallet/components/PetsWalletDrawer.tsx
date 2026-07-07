@@ -27,10 +27,11 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { usePetsWallet, type PetsWalletMode } from '@/pets/core/hooks/usePetsWallet';
 import { BaoWalletDrawer } from './BaoWalletDrawer';
+import { CashuWalletDrawer } from './CashuWalletDrawer';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 
 export function PetsWalletDrawer() {
-  const { wallet, mode, setMode, isReal, isTestnet } = usePetsWallet();
+  const { wallet, mode, setMode, isReal, isBitcoin, isTestnet } = usePetsWallet();
   const [balanceKey, setBalanceKey] = useState(0);
 
   const activeMint = wallet?.mintUrl ?? '';
@@ -42,7 +43,8 @@ export function PetsWalletDrawer() {
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
     () => [
-      { value: 'real', label: 'Real sats', icon: Bitcoin },
+      { value: 'real', label: 'Real sats', icon: WalletIcon },
+      { value: 'bitcoin', label: 'Bitcoin sats', icon: Bitcoin },
       { value: 'testnet', label: 'BAO testnet', icon: FlaskConical },
     ],
     [],
@@ -56,6 +58,32 @@ export function PetsWalletDrawer() {
         </div>
         <div className="flex-1 min-h-0">
           <BaoWalletDrawer />
+        </div>
+      </div>
+    );
+  }
+
+  if (isBitcoin) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="p-4 pb-2">
+          <ModeSwitch mode={mode} setMode={setMode} options={modeOptions} />
+        </div>
+        <div className="flex-1 min-h-0">
+          {wallet ? (
+            <CashuWalletDrawer
+              wallet={wallet}
+              title="Bitcoin sats balance"
+              badge="sats"
+              mintPlaceholder="Select a mint"
+              invoiceDescription="Bitcoin top-up"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground">
+              <WalletIcon className="size-10 mb-3" />
+              <p className="text-sm">Your signer does not support the Cashu wallet (NIP-44 required).</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -161,7 +189,7 @@ function ModeSwitch({
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Pets wallet mode
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {options.map(({ value, label, icon: Icon }) => (
           <Button
             key={value}
@@ -178,8 +206,10 @@ function ModeSwitch({
       </div>
       <p className="text-[10px] text-muted-foreground leading-relaxed">
         {mode === 'real'
-          ? 'Real mode uses your main Cashu wallet. Switch to BAO testnet for free demo sats and faucet play.'
-          : 'Testnet mode uses BAO signet sats and the BAO faucet. Shop purchases still come from this demo wallet.'}
+          ? 'Real mode shows your main Cashu wallet balance. Switch to Bitcoin sats for deposit/send/receive, or BAO testnet for free demo sats and faucet play.'
+          : mode === 'bitcoin'
+            ? 'Bitcoin sats mode uses your main Cashu wallet. Create invoices, send tokens, and receive tokens here.'
+            : 'Testnet mode uses BAO signet sats and the BAO faucet. Shop purchases still come from this demo wallet.'}
       </p>
     </div>
   );
