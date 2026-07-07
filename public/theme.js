@@ -8,8 +8,10 @@
     light: { bg: 'hsl(270 50% 97%)', primary: 'hsl(270 65% 55%)' }
   };
 
-  var theme = 'dark';
-  var colors = builtins.dark;
+  var whitepaper = { bg: 'hsl(45 20% 96%)', primary: 'hsl(40 10% 15%)' };
+
+  var theme = 'custom';
+  var colors = whitepaper;
   var cfg;
   try {
     cfg = JSON.parse(localStorage.getItem('nostr:app-config') || '{}');
@@ -30,9 +32,15 @@
         var pr = ct.colors.primary;
         if (bg && pr) {
           colors = { bg: 'hsl(' + bg + ')', primary: 'hsl(' + pr + ')' };
+        } else {
+          colors = whitepaper;
         }
+      } else {
+        colors = whitepaper;
       }
-    } catch (e) {}
+    } catch (e) {
+      colors = whitepaper;
+    }
   } else if (theme === 'light' || theme === 'dark') {
     // Check for configured theme overrides (ThemesConfig in cfg.themes)
     try {
@@ -51,7 +59,7 @@
       colors = builtins[theme];
     }
   } else {
-    colors = builtins.dark;
+    colors = whitepaper;
   }
 
   document.documentElement.className = theme;
