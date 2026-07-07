@@ -170,10 +170,36 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
     return form;
   }, [id, label, baseSvgEntry, sleepingSvgEntry, glbEntry, roomGlbEntry, scale, roomScale, author, license, sourceUrl]);
 
-  const draftCustomForms = useMemo(() => {
-    if (!draftForm) return {};
-    return { [draftForm.id]: draftForm };
-  }, [draftForm]);
+  // Preview can be shown as soon as we have enough to render something:
+  // a name/id plus at least one uploaded asset (SVG or GLB).
+  const previewId = useMemo(() => {
+    if (isValidId(id)) return id;
+    const fromLabel = slugifyId(label);
+    if (isValidId(fromLabel)) return fromLabel;
+    return 'custom-preview';
+  }, [id, label]);
+
+  const svgPreviewForm: CustomPetForm | undefined = useMemo(() => {
+    if (!isValidId(previewId) || !baseSvgEntry) return undefined;
+    const form: CustomPetForm = {
+      id: previewId,
+      label: label.trim() || previewId,
+      category: 'custom',
+      svgBase: baseSvgEntry,
+      ...(sleepingSvgEntry ? { svgSleeping: sleepingSvgEntry } : undefined),
+      ...(glbEntry ? { asset3d: { ...glbEntry, scale } } : undefined),
+      ...(roomGlbEntry ? { roomAsset3d: { ...roomGlbEntry, scale: roomScale } } : undefined),
+      ...(author.trim() ? { author: author.trim() } : undefined),
+      ...(license.trim() ? { license: license.trim() } : undefined),
+      ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : undefined),
+    };
+    return form;
+  }, [previewId, label, baseSvgEntry, sleepingSvgEntry, glbEntry, roomGlbEntry, scale, roomScale, author, license, sourceUrl]);
+
+  const previewCustomForms = useMemo(() => {
+    if (!svgPreviewForm) return {};
+    return { [svgPreviewForm.id]: svgPreviewForm };
+  }, [svgPreviewForm]);
 
   const previewCompanion: PetsCompanion = useMemo(
     () => ({
@@ -182,11 +208,11 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
       state: 'active',
       progressionState: 'none',
       breedCategory: 'custom',
-      breedAsset: id,
+      breedAsset: previewId,
       adultType: undefined,
       name: label.trim() || baseCompanion.name,
     }),
-    [baseCompanion, id, label],
+    [baseCompanion, previewId, label],
   );
 
   const glbPreviewAsset: Asset3DEntry | undefined = useMemo(() => {
@@ -198,6 +224,8 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
     if (!roomGlbEntry) return undefined;
     return { ...roomGlbEntry, scale: roomScale };
   }, [roomGlbEntry, roomScale]);
+
+  const canPreview = Boolean(baseSvgEntry || glbEntry || roomGlbEntry);
 
   const canSave = Boolean(draftForm) && !isBusy;
 
@@ -392,12 +420,12 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
       </div>
 
       {/* Preview */}
-      {draftForm && (
+      {canPreview && (
         <div className="space-y-3 rounded-xl border bg-card/30 p-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <p className="text-sm font-medium">Preview: {draftForm.label}</p>
-              <p className="text-xs text-muted-foreground">ID: {draftForm.id}</p>
+              <p className="text-sm font-medium">Preview: {svgPreviewForm?.label || 'New species'}</p>
+              <p className="text-xs text-muted-foreground">ID: {svgPreviewForm?.id || previewId}</p>
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="preview-3d" className="text-xs">3D preview</Label>
@@ -419,15 +447,19 @@ export function PetsSpeciesCreator({ baseCompanion }: PetsSpeciesCreatorProps) {
                   className="w-full h-full"
                 />
               </div>
-            ) : (
+            ) : svgPreviewForm ? (
               <div className="size-48">
                 <PetsStageVisual
                   companion={previewCompanion}
-                  customForms={draftCustomForms}
+                  customForms={previewCustomForms}
                   size="lg"
                   animated={false}
                 />
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center">
+                Upload a base SVG or pet GLB to render a preview.
+              </p>
             )}
           </div>
         </div>
