@@ -11,8 +11,22 @@ const { toastMock, LNMock } = vi.hoisted(() => ({
   LNMock: vi.fn(),
 }));
 
-vi.mock('@/hooks/useSecureLocalStorage', () => ({
-  useSecureLocalStorage: vi.fn(() => [[], vi.fn()]),
+vi.mock('@/hooks/useEncryptedSecureLocalStorage', () => ({
+  useEncryptedSecureLocalStorage: vi.fn(() => [[], vi.fn(), true]),
+}));
+
+vi.mock('@/hooks/useCurrentUser', () => ({
+  useCurrentUser: vi.fn(() => ({
+    user: {
+      pubkey: 'user-pubkey',
+      signer: {
+        nip44: {
+          encrypt: vi.fn(async (_pubkey: string, plaintext: string) => plaintext),
+          decrypt: vi.fn(async (_pubkey: string, ciphertext: string) => ciphertext),
+        },
+      },
+    },
+  })),
 }));
 
 vi.mock('@/hooks/useToast', () => ({

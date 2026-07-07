@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
 import { NostrContext } from '@nostrify/react';
-import { NUser, useNostrLogin } from '@nostrify/react/login';
+import { NUser, useNostrLogin, type NLoginType } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getEffectiveRelays, DITTO_RELAYS, ZAPSTORE_RELAY } from '@/lib/appRelays';
@@ -70,6 +70,11 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // The `open()` callback reads from this ref when a relay sends an AUTH
   // challenge, so it always uses the latest signer without recreating the pool.
   const signerRef = useRef<NostrSigner | undefined>(undefined);
+  // Stable ref to the current login so the AUTH callback can validate that the
+  // signing identity matches the logged-in pubkey. It is initialized to
+  // undefined and populated in the sync effect below because currentLogin is
+  // derived later in this component body.
+  const loginRef = useRef<NLoginType | undefined>(undefined);
 
   // Derive the current signer from the active login. This mirrors the
   // logic in useCurrentUser but avoids a circular dependency (useCurrentUser
@@ -96,10 +101,12 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     }
   }, [currentLogin]);
 
-  // Keep the ref in sync so the AUTH callback always sees the latest signer.
+  // Keep the refs in sync so the AUTH callback always sees the latest signer
+  // and the current logged-in identity.
   useEffect(() => {
     signerRef.current = currentSigner;
-  }, [currentSigner]);
+    loginRef.current = currentLogin;
+  }, [currentSigner, currentLogin]);
 
   // Update effective relays ref when config changes. The NPool reads from
   // this ref, so new queries automatically use the updated relay set.
@@ -126,15 +133,36 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             if (!signer) {
               throw new Error('AUTH failed: no signer available (user not logged in)');
             }
-            return signer.signEvent({
+            if (!challenge || challenge.trim().length === 0) {
+              throw new Error('AUTH failed: relay challenge is empty');
+            }
+
+            const expectedRelay = url.href;
+            const signed = await signer.signEvent({
               kind: 22242,
               content: '',
               tags: [
-                ['relay', url.href],
+                ['relay', expectedRelay],
                 ['challenge', challenge],
               ],
               created_at: Math.floor(Date.now() / 1000),
             });
+
+            const relayTag = signed.tags.find(([name]) => name === 'relay')?.[1];
+            if (relayTag !== expectedRelay) {
+              throw new Error('AUTH failed: signed relay tag does not match connected relay');
+            }
+            const challengeTag = signed.tags.find(([name]) => name === 'challenge')?.[1];
+            if (!challengeTag || challengeTag.trim().length === 0) {
+              throw new Error('AUTH failed: signed challenge tag is empty');
+            }
+
+            const expectedPubkey = loginRef.current?.pubkey;
+            if (expectedPubkey && signed.pubkey !== expectedPubkey) {
+              throw new Error('AUTH failed: signed pubkey does not match logged-in identity');
+            }
+
+            return signed;
           },
         });
       },

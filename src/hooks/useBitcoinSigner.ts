@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNostrLogin } from '@nostrify/react/login';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { type BtcSigner, hasBtcSigning } from '@/lib/bitcoin-signers';
+import { type BtcSigner, hasBtcSigning, type PsbtSigningOptions } from '@/lib/bitcoin-signers';
 
 /**
  * Three possible states for Bitcoin PSBT signing capability:
@@ -184,7 +184,7 @@ export function useBitcoinSigner() {
      * The returned hex is a signed (but not finalized) PSBT.
      */
     signPsbt: btcSigner
-      ? (psbtHex: string) => btcSigner.signPsbt(psbtHex)
+      ? (psbtHex: string, options?: PsbtSigningOptions) => btcSigner.signPsbt(psbtHex, options)
       : null,
   };
 }

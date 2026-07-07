@@ -582,12 +582,14 @@ function isPrivateIPv6(ip: string): boolean {
 }
 
 /** Reject localhost, loopback, and private-network mint hosts.
+ *  Require HTTPS for production mint URLs; HTTP is not auto-allowed.
  *  Optionally compare against an allow-list of normalized mint URLs.
  */
 export function isAllowedMintUrl(url: string, allowList?: string[]): boolean {
   try {
     const u = new URL(url);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    // Require HTTPS for mint URLs; HTTP is not auto-allowed.
+    if (u.protocol !== 'https:') return false;
     // The URL constructor normalizes IDN hosts to punycode automatically.
     const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     if (host === 'localhost') return false;

@@ -1,4 +1,5 @@
 import type { NostrEvent } from "@nostrify/nostrify";
+import { verifyEvent } from "nostr-tools";
 
 export const BAO_MARKET_KIND = 38000;
 export const BAO_MARKETS_TRADE_KIND = 38001;
@@ -76,6 +77,12 @@ function parseOutcomes(raw: unknown[]): BaoMarketOutcome[] {
  */
 export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
   if (event.kind !== BAO_MARKET_KIND) return null;
+
+  try {
+    if (!verifyEvent(event)) return null;
+  } catch {
+    return null;
+  }
 
   const tags = event.tags ?? [];
   const getTag = (name: string): string | undefined =>

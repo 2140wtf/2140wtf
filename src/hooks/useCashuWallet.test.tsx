@@ -5,9 +5,10 @@ import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { generateSecretKey } from 'nostr-tools';
 import { getEncodedToken, CashuWallet } from '@cashu/cashu-ts';
+import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
-import { deriveEncryptionKey, deriveNip60WalletKey } from '@/lib/cashu/cashu';
+import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
 import { saveProofsForMint } from '@/lib/cashu/storage';
 import { createNip60Signer, buildTokenEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
@@ -18,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   sendTracker: { active: 0, max: 0 },
   sendCallCount: 0,
+  meltCallCount: 0,
+  mintProofsCallCount: 0,
   createMockWallet: (opts: { sendDelay?: number } = {}) => ({
     loadMint: vi.fn().mockResolvedValue(undefined),
     getInfo: vi.fn().mockResolvedValue({ name: 'Test Mint', nuts: {} }),
@@ -41,8 +44,24 @@ const mocks = vi.hoisted(() => ({
       keep: (Array.isArray(_proofs) ? _proofs : []).filter((p) => (p as { amount: number }).amount < amountToSend),
     })),
     receive: vi.fn().mockResolvedValue([]),
-    getFeesForProofs: vi.fn().mockReturnValue(0),
+    getFeesForProofs: vi.fn().mockImplementation((proofs: unknown[]) => (Array.isArray(proofs) ? proofs.length : 0)),
     checkProofsStates: vi.fn().mockResolvedValue([]),
+    createMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', request: 'lnbc...', state: 'UNPAID' }),
+    checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', state: 'PAID' }),
+    mintProofs: vi.fn().mockImplementation(async (amount: number) => {
+      const callId = ++mocks.mintProofsCallCount;
+      return [{ id: 'ks', amount, secret: `mint-secret-${callId}`, C: `C-mint-${callId}` }];
+    }),
+    createMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
+    checkMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', state: 'PAID' }),
+    meltProofs: vi.fn().mockImplementation(async (_quote: unknown, proofs: unknown[]) => {
+      const callId = ++mocks.meltCallCount;
+      const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
+      return {
+        quote: { quote: 'melt-quote-id', state: 'PAID', payment_preimage: `preimage-${callId}` },
+        change: inputSum > 22 ? [{ id: 'ks', amount: inputSum - 22, secret: `change-secret-${callId}`, C: `C-change-${callId}` }] : [],
+      };
+    }),
     keysets: [{ active: true, id: 'ks' }],
     keys: new Map(),
   }),
@@ -51,6 +70,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useAppContext', () => ({
   useAppContext: () => ({ config: { appName: 'Test', clientName: 'Test' } }),
 }));
+
+vi.mock('@/lib/cashu/cashu', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/cashu/cashu')>('@/lib/cashu/cashu');
+  return {
+    ...actual,
+    validateReceivedProofs: vi.fn().mockReturnValue({ valid: true }),
+  };
+});
 
 vi.mock('@cashu/cashu-ts', async () => {
   const actual = await vi.importActual<typeof import('@cashu/cashu-ts')>('@cashu/cashu-ts');
@@ -351,5 +378,187 @@ describe('useCashuWallet locked-token wrappers', () => {
     await act(async () => result.current.receiveLockedToken(token, validPrivkey));
 
     expect(receiveSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ privkey: validPrivkey }));
+  });
+});
+
+describe('useCashuWallet mint URL policy', () => {
+  const httpsMint = 'https://mint.example.com';
+  const httpMint = 'http://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('addCustomMint rejects HTTP mint URLs', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: httpsMint }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await act(async () => result.current.addCustomMint('Bad HTTP', httpMint));
+
+    await waitFor(() => expect(result.current.error).toBe('Mint URL must use HTTPS'));
+    expect(result.current.allMints.some((m) => m.url === httpMint)).toBe(false);
+  });
+});
+
+describe('useCashuWallet mintFromQuote proof validation', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.mintProofsCallCount = 0;
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 100, secret: 'secret-a', C: 'C-a' },
+      ],
+      encKey,
+    );
+  }
+
+  it('calls validateReceivedProofs on minted proofs before storing them', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
+
+    expect(validateReceivedProofs).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ amount: 21 })]),
+      expect.objectContaining({ requireDleq: true }),
+    );
+  });
+
+  it('rejects minted proofs that fail validation', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: false, reason: 'invalid proof' });
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
+
+    await waitFor(() => expect(result.current.error).toBe('Mint failed: invalid proof'));
+  });
+});
+
+describe('useCashuWallet payInvoice coin selection', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.meltCallCount = 0;
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    // Seed local storage with several proofs so coin selection matters.
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 10, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 20, secret: 'secret-b', C: 'C-b' },
+        { id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' },
+      ],
+      encKey,
+    );
+  }
+
+  it('selects only the proofs needed for amount plus fee reserve', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    const selectSpy = vi.spyOn(wallet, 'selectProofsToSend');
+    const meltSpy = vi.spyOn(wallet, 'meltProofs');
+
+    await act(async () => result.current.payInvoice('lnbc210n1pw'));
+
+    expect(selectSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: 10 }),
+        expect.objectContaining({ amount: 20 }),
+        expect.objectContaining({ amount: 100 }),
+      ]),
+      22,
+      true,
+    );
+    const sentProofs = meltSpy.mock.calls[0]![1] as Array<{ amount: number }>;
+    expect(sentProofs.length).toBeLessThan(3);
+    expect(sentProofs.reduce((sum, p) => sum + p.amount, 0)).toBeGreaterThanOrEqual(22);
+  });
+
+  it('validates change proofs before storing them', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await act(async () => result.current.payInvoice('lnbc210n1pw'));
+
+    expect(validateReceivedProofs).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ requireDleq: true }),
+    );
+    expect(result.current.error).toBe('');
+  });
+
+  it('rejects payment when the melt fee reserve exceeds the selected proof fee', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    vi.spyOn(wallet, 'getFeesForProofs').mockReturnValue(0);
+    vi.spyOn(wallet, 'createMeltQuote').mockResolvedValue({
+      quote: 'melt-quote-id',
+      amount: 21,
+      fee_reserve: 5,
+      state: 'UNPAID',
+    } as MeltQuoteResponse);
+
+    const payResult = await act(async () => result.current.payInvoice('lnbc210n1pw'));
+
+    expect(payResult.success).toBe(false);
+    await waitFor(() =>
+      expect(result.current.error).toBe('Payment failed: Melt fee reserve (5) exceeds fee for selected proofs (0)'),
+    );
   });
 });

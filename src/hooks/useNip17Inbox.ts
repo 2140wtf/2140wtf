@@ -6,6 +6,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { APP_RELAYS } from '@/lib/appRelays';
+import { isVerifiedOwnEvent } from '@/lib/nostrEvents';
 import {
   computeNip17ConversationId,
   getNip17DmRelays,
@@ -67,7 +68,7 @@ export function useNip17Inbox() {
         { signal },
       );
       const event = events[0];
-      return event ? getNip17DmRelays(event) : [];
+      return event && isVerifiedOwnEvent(event, user.pubkey) ? getNip17DmRelays(event) : [];
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

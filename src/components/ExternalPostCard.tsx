@@ -4,7 +4,10 @@ import { Heart, MessageCircle, Repeat2 } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SafeImage } from '@/components/SafeImage';
+import { SafeLink } from '@/components/SafeLink';
 import { formatNumber } from '@/lib/formatNumber';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 /** A single image attachment. */
@@ -83,6 +86,14 @@ interface ExternalPostCardProps {
 export function ExternalPostCard({ post, hideImage, className }: ExternalPostCardProps) {
   const navigate = useNavigate();
 
+  const safePostUrl = sanitizeUrl(post.postUrl);
+  const safeProfileUrl = sanitizeUrl(post.profileUrl);
+  const safeAvatar = sanitizeUrl(post.avatar);
+  const safeImages = post.images
+    ?.map((img) => ({ ...img, thumb: sanitizeUrl(img.thumb) }))
+    .filter((img): img is ExternalImage => !!img.thumb);
+  const safeExternalThumb = sanitizeUrl(post.external?.thumb);
+
   return (
     <div
       className={cn(
@@ -94,30 +105,30 @@ export function ExternalPostCard({ post, hideImage, className }: ExternalPostCar
       tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
-        navigate(`/i/${encodeURIComponent(post.postUrl)}`);
+        if (safePostUrl) navigate(`/i/${encodeURIComponent(safePostUrl)}`);
       }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           e.stopPropagation();
-          navigate(`/i/${encodeURIComponent(post.postUrl)}`);
+          if (safePostUrl) navigate(`/i/${encodeURIComponent(safePostUrl)}`);
         }
       }}
     >
       {/* Images */}
-      {!hideImage && post.images && post.images.length > 0 && (
+      {!hideImage && safeImages && safeImages.length > 0 && (
         <div className={cn(
           'w-full overflow-hidden',
-          post.images.length > 1 ? 'grid grid-cols-2 gap-px' : '',
+          safeImages.length > 1 ? 'grid grid-cols-2 gap-px' : '',
         )}>
-          {post.images.slice(0, 4).map((img, i) => (
-            <img
+          {safeImages.slice(0, 4).map((img, i) => (
+            <SafeImage
               key={i}
               src={img.thumb}
               alt={img.alt || ''}
               className={cn(
                 'w-full object-cover',
-                post.images!.length === 1 ? 'max-h-[300px]' : 'h-[150px]',
+                safeImages.length === 1 ? 'max-h-[300px]' : 'h-[150px]',
               )}
               loading="lazy"
               onError={(e) => {
@@ -129,10 +140,10 @@ export function ExternalPostCard({ post, hideImage, className }: ExternalPostCar
       )}
 
       {/* External link card (if no images) */}
-      {!hideImage && !post.images && post.external?.thumb && (
+      {!hideImage && !safeImages && safeExternalThumb && (
         <div className="w-full overflow-hidden">
-          <img
-            src={post.external.thumb}
+          <SafeImage
+            src={safeExternalThumb}
             alt=""
             className="w-full h-[160px] object-cover"
             loading="lazy"
@@ -152,11 +163,11 @@ export function ExternalPostCard({ post, hideImage, className }: ExternalPostCar
             className="shrink-0"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/i/${encodeURIComponent(post.profileUrl)}`);
+              if (safeProfileUrl) navigate(`/i/${encodeURIComponent(safeProfileUrl)}`);
             }}
           >
             <Avatar className="size-5">
-              <AvatarImage src={post.avatar} alt={post.displayName} />
+              <AvatarImage src={safeAvatar} alt={post.displayName} />
               <AvatarFallback className="bg-primary/20 text-primary text-[10px]">
                 {post.displayName[0]?.toUpperCase()}
               </AvatarFallback>
@@ -168,7 +179,7 @@ export function ExternalPostCard({ post, hideImage, className }: ExternalPostCar
             className="text-sm font-semibold truncate hover:underline"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/i/${encodeURIComponent(post.profileUrl)}`);
+              if (safeProfileUrl) navigate(`/i/${encodeURIComponent(safeProfileUrl)}`);
             }}
           >
             {post.displayName}
@@ -213,16 +224,16 @@ export function ExternalPostCard({ post, hideImage, className }: ExternalPostCar
           </span>
 
           {/* Platform branding — links to the original post */}
-          {post.brandIcon && (
-            <a
-              href={post.postUrl}
+          {post.brandIcon && safePostUrl && (
+            <SafeLink
+              href={safePostUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="ml-auto text-[11px] text-muted-foreground flex items-center gap-1 hover:text-foreground transition-colors"
               onClick={(e) => e.stopPropagation()}
             >
               {post.brandIcon}
-            </a>
+            </SafeLink>
           )}
         </div>
       </div>

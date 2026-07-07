@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useEncryptedSecureLocalStorage } from '@/hooks/useEncryptedSecureLocalStorage';
 import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 
 /**
@@ -15,12 +15,13 @@ import type { Nip17Conversation } from '@/hooks/useNip17Inbox';
 export function useDmReadCursors() {
   const { user } = useCurrentUser();
   const pubkey = user?.pubkey ?? '';
+  const nip44 = user?.signer?.nip44;
   const storageKey = useMemo(
     () => (pubkey ? `ditto:dm-read-cursors:${pubkey}` : 'ditto:dm-read-cursors:'),
     [pubkey],
   );
 
-  const [cursors, setCursors] = useLocalStorage<Record<string, number>>(storageKey, {});
+  const [cursors, setCursors] = useEncryptedSecureLocalStorage<Record<string, number>>(storageKey, {}, nip44, pubkey);
 
   const getCursor = useCallback(
     (conversationId: string) => cursors[conversationId] ?? 0,

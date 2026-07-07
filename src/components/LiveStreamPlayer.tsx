@@ -3,6 +3,7 @@ import type Hls from 'hls.js';
 import { Play, Pause, Volume1, Volume2, VolumeX, Expand, Minimize } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BLANK_POSTER } from '@/lib/blankPoster';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 
 interface LiveStreamPlayerProps {
@@ -16,6 +17,9 @@ interface LiveStreamPlayerProps {
 }
 
 export function LiveStreamPlayer({ src, poster, className, title, artist }: LiveStreamPlayerProps) {
+  const safeSrc = sanitizeUrl(src);
+  const safePoster = sanitizeUrl(poster) || BLANK_POSTER;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -35,11 +39,11 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
   // Set up HLS — dynamically imports hls.js (1.3MB) only when needed
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !src) return;
+    if (!video || !safeSrc) return;
 
     // If browser natively supports HLS (Safari), no library needed
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src;
+      video.src = safeSrc;
       video.play().catch(() => {
         setAutoplayBlocked(true);
       });
@@ -63,7 +67,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
       });
 
       hlsRef.current = hls;
-      hls.loadSource(src);
+      hls.loadSource(safeSrc);
       hls.attachMedia(video);
 
       hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
@@ -99,7 +103,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
         hlsRef.current = null;
       }
     };
-  }, [src]);
+  }, [safeSrc]);
 
   // Track fullscreen changes
   useEffect(() => {
@@ -116,7 +120,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
     const video = videoRef.current;
     if (!video) return;
 
-    const artwork: MediaImage[] = poster ? [{ src: poster, sizes: '512x512', type: 'image/jpeg' }] : [];
+    const artwork: MediaImage[] = safePoster ? [{ src: safePoster, sizes: '512x512', type: 'image/jpeg' }] : [];
     navigator.mediaSession.metadata = new MediaMetadata({
       title: title || 'Live Stream',
       artist: artist || '',
@@ -136,7 +140,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
       navigator.mediaSession.setActionHandler('play', null);
       navigator.mediaSession.setActionHandler('pause', null);
     };
-  }, [title, artist, poster]);
+  }, [title, artist, safePoster]);
 
   // Keep OS playback state in sync
   useEffect(() => {
@@ -187,7 +191,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
     }
   }, []);
 
-  if (hasError) {
+  if (hasError || !safeSrc) {
     return (
       <div className={cn('relative lg:rounded-2xl overflow-hidden bg-black aspect-video flex items-center justify-center', className)}>
         <div className="text-center space-y-2 px-4">
@@ -212,7 +216,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
       <video
         ref={videoRef}
         data-no-native-poster=""
-        poster={poster || BLANK_POSTER}
+        poster={safePoster}
         className="w-full h-full object-contain cursor-pointer"
         playsInline
         autoPlay

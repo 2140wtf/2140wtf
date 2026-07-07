@@ -80,6 +80,7 @@ import { Nip05Badge } from "@/components/Nip05Badge";
 import { NoteContent } from "@/components/NoteContent";
 import { NoteMoreMenu } from "@/components/NoteMoreMenu";
 import { PatchCard } from "@/components/PatchCard";
+import { SafeImage } from "@/components/SafeImage";
 import { PollContent } from "@/components/PollContent";
 import { ProfileBadgesContent } from "@/components/ProfileBadgesContent";
 import { ProfileCard } from "@/components/ProfileCard";
@@ -128,6 +129,7 @@ import { formatNumber } from "@/lib/formatNumber";
 import { publishedAtAction } from "@/lib/publishedAtAction";
 import { parseBadgeSet } from "@/lib/parseBadgeSet";
 import { getEffectiveStreamStatus } from "@/lib/streamStatus";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { cn } from "@/lib/utils";
 import { BLANK_POSTER } from "@/lib/blankPoster";
 import { encodeEventAddress } from "@/lib/encodeEvent";
@@ -1786,9 +1788,12 @@ function ShortVideoMedia({
     setIsMuted(next);
   };
 
+  const safeUrl = sanitizeUrl(imeta?.url);
+  const safeThumbnail = sanitizeUrl(imeta?.thumbnail);
+
   return (
     <>
-      {imeta?.url && (
+      {safeUrl && (
         <div
           ref={containerRef}
           className={cn(
@@ -1796,16 +1801,16 @@ function ShortVideoMedia({
             // With preload="none" the <video> has no intrinsic height until it
             // plays. With no thumbnail to set the box height, fall back to a 16:9
             // box (most videos are landscape) instead of a square-ish sliver.
-            !imeta.thumbnail && !isPlaying && 'aspect-video',
+            !safeThumbnail && !isPlaying && 'aspect-video',
           )}
           onClick={handlePlayToggle}
         >
           {/* When there's a thumbnail it drives the box size (the <video> below
               is absolutely positioned on top); the plain <img> avoids WebView's
               native gray play-circle that a poster-bearing <video> would draw. */}
-          {imeta.thumbnail && !isPlaying && (
+          {safeThumbnail && !isPlaying && (
             <img
-              src={imeta.thumbnail}
+              src={safeThumbnail}
               alt=""
               aria-hidden
               className="w-full max-h-[70vh] object-cover"
@@ -1813,14 +1818,14 @@ function ShortVideoMedia({
           )}
           <video
             ref={videoRef}
-            src={imeta.url}
+            src={safeUrl}
             data-no-native-poster=""
             poster={BLANK_POSTER}
             className={cn(
               'w-full max-h-[70vh] object-cover',
               // Fill on top of the thumbnail (which sets the height) when one is
               // present; otherwise lay out normally.
-              imeta.thumbnail && !isPlaying && 'absolute inset-0 h-full',
+              safeThumbnail && !isPlaying && 'absolute inset-0 h-full',
             )}
             loop
             playsInline
@@ -1902,8 +1907,8 @@ function getStreamStatusConfig(status: string | undefined) {
 function StreamContent({ event }: { event: NostrEvent }) {
   const title = getTag(event.tags, "title") || "Untitled Stream";
   const summary = getTag(event.tags, "summary");
-  const imageUrl = getTag(event.tags, "image");
-  const streamingUrl = getTag(event.tags, "streaming");
+  const imageUrl = sanitizeUrl(getTag(event.tags, "image"));
+  const streamingUrl = sanitizeUrl(getTag(event.tags, "streaming"));
   const status = getEffectiveStreamStatus(event);
   const currentParticipants = getTag(event.tags, "current_participants");
   const statusConfig = getStreamStatusConfig(status);
@@ -1952,7 +1957,7 @@ function StreamContent({ event }: { event: NostrEvent }) {
           </div>
         ) : imageUrl ? (
           <div className="relative w-full aspect-video overflow-hidden bg-muted">
-            <img
+            <SafeImage
               src={imageUrl}
               alt=""
               className="w-full h-full object-cover"
