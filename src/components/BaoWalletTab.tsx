@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -88,11 +88,35 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('bitcoin');
 
   const cashuWallet = useBaoCashuWallet(seedPhrase, user, relayUrls, { enableAutoClaim: false });
+  const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = cashuWallet;
+  const { toast } = useToast();
   const bitcoin = useBitcoinWallet();
   const walletStatus = useWallet();
   const nwc = useNWC();
 
   const totalBalance = cashuWallet.totalBalance + (bitcoin.addressData?.totalBalance ?? 0);
+
+  useEffect(() => {
+    if (walletError) {
+      toast({
+        variant: 'destructive',
+        title: 'BAO wallet error',
+        description: walletError,
+      });
+      clearWalletError();
+    }
+  }, [walletError, toast, clearWalletError]);
+
+  useEffect(() => {
+    if (walletSuccess) {
+      toast({
+        variant: 'success',
+        title: 'BAO wallet',
+        description: walletSuccess,
+      });
+      clearWalletSuccess();
+    }
+  }, [walletSuccess, toast, clearWalletSuccess]);
 
   const refreshAll = () => {
     void cashuWallet.calculateAllBalances();

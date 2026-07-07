@@ -42,8 +42,9 @@ interface Pets3DVisualProps {
 
 const WALK_RADIUS = 1.0;
 const WALK_SPEED = 0.35;
-/** Base scale for the loaded pet GLB. Tuned so the pet feels pet-sized inside the full-room world. */
-const PET_SCALE = 0.015;
+/** Base scale for the loaded pet GLB. Kept small so the pet feels pet-sized inside the full-room world. */
+const PET_SCALE = 0.011;
+const PET_Y = -1.05; // raised slightly above the ground plane
 
 /**
  * Low-poly procedural room environment: sky dome, ground plane, and a few
@@ -130,7 +131,7 @@ function PetModel({
     const x = Math.cos(t) * WALK_RADIUS;
     const z = Math.sin(t) * WALK_RADIUS;
 
-    groupRef.current.position.set(x, -1.25, z);
+    groupRef.current.position.set(x, PET_Y, z);
     // Face the direction of travel (tangent to the circle).
     groupRef.current.rotation.y = -t + Math.PI / 2;
   });

@@ -249,6 +249,7 @@ export function useJurorSession(
           threshold,
           vssCommits: localPolyRef.current.commitments,
           pok: localPolyRef.current.pok,
+          phaseNonce: randomHex32(),
         });
         await publishEvent(template);
 
@@ -296,7 +297,7 @@ export function useJurorSession(
         jurors: selectedJurors,
       });
 
-      const { commitmentEvent, shareEvents } = session.generateCommitmentAndShares();
+      const { commitmentEvent, shareEvents } = await session.generateCommitmentAndShares();
       independentDkgRef.current = session;
 
       await publishEvent(commitmentEvent);
@@ -326,9 +327,9 @@ export function useJurorSession(
     const mySeckey = seckey;
     let completed = false;
 
-    function tryComputeKey() {
+    async function tryComputeKey() {
       if (completed || !session.canComputeKey()) return;
-      session.decryptShares();
+      await session.decryptShares();
       session.verifyShares(commitmentEventIdsRef.current);
       session.resolveComplaints();
       if (!session.canComputeKey()) {
@@ -338,7 +339,7 @@ export function useJurorSession(
 
       completed = true;
       const record = session.computeKey();
-      const { backupEvent } = session.buildBackupPayload(myPubkey);
+      const { backupEvent } = await session.buildBackupPayload(myPubkey);
       const wrap = wrapProtocolEvent(backupEvent, mySeckey, myPubkey);
       publishProtocolWrap(nostr, wrap, myPubkey).catch((error) => {
         console.warn('Failed to publish DKG self-backup:', error);
@@ -386,6 +387,7 @@ export function useJurorSession(
           threshold: parsed.threshold,
           vssCommits: parsed.vssCommits,
           pok: parsed.pok,
+          phaseNonce: parsed.phaseNonce,
           eventId: event.id,
         })) {
           commitmentEventIdsRef.current[parsed.jurorIdx] = event.id;
@@ -411,7 +413,7 @@ export function useJurorSession(
 
       if (changed) {
         updateCounts();
-        tryComputeKey();
+        void tryComputeKey();
       }
     }
 

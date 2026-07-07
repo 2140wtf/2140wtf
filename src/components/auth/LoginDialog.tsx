@@ -2,7 +2,7 @@
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Upload, AlertTriangle, ChevronDown, ChevronUp, Loader2, ExternalLink } from 'lucide-react';
+import { Upload, AlertTriangle, ChevronDown, ChevronUp, Loader2, ExternalLink, Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
@@ -359,11 +359,11 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
         }
       }}
     >
-      <TabsList className="grid w-full grid-cols-2 bg-muted/80 rounded-lg mb-4">
-        <TabsTrigger value="key" className="flex items-center gap-2">
+      <TabsList className="grid w-full grid-cols-2 bg-muted border rounded-none mb-4">
+        <TabsTrigger value="key" className="flex items-center gap-2 rounded-none">
           <span>Secret Key</span>
         </TabsTrigger>
-        <TabsTrigger value="remote" className="flex items-center gap-2">
+        <TabsTrigger value="remote" className="flex items-center gap-2 rounded-none">
           <span>Remote Signer</span>
         </TabsTrigger>
       </TabsList>
@@ -382,7 +382,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
                 setNsec(e.target.value);
                 if (errors.nsec) setErrors(prev => ({ ...prev, nsec: undefined }));
               }}
-              className={`rounded-lg ${
+              className={`rounded-none ${
                 errors.nsec ? 'border-red-500 focus-visible:ring-red-500' : ''
               }`}
               placeholder='nsec1...'
@@ -398,7 +398,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               type="submit"
               size="lg"
               disabled={isLoading || !nsec.trim()}
-              className="flex-1"
+              className="flex-1 rounded-none"
             >
               {isLoading ? 'Verifying...' : 'Log in'}
             </Button>
@@ -416,7 +416,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               size="lg"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading || isFileLoading}
-              className="px-3"
+              className="px-3 rounded-none"
             >
               <Upload className="w-4 h-4" />
             </Button>
@@ -434,7 +434,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
           {connectError ? (
             <div className='flex flex-col items-center space-y-4 py-4'>
               <p className='text-sm text-red-500 text-center'>{connectError}</p>
-              <Button variant='outline' onClick={handleRetry}>
+              <Button variant='outline' className='rounded-none' onClick={handleRetry}>
                 Retry
               </Button>
             </div>
@@ -459,7 +459,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             <>
               {/* QR Code - only show on desktop */}
               {!isMobile && (
-                <div className='p-4 bg-white dark:bg-white rounded-xl'>
+                <div className='p-4 bg-card border rounded-none'>
                   <QRCodeCanvas
                     value={nostrConnectUri}
                     size={180}
@@ -471,7 +471,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               {/* Open Signer App button - primary action on mobile */}
               {isMobile && (
                 <Button
-                  className='w-full gap-2 py-6 rounded-full'
+                  className='w-full gap-2 py-6 rounded-none'
                   onClick={handleOpenSignerApp}
                 >
                   <ExternalLink className='w-5 h-5' />
@@ -487,7 +487,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
         </div>
 
         {/* Manual URI input section - collapsible */}
-        <div className='pt-4 border-t border-gray-200 dark:border-gray-700'>
+        <div className='pt-4 border-t border-border'>
           <button
             type='button'
             onClick={() => setShowBunkerInput(!showBunkerInput)}
@@ -508,7 +508,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
                   id='connectBunkerUri'
                   value={bunkerUri}
                   onChange={(e) => setBunkerUri(e.target.value)}
-                  className='rounded-lg border-gray-300 dark:border-gray-700 focus-visible:ring-primary text-base md:text-sm'
+                  className='rounded-none border-input focus-visible:ring-primary text-base md:text-sm'
                   placeholder='bunker://'
                 />
                 {bunkerUri && !validateBunkerUri(bunkerUri) && (
@@ -517,7 +517,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               </div>
 
               <Button
-                className='w-full rounded-full py-4'
+                className='w-full rounded-none py-4'
                 variant='outline'
                 onClick={handleBunkerLogin}
                 disabled={isLoading || !bunkerUri.trim() || !validateBunkerUri(bunkerUri)}
@@ -533,16 +533,19 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-6 overflow-hidden rounded-2xl overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-6 overflow-hidden rounded-none border-2 border-foreground/20 overflow-y-auto shadow-2xl">
         <DialogHeader className="px-6 pt-6">
-          <DialogTitle className="text-lg font-semibold leading-none tracking-tight text-center">
-            Log in
+          <div className="flex items-center justify-center gap-2 text-primary">
+            <Newspaper className="w-6 h-6" />
+            <span className="text-xs uppercase tracking-widest font-medium">The Daily Nostr</span>
+          </div>
+          <DialogTitle
+            className="text-3xl font-bold leading-none tracking-tight text-center mt-2"
+            style={{ fontFamily: 'var(--title-font-family, serif)' }}
+          >
+            2140
           </DialogTitle>
         </DialogHeader>
-
-        <div className="flex size-40 text-8xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
-          🔑
-        </div>
 
         <div className='px-6 pb-6 space-y-4 overflow-y-auto'>
           {onSignupClick && (
@@ -568,7 +571,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
                 </Alert>
               )}
               <Button
-                className="w-full h-12 px-9"
+                className="w-full h-12 px-9 rounded-none"
                 onClick={handleExtensionLogin}
                 disabled={isLoading}
               >
