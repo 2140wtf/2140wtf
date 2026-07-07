@@ -283,6 +283,23 @@ export function usePetsPurchaseItem(
           return { tags, content: freshProfile.event.content, meta: { currency, totalCost, petFiatSpend } };
         });
       } catch (profileError) {
+        // Roll back any companion fiat deduction before rethrowing.
+        if (companionEvent && companion && petFiatSpend > 0) {
+          try {
+            const rollbackTags = updatePetsTags(companionEvent.tags, {
+              fiat_balance: companion.fiatBalance.toString(),
+            });
+            await publishEvent({
+              kind: KIND_PETS_STATE,
+              content: companion.event.content,
+              tags: rollbackTags,
+              prev: companionEvent,
+            });
+            console.warn('[usePetsPurchaseItem] Restored pet fiat balance after profile update failure.');
+          } catch (rollbackError) {
+            console.error('[usePetsPurchaseItem] Failed to restore pet fiat balance after profile update failure:', rollbackError);
+          }
+        }
         if (paymentToken && externalWallet) {
           try {
             await externalWallet.receiveToken(paymentToken);
