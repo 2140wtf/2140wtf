@@ -230,6 +230,31 @@ export const themePresets: Record<string, ThemePreset> = {
     backgroundOpacity: 0.2,
   },
 
+  whitepaper: {
+    label: 'Whitepaper',
+    emoji: '📰',
+    featured: true,
+    colors: {
+      background: '45 20% 96%',
+      text: '40 40% 10%',
+      primary: '40 10% 15%',
+    },
+    font: { family: 'Lora' },
+    titleFont: { family: 'Playfair Display' },
+    radius: '0',
+    tokens: {
+      card: '45 15% 94%',
+      cardForeground: '40 40% 10%',
+      popover: '45 15% 94%',
+      popoverForeground: '40 40% 10%',
+      muted: '40 15% 90%',
+      mutedForeground: '40 15% 40%',
+      border: '40 20% 80%',
+      input: '40 20% 85%',
+      ring: '40 10% 15%',
+    },
+  },
+
   banana: {
     label: 'Banana',
     emoji: '🍌',
@@ -249,6 +274,9 @@ export const themePresets: Record<string, ThemePreset> = {
     backgroundOpacity: 0.25,
   },
 };
+
+/** The default whitepaper preset, used as the app-wide default theme. */
+export const whitepaperPreset: ThemePreset = themePresets.whitepaper;
 
 /** Converts a camelCase key to a CSS custom property name, e.g. primaryForeground → --primary-foreground */
 export function toThemeVar(key: string): string {
