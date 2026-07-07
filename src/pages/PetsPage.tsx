@@ -348,7 +348,7 @@ function PetsContent() {
   // Active Pets wallet: real Cashu (NIP-60/NWC) by default, or BAO signet/testnet.
   const petsWalletResult = usePetsWallet();
   const petsWallet = petsWalletResult.wallet;
-  const isRealPetsWallet = petsWalletResult.isReal;
+  const isBitcoinPetsWallet = petsWalletResult.isBitcoin;
 
   // Auto-normalize profiles missing pettingLevel tag
   useBlobbonautProfileNormalization({
@@ -639,7 +639,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isRealWallet: isRealPetsWallet,
+    isRealWallet: isBitcoinPetsWallet,
   });
 
   const { mutateAsync: executeEvolve, isPending: isEvolving } = usePetsEvolve({
@@ -647,7 +647,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isRealWallet: isRealPetsWallet,
+    isRealWallet: isBitcoinPetsWallet,
   });
   
   // Handler for evolution (baby -> adult)
