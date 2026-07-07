@@ -7,7 +7,7 @@ import { useFeedSettings } from './useFeedSettings';
 import { useContentFilters } from './useContentFilters';
 import { useMutedAuthorFilter } from './useMutedAuthorFilter';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
-import { isReactionKind, isRepostKind, isZapKind, shouldHideFeedEvent } from '@/lib/feedUtils';
+import { isReactionKind, isRepostKind, isZapKind, isMastodonBridgeEvent, shouldHideFeedEvent } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
 import { APP_RELAYS, getEffectiveRelays } from '@/lib/appRelays';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
@@ -182,6 +182,9 @@ export function useFeedStream(options: UseFeedStreamOptions): {
       //   - user content filters
       //   - the reply toggle (feed excludes replies across all kinds when off)
       if (shouldHideFeedEvent(event)) return;
+      // Keep the count consistent with the default/global feed, which drops
+      // Mastodon / ActivityPub bridged events.
+      if ((tab === 'all' || tab === 'global') && isMastodonBridgeEvent(event)) return;
       if (filterEvent(event)) return;
       if (!replies && isReplyEvent(event)) return;
 

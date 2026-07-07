@@ -2898,6 +2898,106 @@ const BIOMECHMOTH_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/20
 
 const BIOMECHMOTH_SLEEPING = BIOMECHMOTH_BASE;
 
+const HONEY_BADGER_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art honey-badger">
+  <defs>
+    <radialGradient id="hb-body" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="var(--secondaryColor, #f5d0a9)" />
+      <stop offset="55%" stop-color="var(--baseColor, #9c6644)" />
+      <stop offset="100%" stop-color="var(--baseColor, #5c3a21)" />
+    </radialGradient>
+    <radialGradient id="hb-belly" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#f3e5ab" />
+      <stop offset="100%" stop-color="#d4b483" />
+    </radialGradient>
+    <linearGradient id="hb-stripe" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2a2a2a" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#2a2a2a" />
+    </linearGradient>
+  </defs>
+  <!-- Body -->
+  <ellipse cx="100" cy="115" rx="55" ry="45" fill="url(#hb-body)" data-pets-body="true" />
+  <ellipse cx="100" cy="125" rx="35" ry="28" fill="url(#hb-belly)" opacity="0.85" />
+  <!-- Classic white mantle stripe -->
+  <rect x="62" y="88" width="76" height="18" rx="6" fill="url(#hb-stripe)" opacity="0.95" />
+  <!-- Ears -->
+  <ellipse cx="62" cy="72" rx="10" ry="12" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="138" cy="72" rx="10" ry="12" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="62" cy="74" rx="5" ry="6" fill="#f3e5ab" />
+  <ellipse cx="138" cy="74" rx="5" ry="6" fill="#f3e5ab" />
+  <!-- Face -->
+  <g class="face">
+    <g class="eye-group eye-open">
+      <ellipse cx="84" cy="105" rx="9" ry="11" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="84" cy="105" rx="4" ry="6" fill="var(--eyeColor, #ffd700)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-open">
+      <ellipse cx="116" cy="105" rx="9" ry="11" fill="#0a0a0f" />
+      <ellipse class="pupil" cx="116" cy="105" rx="4" ry="6" fill="var(--eyeColor, #ffd700)" data-pets-pupil="true" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M76 105 Q84 110 92 105" stroke="var(--eyeColor, #ffd700)" stroke-width="2" fill="none" />
+    </g>
+    <g class="eye-group eye-closed">
+      <path d="M108 105 Q116 110 124 105" stroke="var(--eyeColor, #ffd700)" stroke-width="2" fill="none" />
+    </g>
+    <ellipse cx="100" cy="118" rx="10" ry="8" fill="#2a2a2a" opacity="0.9" />
+    <path d="M94 124 Q100 128 106 124" stroke="#2a2a2a" stroke-width="2" fill="none" stroke-linecap="round" />
+  </g>
+  <!-- Paws -->
+  <ellipse cx="70" cy="158" rx="14" ry="9" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="130" cy="158" rx="14" ry="9" fill="var(--baseColor, #9c6644)" />
+  <!-- Claws -->
+  <path d="M62 162 L62 168" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <path d="M70 164 L70 170" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <path d="M78 162 L78 168" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <path d="M122 162 L122 168" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <path d="M130 164 L130 170" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <path d="M138 162 L138 168" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" />
+  <!-- Tail -->
+  <path d="M150 120 Q175 110 172 95 Q170 82 185 85" stroke="var(--baseColor, #9c6644)" stroke-width="14" fill="none" stroke-linecap="round" />
+  <path d="M150 120 Q172 112 170 98 Q168 87 182 89" stroke="#f3e5ab" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7" />
+</svg>`;
+
+const HONEY_BADGER_SLEEPING = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art honey-badger">
+  <defs>
+    <radialGradient id="hb-body" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="var(--secondaryColor, #f5d0a9)" />
+      <stop offset="55%" stop-color="var(--baseColor, #9c6644)" />
+      <stop offset="100%" stop-color="var(--baseColor, #5c3a21)" />
+    </radialGradient>
+    <radialGradient id="hb-belly" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#f3e5ab" />
+      <stop offset="100%" stop-color="#d4b483" />
+    </radialGradient>
+    <linearGradient id="hb-stripe" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2a2a2a" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#2a2a2a" />
+    </linearGradient>
+  </defs>
+  <ellipse cx="100" cy="115" rx="55" ry="45" fill="url(#hb-body)" data-pets-body="true" />
+  <ellipse cx="100" cy="125" rx="35" ry="28" fill="url(#hb-belly)" opacity="0.85" />
+  <rect x="62" y="88" width="76" height="18" rx="6" fill="url(#hb-stripe)" opacity="0.95" />
+  <ellipse cx="62" cy="72" rx="10" ry="12" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="138" cy="72" rx="10" ry="12" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="62" cy="74" rx="5" ry="6" fill="#f3e5ab" />
+  <ellipse cx="138" cy="74" rx="5" ry="6" fill="#f3e5ab" />
+  <!-- Sleeping eyes -->
+  <path d="M75 105 Q84 108 93 105" stroke="#0a0a0f" stroke-width="3" fill="none" stroke-linecap="round" />
+  <path d="M107 105 Q116 108 125 105" stroke="#0a0a0f" stroke-width="3" fill="none" stroke-linecap="round" />
+  <ellipse cx="100" cy="118" rx="10" ry="8" fill="#2a2a2a" opacity="0.9" />
+  <path d="M94 124 Q100 128 106 124" stroke="#2a2a2a" stroke-width="2" fill="none" stroke-linecap="round" />
+  <ellipse cx="70" cy="158" rx="14" ry="9" fill="var(--baseColor, #9c6644)" />
+  <ellipse cx="130" cy="158" rx="14" ry="9" fill="var(--baseColor, #9c6644)" />
+  <path d="M150 120 Q175 110 172 95 Q170 82 185 85" stroke="var(--baseColor, #9c6644)" stroke-width="14" fill="none" stroke-linecap="round" />
+  <path d="M150 120 Q172 112 170 98 Q168 87 182 89" stroke="#f3e5ab" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.7" />
+  <!-- Zzz -->
+  <text x="152" y="58" font-size="12" fill="#666" opacity="0.8">Z</text>
+  <text x="160" y="52" font-size="9" fill="#666" opacity="0.6">z</text>
+  <text x="166" y="47" font-size="6" fill="#666" opacity="0.4">z</text>
+</svg>`;
+
 const LIQUIDBLOB_BASE = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="pets-adult-art liquidblob">
   <defs>
     <radialGradient id="lb-body" cx="40%" cy="35%" r="70%">
@@ -2965,4 +3065,5 @@ export const ADULT_SVG_MAP: Record<AdultForm, { base: string; sleeping: string }
   glitchfox: { base: GLITCHFOX_BASE, sleeping: GLITCHFOX_SLEEPING },
   biomechmoth: { base: BIOMECHMOTH_BASE, sleeping: BIOMECHMOTH_SLEEPING },
   liquidblob: { base: LIQUIDBLOB_BASE, sleeping: LIQUIDBLOB_SLEEPING },
+  'honey-badger': { base: HONEY_BADGER_BASE, sleeping: HONEY_BADGER_SLEEPING },
 };

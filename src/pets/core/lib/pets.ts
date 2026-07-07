@@ -66,10 +66,10 @@ export const INITIAL_BLOBBONAUT_SATS = 2_140;
 /** Cost in demo sats to reroll/generate another egg preview during onboarding */
 export const PETS_PREVIEW_REROLL_SATS = 100;
 
-/** Cost in demo sats to adopt a 2140 PET from the preview (first pet is free) */
+/** Cost in demo sats to adopt a NOSTR PET from the preview (first pet is free) */
 export const PETS_ADOPTION_SATS = 0;
 
-/** Sats auto-claimed from the BAO faucet for every new 2140 PET egg. */
+/** Sats auto-claimed from the BAO faucet for every new NOSTR PET egg. */
 export const BAO_PET_STARTER_GRANT_SATS = 2_140;
 
 // ─── Date/Time Utilities ──────────────────────────────────────────────────────
@@ -364,6 +364,12 @@ export interface PetsCompanion {
   evolution: Mission[];
   /** Optional Blossom-hosted 3D asset override for this adult pet. */
   asset3d?: Asset3DEntry;
+  /** Custom species id when the pet belongs to a user-created custom form. */
+  customFormId?: string;
+  /** Pet-bound fiat balance (sats). Eggs start with 2140. */
+  fiatBalance: number;
+  /** Egg visual scale multiplier (DEV editor). */
+  eggScale: number;
   /** All tags preserved for republishing */
   allTags: string[][];
 }
@@ -417,7 +423,7 @@ export interface BlobbonautProfile {
   sats: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
-  /** Wallet mode for 2140 Pets: 'demo-sats' uses in-game demo sats, 'btc-sats' uses real BTC sats via Cashu/NIP-60. */
+  /** Wallet mode for NOSTR Pets: 'demo-sats' uses in-game demo sats, 'btc-sats' uses real BTC sats via Cashu/NIP-60. */
   walletMode: 'demo-sats' | 'btc-sats';
   /** Selected Cashu mint URL when wallet_mode is 'btc-sats'. */
   cashuMintUrl: string | undefined;
@@ -1180,7 +1186,7 @@ export function isLegacyBlobbonautKind(event: NostrEvent): boolean {
  * Legacy format: pets-{name} (e.g., "pets-puck" → "Puck")
  * 
  * @param d - The d-tag value
- * @returns The derived name with first letter capitalized, or "Unnamed 2140 PET" if not derivable
+ * @returns The derived name with first letter capitalized, or "Unnamed NOSTR PET" if not derivable
  */
 /**
  * Capitalize each word in a string.
@@ -1201,16 +1207,16 @@ function capitalizeWords(str: string): string {
  * 2. Replace "-" and "_" with spaces
  * 3. Trim whitespace
  * 4. Capitalize words in a human-friendly way
- * 5. Fallback to "Unnamed 2140 PET" if result is empty
+ * 5. Fallback to "Unnamed NOSTR PET" if result is empty
  * 
  * @example "pets-puck" -> "Puck"
  * @example "pets-mr-cool" -> "Mr Cool"
  * @example "pets_blue" -> "Blue"
- * @example "pets-" -> "Unnamed 2140 PET"
+ * @example "pets-" -> "Unnamed NOSTR PET"
  */
 export function deriveNameFromLegacyD(d: string): string {
   if (!d.startsWith('pets-')) {
-    return 'Unnamed 2140 PET';
+    return 'Unnamed NOSTR PET';
   }
   
   // Remove prefix and normalize separators
@@ -1221,7 +1227,7 @@ export function deriveNameFromLegacyD(d: string): string {
   
   // If nothing meaningful remains, return fallback
   if (!rawName || rawName.length === 0) {
-    return 'Unnamed 2140 PET';
+    return 'Unnamed NOSTR PET';
   }
   
   // Capitalize words for human-friendly display
@@ -1243,7 +1249,7 @@ export function deriveNameFromLegacyD(d: string): string {
  * Name resolution priority:
  * 1. Use `name` tag if present
  * 2. Derive from legacy d-tag format (pets-{name})
- * 3. Fall back to "Unnamed 2140 PET"
+ * 3. Fall back to "Unnamed NOSTR PET"
  * 
  * Visual trait priority:
  * 1. Use explicit visual tags if valid (legacy compatibility)
@@ -1409,6 +1415,16 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
     tasksCompleted,
     evolution,
     asset3d: stage === 'adult' ? parseAsset3DTag(tags) ?? undefined : undefined,
+    customFormId: (() => {
+      const explicit = getTagValue(tags, 'custom_form');
+      if (explicit) return explicit;
+      const category = getTagValue(tags, 'breed_category');
+      const asset = getTagValue(tags, 'breed_asset');
+      if (category === 'custom' && asset) return asset;
+      return undefined;
+    })(),
+    fiatBalance: parseNumericTag(tags, 'fiat_balance') ?? (stage === 'egg' ? 2_140 : 0),
+    eggScale: parseNumericTag(tags, 'egg_scale') ?? 1,
     allTags: tags,
   };
 }
@@ -1520,16 +1536,20 @@ export function buildEggTags(
   pubkey: string,
   petId: string,
   createdAt: number,
-  name = 'Egg'
+  name = 'Egg',
+  options?: {
+    breedCategory?: PetsBreedCategory;
+    breedAsset?: string;
+  },
 ): string[][] {
   const d = getCanonicalPetsD(pubkey, petId);
   const seed = derivePetsSeedV1(pubkey, d, createdAt);
   const now = createdAt.toString();
-  
+
   // Derive visual traits from seed for explicit storage (tags mirror the seed).
   const { baseColor, secondaryColor, eyeColor, pattern, specialMark, size, archetype, specialAbility } = deriveSeedIdentity(seed);
-  
-  return [
+
+  const tags: string[][] = [
     ['d', d],
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['name', name],
@@ -1549,6 +1569,10 @@ export function buildEggTags(
     ['energy', DEFAULT_EGG_STATS.energy.toString()],
     ['last_interaction', now],
     ['last_decay_at', now],
+    // Pet-bound fiat balance: every egg starts with 2140 sats of in-game money.
+    ['fiat_balance', '2140'],
+    // Egg visual scale multiplier (DEV editor)
+    ['egg_scale', '1'],
     // Visual traits (derived from seed, explicitly stored for consistency)
     ['base_color', baseColor],
     ['secondary_color', secondaryColor],
@@ -1559,6 +1583,15 @@ export function buildEggTags(
     ['archetype', archetype],
     ['special_ability', specialAbility],
   ];
+
+  if (options?.breedCategory) {
+    tags.push(['breed_category', options.breedCategory]);
+  }
+  if (options?.breedAsset) {
+    tags.push(['breed_asset', options.breedAsset]);
+  }
+
+  return tags;
 }
 
 // ─── Managed Tag Sets (Separated by Kind) ─────────────────────────────────────
@@ -1599,6 +1632,8 @@ export const MANAGED_PETS_STATE_TAG_NAMES = new Set([
   // Phase B: breed category + breeding tags
   'breed_category', 'breed_asset', 'bao_rarity',
   'parent_a', 'parent_b', 'breeding_cooldown',
+  // Phase C: custom species + pet-bound economy
+  'custom_form', 'fiat_balance', 'egg_scale',
 ]);
 
 /**
@@ -2086,7 +2121,7 @@ export function buildMigrationTags(
   
   // Preserve name with priority: name tag > legacy d-tag derived > fallback
   const nameTag = getTagValue(legacyTags, 'name');
-  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed 2140 PET');
+  const resolvedName = nameTag ?? (legacyD ? deriveNameFromLegacyD(legacyD) : 'Unnamed NOSTR PET');
   newTags.push(['name', resolvedName]);
   
   // Preserve all persistent tags from the legacy event
@@ -2111,6 +2146,8 @@ export function buildMigrationTags(
     'adult_type',
     // Breed category / asset tags (preserve species selection across migration)
     'breed_category', 'breed_asset', 'bao_rarity',
+    // Phase C: custom species + pet-bound economy
+    'custom_form', 'fiat_balance', 'egg_scale',
     // Extension tags
     'theme', 'crossover_app', 'asset_3d',
   ];

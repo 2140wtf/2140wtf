@@ -13,4 +13,6 @@ export type EggVisualPets = {
   lifeStage?: 'egg' | 'baby' | 'adult';
   themeVariant?: string;
   crossoverApp?: string | null;
+  /** Optional visual scale multiplier (e.g. from dev editor egg_scale). */
+  scale?: number;
 };

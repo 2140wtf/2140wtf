@@ -50,7 +50,7 @@ export default function ChaseBtcPage() {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useSeoMeta({
-    title: 'Chase BTC | 2140 Pets',
+    title: 'Chase BTC | NOSTR Pets',
     description: 'Run the ₿AO payment rails and collect demo sats',
   });
 

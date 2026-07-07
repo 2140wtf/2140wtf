@@ -190,7 +190,7 @@ export function usePetsUseInventoryItem({
         
         if (energyCost > 0 && currentEnergy < energyCost) {
           throw new Error(
-            `Your 2140 PET needs at least ${energyCost} energy to play with this toy (current: ${currentEnergy})`
+            `Your NOSTR PET needs at least ${energyCost} energy to play with this toy (current: ${currentEnergy})`
           );
         }
         
@@ -203,7 +203,7 @@ export function usePetsUseInventoryItem({
         
         if (!wouldGainHappiness && !wouldSpendEnergy) {
           throw new Error(
-            'Playing would have no effect - your 2140 PET is already at maximum happiness and has no energy to spend'
+            'Playing would have no effect - your NOSTR PET is already at maximum happiness and has no energy to spend'
           );
         }
       }

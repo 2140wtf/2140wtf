@@ -124,10 +124,13 @@ export function toEggGraphicVisualPets(
     
     // Theme variant
     themeVariant,
-    
+
     // Pass through full tags for EggGraphic metadata lookups
     tags: allTags,
-    
+
+    // Optional visual scale (egg_size / egg_scale)
+    scale: companion.eggScale ?? 1,
+
     // Extracted convenience values
     crossoverApp: extractCrossoverApp(allTags),
     
@@ -151,6 +154,7 @@ export function areEggGraphicVisualsEqual(
     a.pattern === b.pattern &&
     a.specialMark === b.specialMark &&
     a.lifeStage === b.lifeStage &&
-    a.themeVariant === b.themeVariant
+    a.themeVariant === b.themeVariant &&
+    a.scale === b.scale
   );
 }

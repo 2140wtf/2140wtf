@@ -58,6 +58,8 @@ export interface PetsDevUpdates {
   breedingReady?: boolean;
   /** Generation number */
   generation?: number;
+  /** Egg visual scale multiplier */
+  eggScale?: number;
 }
 
 // ─── Stat Presets ─────────────────────────────────────────────────────────────
@@ -187,6 +189,7 @@ export function PetsDevEditor({
   const [careStreak, setCareStreak] = useState(companion.careStreak ?? 0);
   const [breedingReady, setBreedingReady] = useState(companion.breedingReady);
   const [generation, setGeneration] = useState(companion.generation ?? 1);
+  const [eggScale, setEggScale] = useState(companion.eggScale ?? 1);
 
   // Daily-missions reset confirmation state
   const [confirmResetMissions, setConfirmResetMissions] = useState(false);
@@ -206,6 +209,7 @@ export function PetsDevEditor({
     setCareStreak(companion.careStreak ?? 0);
     setBreedingReady(companion.breedingReady);
     setGeneration(companion.generation ?? 1);
+    setEggScale(companion.eggScale ?? 1);
   }, [companion]);
 
   // Check if there are any changes
@@ -221,9 +225,10 @@ export function PetsDevEditor({
       stats.energy !== (companion.stats.energy ?? 100) ||
       careStreak !== (companion.careStreak ?? 0) ||
       breedingReady !== companion.breedingReady ||
-      generation !== (companion.generation ?? 1)
+      generation !== (companion.generation ?? 1) ||
+      eggScale !== (companion.eggScale ?? 1)
     );
-  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, companion]);
+  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, eggScale, companion]);
 
   // Apply preset
   const applyPreset = useCallback((preset: StatPreset) => {
@@ -265,10 +270,11 @@ export function PetsDevEditor({
     if (careStreak !== (companion.careStreak ?? 0)) updates.careStreak = careStreak;
     if (breedingReady !== companion.breedingReady) updates.breedingReady = breedingReady;
     if (generation !== (companion.generation ?? 1)) updates.generation = generation;
+    if (eggScale !== (companion.eggScale ?? 1)) updates.eggScale = eggScale;
 
     await onApply(updates);
     onClose();
-  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, companion, onApply, onClose]);
+  }, [stage, state, adultType, stats, careStreak, breedingReady, generation, eggScale, companion, onApply, onClose]);
 
   // Handle close
   const handleClose = useCallback(() => {
@@ -528,6 +534,32 @@ export function PetsDevEditor({
                   className="h-8"
                 />
               </div>
+            </div>
+
+            {/* Egg Scale */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">Egg Scale</Label>
+                <Input
+                  type="number"
+                  min={0.25}
+                  max={3}
+                  step={0.05}
+                  value={eggScale.toFixed(2)}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    setEggScale(Number.isFinite(value) ? Math.min(3, Math.max(0.25, value)) : 1);
+                  }}
+                  className="w-20 h-7 text-sm text-center"
+                />
+              </div>
+              <Slider
+                value={[eggScale]}
+                min={0.25}
+                max={3}
+                step={0.05}
+                onValueChange={([v]) => setEggScale(v)}
+              />
             </div>
 
             {/* Boolean Flags */}

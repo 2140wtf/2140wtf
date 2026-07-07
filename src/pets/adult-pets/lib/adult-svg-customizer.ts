@@ -606,7 +606,7 @@ function customizePandi(svgText: string, baseColor: string, secondaryColor?: str
   return svg;
 }
 
-// ─── 2140 Pets Customizers ────────────────────────────────────────────────────
+// ─── NOSTR Pets Customizers ────────────────────────────────────────────────────
 
 /**
  * Glitchfox: cyber-fox built on CSS variables. Use the Open Design palette

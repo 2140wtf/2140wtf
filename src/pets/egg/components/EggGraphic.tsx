@@ -179,7 +179,8 @@ export const EggGraphic: React.FC<EggGraphicProps> = ({
     large: 1.0, // 100% fill for maximum presence
   };
 
-  const scale = fillScale[sizeVariant] || fillScale.medium;
+  const baseScale = fillScale[sizeVariant] || fillScale.medium;
+  const scale = baseScale * (pets?.scale ?? 1);
 
   // Tap-to-wiggle interaction state
   const [isTapWiggling, setIsTapWiggling] = useState(false);
