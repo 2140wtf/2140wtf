@@ -1,4 +1,34 @@
 import type { NostrEvent } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
+
+/**
+ * Verify a Nostr event's signature and confirm it was authored by the expected pubkey.
+ *
+ * This is the canonical guard for applying replaceable/relay events that belong to
+ * the current user. It wraps `verifyEvent` and swallows verification exceptions so
+ * callers can treat a forged/invalid event the same as a missing event.
+ */
+export function isVerifiedOwnEvent(event: NostrEvent, pubkey: string): boolean {
+  try {
+    return verifyEvent(event) && event.pubkey === pubkey;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Verify a Nostr event's signature without checking the author.
+ *
+ * Use this when the author is expected to vary (e.g. inbox relay lists fetched for
+ * tagged users, BAO market/dispute events).
+ */
+export function isVerifiedEvent(event: NostrEvent): boolean {
+  try {
+    return verifyEvent(event);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Returns true if the event is a reply (has a root or reply e-tag, or an unmarked e-tag).

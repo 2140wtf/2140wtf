@@ -867,6 +867,22 @@ export interface PsbtRecipient {
   amountSats: number;
 }
 
+/** Optional settings for local PSBT signing. */
+export interface PsbtSigningOptions {
+  /**
+   * User-approved payment intents (address + amount). When supplied, the signer
+   * verifies after finalization that every non-change output matches one intent
+   * and that every intent is present exactly once. Unexpected extra outputs are
+   * rejected.
+   */
+  paymentIntents?: PsbtRecipient[];
+  /**
+   * Additional addresses that are allowed as change outputs beyond the wallet's
+   * own input scripts. Used for HD wallets where change goes to a fresh address.
+   */
+  changeAddresses?: string[];
+}
+
 /**
  * Build an unsigned Taproot PSBT with multiple recipient outputs.
  *
@@ -1166,6 +1182,84 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /**
+ * Decode a mainnet Bitcoin address to its output script. Throws on malformed
+ * or non-mainnet addresses.
+ */
+function addressToOutputScript(address: string): Uint8Array {
+  const decoded = btc.Address(btc.NETWORK).decode(address);
+  if (!decoded) {
+    throw new Error(`Unable to decode Bitcoin address: ${address}`);
+  }
+  return btc.OutScript.encode(decoded);
+}
+
+/** True iff `script` is the output script for `address`. */
+function outputScriptMatchesAddress(script: Uint8Array, address: string): boolean {
+  try {
+    return bytesEqual(script, addressToOutputScript(address));
+  } catch {
+    return false;
+  }
+}
+
+/** Convert a list of addresses to their output scripts, skipping invalid ones. */
+function scriptsForAddresses(addresses: string[]): Uint8Array[] {
+  return addresses
+    .map((a) => {
+      try {
+        return addressToOutputScript(a);
+      } catch {
+        return null;
+      }
+    })
+    .filter((s): s is Uint8Array => s !== null);
+}
+
+/** True iff `script` matches any of the allowed change scripts. */
+function isChangeOutput(script: Uint8Array, allowedChangeScripts: Uint8Array[]): boolean {
+  return allowedChangeScripts.some((change) => bytesEqual(script, change));
+}
+
+/**
+ * Verify that every transaction output either matches a user-approved payment
+ * intent (address + amount) or is a change output to the sender. Rejects
+ * unexpected extra outputs and missing intents.
+ */
+function verifyTxOutputsMatchIntent(
+  tx: btc.Transaction,
+  paymentIntents: PsbtRecipient[],
+  allowedChangeScripts: Uint8Array[],
+): void {
+  const remaining = paymentIntents.map((i) => ({ ...i }));
+
+  for (let i = 0; i < tx.outputsLength; i++) {
+    const out = tx.getOutput(i);
+    const amount = out.amount;
+    const script = out.script;
+    if (!script || script.length === 0) {
+      throw new Error(`PSBT signing: transaction output ${i} has no script.`);
+    }
+
+    if (isChangeOutput(script, allowedChangeScripts)) continue;
+
+    const idx = remaining.findIndex(
+      (intent) =>
+        BigInt(intent.amountSats) === amount && outputScriptMatchesAddress(script, intent.address),
+    );
+    if (idx < 0) {
+      throw new Error(
+        'PSBT signing: transaction output does not match the approved payment intent.',
+      );
+    }
+    remaining.splice(idx, 1);
+  }
+
+  if (remaining.length > 0) {
+    throw new Error('PSBT signing: approved payment intent is missing from transaction outputs.');
+  }
+}
+
+/**
  * Sign a PSBT locally using a raw private key (nsec).
  *
  * `@scure/btc-signer`'s `Transaction.sign(privateKey)` handles BIP-341
@@ -1176,9 +1270,14 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  *
  * @param psbtHex       Hex-encoded unsigned PSBT.
  * @param privateKeyHex 32-byte hex private key.
+ * @param options       Optional payment-intent verification.
  * @returns Hex-encoded signed PSBT (not finalized).
  */
-export function signPsbtLocal(psbtHex: string, privateKeyHex: string): string {
+export function signPsbtLocal(
+  psbtHex: string,
+  privateKeyHex: string,
+  options?: PsbtSigningOptions,
+): string {
   const tx = btc.Transaction.fromPSBT(hexToBytes(psbtHex));
   const privKey = hexToBytes(privateKeyHex);
 
@@ -1196,6 +1295,13 @@ export function signPsbtLocal(psbtHex: string, privateKeyHex: string): string {
 
     if (signedCount === 0) {
       throw new Error('No inputs in this PSBT are owned by the signer.');
+    }
+
+    if (options?.paymentIntents) {
+      // The only expected change output for the single-key path is back to the
+      // sender's own address.
+      const senderPayment = btc.p2tr(internalPubkey, undefined, btc.NETWORK);
+      verifyTxOutputsMatchIntent(tx, options.paymentIntents, [senderPayment.script]);
     }
 
     return hex.encode(tx.toPSBT());
@@ -1220,12 +1326,14 @@ export function signPsbtLocal(psbtHex: string, privateKeyHex: string): string {
  * @param psbtHex          Hex-encoded unsigned PSBT.
  * @param accountNode      Bitcoin wallet account node (m/86'/0'/0').
  * @param legacyPrivateKey Optional 32-byte private key for legacy inputs.
+ * @param options          Optional payment-intent verification.
  * @returns Hex-encoded signed PSBT (not finalized).
  */
 export function signPsbtLocalHd(
   psbtHex: string,
   accountNode: HDKey,
   legacyPrivateKey?: Uint8Array,
+  options?: PsbtSigningOptions,
 ): string {
   const tx = btc.Transaction.fromPSBT(hexToBytes(psbtHex));
 
@@ -1312,6 +1420,20 @@ export function signPsbtLocalHd(
     }
   }
 
+  // Collect scripts that are allowed as change outputs. Inputs obviously belong
+  // to this wallet, and callers can supply explicit change addresses for HD
+  // wallets where change goes to a fresh address.
+  const allowedChangeScripts: Uint8Array[] = [];
+  for (let i = 0; i < tx.inputsLength; i++) {
+    const inp = tx.getInput(i);
+    if (inp.witnessUtxo?.script) {
+      allowedChangeScripts.push(inp.witnessUtxo.script);
+    }
+  }
+  if (options?.changeAddresses) {
+    allowedChangeScripts.push(...scriptsForAddresses(options.changeAddresses));
+  }
+
   if (outputSum > inputSum) {
     throw new Error('PSBT outputs exceed inputs; transaction is invalid.');
   }
@@ -1329,6 +1451,10 @@ export function signPsbtLocalHd(
   }
   if (signedCount < tx.inputsLength) {
     throw new Error(`Only ${signedCount} of ${tx.inputsLength} inputs were signed.`);
+  }
+
+  if (options?.paymentIntents) {
+    verifyTxOutputsMatchIntent(tx, options.paymentIntents, allowedChangeScripts);
   }
 
   // Best-effort wipe of derived keys.
@@ -1376,7 +1502,9 @@ export function createBitcoinTransaction(
   const senderPubkeyHex = hex.encode(internalPubkey);
 
   const { psbtHex, fee } = buildUnsignedPsbt(senderPubkeyHex, toAddress, amountSats, utxos, feeRate);
-  const signedHex = signPsbtLocal(psbtHex, privateKeyHex);
+  const signedHex = signPsbtLocal(psbtHex, privateKeyHex, {
+    paymentIntents: [{ address: toAddress, amountSats }],
+  });
   const txHex = finalizePsbt(signedHex);
 
   return { txHex, fee };

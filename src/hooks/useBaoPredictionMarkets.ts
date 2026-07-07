@@ -47,14 +47,16 @@ export function useBaoPredictionMarkets(category: string = "all") {
           dedupedEvents.push(event);
         }
 
-        // Dedupe by market d-tag, keeping the newest version of each market.
+        // Dedupe by (author, d-tag) so a malicious or stale copy of someone
+        // else's market cannot clobber the original.
         const seen = new Map<string, BaoMarket>();
         for (const event of dedupedEvents) {
           const parsed = parseBaoMarket(event);
           if (!parsed) continue;
-          const existing = seen.get(parsed.marketId);
+          const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
+          const existing = seen.get(key);
           if (!existing || parsed.createdAt > existing.createdAt) {
-            seen.set(parsed.marketId, parsed);
+            seen.set(key, parsed);
           }
         }
 
@@ -100,7 +102,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
       queryClient.setQueryData<BaoMarket[]>(queryKey, (old = []) => {
         const seenEventIds = new Set<string>();
         const byMarket = new Map<string, BaoMarket>();
-        for (const m of old) byMarket.set(m.marketId, m);
+        for (const m of old) byMarket.set(`${m.creatorPubkey}:${m.marketId}`, m);
 
         let changed = false;
         for (const event of events) {
@@ -111,10 +113,11 @@ export function useBaoPredictionMarkets(category: string = "all") {
           const parsed = parseBaoMarket(event);
           if (!parsed) continue;
 
-          const existing = byMarket.get(parsed.marketId);
+          const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
+          const existing = byMarket.get(key);
           if (existing && existing.createdAt >= parsed.createdAt) continue;
 
-          byMarket.set(parsed.marketId, parsed);
+          byMarket.set(key, parsed);
           changed = true;
         }
 

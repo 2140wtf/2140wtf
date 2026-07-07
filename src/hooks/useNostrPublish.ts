@@ -1,6 +1,6 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
-import { nip19 } from "nostr-tools";
+import { nip19, verifyEvent } from "nostr-tools";
 
 import { useAppContext } from "./useAppContext";
 import { useCurrentUser } from "./useCurrentUser";
@@ -84,12 +84,30 @@ export function useNostrPublish(): UseMutationResult<NostrEvent, Error, EventTem
 
         // Handle published_at for replaceable/addressable events (NIP-24)
         if (isReplaceableKind(template.kind) && !tags.some(([name]) => name === "published_at")) {
-          // Only reuse `prev` when it matches the kind being published; otherwise
-          // we could copy `published_at` (or other coordinate metadata) from the
-          // wrong replaceable event.
-          if (prev && prev.kind === template.kind) {
+          // Only reuse `prev` when it is a verified event from the same user and
+          // the same kind. A forged or mismatched prev must be rejected rather
+          // than silently ignored, otherwise an attacker could roll `published_at`
+          // back or reuse metadata from the wrong replaceable coordinate.
+          let trustedPrev: NostrEvent | undefined;
+          if (prev) {
+            const prevValid = (() => {
+              try {
+                return verifyEvent(prev);
+              } catch {
+                return false;
+              }
+            })();
+            if (!prevValid || prev.pubkey !== user.pubkey || prev.kind !== template.kind) {
+              throw new Error(
+                "Rejected forged or mismatched prev event: signature, pubkey, or kind does not match.",
+              );
+            }
+            trustedPrev = prev;
+          }
+
+          if (trustedPrev) {
             // Preserve published_at from the previous event if it had one
-            const oldTag = prev.tags.find(([name]) => name === "published_at");
+            const oldTag = trustedPrev.tags.find(([name]) => name === "published_at");
             if (oldTag) {
               tags.push(["published_at", oldTag[1]]);
             }

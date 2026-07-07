@@ -2,6 +2,12 @@ import { z } from 'zod';
 
 import type { Theme, ContentWarningPolicy } from '@/contexts/AppContext';
 import type { CoreThemeColors, ThemeConfig, ThemesConfig } from '@/themes';
+import {
+  isAllowedHttpsUrl,
+  isAllowedRelayUrl,
+  isAllowedShareOrigin,
+  isAllowedUrlTemplate,
+} from './sanitizeUrl';
 
 // ─── Theme Schemas ───────────────────────────────────────────────────
 
@@ -138,7 +144,7 @@ export const ContentWarningPolicySchema = z.enum(['blur', 'hide', 'show']) satis
 
 export const RelayMetadataSchema = z.object({
   relays: z.array(z.object({
-    url: z.string().url(),
+    url: z.string().url().refine(isAllowedRelayUrl, { message: 'Relay URL must use wss:// (or ws://localhost)' }),
     read: z.boolean(),
     write: z.boolean(),
   })),
@@ -147,7 +153,7 @@ export const RelayMetadataSchema = z.object({
 
 /** Zod schema for BlossomServerMetadata (BUD-03 kind 10063 server list). */
 export const BlossomServerMetadataSchema = z.object({
-  servers: z.array(z.string().url()),
+  servers: z.array(z.string().url().refine(isAllowedHttpsUrl, { message: 'Blossom server URL must use https://' })),
   updatedAt: z.number(),
 });
 
@@ -240,7 +246,7 @@ export const SavedFeedSchema = z.object({
 export const AppConfigSchema = z.object({
   appName: z.string().optional(),
   appId: z.string().optional(),
-  shareOrigin: z.string().url().optional(),
+  shareOrigin: z.string().url().refine(isAllowedShareOrigin, { message: 'Share origin must be an https:// origin without path' }).optional(),
   homePage: z.string().optional(),
   clientName: z.string().optional(),
   /** NIP-19 naddr1 string for the kind 31990 handler event. */
@@ -263,23 +269,23 @@ export const AppConfigSchema = z.object({
   ),
   blossomServerMetadata: BlossomServerMetadataSchema,
   useAppBlossomServers: z.boolean(),
-  faviconUrl: z.string(),
-  linkPreviewUrl: z.string(),
-  corsProxy: z.string(),
-  baoSignetMintUrl: z.string().url().optional(),
-  baoSignetFaucetUrl: z.string().url().optional(),
+  faviconUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Favicon URL template must use https://' }),
+  linkPreviewUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Link preview URL template must use https://' }),
+  corsProxy: z.string().refine(isAllowedUrlTemplate, { message: 'CORS proxy URL template must use https://' }),
+  baoSignetMintUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO mint URL must use https://' }).optional(),
+  baoSignetFaucetUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO faucet URL must use https://' }).optional(),
   /** BAO Markets custom signet Mempool API root, e.g. https://mempool.bao.markets/api */
-  baoCustomSignetMempoolUrl: z.string().url().optional(),
-  baoApiUrl: z.string().url().optional(),
+  baoCustomSignetMempoolUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO mempool URL must use https://' }).optional(),
+  baoApiUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO API URL must use https://' }).optional(),
   /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */
   petsBattleEscrowPubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Optional URL to request release of battle escrow funds to the winner. */
-  petsBattleEscrowServiceUrl: z.string().url().optional(),
+  petsBattleEscrowServiceUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'Escrow service URL must use https://' }).optional(),
   contentWarningPolicy: ContentWarningPolicySchema,
-  sentryDsn: z.string(),
+  sentryDsn: z.string().refine(isAllowedHttpsUrl, { message: 'Sentry DSN must use https:// or be empty' }),
   sentryEnabled: z.boolean(),
   plausibleDomain: z.string(),
-  plausibleEndpoint: z.string(),
+  plausibleEndpoint: z.string().refine(isAllowedHttpsUrl, { message: 'Plausible endpoint must use https:// or be empty' }),
   savedFeeds: z.array(z.unknown()).transform((arr) =>
     arr.flatMap((item) => {
       if (typeof item !== 'object' || item === null) return [];
@@ -292,7 +298,7 @@ export const AppConfigSchema = z.object({
   imageQuality: z.enum(['compressed', 'original']),
   curatorPubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   sandboxDomain: z.string().optional(),
-  esploraApis: z.array(z.string().url()).min(1),
+  esploraApis: z.array(z.string().url().refine(isAllowedHttpsUrl, { message: 'Esplora API URL must use https://' })).min(1),
   currencyDisplay: z.enum(['usd', 'sats']).optional(),
   sidebarWidgets: z.array(z.object({
     id: z.string(),
@@ -300,7 +306,7 @@ export const AppConfigSchema = z.object({
   })).optional(),
   sidebarWidgetsVersion: z.number().int().nonnegative().optional(),
   maxCachedEventAge: z.number().int().nonnegative().optional(),
-  bip352IndexerUrl: z.string().url().optional(),
+  bip352IndexerUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BIP-352 indexer URL must use https://' }).optional(),
   bip352ScanConcurrency: z.number().int().positive().optional(),
 });
 
@@ -422,10 +428,10 @@ export const EncryptedSettingsSchema = z.looseObject({
     nip05: z.record(z.string(), z.unknown()),
   }).optional(),
   autoplayVideos: z.boolean().optional(),
-  corsProxy: z.string().optional(),
-  faviconUrl: z.string().optional(),
-  linkPreviewUrl: z.string().optional(),
-  sentryDsn: z.string().optional(),
+  corsProxy: z.string().refine(isAllowedUrlTemplate, { message: 'CORS proxy URL template must use https://' }).optional(),
+  faviconUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Favicon URL template must use https://' }).optional(),
+  linkPreviewUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Link preview URL template must use https://' }).optional(),
+  sentryDsn: z.string().refine(isAllowedHttpsUrl, { message: 'Sentry DSN must use https:// or be empty' }).optional(),
   currencyDisplay: z.enum(['usd', 'sats']).optional(),
   pets3dEnabled: z.boolean().optional(),
   savedFeeds: z.array(z.unknown()).transform((arr) =>

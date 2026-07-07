@@ -22,6 +22,7 @@ import { DmInboxProvider } from "@/contexts/DmInboxContext";
 import { GroupChatProvider } from "@/contexts/GroupChatContext";
 import { DittoConfigSchema, type DittoConfig } from "@/lib/schemas";
 import { secureStorage } from "@/lib/secureStorage";
+import { createEncryptedLoginStorage } from "@/lib/encryptedLoginStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
 import { DEFAULT_SIDEBAR_WIDGETS, SIDEBAR_WIDGETS_VERSION } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
@@ -46,6 +47,12 @@ function safeOptionalUrl(value: unknown): string | undefined {
   }
   return undefined;
 }
+
+/**
+ * Encrypted storage adapter for NostrLoginProvider. The login JSON blob is
+ * encrypted with NIP-44 self-encryption before being persisted.
+ */
+const encryptedLoginStorage = createEncryptedLoginStorage(secureStorage);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -220,7 +227,7 @@ export function App() {
         <SentryProvider>
           <PlausibleProvider>
             <QueryClientProvider client={queryClient}>
-              <NostrLoginProvider storageKey="nostr:login" storage={secureStorage}>
+              <NostrLoginProvider storageKey="nostr:login" storage={encryptedLoginStorage}>
                 <NostrProvider>
                   <NostrSync />
                   <NativeNotifications />

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBitcoinSigner, isSignerCapabilityError, reportSignerUnsupported } from '@/hooks/useBitcoinSigner';
@@ -135,6 +136,9 @@ export function useOnchainZapMany(
       if (!Number.isFinite(amountPerRecipientSats) || amountPerRecipientSats <= 0) {
         throw new Error('Invalid amount.');
       }
+      if (target && !verifyEvent(target)) {
+        throw new Error('Payment target event failed signature verification.');
+      }
 
       // De-duplicate and remove self.
       const recipients = Array.from(
@@ -233,7 +237,13 @@ export function useOnchainZapMany(
 
       // Sign + finalize + broadcast.
       setProgress('signing');
-      const signedHex = await signPsbt(psbtHex);
+      const changeAddress = isHd && hdWallet.changeAddress
+        ? hdWallet.changeAddress.address
+        : senderAddress;
+      const signedHex = await signPsbt(psbtHex, {
+        paymentIntents: psbtRecipients,
+        changeAddresses: [changeAddress],
+      });
       const txHex = finalizePsbt(signedHex);
 
       setProgress('broadcasting');

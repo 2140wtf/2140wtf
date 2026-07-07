@@ -5,7 +5,15 @@ import { hex } from '@scure/base';
 import * as btc from '@scure/btc-signer';
 import { pubSchnorr, taprootTweakPrivKey } from '@scure/btc-signer/utils.js';
 
-import { signPsbtLocal, signPsbtLocalHd } from '@/lib/bitcoin';
+import {
+  signPsbtLocal,
+  signPsbtLocalHd,
+  validateAndDecodeSilentPaymentAddress,
+  type PsbtRecipient,
+  type PsbtSigningOptions,
+} from '@/lib/bitcoin';
+
+export type { PsbtSigningOptions };
 import {
   encodePsbtV2,
   extractTxFromSignedPsbtV2,
@@ -49,7 +57,7 @@ function hasTapBip32Derivation(psbtHex: string): boolean {
  * hex-encoded signed (but not finalized) PSBT.
  */
 export interface BtcSigner extends NostrSigner {
-  signPsbt(psbtHex: string): Promise<string>;
+  signPsbt(psbtHex: string, options?: PsbtSigningOptions): Promise<string>;
 }
 
 /** Runtime check for whether a signer supports `signPsbt`. */
@@ -87,22 +95,28 @@ export class NSecSignerBtc extends NSecSigner implements BtcSigner {
     this.#secretKeyBytes = new Uint8Array(secretKey);
   }
 
-  async signPsbt(psbtHex: string): Promise<string> {
+  async signPsbt(psbtHex: string, options?: PsbtSigningOptions): Promise<string> {
     // BIP-375 silent payment path first — it resolves SP outputs to concrete
     // P2TR scripts before signing.
     if (hasBip375SpOutputs(psbtHex)) {
-      return signBip375PsbtV2Locally(psbtHex, hex.encode(this.#secretKeyBytes), this.#secretKeyBytes);
+      const paymentIntent = options?.paymentIntents?.[0];
+      return signBip375PsbtV2Locally(
+        psbtHex,
+        hex.encode(this.#secretKeyBytes),
+        this.#secretKeyBytes,
+        paymentIntent,
+      );
     }
 
     // HD wallet path: inputs carry tapBip32Derivation metadata. Derive the
     // account node from the nsec and sign each input with its per-address key.
     if (hasTapBip32Derivation(psbtHex)) {
       const accountNode = bitcoinWalletNodeFromNsec(this.#secretKeyBytes);
-      return signPsbtLocalHd(psbtHex, accountNode, this.#secretKeyBytes);
+      return signPsbtLocalHd(psbtHex, accountNode, this.#secretKeyBytes, options);
     }
 
     // Legacy single-key path: every input shares the Nostr-derived Taproot key.
-    return signPsbtLocal(psbtHex, hex.encode(this.#secretKeyBytes));
+    return signPsbtLocal(psbtHex, hex.encode(this.#secretKeyBytes), options);
   }
 }
 
@@ -145,6 +159,7 @@ function signBip375PsbtV2Locally(
   psbtHex: string,
   privateKeyHex: string,
   secretKeyBytes: Uint8Array,
+  paymentIntent?: PsbtRecipient,
 ): string {
   const psbt = parsePsbtV2(psbtHex);
   if (psbt.inputs.length === 0) throw new Error('NSecSignerBtc: PSBT has no inputs.');
@@ -203,6 +218,15 @@ function signBip375PsbtV2Locally(
   // lex-smallest outpoint for `input_hash`).
   const allOutpoints = psbt.inputs.map((i) => ({ txid: i.txid, vout: i.vout }));
 
+  // Every input is owned by the same sender key, so each contributes the
+  // same tweaked private key to the BIP-352 aggregate `a`.
+  const eligibleInputs: SilentPaymentInput[] = psbt.inputs.map((inp) => ({
+    txid: inp.txid,
+    vout: inp.vout,
+    privateKey: tweakedPrivKey,
+    isTaproot: true,
+  }));
+
   // Collect all SP recipients up-front so `deriveSilentPaymentOutputs` can
   // group them by scan key and assign `k = 0, 1, …` per group. The PSBT-
   // output order is preserved alongside so we can re-pair derived xonly
@@ -245,14 +269,6 @@ function signBip375PsbtV2Locally(
   });
 
   if (spRecipients.length > 0) {
-    // Every input is owned by the same sender key, so each contributes the
-    // same tweaked private key to the BIP-352 aggregate `a`.
-    const eligibleInputs: SilentPaymentInput[] = psbt.inputs.map((inp) => ({
-      txid: inp.txid,
-      vout: inp.vout,
-      privateKey: tweakedPrivKey,
-      isTaproot: true,
-    }));
     const derived = deriveSilentPaymentOutputs(eligibleInputs, spRecipients, {
       allOutpoints,
       network: 'mainnet',
@@ -283,12 +299,6 @@ function signBip375PsbtV2Locally(
   // BIP-375 verifier can re-derive the output scripts without trusting us.
   const spGlobals: { scanPubKey: Uint8Array; ecdhShare: Uint8Array; dleqProof: Uint8Array }[] = [];
   if (spRecipients.length > 0) {
-    const eligibleInputs: SilentPaymentInput[] = psbt.inputs.map((inp) => ({
-      txid: inp.txid,
-      vout: inp.vout,
-      privateKey: tweakedPrivKey,
-      isTaproot: true,
-    }));
     const agg = aggregateSenderPrivateKey(eligibleInputs, allOutpoints);
     // Group recipient scan keys, deduplicating so we emit one share per
     // unique scan key (multiple SP outputs to the same recipient share).
@@ -342,6 +352,10 @@ function signBip375PsbtV2Locally(
   }
   tx.finalize();
 
+  if (paymentIntent) {
+    verifyBip375OutputMatchesIntent(tx, paymentIntent, eligibleInputs, allOutpoints, senderScript);
+  }
+
   // Round-trip back to a finalized PSBT v2 with the resolved scripts plus
   // the input-level final witnesses and any BIP-375 global ECDH shares +
   // DLEQ proofs. The caller's `extractTxFromSignedPsbtV2` will pull out the
@@ -353,6 +367,54 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+/**
+ * Verify a finalized BIP-375 transaction against the user-approved silent
+ * payment intent. Derives the expected P2TR output from the approved SP address
+ * and the input set, then confirms the transaction contains that exact output
+ * (amount + scriptPubKey) and that every other output is change to the sender.
+ */
+function verifyBip375OutputMatchesIntent(
+  tx: btc.Transaction,
+  paymentIntent: PsbtRecipient,
+  eligibleInputs: SilentPaymentInput[],
+  allOutpoints: { txid: string; vout: number }[],
+  senderScript: Uint8Array,
+): void {
+  const spAddress = validateAndDecodeSilentPaymentAddress(paymentIntent.address);
+  if (!spAddress) {
+    throw new Error('NSecSignerBtc: payment intent is not a valid silent payment address.');
+  }
+  const expectedAmount = BigInt(paymentIntent.amountSats);
+
+  const derived = deriveSilentPaymentOutputs(eligibleInputs, [{ address: spAddress }], {
+    allOutpoints,
+    network: 'mainnet',
+  });
+  if (derived.length !== 1) {
+    throw new Error('NSecSignerBtc: expected exactly one derived silent payment output.');
+  }
+  const expectedScript = p2trScriptPubKey(derived[0].xOnlyPubKey);
+
+  let foundSp = false;
+  for (let i = 0; i < tx.outputsLength; i++) {
+    const out = tx.getOutput(i);
+    if (!out.script || out.script.length === 0) {
+      throw new Error('NSecSignerBtc: BIP-375 transaction output has no script.');
+    }
+    if (out.amount === expectedAmount && bytesEqual(out.script, expectedScript)) {
+      foundSp = true;
+      continue;
+    }
+    if (!bytesEqual(out.script, senderScript)) {
+      throw new Error('NSecSignerBtc: unexpected output in BIP-375 transaction.');
+    }
+  }
+
+  if (!foundSp) {
+    throw new Error('NSecSignerBtc: approved silent payment output is missing.');
+  }
 }
 
 function bytesToHexLocal(b: Uint8Array): string {
@@ -423,7 +485,7 @@ export class NBrowserSignerBtc extends NBrowserSigner implements BtcSigner {
     super(opts);
   }
 
-  async signPsbt(psbtHex: string): Promise<string> {
+  async signPsbt(psbtHex: string, _options?: PsbtSigningOptions): Promise<string> {
     // `awaitNostr` is TypeScript-private but JavaScript-public at runtime.
     const nostr = await (this as unknown as { awaitNostr(): Promise<Record<string, unknown>> }).awaitNostr();
 
@@ -480,7 +542,7 @@ export class NConnectSignerBtc extends NConnectSigner implements BtcSigner {
     super(opts);
   }
 
-  async signPsbt(psbtHex: string): Promise<string> {
+  async signPsbt(psbtHex: string, _options?: PsbtSigningOptions): Promise<string> {
     // `cmd` is TypeScript-private but JavaScript-public at runtime.
     const cmd = (this as unknown as { cmd(method: string, params: string[]): Promise<string> }).cmd;
     try {

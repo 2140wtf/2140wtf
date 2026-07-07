@@ -109,7 +109,7 @@ export async function getNsecCredential(): Promise<
   try {
     const credential = await navigator.credentials.get({
       password: true,
-      mediation: 'optional',
+      mediation: 'required',
     } as CredentialRequestOptions);
 
     if (credential && 'password' in credential) {

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NostrFilter } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
+import { isVerifiedOwnEvent } from '@/lib/nostrEvents';
 import { getStorageKey } from '@/lib/storageKey';
 import { useCurrentUser } from './useCurrentUser';
 import { useUploadFile } from './useUploadFile';
@@ -22,11 +23,24 @@ import { toast } from '@/hooks/useToast';
 let lastWriteTs: number = 0;
 
 /**
- * Persist the lastSync timestamp from encrypted settings into localStorage
- * so that InitialSyncGate can decide whether to show a spinner on reload.
- * If a local timestamp exists, localStorage is trustworthy and the app can
- * render immediately while NostrSync fetches updates in the background.
+ * Persist the created_at timestamp of the last applied encrypted-settings event
+ * so page reloads can ignore stale relay events.
  */
+export function getLocalSettingsCreatedAt(appId: string, pubkey: string): number {
+  try {
+    return Number(localStorage.getItem(getStorageKey(appId, `settings-created-at:${pubkey}`))) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setLocalSettingsCreatedAt(appId: string, pubkey: string, createdAt: number): void {
+  try {
+    localStorage.setItem(getStorageKey(appId, `settings-created-at:${pubkey}`), String(createdAt));
+  } catch {
+    // localStorage may not be available
+  }
+}
 export function getLocalSettingsSync(appId: string, pubkey: string): number {
   try {
     return Number(localStorage.getItem(getStorageKey(appId, `settings-lastSync:${pubkey}`))) || 0;
@@ -203,6 +217,12 @@ export function useEncryptedSettings() {
       const event = query.data;
       if (!event || !user) return null;
 
+      // Reject forged or tampered settings events before decrypting.
+      if (!isVerifiedOwnEvent(event, user.pubkey)) {
+        console.warn('Encrypted settings event failed verification, ignoring:', event.id);
+        return null;
+      }
+
       // Decrypt the content
       if (!user.signer.nip44) {
         return null;
@@ -273,6 +293,12 @@ export function useEncryptedSettings() {
           authors: [user.pubkey],
           '#d': [`${config.appId}/metadata`],
         });
+        // fetchFreshEvent verifies the signature and author, but double-check
+        // before we decrypt and merge so a malicious relay response can't roll
+        // settings back.
+        if (freshEvent && !isVerifiedOwnEvent(freshEvent, user.pubkey)) {
+          throw new Error('Fetched encrypted settings event has invalid signature or unexpected author');
+        }
         if (freshEvent) {
           try {
             let ciphertext: string | null = freshEvent.content || null;
@@ -403,6 +429,8 @@ export function useEncryptedSettings() {
 
   return {
     settings: settings.data,
+    /** The created_at timestamp of the verified raw encrypted-settings event, if any. */
+    settingsCreatedAt: query.data && settings.data ? query.data.created_at : undefined,
     isLoading: query.isLoading || settings.isLoading,
     isError: query.isError || settings.isError,
     error: query.error || settings.error,
