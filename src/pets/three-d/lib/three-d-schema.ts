@@ -45,6 +45,16 @@ export interface Asset3DEntry {
   size?: number;
   /** Optional named variant (e.g. "walk", "sleep"). */
   variant?: string;
+  /** Optional display title for the asset. */
+  title?: string;
+  /** Author / creator credit (e.g. "Model by PixelPup on Sketchfab"). */
+  author?: string;
+  /** License name or URL (e.g. "CC-BY-4.0"). */
+  license?: string;
+  /** Link to the original source / Sketchfab page. */
+  sourceUrl?: string;
+  /** Per-asset scale override for this GLB inside the 3D room. */
+  scale?: number;
 }
 
 /** Parsed result from a kind 31124 `asset_3d` tag. */
@@ -84,6 +94,16 @@ function isValidSize(value: unknown): value is number {
 
 function isValidVariant(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 32;
+}
+
+function isValidCreditString(value: unknown, max = 200): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max;
+}
+
+function isValidSourceUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2000) return false;
+  const sanitized = sanitizeUrl(value);
+  return sanitized === value;
 }
 
 // ─── Tag Parser / Builder ────────────────────────────────────────────────────
@@ -229,6 +249,26 @@ function parseAsset3DEntry(raw: unknown): Asset3DEntry | undefined {
   const variant = obj.variant;
   if (variant && isValidVariant(variant)) {
     entry.variant = variant;
+  }
+
+  const title = obj.title;
+  if (title && isValidCreditString(title, 120)) {
+    entry.title = title;
+  }
+
+  const author = obj.author;
+  if (author && isValidCreditString(author, 200)) {
+    entry.author = author;
+  }
+
+  const license = obj.license;
+  if (license && isValidCreditString(license, 120)) {
+    entry.license = license;
+  }
+
+  const sourceUrl = obj.sourceUrl;
+  if (sourceUrl && isValidSourceUrl(sourceUrl)) {
+    entry.sourceUrl = sourceUrl;
   }
 
   return entry;
