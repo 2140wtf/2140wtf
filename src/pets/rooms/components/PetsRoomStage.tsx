@@ -37,6 +37,7 @@ import type { InteractionReactionState } from '@/pets/ui/hooks/useInteractionRea
 import type { PetsFacing } from '@/pets/ui/hooks/usePetsDirectInteraction';
 import { usePets3DEnabled } from '@/pets/three-d/hooks/usePets3DEnabled';
 import { usePets3DAsset } from '@/pets/three-d/hooks/usePets3DAsset';
+import { usePets3DRoomAsset } from '@/pets/three-d/hooks/usePets3DRoomAsset';
 
 const Pets3DVisual = lazy(() =>
   import('@/pets/three-d/components/Pets3DVisual').then((m) => ({ default: m.Pets3DVisual })),
@@ -104,6 +105,7 @@ export function PetsRoomStage({
   // valid Blossom-hosted GLB asset is resolved.
   const pets3dEnabled = usePets3DEnabled();
   const asset3d = usePets3DAsset(companion);
+  const roomAsset3d = usePets3DRoomAsset();
   const show3D = pets3dEnabled && !isEgg && companion.stage === 'adult' && asset3d !== undefined;
 
   // Body-bottom inset: how much of the visual box is empty below the body
@@ -284,6 +286,7 @@ export function PetsRoomStage({
                     >
                       <Pets3DVisual
                         asset={asset3d}
+                        roomAsset={roomAsset3d}
                         isSleeping={isSleeping}
                         className="!size-full"
                       />
