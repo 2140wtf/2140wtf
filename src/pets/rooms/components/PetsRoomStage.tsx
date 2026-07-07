@@ -105,7 +105,7 @@ export function PetsRoomStage({
   // valid Blossom-hosted GLB asset is resolved.
   const pets3dEnabled = usePets3DEnabled();
   const asset3d = usePets3DAsset(companion);
-  const roomAsset3d = usePets3DRoomAsset();
+  const roomAsset3d = usePets3DRoomAsset(companion);
   const show3D = pets3dEnabled && !isEgg && companion.stage === 'adult' && asset3d !== undefined;
 
   // Body-bottom inset: how much of the visual box is empty below the body
@@ -134,7 +134,7 @@ export function PetsRoomStage({
     setShowBirthdayConfetti(true);
     toast({
       title: `🎉 Happy ${milestone.toLocaleString()} blocks!`,
-      description: `Your 2140 PET is celebrating another 100,000-block birthday.`,
+      description: `Your NOSTR PET is celebrating another 100,000-block birthday.`,
     });
   }, [petLife]);
 

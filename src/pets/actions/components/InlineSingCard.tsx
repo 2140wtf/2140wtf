@@ -438,7 +438,7 @@ export function InlineSingCard({
                   ) : (
                     <Check className="size-4 mr-2" />
                   )}
-                  {isPublishing ? 'Singing...' : 'Sing for 2140 PETS'}
+                  {isPublishing ? 'Singing...' : 'Sing for NOSTR PETS'}
                 </Button>
               </>
             )}

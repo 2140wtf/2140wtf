@@ -106,7 +106,7 @@ export function generateEggPreview(
 /**
  * Generate an egg preview constrained to a specific breed category.
  *
- * - For adult-form categories (2140 Pets / Ditto Blobbi) the seed is adjusted
+ * - For adult-form categories (NOSTR Pets / Ditto Blobbi) the seed is adjusted
  *   so the pet deterministically evolves into a random form from that category.
  * - For the ₿AO category a random collectible card id is stored as breedAsset;
  *   the adult visual will render the card image instead of an SVG form.
@@ -199,6 +199,9 @@ export function previewToEventTags(preview: PetsEggPreview): string[][] {
     ['last_interaction', now],
     ['last_decay_at', now],
     ['progression_started_at', now],
+    // Pet-bound fiat balance and egg scale
+    ['fiat_balance', '2140'],
+    ['egg_scale', '1'],
     // Visual trait tags - ensures deterministic rendering
     ['base_color', visualTraits.baseColor],
     ['secondary_color', visualTraits.secondaryColor],
@@ -254,6 +257,9 @@ export function previewToPetsCompanion(preview: PetsEggPreview) {
     incubationTime: undefined, // Deprecated field, no longer used
     startIncubation: undefined, // Deprecated field, no longer used
     adultType: undefined, // Eggs don't have adult type
+    customFormId: preview.breedCategory === 'custom' ? preview.breedAsset : undefined,
+    fiatBalance: 2_140,
+    eggScale: 1,
     
     // Task-related fields
     progressionState: preview.progressionState,
