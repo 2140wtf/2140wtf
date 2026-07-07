@@ -6,7 +6,7 @@
  * The parent decides what bottom bar to render based on the active room.
  */
 
-import { useState, useCallback, useMemo, useEffect, useRef as useReactRef, type CSSProperties } from 'react';
+import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef as useReactRef, type CSSProperties } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { impactLight } from '@/lib/haptics';
@@ -234,21 +234,25 @@ export function PetsRoomShell({
     setPoops(prev => addPoopInstance(prev, source));
   }, []);
 
+  // Internal ref so poop overlay components always get a stable, set ref
+  // (the external poopStateRef prop is optional).
+  const internalPoopRef = useReactRef<PoopState | null>(null);
+
   const poopState: PoopState = useMemo(() => ({
     poops, onRemovePoop, addPoop,
   }), [poops, onRemovePoop, addPoop]);
 
-  if (poopStateRef) poopStateRef.current = poopState;
-
-  // Internal ref so poop overlay components always get a stable, set ref
-  // (the external poopStateRef prop is optional).
-  const internalPoopRef = useReactRef<PoopState | null>(null);
-  internalPoopRef.current = poopState;
-
   // Shovel drag — only active in the kitchen (null-coerced otherwise).
   // Lives here alongside poop state so both resolve in the same render pass.
   const shovelDrag = useShovelDrag(roomId === 'kitchen' ? poopState : null);
-  if (shovelDragRef) shovelDragRef.current = shovelDrag;
+
+  // Sync imperative refs after render; assigning during render violates React
+  // rules and breaks under StrictMode / concurrent features.
+  useLayoutEffect(() => {
+    if (poopStateRef) poopStateRef.current = poopState;
+    internalPoopRef.current = poopState;
+    if (shovelDragRef) shovelDragRef.current = shovelDrag;
+  }, [poopState, shovelDrag, poopStateRef, shovelDragRef, internalPoopRef]);
 
   // ─── Room background styles (decorative, from validated layout) ───
   const wallBackground = useMemo((): string | undefined => {
