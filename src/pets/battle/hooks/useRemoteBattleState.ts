@@ -140,6 +140,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
   const inviteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inviteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const syncCleanupRef = useRef<(() => void) | null>(null);
+  const autoStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGuestInputRef = useRef<PlayerInput>(DEFAULT_INPUT);
   const guestInputRef = useRef<PlayerInput>(DEFAULT_INPUT);
   const lastHostSnapshotRef = useRef<RemoteBattleStateSnapshot | null>(null);
@@ -163,6 +164,10 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
     if (syncCleanupRef.current) {
       syncCleanupRef.current();
       syncCleanupRef.current = null;
+    }
+    if (autoStartTimerRef.current) {
+      clearTimeout(autoStartTimerRef.current);
+      autoStartTimerRef.current = null;
     }
   }, []);
 
@@ -253,10 +258,11 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               }));
               // Give both clients a moment to render the accepted state, then
               // the host automatically starts the fight.
-              setTimeout(() => {
+              autoStartTimerRef.current = setTimeout(() => {
                 if (stateRef.current.phase === 'accepted') {
                   startFight();
                 }
+                autoStartTimerRef.current = null;
               }, 800);
             } else if (payload.type === 'battle-input') {
               lastGuestInputRef.current = payload.input;
