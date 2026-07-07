@@ -84,12 +84,12 @@ function getKindsForTab(allKinds: number[], tab: ProfileTab): number[] {
  * and to over-fetch, compensating for events discarded by client-side
  * filtering (e.g. reply events on the "posts" tab).
  */
-export function useProfileFeed(pubkey: string | undefined, activeTab: ProfileTab, enabled = true) {
+export function useProfileFeed(pubkey: string | undefined, activeTab: ProfileTab, enabled = true, kindsOverride?: number[]) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { feedSettings } = useFeedSettings();
 
-  const allKinds = getEnabledFeedKinds(feedSettings);
+  const allKinds = kindsOverride ?? getEnabledFeedKinds(feedSettings);
   const profileKinds = getKindsForTab(allKinds, activeTab);
   const kindsKey = [...profileKinds].sort().join(',');
 
