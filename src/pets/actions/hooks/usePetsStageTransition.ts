@@ -126,7 +126,7 @@ export function usePetsHatch({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  isRealWallet = true,
+  isRealWallet: _isRealWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -144,10 +144,6 @@ export function usePetsHatch({
 
       if (!profile) {
         throw new Error('Profile not found');
-      }
-
-      if (!isRealWallet) {
-        throw new Error('BAO testnet pets cannot mature. Switch to real Cashu to grow your 2140 PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -312,7 +308,7 @@ export function usePetsEvolve({
       }
 
       if (!isRealWallet) {
-        throw new Error('BAO testnet pets cannot mature. Switch to real Cashu to grow your 2140 PET.');
+        throw new Error('BAO testnet pets cannot reach the adult stage. Switch to real Cashu to evolve your 2140 PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
