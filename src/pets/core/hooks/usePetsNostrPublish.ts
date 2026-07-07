@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNostrPublish, type EventTemplate } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { toast } from '@/hooks/useToast';
@@ -16,6 +16,7 @@ export function usePetsNostrPublish() {
   const base = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
   const petsEnabled = isEnabled('pets');
+  const [isPending, setIsPending] = useState(false);
 
   const guard = useCallback(() => {
     if (!petsEnabled) {
@@ -28,9 +29,14 @@ export function usePetsNostrPublish() {
   }, [petsEnabled]);
 
   const mutateAsync = useCallback(
-    (template: EventTemplate) => {
+    async (template: EventTemplate) => {
       guard();
-      return base.mutateAsync({ ...template, relays: [PETS_BAO_RELAY_URL] });
+      setIsPending(true);
+      try {
+        return await base.mutateAsync({ ...template, relays: [PETS_BAO_RELAY_URL] });
+      } finally {
+        setIsPending(false);
+      }
     },
     [base, guard],
   );
@@ -38,10 +44,20 @@ export function usePetsNostrPublish() {
   const mutate = useCallback(
     (template: EventTemplate, options?: Parameters<typeof base.mutate>[1]) => {
       guard();
-      return base.mutate({ ...template, relays: [PETS_BAO_RELAY_URL] }, options);
+      setIsPending(true);
+      return base.mutate(
+        { ...template, relays: [PETS_BAO_RELAY_URL] },
+        {
+          ...options,
+          onSettled: (data, error, variables, onMutateResult, context) => {
+            setIsPending(false);
+            options?.onSettled?.(data, error, variables, onMutateResult, context);
+          },
+        },
+      );
     },
     [base, guard],
   );
 
-  return { ...base, mutate, mutateAsync };
+  return { mutate, mutateAsync, isPending };
 }
