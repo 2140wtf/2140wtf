@@ -1,10 +1,22 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/types';
 import { NKinds, type NPool, type NStore } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 
 import { isNostrId } from '@/lib/nostrId';
 
 /** Maximum number of items per batch to avoid hitting relay filter limits. */
 const MAX_BATCH_SIZE = 50;
+
+/** Drop events with invalid signatures before they reach app code or the cache. */
+function filterVerifiedEvents(events: NostrEvent[]): NostrEvent[] {
+  return events.filter((event) => {
+    try {
+      return verifyEvent(event);
+    } catch {
+      return false;
+    }
+  });
+}
 
 /**
  * Pending request waiting for a batched query result.
@@ -233,9 +245,11 @@ class ReplaceableCollector {
     try {
       await Promise.all(
         [...byKindSet.values()].map(async ({ kinds, pubkeys }) => {
-          const events = await this.pool.query(
-            [{ kinds, authors: pubkeys, limit: kinds.length * pubkeys.length }],
-            { signal: controller.signal },
+          const events = filterVerifiedEvents(
+            await this.pool.query(
+              [{ kinds, authors: pubkeys, limit: kinds.length * pubkeys.length }],
+              { signal: controller.signal },
+            ),
           );
           // Index by pubkey+kind, pick newest per pair.
           for (const pubkey of pubkeys) {
@@ -276,9 +290,11 @@ class ReplaceableCollector {
 
         await Promise.all(
           chunks.map(async (chunk) => {
-            const retryEvents = await this.pool.query(
-              [{ kinds: [0], authors: chunk, limit: chunk.length }],
-              { signal: controller.signal },
+            const retryEvents = filterVerifiedEvents(
+              await this.pool.query(
+                [{ kinds: [0], authors: chunk, limit: chunk.length }],
+                { signal: controller.signal },
+              ),
             );
             for (const event of retryEvents) {
               if (!results.has(event.pubkey)) results.set(event.pubkey, new Map());
@@ -576,7 +592,7 @@ export class AppPool {
     filters: NostrFilter[],
     opts?: { signal?: AbortSignal },
   ): Promise<NostrEvent[]> {
-    const events = await this.queryInner(filters, opts);
+    const events = filterVerifiedEvents(await this.queryInner(filters, opts));
     this.cacheEvents(events);
     return events;
   }
@@ -703,7 +719,9 @@ export class AppPool {
     // never reads back a locally-published event the relays rejected. This also
     // lets a successfully-published kind 5 deletion request prune its targets
     // from the cache (see NIndexedDB's NIP-09 handling).
-    this.cacheEvents([event]);
+    if (verifyEvent(event)) {
+      this.cacheEvents([event]);
+    }
   }
 
   req(
@@ -717,7 +735,9 @@ export class AppPool {
     return (async function* () {
       for await (const msg of source) {
         if (msg[0] === 'EVENT') {
-          cacheEvents([msg[2]]);
+          if (verifyEvent(msg[2])) {
+            cacheEvents([msg[2]]);
+          }
         }
         yield msg;
       }
