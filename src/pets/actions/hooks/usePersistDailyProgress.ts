@@ -24,7 +24,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
-import { KIND_BLOBBONAUT_PROFILE } from '@/pets/core/lib/pets';
+import { KIND_BLOBBONAUT_PROFILE, getCanonicalBlobbonautD } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import { readDailyFromStorage } from '../lib/daily-mission-tracker';
 import { areAllDailyComplete } from '../lib/daily-missions';
@@ -92,6 +92,7 @@ export function usePersistDailyProgress(
       const prev = await fetchFreshPetsEvent(nostrRef.current, {
         kinds: [KIND_BLOBBONAUT_PROFILE],
         authors: [pubkey],
+        '#d': [getCanonicalBlobbonautD(pubkey)],
       });
 
       // Safety: never publish a kind 11125 event without an existing profile.

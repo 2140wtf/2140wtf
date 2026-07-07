@@ -2201,7 +2201,9 @@ function PetsDashboard({
       {/* ─── Drawer + Tab Bar — overlays the room ─── */}
       <div className={cn(
         'absolute left-0 right-0 z-[70] flex flex-col transition-all duration-250 ease-in-out',
-        activeDrawer === 'wallet' ? 'inset-y-0' : 'top-0',
+        activeDrawer === 'wallet'
+          ? 'top-0 bottom-[var(--pets-room-dock-height)]'
+          : 'top-0',
         isFurnitureEditorOpen && 'opacity-40 pointer-events-none',
       )}>
         <SubHeaderBar className="relative !top-0 shrink-0" innerClassName="md:min-h-0 min-h-[50px]">
@@ -2248,7 +2250,7 @@ function PetsDashboard({
             'bg-background/95 backdrop-blur-sm overflow-hidden transition-[max-height] duration-250 ease-in-out',
             activeDrawer !== 'none'
               ? activeDrawer === 'wallet'
-                ? 'flex-1 max-h-none'
+                ? 'flex-1 h-full max-h-none'
                 : 'max-h-[256px]'
               : 'max-h-0',
           )}
