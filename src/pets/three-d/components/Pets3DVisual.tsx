@@ -155,8 +155,11 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
         <directionalLight position={[-3, 2, -3]} intensity={0.3} />
 
         <Suspense fallback={null}>
-          <Pets3DRoom />
-          {roomAsset && <Pets3DRoomModel url={roomAsset.url} scale={roomAsset.scale} />}
+          {roomAsset ? (
+            <Pets3DRoomModel url={roomAsset.url} scale={roomAsset.scale} />
+          ) : (
+            <Pets3DRoom />
+          )}
           <PetModel
             url={asset.url}
             scale={asset.scale}
