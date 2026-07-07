@@ -21,6 +21,8 @@ import {
 } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
 import { getStorageKey } from '@/lib/storageKey';
+import { FEED_TOPICS } from '@/lib/feedTopics';
+import type { NostrFilter } from '@nostrify/nostrify';
 
 const PAGE_SIZE = 15;
 
@@ -30,6 +32,17 @@ const PAGE_SIZE = 15;
  * will be discarded. This prevents large time gaps in the visible feed.
  */
 const OVER_FETCH_MULTIPLIER = 3;
+
+/** Build the union of all topic tags for the unified "All" feed. */
+function getAllTopicTags(): string[] {
+  const seen = new Set<string>();
+  for (const topic of FEED_TOPICS) {
+    for (const tag of topic.tags) {
+      seen.add(tag.toLowerCase());
+    }
+  }
+  return [...seen];
+}
 
 // Re-export FeedItem for backwards compatibility
 export type { FeedItem };
@@ -97,8 +110,8 @@ function useCommunityPubkeys(appId: string): string[] {
   return useMemo(() => readCommunityPubkeys(raw), [raw]);
 }
 
-/** Hook to fetch the global, followed, loved, or communities feed with infinite scroll pagination. */
-export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', options?: UseFeedOptions) {
+/** Hook to fetch the global, followed, loved, communities, or unified All feed with infinite scroll pagination. */
+export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communities', options?: UseFeedOptions) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { user } = useCurrentUser();
@@ -130,12 +143,15 @@ export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', opt
   // Without this guard, the query falls through to the global branch while followList is still loading.
   // Allow query to run if not on follows tab, OR if follow list has loaded (even if empty).
   // The loved tab gates on the love list the same way.
+  // The all tab waits for both lists when logged in so follows/loved filters are included on first load.
   const followsReady =
     tab === 'follows'
       ? !!user && followList !== undefined
       : tab === 'loved'
         ? !!user && lovedPubkeys !== undefined
-        : true;
+        : tab === 'all'
+          ? !user || (followList !== undefined && lovedPubkeys !== undefined)
+          : true;
 
   const allCommunityPubkeys = useCommunityPubkeys(config.appId);
   const communityPubkeys = tab === 'communities' ? allCommunityPubkeys : [];
@@ -161,7 +177,70 @@ export function useFeed(tab: 'follows' | 'loved' | 'global' | 'communities', opt
         }
       }
 
-      if (tab === 'communities' && communityPubkeys.length > 0) {
+      if (tab === 'all') {
+        // Unified “All” feed — merges follows, loved, community, global, and
+        // topic-tagged posts into a single timeline. Multiple filters are sent
+        // in one relay round-trip; results are merged and deduplicated below.
+        const fetchLimit = !feedSettings.followsFeedShowReplies ? PAGE_SIZE * OVER_FETCH_MULTIPLIER : PAGE_SIZE;
+        const showReplies = feedSettings.followsFeedShowReplies;
+        const postKinds = allKinds.filter((k) => !isRepostKind(k) && !isReactionKind(k) && !isZapKind(k));
+        const authorKinds = allKinds;
+
+        const filters: { kinds: number[]; limit: number; until?: number; authors?: string[]; search?: string; '#t'?: string[] }[] = [];
+
+        if (user && followList !== undefined) {
+          const follows = excludeMuted(followList);
+          if (follows.length > 0) {
+            filters.push({ kinds: authorKinds, authors: [...follows, user.pubkey], limit: fetchLimit });
+          }
+        }
+
+        if (user && lovedPubkeys !== undefined) {
+          const loved = excludeMuted(lovedPubkeys);
+          if (loved.length > 0) {
+            filters.push({ kinds: postKinds, authors: loved, limit: fetchLimit });
+          }
+        }
+
+        if (communityPubkeys.length > 0) {
+          filters.push({ kinds: authorKinds, authors: communityPubkeys, limit: fetchLimit });
+        }
+
+        filters.push({ kinds: postKinds, limit: PAGE_SIZE, search: 'sort:hot protocol:nostr' });
+
+        const topicTags = getAllTopicTags();
+        if (topicTags.length > 0) {
+          filters.push({ kinds: postKinds, '#t': topicTags, limit: PAGE_SIZE });
+        }
+
+        if (pageParam) {
+          for (const filter of filters) {
+            filter.until = pageParam as number;
+          }
+        }
+
+        const rawEvents = filters.length > 0
+          ? await nostr.query(filters as NostrFilter[], { signal })
+          : [];
+
+        const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
+        const oldestQueryTimestamp = getPaginationCursor(validEvents);
+
+        const items = await buildFeedItems(validEvents, nostr, signal);
+        let dedupedItems = dedupeFeedItems(items);
+
+        if (!showReplies) {
+          dedupedItems = dedupedItems.filter(
+            (item) => item.repostedBy || item.reactedBy || item.zappedBy || item.profileZapRecipient || !isReplyEvent(item.event),
+          );
+        }
+
+        // Sort newest-first in case the relay returned interleaved filter results.
+        dedupedItems.sort((a, b) => b.event.created_at - a.event.created_at);
+
+        cacheEvents(dedupedItems);
+        return { items: dedupedItems, oldestQueryTimestamp, rawCount: validEvents.length };
+      } else if (tab === 'communities' && communityPubkeys.length > 0) {
         // Communities feed — posts from community members with NIP-05 verification
         const fetchLimit = !feedSettings.followsFeedShowReplies ? PAGE_SIZE * OVER_FETCH_MULTIPLIER : PAGE_SIZE;
         const filter: Record<string, unknown> = { kinds: allKinds, authors: communityPubkeys, limit: fetchLimit, ...tagFilters };
