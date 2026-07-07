@@ -67,56 +67,46 @@ interface UseCompanionActionMenuResult {
 }
 
 /**
- * Resolve available items for a specific action/category from the shop catalog.
- * 
- * Items are sourced from the full shop catalog — all items are
- * available as reusable abilities/tools, filtered only by stage.
- * 
- * Uses the centralized `canUseItemForStage` function to ensure consistent
- * stage-based filtering across all UIs:
- * - Egg-only items (like Shell Repair Kit) are excluded for baby/adult companions
- * - Baby/adult-only items (food, toys) are excluded for eggs
- * - Items without relevant effects are excluded
- * 
- * Since companions can only be baby or adult (not egg), this effectively
- * filters out all egg-only items from the companion interaction system.
+ * Resolve available items for a specific action/category from the user's inventory.
+ *
+ * Items are sourced from the live shop catalog but filtered to those the user
+ * actually owns (profile.storage quantity > 0). They are further filtered by
+ * stage so egg-only items never appear for baby/adult companions.
  */
 function resolveItemsForAction(
   action: CompanionMenuAction,
-  stage: 'egg' | 'baby' | 'adult'
+  stage: 'egg' | 'baby' | 'adult',
+  storageMap: Map<string, number>,
 ): CompanionItem[] {
   const category = getItemCategoryForAction(action);
-  
+
   // Sleep action has no items
   if (!category) return [];
-  
+
   const allItems = getLiveShopItems();
   const items: CompanionItem[] = [];
-  
+
   for (const shopItem of allItems) {
     if (shopItem.type !== category) continue;
-    
-    // Use centralized stage-based filtering
-    // This handles:
-    // - Shell Repair Kit: only for eggs (excluded for baby/adult companions)
-    // - Food/Toys: only for baby/adult (excluded for eggs)
-    // - Medicine: must have health effect
-    // - Hygiene: must have hygiene or happiness effect
+
+    const ownedQty = storageMap.get(shopItem.id) ?? 0;
+    if (ownedQty <= 0) continue;
+
     const usability = canUseItemForStage(shopItem.id, stage);
     if (!usability.canUse) {
       continue;
     }
-    
+
     items.push({
       id: shopItem.id,
       name: shopItem.name,
       emoji: shopItem.icon,
       category: shopItem.type,
-      quantity: Infinity,
+      quantity: ownedQty,
       effect: shopItem.effect,
     });
   }
-  
+
   return items;
 }
 
@@ -133,6 +123,10 @@ export function useCompanionActionMenu({
 }: UseCompanionActionMenuOptions): UseCompanionActionMenuResult {
   const location = useLocation();
   const { profile } = useBlobbonautProfile();
+  const storageMap = useMemo(
+    () => new Map((profile?.storage ?? []).map((s) => [s.itemId, s.quantity])),
+    [profile?.storage],
+  );
   
   const [menuState, setMenuState] = useState<CompanionMenuState>(INITIAL_MENU_STATE);
   
@@ -195,8 +189,8 @@ export function useCompanionActionMenu({
       return;
     }
     
-    // Resolve items for this action from the catalog (not inventory)
-    const items = resolveItemsForAction(action, stage);
+    // Resolve items for this action from the user's inventory.
+    const items = resolveItemsForAction(action, stage, storageMap);
     
     setMenuState(prev => ({
       ...prev,
@@ -205,7 +199,7 @@ export function useCompanionActionMenu({
     }));
     
     onActionSelect?.(action);
-  }, [isActive, profile, stage, menuState.selectedAction, onActionSelect]);
+  }, [isActive, profile, stage, storageMap, menuState.selectedAction, onActionSelect]);
   
   /**
    * Clear the selected action.

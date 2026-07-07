@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 
 import { useAppContext } from '@/hooks/useAppContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { ReactionSparkles, ReactionBubbles } from '@/pets/ui/ReactionOverlays';
 import { FloatingSocialHearts } from '@/pets/ui/FloatingSocialHearts';
@@ -159,8 +160,8 @@ export function PetsRoomStage({
           resolved 3D asset and 3D mode enabled. */}
       {show3D && (
         <div className="absolute inset-0 z-0 pointer-events-auto">
-          <Suspense
-            fallback={
+          <ErrorBoundary
+            fallback={() => (
               <PetsStageVisual
                 companion={companion}
                 size="lg"
@@ -173,15 +174,32 @@ export function PetsRoomStage({
                 facing={facing}
                 className="!size-full"
               />
-            }
+            )}
           >
-            <Pets3DVisual
-              asset={asset3d}
-              roomAsset={roomAsset3d}
-              isSleeping={isSleeping}
-              className="!size-full"
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                <PetsStageVisual
+                  companion={companion}
+                  size="lg"
+                  animated={!isSleeping}
+                  reaction={petsReaction}
+                  recipe={hasDevOverride ? undefined : statusRecipe}
+                  recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                  emotion={effectiveEmotion}
+                  onEggClick={onEggClick}
+                  facing={facing}
+                  className="!size-full"
+                />
+              }
+            >
+              <Pets3DVisual
+                asset={asset3d}
+                roomAsset={roomAsset3d}
+                isSleeping={isSleeping}
+                className="!size-full"
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       )}
 
