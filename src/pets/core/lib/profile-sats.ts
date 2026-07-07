@@ -211,3 +211,51 @@ export async function consumeStorageItem(
     return { event, prevStorage, newStorage, consumed: true };
   });
 }
+
+/**
+ * Restore one unit of an item to the user's storage.
+ *
+ * Used as a compensating action when a pet-state publish fails after storage
+ * was already decremented, so the item is not permanently lost.
+ */
+export async function restoreStorageItem(
+  nostr: NPool,
+  publishEvent: PublishEventFn,
+  pubkey: string,
+  itemId: string,
+): Promise<ConsumeStorageItemResult> {
+  return runSerialized(pubkey, async () => {
+    const prev = await fetchFreshPetsEvent(nostr, {
+      kinds: [KIND_BLOBBONAUT_PROFILE],
+      authors: [pubkey],
+      '#d': getBlobbonautQueryDValues(pubkey),
+    });
+
+    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const prevStorage = profile?.storage ?? [];
+    const existingIndex = prevStorage.findIndex((s) => s.itemId === itemId);
+
+    let newStorage: StorageItem[];
+    if (existingIndex >= 0) {
+      newStorage = prevStorage.map((s, i) =>
+        i === existingIndex ? { ...s, quantity: s.quantity + 1 } : s,
+      );
+    } else {
+      newStorage = [...prevStorage, { itemId, quantity: 1 }];
+    }
+
+    const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
+    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+      storage: storageValues,
+    });
+
+    const event = await publishEvent({
+      kind: KIND_BLOBBONAUT_PROFILE,
+      content: prev?.content ?? profile?.content ?? '',
+      tags,
+      prev: prev ?? undefined,
+    });
+
+    return { event, prevStorage, newStorage, consumed: true };
+  });
+}
