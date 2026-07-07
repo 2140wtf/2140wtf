@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -207,10 +207,8 @@ export function PetsPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
 
-  useLayoutOptions({ hasSubHeader: true, noOverscroll: true });
-
   useSeoMeta({
-    title: `2140 PETS | ${config.appName}`,
+    title: `NOSTR PETS | ${config.appName}`,
     description: 'Care for your virtual pet companion on Nostr',
   });
 
@@ -230,7 +228,7 @@ function LoggedOutState() {
         <div className="size-20 rounded-3xl bg-primary/10 flex items-center justify-center">
           <Egg className="size-10 text-primary" />
         </div>
-        <h1 className="text-2xl font-bold">2140 PETS</h1>
+        <h1 className="text-2xl font-bold">NOSTR PETS</h1>
         <p className="text-muted-foreground">
           Log in with your Nostr account to care for your virtual pet companion.
         </p>
@@ -253,6 +251,7 @@ function BreedCategoryPicker({
     '2140-pets': Sparkles,
     'ditto-blobbi': Cat,
     bao: Wallet,
+    custom: Palette,
   };
 
   if (compact) {
@@ -393,7 +392,7 @@ function PetsContent() {
   const localStorageKey = user?.pubkey ? getSelectedPetsKey(user.pubkey) : 'pets:selected:d:none';
   const [storedSelectedD, setStoredSelectedD] = useLocalStorage<string | null>(localStorageKey, null);
   
-  // State for showing the adoption flow (for "Adopt another 2140 PET")
+  // State for showing the adoption flow (for "Adopt another NOSTR PET")
   const [showAdoptionFlow, setShowAdoptionFlow] = useState(false);
   const [selectedBreedCategory, setSelectedBreedCategory] = useState<PetsBreedCategory | undefined>(undefined);
   const [adoptionStep, setAdoptionStep] = useState<'category' | 'onboarding'>('category');
@@ -565,8 +564,8 @@ function PetsContent() {
       toast({
         title: isCurrentlySleeping ? 'Woke up!' : 'Resting...',
         description: isCurrentlySleeping
-          ? 'Your 2140 PET is now awake and active!'
-          : 'Your 2140 PET is taking a rest.',
+          ? 'Your NOSTR PET is now awake and active!'
+          : 'Your NOSTR PET is taking a rest.',
       });
 
       // Track daily mission progress for sleep action (only when putting to sleep)
@@ -586,7 +585,12 @@ function PetsContent() {
   }, [user?.pubkey, companion, ensureCanonicalBeforeAction, publishEvent, updateCompanionEvent]);
   
   // ─── Shop Purchase Hook ───
-  const { mutateAsync: purchaseItem, isPending: isPurchasingItem } = usePetsPurchaseItem(profile ?? null, petsWallet);
+  const { mutateAsync: purchaseItem, isPending: isPurchasingItem } = usePetsPurchaseItem(
+    profile ?? null,
+    companion,
+    petsWallet,
+    updateCompanionEvent,
+  );
 
   // ─── Use Inventory Item Hook ───
   const { mutateAsync: executeUseItem, isPending: itemUsePending } = usePetsUseInventoryItem({
@@ -906,7 +910,7 @@ function PetsContent() {
             <div className="size-24 rounded-3xl bg-muted/50 flex items-center justify-center">
               <RefreshCw className="size-12 text-muted-foreground animate-spin" />
             </div>
-            <h1 className="text-2xl font-bold">Syncing your 2140 PETS...</h1>
+            <h1 className="text-2xl font-bold">Syncing your NOSTR PETS...</h1>
             <p className="text-muted-foreground">
               Fetching your pet data from relays...
             </p>
@@ -1172,6 +1176,18 @@ function PetsDashboard({
   // Layout options (hasSubHeader, noOverscroll) set at PetsPage level
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+
+  // ─── Full-screen game mode ───
+  const [gameMode, setGameMode] = useState(false);
+  useLayoutOptions({
+    hasSubHeader: true,
+    noOverscroll: true,
+    hideLeftSidebar: gameMode,
+    rightSidebar: gameMode ? null : undefined,
+    noMaxWidth: gameMode,
+    hideTopBar: gameMode,
+    hideBottomNav: gameMode,
+  });
   
   const isSleeping = companion.state === 'sleeping';
   const isEgg = companion.stage === 'egg';
@@ -1263,8 +1279,8 @@ function PetsDashboard({
       toast({
         title: open ? 'Social interactions enabled' : 'Social interactions disabled',
         description: open
-          ? 'Other people can now care for this 2140 PET.'
-          : 'Only you can interact with this 2140 PET.',
+          ? 'Other people can now care for this NOSTR PET.'
+          : 'Only you can interact with this NOSTR PET.',
       });
     } catch (error) {
       console.error('Failed to toggle social permission:', error);
@@ -1635,7 +1651,7 @@ function PetsDashboard({
     if (!isCurrentCompanion && !canBeCompanion) {
       toast({
         title: 'Cannot set as companion',
-        description: 'Only hatched 2140 PETS (baby or adult) can be set as your companion.',
+        description: 'Only hatched NOSTR PETS (baby or adult) can be set as your companion.',
         variant: 'destructive',
       });
       return;
@@ -2319,7 +2335,12 @@ function PetsDashboard({
               )}
               {activeDrawer === 'shop' && (
                 <div className="flex-1 min-h-0">
-                  <PetsShopDrawer profile={profile ?? null} externalWallet={petsWallet} />
+                  <PetsShopDrawer
+                    profile={profile ?? null}
+                    companion={companion}
+                    externalWallet={petsWallet}
+                    onCompanionUpdated={updateCompanionEvent}
+                  />
                 </div>
               )}
               {activeDrawer === 'wallet' && (
@@ -2336,12 +2357,34 @@ function PetsDashboard({
       <PetsRoomShell
         roomId={currentRoom}
         headerSlot={
-          <PetsSwapButton
-            companions={companions}
-            selectedD={selectedD}
-            currentCompanionD={profile?.currentCompanion}
-            onSelect={onSelectPets}
-          />
+          <div className="flex items-center gap-2">
+            <PetsSwapButton
+              companions={companions}
+              selectedD={selectedD}
+              currentCompanionD={profile?.currentCompanion}
+              onSelect={onSelectPets}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-9 rounded-full bg-background/80 backdrop-blur-sm"
+              onClick={() => {
+                setGameMode((prev) => {
+                  const next = !prev;
+                  if (next && document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                  } else if (!next && document.fullscreenElement && document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                  }
+                  return next;
+                });
+              }}
+              aria-label={gameMode ? 'Exit game mode' : 'Enter game mode'}
+            >
+              {gameMode ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+            </Button>
+          </div>
         }
         onChangeRoom={(room) => {
           if (isSleeping) {
@@ -3385,7 +3428,7 @@ function MissionsTabContent({
             {!dailyMissions.isLoading && dailyMissions.noMissionsAvailable && (
               <div className="flex flex-col items-center gap-2 py-6 text-center">
                 <Egg className="size-6 text-muted-foreground/30" />
-                <p className="text-xs text-muted-foreground">Hatch a 2140 PET to unlock daily bounties</p>
+                <p className="text-xs text-muted-foreground">Hatch a NOSTR PET to unlock daily bounties</p>
               </div>
             )}
 
@@ -3857,7 +3900,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
         <div className="flex items-center gap-2.5 rounded-lg border border-dashed p-3">
           <Egg className="size-4 shrink-0 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Social care settings will unlock after your 2140 PET hatches.
+            Social care settings will unlock after your NOSTR PET hatches.
           </p>
         </div>
       ) : (
@@ -3865,7 +3908,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
           <label htmlFor={socialToggleId} className="flex items-center gap-2.5 cursor-pointer select-none min-w-0">
             <Users className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
-              <p className="text-sm font-medium leading-tight">Allow others to care for this 2140 PET</p>
+              <p className="text-sm font-medium leading-tight">Allow others to care for this NOSTR PET</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {socialOpen ? 'Anyone can feed, play, and clean.' : 'Only you can interact.'}
               </p>
@@ -3876,7 +3919,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
             checked={socialOpen}
             onCheckedChange={onToggleSocial}
             disabled={isSocialToggling}
-            aria-label="Allow other people to care for this 2140 PET"
+            aria-label="Allow other people to care for this NOSTR PET"
           />
         </div>
       )}
@@ -3962,7 +4005,7 @@ function PetsSelectorPage({ companions, onSelect, isLoading, onAdopt, currentCom
         <div className="flex items-center gap-3">
           <Egg className="size-5 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">Choose Your 2140 PET</h1>
+            <h1 className="text-lg font-semibold">Choose Your NOSTR PET</h1>
             <p className="text-xs text-muted-foreground">Select a companion to care for</p>
           </div>
         </div>
@@ -4028,7 +4071,7 @@ function PetsSwapButton({ companions, selectedD, currentCompanionD, onSelect }: 
       <PopoverTrigger asChild>
         <button
           className="flex items-center gap-1.5 rounded-full bg-background/70 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
-          aria-label="Switch 2140 PET"
+          aria-label="Switch NOSTR PET"
         >
           <ArrowLeftRight className="size-3.5" />
           <span>Swap</span>
@@ -4036,7 +4079,7 @@ function PetsSwapButton({ companions, selectedD, currentCompanionD, onSelect }: 
       </PopoverTrigger>
       <PopoverContent side="bottom" align="center" className="w-auto p-3">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-medium text-muted-foreground">Switch 2140 PET</p>
+          <p className="text-xs font-medium text-muted-foreground">Switch NOSTR PET</p>
           <button
             onClick={() => setOpen(false)}
             aria-label="Close"

@@ -80,7 +80,7 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -104,7 +104,7 @@ describe('usePetsPurchaseItem btc-sats mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseBlobbonautEvent(createProfileEvent('btc-sats', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -130,7 +130,7 @@ describe('usePetsPurchaseItem demo-sats mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseBlobbonautEvent(createProfileEvent('demo-sats', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 

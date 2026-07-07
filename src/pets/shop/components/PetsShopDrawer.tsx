@@ -12,13 +12,16 @@ import { cn } from '@/lib/utils';
 import { usePetsPurchaseItem, estimateCashuSendFee } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
-import type { BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { BlobbonautProfile, PetsCompanion } from '@/pets/core/lib/pets';
+import type { NostrEvent } from '@nostrify/nostrify';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import type { ShopItem, ShopItemCategory } from '../types/shop.types';
 
 interface PetsShopDrawerProps {
   profile: BlobbonautProfile | null;
+  companion?: PetsCompanion | null;
   externalWallet?: (CashuWalletState & CashuWalletActions) | null;
+  onCompanionUpdated?: (event: NostrEvent) => void;
 }
 
 const CATEGORY_ORDER: ShopItemCategory[] = ['food', 'toy', 'medicine', 'hygiene', 'energy'];
@@ -41,8 +44,8 @@ function effectSummary(effect: ShopItem['effect']): string {
   return parts.join(' · ');
 }
 
-export function PetsShopDrawer({ profile, externalWallet }: PetsShopDrawerProps) {
-  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, externalWallet);
+export function PetsShopDrawer({ profile, companion, externalWallet, onCompanionUpdated }: PetsShopDrawerProps) {
+  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated);
   const { isReal, isTestnet } = usePetsWallet();
 
   const isBtcMode = profile?.walletMode === 'btc-sats';

@@ -50,7 +50,7 @@ import {
 /** 
  * Onboarding steps:
  * - 'creating-profile': Auto-creating profile (no user input needed)
- * - 'adoption-question': Ask if user wants to adopt a 2140 PET
+ * - 'adoption-question': Ask if user wants to adopt a NOSTR PET
  * - 'preview': Show egg preview with reroll/adopt options
  */
 export type OnboardingStep = 'creating-profile' | 'adoption-question' | 'preview';
@@ -104,7 +104,7 @@ export interface UsePetsOnboardingResult {
  * - Profile exists, no pets → 'adoption-question'
  * - Profile exists with pets → should not be in onboarding at all
  * 
- * Adoption-only mode (for "Adopt another 2140 PET"):
+ * Adoption-only mode (for "Adopt another NOSTR PET"):
  * - Profile must exist → 'preview' (skip straight to egg preview)
  * - No profile → error case, should not happen
  */
@@ -144,7 +144,7 @@ interface UsePetsOnboardingOptions {
   onComplete?: () => void;
   /** 
    * If true, skip profile creation and adoption question, go directly to preview.
-   * Use this for "Adopt another 2140 PET" flow for existing users.
+   * Use this for "Adopt another NOSTR PET" flow for existing users.
    * Requires profile to be non-null.
    */
   adoptionOnly?: boolean;
@@ -311,7 +311,7 @@ export function usePetsOnboarding({
         invalidateProfile();
         
         toast({
-          title: 'Welcome to 2140 PETS!',
+          title: 'Welcome to NOSTR PETS!',
           description: `Your profile has been created, ${name}!`,
         });
         
@@ -495,7 +495,7 @@ export function usePetsOnboarding({
 
       const eggEvent = await publishEvent({
         kind: KIND_PETS_STATE,
-        content: 'A new 2140 PET egg!',
+        content: 'A new NOSTR PET egg!',
         tags: eggTags,
         created_at: preview.createdAt,
       });

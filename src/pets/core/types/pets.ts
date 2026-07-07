@@ -217,7 +217,7 @@ export function createDefaultPets(overrides: Partial<Pets> = {}): Pets {
 
   return {
     id: overrides.id ?? '2140pets-1',
-    name: overrides.name ?? '2140 PET',
+    name: overrides.name ?? 'NOSTR PET',
     lifeStage: overrides.lifeStage ?? DEFAULT_PETS_LIFE_STAGE,
     state,
     isSleeping: overrides.isSleeping ?? state === 'sleeping',

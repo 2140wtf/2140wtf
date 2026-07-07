@@ -55,7 +55,7 @@ export function PetsAdoptionConfirmDialog({
         <DialogHeader>
           <DialogTitle>Confirm Adoption</DialogTitle>
           <DialogDescription>
-            You're about to adopt this 2140 PET. This action cannot be undone.
+            You're about to adopt this NOSTR PET. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 

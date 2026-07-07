@@ -212,6 +212,79 @@ export function shouldHideFeedEvent(event: NostrEvent): boolean {
 }
 
 /**
+ * Domains used by Mastodon / ActivityPub bridges. Events that appear to be
+ * authored by or relayed through these domains are dropped from the default
+ * global feeds. Subdomains are matched automatically.
+ */
+const MASTODON_BRIDGE_DOMAINS = new Set([
+  'mostr.pub',
+]);
+
+/** Returns true if a hostname belongs to a known Mastodon/ActivityPub bridge. */
+function isMastodonBridgeHost(host: string): boolean {
+  const lower = host.toLowerCase();
+  for (const domain of MASTODON_BRIDGE_DOMAINS) {
+    if (lower === domain || lower.endsWith(`.${domain}`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if a value looks like a bridged ActivityPub identifier:
+ * - NIP-05 / ActivityPub handle style: user@domain or user@subdomain.mostr.pub
+ * - URL style: https://mostr.pub/... or https://subdomain.mostr.pub/...
+ */
+function isMastodonBridgeIdentifier(value: string): boolean {
+  const lower = value.toLowerCase();
+  // NIP-05 / ActivityPub handle style: user@domain
+  const atIndex = lower.lastIndexOf('@');
+  if (atIndex > 0) {
+    const host = lower.slice(atIndex + 1);
+    if (host && isMastodonBridgeHost(host)) return true;
+  }
+  // URL style
+  if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    try {
+      if (isMastodonBridgeHost(new URL(lower).hostname)) return true;
+    } catch {
+      // ignore invalid URLs
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns true if an event appears to be authored by or relayed through a
+ * Mastodon/ActivityPub bridge (e.g. mostr.pub).
+ *
+ * Detects:
+ * - NIP-48 proxy tags with protocol "activitypub"
+ * - Proxy tag URIs / values that reference a known bridge domain
+ * - Tag values containing a NIP-05-style identifier ending in a bridge domain
+ */
+export function isMastodonBridgeEvent(event: NostrEvent): boolean {
+  // NIP-48 proxy tag: ["proxy", "<uri>", "<protocol>"]
+  const proxyTag = event.tags.find(([name]) => name === 'proxy');
+  if (proxyTag) {
+    const protocol = proxyTag[2]?.toLowerCase();
+    if (protocol === 'activitypub') return true;
+    for (let i = 1; i < proxyTag.length; i++) {
+      const value = proxyTag[i];
+      if (typeof value === 'string' && isMastodonBridgeIdentifier(value)) return true;
+    }
+  }
+  // Defensive scan of string tag values for bridge identifiers (e.g. an
+  // author handle embedded as user@mostr.pub). This is intentionally narrow:
+  // it only matches known bridge domains, so normal mentions/links are fine.
+  for (const tag of event.tags) {
+    for (const value of tag.slice(1)) {
+      if (typeof value === 'string' && isMastodonBridgeIdentifier(value)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Turn a list of raw events into FeedItems, unwrapping reposts /
  * reactions / zaps so that the target event becomes the FeedItem's
  * primary `event` and the wrapper is surfaced as an overlay

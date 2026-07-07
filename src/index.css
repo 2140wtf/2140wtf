@@ -695,7 +695,7 @@
   }
 }
 
-/* ─── 2140 Pets + ₿AO Living SVG Animations ────────────────────────────────── */
+/* ─── NOSTR Pets + ₿AO Living SVG Animations ────────────────────────────────── */
 
 @keyframes pets-breathe {
   0%, 100% { transform: scale(1) translateY(0); }
@@ -1175,7 +1175,7 @@
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════ *
- * CYPHERPUNK 2140 PETS — scoped theme layer
+ * CYPHERPUNK NOSTR PETS — scoped theme layer
  * Generated from Open Design artifact: cypherpunk-2140-pets
  * ═════════════════════════════════════════════════════════════════════════════ */
 

@@ -80,7 +80,7 @@ export function PetsEggPreviewCard({
         {/* Title */}
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-bold">
-            Meet Your 2140 PET!
+            Meet Your NOSTR PET!
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
             {isFirstPreview
@@ -94,7 +94,7 @@ export function PetsEggPreviewCard({
         <div className="w-full max-w-xs space-y-2">
           <Label htmlFor="pets-name" className="text-sm font-medium flex items-center gap-1">
             <Pencil className="size-3" />
-            Name Your 2140 PET
+            Name Your NOSTR PET
           </Label>
           <Input
             id="pets-name"
@@ -107,7 +107,7 @@ export function PetsEggPreviewCard({
             maxLength={32}
           />
           {!isValidName && (
-            <p className="text-xs text-destructive">Please enter a name for your 2140 PET</p>
+            <p className="text-xs text-destructive">Please enter a name for your NOSTR PET</p>
           )}
         </div>
 
@@ -181,7 +181,7 @@ export function PetsEggPreviewCard({
             ) : (
               <>
                 <Heart className="size-4 mr-2" />
-                Adopt {trimmedName || 'This 2140 PET'} ({formatCompactNumber(adoptionCostSats)} demo sats)
+                Adopt {trimmedName || 'This NOSTR PET'} ({formatCompactNumber(adoptionCostSats)} demo sats)
               </>
             )}
           </Button>

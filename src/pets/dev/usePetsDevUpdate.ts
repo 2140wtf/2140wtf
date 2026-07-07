@@ -140,6 +140,10 @@ export function usePetsDevUpdate({
         tagUpdates.generation = updates.generation.toString();
         changedFields.push('generation');
       }
+      if (updates.eggScale !== undefined) {
+        tagUpdates.egg_scale = updates.eggScale.toString();
+        changedFields.push('egg_scale');
+      }
 
       // Always update last_interaction and last_decay_at
       tagUpdates.last_interaction = now.toString();
@@ -197,14 +201,14 @@ export function usePetsDevUpdate({
         : `Updated: ${changedFields.join(', ')}`;
 
       toast({
-        title: '2140 PETS state updated (DEV)',
+        title: 'NOSTR PETS state updated (DEV)',
         description,
       });
     },
     onError: (error: Error) => {
       console.error('[DevUpdate] Failed:', error);
       toast({
-        title: 'Failed to update 2140 PETS',
+        title: 'Failed to update NOSTR PETS',
         description: error.message,
         variant: 'destructive',
       });

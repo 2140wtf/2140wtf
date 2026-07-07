@@ -1,7 +1,7 @@
 /**
- * 2140 PETS Tag Schema - Canonical Reference
+ * NOSTR PETS Tag Schema - Canonical Reference
  * 
- * This file defines the single source of truth for all 2140 PETS tags used in Kind 31124
+ * This file defines the single source of truth for all NOSTR PETS tags used in Kind 31124
  * (Pets State) events. It documents which tags exist, their purpose, when they're
  * used, and how they should be handled during stage transitions.
  * 
@@ -84,7 +84,7 @@ export interface PetsTagSchema {
 /**
  * Complete canonical schema for all valid Pets tags.
  * 
- * This is the SINGLE SOURCE OF TRUTH for 2140 PETS tag definitions.
+ * This is the SINGLE SOURCE OF TRUTH for NOSTR PETS tag definitions.
  * All stage transitions, migrations, and validations should reference this schema.
  */
 export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
@@ -93,7 +93,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'd',
-    description: 'Unique identifier for the 2140 PET (addressable event d-tag)',
+    description: 'Unique identifier for the NOSTR PET (addressable event d-tag)',
     category: 'system',
     required: true,
     stages: ['egg', 'baby', 'adult'],
@@ -120,7 +120,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'name',
-    description: 'Display name for the 2140 PET',
+    description: 'Display name for the NOSTR PET',
     category: 'identity',
     required: true,
     stages: ['egg', 'baby', 'adult'],
@@ -143,7 +143,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'generation',
-    description: 'Generation number in the 2140 PET lineage',
+    description: 'Generation number in the NOSTR PET lineage',
     category: 'identity',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -152,7 +152,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     regenerable: false,
     format: 'positive integer',
     defaultValue: '1',
-    notes: 'Starts at 1 for adopted 2140 PETS. Increments for bred offspring.',
+    notes: 'Starts at 1 for adopted NOSTR PETS. Increments for bred offspring.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -160,7 +160,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'base_color',
-    description: 'Primary/base color for the 2140 PET',
+    description: 'Primary/base color for the NOSTR PET',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -172,7 +172,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'secondary_color',
-    description: 'Secondary/accent color for the 2140 PET',
+    description: 'Secondary/accent color for the NOSTR PET',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -184,7 +184,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'eye_color',
-    description: 'Eye color for the 2140 PET',
+    description: 'Eye color for the NOSTR PET',
     category: 'visual',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -542,7 +542,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   // ═══════════════════════════════════════════════════════════════════════════
   {
     tag: 'social',
-    description: 'Whether external users can interact with this 2140 PET via kind 1124 events',
+    description: 'Whether external users can interact with this NOSTR PET via kind 1124 events',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -555,7 +555,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'breeding_ready',
-    description: 'Whether the 2140 PET is eligible for breeding',
+    description: 'Whether the NOSTR PET is eligible for breeding',
     category: 'social',
     required: false,
     stages: ['egg', 'baby', 'adult'],
@@ -674,7 +674,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Theme identifier string (e.g., "divine")',
-    notes: 'Used for special themed 2140 PETS. Persists across stages.',
+    notes: 'Used for special themed NOSTR PETS. Persists across stages.',
   },
   {
     tag: 'crossover_app',
@@ -686,7 +686,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     source: 'system',
     regenerable: false,
     format: 'Application identifier string (e.g., "divine")',
-    notes: 'Indicates the 2140 PET originated from or has features from another app.',
+    notes: 'Indicates the NOSTR PET originated from or has features from another app.',
   },
   {
     tag: 'archetype',
@@ -714,7 +714,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
   },
   {
     tag: 'asset_3d',
-    description: 'Blossom URL of a 3D model override for this adult 2140 PET',
+    description: 'Blossom URL of a 3D model override for this adult NOSTR PET',
     category: 'extension',
     required: false,
     stages: ['adult'],
@@ -785,7 +785,7 @@ export const DEPRECATED_TAG_SCHEMA: readonly DeprecatedTagSchema[] = [
   },
   {
     tag: 'fees',
-    reason: 'Fee tracking removed from 2140 PETS events',
+    reason: 'Fee tracking removed from NOSTR PETS events',
     replacedBy: undefined,
     deprecatedSince: 'v1.0',
   },
@@ -911,7 +911,7 @@ const RECOVERABLE_SYSTEM_TAGS: Record<string, string> = {
 
 /**
  * Tags that should NEVER be invented if they don't exist.
- * Per spec: Do NOT invent personality/trait/adult_type for existing 2140 PETS.
+ * Per spec: Do NOT invent personality/trait/adult_type for existing NOSTR PETS.
  */
 const NEVER_INVENT_TAGS = new Set([
   // Personality tags - generated at creation only
@@ -1252,7 +1252,7 @@ export function generateSchemaDocumentation(): string {
     'state', 'task', 'progression', 'social', 'evolution', 'extension',
   ] as TagCategory[];
   
-  let doc = '# 2140 PETS Tag Schema\n\n';
+  let doc = '# NOSTR PETS Tag Schema\n\n';
   
   for (const category of categories) {
     const tags = getTagsByCategory(category);

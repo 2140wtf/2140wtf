@@ -12,15 +12,15 @@ export interface LyricsEntry {
 }
 
 /**
- * Collection of placeholder lyrics for singing to a 2140 PET.
+ * Collection of placeholder lyrics for singing to a NOSTR PET.
  * Simple, fun, and appropriate for all ages.
  */
 export const PETS_LYRICS: LyricsEntry[] = [
   {
     id: 'lullaby-1',
-    title: '2140 PET Lullaby',
+    title: 'NOSTR PET Lullaby',
     lines: [
-      'Little 2140 PET, close your eyes,',
+      'Little NOSTR PET, close your eyes,',
       'Dream of stars up in the skies.',
       'Safe and warm, you drift away,',
       "We'll play again another day.",
@@ -28,9 +28,9 @@ export const PETS_LYRICS: LyricsEntry[] = [
   },
   {
     id: 'happy-song-1',
-    title: 'Happy 2140 PET Song',
+    title: 'Happy NOSTR PET Song',
     lines: [
-      '2140 PET, 2140 PET, jump around!',
+      'NOSTR PET, NOSTR PET, jump around!',
       "You're the happiest friend I've found!",
       'Dancing, playing, full of cheer,',
       "I'm so glad that you are here!",

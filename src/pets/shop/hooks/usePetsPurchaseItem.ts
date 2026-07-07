@@ -7,14 +7,17 @@ import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment
 import { toast } from '@/hooks/useToast';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+import type { NostrEvent } from '@nostrify/nostrify';
 
 import type { CashuWallet, MintKeyset } from '@cashu/cashu-ts';
 
 import type { PurchaseRequest } from '../types/shop.types';
-import type { BlobbonautProfile, StorageItem } from '@/pets/core/lib/pets';
+import type { BlobbonautProfile, PetsCompanion, StorageItem } from '@/pets/core/lib/pets';
 import {
+  KIND_PETS_STATE,
   updateBlobbonautTags,
   createStorageTags,
+  updatePetsTags,
 } from '@/pets/core/lib/pets';
 import { getShopItemById } from '../lib/pets-shop-items';
 
@@ -42,18 +45,51 @@ export function estimateCashuSendFee(amount: number, wallet: CashuWallet | null)
   }
 }
 
+/** Minimum pet-bound fiat balance to keep as a reserve before falling back to wallet rails. */
+const PET_FIAT_RESERVE_SATS = 100;
+
+/**
+ * Compute how much of a sats-priced purchase should be covered by the pet's
+ * bound fiat balance vs the wallet. The pet always spends first, but we leave
+ * a small reserve so the pet is not emptied to zero.
+ */
+function splitSatsPayment(
+  totalSatsCost: number,
+  petFiatBalance: number,
+): { petFiatSpend: number; walletSatsCost: number } {
+  if (totalSatsCost <= 0) return { petFiatSpend: 0, walletSatsCost: 0 };
+  if (petFiatBalance <= 0) return { petFiatSpend: 0, walletSatsCost: totalSatsCost };
+
+  // If the pet can pay the whole cost and still keep the reserve, use pet fiat only.
+  if (petFiatBalance >= totalSatsCost + PET_FIAT_RESERVE_SATS) {
+    return { petFiatSpend: totalSatsCost, walletSatsCost: 0 };
+  }
+
+  // If the pet balance itself is below the reserve, do not touch it; fall back to wallet.
+  if (petFiatBalance < PET_FIAT_RESERVE_SATS) {
+    return { petFiatSpend: 0, walletSatsCost: totalSatsCost };
+  }
+
+  // Spend pet fiat down to the reserve, cover the rest with the wallet.
+  const petFiatSpend = petFiatBalance - PET_FIAT_RESERVE_SATS;
+  return { petFiatSpend, walletSatsCost: totalSatsCost - petFiatSpend };
+}
+
 /**
  * Hook to purchase items from the Pets Shop.
  *
  * Handles:
- * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'demo-sats')
+ * - Pet-bound fiat balance first for sats-priced items
  * - Real BTC sats payment via the external Cashu wallet (wallet_mode === 'btc-sats')
+ * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'demo-sats')
  * - Storage updates (stacking or adding new items)
  * - Atomic profile update
  */
 export function usePetsPurchaseItem(
   currentProfile: BlobbonautProfile | null,
+  companion?: PetsCompanion | null,
   externalWallet?: (CashuWalletState & CashuWalletActions) | null,
+  onCompanionUpdated?: (event: NostrEvent) => void,
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -131,31 +167,55 @@ export function usePetsPurchaseItem(
       let currency: 'fiat coins' | 'demo sats' | 'sats' = 'fiat coins';
       let totalCost = 0;
       let paymentToken: string | undefined;
+      let petFiatSpend = 0;
+      let walletSatsCost = 0;
 
-      if (resolvedCurrency === 'sats' && isBtcSats) {
-        currency = 'sats';
+      if (resolvedCurrency === 'sats') {
+        currency = isBtcSats ? 'sats' : 'demo sats';
         totalCost = totalSatsCost;
-        if (!externalWallet) {
-          throw new Error('External wallet is not available.');
+
+        // Split the cost between pet-bound fiat and the wallet.
+        const split = splitSatsPayment(totalSatsCost, companion?.fiatBalance ?? 0);
+        petFiatSpend = split.petFiatSpend;
+        walletSatsCost = split.walletSatsCost;
+
+        if (walletSatsCost > 0 && isBtcSats) {
+          if (!externalWallet) {
+            throw new Error('External wallet is not available.');
+          }
+          const selectedMintBalance = getSelectedMintBalance(externalWallet);
+          const feeReserve = estimateCashuSendFee(walletSatsCost, externalWallet.wallet ?? null);
+          const totalNeeded = walletSatsCost + feeReserve;
+          if (selectedMintBalance < totalNeeded) {
+            throw new Error(
+              `Insufficient balance on the selected mint. You need ${walletSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats on ${externalWallet.mintUrl ?? 'the selected mint'}.`
+            );
+          }
+          // Burn real sats BEFORE updating the profile so a payment failure cannot
+          // grant a free item. If the profile update fails after the token is spent,
+          // attempt to refund the token so the user does not lose sats.
+          paymentToken = await paySats(walletSatsCost, `Pets shop: ${item.name}`);
         }
-        const selectedMintBalance = getSelectedMintBalance(externalWallet);
-        const feeReserve = estimateCashuSendFee(totalSatsCost, externalWallet.wallet ?? null);
-        const totalNeeded = totalSatsCost + feeReserve;
-        if (selectedMintBalance < totalNeeded) {
-          throw new Error(
-            `Insufficient balance on the selected mint. You need ${totalSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats on ${externalWallet.mintUrl ?? 'the selected mint'}.`
-          );
-        }
-        // Burn real sats BEFORE updating the profile so a payment failure cannot
-        // grant a free item. If the profile update fails after the token is spent,
-        // attempt to refund the token so the user does not lose sats.
-        paymentToken = await paySats(totalSatsCost, `Pets shop: ${item.name}`);
-      } else if (resolvedCurrency === 'sats') {
-        currency = 'demo sats';
-        totalCost = totalSatsCost;
       } else {
         currency = 'fiat coins';
         totalCost = totalFiatCost;
+      }
+
+      // If pet-bound fiat is being spent, publish the companion update first.
+      // This happens outside the profile serialization because it is a different
+      // kind (31124 vs 11125), but it is idempotent: a failure here stops the
+      // purchase before any wallet money moves.
+      let companionEvent: NostrEvent | undefined;
+      if (petFiatSpend > 0 && companion) {
+        const newFiatBalance = Math.max(0, companion.fiatBalance - petFiatSpend);
+        const petTags = updatePetsTags(companion.event.tags, {
+          fiat_balance: newFiatBalance.toString(),
+        });
+        companionEvent = await publishEvent({
+          kind: KIND_PETS_STATE,
+          content: companion.event.content,
+          tags: petTags,
+        });
       }
 
       // Serialize the profile update so concurrent purchases/missions cannot
@@ -178,11 +238,12 @@ export function usePetsPurchaseItem(
               );
             }
           } else if (!isBtcSats) {
-            // Demo-sats purchase: the real wallet was not charged, so deduct the
-            // in-game demo sats from the freshest profile.
-            if (freshProfile.sats < totalSatsCost) {
+            // Demo-sats purchase: the external wallet was not charged, so deduct the
+            // remaining cost from the freshest profile demo sats balance.
+            const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
+            if (freshProfile.sats < demoDeduction) {
               throw new Error(
-                `Insufficient demo sats. You need ${totalSatsCost.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
+                `Insufficient demo sats. You need ${demoDeduction.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
               );
             }
           }
@@ -214,11 +275,12 @@ export function usePetsPurchaseItem(
           if (resolvedCurrency === 'fiat') {
             updates.coins = (freshProfile.coins - totalFiatCost).toString();
           } else if (!isBtcSats) {
-            updates.sats = (freshProfile.sats - totalSatsCost).toString();
+            const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
+            updates.sats = (freshProfile.sats - demoDeduction).toString();
           }
 
           const tags = updateBlobbonautTags(freshProfile.event.tags, updates);
-          return { tags, content: freshProfile.event.content, meta: { currency, totalCost } };
+          return { tags, content: freshProfile.event.content, meta: { currency, totalCost, petFiatSpend } };
         });
       } catch (profileError) {
         if (paymentToken && externalWallet) {
@@ -241,6 +303,12 @@ export function usePetsPurchaseItem(
         throw new Error('Profile update returned no changes.');
       }
 
+      // Notify the caller about the updated companion so the UI can optimistically
+      // refresh the pet's fiat balance.
+      if (companionEvent) {
+        onCompanionUpdated?.(companionEvent);
+      }
+
       return {
         event: result.event,
         item,
@@ -248,18 +316,20 @@ export function usePetsPurchaseItem(
         totalCost: (result.meta?.totalCost as number | undefined) ?? totalCost,
         currency: (result.meta?.currency as typeof currency | undefined) ?? currency,
         paymentToken,
+        petFiatSpend: (result.meta?.petFiatSpend as number | undefined) ?? 0,
       };
     },
-    onSuccess: ({ item, quantity, totalCost, currency }) => {
+    onSuccess: ({ item, quantity, totalCost, currency, petFiatSpend }) => {
       // Invalidate profile query to refetch fresh data
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
       }
 
       // Show success toast
+      const petPart = petFiatSpend > 0 ? ` (${petFiatSpend.toLocaleString()} from pet fiat)` : '';
       toast({
         title: 'Purchase Successful!',
-        description: `You bought ${item.name} (×${quantity}) for ${totalCost.toLocaleString()} ${currency}.`,
+        description: `You bought ${item.name} (×${quantity}) for ${totalCost.toLocaleString()} ${currency}.${petPart}`,
       });
     },
     onError: (error: Error) => {

@@ -31,7 +31,7 @@ describe('generateEggPreviewForCategory', () => {
     expect(preview.breedAsset).toBeDefined();
   });
 
-  it('constrains 2140-pets eggs to the three 2140 adult forms', () => {
+  it('constrains 2140-pets eggs to the four 2140 adult forms', () => {
     const allowed = new Set(
       CATEGORY_MEMBERS['2140-pets']
         .filter(isAdultFormMember)
@@ -143,6 +143,10 @@ describe('resolveAdultForm', () => {
 describe('category metadata', () => {
   it('has a non-empty member pool for every registered category', () => {
     for (const cat of BREED_CATEGORIES) {
+      if (cat.id === 'custom') {
+        // Custom species are owner-defined and may be empty until the user creates one.
+        continue;
+      }
       expect(CATEGORY_MEMBERS[cat.id].length).toBeGreaterThan(0);
     }
   });

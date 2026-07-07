@@ -253,7 +253,7 @@ export function usePetsDirectAction({
       const satsText = formatSatsGain(satsGained);
       toast({
         title: `${actionMeta.label} complete!`,
-        description: `Your 2140 PET's happiness increased by ${happinessChange}! ${satsText}`,
+        description: `Your NOSTR PET's happiness increased by ${happinessChange}! ${satsText}`,
       });
 
       // Track daily mission progress
