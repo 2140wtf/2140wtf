@@ -125,6 +125,7 @@ export default function ChaseBtcPage() {
 
   const handleClaimSats = useCallback(async () => {
     if (mode !== 'sats') return { success: false, claimedAmount: 0, message: 'Not in sats mode' };
+    if (payout.isPending) return { success: false, claimedAmount: 0, message: 'Claim already in progress' };
     try {
       const result = await payout.mutateAsync({
         satsWon: state.result.satsWon,
