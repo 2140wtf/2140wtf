@@ -8,11 +8,11 @@
  * Defaults:
  * - Loads the bundled demo GLB when no user asset is configured.
  * - Renders a procedural 3D environment (sky, ground, simple props).
- * - Animates the pet walking in a small circle so it is not just sitting.
+ * - Lets the user rotate/zoom around the pet instead of auto-orbiting it.
  */
 
 import { Suspense, useEffect, useMemo, useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import {
   ContactShadows,
   Environment,
@@ -40,8 +40,6 @@ interface Pets3DVisualProps {
   className?: string;
 }
 
-const WALK_RADIUS = 1.0;
-const WALK_SPEED = 0.35;
 /** Base scale for the loaded pet GLB. Kept small so the pet feels pet-sized inside the full-room world. */
 const PET_SCALE = 0.011;
 const PET_Y = -1.05; // raised slightly above the ground plane
@@ -96,19 +94,21 @@ function Pets3DRoomModel({ url }: { url: string }) {
 /**
  * The loaded GLB pet. `useGLTF` caches the loader result, so re-renders of
  * the parent don't re-fetch the asset. Plays the first available animation
- * (usually a walk cycle) and moves the pet around the room.
+ * and stays at the center of the room; the user can rotate the view with
+ * the mouse or touch instead.
  */
 function PetModel({
   url,
-  isSleeping,
+  scale,
+  _isSleeping,
 }: {
   url: string;
-  isSleeping?: boolean;
+  scale?: number;
+  _isSleeping?: boolean;
 }) {
   const { scene, animations } = useGLTF(url);
   const groupRef = useRef<Group>(null);
   const { actions } = useAnimations(animations, groupRef);
-  const angleRef = useRef(Math.random() * Math.PI * 2);
 
   useEffect(() => {
     if (!actions) return;
@@ -121,27 +121,13 @@ function PetModel({
     };
   }, [actions, animations]);
 
-  useFrame((state, delta) => {
-    if (!groupRef.current || isSleeping) return;
-
-    // Pause animation time while sleeping is handled by isSleeping bypass;
-    // here we advance the walk cycle and orbit the pet around the room.
-    angleRef.current += delta * WALK_SPEED;
-    const t = angleRef.current;
-    const x = Math.cos(t) * WALK_RADIUS;
-    const z = Math.sin(t) * WALK_RADIUS;
-
-    groupRef.current.position.set(x, PET_Y, z);
-    // Face the direction of travel (tangent to the circle).
-    groupRef.current.rotation.y = -t + Math.PI / 2;
-  });
-
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={[0, PET_Y, 0]}>
       <primitive
         object={scene}
         // Scale the loaded model to pet size inside the full-room world.
-        scale={PET_SCALE}
+        // A per-asset scale override can make a specific GLB larger or smaller.
+        scale={scale ?? PET_SCALE}
         position={[0, 0, 0]}
         castShadow
         receiveShadow
@@ -173,7 +159,7 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
       <Suspense fallback={null}>
         <Pets3DRoom />
         {roomAsset && <Pets3DRoomModel url={roomAsset.url} />}
-        <PetModel url={asset.url} isSleeping={isSleeping} />
+        <PetModel url={asset.url} scale={asset.scale} _isSleeping={isSleeping} />
         <ContactShadows
           position={[0, -1.35, 0]}
           opacity={0.35}
@@ -187,11 +173,11 @@ export function Pets3DVisual({ asset, roomAsset, isSleeping, className }: Pets3D
       <OrbitControls
         enablePan={false}
         enableZoom={false}
-        enableRotate={!isSleeping}
+        enableRotate
         minPolarAngle={Math.PI / 3}
         maxPolarAngle={Math.PI / 2.05}
-        minAzimuthAngle={-Math.PI / 2}
-        maxAzimuthAngle={Math.PI / 2}
+        enableDamping
+        dampingFactor={0.05}
       />
     </Canvas>
   );
