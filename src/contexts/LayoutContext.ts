@@ -42,6 +42,11 @@ export interface LayoutOptions {
    */
   hasSubHeader?: boolean;
   /**
+   * If true, hides the desktop left sidebar entirely. Use with `rightSidebar: null`
+   * and `noMaxWidth: true` for full-screen game-style pages.
+   */
+  hideLeftSidebar?: boolean;
+  /**
    * If true, all decorative arcs are replaced with plain rectangles on the
    * mobile top bar, bottom nav, and sub-header. Use for immersive pages
    * (e.g. full-screen video feeds) where curved chrome interferes with
@@ -67,7 +72,7 @@ const LAYOUT_KEYS: (keyof LayoutOptions)[] = [
   'showFAB', 'fabKind', 'fabHref', 'onFabClick', 'fabIcon',
   'wrapperClassName', 'rightSidebar', 'scrollContainer',
   'noOverscroll', 'noMaxWidth', 'hasSubHeader', 'noArcs',
-  'hideTopBar', 'hideBottomNav',
+  'hideTopBar', 'hideBottomNav', 'hideLeftSidebar',
 ];
 
 /** Shallow-compare two LayoutOptions objects. */

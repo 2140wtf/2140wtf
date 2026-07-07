@@ -52,8 +52,8 @@ export default function PetsBattlePage() {
   }, [seedPhrase]);
 
   useSeoMeta({
-    title: 'Battle Arena | 2140 Pets',
-    description: 'Battle your 2140 Pets for ₿AO credits',
+    title: 'Battle Arena | NOSTR Pets',
+    description: 'Battle your NOSTR Pets for ₿AO credits',
   });
 
   useLayoutOptions({

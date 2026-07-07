@@ -450,13 +450,13 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
       },
     ],
   },
-  // 2140 PETS (feed-only — dedicated page at /pets)
+  // NOSTR PETS (feed-only — dedicated page at /pets)
   {
     kind: 31124,
     id: 'pets',
     feedKey: 'feedIncludePets',
-    label: '2140 PETS',
-    description: '2140 PETS virtual pet updates',
+    label: 'NOSTR PETS',
+    description: 'NOSTR PETS virtual pet updates',
     addressable: true,
     section: 'whimsy',
     feedOnly: true,

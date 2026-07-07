@@ -256,7 +256,7 @@ export function usePetsHatch({
     onSuccess: ({ name }) => {
       toast({
         title: 'Your egg hatched!',
-        description: `${name} is now a baby Pets! Take good care of them.`,
+        description: `${name} is now a baby NOSTR PET! Take good care of them.`,
       });
     },
     onError: (error: Error) => {
@@ -308,7 +308,7 @@ export function usePetsEvolve({
       }
 
       if (!isRealWallet) {
-        throw new Error('BAO testnet pets cannot reach the adult stage. Switch to real Cashu to evolve your 2140 PET.');
+        throw new Error('Testnet pets cannot reach the adult stage. Switch to real Bitcoin sats to evolve your NOSTR PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
@@ -321,12 +321,12 @@ export function usePetsEvolve({
       // stale prop, so a concurrent evolution on another client is not republished.
       if (canonical.companion.stage !== 'baby') {
         if (canonical.companion.stage === 'egg') {
-          throw new Error('Eggs must hatch before they can evolve');
+          throw new Error('Eggs must hatch before they can evolve into a NOSTR PET');
         }
         if (canonical.companion.stage === 'adult') {
-          throw new Error('This 2140 PET is already fully evolved');
+          throw new Error('This NOSTR PET is already fully evolved');
         }
-        throw new Error('Only baby 2140 PETS can evolve');
+        throw new Error('Only baby NOSTR PETS can evolve');
       }
 
       // ─── Apply Accumulated Decay First ───
@@ -364,7 +364,7 @@ export function usePetsEvolve({
         statsAfterDecay.energy >= EVOLVE_STAT_THRESHOLD;
 
       if (!persistentTasksComplete || !dynamicTaskComplete) {
-        throw new Error('Evolution tasks are not complete yet. Keep caring for your 2140 PET!');
+        throw new Error('Evolution tasks are not complete yet. Keep caring for your NOSTR PET!');
       }
 
       // ─── Adult Stats ───

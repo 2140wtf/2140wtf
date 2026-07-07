@@ -32,7 +32,7 @@ export interface CategoryAbilityBonuses {
 
 /**
  * Whether the user's local time is currently in daylight hours (06:00–18:00).
- * Used by the 2140 Pets daylight-netrunning sats bonus.
+ * Used by the NOSTR Pets daylight-netrunning sats bonus.
  */
 export function isLocalDaylight(date: Date = new Date()): boolean {
   const hour = date.getHours();
@@ -60,7 +60,7 @@ const BASE_BONUSES: CategoryAbilityBonuses = {
  * reward calculations. Callers should apply each multiplier/offset at the point
  * where the corresponding value is computed.
  *
- * For 2140 Pets, the daytime sats bonus is included when `isLocalDaylight()`
+ * For NOSTR Pets, the daytime sats bonus is included when `isLocalDaylight()`
  * is true. Callers that need the non-daylight value can pass `now` explicitly.
  */
 export function getCategoryAbilityBonuses(

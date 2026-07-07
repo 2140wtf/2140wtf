@@ -34,7 +34,7 @@ function PageSkeleton() {
 
 /** Inner component that reads layout options from the context store. */
 function MainLayoutInner() {
-  const { rightSidebar, showFAB = false, fabKind = 1, fabHref, onFabClick, fabIcon, wrapperClassName, noOverscroll, noMaxWidth, scrollContainer, hasSubHeader, hideTopBar, hideBottomNav } = useLayoutSnapshot();
+  const { rightSidebar, showFAB = false, fabKind = 1, fabHref, onFabClick, fabIcon, wrapperClassName, noOverscroll, noMaxWidth, scrollContainer, hasSubHeader, hideTopBar, hideBottomNav, hideLeftSidebar } = useLayoutSnapshot();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const centerColumnRef = useRef<HTMLDivElement>(null);
@@ -63,8 +63,10 @@ function MainLayoutInner() {
 
       {/* Main layout - three column on desktop */}
       <div className={cn("flex justify-center mx-auto max-w-[1200px]", wrapperClassName)}>
-        {/* Desktop left sidebar - hidden below sidebar breakpoint */}
-        <LeftSidebar collapsed={leftCollapsed} onToggleCollapse={() => setLeftCollapsed((v) => !v)} />
+        {/* Desktop left sidebar - hidden below sidebar breakpoint or when requested */}
+        {!hideLeftSidebar && (
+          <LeftSidebar collapsed={leftCollapsed} onToggleCollapse={() => setLeftCollapsed((v) => !v)} />
+        )}
 
         {/* Main content + right sidebar: inside Suspense so the left sidebar persists while lazy pages load */}
         <Suspense fallback={<PageSkeleton />}>
@@ -105,7 +107,7 @@ function MainLayoutInner() {
             )}
           </div>
           {/* Right sidebar — render page-provided sidebar, or the widget sidebar */}
-          {rightSidebar ?? <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
+          {rightSidebar !== undefined ? rightSidebar : <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
         </Suspense>
       </div>
 
