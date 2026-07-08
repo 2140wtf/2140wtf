@@ -20,7 +20,7 @@ import { useFollowList } from '@/hooks/useFollowActions';
 import { useMutedAuthorFilter } from '@/hooks/useMutedAuthorFilter';
 import { useIsOnline } from '@/hooks/useIsOnline';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { getStorageKey } from '@/lib/storageKey';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFeedTab } from '@/hooks/useFeedTab';
@@ -32,7 +32,7 @@ import { useTopicAuthors } from '@/hooks/useTopicAuthors';
 import { useSavedFeeds } from '@/hooks/useSavedFeeds';
 import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
 import { useCuratorFollowList } from '@/hooks/useCuratorFollowList';
-import { useCuratedDittoFeed } from '@/hooks/useCuratedDittoFeed';
+import { useCuratedAppFeed } from '@/hooks/useCuratedAppFeed';
 import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 import { diversifyFeedPages } from '@/lib/feedDiversity';
@@ -48,7 +48,7 @@ import type { FeedItem } from '@/lib/feedUtils';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { SavedFeed } from '@/contexts/AppContext';
 
-type CoreFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities' | 'ditto';
+type CoreFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities' | 'app';
 type FeedTab = CoreFeedTab | string; // string = saved feed id
 
 interface FeedProps {
@@ -102,9 +102,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     }
   })();
 
-  const showDittoFeed = (() => {
+  const showAppFeed = (() => {
     try {
-      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showAppFeed'));
       return stored !== null ? stored === 'true' : true;
     } catch {
       return true;
@@ -147,9 +147,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const showSavedFeedTabs = user && !isKindSpecificPage && !tagFilters;
 
   // Kind-specific pages only support Follows + Global. Clamp any other
-  // persisted tab (e.g. 'ditto', 'communities', 'all') back to the appropriate default.
+  // persisted tab (e.g. 'app', 'communities', 'all') back to the appropriate default.
   // Logged-out users must land on 'all' (public tab bar) since 'follows' requires a user.
   const activeTab: FeedTab = (() => {
+    // Legacy 'ditto' tab was renamed to 'app'; migrate any persisted selection.
+    if (rawActiveTab === 'ditto') return 'app';
     // 'loved' is only valid on the home feed while the Love List is non-empty.
     if (rawActiveTab === 'loved' && (kinds || !hasLovedPeople)) {
       return user ? 'all' : 'global';
@@ -167,7 +169,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       // Home feed: no clamping for logged-in users. For guests, make sure the
       // persisted tab is actually visible in the public LandingHero tab bar.
       if (!user) {
-        if (rawActiveTab === 'ditto' && !showDittoFeed) return 'all';
+        if (rawActiveTab === 'app' && !showAppFeed) return 'all';
         if (rawActiveTab === 'communities' && !showCommunityFeed) return 'all';
       }
       return rawActiveTab;
@@ -204,18 +206,18 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     : undefined;
   const hasTopicAuthors = (topicAuthors?.length ?? 0) > 0;
 
-  // When logged out and the 2140.wtf (Ditto) tab is active, show the "hot"
+  // When logged out and the 2140.wtf tab is active, show the "hot"
   // sorted curated feed instead of the noisy global feed. Guests can now switch
-  // tabs, so only force the top feed while the Ditto tab is selected.
-  const useTopFeedForLoggedOut = !user && !kinds && activeTab === 'ditto';
+  // tabs, so only force the top feed while the 2140.wtf tab is selected.
+  const useTopFeedForLoggedOut = !user && !kinds && activeTab === 'app';
 
   // When the 2140.wtf tab is active (logged in), show the same hot-sorted curated feed.
   // Disabled on kind-specific pages — the 2140.wtf tab is not shown there.
-  const useDittoTab = user && activeTab === 'ditto' && !kinds;
+  const useAppTab = user && activeTab === 'app' && !kinds;
 
   // Standard feed query (used when logged in, or on kind-specific pages, or core tabs)
   const isCoreFeedTab =
-    activeTab === 'all' || activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'ditto' || isTopicTab;
+    activeTab === 'all' || activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities' || activeTab === 'app' || isTopicTab;
   type UseFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities';
   const feedTabForQuery: UseFeedTab =
     activeTab === 'all' || activeTab === 'follows' || activeTab === 'loved' || activeTab === 'global' || activeTab === 'communities'
@@ -237,29 +239,29 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   );
 
   // Curated 2140.wtf feed: latest content from the curator's follow list.
-  const topQuery = useCuratedDittoFeed(
+  const topQuery = useCuratedAppFeed(
     curatorFollowList,
-    useTopFeedForLoggedOut || !!useDittoTab,
+    useTopFeedForLoggedOut || !!useAppTab,
   );
 
   // Unify the two query shapes behind a single interface
-  const useDittoQuery = useTopFeedForLoggedOut || useDittoTab;
-  const activeQuery = useDittoQuery
+  const useAppQuery = useTopFeedForLoggedOut || useAppTab;
+  const activeQuery = useAppQuery
     ? topQuery
     : hasTopicAuthors
       ? authorTopicQuery
       : feedQuery;
   const queryKey = useMemo(() => {
-    if (useDittoQuery) return ['ditto-curated-feed'];
+    if (useAppQuery) return ['app-curated-feed'];
     if (hasTopicAuthors) return ['tab-feed', `topic-${activeTopic!.id}`];
     return ['feed', activeTab];
-  }, [useDittoQuery, hasTopicAuthors, activeTopic, activeTab]);
+  }, [useAppQuery, hasTopicAuthors, activeTopic, activeTab]);
 
   const handleRefresh = usePageRefresh(queryKey);
 
   // Live auto-refresh: detect new posts arriving on the active feed and surface
   // a "N new posts" pill, without re-sorting the feed under the user's scroll.
-  // Only the core author/global tabs stream — the curated Ditto tab, saved
+  // Only the core author/global tabs stream — the curated 2140.wtf tab, saved
   // feeds, and hashtag/geotag tabs render their own content below.
   const { feedSettings } = useFeedSettings();
   const streamAuthors = useMemo<string[] | undefined>(() => {
@@ -275,10 +277,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     return undefined;
   }, [feedTabForQuery, followData?.pubkeys, lovedPubkeys, user, excludeMuted]);
 
-  // Stream only for the core feed tabs, when not the curated Ditto query or a topic tab.
+  // Stream only for the core feed tabs, when not the curated 2140.wtf query or a topic tab.
   const streamEnabled =
     isCoreFeedTab &&
-    !useDittoQuery &&
+    !useAppQuery &&
     !isTopicTab &&
     (feedTabForQuery === 'follows' || feedTabForQuery === 'loved' || feedTabForQuery === 'global');
 
@@ -331,7 +333,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     if (!rawData?.pages) return [];
     const seen = new Set<string>();
 
-    if (useDittoQuery) {
+    if (useAppQuery) {
       // Deduplicate and filter each page independently, then diversify
       // page-by-page so earlier pages never change when new pages arrive.
       const dedupedPages = (rawData.pages as unknown as import('@nostrify/nostrify').NostrEvent[][])
@@ -363,7 +365,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
         if (muteItems.length > 0 && isEventMuted(item.event, muteItems)) return false;
         return true;
       });
-  }, [rawData?.pages, muteItems, useDittoQuery]);
+  }, [rawData?.pages, muteItems, useAppQuery]);
 
   // Retain the last non-empty list so a key change / background refetch /
   // settled-empty relay miss never flashes the empty state over a feed the
@@ -371,7 +373,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // (account or tab) changes.
   const feedItems = useStickyFeedItems(
     derivedItems,
-    `${user?.pubkey ?? ''}:${useDittoQuery ? 'ditto' : activeTab}`,
+    `${user?.pubkey ?? ''}:${useAppQuery ? 'app' : activeTab}`,
   );
 
   // Apply optional client-side keyword search and poll-type filter.
@@ -402,7 +404,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
   // Show skeletons while loading, but not if the curator list query errored
   // (that would leave logged-out users staring at infinite skeletons).
-  const showSkeleton = (isPending || (isLoading && !rawData)) && !(useDittoQuery && isCuratorError);
+  const showSkeleton = (isPending || (isLoading && !rawData)) && !(useAppQuery && isCuratorError);
 
   // Distinguish the empty-state cases so the message + CTAs match the cause:
   //   - Follows tab with zero follows → "follow some people" (no retry).
@@ -493,8 +495,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {user && (
             <TabButton label="Follows" active={activeTab === 'follows'} onClick={() => handleSetActiveTab('follows')} />
           )}
-          {!isKindSpecificPage && showDittoFeed && (
-            <TabButton label={config.appName} active={activeTab === 'ditto'} onClick={() => handleSetActiveTab('ditto')} />
+          {!isKindSpecificPage && showAppFeed && (
+            <TabButton label={config.appName} active={activeTab === 'app'} onClick={() => handleSetActiveTab('app')} />
           )}
           {!isKindSpecificPage && showCommunityFeed && (
             <TabButton label={communityLabel} active={activeTab === 'communities'} onClick={() => handleSetActiveTab('communities')} />
@@ -814,8 +816,8 @@ function HashtagFeedContent({ tag }: { tag: string }) {
   const { data: events, isLoading } = useQuery<NostrEvent[]>({
     queryKey,
     queryFn: async ({ signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
-      return ditto.query(
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
+      return appRelays.query(
         [{ kinds, '#t': [tag.toLowerCase()], limit: 40 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
@@ -875,10 +877,10 @@ function GeotagFeedContent({ tag }: { tag: string }) {
   const { data: events, isLoading } = useQuery<NostrEvent[]>({
     queryKey,
     queryFn: async ({ signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
       const filter = { kinds, limit: 40 } as Record<string, unknown>;
       filter['#g'] = [tag];
-      return ditto.query([filter as Parameters<typeof ditto.query>[0][number]], {
+      return appRelays.query([filter as Parameters<typeof appRelays.query>[0][number]], {
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
     },

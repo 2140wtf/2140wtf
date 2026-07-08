@@ -44,7 +44,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
  *
  * `@noble/curves` v1 exposes the projective-point constructor as
  * `secp256k1.ProjectivePoint`; v2 moved it to `schnorr.Point`. We use the
- * v1 export to match the rest of the ditto codebase.
+ * v1 export to match the rest of the 2140.wtf codebase.
  */
 /** secp256k1 projective point. Exported for the BIP-352 tweak scanner in `src/lib/sp/`. */
 export const Point = secp256k1.Point;

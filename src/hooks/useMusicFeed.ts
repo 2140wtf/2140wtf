@@ -2,7 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import type { NostrFilter } from '@nostrify/nostrify';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { useFollowList } from '@/hooks/useFollowActions';
 import { useMutedAuthorFilter } from '@/hooks/useMutedAuthorFilter';
 import type { MusicSort, MusicScope } from '@/components/music/MusicSortFilterBar';
@@ -87,7 +87,7 @@ export function useMusicFeed({ kind, sort, scope, genre, enabled = true }: UseMu
       }
 
       // Hot/top need the 2140.wtf relay for NIP-50; new uses default pool
-      const target = sort === 'new' ? nostr : nostr.group(DITTO_RELAYS);
+      const target = sort === 'new' ? nostr : nostr.group(APP_SEARCH_RELAYS);
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
 
       const events = await target.query([filter], { signal: timeout });

@@ -88,7 +88,7 @@ export function PetsAdultSvgRenderer({
   const customizedSvg = useMemo(() => {
     debugPets('svg-rebuild', 'adult customizedSvg rebuild');
 
-    // Resolve the correct adult art. NOSTR Pets / Ditto Blobbi use the standard
+    // Resolve the correct adult art. NOSTR Pets / 2140 Blobbi use the standard
     // adult-form SVGs; ₿AO Pets (identified by a known breed_asset recipe) render
     // a generated trading-card variation. Custom species use their uploaded SVG.
     let form: string;

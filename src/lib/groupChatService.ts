@@ -139,7 +139,7 @@ function secureRandomHex(length: number): string {
 }
 
 function generateGroupId(): string {
-  return `ditto-grp-${secureRandomHex(8)}-${Date.now().toString(36)}-${secureRandomHex(4)}`;
+  return `2140-grp-${secureRandomHex(8)}-${Date.now().toString(36)}-${secureRandomHex(4)}`;
 }
 
 function validateGroupId(id: unknown): string | null {

@@ -4,7 +4,7 @@ import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin, type NLoginType } from '@nostrify/react/login';
 import type { NostrSigner } from '@nostrify/types';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getEffectiveRelays, DITTO_RELAYS, ZAPSTORE_RELAY } from '@/lib/appRelays';
+import { getEffectiveRelays, APP_SEARCH_RELAYS, ZAPSTORE_RELAY } from '@/lib/appRelays';
 import { AppPool } from '@/lib/AppPool';
 import { NIndexedDB } from '@nostrify/indexeddb';
 import { NostrStorageContext } from '@/contexts/NostrStorageContext';
@@ -171,7 +171,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
         // Search queries must go to search relays
         if (filters.some((f) => "search" in f)) {
-          return new Map(DITTO_RELAYS.map(url => [url, filters]));
+          return new Map(APP_SEARCH_RELAYS.map(url => [url, filters]));
         }
 
         // Route to all read relays

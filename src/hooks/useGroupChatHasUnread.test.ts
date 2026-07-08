@@ -102,7 +102,7 @@ describe('useGroupChatHasUnread', () => {
 
   it('counts messages newer than the stored cursor as unread', async () => {
     localStorage.setItem(
-      `ditto:group-read-cursors:${viewerPubkey}`,
+      `app:group-read-cursors:${viewerPubkey}`,
       JSON.stringify({ g1: 50 }),
     );
 

@@ -31,10 +31,10 @@ export const NUTZAP_INFO_KIND = 10019;
 export const NUTZAP_KIND = 9321;
 
 const UNIT = 'sat';
-const LOCAL_TOKEN_EVENT_KEY_PREFIX = 'ditto_nip60_token_event_';
-const LOCAL_TOKEN_HASH_KEY_PREFIX = 'ditto_nip60_token_hash_';
-const LOCAL_CONFIG_HASH_KEY = 'ditto_nip60_config_hash';
-const LOCAL_NUTZAP_INFO_HASH_KEY = 'ditto_nip60_nutzap_info_hash';
+const LOCAL_TOKEN_EVENT_KEY_PREFIX = '2140_nip60_token_event_';
+const LOCAL_TOKEN_HASH_KEY_PREFIX = '2140_nip60_token_hash_';
+const LOCAL_CONFIG_HASH_KEY = '2140_nip60_config_hash';
+const LOCAL_NUTZAP_INFO_HASH_KEY = '2140_nip60_nutzap_info_hash';
 
 function resolveNip60Key(key: string, namespace?: string): string {
   return namespace ? `${namespace}${key}` : key;

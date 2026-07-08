@@ -2,7 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { parseMusicTrack } from '@/lib/musicHelpers';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 
 /** Minimum number of featured tracks before we backfill with recent tracks. */
 const MIN_FEATURED = 5;
@@ -34,10 +34,10 @@ export function useFeaturedMusicTracks(curatedPubkeys: string[] | undefined) {
       if (!curatedPubkeys || curatedPubkeys.length === 0) return [];
 
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
 
       // Primary query: hot tracks, one per artist
-      const hotEvents = await ditto.query(
+      const hotEvents = await appRelays.query(
         [{
           kinds: [36787],
           authors: curatedPubkeys,
@@ -53,7 +53,7 @@ export function useFeaturedMusicTracks(curatedPubkeys: string[] | undefined) {
       if (results.length < MIN_FEATURED) {
         const seenAuthors = new Set(results.map((ev) => ev.pubkey));
 
-        const recentEvents = await ditto.query(
+        const recentEvents = await appRelays.query(
           [{
             kinds: [36787],
             authors: curatedPubkeys,

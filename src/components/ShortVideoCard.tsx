@@ -31,7 +31,7 @@ import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useRepostStatus } from "@/hooks/useRepostStatus";
 import { type EventStats, useEventStats } from "@/hooks/useTrending";
 import { useUserReaction } from "@/hooks/useUserReaction";
-import { DITTO_RELAY } from "@/lib/appRelays";
+import { APP_SEARCH_RELAY } from "@/lib/appRelays";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { getContentWarning } from "@/lib/contentWarning";
 import { getRepostKind } from "@/lib/feedUtils";
@@ -228,7 +228,7 @@ function ShortVideoRepostButton({
       queryClient.setQueryData(["user-repost", event.id], "optimistic");
 
       const tags: string[][] = [
-        ["e", event.id, DITTO_RELAY],
+        ["e", event.id, APP_SEARCH_RELAY],
         ["p", event.pubkey],
       ];
       if (repostKind === 16) {

@@ -2,7 +2,7 @@ import { ReactNode, useLayoutEffect, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme } from '@/contexts/AppContext';
 import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfig, type ThemeConfig, type ThemesConfig } from '@/themes';
-import { AppConfigSchema } from '@/lib/schemas';
+import { RuntimeAppConfigSchema } from '@/lib/schemas';
 import { loadAndApplyFont, loadAndApplyTitleFont } from '@/lib/fontLoader';
 import { isAllowedHttpsUrl } from '@/lib/sanitizeUrl';
 
@@ -39,7 +39,7 @@ export function AppProvider(props: AppProviderProps) {
         const result: Partial<AppConfig> = {};
         // Validate each top-level field individually
         for (const key of Object.keys(parsed)) {
-          const fieldSchema = AppConfigSchema.shape[key as keyof typeof AppConfigSchema.shape];
+          const fieldSchema = RuntimeAppConfigSchema.shape[key as keyof typeof RuntimeAppConfigSchema.shape];
           if (fieldSchema) {
             const fieldResult = fieldSchema.safeParse(parsed[key]);
             if (fieldResult.success) {

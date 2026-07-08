@@ -24,7 +24,7 @@ export const SP_STORAGE_VERSION = 1;
 
 const SP_STORAGE_D_TAG_SUFFIX = 'hdwallet/sp-utxos';
 
-/** Build the full d-tag for the given appId, e.g. `"ditto/hdwallet/sp-utxos"`. */
+/** Build the full d-tag for the given appId, e.g. `"2140/hdwallet/sp-utxos"`. */
 export function spStorageDTag(appId: string): string {
   return `${appId}/${SP_STORAGE_D_TAG_SUFFIX}`;
 }
