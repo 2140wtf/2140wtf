@@ -36,7 +36,7 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="stylesheet" href="/tokens-2140.css">
-    <style>@keyframes ditto-spin{to{transform:rotate(360deg)}}</style>
+    <style>@keyframes app-spin{to{transform:rotate(360deg)}}</style>
   </head>
   <body style="margin:0;background:#0a0a0a">
     <!-- Pre-React loading screen. Lives OUTSIDE #root so React doesn't
@@ -44,7 +44,7 @@
     <div id="preloader" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#0a0a0a">
       <div style="display:flex;flex-direction:column;align-items:center;gap:24px">
         <img src="/logo.jpg" alt="" width="48" height="48" style="display:block;width:48px;height:48px" />
-        <div data-spinner style="width:24px;height:24px;border:2.5px solid #f7931a40;border-top-color:#f7931a;border-radius:50%;animation:ditto-spin .7s linear infinite"></div>
+        <div data-spinner style="width:24px;height:24px;border:2.5px solid #f7931a40;border-top-color:#f7931a;border-radius:50%;animation:app-spin .7s linear infinite"></div>
       </div>
     </div>
     <!-- Blocking script: reads theme from localStorage and applies it
