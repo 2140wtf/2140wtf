@@ -4,7 +4,7 @@ import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNip85EventStats, useNip85AddrStats } from '@/hooks/useNip85Stats';
 import { type ResolvedEmoji } from '@/lib/customEmoji';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { useAppContext } from '@/hooks/useAppContext';
 
 export interface TrendingTag {
@@ -22,7 +22,7 @@ export interface TrendingTagsResult {
 }
 
 /**
- * Fetches trending hashtags from relay.ditto.pub via kind 1985 label events.
+ * Fetches trending hashtags from 2140.wtf relays via kind 1985 label events.
  * These are published with L: "pub.ditto.trends" and l: "#t", "pub.ditto.trends".
  * Each label event contains `t` tags with the trending hashtags.
  */
@@ -36,8 +36,8 @@ export function useTrendingTags(enabled = true) {
     queryFn: async ({ signal }) => {
       if (!statsPubkey) return { tags: [], labelCreatedAt: 0 };
 
-      const ditto = nostr.group(DITTO_RELAYS);
-      const events = await ditto.query(
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
+      const events = await appRelays.query(
         [{
           kinds: [1985],
           authors: [statsPubkey],
@@ -70,7 +70,7 @@ export function useTrendingTags(enabled = true) {
 }
 
 /**
- * Fetches trending event IDs from relay.ditto.pub via kind 1985 label events,
+ * Fetches trending event IDs from 2140.wtf relays via kind 1985 label events,
  * then fetches the actual events.
  */
 export function useTrendingPosts(enabled = true) {
@@ -83,8 +83,8 @@ export function useTrendingPosts(enabled = true) {
     queryFn: async ({ signal }) => {
       if (!statsPubkey) return [];
 
-      const ditto = nostr.group(DITTO_RELAYS);
-      const labelEvents = await ditto.query(
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
+      const labelEvents = await appRelays.query(
         [{
           kinds: [1985],
           authors: [statsPubkey],
@@ -123,7 +123,7 @@ export function useTrendingPosts(enabled = true) {
 export type SortMode = 'hot' | 'rising' | 'controversial';
 
 /**
- * Fetches sorted posts from relay.ditto.pub using NIP-50 search extensions.
+ * Fetches sorted posts from 2140.wtf relays using NIP-50 search extensions.
  * Supports sort:hot, sort:rising, sort:controversial.
  */
 export function useSortedPosts(sort: SortMode, limit = 5, enabled = true) {
@@ -132,8 +132,8 @@ export function useSortedPosts(sort: SortMode, limit = 5, enabled = true) {
   return useQuery<NostrEvent[]>({
     queryKey: ['sorted-posts', sort, limit],
     queryFn: async ({ signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
-      const events = await ditto.query(
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
+      const events = await appRelays.query(
         [{ kinds: [1], search: `sort:${sort} protocol:nostr`, limit }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
@@ -149,7 +149,7 @@ const SORTED_PAGE_SIZE = 20;
 /**
  * Fetches sorted posts with infinite scroll pagination.
  * Uses NIP-50 search extensions with `until`-based cursor pagination
- * against relay.ditto.pub.
+ * against 2140.wtf relays.
  */
 export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
   const { nostr } = useNostr();
@@ -157,7 +157,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
   return useInfiniteQuery<NostrEvent[], Error>({
     queryKey: ['infinite-sorted-posts', sort],
     queryFn: async ({ pageParam, signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
       const filter: Record<string, unknown> = {
         kinds: [1],
         search: `sort:${sort} protocol:nostr`,
@@ -167,7 +167,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
         filter.until = pageParam;
       }
 
-      const events = await ditto.query(
+      const events = await appRelays.query(
         [filter as { kinds: number[]; search: string; limit: number; until?: number }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
@@ -188,7 +188,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
 
 /**
  * Fetches hot-sorted events for specific kinds with infinite scroll.
- * Uses NIP-50 search extension `sort:hot` against relay.ditto.pub.
+ * Uses NIP-50 search extension `sort:hot` against 2140.wtf relays.
  *
  * `extraFilters` allows appending additional filter objects to the REQ,
  * useful when some kinds need tag constraints (e.g. mini-apps need `#m`).
@@ -205,7 +205,7 @@ export function useInfiniteHotFeed(
   return useInfiniteQuery<NostrEvent[], Error>({
     queryKey: ['infinite-hot-feed', kinds.join(','), limit, extraKey],
     queryFn: async ({ pageParam, signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
 
       const base: Record<string, unknown> = {
         search: 'sort:hot protocol:nostr',
@@ -223,7 +223,7 @@ export function useInfiniteHotFeed(
         }
       }
 
-      return ditto.query(
+      return appRelays.query(
         filters as { kinds: number[]; search: string; limit: number; until?: number }[],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
@@ -320,7 +320,7 @@ const SPARKLINE_DAYS = 7;
 /**
  * Returns UTC-midnight-aligned day boundaries for the 7 days ending at the
  * given reference timestamp (in seconds), oldest first — matching the server's
- * generateDateRange logic in ditto/utils/time.ts.
+ * generateDateRange logic in lib/time.ts.
  */
 function generateSparklineDays(refTimestampSecs: number): { since: number; until: number }[] {
   // Strip to UTC midnight of the reference date
@@ -338,7 +338,7 @@ function generateSparklineDays(refTimestampSecs: number): { since: number; until
 
 /**
  * Fetches sparkline data for multiple hashtags from kind 1985 label events
- * published by relay.ditto.pub. Returns a map of tag → number[] where each
+ * published by 2140.wtf relays. Returns a map of tag → number[] where each
  * number is the `uses` count for that UTC calendar day (7 days of history,
  * oldest first).
  *
@@ -362,7 +362,7 @@ export function useTagSparklines(tags: string[], labelCreatedAt: number, enabled
     queryFn: async ({ signal }) => {
       if (sortedTags.length === 0 || !labelCreatedAt || !statsPubkey) return new Map();
 
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
 
       // Generate UTC-midnight-aligned day boundaries from the label's created_at
       const days = generateSparklineDays(labelCreatedAt);
@@ -399,7 +399,7 @@ export function useTagSparklines(tags: string[], labelCreatedAt: number, enabled
         })),
       );
 
-      const allEvents = await ditto.query(
+      const allEvents = await appRelays.query(
         filters,
         { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
       );

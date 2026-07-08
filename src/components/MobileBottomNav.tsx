@@ -81,7 +81,7 @@ export function MobileBottomNav() {
               if (location.pathname === '/' || location.pathname === homePath) {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 void queryClient.invalidateQueries({ queryKey: ['feed'] });
-                void queryClient.invalidateQueries({ queryKey: ['ditto-curated-feed'] });
+                void queryClient.invalidateQueries({ queryKey: ['app-curated-feed'] });
               }
             }}
             className={cn(

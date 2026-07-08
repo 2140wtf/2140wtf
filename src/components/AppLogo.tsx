@@ -1,13 +1,13 @@
 import { useAppContext } from '@/hooks/useAppContext';
 import { cn } from '@/lib/utils';
 
-interface DittoLogoProps {
+interface AppLogoProps {
   className?: string;
   size?: number;
 }
 
 /** The app logo — 2140 branding used in the sidebar, top bar, and loading screens. */
-export function DittoLogo({ className, size = 40 }: DittoLogoProps) {
+export function AppLogo({ className, size = 40 }: AppLogoProps) {
   const { config } = useAppContext();
 
   return (

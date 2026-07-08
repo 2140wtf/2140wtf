@@ -5,7 +5,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import { parseMusicTrack } from '@/lib/musicHelpers';
 import { getExtraKindDef } from '@/lib/extraKinds';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { useCuratedMusicArtists } from '@/hooks/useCuratedMusicArtists';
 import { useFeaturedMusicTracks } from '@/hooks/useFeaturedMusicTracks';
 import { useMusicCuratorFollows } from '@/hooks/useMusicCuratorFollows';
@@ -108,8 +108,8 @@ export function MusicDiscoverTab({ onSwitchToTracks, onSwitchToPlaylists, onSwit
         );
       } else {
         filter.search = `sort:${newTracksSort}`;
-        const ditto = nostr.group(DITTO_RELAYS);
-        events = await ditto.query(
+        const appRelays = nostr.group(APP_SEARCH_RELAYS);
+        events = await appRelays.query(
           [filter as { kinds: number[]; authors: string[]; search: string; limit: number; '#t'?: string[] }],
           { signal: timeout },
         );

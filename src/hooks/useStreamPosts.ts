@@ -8,7 +8,7 @@ import { isRepostKind } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
 import { isEventMuted } from '@/lib/muteHelpers';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { nip19 } from 'nostr-tools';
 import { isNostrId } from '@/lib/nostrId';
 
@@ -32,7 +32,7 @@ interface StreamPostsOptions {
   sort?: 'recent' | 'hot' | 'trending';
   /**
    * When set, limits results to events published with one of these `client`
-   * tag values (NIP-89). Used by the "Only Ditto users" search filter.
+   * tag values (NIP-89). Used by the "Only 2140 users" search filter.
    */
   clientTags?: string[];
 }
@@ -427,9 +427,9 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
         const now = Math.floor(Date.now() / 1000);
         
         // Use 2140.wtf relays directly for streaming to avoid pool's eoseTimeout
-        const dittoRelay = nostr.group(DITTO_RELAYS);
+        const appRelayGroup = nostr.group(APP_SEARCH_RELAYS);
         
-        for await (const msg of dittoRelay.req(
+        for await (const msg of appRelayGroup.req(
           [{ ...streamFilter, since: now, limit: 0 }],
           { signal: ac.signal }
         )) {

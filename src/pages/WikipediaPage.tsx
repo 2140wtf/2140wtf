@@ -61,12 +61,12 @@ function wikiPageUrl(page: WikiPage): string {
   return page.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${page.title}`;
 }
 
-function dittoUrl(url: string): string {
+function appUrl(url: string): string {
   return `/i/${encodeURIComponent(url)}`;
 }
 
-function dittoWikiUrl(page: WikiPage): string {
-  return dittoUrl(wikiPageUrl(page));
+function appWikiUrl(page: WikiPage): string {
+  return appUrl(wikiPageUrl(page));
 }
 
 function formatViews(n: number): string {
@@ -183,7 +183,7 @@ function ArticleCard({ page, badge, badgeIcon }: {
 }) {
   return (
     <Link
-      to={dittoWikiUrl(page)}
+      to={appWikiUrl(page)}
       className="group block rounded-2xl border border-border overflow-hidden bg-card hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
     >
       {/* Thumbnail */}
@@ -231,7 +231,7 @@ function ArticleCard({ page, badge, badgeIcon }: {
 function FeaturedArticleCard({ page }: { page: WikiPage }) {
   return (
     <Link
-      to={dittoWikiUrl(page)}
+      to={appWikiUrl(page)}
       className="group block rounded-2xl border border-border overflow-hidden bg-card hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
     >
       <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-amber-500/10 to-orange-500/10">
@@ -282,7 +282,7 @@ function OnThisDayCard({ event }: { event: OnThisDayEvent }) {
           <p className="text-sm leading-relaxed">{event.text}</p>
           {mainPage && (
             <Link
-              to={dittoWikiUrl(mainPage)}
+              to={appWikiUrl(mainPage)}
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <BookOpen className="size-3" />
@@ -291,7 +291,7 @@ function OnThisDayCard({ event }: { event: OnThisDayEvent }) {
           )}
         </div>
         {mainPage?.thumbnail && (
-          <Link to={dittoWikiUrl(mainPage)} className="shrink-0">
+          <Link to={appWikiUrl(mainPage)} className="shrink-0">
             <img
               src={mainPage.thumbnail.source}
               alt=""
@@ -331,7 +331,7 @@ function NewsCard({ item }: { item: NewsItem }) {
           <p className="text-sm leading-relaxed">{storyText}</p>
           {mainLink && (
             <Link
-              to={dittoWikiUrl(mainLink)}
+              to={appWikiUrl(mainLink)}
               className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <BookOpen className="size-3" />
@@ -340,7 +340,7 @@ function NewsCard({ item }: { item: NewsItem }) {
           )}
         </div>
         {mainLink?.thumbnail && (
-          <Link to={dittoWikiUrl(mainLink)} className="shrink-0">
+          <Link to={appWikiUrl(mainLink)} className="shrink-0">
             <img
               src={mainLink.thumbnail.source}
               alt=""
@@ -407,7 +407,7 @@ function WikipediaSearchBar() {
     setDebouncedQuery('');
     setDropdownOpen(false);
     inputRef.current?.blur();
-    navigate(dittoUrl(result.url));
+    navigate(appUrl(result.url));
   }, [navigate]);
 
   const handleClear = useCallback(() => {

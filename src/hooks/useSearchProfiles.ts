@@ -54,7 +54,7 @@ function searchCachedProfiles(
   return results.slice(0, limit);
 }
 
-/** Search for profiles by username/nip05 using NIP-50 search on relay.ditto.pub. */
+/** Search for profiles by username/nip05 using NIP-50 search on 2140.wtf relays. */
 export function useSearchProfiles(query: string) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();

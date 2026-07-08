@@ -9,7 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_NOSTR_PUSH_PUBKEY?: string;
   /**
    * Canonical origin used when generating shareable URLs (QR codes, copy-link,
-   * remote-login callbacks, etc). Overridden by `shareOrigin` in `ditto.json`
+   * remote-login callbacks, etc). Overridden by `shareOrigin` in `app.json`
    * and by user config in localStorage. Falls back to `window.location.origin`
    * when unset. Primarily useful for native (Capacitor) builds, where
    * `window.location.origin` is `capacitor://localhost` or `https://localhost`.
@@ -23,6 +23,6 @@ interface ImportMetaEnv {
   readonly COMMIT_SHA: string;
   /** Git tag for the current commit (e.g., "v2.0.0"). Empty string if untagged (pre-release build). */
   readonly COMMIT_TAG: string;
-  /** Build-time configuration injected from ditto.json as a JSON string. `"null"` when no config file was provided. */
-  readonly DITTO_CONFIG: string;
+  /** Build-time configuration injected from app.json as a JSON string. `"null"` when no config file was provided. */
+  readonly APP_CONFIG: string;
 }

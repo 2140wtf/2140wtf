@@ -91,7 +91,7 @@ bitcoin.initEccLib(ecc);
 
 ## Balance & Transaction APIs
 
-All Bitcoin data is fetched from an [Esplora](https://github.com/Blockstream/esplora/blob/master/API.md)-compatible REST API. The base URL is read from `AppConfig.esploraBaseUrl` (default: `https://mempool.space/api`) and can be overridden in `ditto.json` at build time or in Settings at runtime. Any Esplora-compatible backend works (mempool.space, Blockstream, self-hosted).
+All Bitcoin data is fetched from an [Esplora](https://github.com/Blockstream/esplora/blob/master/API.md)-compatible REST API. The base URL is read from `AppConfig.esploraBaseUrl` (default: `https://mempool.space/api`) and can be overridden in `app.json` at build time or in Settings at runtime. Any Esplora-compatible backend works (mempool.space, Blockstream, self-hosted).
 
 | Endpoint (relative to `esploraBaseUrl`) | Purpose |
 |---|---|

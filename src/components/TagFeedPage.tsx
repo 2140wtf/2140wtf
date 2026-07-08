@@ -6,7 +6,7 @@ import { NoteCard } from '@/components/NoteCard';
 import { PullToRefresh } from '@/components/PullToRefresh';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useInterests } from '@/hooks/useInterests';
@@ -88,11 +88,11 @@ export function TagFeedPage({
   const { data: events, isLoading } = useQuery<NostrEvent[]>({
     queryKey,
     queryFn: async ({ signal }) => {
-      const ditto = nostr.group(DITTO_RELAYS);
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
       const tagFilter: NostrFilter = { kinds, limit: 40, ...(search ? { search } : {}) };
       // NostrFilter uses `#${letter}` index signature — assign after construction to satisfy TS
       (tagFilter as Record<string, unknown>)[filterKey] = tagFilterValues;
-      return ditto.query([tagFilter], {
+      return appRelays.query([tagFilter], {
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
     },

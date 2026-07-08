@@ -2,7 +2,7 @@
  * PhotosFeedPage — Instagram-style grid feed for NIP-68 photo events (kind 20).
  *
  * - Follows tab: useFeed (relay pool, chronological)
- * - Global tab: useInfiniteHotFeed (sort:hot via relay.ditto.pub)
+ * - Global tab: useInfiniteHotFeed (sort:hot via 2140.wtf relays)
  * - Infinite-scroll justified collage via the shared MediaCollage component
  */
 

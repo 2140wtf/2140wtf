@@ -1078,7 +1078,7 @@ export function useCashuWallet(
   // ─── NIP-60 / NIP-61 helpers ─────────────────────────────────────────────────
 
   const getClientTag = useCallback((): string[] => {
-    return ['client', config.clientName ?? config.appName ?? 'Ditto'];
+    return ['client', config.clientName ?? config.appName ?? '2140'];
   }, [config.clientName, config.appName]);
 
   const getNip60WalletSigner = useCallback(() => {

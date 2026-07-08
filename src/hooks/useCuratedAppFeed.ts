@@ -3,7 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 
 /** Curated kinds for the 2140.wtf feed: unique 2140.wtf content types. */
 const CURATED_KINDS = [
@@ -26,7 +26,7 @@ const CURATED_KINDS = [
  *
  * npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j
  */
-const FEATURED_DITTO_PUBKEYS = [
+const FEATURED_APP_PUBKEYS = [
   'fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416',
 ];
 
@@ -56,13 +56,13 @@ function fingerprint(items: string[]): string {
  * @param authors - Pubkeys whose content to include (from useCuratorFollowList).
  * @param enabled - Whether the query should run.
  */
-export function useCuratedDittoFeed(authors: string[] | undefined, enabled: boolean) {
+export function useCuratedAppFeed(authors: string[] | undefined, enabled: boolean) {
   const { nostr } = useNostr();
 
   // Merge the curator follow list with the featured 2140.wtf account(s) so
   // official posts always appear in the curated feed.
   const effectiveAuthors = useMemo(() => {
-    const set = new Set(FEATURED_DITTO_PUBKEYS);
+    const set = new Set(FEATURED_APP_PUBKEYS);
     if (authors) {
       for (const pk of authors) set.add(pk);
     }
@@ -72,7 +72,7 @@ export function useCuratedDittoFeed(authors: string[] | undefined, enabled: bool
   const authorsKey = fingerprint(effectiveAuthors);
 
   return useInfiniteQuery<NostrEvent[], Error>({
-    queryKey: ['ditto-curated-feed', authorsKey],
+    queryKey: ['app-curated-feed', authorsKey],
     queryFn: async ({ pageParam, signal }) => {
       const base: Record<string, unknown> = {
         kinds: CURATED_KINDS,
@@ -86,14 +86,14 @@ export function useCuratedDittoFeed(authors: string[] | undefined, enabled: bool
       // excluded from the media-focused curated feed.
       const featuredFilter: Record<string, unknown> = {
         kinds: FEATURED_KINDS,
-        authors: FEATURED_DITTO_PUBKEYS,
+        authors: FEATURED_APP_PUBKEYS,
         limit: 20,
       };
       if (pageParam) featuredFilter.until = pageParam;
 
-      const ditto = nostr.group(DITTO_RELAYS);
-      return ditto.query(
-        [base, featuredFilter] as Parameters<typeof ditto.query>[0],
+      const appRelays = nostr.group(APP_SEARCH_RELAYS);
+      return appRelays.query(
+        [base, featuredFilter] as Parameters<typeof appRelays.query>[0],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
     },
