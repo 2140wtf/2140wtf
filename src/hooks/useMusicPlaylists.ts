@@ -2,7 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { parseMusicPlaylist } from '@/lib/musicHelpers';
-import { DITTO_RELAYS } from '@/lib/appRelays';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 
 interface UseMusicPlaylistsOptions {
   /** Filter playlists to only these author pubkeys. */
@@ -41,7 +41,7 @@ export function useMusicPlaylists(options: UseMusicPlaylistsOptions = {}) {
       }
 
       // Use 2140.wtf relay for NIP-50 search queries, default pool otherwise
-      const target = search ? nostr.group(DITTO_RELAYS) : nostr;
+      const target = search ? nostr.group(APP_SEARCH_RELAYS) : nostr;
 
       const events = await target.query(
         [filter as { kinds: number[]; limit: number; authors?: string[]; search?: string }],

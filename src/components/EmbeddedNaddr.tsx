@@ -39,7 +39,7 @@ interface EmbeddedNaddrProps {
   className?: string;
   /** When true, ProfileHoverCards inside the card are disabled to prevent nested hover cards. */
   disableHoverCards?: boolean;
-  /** Original URL the naddr was extracted from (e.g. a non-Ditto article link).
+  /** Original URL the naddr was extracted from (e.g. a non-2140 article link).
    *  When it points to a different host than the current app, the card offers
    *  an "Open" button so the source is still reachable. */
   sourceUrl?: string;

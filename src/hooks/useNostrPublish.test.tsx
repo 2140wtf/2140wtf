@@ -25,7 +25,7 @@ vi.mock('@/hooks/useCurrentUser', () => ({
 vi.mock('@/hooks/useAppContext', () => ({
   useAppContext: () => ({
     config: {
-      clientName: 'DittoTest',
+      clientName: 'AppTest',
       appName: '2140.wtf',
       client: undefined,
     },
@@ -63,7 +63,7 @@ function createPrevEvent(overrides?: Partial<NostrEvent>): NostrEvent {
       kind: 30078,
       content: '',
       tags: [
-        ['d', 'ditto/metadata'],
+        ['d', '2140/metadata'],
         ['published_at', '900'],
       ],
       created_at: 900,
@@ -139,7 +139,7 @@ describe('useNostrPublish', () => {
     result.current.mutate({
       kind: 30078,
       content: 'updated',
-      tags: [['d', 'ditto/metadata']],
+      tags: [['d', '2140/metadata']],
       created_at: 1000,
       prev,
     });
@@ -156,7 +156,7 @@ describe('useNostrPublish', () => {
     result.current.mutate({
       kind: 30078,
       content: 'updated',
-      tags: [['d', 'ditto/metadata']],
+      tags: [['d', '2140/metadata']],
       created_at: 1000,
       prev,
     });
@@ -170,7 +170,7 @@ describe('useNostrPublish', () => {
       {
         kind: 30078,
         content: '',
-        tags: [['d', 'ditto/metadata'], ['published_at', '900']],
+        tags: [['d', '2140/metadata'], ['published_at', '900']],
         created_at: 900,
       },
       otherSk,
@@ -179,7 +179,7 @@ describe('useNostrPublish', () => {
     result.current.mutate({
       kind: 30078,
       content: 'updated',
-      tags: [['d', 'ditto/metadata']],
+      tags: [['d', '2140/metadata']],
       created_at: 1000,
       prev,
     });
@@ -194,7 +194,7 @@ describe('useNostrPublish', () => {
     result.current.mutate({
       kind: 30078,
       content: 'updated',
-      tags: [['d', 'ditto/metadata']],
+      tags: [['d', '2140/metadata']],
       created_at: 1000,
       prev,
     });

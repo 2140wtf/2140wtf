@@ -24,7 +24,7 @@ import { secureStorage } from '@/lib/secureStorage';
 
 // ─── Ephemeral device key ─────────────────────────────────────────────────────
 
-const DEVICE_KEY_STORAGE = 'ditto-push-device-key';
+const DEVICE_KEY_STORAGE = '2140-push-device-key';
 
 /**
  * Get or generate a persistent ephemeral key for this device.

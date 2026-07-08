@@ -27,7 +27,7 @@ function hexToBytes(hex: string): Uint8Array {
 
 describe('spStorageDTag', () => {
   it('builds a deterministic d-tag from appId', () => {
-    expect(spStorageDTag('ditto')).toBe('ditto/hdwallet/sp-utxos');
+    expect(spStorageDTag('2140')).toBe('2140/hdwallet/sp-utxos');
   });
 });
 

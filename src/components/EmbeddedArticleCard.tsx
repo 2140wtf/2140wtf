@@ -37,7 +37,7 @@ interface EmbeddedArticleCardProps {
    *  is shown inside a context that already displays the author (e.g. a feed
    *  NoteCard with its own author header). */
   hideAuthor?: boolean;
-  /** Original URL the article was linked from. When it points to a non-Ditto
+  /** Original URL the article was linked from. When it points to a non-2140
    *  host, the card shows the source's favicon + hostname as an open link. */
   sourceUrl?: string;
 }
