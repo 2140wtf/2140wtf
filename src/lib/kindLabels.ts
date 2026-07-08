@@ -7,7 +7,7 @@
  *
  * Sources:
  * - NIP README kinds table (https://github.com/nostr-protocol/nips)
- * - 2140.wtf reference (https://about.ditto.pub/reference)
+ * - 2140.wtf reference (https://about.2140.wtf/reference)
  * - Existing codebase registries (consolidated)
  *
  * Labels are bare noun phrases (no articles, no verbs) so each consumer can

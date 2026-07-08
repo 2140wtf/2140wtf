@@ -9,18 +9,18 @@ import { useFollowList } from './useFollowActions';
 import { getEffectiveRelays } from '@/lib/appRelays';
 import { getEnabledNotificationKinds } from '@/lib/notificationKinds';
 
-/** Interface for the native DittoNotification Capacitor plugin. */
-interface DittoNotificationPlugin {
+/** Interface for the native AppNotification Capacitor plugin. */
+interface AppNotificationPlugin {
   configure(options: { userPubkey?: string; relayUrls?: string[]; enabledKinds?: number[]; authors?: string[]; notificationStyle?: string }): Promise<void>;
 }
 
-const DittoNotification = registerPlugin<DittoNotificationPlugin>('DittoNotification');
+const AppNotification = registerPlugin<AppNotificationPlugin>('DittoNotification');
 
 /**
  * Manages the native Android notification service via Capacitor.
  *
  * Passes user pubkey + relay URLs + enabled notification kinds + optional
- * authors filter to the DittoNotification plugin so it can poll for events
+ * authors filter to the AppNotification plugin so it can poll for events
  * in the background. Respects the NIP-78 notificationsEnabled setting
  * (defaults to on), per-type notification preferences, and the "only from
  * people I follow" setting.
@@ -73,7 +73,7 @@ export function useNativeNotifications(): void {
     if (!Capacitor.isNativePlatform()) return;
 
     if (!user || !notificationsEnabled) {
-      DittoNotification.configure({});
+      AppNotification.configure({});
       return;
     }
 
@@ -84,7 +84,7 @@ export function useNativeNotifications(): void {
 
     if (relayUrls.length === 0) return;
 
-    DittoNotification.configure({
+    AppNotification.configure({
       userPubkey: user.pubkey,
       relayUrls,
       enabledKinds,

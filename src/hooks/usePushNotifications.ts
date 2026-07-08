@@ -35,8 +35,8 @@ const RPC_RELAYS = [
 ];
 
 // localStorage keys
-const VAPID_KEY_CACHE = 'ditto-push-vapid-key';
-const SUBSCRIPTION_ID_KEY = 'ditto-push-subscription-id';
+const VAPID_KEY_CACHE = '2140-push-vapid-key';
+const SUBSCRIPTION_ID_KEY = '2140-push-subscription-id';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

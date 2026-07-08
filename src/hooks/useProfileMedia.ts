@@ -14,7 +14,7 @@ interface ProfileMediaPage {
 }
 
 /**
- * Queries media events for a profile directly from relay.ditto.pub
+ * Queries media events for a profile directly from 2140.wtf relays
  * using the NIP-50 search extension `media:true`.
  *
  * `media:true` covers images, videos, and mixed attachments — it's

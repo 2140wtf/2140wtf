@@ -8,13 +8,13 @@ import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
-import { DittoConfigSchema } from "./src/lib/schemas";
+import { AppConfigSchema } from "./src/lib/schemas";
 
 const PROJECT_ROOT = path.resolve(process.cwd());
 
 /**
  * Ensure `target` resolves inside the project root. Prevents build-time path
- * traversal via environment variables such as DITTO_CONFIG_FILE.
+ * traversal via environment variables such as APP_CONFIG_FILE.
  */
 function isWithinProjectRoot(target: string): boolean {
   const resolved = path.resolve(PROJECT_ROOT, target);
@@ -22,18 +22,18 @@ function isWithinProjectRoot(target: string): boolean {
 }
 
 /**
- * Load and validate the build-time ditto.json configuration file.
+ * Load and validate the build-time app.json configuration file.
  * Returns the parsed config object, or `undefined` if the file doesn't exist.
- * Set the DITTO_CONFIG_FILE env var to override the default path ("./ditto.json").
+ * Set the APP_CONFIG_FILE env var to override the default path ("./app.json").
  *
- * Why DITTO_CONFIG_FILE and not CONFIG_FILE: GitLab Runner sets CONFIG_FILE in
+ * Why APP_CONFIG_FILE and not CONFIG_FILE: GitLab Runner sets CONFIG_FILE in
  * its job environment to point at its own TOML config (~/.gitlab-runner/config.toml),
  * so a generic name silently breaks every CI build that runs on a self-hosted runner.
  */
-function loadDittoConfig(): object | undefined {
-  const rawPath = process.env.DITTO_CONFIG_FILE ?? "./ditto.json";
+function loadAppConfig(): object | undefined {
+  const rawPath = process.env.APP_CONFIG_FILE ?? "./app.json";
   if (!isWithinProjectRoot(rawPath)) {
-    throw new Error(`DITTO_CONFIG_FILE must resolve inside the project root: ${rawPath}`);
+    throw new Error(`APP_CONFIG_FILE must resolve inside the project root: ${rawPath}`);
   }
   const configPath = path.resolve(PROJECT_ROOT, rawPath);
 
@@ -46,7 +46,7 @@ function loadDittoConfig(): object | undefined {
   }
 
   const json = JSON.parse(raw);
-  const result = DittoConfigSchema.parse(json);
+  const result = AppConfigSchema.parse(json);
   return result;
 }
 
@@ -80,7 +80,7 @@ function mergePublicDir(externalDir: string): Plugin {
   const resolved = path.resolve(externalDir);
 
   return {
-    name: "ditto:merge-public-dir",
+    name: "2140:merge-public-dir",
 
     configureServer(server) {
       // Serve files from the external public dir before the default public dir.
@@ -116,7 +116,7 @@ function mergePublicDir(externalDir: string): Plugin {
   };
 }
 
-const dittoConfig = loadDittoConfig();
+const appConfig = loadAppConfig();
 const publicDir = process.env.PUBLIC_DIR;
 const require = createRequire(import.meta.url);
 const pkg = require("./package.json") as { version: string };
@@ -200,7 +200,7 @@ export default defineConfig(({ mode }) => {
     ...(publicDir ? [mergePublicDir(publicDir)] : []),
   ],
   define: {
-    'import.meta.env.DITTO_CONFIG': JSON.stringify(JSON.stringify(dittoConfig ?? null)),
+    'import.meta.env.APP_CONFIG': JSON.stringify(JSON.stringify(appConfig ?? null)),
     'import.meta.env.VERSION': JSON.stringify(pkg.version),
     'import.meta.env.BUILD_DATE': JSON.stringify(new Date().toISOString()),
     'import.meta.env.COMMIT_SHA': JSON.stringify(getCommitSha()),

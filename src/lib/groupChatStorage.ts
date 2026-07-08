@@ -11,7 +11,7 @@
 
 import { secureStorage } from './secureStorage';
 
-const STORAGE_PREFIX = 'ditto:groups:';
+const STORAGE_PREFIX = 'app:groups:';
 const SECRETS_KEY_PREFIX = `${STORAGE_PREFIX}secrets:`;
 const MAX_MESSAGES_PER_GROUP = 500;
 

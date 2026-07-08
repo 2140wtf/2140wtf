@@ -50,7 +50,7 @@ describe('useHasUnreadMessages', () => {
 
   it('counts messages newer than the stored cursor as unread', async () => {
     localStorage.setItem(
-      `ditto:dm-read-cursors:${viewerPubkey}`,
+      `app:dm-read-cursors:${viewerPubkey}`,
       JSON.stringify({ c1: 50 }),
     );
 
@@ -77,7 +77,7 @@ describe('useHasUnreadMessages', () => {
 
   it('returns no unread when all messages are older than the cursor', async () => {
     localStorage.setItem(
-      `ditto:dm-read-cursors:${viewerPubkey}`,
+      `app:dm-read-cursors:${viewerPubkey}`,
       JSON.stringify({ c1: 100 }),
     );
 

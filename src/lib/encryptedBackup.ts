@@ -18,7 +18,7 @@ export function computeBackupHash(plaintext: string): string {
 /** Build a File from an encrypted ciphertext string. */
 export function createBackupFile(plaintext: string): File {
   const blob = new Blob([plaintext], { type: 'text/plain' });
-  return new File([blob], 'ditto-settings-backup.txt', { type: 'text/plain' });
+  return new File([blob], '2140-settings-backup.txt', { type: 'text/plain' });
 }
 
 /** Build a `['blossom', url, sha256]` tag from an uploaded backup URL and plaintext. */

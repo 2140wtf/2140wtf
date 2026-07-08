@@ -9,7 +9,7 @@
  *   // In a React component / hook:
  *   const { config } = useAppContext();
  *   const key = getStorageKey(config.appId, 'showGlobalFeed');
- *   // → "ditto:showGlobalFeed" (on the default build)
+ *   // → "2140:showGlobalFeed" (on the default build)
  */
 export function getStorageKey(appId: string, suffix: string): string {
   return `${appId}:${suffix}`;

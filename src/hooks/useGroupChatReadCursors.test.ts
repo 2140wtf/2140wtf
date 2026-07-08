@@ -84,7 +84,7 @@ describe('useGroupChatReadCursors', () => {
     });
 
     await waitFor(() => {
-      expect(localStorage.getItem(`ditto:group-read-cursors:${viewerPubkey}`)).toContain('42');
+      expect(localStorage.getItem(`app:group-read-cursors:${viewerPubkey}`)).toContain('42');
     });
   });
 });
