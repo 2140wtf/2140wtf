@@ -12,7 +12,7 @@ import { getStorageKey } from '@/lib/storageKey';
  *
  * @param feedId  Unique identifier for this feed page.
  * @param validTabs  Optional list of valid tab values for validation. If omitted, any stored value is accepted.
- * @param defaultTabOverride  Optional default tab to use when nothing is persisted (overrides the follows/ditto default).
+ * @param defaultTabOverride  Optional default tab to use when nothing is persisted (overrides the follows/app default).
  */
 export function useFeedTab<T extends string = string>(
   feedId: string,
@@ -24,12 +24,14 @@ export function useFeedTab<T extends string = string>(
   const key = getStorageKey(config.appId, `feed-tab:${feedId}`);
 
   const [activeTab, setActiveTab] = useState<T>(() => {
-    const defaultTab = (defaultTabOverride ?? (user ? 'follows' : 'ditto')) as T;
+    const defaultTab = (defaultTabOverride ?? (user ? 'follows' : 'app')) as T;
     try {
       const stored = sessionStorage.getItem(key);
       if (stored) {
-        if (!validTabs || validTabs.includes(stored as T)) {
-          return stored as T;
+        // Legacy 'ditto' tab was renamed to 'app'; migrate persisted selection.
+        const normalized = stored === 'ditto' ? 'app' : stored;
+        if (!validTabs || validTabs.includes(normalized as T)) {
+          return normalized as T;
         }
       }
     } catch { /* sessionStorage unavailable */ }

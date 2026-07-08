@@ -259,10 +259,20 @@ function FeedTabsSection() {
     }
   });
 
-  const [showDittoFeed, setShowDittoFeed] = useState(() => {
+  const [showAppFeed, setShowAppFeed] = useState(() => {
     try {
-      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
-      return stored !== null ? stored === 'true' : true; // Default to true
+      const key = getStorageKey(config.appId, 'showAppFeed');
+      const stored = localStorage.getItem(key);
+      if (stored !== null) return stored === 'true';
+      // Legacy key from before the ditto → 2140.wtf rebrand.
+      const legacyKey = getStorageKey(config.appId, 'showDittoFeed');
+      const legacy = localStorage.getItem(legacyKey);
+      if (legacy !== null) {
+        localStorage.removeItem(legacyKey);
+        localStorage.setItem(key, legacy);
+        return legacy === 'true';
+      }
+      return true; // Default to true
     } catch {
       return true;
     }
@@ -293,9 +303,9 @@ function FeedTabsSection() {
     try { localStorage.removeItem(key); } catch { /* ignore */ }
   };
 
-  const handleToggleDittoFeed = async (checked: boolean) => {
-    setShowDittoFeed(checked);
-    safeSetItem(getStorageKey(config.appId, 'showDittoFeed'), String(checked));
+  const handleToggleAppFeed = async (checked: boolean) => {
+    setShowAppFeed(checked);
+    safeSetItem(getStorageKey(config.appId, 'showAppFeed'), String(checked));
     toast({
       title: checked ? `${config.appName} feed enabled` : `${config.appName} feed disabled`,
       description: checked
@@ -367,7 +377,7 @@ function FeedTabsSection() {
       const userCount = Object.keys(data.names).length;
 
       // Extract label from domain (hostname without TLD)
-      // ditto.pub -> 2140.wtf, spinster.xyz -> Spinster, etc.
+      // e.g. example.com -> Example, spinster.xyz -> Spinster.
       const domainParts = domain.split('.');
       const hostname = domainParts[0]; // Get first part
       const label = hostname.charAt(0).toUpperCase() + hostname.slice(1); // Capitalize
@@ -475,8 +485,8 @@ function FeedTabsSection() {
             <p className="text-xs text-muted-foreground mt-0.5">Show trending and curated content from the {config.appName} relay</p>
           </div>
           <Switch
-            checked={showDittoFeed}
-            onCheckedChange={handleToggleDittoFeed}
+            checked={showAppFeed}
+            onCheckedChange={handleToggleAppFeed}
             className="shrink-0"
           />
         </div>

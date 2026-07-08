@@ -55,7 +55,7 @@ npm test
 
 ## Configuration
 
-2140.wtf is configured through a `ditto.json` file at the project root, read at build time. This file is gitignored so each deployment can have its own configuration.
+2140.wtf is configured through a `app.json` file at the project root, read at build time. This file is gitignored so each deployment can have its own configuration.
 
 ```jsonc
 {
@@ -78,10 +78,10 @@ npm test
 Configuration is resolved in three layers (highest priority first):
 
 1. **User settings** stored in localStorage
-2. **Build config** from `ditto.json`
+2. **Build config** from `app.json`
 3. **Hardcoded defaults**
 
-Use an alternate config file path with: `DITTO_CONFIG_FILE=./my-config.json npm run build`
+Use an alternate config file path with: `APP_CONFIG_FILE=./my-config.json npm run build`
 
 ### Custom Branding
 
@@ -90,7 +90,7 @@ For self-hosted instances:
 - Replace `public/logo.png` with your logo, then run `npm run icons` to regenerate all branded assets
 - Update the app name in `index.html` and `public/manifest.webmanifest`
 - Replace `public/og-image.jpg` for social sharing previews
-- Set default relays and upload servers in `ditto.json`
+- Set default relays and upload servers in `app.json`
 
 ## Deployment
 

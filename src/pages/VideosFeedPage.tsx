@@ -8,7 +8,7 @@
  *  │  (snap-scroll short-form player, within column) │
  *  └──────────────────────────────────────────────┘
  *
- * Global: sort:hot (ditto relay, limit 8/page)
+ * Global: sort:hot (2140.wtf relays, limit 8/page)
  * Follows: chronological (useFeed, limit 8/page via PAGE_SIZE override)
  * Streams: live-only query, limit 10
  */

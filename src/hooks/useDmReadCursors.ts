@@ -17,7 +17,7 @@ export function useDmReadCursors() {
   const pubkey = user?.pubkey ?? '';
   const nip44 = user?.signer?.nip44;
   const storageKey = useMemo(
-    () => (pubkey ? `ditto:dm-read-cursors:${pubkey}` : 'ditto:dm-read-cursors:'),
+    () => (pubkey ? `app:dm-read-cursors:${pubkey}` : 'app:dm-read-cursors:'),
     [pubkey],
   );
 

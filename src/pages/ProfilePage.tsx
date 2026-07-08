@@ -1378,7 +1378,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     description: metadata?.about || 'Nostr profile',
   });
 
-  // Profile media — dedicated search query via relay.ditto.pub (video:true image:true)
+  // Profile media — dedicated search query via 2140.wtf relays (video:true image:true)
   const {
     data: mediaData,
     isPending: mediaPending,

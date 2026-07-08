@@ -73,7 +73,7 @@ describe('useDmReadCursors', () => {
     });
 
     await waitFor(() => {
-      expect(localStorage.getItem(`ditto:dm-read-cursors:${viewerPubkey}`)).toContain('42');
+      expect(localStorage.getItem(`app:dm-read-cursors:${viewerPubkey}`)).toContain('42');
     });
   });
 });

@@ -1,10 +1,10 @@
 import type { RelayMetadata } from '@/contexts/AppContext';
 
 /** Relay used for NIP-50 search, trending, and streaming queries. */
-export const DITTO_RELAY = 'wss://relay.ditto.pub/';
+export const APP_SEARCH_RELAY = 'wss://relay.ditto.pub/';
 
 /** All 2140.wtf relays used for search, trending, and streaming queries. */
-export const DITTO_RELAYS: string[] = [
+export const APP_SEARCH_RELAYS: string[] = [
   'wss://relay.ditto.pub/',
   'wss://relay.dreamith.to/',
 ];

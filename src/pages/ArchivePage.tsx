@@ -359,7 +359,7 @@ function archiveUrl(identifier: string): string {
   return `https://archive.org/details/${identifier}`;
 }
 
-function dittoUrl(identifier: string): string {
+function appUrl(identifier: string): string {
   return `/i/${encodeURIComponent(archiveUrl(identifier))}`;
 }
 
@@ -398,7 +398,7 @@ function ArchiveCard({ item }: { item: ArchiveItem }) {
 
   return (
     <Link
-      to={dittoUrl(item.identifier)}
+      to={appUrl(item.identifier)}
       className="group block rounded-2xl border border-border overflow-hidden bg-card hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5"
     >
       {/* Thumbnail */}
@@ -516,7 +516,7 @@ function ArchiveSearchBar() {
     setDebouncedQuery('');
     setDropdownOpen(false);
     inputRef.current?.blur();
-    navigate(dittoUrl(identifier));
+    navigate(appUrl(identifier));
   }, [navigate]);
 
   const handleClear = useCallback(() => {

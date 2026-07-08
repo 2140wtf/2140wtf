@@ -2,7 +2,7 @@ import type { NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import { CLIENTS, type ClientDef } from '@/lib/clients';
-import { DITTO_RELAY } from '@/lib/appRelays';
+import { APP_SEARCH_RELAY } from '@/lib/appRelays';
 
 export interface ClientCount {
   client: ClientDef;
@@ -22,7 +22,7 @@ export function useClientCounts(baseFilter: NostrFilter) {
   return useQuery({
     queryKey: ['client-counts', JSON.stringify(baseFilter)],
     queryFn: async (c): Promise<ClientCount[]> => {
-      const relay = nostr.relay(DITTO_RELAY);
+      const relay = nostr.relay(APP_SEARCH_RELAY);
       if (!relay.count) {
         throw new Error('Relay does not support NIP-45 COUNT');
       }

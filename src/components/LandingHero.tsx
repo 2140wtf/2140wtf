@@ -102,9 +102,9 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
   // Global is always shown for guests — there is no settings UI for them to
   // opt into it, and it is one of the core public feeds they should be able to
   // switch to from the landing hero.
-  const showDittoFeed = (() => {
+  const showAppFeed = (() => {
     try {
-      const stored = localStorage.getItem(getStorageKey(config.appId, 'showDittoFeed'));
+      const stored = localStorage.getItem(getStorageKey(config.appId, 'showAppFeed'));
       return stored !== null ? stored === 'true' : true;
     } catch {
       return true;
@@ -289,11 +289,11 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
               active={activeTab === 'all'}
               onClick={() => onTabChange('all')}
             />
-            {showDittoFeed && (
+            {showAppFeed && (
               <TabButton
                 label={appName}
-                active={activeTab === 'ditto'}
-                onClick={() => onTabChange('ditto')}
+                active={activeTab === 'app'}
+                onClick={() => onTabChange('app')}
               />
             )}
             {showCommunityFeed && (

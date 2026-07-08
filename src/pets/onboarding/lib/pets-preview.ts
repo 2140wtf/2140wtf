@@ -106,7 +106,7 @@ export function generateEggPreview(
 /**
  * Generate an egg preview constrained to a specific breed category.
  *
- * - For adult-form categories (NOSTR Pets / Ditto Blobbi) the seed is adjusted
+ * - For adult-form categories (NOSTR Pets / 2140 Blobbi) the seed is adjusted
  *   so the pet deterministically evolves into a random form from that category.
  * - For the ₿AO category a random collectible card id is stored as breedAsset;
  *   the adult visual will render the card image instead of an SVG form.

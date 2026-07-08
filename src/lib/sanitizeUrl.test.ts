@@ -91,16 +91,16 @@ describe('URL allowlist helpers', () => {
 
   describe('isAllowedShareOrigin', () => {
     it('accepts bare https origins', () => {
-      expect(isAllowedShareOrigin('https://ditto.pub')).toBe(true);
+      expect(isAllowedShareOrigin('https://2140.wtf')).toBe(true);
     });
 
     it('rejects origins with path or query', () => {
-      expect(isAllowedShareOrigin('https://ditto.pub/path')).toBe(false);
-      expect(isAllowedShareOrigin('https://ditto.pub?x=1')).toBe(false);
+      expect(isAllowedShareOrigin('https://2140.wtf/path')).toBe(false);
+      expect(isAllowedShareOrigin('https://2140.wtf?x=1')).toBe(false);
     });
 
     it('rejects non-https origins', () => {
-      expect(isAllowedShareOrigin('http://ditto.pub')).toBe(false);
+      expect(isAllowedShareOrigin('http://2140.wtf')).toBe(false);
     });
   });
 

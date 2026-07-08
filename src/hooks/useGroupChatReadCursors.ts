@@ -9,7 +9,7 @@ export function useGroupChatReadCursors() {
   const pubkey = user?.pubkey ?? '';
   const nip44 = user?.signer?.nip44;
   const storageKey = useMemo(
-    () => (pubkey ? `ditto:group-read-cursors:${pubkey}` : 'ditto:group-read-cursors:'),
+    () => (pubkey ? `app:group-read-cursors:${pubkey}` : 'app:group-read-cursors:'),
     [pubkey],
   );
 
