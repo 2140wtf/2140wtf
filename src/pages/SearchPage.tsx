@@ -56,7 +56,7 @@ import { cn, parseKindFilter } from '@/lib/utils';
 import type { TabFilter } from '@/contexts/AppContext';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { PageHeader } from '@/components/PageHeader';
-import { DittoLogo } from '@/components/DittoLogo';
+import { AppLogo } from '@/components/AppLogo';
 import { buildFeedItems, dedupeFeedItems, feedItemKey, type FeedItem } from '@/lib/feedUtils';
 import { nip19 } from 'nostr-tools';
 
@@ -76,7 +76,7 @@ type SortPref = typeof VALID_SORTS[number];
 
 const DEFAULT_FILTERS = {
   includeReplies: true,
-  onlyDitto: false,
+  onlyApp: false,
   mediaType: 'all' as const,
   language: 'global',
   platform: 'nostr' as const,
@@ -118,7 +118,7 @@ export function SearchPage() {
 
   // ── Filter state — all derived from URL params ──────────────────────────
   const includeReplies = parseBoolParam(searchParams.get('replies'), DEFAULT_FILTERS.includeReplies);
-  const onlyDitto = parseBoolParam(searchParams.get('ditto'), DEFAULT_FILTERS.onlyDitto);
+  const onlyApp = parseBoolParam(searchParams.get('app'), DEFAULT_FILTERS.onlyApp);
   const VALID_MEDIA_TYPES = ['all', 'images', 'videos', 'none'] as const;
   type MediaType = typeof VALID_MEDIA_TYPES[number];
   const rawMedia = searchParams.get('media') ?? DEFAULT_FILTERS.mediaType;
@@ -156,7 +156,7 @@ export function SearchPage() {
   }, [setSearchParams]);
 
   const setIncludeReplies = useCallback((v: boolean) => setParam('replies', String(v), String(DEFAULT_FILTERS.includeReplies)), [setParam]);
-  const setOnlyDitto = useCallback((v: boolean) => setParam('ditto', String(v), String(DEFAULT_FILTERS.onlyDitto)), [setParam]);
+  const setOnlyApp = useCallback((v: boolean) => setParam('app', String(v), String(DEFAULT_FILTERS.onlyApp)), [setParam]);
   const setMediaType = useCallback((v: string) => setParam('media', v, DEFAULT_FILTERS.mediaType), [setParam]);
   const setLanguage = useCallback((v: string) => setParam('lang', v, DEFAULT_FILTERS.language), [setParam]);
   const setPlatform = useCallback((v: string) => setParam('platform', v, DEFAULT_FILTERS.platform), [setParam]);
@@ -243,11 +243,11 @@ export function SearchPage() {
 
   const protocols = useMemo(() => [platform], [platform]);
 
-  // When "Only Ditto users" is on, scope the query to the app's NIP-89 client
-  // tag value (defaults to "Ditto"). Empty array = no client filter.
+  // When "Only 2140 users" is on, scope the query to the app's NIP-89 client
+  // tag value (defaults to the app name). Empty array = no client filter.
   const clientTags = useMemo<string[] | undefined>(
-    () => (onlyDitto ? [config.clientName ?? config.appName] : undefined),
-    [onlyDitto, config.clientName, config.appName],
+    () => (onlyApp ? [config.clientName ?? config.appName] : undefined),
+    [onlyApp, config.clientName, config.appName],
   );
 
   const kindOptions = useMemo(() => buildKindOptions(), []);
@@ -264,7 +264,7 @@ export function SearchPage() {
   );
 
   // Determine if any filter differs from the default
-  const hasActiveFilters = !includeReplies || onlyDitto || mediaType !== DEFAULT_FILTERS.mediaType ||
+  const hasActiveFilters = !includeReplies || onlyApp || mediaType !== DEFAULT_FILTERS.mediaType ||
     language !== DEFAULT_FILTERS.language || platform !== DEFAULT_FILTERS.platform ||
     kindFilter !== DEFAULT_FILTERS.kindFilter || authorScope !== DEFAULT_FILTERS.authorScope ||
     sort !== DEFAULT_FILTERS.sort || authorPubkeys.length > 0;
@@ -273,7 +273,7 @@ export function SearchPage() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('replies');
-      next.delete('ditto');
+      next.delete('app');
       next.delete('media');
       next.delete('lang');
       next.delete('platform');
@@ -290,7 +290,7 @@ export function SearchPage() {
   const activeFilterLabels = useMemo(() => {
     const labels: string[] = [];
     if (!includeReplies) labels.push('No replies');
-    if (onlyDitto) labels.push('Ditto users only');
+    if (onlyApp) labels.push('2140 users only');
     if (mediaType !== 'all') labels.push({ images: 'Images', videos: 'Videos', none: 'No media' }[mediaType] ?? mediaType);
     if (language !== 'global') labels.push(language.toUpperCase());
     if (platform !== 'nostr') labels.push({ activitypub: 'Mastodon' }[platform] ?? platform);
@@ -310,7 +310,7 @@ export function SearchPage() {
     if (authorScope === 'follows') labels.push('My follows');
     if (authorScope === 'people' && authorPubkeys.length > 0) labels.push(`${authorPubkeys.length} author${authorPubkeys.length > 1 ? 's' : ''}`);
     return labels;
-  }, [includeReplies, onlyDitto, mediaType, language, platform, sort, kindFilter, customKindText, authorScope, authorPubkeys, kindOptions]);
+  }, [includeReplies, onlyApp, mediaType, language, platform, sort, kindFilter, customKindText, authorScope, authorPubkeys, kindOptions]);
 
   // Hooks
   const { user } = useCurrentUser();
@@ -715,13 +715,13 @@ export function SearchPage() {
                   <Switch checked={includeReplies} onCheckedChange={setIncludeReplies} className="scale-90" />
                 </div>
 
-                {/* Only Ditto users toggle */}
+                {/* Only 2140 users toggle */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <DittoLogo size={14} className="shrink-0" />
+                    <AppLogo size={14} className="shrink-0" />
                     {config.appName} users only
                   </span>
-                  <Switch checked={onlyDitto} onCheckedChange={setOnlyDitto} className="scale-90" />
+                  <Switch checked={onlyApp} onCheckedChange={setOnlyApp} className="scale-90" />
                 </div>
               </PopoverContent>
             </Popover>

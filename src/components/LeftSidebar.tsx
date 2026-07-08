@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { DittoLogo } from '@/components/DittoLogo';
+import { AppLogo } from '@/components/AppLogo';
 import { EmojifiedText } from '@/components/CustomEmoji';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { SidebarNavList } from '@/components/SidebarNavItem';
@@ -106,7 +106,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
       <div className={cn('flex mb-1', collapsed ? 'flex-col items-center gap-2 px-1' : 'items-center justify-between px-3')}>
         <Link to="/" onClick={scrollToTopIfCurrent('/')}>
           <div className="bg-background/85 rounded-full">
-            <DittoLogo size={collapsed ? 36 : 48} />
+            <AppLogo size={collapsed ? 36 : 48} />
           </div>
         </Link>
         <button

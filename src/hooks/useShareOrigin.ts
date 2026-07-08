@@ -10,7 +10,7 @@ import { useAppContext } from '@/hooks/useAppContext';
  * Why this exists: on Capacitor, `window.location.origin` resolves to
  * `capacitor://localhost` (iOS) or `https://localhost` (Android), which
  * produces broken shareable URLs. Native builds should configure
- * `shareOrigin` in `ditto.json` so that QR codes, copy-link actions, and
+ * `shareOrigin` in `app.json` so that QR codes, copy-link actions, and
  * remote-login callbacks resolve to the canonical web origin instead.
  */
 export function useShareOrigin(): string {

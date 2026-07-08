@@ -235,7 +235,7 @@ export const SavedFeedSchema = z.object({
   createdAt: z.number(),
 });
 
-// ─── AppConfigSchema ─────────────────────────────────────────────────
+// ─── RuntimeAppConfigSchema ─────────────────────────────────────────────────
 
 /**
  * Zod schema for the full AppConfig stored in localStorage.
@@ -243,7 +243,7 @@ export const SavedFeedSchema = z.object({
  * Uses ThemeConfigCompatSchema for the customTheme field so legacy
  * 19-token color objects still parse successfully.
  */
-export const AppConfigSchema = z.object({
+export const RuntimeAppConfigSchema = z.object({
   appName: z.string().optional(),
   appId: z.string().optional(),
   shareOrigin: z.string().url().refine(isAllowedShareOrigin, { message: 'Share origin must be an https:// origin without path' }).optional(),
@@ -310,19 +310,19 @@ export const AppConfigSchema = z.object({
   bip352ScanConcurrency: z.number().int().positive().optional(),
 });
 
-// ─── DittoConfigSchema (build-time ditto.json) ───────────────────────
+// ─── AppConfigSchema (build-time app.json) ───────────────────────
 
 /**
- * Schema for the build-time `ditto.json` configuration file.
- * Derived from AppConfigSchema with all fields made optional and strict
+ * Schema for the build-time `app.json` configuration file.
+ * Derived from RuntimeAppConfigSchema with all fields made optional and strict
  * mode enabled so unknown keys are rejected.
  */
-export const DittoConfigSchema = AppConfigSchema
+export const AppConfigSchema = RuntimeAppConfigSchema
   .partial()
   .strict();
 
 /** Inferred type for the build-time configuration. */
-export type DittoConfig = z.infer<typeof DittoConfigSchema>;
+export type AppConfig = z.infer<typeof AppConfigSchema>;
 
 // ─── Content Filter Schemas ──────────────────────────────────────────
 

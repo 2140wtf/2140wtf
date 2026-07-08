@@ -21,7 +21,7 @@ import { SavePassword } from '@capgo/capacitor-autofill-save-password';
 import { downloadTextFile } from '@/lib/downloadFile';
 
 /** The domain used for Shared Web Credentials on iOS. */
-const CREDENTIAL_DOMAIN = 'ditto.pub';
+const CREDENTIAL_DOMAIN = '2140.wtf';
 
 /** Whether the browser supports PasswordCredential (Chromium-only). */
 export function supportsPasswordCredential(): boolean {

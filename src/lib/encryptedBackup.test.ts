@@ -19,7 +19,7 @@ describe('computeBackupHash', () => {
 describe('createBackupFile', () => {
   it('creates a text/plain File containing the plaintext', () => {
     const file = createBackupFile('encrypted payload');
-    expect(file.name).toBe('ditto-settings-backup.txt');
+    expect(file.name).toBe('2140-settings-backup.txt');
     expect(file.type).toBe('text/plain');
   });
 });

@@ -9,7 +9,7 @@ import { getNostrIdentifierPath } from '@/lib/nostrIdentifier';
  *
  * Three flavours are supported:
  *
- *   1. `https://ditto.pub/...` universal links — the path/query/hash is
+ *   1. `https://2140.wtf/...` universal links — the path/query/hash is
  *      forwarded verbatim to the in-app router.
  *   2. `bitcoin:...` BIP-21 payment URIs — the user is dropped on the
  *      `/wallet` page with the URI passed through `location.state.bip21Uri`

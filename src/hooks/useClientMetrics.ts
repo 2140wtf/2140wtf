@@ -1,7 +1,7 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrFilter } from '@nostrify/nostrify';
-import { DITTO_RELAY } from '@/lib/appRelays';
+import { APP_SEARCH_RELAY } from '@/lib/appRelays';
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -59,7 +59,7 @@ function dailyBuckets(days: number): Array<{ since: number; until: number; label
 
 /**
  * Fetch usage metrics for a NIP-89 client via NIP-45 COUNT queries against the
- * 2140.wtf relay. Mirrors the approach used by the ditto-metrics dashboard, but
+ * 2140.wtf relay. Mirrors the approach used by the 2140-metrics dashboard, but
  * exposes only the two metrics surfaced on `/client/:name`:
  *
  * - **MAU** — distinct authors who published with this client in the last 30 days.
@@ -78,7 +78,7 @@ export function useClientMetrics(clientTags: string[]) {
   return useQuery({
     queryKey: ['client-metrics', clientTags],
     queryFn: async (c): Promise<ClientMetrics> => {
-      const relay = nostr.relay(DITTO_RELAY);
+      const relay = nostr.relay(APP_SEARCH_RELAY);
       if (!relay.count) {
         throw new Error('Relay does not support NIP-45 COUNT');
       }

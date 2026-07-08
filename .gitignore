@@ -36,7 +36,7 @@ deploy.sh
 !.env.example
 
 # Build-time configuration
-ditto.json
+app.json
 
 # Agent memory / local-only workspace
 .claude/

@@ -46,7 +46,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
     label: 'Getting Started',
     items: [
       {
-        id: 'what-is-ditto',
+        id: 'what-is-2140',
         question: 'What is {appName}?',
         answer: [
           '{appName} is a social media platform built on Nostr \u2014 a new kind of open, decentralized network. Think of {appName} as the app you\'re using right now to connect with people, post, and discover content.',
