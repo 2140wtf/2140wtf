@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'pub.ditto.app',
+  appId: 'wtf.2140.app',
   appName: '2140.wtf',
   webDir: 'dist',
   server: {
@@ -16,7 +16,7 @@ const config: CapacitorConfig = {
   ios: {
     backgroundColor: '#14161f',
     contentInset: 'never',
-    scheme: 'Ditto'
+    scheme: '2140'
   },
   plugins: {
     SystemBars: {
