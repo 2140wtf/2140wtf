@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.25.0] - 2026-07-08
+
+### Added
+- NOSTR Pets v2 — design your own species, upload GLB/SVG assets, and share custom rooms
+- Bitcoin sats wallet mode for Pets alongside ₿AO testnet, with shared invoice/send UI
+- Unified "All" feed that merges follows, loved posts, communities, global hot sort, and topic tags
+- Per-topic author discovery for more dynamic feed curation
+- 3D pet preview with manual rotation, movement controls, fullscreen game mode, and procedural room
+- Asset credits, per-asset scale overrides, and default CC0 Fox model for 3D pets
+- Honey-badger built-in species and adult SVG customization
+
+### Changed
+- Pet Shop now shows fiat, ₿AO testnet, and Bitcoin sats balances and filters items to what you own
+- New Blobbonaut profiles start with 2,140 fiat coins and one free apple
+- Pets wallet drawer mode syncs to profile `wallet_mode`
+- Demo/testnet pets hatch to baby but require real sats to mature to adult
+- Default home tab is "All" for logged-in users and guests
+
+### Fixed
+- Consolidated security audit fixes across Nostr event handling, Bitcoin/Cashu payments, storage, and content rendering
+  - SVG asset uploads verify local SHA-256 against the server-returned `x` tag
+  - All relay events are signature-verified before caching or returning from `AppPool`
+  - `useNostrPublish` rejects forged or mismatched `prev` events
+  - Relay, DM relay, Blossom, and encrypted-settings replaceable events are verified and author-checked
+  - Encrypted settings and read cursors merge by `created_at`, not arrival order
+  - BAO court and prediction-market events verify signatures and enforce coordinator allowlists
+  - PSBT outputs are checked against the approved payment intent after local signing
+  - On-chain zap targets are verified before address derivation
+  - Cashu mint URLs require HTTPS and an explicit allowlist; proofs are validated before storage
+  - Login secrets, NWC URIs, and DM/group read cursors are encrypted at rest with NIP-44
+  - Web credential auto-login is gated behind required browser mediation
+  - Injected config URLs are validated against an allowlist
+  - Untrusted media, link, and avatar URLs are sanitized before rendering
+- Pet purchases and item use rollback balances/storage if the Nostr publish fails
+- Pet action menu and carousels show only owned items instead of every shop item
+- Android and web fullscreen behavior for Pets game mode
+
 ## [0.24.0] - 2026-06-22
 
 This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade ₿AO prediction markets, vote in live poll cubes, chat in private groups, send encrypted messages, and carry a Cashu wallet — all under a fresh 2140.wtf look with light themes and a reorganized home.
