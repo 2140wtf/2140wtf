@@ -14,8 +14,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
+import { Dices, Egg, Loader2 } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
@@ -32,6 +34,7 @@ import {
   KIND_BLOBBONAUT_PROFILE,
   INITIAL_BLOBBONAUT_SATS,
   BAO_PET_STARTER_GRANT_SATS,
+  PETS_PREVIEW_REROLL_SATS,
   STAT_MAX,
   buildBlobbonautTags,
   updateBlobbonautTags,
@@ -74,6 +77,7 @@ const NAMING_DIALOG = 'Every life deserves a name.\nWhat will you call this one?
 type CeremonyPhase =
   | 'loading'
   | 'error'
+  | 'preview'     // pre-publish: keep this egg (free) or pay to reroll
   | 'egg'
   | 'crack_1'
   | 'crack_2'
@@ -131,7 +135,8 @@ export function PetsHatchingCeremony({
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
-  const { isBao: isBaoWalletMode } = usePetsWallet();
+  const { isBao: isBaoWalletMode, wallet: activeWallet } = usePetsWallet();
+  const { config } = useAppContext();
   const starterGrant = usePetsStarterGrant();
 
   // ── Core state ──
@@ -154,6 +159,11 @@ export function PetsHatchingCeremony({
 
   // Retry state: increments when the user presses Retry on the error screen.
   const [retryCount, setRetryCount] = useState(0);
+
+  // Preview/reroll state (pre-publish egg preview)
+  const [isRerolling, setIsRerolling] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [rerollCount, setRerollCount] = useState(0);
 
   // Refs
   const setupAttempted = useRef(false);
@@ -306,7 +316,9 @@ export function PetsHatchingCeremony({
           invalidateProfile();
         }
 
-        // 2. Generate and publish egg
+        // 2. Generate the egg preview. Nothing is published yet — in the
+        //    preview phase the user keeps this egg (free) or pays to reroll;
+        //    the egg event is only minted when they commit to hatching.
         const eggPreview = breedCategory
           ? generateEggPreviewForCategory(user.pubkey, breedCategory, 'Egg')
           : generateEggPreview(user.pubkey, 'Egg');
@@ -314,73 +326,7 @@ export function PetsHatchingCeremony({
         previewRef.current = eggPreview;
         if (!mountedRef.current) return;
 
-        const eggTags = previewToEventTags(eggPreview);
-        eggTagsRef.current = eggTags;
-
-        const eggEvent = await publishEvent({
-          kind: KIND_PETS_STATE,
-          content: 'A new NOSTR PET egg!',
-          tags: eggTags,
-          created_at: eggPreview.createdAt,
-        });
-        if (!mountedRef.current) return;
-
-        updateCompanionEvent(eggEvent);
-
-        // 3. Award starter sats for the new egg (best-effort, demo mode only).
-        //    This claims BAO signet sats from the faucet into the BAO wallet.
-        //    Mainnet mode has no starter grant — real sats are never free.
-        //    Await it before writing the profile `has[]` tag so concurrent
-        //    profile updates stay serialized.
-        if (isBaoWalletMode && !starterGrantAttemptedFor.has(eggPreview.d)) {
-          starterGrantAttemptedFor.add(eggPreview.d);
-          try {
-            await starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS);
-          } catch (grantError) {
-            // Grant failure must never block hatching.
-            console.warn('[HatchingCeremony] Starter grant failed:', grantError);
-          }
-        }
-        if (!mountedRef.current) return;
-
-        // 4. Update profile with has[] entry. Fetch fresh profile first because
-        //    the starter grant (or a concurrent update) may have changed it.
-        const profileBeforeHas = profileRef.current;
-        const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
-        if (!mountedRef.current) return;
-
-        const baseProfile = freshProfile ?? profileBeforeHas;
-        if (baseProfile) {
-          const baseTags = baseProfile.allTags;
-          const baseContent = baseProfile.event.content ?? '';
-          const prevEvent = baseProfile.event;
-
-          const existingHas = baseTags
-            .filter(([k]) => k === 'has')
-            .map(([, v]) => v);
-          const newHas = [...existingHas, eggPreview.d];
-
-          const updatedTags = updateBlobbonautTags(baseTags, {
-            has: newHas,
-          });
-
-          const updatedProfileEvent = await publishEvent({
-            kind: KIND_BLOBBONAUT_PROFILE,
-            content: baseContent,
-            tags: updatedTags,
-            prev: prevEvent,
-          });
-          if (!mountedRef.current) return;
-
-          updateProfileEvent(updatedProfileEvent);
-        }
-
-        setStoredSelectedD(eggPreview.d);
-        invalidateProfile();
-        invalidateCompanion();
-
-        setPhase('egg');
-        scheduleTimeout(() => setEggVisible(true), 200);
+        setPhase('preview');
       } catch (error) {
         console.error('[HatchingCeremony] Setup failed:', error);
         if (!mountedRef.current) return;
@@ -414,17 +360,177 @@ export function PetsHatchingCeremony({
     if (profile) profileRef.current = profile;
   }, [profile]);
 
-  // eggOnly mode: auto-complete after the egg is shown (skip hatching).
-  // Uses onCompleteRef so the timer isn't reset when the parent re-renders
-  // with a new inline callback reference.
-  useEffect(() => {
-    if (!eggOnly || !eggVisible) return;
-    const timer = scheduleTimeout(() => {
-      setPhase('complete');
-      onCompleteRef.current?.();
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [eggOnly, eggVisible, scheduleTimeout]);
+  // ── Preview phase: pay the reroll fee over the active rail ──
+  // Both modes pay the 2140 treasury by Cashu nutzap — demo over the BAO
+  // signet mint, mainnet over the user's real mint.
+  const payRerollFee = useCallback(async (): Promise<boolean> => {
+    if (!activeWallet) {
+      toast({
+        title: 'No wallet connected',
+        description: 'Set up your pets wallet in the Wallet tab before rerolling.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    const treasuryNpub = config.petsTreasuryNpub;
+    if (!treasuryNpub) {
+      toast({
+        title: 'Reroll unavailable',
+        description: 'No treasury is configured to receive reroll payments.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    const ok = await activeWallet.sendNutzap(
+      PETS_PREVIEW_REROLL_SATS,
+      treasuryNpub,
+      activeWallet.mintUrl,
+      { memo: 'Pets egg reroll' },
+    );
+    if (!ok) {
+      toast({
+        title: 'Payment failed',
+        description: 'The reroll payment did not go through. Your egg was not changed.',
+        variant: 'destructive',
+      });
+    }
+    return ok;
+  }, [activeWallet, config.petsTreasuryNpub]);
+
+  // ── Preview phase: pay and generate a fresh egg ──
+  const handleReroll = useCallback(async () => {
+    if (!user?.pubkey || isRerolling || isCommitting) return;
+    setIsRerolling(true);
+    try {
+      const paid = await payRerollFee();
+      if (!paid || !mountedRef.current) return;
+
+      const fresh = breedCategory
+        ? generateEggPreviewForCategory(user.pubkey, breedCategory, 'Egg')
+        : generateEggPreview(user.pubkey, 'Egg');
+      setPreview(fresh);
+      previewRef.current = fresh;
+      setRerollCount((c) => c + 1);
+      impactLight();
+    } finally {
+      if (mountedRef.current) setIsRerolling(false);
+    }
+  }, [user?.pubkey, breedCategory, isRerolling, isCommitting, payRerollFee]);
+
+  // ── Preview phase: commit — publish the egg, grant starter sats, link has[] ──
+  const commitToHatch = useCallback(async () => {
+    const eggPreview = previewRef.current;
+    if (!user?.pubkey || !eggPreview || isCommitting || isRerolling) return;
+    setIsCommitting(true);
+
+    try {
+      // 1. Publish the egg event.
+      const eggTags = previewToEventTags(eggPreview);
+      eggTagsRef.current = eggTags;
+
+      const eggEvent = await publishEvent({
+        kind: KIND_PETS_STATE,
+        content: 'A new NOSTR PET egg!',
+        tags: eggTags,
+        created_at: eggPreview.createdAt,
+      });
+      if (!mountedRef.current) return;
+
+      updateCompanionEvent(eggEvent);
+
+      // 2. Award starter sats for the new egg (best-effort, demo mode only).
+      //    This claims BAO signet sats from the faucet into the BAO wallet.
+      //    Mainnet mode has no starter grant — real sats are never free.
+      //    Await it before writing the profile `has[]` tag so concurrent
+      //    profile updates stay serialized.
+      if (isBaoWalletMode && !starterGrantAttemptedFor.has(eggPreview.d)) {
+        starterGrantAttemptedFor.add(eggPreview.d);
+        try {
+          await starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS);
+        } catch (grantError) {
+          // Grant failure must never block hatching.
+          console.warn('[HatchingCeremony] Starter grant failed:', grantError);
+        }
+      }
+      if (!mountedRef.current) return;
+
+      // 3. Update profile with has[] entry. Fetch fresh profile first because
+      //    the starter grant (or a concurrent update) may have changed it.
+      const profileBeforeHas = profileRef.current;
+      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      if (!mountedRef.current) return;
+
+      const baseProfile = freshProfile ?? profileBeforeHas;
+      if (baseProfile) {
+        const baseTags = baseProfile.allTags;
+        const baseContent = baseProfile.event.content ?? '';
+        const prevEvent = baseProfile.event;
+
+        const existingHas = baseTags
+          .filter(([k]) => k === 'has')
+          .map(([, v]) => v);
+        const newHas = [...existingHas, eggPreview.d];
+
+        const updatedTags = updateBlobbonautTags(baseTags, {
+          has: newHas,
+        });
+
+        const updatedProfileEvent = await publishEvent({
+          kind: KIND_BLOBBONAUT_PROFILE,
+          content: baseContent,
+          tags: updatedTags,
+          prev: prevEvent,
+        });
+        if (!mountedRef.current) return;
+
+        updateProfileEvent(updatedProfileEvent);
+      }
+
+      setStoredSelectedD(eggPreview.d);
+      invalidateProfile();
+      invalidateCompanion();
+
+      // eggOnly (adoption) mode: the egg stays an egg — complete immediately
+      // without entering the cracking ceremony.
+      if (eggOnly) {
+        setPhase('complete');
+        onCompleteRef.current?.();
+        return;
+      }
+
+      setPhase('egg');
+      scheduleTimeout(() => setEggVisible(true), 200);
+    } catch (error) {
+      console.error('[HatchingCeremony] Commit failed:', error);
+      if (!mountedRef.current) return;
+      toast({
+        title: 'Something went wrong',
+        description: 'Failed to create your egg. Please try again.',
+        variant: 'destructive',
+      });
+      setPhase('error');
+    } finally {
+      if (mountedRef.current) setIsCommitting(false);
+    }
+  }, [
+    user?.pubkey,
+    isCommitting,
+    isRerolling,
+    publishEvent,
+    updateCompanionEvent,
+    isBaoWalletMode,
+    starterGrant,
+    nostr,
+    updateProfileEvent,
+    setStoredSelectedD,
+    invalidateProfile,
+    invalidateCompanion,
+    scheduleTimeout,
+    eggOnly,
+  ]);
+
+  // eggOnly mode commits from the preview phase and completes there, so it
+  // never reaches the egg phase — no auto-complete timer needed.
 
   // Play entrance animation once
   useEffect(() => {
@@ -741,6 +847,92 @@ export function PetsHatchingCeremony({
         >
           Try Again
         </Button>
+      </div>
+    );
+  }
+
+  if (phase === 'preview') {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 p-6 overflow-hidden select-none"
+        style={{ background: 'radial-gradient(ellipse at center, #0a1a2a 0%, #081520 50%, #060f18 100%)' }}
+      >
+        {/* Ambient glow behind the pet */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse at 50% 45%, ${eggColor}25 0%, transparent 60%)`,
+          }}
+        />
+
+        <div className="text-center space-y-1 relative">
+          <h2 className="text-xl font-semibold text-white flex items-center justify-center gap-2">
+            <Egg className="size-5" style={{ color: eggColor }} />
+            Your egg is ready
+          </h2>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            This is the NOSTR PET waiting inside. Keep it for free, or reroll for a new one.
+          </p>
+        </div>
+
+        {babyCompanion && (
+          <div className="relative">
+            <div
+              className="absolute -inset-10 rounded-full blur-2xl"
+              style={{
+                background: `radial-gradient(circle, ${eggColor}50 0%, transparent 70%)`,
+              }}
+            />
+            <PetsStageVisual
+              companion={babyCompanion}
+              size="lg"
+              animated
+              className="size-52 sm:size-60 relative"
+            />
+          </div>
+        )}
+
+        <div className="flex flex-col items-center gap-3 relative w-full max-w-xs">
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={isCommitting || isRerolling}
+            onClick={commitToHatch}
+          >
+            {isCommitting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Creating your egg…
+              </>
+            ) : (
+              eggOnly ? 'Keep this egg — Free' : 'Hatch this egg — Free'
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            disabled={isCommitting || isRerolling}
+            onClick={handleReroll}
+          >
+            {isRerolling ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Rerolling…
+              </>
+            ) : (
+              <>
+                <Dices className="size-4" />
+                Reroll — {PETS_PREVIEW_REROLL_SATS} sats
+              </>
+            )}
+          </Button>
+          {rerollCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Rerolled {rerollCount} {rerollCount === 1 ? 'time' : 'times'}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
