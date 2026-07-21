@@ -162,6 +162,11 @@ export default defineConfig(({ mode }) => {
       // taken — the drift is confusing ("which port is the app on now?").
       strictPort: true,
       allowedHosts: env.ALLOWED_HOSTS === "*" ? true : undefined,
+      // Avoid stale dynamic-import chunk errors during development. Vite's
+      // dev server may otherwise serve cached module URLs after rebuilds.
+      headers: {
+        'Cache-Control': 'no-store, must-revalidate',
+      },
       proxy: {
         '/api/stacker-news': {
           target: 'https://stacker.news',
