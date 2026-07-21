@@ -2,7 +2,8 @@ import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
+import { APP_CURATED_FEED_RELAYS } from '@/lib/appRelays';
+import { getPaginationCursor } from '@/lib/feedUtils';
 
 /**
  * The 2140.wtf tab should show posts only from the official 2140.wtf account.
@@ -36,15 +37,32 @@ export function useCuratedAppFeed(enabled: boolean) {
       };
       if (pageParam) filter.until = pageParam;
 
-      const appRelays = nostr.group(APP_SEARCH_RELAYS);
-      return appRelays.query(
-        [filter] as Parameters<typeof appRelays.query>[0],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
-      );
+      const appRelays = nostr.group(APP_CURATED_FEED_RELAYS);
+      const events = new Map<string, NostrEvent>();
+
+      // Use req() so we can gather events from *all* relays in the group.
+      // query() stops on the first EOSE, which only returns the fastest
+      // relay's subset. We wait for every relay to finish (or a timeout).
+      try {
+        const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
+        for await (const msg of appRelays.req(
+          [filter] as Parameters<typeof appRelays.req>[0],
+          { signal: combinedSignal, eoseTimeout: 6000 },
+        )) {
+          if (msg[0] === 'EVENT') {
+            events.set(msg[2].id, msg[2]);
+          }
+        }
+      } catch {
+        // Return whatever we collected before the timeout/abort.
+      }
+
+      const sorted = [...events.values()].sort((a, b) => b.created_at - a.created_at);
+      return sorted.slice(0, 20);
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length === 0) return undefined;
-      return lastPage[lastPage.length - 1].created_at - 1;
+      return getPaginationCursor(lastPage) - 1;
     },
     initialPageParam: undefined as number | undefined,
     enabled: enabled && FEATURED_APP_PUBKEYS.length > 0,
