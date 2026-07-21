@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ExternalLink } from 'lucide-react';
+import { Check, ExternalLink, Zap } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getAvatarShape } from '@/lib/avatarShape';
@@ -24,6 +25,8 @@ interface ZapSuccessScreenProps {
   btcPrice: number | undefined;
   /** Bitcoin txid (onchain only). Enables the "View transaction" link to the in-app tx detail page. */
   txid?: string;
+  /** Nutzap event id (Cashu only). Enables a link to the published kind 9321 event. */
+  eventId?: string;
   /** Close handler invoked by the "Done" button. */
   onClose: () => void;
 }
@@ -44,6 +47,7 @@ export function ZapSuccessScreen({
   amountSats,
   btcPrice,
   txid,
+  eventId,
   onClose,
 }: ZapSuccessScreenProps) {
   const { data: author } = useAuthor(recipientPubkey);
@@ -130,7 +134,7 @@ export function ZapSuccessScreen({
       {/* Headline + amount */}
       <div className="grid gap-1">
         <h2 className="text-lg font-semibold tracking-tight">
-          {recipientLabel ? 'Donation sent' : 'Bitcoin sent'}
+          {recipientLabel ? 'Donation sent' : eventId ? 'Nutzap sent' : 'Bitcoin sent'}
         </h2>
         <div className="text-4xl font-bold tabular-nums bg-gradient-to-br from-amber-500 to-orange-600 bg-clip-text text-transparent">
           {usdDisplay || `${amountSats.toLocaleString()} sats`}
@@ -163,6 +167,19 @@ export function ZapSuccessScreen({
             <Link to={`/i/bitcoin:tx:${txid}`} onClick={onClose}>
               <ExternalLink className="size-4 mr-2" />
               View transaction
+            </Link>
+          </Button>
+        )}
+        {eventId && (
+          <Button
+            type="button"
+            variant="outline"
+            asChild
+            className="w-full"
+          >
+            <Link to={`/${nip19.neventEncode({ id: eventId })}`} onClick={onClose}>
+              <Zap className="size-4 mr-2" />
+              View Nutzap
             </Link>
           </Button>
         )}

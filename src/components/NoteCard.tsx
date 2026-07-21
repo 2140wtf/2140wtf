@@ -109,6 +109,7 @@ import { ZapDialog } from "@/components/ZapDialog";
 import { ZapPollVoteButton } from "@/components/ZapPollVoteButton";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthor } from "@/hooks/useAuthor";
+import { useCanReceiveZaps } from "@/hooks/useCanReceiveZaps";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLoveList, LOVE_LIST_KIND } from "@/hooks/useLoveList";
 import { useNip05Verify } from "@/hooks/useNip05Verify";
@@ -421,10 +422,10 @@ export const NoteCard = memo(function NoteCard({
     if (mapped) triggerPetsReaction(mapped);
   }, [triggerPetsReaction]);
 
-  // Zap button shows for any logged-in user except on their own posts.
-  // On-chain zaps are always available; Lightning is offered inside the dialog
-  // when the author has lud06/lud16.
-  const canZapAuthor = !!user && user.pubkey !== event.pubkey;
+  // Zap button shows for any logged-in user except on their own posts, and
+  // only when the recipient can receive via Lightning, Bitcoin, or Nutzap.
+  const { canReceive: eventCanReceive } = useCanReceiveZaps(event.pubkey);
+  const canZapAuthor = !!user && user.pubkey !== event.pubkey && eventCanReceive;
 
   // Profile-zap variants: when the card targets a recipient profile rather
   // than a specific note, the action bar attaches to the recipient's kind-0
@@ -432,7 +433,8 @@ export const NoteCard = memo(function NoteCard({
   // run unconditionally with `undefined` when not applicable.
   const recipientEvent = recipient.data?.event;
   const { data: recipientStats } = useEventStats(recipientEvent?.id, recipientEvent);
-  const canZapRecipient = !!user && !!profileZapRecipient && user.pubkey !== profileZapRecipient;
+  const { canReceive: profileRecipientCanReceive } = useCanReceiveZaps(profileZapRecipient);
+  const canZapRecipient = !!user && !!profileZapRecipient && user.pubkey !== profileZapRecipient && profileRecipientCanReceive;
 
   // Money formatter (USD by default, with sats fallback). Reused for the
   // "X zapped Y" wrapper header and the kind 9735 zap-receipt card below.
