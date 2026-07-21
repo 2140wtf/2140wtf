@@ -4,8 +4,8 @@
 <dict>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>webcredentials:ditto.pub</string>
-		<string>webcredentials:ditto.pub?mode=developer</string>
+		<string>webcredentials:2140.wtf</string>
+		<string>webcredentials:2140.wtf?mode=developer</string>
 	</array>
 </dict>
 </plist>

@@ -323,9 +323,9 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.24.0;
+				MARKETING_VERSION = 0.25.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
-				PRODUCT_BUNDLE_IDENTIFIER = pub.ditto.app;
+				PRODUCT_BUNDLE_IDENTIFIER = app.wtf2140;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
@@ -347,8 +347,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.24.0;
-				PRODUCT_BUNDLE_IDENTIFIER = pub.ditto.app;
+				MARKETING_VERSION = 0.25.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.wtf2140;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
