@@ -9,6 +9,22 @@ export const APP_SEARCH_RELAYS: string[] = [
   'wss://relay.dreamith.to/',
 ];
 
+/** Relays used for the curated 2140.wtf account feed. */
+export const APP_CURATED_FEED_RELAYS: string[] = [
+  'wss://relay.ditto.pub/',
+  'wss://relay.dreamith.to/',
+  'wss://relay.primal.net/',
+  'wss://relay.damus.io/',
+  'wss://relay.nostr.band/',
+  'wss://nos.lol/',
+  'wss://relay.mostr.pub/',
+  'wss://relay.bao.network/',
+  'wss://offchain.pub/',
+  'wss://relay.snort.social/',
+  'wss://bitcoiner.social/',
+  'wss://nostr.bitcoiner.social/',
+];
+
 /** Relay used for Zapstore app metadata (kind 32267) and releases (kind 30063). */
 export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev/';
 
