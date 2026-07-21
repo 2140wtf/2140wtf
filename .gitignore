@@ -77,3 +77,6 @@ EXPERIMENTAL_BRANCHES.md
 # Escrow operator service
 services/escrow-operator/node_modules/
 services/escrow-operator/dist/
+
+# Grant proposal experiment (local only, not for public repo)
+grant-proposal-experiment/
