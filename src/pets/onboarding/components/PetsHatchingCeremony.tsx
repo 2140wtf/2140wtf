@@ -14,7 +14,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
-import { Dices, Egg, Loader2 } from 'lucide-react';
+import { ChevronLeft, Dices, Egg, Loader2 } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -116,6 +116,8 @@ interface PetsHatchingCeremonyProps {
   existingCompanion?: PetsCompanion | null;
   /** If true, only create the egg and skip the hatching ceremony. The egg stays an egg. */
   eggOnly?: boolean;
+  /** Optional exit handler. When provided, a back button is shown so the user can leave the ceremony. */
+  onExit?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -128,6 +130,7 @@ export function PetsHatchingCeremony({
   invalidateCompanion,
   setStoredSelectedD,
   onComplete,
+  onExit,
   breedCategory,
   existingCompanion,
   eggOnly = false,
@@ -655,6 +658,10 @@ export function PetsHatchingCeremony({
   const handleEggClick = useCallback(() => {
     if (phase === 'hatching') return;
 
+    // Existing eggs that aren't old enough yet are blocked from cracking.
+    // The waiting UI explains the Bitcoin-block delay and offers an exit.
+    if (eggTooYoung) return;
+
     if (phase === 'egg') {
       triggerShake('animate-egg-onboard-shake-light');
       impactLight();
@@ -880,6 +887,16 @@ export function PetsHatchingCeremony({
         className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 p-6 overflow-hidden select-none"
         style={{ background: 'radial-gradient(ellipse at center, #0a1a2a 0%, #081520 50%, #060f18 100%)' }}
       >
+        {onExit && (
+          <button
+            onClick={onExit}
+            className="absolute top-4 left-4 z-50 flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors"
+            aria-label="Back"
+          >
+            <ChevronLeft className="size-5" />
+            Back
+          </button>
+        )}
         {/* Ambient glow behind the pet */}
         <div
           className="absolute inset-0 pointer-events-none"
@@ -973,6 +990,19 @@ export function PetsHatchingCeremony({
       }}
       onClick={phase === 'dialog' ? handleDialogClick : undefined}
     >
+      {onExit && isEggPhase && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onExit();
+          }}
+          className="absolute top-4 left-4 z-50 flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors"
+          aria-label="Back"
+        >
+          <ChevronLeft className="size-5" />
+          Back
+        </button>
+      )}
       {/* ── Ambient background glow (egg phase only) ── */}
       {!showBaby && (
         <div
@@ -1021,7 +1051,8 @@ export function PetsHatchingCeremony({
           <div
             ref={eggContainerRef}
             className={cn(
-              'cursor-pointer relative',
+              'relative',
+              !eggTooYoung && 'cursor-pointer',
               eggVisible ? '' : 'opacity-0',
               eggVisible && isEggPhase && 'animate-egg-onboard-breathe',
               isHatching && 'animate-egg-onboard-burst',
@@ -1040,8 +1071,32 @@ export function PetsHatchingCeremony({
               animated
               className="size-56 sm:size-64 md:size-72"
               tourVisualState={tourVisualState}
-              onEggClick={handleEggClick}
+              onEggClick={eggTooYoung ? undefined : handleEggClick}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ── Waiting overlay for eggs that are not old enough yet ── */}
+      {eggTooYoung && isEggPhase && (
+        <div className="absolute inset-x-0 bottom-0 flex justify-center pb-28 sm:pb-36 px-8 z-50">
+          <div className="relative max-w-md w-full text-center p-6 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-md">
+            <h3 className="text-lg font-semibold text-white mb-2">Egg not ready</h3>
+            <p className="text-sm text-white/70 mb-4">
+              Wait until at least one Bitcoin block is mined (~10 min) before hatching.
+            </p>
+            {onExit && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExit();
+                }}
+                variant="outline"
+                className="border-white/30 text-white bg-white/10 hover:bg-white/20 hover:text-white"
+              >
+                Back to pet
+              </Button>
+            )}
           </div>
         </div>
       )}
