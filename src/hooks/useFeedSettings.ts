@@ -17,6 +17,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "pets",
   "wallet",
   "events",
+  "media",
   "btcmap",
 ];
 
@@ -25,6 +26,8 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'emoji-packs': 'emojis',
   'shop': 'badges',
   'achievements': 'badges',
+  'music': 'media',
+  'videos': 'media',
 };
 
 /**

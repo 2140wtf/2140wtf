@@ -374,6 +374,27 @@ export function SidebarNavList({
           }
           // 'market' is rendered as a child of the MARKETS group, skip flat rendering.
           if (id === 'market') return null;
+
+          if (id === 'media') {
+            return (
+              <SidebarGroup
+                key={id}
+                id={id}
+                active={isActive(id)}
+                editing={editing}
+                onRemove={(removeId) => onRemove(removeId, i)}
+                onClick={getOnClick?.(id)}
+                compact={compact}
+                minimal={minimal}
+                children={[
+                  { id: 'videos', label: 'Videos', path: '/videos' },
+                  { id: 'music', label: 'Music', path: '/music' },
+                ]}
+              />
+            );
+          }
+          // Music and Videos are rendered as children of the Media group, skip flat rendering.
+          if (id === 'music' || id === 'videos') return null;
           return (
             <SidebarNavItem
               key={id}
