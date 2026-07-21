@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -40,7 +40,7 @@ function DashboardLoadingState() {
 export default function ChaseBtcPage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
-  const { profile, isLoading: profileLoading, updateProfileEvent } = useBlobbonautProfile();
+  const { profile, isLoading: profileLoading, updateProfileEvent } = useNostrPetProfile();
   const { companions, isLoading: collectionLoading } = usePetssCollection();
 
   const { wallet: petsWallet, isCashu } = usePetsWallet();

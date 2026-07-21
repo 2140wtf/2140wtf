@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { createRivalCompanion } from '../lib/rival';
 import { DEFAULT_PRIZE_SATS } from '../lib/constants';
 import { RemoteBattleSetup } from './RemoteBattleSetup';
@@ -28,7 +28,7 @@ export interface BattleSetupProps {
 export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, className }: BattleSetupProps) {
   const { companions, isLoading } = usePetssCollection();
   const [mode, setMode] = useState<'local' | 'remote'>('local');
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
 
   const eligiblePets = useMemo(
     () => companions.filter((pet) => pet.stage === 'baby' || pet.stage === 'adult'),

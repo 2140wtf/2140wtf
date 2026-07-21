@@ -11,7 +11,7 @@
  * 
  * Profile creation is automatic - when the user enters Pets for the first time,
  * the profile is created using their kind 0 display_name/name, falling back to
- * "Blobbonaut" if no name is available. This eliminates the need for a manual
+ * "NOSTR Pet" if no name is available. This eliminates the need for a manual
  * name entry step.
  */
 
@@ -24,18 +24,18 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 import {
   KIND_PETS_STATE,
-  KIND_BLOBBONAUT_PROFILE,
-  INITIAL_BLOBBONAUT_SATS,
+  KIND_NOSTR_PET_PROFILE,
+  INITIAL_NOSTR_PET_SATS,
   PETS_PREVIEW_REROLL_SATS,
   PETS_ADOPTION_SATS,
-  buildBlobbonautTags,
-  updateBlobbonautTags,
-  type BlobbonautProfile,
+  buildNostrPetProfileTags,
+  updateNostrPetProfileTags,
+  type NostrPetProfile,
 } from '@/pets/core/lib/pets';
 
 import {
@@ -69,7 +69,7 @@ export interface OnboardingState {
   /** Temporary demo sats for preview phase (before profile exists) */
   previewSats: number;
   /** Name set during profile creation (for adoption step display) */
-  blobbonautName: string | undefined;
+  nostrPetName: string | undefined;
 }
 
 export interface OnboardingActions {
@@ -109,7 +109,7 @@ export interface UsePetsOnboardingResult {
  * - No profile → error case, should not happen
  */
 function deriveInitialStep(
-  profile: BlobbonautProfile | null, 
+  profile: NostrPetProfile | null, 
   adoptionOnly: boolean
 ): OnboardingStep {
   // Adoption-only mode: skip to preview if profile exists
@@ -129,7 +129,7 @@ function deriveInitialStep(
 
 interface UsePetsOnboardingOptions {
   /** Current profile (null if doesn't exist) */
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called to update profile event in cache after publishing */
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
   /** Called to update companion event in cache after publishing */
@@ -209,8 +209,8 @@ export function usePetsOnboarding({
     return null;
   });
   const [isFirstPreview, setIsFirstPreview] = useState(true);
-  const [previewSats] = useState(INITIAL_BLOBBONAUT_SATS);
-  const [blobbonautName, setBlobbonautName] = useState<string | undefined>(profile?.name);
+  const [previewSats] = useState(INITIAL_NOSTR_PET_SATS);
+  const [nostrPetName, setNostrPetName] = useState<string | undefined>(profile?.name);
   
   // ─── Sync step with profile changes ─────────────────────────────────────────
   // Ensure step is ALWAYS correct based on profile state.
@@ -239,7 +239,7 @@ export function usePetsOnboarding({
     if (step === 'creating-profile' && profile) {
       console.log('[usePetsOnboarding] Profile loaded, moving to adoption-question');
       setStep('adoption-question');
-      setBlobbonautName(profile.name);
+      setNostrPetName(profile.name);
       return;
     }
     
@@ -248,7 +248,7 @@ export function usePetsOnboarding({
     if (step === 'adoption-question' && !profile) {
       console.log('[usePetsOnboarding] Profile lost, moving back to creating-profile');
       setStep('creating-profile');
-      setBlobbonautName(undefined);
+      setNostrPetName(undefined);
       return;
     }
     
@@ -258,7 +258,7 @@ export function usePetsOnboarding({
       console.log('[usePetsOnboarding] No profile in preview step, moving back to creating-profile');
       setStep('creating-profile');
       setPreview(null);
-      setBlobbonautName(undefined);
+      setNostrPetName(undefined);
       return;
     }
   }, [profile, step, adoptionOnly]);
@@ -275,7 +275,7 @@ export function usePetsOnboarding({
   
   /**
    * Auto-create profile when step is 'creating-profile'.
-   * Uses the user's kind 0 name, falling back to "Blobbonaut" if not available.
+   * Uses the user's kind 0 name, falling back to "NOSTR Pet" if not available.
    */
   useEffect(() => {
     // Only run when step is 'creating-profile'
@@ -297,7 +297,7 @@ export function usePetsOnboarding({
     profileCreationAttempted.current = true;
     
     // Determine the name to use: kind 0 name or fallback
-    const name = suggestedName || 'Blobbonaut';
+    const name = suggestedName || 'NOSTR Pet';
     
     console.log('[usePetsOnboarding] Auto-creating profile with name:', name);
     
@@ -307,21 +307,21 @@ export function usePetsOnboarding({
       
       try {
         // Build tags with name and initial demo sats
-        const baseTags = buildBlobbonautTags(user.pubkey);
+        const baseTags = buildNostrPetProfileTags(user.pubkey);
         const tagsWithName = [
           ...baseTags,
           ['name', name],
-          ['sats', INITIAL_BLOBBONAUT_SATS.toString()],
+          ['sats', INITIAL_NOSTR_PET_SATS.toString()],
         ];
         
         const event = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
+          kind: KIND_NOSTR_PET_PROFILE,
           content: '',
           tags: tagsWithName,
         });
         
         updateProfileEvent(event);
-        setBlobbonautName(name);
+        setNostrPetName(name);
         invalidateProfile();
         
         toast({
@@ -405,7 +405,7 @@ export function usePetsOnboarding({
       } else {
         // Deduct demo sats through the serialized profile updater so concurrent
         // actions cannot overwrite each other.
-        const updateResult = await updateBlobbonautProfile(
+        const updateResult = await updateNostrPetProfile(
           nostr,
           publishEvent,
           user.pubkey,
@@ -420,7 +420,7 @@ export function usePetsOnboarding({
             }
             const newSats = freshProfile.sats - rerollCostSats;
             return {
-              tags: updateBlobbonautTags(freshProfile.event.tags, {
+              tags: updateNostrPetProfileTags(freshProfile.event.tags, {
                 sats: newSats.toString(),
               }),
               content: freshProfile.event.content,
@@ -523,7 +523,7 @@ export function usePetsOnboarding({
       // Eggs should never be auto-assigned as the floating companion.
       // NOTE: pets_onboarding_done is NOT set here — adoption alone does not
       // complete onboarding. It is set when the first-hatch tour finishes.
-      const profileUpdateResult = await updateBlobbonautProfile(
+      const profileUpdateResult = await updateNostrPetProfile(
         nostr,
         publishEvent,
         user.pubkey,
@@ -547,7 +547,7 @@ export function usePetsOnboarding({
           }
 
           return {
-            tags: updateBlobbonautTags(freshProfile.event.tags, updates),
+            tags: updateNostrPetProfileTags(freshProfile.event.tags, updates),
             content: freshProfile.event.content,
             meta: { newHas },
           };
@@ -595,7 +595,7 @@ export function usePetsOnboarding({
       preview,
       isFirstPreview,
       previewSats,
-      blobbonautName,
+      nostrPetName,
     },
     actions: {
       startAdoptionPreview,
