@@ -41,6 +41,7 @@ import {
   type PetsCompanion,
 } from '@/pets/core/lib/pets';
 import { usePetsStarterGrant } from '@/pets/core/hooks/usePetsStarterGrant';
+import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '@/pets/actions/lib/evolution-missions';
@@ -130,7 +131,8 @@ export function PetsHatchingCeremony({
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
-  const starterGrant = usePetsStarterGrant({ onProfileUpdate: updateProfileEvent });
+  const { isBao: isBaoWalletMode } = usePetsWallet();
+  const starterGrant = usePetsStarterGrant();
 
   // ── Core state ──
   const [phase, setPhase] = useState<CeremonyPhase>('loading');
@@ -325,12 +327,12 @@ export function PetsHatchingCeremony({
 
         updateCompanionEvent(eggEvent);
 
-        // 3. Award starter sats for the new egg (best-effort). In testnet mode
-        //    this claims from the BAO faucet; in real mode it credits fake
-        //    starter sats to the profile. Await it before writing the profile
-        //    `has[]` tag so the two profile updates are serialized and do not
-        //    overwrite each other.
-        if (!starterGrantAttemptedFor.has(eggPreview.d)) {
+        // 3. Award starter sats for the new egg (best-effort, demo mode only).
+        //    This claims BAO signet sats from the faucet into the BAO wallet.
+        //    Mainnet mode has no starter grant — real sats are never free.
+        //    Await it before writing the profile `has[]` tag so concurrent
+        //    profile updates stay serialized.
+        if (isBaoWalletMode && !starterGrantAttemptedFor.has(eggPreview.d)) {
           starterGrantAttemptedFor.add(eggPreview.d);
           try {
             await starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS);
