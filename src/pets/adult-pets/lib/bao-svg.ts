@@ -3,7 +3,7 @@
  *
  * Builds a living SVG adult for any variation in the BAO_RECIPE. The output
  * uses CSS custom properties for recoloring and exposes the same eye hooks
- * (data-pets-pupil) as 2140 Blobbi so it works with PetsAdultSvgRenderer.
+ * (data-pets-pupil) as Blobbi so it works with PetsAdultSvgRenderer.
  */
 
 import { uniquifySvgIds, ensureSvgFillsContainer } from '@/pets/ui/lib/svg';
