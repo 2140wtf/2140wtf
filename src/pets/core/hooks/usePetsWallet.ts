@@ -2,12 +2,12 @@
 //
 // Wallet selector for the NOSTR PETS economy.
 //
-// - "bitcoin" mode wires Pets to the user's main Cashu wallet (NIP-60/NWC). Shop
-//   purchases and top-ups move real Bitcoin sats.
-// - "testnet" mode keeps the legacy BAO signet/demo wallet for free faucet
-//   claims and BAO testnet play.
+// - "cashu" mode wires Pets to the user's main Cashu wallet (NIP-60). Shop
+//   purchases and top-ups move real Bitcoin sats as ecash.
+// - "bao" mode keeps the BAO signet/demo wallet for free faucet claims and
+//   BAO signet play. No real money is involved.
 //
-// The choice is persisted per-browser in localStorage and defaults to bitcoin mode.
+// The choice is persisted per-browser in localStorage and defaults to cashu mode.
 
 import { useCallback, useMemo, useState } from 'react';
 
@@ -24,20 +24,20 @@ import {
 } from '@/lib/cashu/cashuBackup';
 import type { NUser } from '@nostrify/react/login';
 
-export type PetsWalletMode = 'bitcoin' | 'testnet';
+export type PetsWalletMode = 'cashu' | 'bao';
 
 const STORAGE_KEY = 'pets:walletMode';
 
 function loadStoredMode(): PetsWalletMode {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === 'testnet') return 'testnet';
-    // Legacy 'real' or any unknown value defaults to bitcoin.
-    if (raw === 'real' || raw === 'bitcoin') return 'bitcoin';
+    if (raw === 'bao' || raw === 'testnet') return 'bao';
+    // Legacy 'real'/'bitcoin' or any unknown value defaults to cashu.
+    if (raw === 'real' || raw === 'bitcoin' || raw === 'cashu') return 'cashu';
   } catch {
     // localStorage may be unavailable in private mode / SSR.
   }
-  return 'bitcoin';
+  return 'cashu';
 }
 
 function saveStoredMode(mode: PetsWalletMode): void {
@@ -49,7 +49,7 @@ function saveStoredMode(mode: PetsWalletMode): void {
 }
 
 export interface UsePetsWalletResult {
-  /** Currently active wallet (Bitcoin sats Cashu or BAO demo). */
+  /** Currently active wallet (real Cashu sats or BAO signet demo). */
   wallet: (CashuWalletState & CashuWalletActions) | null;
   /** The main Cashu wallet, regardless of active mode. */
   realWallet: (CashuWalletState & CashuWalletActions) | null;
@@ -57,19 +57,19 @@ export interface UsePetsWalletResult {
   baoWallet: (CashuWalletState & CashuWalletActions) | null;
   /** Current mode. */
   mode: PetsWalletMode;
-  /** Switch between bitcoin and testnet mode. */
+  /** Switch between cashu (real sats) and bao (signet demo) mode. */
   setMode: (mode: PetsWalletMode) => void;
-  /** True when the active wallet is the main Cashu wallet. */
-  isBitcoin: boolean;
+  /** True when the active wallet is the main Cashu wallet (real sats). */
+  isCashu: boolean;
   /** True when the active wallet is the BAO signet/demo wallet. */
-  isTestnet: boolean;
+  isBao: boolean;
 }
 
 /**
  * Returns the wallets that power the Pets economy.
  *
- * Bitcoin mode uses the same NIP-60/NWC Cashu wallet as the Wallet tab, so users
- * can top it up from there. Testnet mode uses the isolated BAO signet wallet
+ * Cashu mode uses the same NIP-60 Cashu wallet as the Wallet tab, so users
+ * can top it up from there. BAO mode uses the isolated BAO signet wallet
  * and keeps the BAO faucet available.
  *
  * Both wallets are kept available so the Shop can show balances for each rail
@@ -129,17 +129,17 @@ export function usePetsWallet(): UsePetsWalletResult {
     nip60Sync,
   });
 
-  // BAO testnet wallet. Auto-claim is only enabled in testnet mode so that
-  // simply opening Pets in bitcoin mode does not pull BAO demo sats. The wallet
+  // BAO signet/demo wallet. Auto-claim is only enabled in bao mode so that
+  // simply opening Pets in cashu mode does not pull BAO demo sats. The wallet
   // itself stays enabled so the Shop can display the BAO balance at all times.
   const baoWallet = useBaoCashuWallet(
     seedPhrase ?? '',
     walletUser ?? fallbackUser,
     relayUrls,
-    { enableAutoClaim: mode === 'testnet', enabled: true },
+    { enableAutoClaim: mode === 'bao', enabled: true },
   );
 
-  const activeWallet = mode === 'testnet' ? baoWallet : realWallet;
+  const activeWallet = mode === 'bao' ? baoWallet : realWallet;
 
   // If the Cashu seed is not available, surface a null wallet so callers can
   // show a clear "wallet unavailable" state instead of a broken wallet object.
@@ -154,8 +154,8 @@ export function usePetsWallet(): UsePetsWalletResult {
       baoWallet: safeBaoWallet,
       mode,
       setMode,
-      isBitcoin: mode === 'bitcoin',
-      isTestnet: mode === 'testnet',
+      isCashu: mode === 'cashu',
+      isBao: mode === 'bao',
     }),
     [safeActiveWallet, safeRealWallet, safeBaoWallet, mode, setMode],
   );

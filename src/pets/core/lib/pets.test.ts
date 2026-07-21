@@ -1,36 +1,22 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { parseWalletModeTag, setPetsRealSatsEnabled } from './pets';
+import { parseWalletModeTag } from './pets';
 
 describe('parseWalletModeTag', () => {
-  beforeEach(() => {
-    // Default state for safe testing: real-sats mode is disabled.
-    setPetsRealSatsEnabled(false);
+  it('returns "bao" (demo) by default so missing/unknown tags never touch real money', () => {
+    expect(parseWalletModeTag([])).toBe('bao');
+    expect(parseWalletModeTag([['wallet_mode', '']])).toBe('bao');
+    expect(parseWalletModeTag([['wallet_mode', 'unknown']])).toBe('bao');
   });
 
-  afterEach(() => {
-    setPetsRealSatsEnabled(false);
+  it('maps "bao" and legacy "demo-sats" to the BAO signet/demo wallet', () => {
+    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('bao');
+    expect(parseWalletModeTag([['wallet_mode', 'demo-sats']])).toBe('bao');
   });
 
-  it('returns "demo-sats" by default', () => {
-    expect(parseWalletModeTag([])).toBe('demo-sats');
-    expect(parseWalletModeTag([['wallet_mode', '']])).toBe('demo-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'unknown']])).toBe('demo-sats');
-  });
-
-  it('treats legacy "real" as demo-sats while real-sats is disabled', () => {
-    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('demo-sats');
-  });
-
-  it('always maps BAO signet/demo and btc-sats to btc-sats', () => {
-    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('btc-sats');
-  });
-
-  it('maps legacy "real" to "btc-sats" only when real-sats is enabled', () => {
-    setPetsRealSatsEnabled(true);
-    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('btc-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'bao']])).toBe('btc-sats');
-    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('btc-sats');
+  it('maps "cashu" and legacy real-money tags to the real Cashu wallet', () => {
+    expect(parseWalletModeTag([['wallet_mode', 'cashu']])).toBe('cashu');
+    expect(parseWalletModeTag([['wallet_mode', 'btc-sats']])).toBe('cashu');
+    expect(parseWalletModeTag([['wallet_mode', 'real']])).toBe('cashu');
   });
 });
