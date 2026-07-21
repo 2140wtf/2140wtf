@@ -7,9 +7,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 import type { Pets } from '@/pets/core/types/pets';
 import { sanitizePetsSvg } from '@/lib/sanitizePetsSvg';
+import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
 import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 import { useCustomForms } from './useCustomForms';
 
@@ -18,11 +21,24 @@ interface UseCustomFormSvgResult {
   svg: string | undefined;
   /** True while the SVG is being fetched. */
   isLoading: boolean;
-  /** True if the fetch failed. */
+  /** True if the fetch or hash verification failed. */
   error: boolean;
 }
 
 const SVG_CACHE = new Map<string, string>();
+
+/**
+ * Verify downloaded bytes against the expected SHA-256 declared in the asset entry.
+ * Throws a descriptive error if the hash does not match.
+ */
+function verifyAssetHash(bytes: Uint8Array, expectedHash: string): void {
+  const actualHash = bytesToHex(sha256(bytes)).toLowerCase();
+  if (actualHash !== expectedHash.toLowerCase()) {
+    throw new Error(
+      `SVG hash mismatch: expected ${expectedHash} but got ${actualHash}. The asset has been rejected.`,
+    );
+  }
+}
 
 /**
  * Fetch the custom species SVG for a pet if it belongs to the custom category.
@@ -45,19 +61,19 @@ export function useCustomFormSvg(
   }, [forms, pets.breedCategory, pets.breedAsset]);
 
   const isSleeping = pets.state === 'sleeping' || pets.isSleeping === true;
-  const url = useMemo(() => {
+  const entry = useMemo<Asset3DEntry | undefined>(() => {
     if (!form) return undefined;
-    const entry = isSleeping ? (form.svgSleeping ?? form.svgBase) : form.svgBase;
-    return entry.url;
+    return isSleeping ? (form.svgSleeping ?? form.svgBase) : form.svgBase;
   }, [form, isSleeping]);
 
+  const url = entry?.url;
   const cached = url ? SVG_CACHE.get(url) : undefined;
   const [svg, setSvg] = useState<string | undefined>(cached);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!url) {
+    if (!entry || !url) {
       setSvg(undefined);
       setIsLoading(false);
       setError(false);
@@ -80,7 +96,9 @@ export function useCustomFormSvg(
     fetch(url, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        verifyAssetHash(bytes, entry.sha256);
+        const text = new TextDecoder().decode(bytes);
         const sanitized = sanitizePetsSvg(text);
         SVG_CACHE.set(url, sanitized);
         return sanitized;
@@ -96,7 +114,13 @@ export function useCustomFormSvg(
       });
 
     return () => controller.abort();
-  }, [url]);
+  }, [entry, url]);
 
   return { svg, isLoading, error };
 }
+
+/**
+ * Re-export the verifier so callers that fetch custom-form assets outside React
+ * (e.g. persistence or preview paths) can reuse the same SHA-256 check.
+ */
+export { verifyAssetHash };
