@@ -34,7 +34,7 @@ import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
 import { useCuratedAppFeed } from '@/hooks/useCuratedAppFeed';
 import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
-import { diversifyFeedPages } from '@/lib/feedDiversity';
+
 import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
 import { FEED_TOPICS, getFeedTopic, getTopicTagFilter } from '@/lib/feedTopics';
 import { isEventMuted } from '@/lib/muteHelpers';
@@ -329,10 +329,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     const seen = new Set<string>();
 
     if (useAppQuery) {
-      // Deduplicate and filter each page independently, then diversify
-      // page-by-page so earlier pages never change when new pages arrive.
-      const dedupedPages = (rawData.pages as unknown as import('@nostrify/nostrify').NostrEvent[][])
-        .map((page) =>
+      // The curated 2140.wtf feed is a single-author feed; content-type
+      // diversity reordering would discard most posts because they share the
+      // same type. Just deduplicate and keep the original newest-first order.
+      return (rawData.pages as unknown as import('@nostrify/nostrify').NostrEvent[][])
+        .flatMap((page) =>
           page
             .filter((event) => {
               if (seen.has(event.id)) return false;
@@ -343,11 +344,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
             })
             .map((event): FeedItem => ({ event, sortTimestamp: event.created_at })),
         );
-
-      // Reorder for content-type diversity: cap any single type at 20%
-      // per page and enforce a minimum gap of 4 positions between same-type
-      // items, with gap state carrying across page boundaries.
-      return diversifyFeedPages(dedupedPages);
     }
 
     return (rawData.pages as unknown as { items: FeedItem[] }[])
@@ -370,6 +366,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     derivedItems,
     `${user?.pubkey ?? ''}:${useAppQuery ? 'app' : activeTab}`,
   );
+
+
 
   // Apply optional client-side keyword search and poll-type filter.
   const visibleItems = useMemo(() => {
