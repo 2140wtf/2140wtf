@@ -1,11 +1,10 @@
 # Contributing to 2140.wtf
 
-We welcome contributions, but we have high standards. 2140.wtf is a carefully designed product with a specific vision, and every merge request must meet that bar. This guide exists to help you succeed.
+We welcome contributions, but we have high standards. 2140.wtf is a carefully designed product with a specific vision, and every pull request must meet that bar. This guide exists to help you succeed.
 
 **Required reading before you start:**
 
-- [2140.wtf Philosophy](https://about.ditto.pub/philosophy) -- the product vision. Your change must align with it.
-- [Contributing Guide](https://about.ditto.pub/contributing) -- the upstream contribution process.
+- **2140.wtf Philosophy** (summarized below under "Understanding 2140.wtf") -- the product vision. Your change must align with it.
 - `AGENTS.md` in this repo -- the codebase conventions. Your AI tool should load this file.
 
 ## Understanding 2140.wtf
@@ -36,27 +35,27 @@ If a change does all three, it belongs. If it only does one, think harder. If it
 - A place where profiles feel like worlds, not business cards
 - The most fun you've had on the internet in years
 
-Read the [full philosophy](https://about.ditto.pub/philosophy) for the complete vision.
+The philosophy summary above is the complete vision.
 
 ## What we accept
 
 ### Bug fixes
 
-One bug, one merge request. Fix exactly one thing. Don't bundle unrelated changes, don't sneak in refactors, don't "clean up while you're in there." Small, focused MRs get reviewed fast. Large ones sit.
+One bug, one pull request. Fix exactly one thing. Don't bundle unrelated changes, don't sneak in refactors, don't "clean up while you're in there." Small, focused PRs get reviewed fast. Large ones sit.
 
 When the bug was introduced by an identifiable prior commit, add a `Regression-of: <short-sha>` trailer to the bottom of your commit message. See AGENTS.md "Attributing Regressions" for the convention.
 
 ### New features and significant changes
 
-Every feature MR must link to an existing open issue and clearly align with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy). The philosophy alignment section in the MR template is where you make the case for why your change belongs in 2140.wtf. If you can't articulate that clearly, the change probably doesn't belong.
+Every feature PR must link to an existing open issue and clearly align with the **2140.wtf Philosophy**. The philosophy alignment section in the PR template is where you make the case for why your change belongs in 2140.wtf. If you can't articulate that clearly, the change probably doesn't belong.
 
 If you have an idea for a feature that doesn't have an issue yet:
 
-1. Build it as a standalone Nostr app first (see [Contributing Guide](https://about.ditto.pub/contributing)).
+1. Build it as a standalone Nostr app first .
 2. Prove it works and get user feedback.
 3. Open an issue to discuss integration.
 
-**Feature MRs that don't link to an issue or don't align with the 2140.wtf Philosophy will be closed.** Our open issues are our internal roadmap -- some require deep product context. If your implementation doesn't match the product vision, it will be closed regardless of code quality.
+**Feature PRs that don't link to an issue or don't align with the 2140.wtf Philosophy will be closed.** Our open issues are our internal roadmap -- some require deep product context. If your implementation doesn't match the product vision, it will be closed regardless of code quality.
 
 ## Required tools
 
@@ -66,7 +65,7 @@ If you have an idea for a feature that doesn't have an issue yet:
 
 ## The contribution workflow
 
-Follow these steps in order. Skipping steps is the most common reason MRs are rejected.
+Follow these steps in order. Skipping steps is the most common reason PRs are rejected.
 
 ### 1. Ask: does anyone need this?
 
@@ -82,7 +81,7 @@ Read `AGENTS.md` in the repo root. This is the single source of truth for how co
 
 ### 4. Read the philosophy
 
-Read the [2140.wtf Philosophy](https://about.ditto.pub/philosophy). 2140.wtf is a carnival, not a platform. Your change should feel like it belongs in 2140.wtf -- not like it was transplanted from a generic social media template. Apply the product decision filter above.
+Read the **2140.wtf Philosophy**. 2140.wtf is a carnival, not a platform. Your change should feel like it belongs in 2140.wtf -- not like it was transplanted from a generic social media template. Apply the product decision filter above.
 
 ### 5. Plan before you code
 
@@ -104,7 +103,7 @@ Switch to code mode and implement your plan. Use Opus 4.6 or equivalent.
 npm run test
 ```
 
-This runs type-checking, linting, unit tests, and a production build. All must pass. Do not submit an MR with a failing test suite.
+This runs type-checking, linting, unit tests, and a production build. All must pass. Do not submit an PR with a failing test suite.
 
 ### 8. Self-review
 
@@ -153,22 +152,22 @@ npm run build
 npx surge dist your-branch-name.surge.sh
 ```
 
-Or use Netlify, Vercel, or any static hosting. Include the live preview URL in your MR description.
+Or use Netlify, Vercel, or any static hosting. Include the live preview URL in your PR description.
 
 ### 10. Take screenshots
 
-Capture before and after screenshots of any UI changes. Include them directly in the MR description. If your change has no visual component, state that explicitly.
+Capture before and after screenshots of any UI changes. Include them directly in the PR description. If your change has no visual component, state that explicitly.
 
 ### 11. Submit
 
-Fill out every field in the MR template. Incomplete MRs will not be reviewed.
+Fill out every field in the PR template. Incomplete PRs will not be reviewed.
 
-## What gets your MR closed without review
+## What gets your PR closed without review
 
 - No linked issue
-- Feature MRs with no clear alignment with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy)
+- Feature PRs with no clear alignment with the **2140.wtf Philosophy**
 - Features that fail the product decision filter (not magnetic, not threatening to the status quo, not peaceful)
-- Incomplete MR template (missing checklist, screenshots, or preview URL)
+- Incomplete PR template (missing checklist, screenshots, or preview URL)
 - Changes that go beyond what was asked for (scope creep)
 - Placeholder code, dead code, or debug artifacts
 - Evidence of low-quality AI generation ("In a real application..." comments, hallucinated APIs, generic template code)
@@ -178,10 +177,10 @@ Fill out every field in the MR template. Incomplete MRs will not be reviewed.
 - Large binary assets committed to git (images >100KB, fonts, videos)
 - Security issues (dangerouslySetInnerHTML, eval, innerHTML, unsanitized user input)
 
-## MR review process
+## PR review process
 
-1. The CI pipeline validates your MR description automatically. If it fails, read the error message and fix your MR description.
-2. Maintainers will review your MR when all CI checks pass and the template is complete.
-3. If changes are requested, address them promptly. Stale MRs will be closed.
+1. GitHub Actions runs the full test suite on your PR. If it fails, read the logs and fix the failure.
+2. Maintainers will review your PR when all CI checks pass and the template is complete.
+3. If changes are requested, address them promptly. Stale PRs will be closed.
 
-We appreciate your interest in contributing. These standards exist because reviewing a low-quality MR takes 3x longer than doing the work ourselves. Help us help you by following the process.
+We appreciate your interest in contributing. These standards exist because reviewing a low-quality PR takes 3x longer than doing the work ourselves. Help us help you by following the process.

@@ -74,6 +74,9 @@ EXPERIMENTAL_BRANCHES.md
 # Local scratch / upstream mirrors
 .tmp/
 
+# Output of scripts/migrate-2140-content.mjs (regenerated locally)
+migrated-events.json
+
 # Escrow operator service
 services/escrow-operator/node_modules/
 services/escrow-operator/dist/
