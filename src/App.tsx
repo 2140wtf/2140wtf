@@ -18,6 +18,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNsecPasteGuard } from "@/hooks/useNsecPasteGuard";
 import type { AppConfig } from "@/contexts/AppContext";
 import { NWCProvider } from "@/contexts/NWCContext";
+import { CashuWalletProvider } from "@/contexts/CashuWalletContext";
 import { DmInboxProvider } from "@/contexts/DmInboxContext";
 import { GroupChatProvider } from "@/contexts/GroupChatContext";
 import { AppConfigSchema, type AppConfig as AppBuildConfig } from "@/lib/schemas";
@@ -246,11 +247,13 @@ export function App() {
                       <EmotionDevProvider>
                         <TooltipProvider>
                           <DmInboxProvider>
-                            <RemoteBattleProvider>
-                              <GroupChatProvider>
-                                <AppRouter />
-                              </GroupChatProvider>
-                            </RemoteBattleProvider>
+                            <CashuWalletProvider>
+                              <RemoteBattleProvider>
+                                <GroupChatProvider>
+                                  <AppRouter />
+                                </GroupChatProvider>
+                              </RemoteBattleProvider>
+                            </CashuWalletProvider>
                           </DmInboxProvider>
                         </TooltipProvider>
                       </EmotionDevProvider>
