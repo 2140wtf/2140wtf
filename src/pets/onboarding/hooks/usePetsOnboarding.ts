@@ -19,12 +19,12 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
-import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 import {
@@ -165,8 +165,22 @@ export function usePetsOnboarding({
 }: UsePetsOnboardingOptions): UsePetsOnboardingResult {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+  const { config } = useAppContext();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
-  const { paySats } = useExternalSatsPayment(externalWallet);
+
+  // Real-sats payments (reroll/adoption) go to the 2140 treasury as nutzaps.
+  const payTreasury = useCallback(
+    async (amount: number, memo: string) => {
+      const treasuryNpub = config.petsTreasuryNpub;
+      if (!treasuryNpub) throw new Error('Pets treasury is not configured.');
+      if (!externalWallet?.mintUrl) {
+        throw new Error('Select a mint in your Cashu wallet before paying with sats.');
+      }
+      const sent = await externalWallet.sendNutzap(amount, treasuryNpub, externalWallet.mintUrl, { memo });
+      if (!sent) throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+    },
+    [config.petsTreasuryNpub, externalWallet],
+  );
   
   // Get kind 0 metadata for name suggestion
   const { data: authorData } = useAuthor(user?.pubkey);
@@ -359,16 +373,16 @@ export function usePetsOnboarding({
   }, [preview]);
   
   /**
-   * Generate a new preview (reroll) - costs demo sats in demo-sats mode, BTC sats in btc-sats mode
+   * Generate a new preview (reroll) - costs demo sats in BAO signet mode, real sats in Cashu mode
    */
   const rerollPreview = useCallback(async () => {
     if (!user?.pubkey || !profile) return;
 
-    const isBtcSatsMode = profile.walletMode === 'btc-sats';
+    const isCashuMode = profile.walletMode === 'cashu';
     const rerollCostSats = PETS_PREVIEW_REROLL_SATS;
 
     // Check if can afford
-    if (!isBtcSatsMode && sats < rerollCostSats) {
+    if (!isCashuMode && sats < rerollCostSats) {
       toast({
         title: 'Not enough demo sats',
         description: `You need ${rerollCostSats.toLocaleString()} demo sats to try another.`,
@@ -381,12 +395,12 @@ export function usePetsOnboarding({
     setActionInProgress('reroll');
 
     try {
-      if (isBtcSatsMode) {
-        // Pay with real BTC sats; no profile sats update needed for a reroll.
+      if (isCashuMode) {
+        // Pay with real sats; no profile sats update needed for a reroll.
         // Skip the wallet call when the reroll cost is zero to avoid the
         // external payment hook rejecting non-positive amounts.
         if (rerollCostSats > 0) {
-          await paySats(rerollCostSats, 'Pets reroll');
+          await payTreasury(rerollCostSats, 'Pets reroll');
         }
       } else {
         // Deduct demo sats through the serialized profile updater so concurrent
@@ -460,19 +474,19 @@ export function usePetsOnboarding({
       setActionInProgress(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- preview identity (d/seed/petId) only used for debug logs
-  }, [user?.pubkey, nostr, profile, sats, preview?.name, publishEvent, updateProfileEvent, invalidateProfile, paySats]);
+  }, [user?.pubkey, nostr, profile, sats, preview?.name, publishEvent, updateProfileEvent, invalidateProfile, payTreasury]);
   
   /**
-   * Adopt the current preview - costs demo sats in demo-sats mode, BTC sats in btc-sats mode
+   * Adopt the current preview - costs demo sats in BAO signet mode, real sats in Cashu mode
    */
   const adoptPreview = useCallback(async () => {
     if (!user?.pubkey || !profile || !preview) return;
 
-    const isBtcSatsMode = profile.walletMode === 'btc-sats';
+    const isCashuMode = profile.walletMode === 'cashu';
     const adoptionCostSats = PETS_ADOPTION_SATS;
 
     // Check if can afford
-    if (!isBtcSatsMode && sats < adoptionCostSats) {
+    if (!isCashuMode && sats < adoptionCostSats) {
       toast({
         title: 'Not enough demo sats',
         description: `You need ${adoptionCostSats.toLocaleString()} demo sats to adopt.`,
@@ -485,9 +499,9 @@ export function usePetsOnboarding({
     setActionInProgress('adopt');
 
     try {
-      if (isBtcSatsMode && adoptionCostSats > 0) {
-        // Pay adoption cost with real BTC sats before creating the pet.
-        await paySats(adoptionCostSats, 'Pets adoption');
+      if (isCashuMode && adoptionCostSats > 0) {
+        // Pay adoption cost with real sats before creating the pet.
+        await payTreasury(adoptionCostSats, 'Pets adoption');
       }
 
       // 1. Publish the Pets egg event using exact preview data
@@ -523,7 +537,7 @@ export function usePetsOnboarding({
             has: newHas,
           };
 
-          if (!isBtcSatsMode) {
+          if (!isCashuMode) {
             if (freshProfile.sats < adoptionCostSats) {
               throw new Error(
                 `Not enough demo sats. You need ${adoptionCostSats.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
@@ -569,7 +583,7 @@ export function usePetsOnboarding({
       setIsProcessing(false);
       setActionInProgress(null);
     }
-  }, [user?.pubkey, nostr, profile, preview, sats, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete, paySats]);
+  }, [user?.pubkey, nostr, profile, preview, sats, publishEvent, updateCompanionEvent, updateProfileEvent, setStoredSelectedD, invalidateProfile, invalidateCompanion, onComplete, payTreasury]);
   
   // ─── Return ─────────────────────────────────────────────────────────────────
   

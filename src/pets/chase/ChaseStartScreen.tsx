@@ -74,7 +74,7 @@ export function ChaseStartScreen({ coins, sats, onStart, allowSatsMode = true }:
                 <span className="text-xs text-muted-foreground font-normal">
                   {allowSatsMode
                     ? `Free to play · ${CHASE_SATS_PER_COIN} sats per coin collected`
-                    : 'Switch to BAO testnet mode to play for demo sats.'}
+                    : 'Switch to BAO signet mode to play for demo sats.'}
                 </span>
               </span>
               <Zap className="size-5" />
