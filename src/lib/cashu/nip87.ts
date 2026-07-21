@@ -156,6 +156,58 @@ export function parseMintRecommendation(event: NostrEvent): CashuMintRecommendat
   };
 }
 
+export interface MintRecommendationInput {
+  /** Mint identifier (d-tag of the referenced kind 38172 event). */
+  mintId: string;
+  /** Normalized mint URL. */
+  mintUrl: string;
+  /** Optional NIP-33 address coordinate of the kind 38172 announcement. */
+  announcementCoordinate?: string;
+  /** Optional 1–5 star rating. */
+  rating?: number;
+  /** Review text. */
+  content?: string;
+}
+
+/**
+ * Build the event template for a kind 38000 Cashu mint recommendation/review.
+ *
+ * Does not sign or publish — use with `useNostrPublish`.
+ */
+export function buildMintRecommendationEvent(input: MintRecommendationInput): {
+  kind: typeof CASHU_MINT_RECOMMENDATION_KIND;
+  content: string;
+  tags: string[][];
+} {
+  const { mintId, mintUrl, announcementCoordinate, rating, content = '' } = input;
+
+  if (!mintId.trim()) throw new Error('Mint identifier is required');
+  if (!mintUrl.trim()) throw new Error('Mint URL is required');
+  if (rating !== undefined && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+    throw new Error('Rating must be an integer between 1 and 5');
+  }
+
+  const tags: string[][] = [
+    ['d', mintId.trim()],
+    ['k', String(CASHU_MINT_ANNOUNCEMENT_KIND)],
+    ['u', mintUrl.trim()],
+  ];
+
+  if (announcementCoordinate) {
+    tags.push(['a', announcementCoordinate.trim()]);
+  }
+
+  if (rating !== undefined) {
+    tags.push(['rating', String(rating)]);
+  }
+
+  return {
+    kind: CASHU_MINT_RECOMMENDATION_KIND,
+    content: content.trim(),
+    tags,
+  };
+}
+
 /**
  * Group recommendations by normalized mint URL.
  *
