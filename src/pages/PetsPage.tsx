@@ -113,6 +113,7 @@ import {
   type StartIncubationMode,
 } from '@/pets/actions';
 import { PetsOnboardingFlow } from '@/pets/onboarding';
+import { BreedCategoryPreviews } from '@/pets/onboarding/components/BreedCategoryPreviews';
 import { usePetsActionsRegistration, type UseItemFunction } from '@/pets/companion/interaction';
 import { getAdultBaseSvg } from '@/pets/adult-pets';
 import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
@@ -286,6 +287,7 @@ function BreedCategoryPicker({
                   <p className="font-medium text-sm">{cat.label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{cat.description}</p>
                 </div>
+                <BreedCategoryPreviews category={cat.id} size="sm" limit={6} className="mt-2" />
               </button>
             );
           })}
@@ -325,6 +327,7 @@ function BreedCategoryPicker({
                 <p className="font-semibold">{cat.label}</p>
                 <p className="text-xs text-muted-foreground mt-1">{cat.description}</p>
               </div>
+              <BreedCategoryPreviews category={cat.id} size="md" className="mt-3" />
             </button>
           );
         })}
