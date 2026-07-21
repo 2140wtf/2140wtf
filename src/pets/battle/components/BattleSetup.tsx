@@ -61,8 +61,11 @@ export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, classNa
     return eligiblePets.find((pet) => pet.d === pet2Id) ?? createRivalCompanion(ownerPubkey, 1);
   }, [eligiblePets, ownerPubkey, pet2Id]);
 
-  const walletMode = profile?.walletMode ?? 'demo-sats';
-  const effectiveMode: BattleMode = allowBtcSats ? walletMode : 'demo-sats';
+  const walletMode = profile?.walletMode ?? 'bao';
+  // BAO signet/demo battles pay faucet-funded 'btc-sats' prizes; real Cashu
+  // mode only offers free 'demo-sats' prizes locally (real stakes live in
+  // remote escrow battles).
+  const effectiveMode: BattleMode = allowBtcSats && walletMode === 'bao' ? 'btc-sats' : 'demo-sats';
 
   const handleStart = () => {
     if (!pet1 || !pet2) return;
@@ -152,7 +155,7 @@ export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, classNa
                 ? 'Real BAO signet/demo sats paid from your BAO wallet.'
                 : allowBtcSats
                   ? 'One prize per day in demo mode.'
-                  : 'Real-sats battles are disabled in real-money mode. Switch to BAO testnet to play for BAO sats.'}
+                  : 'Real-sats battles are only available in remote matches. Switch to BAO signet mode to play for BAO sats.'}
             </p>
           </div>
         </div>

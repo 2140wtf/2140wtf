@@ -423,9 +423,9 @@ export interface BlobbonautProfile {
   sats: number;
   /** Current room the player is in (persisted for cross-session continuity) */
   room: string | undefined;
-  /** Wallet mode for NOSTR Pets: 'demo-sats' uses in-game demo sats, 'btc-sats' uses real BTC sats via Cashu/NIP-60. */
-  walletMode: 'demo-sats' | 'btc-sats';
-  /** Selected Cashu mint URL when wallet_mode is 'btc-sats'. */
+  /** Wallet mode for NOSTR Pets: 'bao' uses the BAO signet/demo wallet, 'cashu' uses real sats via the Cashu/NIP-60 wallet. */
+  walletMode: 'bao' | 'cashu';
+  /** Selected Cashu mint URL when wallet_mode is 'cashu'. */
   cashuMintUrl: string | undefined;
   /** Purchased items storage */
   storage: StorageItem[];
@@ -1482,33 +1482,17 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
  * Build tags for a new Blobbonaut Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
-/**
- * Feature flag for real-sats wallet mode.
- *
- * While this is `false`, every profile is treated as `demo-sats` so the Pets
- * economy can be tested safely without touching real BTC. Flip to `true` once
- * Cashu/NIP-60 real-sats settlement is ready for production.
- */
-let petsRealSatsEnabled = false;
 
-/** Returns whether real-sats (`btc-sats`) wallet mode is enabled. */
-export function isPetsRealSatsEnabled(): boolean {
-  return petsRealSatsEnabled;
-}
-
-/** Enable or disable real-sats (`btc-sats`) wallet mode. Exposed for tests. */
-export function setPetsRealSatsEnabled(enabled: boolean): void {
-  petsRealSatsEnabled = enabled;
-}
-
-export function parseWalletModeTag(tags: string[][]): 'demo-sats' | 'btc-sats' {
+export function parseWalletModeTag(tags: string[][]): 'bao' | 'cashu' {
   const value = getTagValue(tags, 'wallet_mode');
-  // BAO signet/demo sats are always settled through the external BAO Cashu
-  // wallet. The legacy 'real' flag stays gated until real BTC is enabled.
-  if (value === 'btc-sats' || value === 'bao' || (petsRealSatsEnabled && value === 'real')) {
-    return 'btc-sats';
+  // 'cashu' selects the real-sats Cashu/NIP-60 wallet. Legacy 'btc-sats' and
+  // gated 'real' values also map to the real wallet.
+  if (value === 'cashu' || value === 'btc-sats' || value === 'real') {
+    return 'cashu';
   }
-  return 'demo-sats';
+  // 'bao', legacy 'demo-sats', and missing tags all select the BAO signet/demo
+  // wallet, so demo play never touches real money.
+  return 'bao';
 }
 
 export function buildBlobbonautTags(pubkey: string): string[][] {

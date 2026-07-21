@@ -299,6 +299,8 @@ export interface AppConfig {
   petsBattleEscrowPubkey?: string;
   /** Optional URL to request release of battle escrow funds to the winner. */
   petsBattleEscrowServiceUrl?: string;
+  /** npub that receives real-sats Pets shop payments (nutzaps) in Cashu mode. */
+  petsTreasuryNpub?: string;
   /**
    * Ordered list of base URLs for Esplora-compatible Bitcoin REST APIs.
    * Used by the wallet, on-chain zap flows, and NIP-73 Bitcoin tx/address

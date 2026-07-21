@@ -47,7 +47,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   const { data: follows, isLoading: followsLoading } = useFollows();
   const remote = useRemoteBattle();
   const { config } = useAppContext();
-  const { wallet: petsWallet, isBitcoin } = usePetsWallet();
+  const { wallet: petsWallet, isCashu } = usePetsWallet();
   const { seedPhrase, available: seedAvailable } = useCashuSeed();
 
   const escrowKeypair = useMemo(() => {
@@ -60,7 +60,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   }, [seedPhrase]);
 
   const escrowConfigured = !!config.petsBattleEscrowPubkey && !!config.petsBattleEscrowServiceUrl;
-  const canUseRealSats = isBitcoin && seedAvailable && escrowConfigured;
+  const canUseRealSats = isCashu && seedAvailable && escrowConfigured;
   const battleMode: BattleMode = canUseRealSats ? 'real-sats' : 'demo-sats';
   const operatorPubkey = config.petsBattleEscrowPubkey;
 

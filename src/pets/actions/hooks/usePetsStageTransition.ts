@@ -85,7 +85,7 @@ export interface UsePetsStageTransitionParams {
   /** Update companion event in local cache */
   updateCompanionEvent: (event: NostrEvent) => void;
   /** When true, BTC-stage transitions are enabled. Defaults to true for backwards compatibility. */
-  isBitcoinPetsWallet?: boolean;
+  isCashuPetsWallet?: boolean;
 }
 
 /**
@@ -126,7 +126,7 @@ export function usePetsHatch({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  isBitcoinPetsWallet: _isBitcoinPetsWallet = true,
+  isCashuPetsWallet: _isCashuPetsWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -288,7 +288,7 @@ export function usePetsEvolve({
   profile,
   ensureCanonicalBeforeAction,
   updateCompanionEvent,
-  isBitcoinPetsWallet = true,
+  isCashuPetsWallet = true,
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
@@ -308,8 +308,8 @@ export function usePetsEvolve({
         throw new Error('Profile not found');
       }
 
-      if (!isBitcoinPetsWallet) {
-        throw new Error('Testnet pets cannot reach the adult stage. Switch to real Bitcoin sats to evolve your NOSTR PET.');
+      if (!isCashuPetsWallet) {
+        throw new Error('BAO signet pets cannot reach the adult stage. Switch to real Cashu sats mode to evolve your NOSTR PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
