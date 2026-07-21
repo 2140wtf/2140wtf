@@ -34,6 +34,8 @@ export interface UseAudioPlaybackOptions {
   onError?: (error: PlaybackError) => void;
   /** Initial volume level (0-1), defaults to 0.8 */
   initialVolume?: number;
+  /** Optional MIME type hint (e.g. "audio/mpeg") to pre-check browser support. */
+  mimeType?: string;
 }
 
 /**
@@ -73,7 +75,7 @@ export interface UseAudioPlaybackReturn {
  * Handles Audio element lifecycle, error handling, and state management.
  */
 export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudioPlaybackReturn {
-  const { onEnded, onError, initialVolume = DEFAULT_VOLUME } = options;
+  const { onEnded, onError, initialVolume = DEFAULT_VOLUME, mimeType } = options;
   
   const [state, setState] = useState<PlaybackState>('idle');
   const [error, setError] = useState<PlaybackError | null>(null);
@@ -116,7 +118,7 @@ export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudi
       }
       return;
     }
-    
+
     // Cleanup previous audio
     if (audioRef.current) {
       audioRef.current.pause();
@@ -125,12 +127,26 @@ export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudi
       audioRef.current.oncanplay = null;
       audioRef.current.onplaying = null;
     }
-    
+
     setState('loading');
     setError(null);
     setCurrentUrl(url);
     currentUrlRef.current = url;
-    
+
+    // Pre-check supported formats so we surface a helpful error instead of
+    // relying on the generic MEDIA_ERR_SRC_NOT_SUPPORTED message.
+    const guessedMime = guessAudioMimeType(url, mimeType);
+    if (guessedMime && !isAudioMimeTypeSupported(guessedMime)) {
+      const playbackError: PlaybackError = {
+        message: `This track's audio format (${guessedMime}) is not supported by your browser.`,
+        code: 'FORMAT_UNSUPPORTED',
+      };
+      setError(playbackError);
+      setState('error');
+      onError?.(playbackError);
+      return;
+    }
+
     const audio = new Audio(url);
     audio.volume = volumeRef.current; // Apply current volume to new audio
     audioRef.current = audio;
@@ -168,8 +184,8 @@ export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudi
     
     audio.onerror = () => {
       const playbackError: PlaybackError = {
-        message: 'Failed to load audio. The format may not be supported.',
-        code: 'MEDIA_ERR',
+        message: getMediaErrorMessage(audio),
+        code: audio.error?.code ? `MEDIA_ERR_${audio.error.code}` : 'MEDIA_ERR',
       };
       setError(playbackError);
       setState('error');
@@ -178,7 +194,7 @@ export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudi
     
     // Start loading
     audio.load();
-  }, [onEnded, onError, state]);
+  }, [onEnded, onError, state, mimeType]);
   
   // Play current audio
   const play = useCallback(async () => {
@@ -268,6 +284,64 @@ export function useAudioPlayback(options: UseAudioPlaybackOptions = {}): UseAudi
     setVolume,
     cleanup,
   };
+}
+
+// ─── Format support helpers ───────────────────────────────────────────────────
+
+const AUDIO_EXTENSION_TO_MIME: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  weba: 'audio/webm',
+  webm: 'audio/webm',
+};
+
+/** Guess an audio MIME type from an explicit hint or the file extension. */
+function guessAudioMimeType(url: string, formatHint?: string): string | undefined {
+  if (formatHint) {
+    const lower = formatHint.toLowerCase();
+    if (lower.startsWith('audio/')) return lower;
+    if (AUDIO_EXTENSION_TO_MIME[lower]) return AUDIO_EXTENSION_TO_MIME[lower];
+  }
+  try {
+    const pathname = new URL(url).pathname;
+    const ext = pathname.split('.').pop()?.toLowerCase();
+    if (ext && AUDIO_EXTENSION_TO_MIME[ext]) return AUDIO_EXTENSION_TO_MIME[ext];
+  } catch {
+    // ignore malformed URLs
+  }
+  return undefined;
+}
+
+/** Check whether the current browser reports it can play a MIME type. */
+function isAudioMimeTypeSupported(mimeType: string): boolean {
+  if (typeof document === 'undefined') return true;
+  const audio = document.createElement('audio');
+  const result = audio.canPlayType(mimeType);
+  return result === 'probably' || result === 'maybe';
+}
+
+/** Build a user-friendly message from a media element error code. */
+function getMediaErrorMessage(audio: HTMLAudioElement): string {
+  const err = audio.error;
+  if (!err) return 'Failed to load audio. The format may not be supported.';
+  switch (err.code) {
+    case MediaError.MEDIA_ERR_ABORTED:
+      return 'Audio playback was aborted.';
+    case MediaError.MEDIA_ERR_NETWORK:
+      return 'Network error while loading audio. The file may be unreachable.';
+    case MediaError.MEDIA_ERR_DECODE:
+      return 'Audio decoding failed. The file may be corrupt or use an unsupported codec.';
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      return 'Audio format not supported. Try another track or browser.';
+    default:
+      return 'Failed to load audio. The format may not be supported.';
+  }
 }
 
 /**
