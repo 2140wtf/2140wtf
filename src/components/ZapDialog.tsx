@@ -21,6 +21,7 @@ import {
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { OnchainZapContent } from '@/components/OnchainZapContent';
 import { GenericPaymentContent } from '@/components/GenericPaymentContent';
+import { CashuZapContent } from '@/components/CashuZapContent';
 import { PaymentMethodIcon } from '@/components/PaymentMethodIcon';
 import { ZapAmountInput } from '@/components/ZapAmountInput';
 import { ZapSuccessScreen } from '@/components/ZapSuccessScreen';
@@ -33,6 +34,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { usePaymentTargets } from '@/hooks/usePaymentTargets';
 import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
+import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
+import { useNutzapInfo, canReceiveNutzap } from '@/hooks/useNutzapInfo';
 import { canZap } from '@/lib/canZap';
 import { parseCampaign } from '@/lib/campaign';
 import {
@@ -40,7 +43,7 @@ import {
   findBitcoinTarget,
   findLightningTarget,
   isSilentPaymentLike,
-  type PaymentMethodDef,
+  type PaymentMethodKind,
   type PaymentTarget,
 } from '@/lib/paymentTargets';
 import type { BitcoinRecipientOverride } from '@/hooks/useOnchainZap';
@@ -100,7 +103,12 @@ type DialogMethodId = string;
 /** A method shown in the dialog's title switcher. */
 interface DialogMethod {
   id: DialogMethodId;
-  def: PaymentMethodDef;
+  /** Display label, e.g. "Bitcoin", "Cashu". */
+  label: string;
+  /** Drives rendering and icon selection. */
+  kind: PaymentMethodKind;
+  /** Optional override icon (rare; PaymentMethodIcon handles the common rails). */
+  icon?: React.ReactNode;
   /** The underlying payment target, for generic (non-native) methods. */
   target?: PaymentTarget;
 }
@@ -364,6 +372,7 @@ export function ZapDialog({
   const [success, setSuccess] = useState<
     | { kind: 'onchain'; amountSats: number; txid: string }
     | { kind: 'lightning'; amountSats: number }
+    | { kind: 'cashu'; amountSats: number; eventId: string }
     | null
   >(null);
 
@@ -447,6 +456,17 @@ export function ZapDialog({
     };
   }, [bitcoinTarget]);
 
+  // Cashu / NIP-61 Nutzap capability. The recipient must publish a kind 10019
+  // event with accepted mints; the sender needs an initialized Cashu wallet.
+  const cashuWallet = useCashuWalletContext();
+  const { data: nutzapInfo } = useNutzapInfo(target.pubkey);
+  const hasCashu =
+    !campaign &&
+    !isPollVote &&
+    cashuWallet.seedAvailable &&
+    canReceiveNutzap(nutzapInfo) &&
+    cashuWallet.totalBalance > 0;
+
   // Generic (non-native) payment targets — Monero, Ethereum, etc. These render
   // a QR + native-URI button rather than a built-in send flow.
   const genericTargets = useMemo(
@@ -465,32 +485,40 @@ export function ZapDialog({
   // npub. On-chain Bitcoin is only offered when the recipient has explicitly
   // published a NIP-A3 `payto bitcoin` target (a `bc1…` address or, preferably,
   // a BIP-352 `sp1…` silent-payment code).
+  //
+  // Cashu is not a NIP-A3 target; it is discovered via the recipient's NIP-61
+  // kind 10019 event and rendered as a native rail when both sides support it.
   const methods = useMemo<DialogMethod[]>(() => {
     if (campaign) return [];
     if (isPollVote) {
       return (hasLightning || lightningTarget)
-        ? [{ id: 'lightning', def: PAYMENT_METHODS.lightning }]
+        ? [{ id: 'lightning', label: 'Lightning', kind: 'lightning' }]
         : [];
     }
     const list: DialogMethod[] = [];
     if (bitcoinTarget) {
-      list.push({ id: 'bitcoin', def: PAYMENT_METHODS.bitcoin });
+      list.push({ id: 'bitcoin', label: 'Bitcoin', kind: 'bitcoin' });
     }
     if (hasLightning || lightningTarget) {
-      list.push({ id: 'lightning', def: PAYMENT_METHODS.lightning });
+      list.push({ id: 'lightning', label: 'Lightning', kind: 'lightning' });
+    }
+    if (hasCashu) {
+      list.push({ id: 'cashu', label: 'Cashu', kind: 'cashu' });
     }
     for (const t of genericTargets) {
-      list.push({ id: t.type, def: PAYMENT_METHODS[t.type], target: t });
+      const def = PAYMENT_METHODS[t.type];
+      list.push({ id: t.type, label: def.label, kind: def.kind, target: t });
     }
     return list;
-  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, genericTargets, isPollVote]);
+  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote]);
 
   const defaultMethodId: DialogMethodId = useMemo(() => {
     if (isPollVote) return 'lightning';
-    if (bitcoinTarget) return 'bitcoin';
     if (hasLightning || lightningTarget) return 'lightning';
+    if (bitcoinTarget) return 'bitcoin';
+    if (hasCashu) return 'cashu';
     return methods[0]?.id ?? 'bitcoin';
-  }, [bitcoinTarget, hasLightning, lightningTarget, isPollVote, methods]);
+  }, [bitcoinTarget, hasLightning, lightningTarget, hasCashu, isPollVote, methods]);
   const [activeMethod, setActiveMethod] = useState<DialogMethodId>(defaultMethodId);
 
   const currentMethod =
@@ -632,11 +660,21 @@ export function ZapDialog({
   // campaign is legitimate. NIP-69 poll authors cannot vote on their own polls.
   //
   // For non-campaign profile zaps, require at least one usable payment method:
-  // a declared bitcoin target, Lightning capability/target, or a generic
-  // NIP-A3 payment method. No method = nothing to zap with.
+  // a declared bitcoin target, Lightning capability/target, Cashu/Nutzap, or a
+  // generic NIP-A3 payment method. No method = nothing to zap with.
   const canOpenZap = !!user && (!!campaign || user.pubkey !== target.pubkey) &&
     (!isPollVote || user.pubkey !== target.pubkey) &&
     (campaign || methods.length > 0);
+
+  // Event context passed to Cashu Nutzaps. Profile zaps (kind 0 target) are
+  // identity-only and should not tag a specific event.
+  const cashuZappedEvent = useMemo(
+    () =>
+      target.kind === 0
+        ? undefined
+        : { id: target.id, kind: target.kind, relay: relayUrls[0] },
+    [target, relayUrls],
+  );
 
   if (!canOpenZap) {
     // Uncontrolled callers wrap a trigger node; render it bare so the icon
@@ -680,7 +718,7 @@ export function ZapDialog({
                     className="inline-flex items-center gap-1.5 min-w-0 rounded-md px-1 -mx-1 hover:bg-secondary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
                     aria-label="Switch payment method"
                   >
-                    <PaymentMethodIcon method={currentMethod?.def} />
+                    <PaymentMethodIcon method={currentMethod ? { kind: currentMethod.kind, symbol: currentMethod.target ? PAYMENT_METHODS[currentMethod.target.type].symbol : undefined } : undefined} />
                     <span className="truncate">{methodTitle(currentMethod)}</span>
                     <ChevronDown className="size-4 shrink-0 opacity-70" />
                   </button>
@@ -692,8 +730,8 @@ export function ZapDialog({
                       onSelect={() => setActiveMethod(m.id)}
                       className="gap-2"
                     >
-                      <PaymentMethodIcon method={m.def} />
-                      <span>{m.def.label}</span>
+                      <PaymentMethodIcon method={m.target ? { kind: m.kind, symbol: PAYMENT_METHODS[m.target.type].symbol } : { kind: m.kind }} />
+                      <span>{m.label}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -720,6 +758,7 @@ export function ZapDialog({
               amountSats={success.amountSats}
               btcPrice={btcPrice}
               txid={success.kind === 'onchain' ? success.txid : undefined}
+              eventId={success.kind === 'cashu' ? success.eventId : undefined}
               onClose={() => setOpen(false)}
             />
           ) : campaign ? (
@@ -742,6 +781,10 @@ export function ZapDialog({
               onOnchainSuccess={({ txid, amountSats }) =>
                 setSuccess({ kind: 'onchain', amountSats, txid })
               }
+              onCashuSuccess={({ amountSats, eventId }) =>
+                setSuccess({ kind: 'cashu', amountSats, eventId })
+              }
+              zappedEvent={cashuZappedEvent}
               onClose={() => setOpen(false)}
             />
           )}
@@ -754,8 +797,8 @@ export function ZapDialog({
 /** Title label for the current method (native Bitcoin keeps "Send Bitcoin"). */
 function methodTitle(method: DialogMethod | undefined): string {
   if (!method) return 'Send Bitcoin';
-  if (method.def.kind === 'bitcoin') return 'Send Bitcoin';
-  return method.def.label;
+  if (method.kind === 'bitcoin') return 'Send Bitcoin';
+  return method.label;
 }
 
 interface ZapMethodPaneProps {
@@ -764,6 +807,8 @@ interface ZapMethodPaneProps {
   bitcoinOverride: BitcoinRecipientOverride | undefined;
   lightningContentProps: LightningZapContentProps;
   onOnchainSuccess: (result: { txid: string; amountSats: number }) => void;
+  onCashuSuccess: (result: { amountSats: number; eventId: string }) => void;
+  zappedEvent?: { id: string; kind: number; relay?: string };
   onClose: () => void;
 }
 
@@ -774,13 +819,28 @@ function ZapMethodPane({
   bitcoinOverride,
   lightningContentProps,
   onOnchainSuccess,
+  onCashuSuccess,
+  zappedEvent,
   onClose,
 }: ZapMethodPaneProps) {
-  if (method?.def.kind === 'lightning') {
+  if (method?.kind === 'lightning') {
     return <LightningZapContent {...lightningContentProps} />;
   }
-  if (method?.def.kind === 'generic' && method.target) {
-    return <GenericPaymentContent method={method.def} target={method.target} />;
+  if (method?.kind === 'cashu') {
+    return (
+      <CashuZapContent
+        target={target}
+        amountSats={lightningContentProps.amountSats}
+        currencyDisplay={lightningContentProps.currencyDisplay}
+        btcPrice={lightningContentProps.btcPrice}
+        onAmountChange={lightningContentProps.setAmountSats}
+        onSuccess={onCashuSuccess}
+        zappedEvent={zappedEvent}
+      />
+    );
+  }
+  if (method?.kind === 'generic' && method.target) {
+    return <GenericPaymentContent method={PAYMENT_METHODS[method.target.type]} target={method.target} />;
   }
   // Default: native Bitcoin. Profile zaps use the derived Taproot address
   // unless a Bitcoin payment target overrides it.
