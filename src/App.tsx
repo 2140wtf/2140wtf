@@ -149,6 +149,7 @@ const hardcodedConfig: AppConfig = {
     "messages",
     "prediction-markets",
     "polls",
+    "media",
     "pets",
     "wallet",
     "events",
