@@ -31,6 +31,8 @@ interface PetsOnboardingFlowProps {
   setStoredSelectedD: (d: string) => void;
   /** Called when onboarding is complete */
   onComplete?: () => void;
+  /** Optional exit handler. Shows a back button in the ceremony. */
+  onExit?: () => void;
   /** Breed category to constrain the newly created egg. */
   breedCategory?: PetsBreedCategory;
   /** If provided, skip egg creation and use this existing egg for the ceremony. */
@@ -50,6 +52,7 @@ export function PetsOnboardingFlow({
   invalidateCompanion,
   setStoredSelectedD,
   onComplete,
+  onExit,
   breedCategory,
   existingCompanion,
   adoptionOnly,
@@ -63,6 +66,7 @@ export function PetsOnboardingFlow({
       invalidateCompanion={invalidateCompanion}
       setStoredSelectedD={setStoredSelectedD}
       onComplete={onComplete}
+      onExit={onExit}
       breedCategory={breedCategory}
       existingCompanion={existingCompanion}
       eggOnly={adoptionOnly}
