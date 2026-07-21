@@ -1,4 +1,4 @@
-package pub.ditto.app;
+package app.wtf2140;
 
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.content.Context;
@@ -109,7 +109,7 @@ public class MainActivity extends BridgeActivity {
     private void handleNotificationIntent(Intent intent) {
         if (intent == null) return;
         Uri data = intent.getData();
-        if (data != null && "ditto.pub".equals(data.getHost())) {
+        if (data != null && "2140.wtf".equals(data.getHost())) {
             String path = data.getPath();
             if (path != null && !path.isEmpty()) {
                 // Wait for WebView to be ready, then navigate
