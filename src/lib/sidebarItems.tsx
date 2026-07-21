@@ -334,6 +334,10 @@ export function isItemActive(
     return pathname.startsWith("/messages") || pathname.startsWith("/groups");
   }
 
+  if (id === "media") {
+    return pathname === "/media" || pathname.startsWith("/videos") || pathname.startsWith("/music");
+  }
+
   const itemDef = SIDEBAR_ITEM_MAP.get(id);
   const itemPathname = itemDef?.path ?? `/${id}`;
 
