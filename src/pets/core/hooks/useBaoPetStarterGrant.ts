@@ -1,15 +1,11 @@
 import { useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNostr } from '@nostrify/react';
 import { nip19 } from 'nostr-tools';
-import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
-import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
-import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
 import { decodeCashuToken } from '@/lib/cashu/cashu';
 import { devLog } from '@/lib/cashu/devLog';
@@ -19,12 +15,11 @@ export interface BaoPetStarterGrantResult {
   amount: number;
   remaining24h?: number;
   resetsAt?: number;
-  profileEvent: NostrEvent;
 }
 
 interface UseBaoPetStarterGrantOptions {
-  /** Called with the updated profile event after sats are credited. */
-  onProfileUpdate?: (event: NostrEvent) => void;
+  /** Called with the grant result after the BAO wallet is credited. */
+  onCredited?: (result: BaoPetStarterGrantResult) => void;
   /** If false, the BAO wallet is kept idle and the mutation will throw. Default true. */
   enabled?: boolean;
 }
@@ -32,17 +27,16 @@ interface UseBaoPetStarterGrantOptions {
 /**
  * Claim BAO signet sats for a newly created pet.
  *
- * This is the shared rail for the pet starter grant. It calls the BAO faucet,
- * redeems the Cashu token into the BAO wallet, and credits the Blobbonaut
- * profile. The BAO API is responsible for the 21,400 sats / 24h rolling cap
- * per npub; the client just reports the result.
+ * Calls the BAO faucet and redeems the Cashu token into the BAO signet
+ * wallet (the demo cashu rail). The balance is read back from the wallet
+ * itself — nothing is mirrored into the Blobbonaut profile `sats` tag.
+ * The BAO API is responsible for the 21,400 sats / 24h rolling cap per
+ * npub; the client just reports the result.
  */
 export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}) {
-  const { onProfileUpdate, enabled = true } = options;
+  const { onCredited, enabled = true } = options;
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { seedPhrase, available: seedAvailable } = useCashuSeed();
 
   const relayUrls = useMemo(() => {
@@ -94,7 +88,7 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
 
       await baoWallet.receiveToken(res.token.trim());
 
-      // Credit the actual decoded token amount, capped to the faucet's 24h report.
+      // Report the actual decoded token amount, capped to the faucet's 24h report.
       const decoded = decodeCashuToken(res.token.trim());
       const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
       const creditedAmount = clampBaoFaucetAmount(depositedSats, res.remaining24h);
@@ -102,18 +96,15 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
         throw new Error(res.message ?? 'BAO faucet returned an empty token.');
       }
 
-      const { event } = await addProfileSats(nostr, publishEvent, user.pubkey, creditedAmount);
-
       return {
         amount: creditedAmount,
         remaining24h: res.remaining24h,
         resetsAt: res.resetsAt,
-        profileEvent: event,
       };
     },
     onSuccess: (result) => {
-      onProfileUpdate?.(result.profileEvent);
-      devLog.log(`BAO starter grant credited ${result.amount} sats to pet profile`);
+      onCredited?.(result);
+      devLog.log(`BAO starter grant credited ${result.amount} sats to the BAO wallet`);
     },
     onError: (error: Error) => {
       // The faucet returns user-facing messages (e.g. daily limit reached).
