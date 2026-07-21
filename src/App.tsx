@@ -178,7 +178,10 @@ const hardcodedConfig: AppConfig = {
     safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_PETS_BATTLE_ESCROW_URL) ?? undefined,
   petsTreasuryNpub:
     ((import.meta.env as Record<string, unknown>).VITE_PETS_TREASURY_NPUB as string | undefined) ||
-    'npub1ahqqyfxyrxn3cg7cdkh9nv6ghn07sqnc4yycwq8wlyjd3dr8wt9qjhuesp',
+    // The canonical 2140.wtf account (see SupportContactCard). Receives all
+    // mainnet pets payments (shop, adoption, rerolls) as Cashu nutzaps.
+    // Its nsec stays with the operator and never enters this repo.
+    'npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j',
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
   sentryEnabled: true,

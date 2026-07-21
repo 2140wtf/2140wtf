@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowDownLeft,
@@ -34,56 +34,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
-import { usePublishPreferences } from '@/hooks/usePublishPreferences';
-import { useCashuWallet } from '@/hooks/useCashuWallet';
-import { useNip60Sync } from '@/hooks/useNip60Sync';
-import { useNutzapReceiver } from '@/hooks/useNutzapReceiver';
-import {
-  syncCashuState,
-  restoreCashuState as fetchCashuBackup,
-  type CashuBackupPayload,
-} from '@/lib/cashu/cashuBackup';
+import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
-import type { NostrSigner } from '@nostrify/types';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
 
-interface CashuWalletTabProps {
-  seedPhrase: string;
-  user: { pubkey: string; signer: NostrSigner };
-  relayUrls: string[];
-}
-
-export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabProps) {
-  const { isEnabled } = usePublishPreferences();
+export function CashuWalletTab() {
   const { toast } = useToast();
-  const backupCashuState = useCallback(
-    (payload: CashuBackupPayload) => {
-      if (!isEnabled('encryptedSettings')) {
-        toast({
-          title: 'Encrypted backups disabled',
-          description: 'Turn on “Encrypted settings” in Settings → Privacy & Publishing to back up your Cashu wallet.',
-        });
-        return Promise.resolve<string | null>(null);
-      }
-      return syncCashuState(payload, user, relayUrls);
-    },
-    [user, relayUrls, isEnabled, toast],
-  );
-  const restoreCashuState = useCallback(
-    () => fetchCashuBackup(user, relayUrls),
-    [user, relayUrls],
-  );
-
-  const nip60Sync = useNip60Sync();
-
-  const wallet = useCashuWallet(seedPhrase, {
-    backupCashuState,
-    restoreCashuState,
-    nip60Sync,
-  });
-
-  useNutzapReceiver(seedPhrase, wallet.allMints, wallet.receiveNutzap);
+  const wallet = useCashuWalletContext();
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
@@ -221,7 +179,7 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
   const handleRestore = async () => {
     setRestoring(true);
     try {
-      const payload = await fetchCashuBackup(user, relayUrls);
+      const payload = await wallet.fetchBackup();
       if (payload) {
         await wallet.restoreFromBackup(payload);
       } else {
@@ -579,7 +537,7 @@ export function CashuWalletTab({ seedPhrase, user, relayUrls }: CashuWalletTabPr
               Write down these 12 words. They are the only way to restore your Cashu wallet.
             </p>
             <div className='rounded-lg border bg-muted p-4 font-mono text-sm break-words'>
-              {seedPhrase}
+              {wallet.seedPhrase}
             </div>
             <Button onClick={() => setShowSeedBackup(false)} className='w-full'>
               I have saved my seed
