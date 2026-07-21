@@ -6,6 +6,7 @@ import {
   parseMintAnnouncement,
   parseMintRecommendation,
   groupRecommendationsByUrl,
+  buildMintRecommendationEvent,
   type CashuMintRecommendation,
 } from '@/lib/cashu/nip87';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -147,5 +148,50 @@ describe('groupRecommendationsByUrl', () => {
     const grouped = groupRecommendationsByUrl([r1, r2]);
     expect(grouped['https://mint.one']).toHaveLength(2);
     expect(grouped['https://mint.two']).toHaveLength(1);
+  });
+});
+
+describe('buildMintRecommendationEvent', () => {
+  it('builds a minimal recommendation event', () => {
+    const event = buildMintRecommendationEvent({
+      mintId: 'mpubkey',
+      mintUrl: 'https://mint.example.com',
+    });
+    expect(event.kind).toBe(CASHU_MINT_RECOMMENDATION_KIND);
+    expect(event.content).toBe('');
+    expect(event.tags).toEqual([
+      ['d', 'mpubkey'],
+      ['k', '38172'],
+      ['u', 'https://mint.example.com'],
+    ]);
+  });
+
+  it('includes rating and address coordinate when provided', () => {
+    const event = buildMintRecommendationEvent({
+      mintId: 'mpubkey',
+      mintUrl: 'https://mint.example.com',
+      announcementCoordinate: '38172:operator:mpubkey',
+      rating: 4,
+      content: 'Solid mint.',
+    });
+    expect(event.tags).toEqual([
+      ['d', 'mpubkey'],
+      ['k', '38172'],
+      ['u', 'https://mint.example.com'],
+      ['a', '38172:operator:mpubkey'],
+      ['rating', '4'],
+    ]);
+    expect(event.content).toBe('Solid mint.');
+  });
+
+  it('rejects invalid ratings', () => {
+    expect(() => buildMintRecommendationEvent({ mintId: 'mpubkey', mintUrl: 'https://mint.example.com', rating: 0 })).toThrow();
+    expect(() => buildMintRecommendationEvent({ mintId: 'mpubkey', mintUrl: 'https://mint.example.com', rating: 6 })).toThrow();
+    expect(() => buildMintRecommendationEvent({ mintId: 'mpubkey', mintUrl: 'https://mint.example.com', rating: 3.5 })).toThrow();
+  });
+
+  it('rejects missing mint id or url', () => {
+    expect(() => buildMintRecommendationEvent({ mintId: '', mintUrl: 'https://mint.example.com' })).toThrow();
+    expect(() => buildMintRecommendationEvent({ mintId: 'mpubkey', mintUrl: '' })).toThrow();
   });
 });
