@@ -35,6 +35,8 @@ import { useToast } from '@/hooks/useToast';
 import { usePinnedNotes } from '@/hooks/usePinnedNotes';
 
 import { useFollowList, useFollowActions } from '@/hooks/useFollowActions';
+import { usePaymentTargets } from '@/hooks/usePaymentTargets';
+import { findSilentPaymentTarget } from '@/lib/paymentTargets';
 import { useMuteList } from '@/hooks/useMuteList';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { useProfileFeed, useProfileLikes as useProfileLikesInfinite, useTabFeed, filterByTab } from '@/hooks/useProfileFeed';
@@ -1364,6 +1366,14 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   const displayName = metadata?.name || metadata?.display_name || 'Anonymous';
   const canReceiveDonations = useMemo(() => !!metadata && canZap(metadata), [metadata]);
 
+  // NIP-A3 payment targets published by this profile. We need these eagerly
+  // to decide whether to show the on-chain "Fat Zap" button (silent payments).
+  const { targets: paymentTargets } = usePaymentTargets(pubkey);
+  const silentPaymentTarget = useMemo(
+    () => findSilentPaymentTarget(paymentTargets),
+    [paymentTargets],
+  );
+
   // Kind 3 + 10001 — fetched separately so the large contact list
   // doesn't block the profile header or feed from rendering.
   const { data: supplementary } = useProfileSupplementary(pubkey);
@@ -2246,6 +2256,27 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                             Donate
                           </Button>
                         </ZapDialog>
+                      )}
+                      {!isOwnProfile && silentPaymentTarget && metadataEvent && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <ZapDialog target={metadataEvent} initialAmountSats={5000}>
+                              <Button
+                                variant="outline"
+                                className="rounded-full font-bold border-orange-500 text-orange-500 hover:bg-orange-500/10 hover:text-orange-600"
+                              >
+                                <Bitcoin className="size-4 mr-1.5" />
+                                Fat Zap
+                              </Button>
+                            </ZapDialog>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-xs">
+                            <p>Send an on-chain zap via Silent Payments.</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Uses a private sp1… code so every payment creates a fresh, unlinkable Bitcoin address.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       <Button
                         className={cn(
