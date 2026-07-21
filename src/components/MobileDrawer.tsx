@@ -316,7 +316,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
               <div className="px-4 py-3">
                 <ProfileSearchDropdown
                   placeholder="Search..."
-                  inputClassName="!bg-[var(--2140-raised)] !text-[var(--2140-fg)] !placeholder:text-[var(--2140-placeholder)] !border-0"
+                  inputClassName="bg-muted text-foreground placeholder:text-muted-foreground border-0"
                   enableTextSearch
                 />
               </div>
@@ -380,7 +380,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
               >
                 <ProfileSearchDropdown
                   placeholder="Search..."
-                  inputClassName="!bg-[var(--2140-raised)] !text-[var(--2140-fg)] !placeholder:text-[var(--2140-placeholder)] !border-0"
+                  inputClassName="bg-muted text-foreground placeholder:text-muted-foreground border-0"
                   enableTextSearch
                 />
               </div>
