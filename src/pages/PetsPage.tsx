@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize, Settings } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Lock, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize, Settings } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
@@ -2293,6 +2293,7 @@ function PetsDashboard({
                   isHatching={isHatching || showHatchCeremony}
                   onEvolve={async () => setShowEvolveCeremony(true)}
                   isEvolving={isEvolving || showEvolveCeremony}
+                  isMainnetWallet={profile?.walletMode === 'cashu'}
                   onStopIncubation={handleStopIncubation}
                   isStoppingIncubation={isStoppingIncubation}
                   onStopEvolution={handleStopEvolution}
@@ -3221,6 +3222,8 @@ interface MissionsTabContentProps {
   isHatching: boolean;
   onEvolve: () => Promise<void>;
   isEvolving: boolean;
+  /** False in demo (BAO signet) mode: adult evolution is a mainnet feature. */
+  isMainnetWallet: boolean;
   onStopIncubation: () => Promise<void>;
   isStoppingIncubation: boolean;
   onStopEvolution: () => Promise<void>;
@@ -3250,6 +3253,7 @@ function MissionsTabContent({
   isHatching,
   onEvolve,
   isEvolving,
+  isMainnetWallet,
   onStopIncubation,
   isStoppingIncubation,
   onStopEvolution,
@@ -3265,6 +3269,16 @@ function MissionsTabContent({
   const [pane, setPane] = useState<QuestPane>(initialPane ?? 'journey');
   const hasActiveProcess = (isIncubating && isEgg) || (isEvolvingState && isBaby);
   const isProcessBusy = isHatching || isEvolving || isStoppingIncubation || isStoppingEvolution;
+  // Demo (BAO signet) mode: adult evolution is a mainnet feature. Show the
+  // lock up front instead of letting the user invest in evolve tasks first.
+  const showEvolveLockedToast = () => {
+    toast({
+      title: '\u{1F512} Adult evolution is a Mainnet feature',
+      description:
+        'Switch to Mainnet (Cashu sats) in the Wallet tab to grow your NOSTR PET into an adult. Demo pets stay babies — everything else is free to play.',
+    });
+  };
+
   const tasks = isIncubating ? hatchTasks.tasks : evolveTasks.tasks;
   const allCompleted = isIncubating ? hatchTasks.allCompleted : evolveTasks.allCompleted;
   const isLoading = isIncubating ? hatchTasks.isLoading : evolveTasks.isLoading;
@@ -3374,7 +3388,7 @@ function MissionsTabContent({
             {/* Hatch / Evolve CTA */}
             {hasActiveProcess && allCompleted && !isLoading && (
               <button
-                onClick={isIncubating ? onHatch : onEvolve}
+                onClick={isIncubating ? onHatch : (isMainnetWallet ? onEvolve : showEvolveLockedToast)}
                 disabled={isProcessBusy}
                 className={cn(
                   'w-full flex items-center justify-center gap-2 px-6 py-3 mt-1 rounded-full text-white font-semibold transition-all duration-300',
@@ -3389,6 +3403,8 @@ function MissionsTabContent({
               >
                 {(isHatching || isEvolving) ? (
                   <Loader2 className="size-5 animate-spin" />
+                ) : (!isIncubating && !isMainnetWallet) ? (
+                  <Lock className="size-5" />
                 ) : (
                   <span className="text-lg">{isIncubating ? '\uD83D\uDC23' : '\u2728'}</span>
                 )}
@@ -3412,7 +3428,7 @@ function MissionsTabContent({
               <div className="flex flex-col items-center gap-3 py-4">
                 {(canStartIncubation || canStartEvolution) ? (
                   <button
-                    onClick={canStartIncubation ? onStartIncubation : onStartEvolution}
+                    onClick={canStartIncubation ? onStartIncubation : (isMainnetWallet ? onStartEvolution : showEvolveLockedToast)}
                     disabled={isStartingIncubation || isStartingEvolution}
                     className={cn(
                       'flex items-center justify-center gap-2 px-8 py-3 rounded-full text-white font-semibold transition-all duration-300',
@@ -3427,6 +3443,8 @@ function MissionsTabContent({
                   >
                     {(isStartingIncubation || isStartingEvolution) ? (
                       <Loader2 className="size-5 animate-spin" />
+                    ) : (!canStartIncubation && !isMainnetWallet) ? (
+                      <Lock className="size-5" />
                     ) : (
                       <Sparkles className="size-5" />
                     )}
