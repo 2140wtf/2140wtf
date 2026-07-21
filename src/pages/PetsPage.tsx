@@ -365,7 +365,11 @@ function PetsAdoptionFlowPortal({
   onComplete: () => void;
 }) {
   return createPortal(
-    <div className="fixed inset-0 z-[300]">
+    <div
+      className="fixed inset-0 z-[300]"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
       <PetsOnboardingFlow
         profile={profile}
         updateProfileEvent={updateProfileEvent}
