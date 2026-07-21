@@ -1,21 +1,37 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Landmark, Globe, Users, Star, Plus, Check, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
+import { Landmark, Globe, Users, Star, Plus, Check, ChevronDown, ChevronUp, ShieldCheck, Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useToast } from '@/hooks/useToast';
-import { useMintDiscovery, useMintInfo, useSmartMintSelection, type SmartMintOption } from '@/hooks/useMintDiscovery';
+import {
+  useMintDiscovery,
+  useMintInfo,
+  useSmartMintSelection,
+  usePublishMintRecommendation,
+  type SmartMintOption,
+} from '@/hooks/useMintDiscovery';
 import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
+import { useQueryClient } from '@tanstack/react-query';
 
 function NutBadge({ nut }: { nut: number }) {
   return (
@@ -63,14 +79,126 @@ function MintInfoPanel({ url }: { url: string }) {
   );
 }
 
+function StarRating({ value, onChange }: { value: number; onChange: (rating: number) => void }) {
+  return (
+    <div className="flex items-center gap-1" role="radiogroup" aria-label="Rating">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const rating = i + 1;
+        const filled = rating <= value;
+        return (
+          <button
+            key={rating}
+            type="button"
+            role="radio"
+            aria-checked={value === rating}
+            aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
+            onClick={() => onChange(rating)}
+            className="p-1 rounded hover:bg-secondary transition-colors"
+          >
+            <Star className={`size-6 ${filled ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MintReviewDialog({
+  option,
+  open,
+  onOpenChange,
+}: {
+  option: SmartMintOption | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { publishReview, isPending } = usePublishMintRecommendation();
+  const [rating, setRating] = useState(0);
+  const [content, setContent] = useState('');
+
+  const handleSubmit = async () => {
+    if (!option?.announcement) return;
+    if (rating < 1 || rating > 5) {
+      toast({ variant: 'destructive', title: 'Rating required', description: 'Pick a 1–5 star rating.' });
+      return;
+    }
+
+    try {
+      await publishReview({
+        mintId: option.announcement.mintId,
+        mintUrl: option.announcement.mintUrl,
+        announcementCoordinate: `${option.announcement.event.kind}:${option.announcement.event.pubkey}:${option.announcement.mintId}`,
+        rating,
+        content,
+      });
+      toast({ title: 'Review published', description: 'Your mint recommendation is live.' });
+      setRating(0);
+      setContent('');
+      onOpenChange(false);
+      void queryClient.invalidateQueries({ queryKey: ['cashu-mint-discovery'] });
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Publish failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  };
+
+  const handleClose = (open: boolean) => {
+    if (!open && !isPending) {
+      setRating(0);
+      setContent('');
+    }
+    onOpenChange(open);
+  };
+
+  if (!option) return null;
+  const displayName = typeof option.announcement?.metadata?.name === 'string'
+    ? option.announcement.metadata.name
+    : option.url;
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Review mint</DialogTitle>
+          <DialogDescription>{displayName}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <StarRating value={rating} onChange={setRating} />
+          <Textarea
+            placeholder="Why do you recommend (or not recommend) this mint?"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={4}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleClose(false)} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isPending || rating < 1}>
+            {isPending ? 'Publishing…' : 'Publish review'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MintCard({
   option,
   isAdded,
   onAdd,
+  onReview,
 }: {
   option: SmartMintOption;
   isAdded: boolean;
   onAdd: (url: string) => void;
+  onReview: (option: SmartMintOption) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { announcement, recommendations, hasBalance } = option;
@@ -79,30 +207,38 @@ function MintCard({
       ? recommendations.reduce((sum, r) => sum + (r.rating ?? 0), 0) / recommendations.length
       : 0;
 
-  const displayName = (announcement?.metadata?.name as string | undefined) || option.url;
+  const displayName = typeof announcement?.metadata?.name === 'string' ? announcement.metadata.name : option.url;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base truncate" title={displayName as string}>
-              {displayName as string}
+            <CardTitle className="text-base truncate" title={displayName}>
+              {displayName}
             </CardTitle>
             <p className="text-xs text-muted-foreground truncate" title={option.url}>
               {option.url}
             </p>
           </div>
-          <Button
-            size="sm"
-            variant={isAdded ? 'secondary' : 'default'}
-            disabled={isAdded}
-            onClick={() => onAdd(option.url)}
-            className="shrink-0 gap-1"
-          >
-            {isAdded ? <Check className="size-4" /> : <Plus className="size-4" />}
-            {isAdded ? 'Added' : 'Add'}
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {announcement && (
+              <Button size="sm" variant="outline" className="gap-1" onClick={() => onReview(option)}>
+                <Pencil className="size-3.5" />
+                Review
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant={isAdded ? 'secondary' : 'default'}
+              disabled={isAdded}
+              onClick={() => onAdd(option.url)}
+              className="gap-1"
+            >
+              {isAdded ? <Check className="size-4" /> : <Plus className="size-4" />}
+              {isAdded ? 'Added' : 'Add'}
+            </Button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2">
           {announcement?.network === 'mainnet' && (
@@ -156,6 +292,7 @@ export function MintDiscoveryPage() {
   const { toast } = useToast();
   const wallet = useCashuWalletContext();
   const [global, setGlobal] = useState(false);
+  const [reviewing, setReviewing] = useState<SmartMintOption | null>(null);
 
   const discovery = useMintDiscovery({ global });
   const userMintUrls = wallet.allMints.map((m) => m.url);
@@ -164,7 +301,7 @@ export function MintDiscoveryPage() {
 
   useSeoMeta({
     title: `Mint Discovery | ${config.appName}`,
-    description: 'Discover recommended Cashu mints on Nostr.',
+    description: 'Discover and review recommended Cashu mints on Nostr.',
   });
 
   const handleAdd = (url: string) => {
@@ -250,10 +387,13 @@ export function MintDiscoveryPage() {
                 option={option}
                 isAdded={addedUrls.has(option.url.toLowerCase())}
                 onAdd={handleAdd}
+                onReview={setReviewing}
               />
             ))}
           </div>
         )}
+
+        <MintReviewDialog option={reviewing} open={!!reviewing} onOpenChange={(open) => !open && setReviewing(null)} />
 
         <div className="text-center pt-2">
           <Button variant="outline" size="sm" asChild>
