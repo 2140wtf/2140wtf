@@ -8,7 +8,7 @@ import { PETS_BAO_RELAY_URL } from '@/pets/core/lib/pets-relay';
  * Pet-specific `useNostrPublish` wrapper.
  *
  * Every event published through this hook is sent only to the BAO pets relay,
- * keeping pet state, Blobbonaut profiles, and interactions off public relays.
+ * keeping pet state, Nostr pet profiles, and interactions off public relays.
  *
  * Publishing is gated by the user's Privacy & Publishing preference for pets.
  */

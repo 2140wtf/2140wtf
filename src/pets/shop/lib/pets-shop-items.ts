@@ -1,7 +1,7 @@
 // src/pets/shop/lib/pets-shop-items.ts
 
 import type { ShopItem, ShopItemCategory } from '../types/shop.types';
-import type { BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { NostrPetProfile } from '@/pets/core/lib/pets';
 
 /**
  * Complete shop item catalog for the Pets Shop.
@@ -221,7 +221,7 @@ export function getLiveShopItems(): ShopItem[] {
  * Only items with a positive quantity in profile.storage are returned,
  * so carousels never display items that cannot actually be used.
  */
-export function getOwnedLiveShopItems(profile: BlobbonautProfile | null): ShopItem[] {
+export function getOwnedLiveShopItems(profile: NostrPetProfile | null): ShopItem[] {
   const storage = profile?.storage ?? [];
   const ownedIds = new Set(
     storage.filter((s) => s.quantity > 0).map((s) => s.itemId),

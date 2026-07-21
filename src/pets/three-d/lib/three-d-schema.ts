@@ -4,7 +4,7 @@
  * Defines how 3D pet/room assets are referenced from Nostr events.
  *
  *   - kind 31124 (Pets State) tags: ["asset_3d", "<url>", "<sha256>", "<mime>"]
- *   - kind 11125 (Blobbonaut Profile) content JSON: { assets_3d: Assets3DContent }
+ *   - kind 11125 (Nostr Pet Profile) content JSON: { assets_3d: Assets3DContent }
  *
  * Assets are hosted on Blossom (BUD-01) so they are Nostr-native binary blobs.
  * Other Nostr clients that do not support 3D rendering fall back to the standard

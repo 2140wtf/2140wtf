@@ -28,7 +28,7 @@ import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
  *   5. SVG fallback (return undefined).
  *
  * @param companion - Parsed NOSTR PET (must be adult to use a 3D asset).
- * @param profileContent - Raw kind 11125 content string from the owner's Blobbonaut profile.
+ * @param profileContent - Raw kind 11125 content string from the owner's Nostr pet profile.
  * @param customForms - Optional owner custom species map from profile `custom_forms`.
  * @returns The resolved asset entry, or undefined to fall back to SVG.
  */

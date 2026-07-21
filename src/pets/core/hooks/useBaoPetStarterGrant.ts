@@ -29,7 +29,7 @@ interface UseBaoPetStarterGrantOptions {
  *
  * Calls the BAO faucet and redeems the Cashu token into the BAO signet
  * wallet (the demo cashu rail). The balance is read back from the wallet
- * itself — nothing is mirrored into the Blobbonaut profile `sats` tag.
+ * itself — nothing is mirrored into the Nostr pet profile `sats` tag.
  * The BAO API is responsible for the 21,400 sats / 24h rolling cap per
  * npub; the client just reports the result.
  */
