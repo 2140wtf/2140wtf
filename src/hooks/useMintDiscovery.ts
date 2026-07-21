@@ -1,20 +1,25 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { CashuMint } from '@cashu/cashu-ts';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useFollows } from '@/hooks/useFollows';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
 import {
   CASHU_MINT_ANNOUNCEMENT_KIND,
   CASHU_MINT_RECOMMENDATION_KIND,
   parseMintAnnouncement,
   parseMintRecommendation,
   groupRecommendationsByUrl,
+  buildMintRecommendationEvent,
   type CashuMintAnnouncement,
   type CashuMintRecommendation,
+  type MintRecommendationInput,
 } from '@/lib/cashu/nip87';
 import { createMintFetch } from '@/lib/cashu/cashuFetch';
+import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 export interface MintDiscoveryOptions {
   /** When true, search all relays without filtering by follows. Default false. */
@@ -147,6 +152,44 @@ function averageRating(recommendations: CashuMintRecommendation[]): number | und
   const ratings = recommendations.map((r) => r.rating).filter((r): r is number => r !== undefined);
   if (ratings.length === 0) return undefined;
   return ratings.reduce((a, b) => a + b, 0) / ratings.length;
+}
+
+/**
+ * Publish (or update) a kind 38000 Cashu mint recommendation/review.
+ *
+ * This is an addressable event identified by the user's pubkey + kind 38000 +
+ * the mint's d-tag, so each user can have exactly one review per mint. The
+ * previous version is fetched and passed as `prev` to preserve `published_at`.
+ */
+export function usePublishMintRecommendation() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { mutateAsync, isPending, error } = useNostrPublish();
+
+  const publishReview = useCallback(
+    async (input: MintRecommendationInput) => {
+      if (!user) throw new Error('You must be logged in to publish a review');
+
+      const template = buildMintRecommendationEvent(input);
+      const prev = await fetchFreshEvent(nostr, {
+        kinds: [CASHU_MINT_RECOMMENDATION_KIND],
+        authors: [user.pubkey],
+        '#d': [input.mintId.trim()],
+      });
+
+      return mutateAsync({
+        ...template,
+        prev: prev ?? undefined,
+      });
+    },
+    [nostr, user, mutateAsync],
+  );
+
+  return {
+    publishReview,
+    isPending,
+    error,
+  };
 }
 
 /**
