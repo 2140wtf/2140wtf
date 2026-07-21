@@ -100,8 +100,8 @@ export interface CashuWalletActions {
   handleSeedBackupConfirm: () => Promise<void>;
   calculateAllBalances: () => Promise<void>;
   receiveToken: (tokenStr: string, privkey?: string) => Promise<void>;
-  sendToken: (amount: number, memo?: string, recipientPubkey?: string) => Promise<string | null>;
-  sendLockedToken: (amount: number, recipientPubkey: string, memo?: string) => Promise<string | null>;
+  sendToken: (amount: number, memo?: string, recipientPubkey?: string, mintUrlOverride?: string) => Promise<string | null>;
+  sendLockedToken: (amount: number, recipientPubkey: string, memo?: string, mintUrlOverride?: string) => Promise<string | null>;
   receiveLockedToken: (tokenStr: string, privkey: string) => Promise<void>;
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
@@ -1795,14 +1795,28 @@ export function useCashuWallet(
     return null;
   };
 
-  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string): Promise<string | null> => {
+  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string, mintUrlOverride?: string): Promise<string | null> => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
     if (err) { setError(err); return null; }
     if (typeof memo !== 'string') { setError('Memo must be a string'); return null; }
     if (memo.length > 500) { setError('Memo too long (max 500 chars)'); return null; }
-    if (!wallet || !bip39Seed || !encKey) {
+    if (!bip39Seed || !encKey) {
+      setError('Wallet not initialized');
+      return null;
+    }
+    const activeMint = safeNormalizeMintUrl(mintUrlOverride ?? mintUrl);
+    let targetWallet = wallet;
+    if (mintUrlOverride) {
+      try {
+        targetWallet = await getOrCreateWallet(activeMint, bip39Seed, true);
+      } catch (e: any) {
+        setError(`Failed to load mint wallet: ${e.message}`);
+        return null;
+      }
+    }
+    if (!targetWallet) {
       setError('Wallet not initialized');
       return null;
     }
@@ -1812,7 +1826,7 @@ export function useCashuWallet(
       setError('');
 
       const token = await storageRef.current.withProofLock(async () => {
-        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(safeNormalizeMintUrl(mintUrl), encKey, legacyEncKeyRef.current ?? undefined));
+        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(activeMint, encKey, legacyEncKeyRef.current ?? undefined));
         const available = proofs.reduce((sum, p) => {
           const amt = Number(p.amount);
           return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
@@ -1824,7 +1838,7 @@ export function useCashuWallet(
         // Pre-write input proofs as crash recovery. If the app is killed after the mint
         // marks them spent but before we persist the change, the reconciliation loop
         // will ask the mint for spent-state rather than blindly restoring this snapshot.
-        const normalizedMint = safeNormalizeMintUrl(mintUrl);
+        const normalizedMint = activeMint;
         await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
         const sendOpts: import('@cashu/cashu-ts').SendOptions = { proofsWeHave: proofs };
         if (recipientPubkey && recipientPubkey.length === 64) {
@@ -1832,7 +1846,7 @@ export function useCashuWallet(
           sendOpts.includeDleq = true;
         }
         const sendResult = await withTimeout(
-          wallet.send(amount, proofs, sendOpts),
+          targetWallet.send(amount, proofs, sendOpts),
           60000,
           'Send',
           () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -1858,7 +1872,7 @@ export function useCashuWallet(
         // the fee the mint itself advertised.
         let maxFee = 0;
         try {
-          maxFee = wallet.getFeesForProofs(proofs);
+          maxFee = targetWallet.getFeesForProofs(proofs);
         } catch {
           maxFee = Math.max(1, Math.floor(inputAmount * 0.001));
         }
@@ -1910,7 +1924,7 @@ export function useCashuWallet(
               type: 'send',
               amount,
               memo: memo || 'Cashu send',
-              mintUrl,
+              mintUrl: activeMint,
               status: 'completed',
             }, encKey, legacyEncKeyRef.current ?? undefined);
           });
@@ -1924,7 +1938,7 @@ export function useCashuWallet(
         return tokenStr;
       });
 
-      await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'out', amount);
+      await syncNip60TokenForMint(activeMint, 'out', amount);
 
       // Return token immediately — proof update and tx recording are complete.
       if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats`);
@@ -1954,14 +1968,14 @@ export function useCashuWallet(
         } catch { /* ignore */ }
       })();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
+  }, [wallet, mintUrl, getOrCreateWallet, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
 
-  const sendLockedToken = useCallback(async (amount: number, recipientPubkey: string, memo = ''): Promise<string | null> => {
+  const sendLockedToken = useCallback(async (amount: number, recipientPubkey: string, memo = '', mintUrlOverride?: string): Promise<string | null> => {
     if (!recipientPubkey || recipientPubkey.length !== 64) {
       setError('Invalid recipient P2PK pubkey');
       return null;
     }
-    return sendToken(amount, memo, recipientPubkey);
+    return sendToken(amount, memo, recipientPubkey, mintUrlOverride);
   }, [sendToken]);
 
   const receiveLockedToken = useCallback(async (tokenStr: string, privkey: string): Promise<void> => {

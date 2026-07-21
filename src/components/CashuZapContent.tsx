@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MessageCircle } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import type { Event } from 'nostr-tools';
 
@@ -15,6 +15,7 @@ import {
 import { ZapAmountInput } from '@/components/ZapAmountInput';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useNutzapInfo } from '@/hooks/useNutzapInfo';
+import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { normalizeMintUrl } from '@/lib/cashu/cashu';
 
@@ -29,8 +30,8 @@ interface CashuZapContentProps {
   btcPrice: number | undefined;
   /** Called when the amount changes. */
   onAmountChange: (value: number | string) => void;
-  /** Called when the Nutzap is successfully published. */
-  onSuccess: (result: { amountSats: number; eventId: string }) => void;
+  /** Called when the Cashu send is successfully published. */
+  onSuccess: (result: { amountSats: number; eventId?: string }) => void;
   /** Optional zapped-event context (for zapping a specific note). */
   zappedEvent?: { id: string; kind: number; relay?: string };
 }
@@ -42,6 +43,10 @@ const CASHU_SATS_PRESETS = [100, 500, 1000, 5000, 10000];
  *
  * Discovers the recipient's kind 10019 Nutzap info, intersects it with the
  * sender's mint balances, and sends a P2PK-locked Nutzap event (kind 9321).
+ *
+ * When the recipient has not published Nutzap preferences (or the sender does
+ * not hold balances on any accepted mint), the pane falls back to a NUT-18
+ * Cashu token sent over a NIP-17 encrypted direct message.
  */
 export function CashuZapContent({
   target,
@@ -53,16 +58,22 @@ export function CashuZapContent({
   zappedEvent,
 }: CashuZapContentProps) {
   const wallet = useCashuWalletContext();
-  const { data: nutzapInfo } = useNutzapInfo(target.pubkey);
+  const { data: nutzapInfo, isLoading: nutzapInfoLoading } = useNutzapInfo(target.pubkey);
+  const { sendMessage: sendDm, isPending: isDmSending } = useNip17SendMessage();
   const [memo, setMemo] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState('');
   const [editingAmount, setEditingAmount] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
-  // Compute the intersection of sender mints (with balances) and recipient
-  // accepted mints. Mints are keyed by normalized URL for stable comparison.
-  const availableMints = useMemo(() => {
+  const numericSats = useMemo(() => {
+    const value = typeof amountSats === 'string' ? Number(amountSats.replace(/,/g, '')) : amountSats;
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }, [amountSats]);
+
+  // Mints that the recipient accepts for Nutzaps and that the sender has a
+  // balance on.
+  const nutzapMints = useMemo(() => {
     if (!nutzapInfo) return [];
     const accepted = new Set(
       nutzapInfo.mints.map(normalizeMintUrl).filter((u): u is string => u !== null),
@@ -74,26 +85,30 @@ export function CashuZapContent({
     });
   }, [nutzapInfo, wallet.allMints, wallet.balances]);
 
-  // Default to the wallet's current mint if it overlaps and has balance,
-  // otherwise the first available mint.
+  // All mints the sender holds a balance on — used for the NIP-17 DM fallback.
+  const dmMints = useMemo(() => {
+    return wallet.allMints.filter((m) => {
+      const normalized = normalizeMintUrl(m.url);
+      return normalized !== null && (wallet.balances[normalized] ?? 0) > 0;
+    });
+  }, [wallet.allMints, wallet.balances]);
+
+  const isNutzapMode = nutzapInfo !== null && nutzapMints.length > 0;
+  const activeMints = isNutzapMode ? nutzapMints : dmMints;
+
   const [selectedMintUrl, setSelectedMintUrl] = useState('');
   useEffect(() => {
     if (selectedMintUrl) return;
     const currentNormalized = normalizeMintUrl(wallet.mintUrl);
     const currentAvailable =
       currentNormalized !== null &&
-      availableMints.some((m) => normalizeMintUrl(m.url) === currentNormalized);
+      activeMints.some((m) => normalizeMintUrl(m.url) === currentNormalized);
     if (currentAvailable) {
       setSelectedMintUrl(wallet.mintUrl);
-    } else if (availableMints[0]) {
-      setSelectedMintUrl(availableMints[0].url);
+    } else if (activeMints[0]) {
+      setSelectedMintUrl(activeMints[0].url);
     }
-  }, [availableMints, wallet.mintUrl, selectedMintUrl]);
-
-  const numericSats = useMemo(() => {
-    const value = typeof amountSats === 'string' ? Number(amountSats.replace(/,/g, '')) : amountSats;
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  }, [amountSats]);
+  }, [activeMints, wallet.mintUrl, selectedMintUrl]);
 
   const selectedBalance = useMemo(() => {
     if (!selectedMintUrl) return 0;
@@ -104,12 +119,12 @@ export function CashuZapContent({
   const { format: formatMoney } = useFormatMoney();
   const primaryDisplay = formatMoney(numericSats);
 
+  const isBusy = isSending || isDmSending || wallet.loading;
   const canSend =
     numericSats > 0 &&
     selectedMintUrl &&
     selectedBalance >= numericSats &&
-    !wallet.loading &&
-    !isSending;
+    !isBusy;
 
   const handleSend = async () => {
     setError('');
@@ -128,24 +143,36 @@ export function CashuZapContent({
 
     setIsSending(true);
     try {
-      const recipient = nip19.npubEncode(target.pubkey);
-      const ok = await wallet.sendNutzap(numericSats, recipient, selectedMintUrl, {
-        memo,
-        zappedEvent,
-      });
-      if (!ok) {
-        setError('Nutzap could not be sent. It may be queued for retry.');
+      if (isNutzapMode) {
+        const recipient = nip19.npubEncode(target.pubkey);
+        const ok = await wallet.sendNutzap(numericSats, recipient, selectedMintUrl, {
+          memo,
+          zappedEvent,
+        });
+        if (!ok) {
+          setError('Nutzap could not be sent. It may be queued for retry.');
+          return;
+        }
+        // sendNutzap stores the published event in wallet.nutzaps[0] (newest).
+        const publishedEvent = wallet.nutzaps[0];
+        if (!publishedEvent) {
+          setError('Sent, but the published event id was not returned.');
+          return;
+        }
+        onSuccess({ amountSats: numericSats, eventId: publishedEvent.id });
         return;
       }
-      // sendNutzap stores the published event in wallet.nutzaps[0] (newest).
-      const publishedEvent = wallet.nutzaps[0];
-      if (!publishedEvent) {
-        setError('Sent, but the published event id was not returned.');
+
+      // NUT-18 fallback: send a Cashu token over a NIP-17 DM.
+      const token = await wallet.sendToken(numericSats, memo, undefined, selectedMintUrl);
+      if (!token) {
+        setError(wallet.error || 'Failed to create Cashu token.');
         return;
       }
-      onSuccess({ amountSats: numericSats, eventId: publishedEvent.id });
+      await sendDm({ recipientPubkey: target.pubkey, content: token });
+      onSuccess({ amountSats: numericSats });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send Nutzap.');
+      setError(err instanceof Error ? err.message : 'Failed to send Cashu.');
     } finally {
       setIsSending(false);
     }
@@ -161,7 +188,7 @@ export function CashuZapContent({
     );
   }
 
-  if (!nutzapInfo) {
+  if (nutzapInfoLoading) {
     return (
       <div className="px-4 py-8 text-center space-y-3">
         <Loader2 className="size-5 animate-spin mx-auto text-muted-foreground" />
@@ -170,14 +197,14 @@ export function CashuZapContent({
     );
   }
 
-  if (availableMints.length === 0) {
+  if (activeMints.length === 0) {
     return (
       <div className="px-4 py-8 text-center space-y-3">
         <p className="text-sm text-muted-foreground">
-          This user accepts Nutzaps on mints you do not currently hold balances in.
+          You do not have a Cashu balance on any mint.
         </p>
         <p className="text-xs text-muted-foreground">
-          Accepted: {nutzapInfo.mints.map((m) => m.replace(/^https?:\/\//, '')).join(', ')}
+          Deposit sats into your Cashu wallet before sending.
         </p>
       </div>
     );
@@ -194,7 +221,7 @@ export function CashuZapContent({
         btcPrice={btcPrice}
         currencyDisplay={currencyDisplay}
         presets={CASHU_SATS_PRESETS}
-        disabled={isSending}
+        disabled={isBusy}
         inputRef={amountInputRef}
         editing={editingAmount}
         onEditingChange={setEditingAmount}
@@ -205,12 +232,12 @@ export function CashuZapContent({
         <span className="font-medium tabular-nums">{selectedBalance.toLocaleString()} sats</span>
       </div>
 
-      <Select value={selectedMintUrl} onValueChange={setSelectedMintUrl} disabled={isSending}>
+      <Select value={selectedMintUrl} onValueChange={setSelectedMintUrl} disabled={isBusy}>
         <SelectTrigger>
           <SelectValue placeholder="Select mint" />
         </SelectTrigger>
         <SelectContent>
-          {availableMints.map((m) => {
+          {activeMints.map((m) => {
             const normalized = normalizeMintUrl(m.url);
             if (!normalized) return null;
             return (
@@ -226,25 +253,32 @@ export function CashuZapContent({
         placeholder="Memo (optional)"
         value={memo}
         onChange={(e) => setMemo(e.target.value)}
-        disabled={isSending}
+        disabled={isBusy}
         maxLength={200}
       />
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {(error || wallet.error) && <p className="text-xs text-destructive">{error || wallet.error}</p>}
 
       <Button type="button" onClick={handleSend} disabled={!canSend} className="w-full">
-        {isSending ? (
+        {isBusy ? (
           <>
             <Loader2 className="size-4 mr-1.5 animate-spin" />
-            Sending Nutzap…
+            {isNutzapMode ? 'Sending Nutzap…' : 'Sending Cashu token…'}
           </>
         ) : (
           <>Send {primaryDisplay || `${numericSats.toLocaleString()} sats`}</>
         )}
       </Button>
 
-      <p className="text-[11px] text-muted-foreground text-center">
-        Sends a NIP-61 Nutzap (kind 9321) locked to the recipient's Cashu pubkey.
+      <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1">
+        {isNutzapMode ? (
+          <>Sends a NIP-61 Nutzap (kind 9321) locked to the recipient&apos;s Cashu pubkey.</>
+        ) : (
+          <>
+            <MessageCircle className="size-3" />
+            Sends a NUT-18 Cashu token over a NIP-17 encrypted direct message.
+          </>
+        )}
       </p>
     </div>
   );
