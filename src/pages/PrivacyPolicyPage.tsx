@@ -72,9 +72,9 @@ export function PrivacyPolicyPage() {
         <section className="space-y-2">
           <h2 className="text-base font-bold text-foreground">Direct Messages</h2>
           <p>
-            Direct messages on Nostr are encrypted between sender and recipient using the NIP-04 or NIP-44
-            encryption standards. While message content is encrypted, metadata such as the sender and recipient
-            public keys and timestamps are visible on relays.
+            {config.appName} sends direct messages as NIP-17 gift-wrapped events. Each message is sealed and
+            wrapped so that both the content and the sender/recipient metadata are hidden from relays. Legacy
+            NIP-04 direct messages are not supported.
           </p>
         </section>
 
