@@ -540,10 +540,14 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             <span className="text-xs uppercase tracking-widest font-medium">The Daily Nostr</span>
           </div>
           <DialogTitle
-            className="text-3xl font-bold leading-none tracking-tight text-center mt-2"
+            className="text-center mt-2"
             style={{ fontFamily: 'var(--title-font-family, serif)' }}
           >
-            2140
+            <img
+              src="/logo.png"
+              alt="2140.wtf"
+              className="h-12 w-auto mx-auto"
+            />
           </DialogTitle>
         </DialogHeader>
 
