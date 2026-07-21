@@ -24,12 +24,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep links: open ditto.pub URLs in the app -->
+            <!-- Deep links: open 2140.wtf URLs in the app -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="ditto.pub" />
+                <data android:scheme="https" android:host="2140.wtf" />
             </intent-filter>
 
             <!-- BIP-21 bitcoin: payment URIs. Ditto appears in the system

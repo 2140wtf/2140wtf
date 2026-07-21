@@ -1,4 +1,4 @@
-package pub.ditto.app;
+package app.wtf2140;
 
 import android.app.AlarmManager;
 import android.app.ForegroundServiceStartNotAllowedException;
@@ -83,7 +83,7 @@ public class NotificationRelayService extends Service {
     // + REQ + up to 5 events + EOSE + metadata fetch + disconnect.
     private static final long FETCH_WAKELOCK_TIMEOUT_MS = 30_000;
 
-    private static final String ACTION_FETCH = "pub.ditto.app.ACTION_FETCH";
+    private static final String ACTION_FETCH = "app.wtf2140.ACTION_FETCH";
 
     // Backoff bounds for relay connect failures (separate from alarm interval).
     private static final long INITIAL_BACKOFF_MS = 1_000;
