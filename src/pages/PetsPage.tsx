@@ -23,6 +23,7 @@ import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { useNostr } from '@nostrify/react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePetsMigration } from '@/pets/core/hooks/usePetsMigration';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
@@ -333,6 +334,51 @@ function BreedCategoryPicker({
         })}
       </div>
     </main>
+  );
+}
+
+// ─── Adoption Flow Portal ─────────────────────────────────────────────────────
+
+/**
+ * Renders the onboarding/hatching flow in a portal so it escapes any parent
+ * stacking context (e.g. a shadcn Dialog with transforms). Without this, the
+ * flow's fixed-position layers end up clipped or hidden behind the dialog
+ * overlay, leaving only a thin visible line when a breed category is selected.
+ */
+function PetsAdoptionFlowPortal({
+  profile,
+  updateProfileEvent,
+  updateCompanionEvent,
+  invalidateProfile,
+  invalidateCompanion,
+  setStoredSelectedD,
+  breedCategory,
+  onComplete,
+}: {
+  profile: NostrPetProfile | null;
+  updateProfileEvent: (event: NostrEvent) => void;
+  updateCompanionEvent: (event: NostrEvent) => void;
+  invalidateProfile: () => void;
+  invalidateCompanion: () => void;
+  setStoredSelectedD: (d: string) => void;
+  breedCategory?: PetsBreedCategory;
+  onComplete: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-[300]">
+      <PetsOnboardingFlow
+        profile={profile}
+        updateProfileEvent={updateProfileEvent}
+        updateCompanionEvent={updateCompanionEvent}
+        invalidateProfile={invalidateProfile}
+        invalidateCompanion={invalidateCompanion}
+        setStoredSelectedD={setStoredSelectedD}
+        breedCategory={breedCategory}
+        adoptionOnly={true}
+        onComplete={onComplete}
+      />
+    </div>,
+    document.body
   );
 }
 
@@ -880,15 +926,14 @@ function PetsContent() {
                 }}
               />
             ) : (
-              <PetsOnboardingFlow
-                profile={profile}
+              <PetsAdoptionFlowPortal
+                profile={profile ?? null}
                 updateProfileEvent={updateProfileEvent}
                 updateCompanionEvent={updateCompanionEvent}
                 invalidateProfile={invalidateProfile}
                 invalidateCompanion={invalidateCompanion}
                 setStoredSelectedD={setStoredSelectedD}
                 breedCategory={selectedBreedCategory}
-                adoptionOnly={true}
                 onComplete={() => setShowAdoptionFlow(false)}
               />
             )}
@@ -958,15 +1003,14 @@ function PetsContent() {
                 }}
               />
             ) : (
-              <PetsOnboardingFlow
-                profile={profile}
+              <PetsAdoptionFlowPortal
+                profile={profile ?? null}
                 updateProfileEvent={updateProfileEvent}
                 updateCompanionEvent={updateCompanionEvent}
                 invalidateProfile={invalidateProfile}
                 invalidateCompanion={invalidateCompanion}
                 setStoredSelectedD={setStoredSelectedD}
                 breedCategory={selectedBreedCategory}
-                adoptionOnly={true}
                 onComplete={() => setShowAdoptionFlow(false)}
               />
             )}
@@ -1015,15 +1059,14 @@ function PetsContent() {
                 }}
               />
             ) : (
-              <PetsOnboardingFlow
-                profile={profile}
+              <PetsAdoptionFlowPortal
+                profile={profile ?? null}
                 updateProfileEvent={updateProfileEvent}
                 updateCompanionEvent={updateCompanionEvent}
                 invalidateProfile={invalidateProfile}
                 invalidateCompanion={invalidateCompanion}
                 setStoredSelectedD={setStoredSelectedD}
                 breedCategory={selectedBreedCategory}
-                adoptionOnly={true}
                 onComplete={() => setShowAdoptionFlow(false)}
               />
             )}
@@ -2750,7 +2793,7 @@ function PetsDashboard({
               }}
             />
           ) : (
-            <PetsOnboardingFlow
+            <PetsAdoptionFlowPortal
               profile={profile}
               updateProfileEvent={updateProfileEvent}
               updateCompanionEvent={updateCompanionEvent}
@@ -2758,7 +2801,6 @@ function PetsDashboard({
               invalidateCompanion={invalidateCompanion}
               setStoredSelectedD={setStoredSelectedD}
               breedCategory={adoptionBreedCategory}
-              adoptionOnly={true}
               onComplete={() => setShowAdoptionFlow(false)}
             />
           )}
