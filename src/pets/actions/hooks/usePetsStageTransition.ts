@@ -27,7 +27,7 @@ import {
   updatePetsTags,
 } from '@/pets/core/lib/pets';
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
-import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
+import { useCurrentBlockHeight, isPetOldEnough, getStoredBirthBlockHeight } from '@/pets/core/lib/pets-life';
 import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '../lib/evolution-missions';
@@ -163,7 +163,10 @@ export function usePetsHatch({
       }
 
       // Eggs must wait for at least one real Bitcoin block before hatching.
-      if (!isPetOldEnough(canonical.companion.event.created_at, currentBlockHeight)) {
+      // Prefer the stored birth_block tag; fall back to the 10-minute estimate
+      // for legacy eggs.
+      const storedBirthBlock = getStoredBirthBlockHeight(canonical.companion.event.tags);
+      if (!isPetOldEnough(canonical.companion.event.created_at, currentBlockHeight, storedBirthBlock)) {
         throw new Error('This egg is still warming. Wait until at least one Bitcoin block is mined before hatching.');
       }
 

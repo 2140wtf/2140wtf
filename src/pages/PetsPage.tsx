@@ -66,7 +66,7 @@ import {
 
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
-import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
+import { useCurrentBlockHeight, isPetOldEnough, getStoredBirthBlockHeight } from '@/pets/core/lib/pets-life';
 import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
 import { getLiveShopItems, getOwnedLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
@@ -1201,8 +1201,11 @@ function PetsDashboard({
 
   // ─── Bitcoin-block age gate ───
   // Eggs must wait for at least one real block to be mined before they can hatch.
+  // Prefer the stored birth_block tag; fall back to the 10-minute estimate for
+  // legacy eggs.
   const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
-  const isEggOldEnough = isEgg && isPetOldEnough(companion.event.created_at, currentBlockHeight);
+  const storedBirthBlock = getStoredBirthBlockHeight(companion.event.tags);
+  const isEggOldEnough = isEgg && isPetOldEnough(companion.event.created_at, currentBlockHeight, storedBirthBlock);
   
   // ─── Active Drawer ───
   const [activeDrawer, setActiveDrawer] = useState<DashboardDrawer>('none');
