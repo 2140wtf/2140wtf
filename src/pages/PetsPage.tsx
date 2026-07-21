@@ -891,6 +891,7 @@ function PetsContent() {
           setStoredSelectedD={setStoredSelectedD}
           existingCompanion={ceremonyEggRef.current}
           onComplete={() => setCeremonyInProgress(false)}
+          onExit={() => setCeremonyInProgress(false)}
         />
       </div>,
       document.body,
@@ -2759,6 +2760,7 @@ function PetsDashboard({
             setStoredSelectedD={setStoredSelectedD}
             existingCompanion={companion}
             onComplete={() => setShowHatchCeremony(false)}
+            onExit={() => setShowHatchCeremony(false)}
           />
         </div>,
         document.body,
