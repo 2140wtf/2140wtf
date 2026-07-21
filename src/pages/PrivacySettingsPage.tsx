@@ -175,11 +175,6 @@ export function PrivacySettingsPage() {
           </CardHeader>
           <CardContent className="pt-0 divide-y">
             <ToggleRow
-              feature="autoShareTheme"
-              title="Share active theme"
-              description="Publish your currently selected custom theme as a profile event (kind 16767)."
-            />
-            <ToggleRow
               feature="publishRelayList"
               title="Publish relay list"
               description="Publish your NIP-65 relay list (kind 10002) when you edit relays."
