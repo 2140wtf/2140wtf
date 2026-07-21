@@ -181,3 +181,23 @@ export function getBirthBlockHeight(
   return Math.max(0, currentBlockHeight - (life.totalBlocks - 1));
 }
 
+/**
+ * Whether a pet has lived long enough for at least one real Bitcoin block to
+ * have been mined since its birth. Used to gate hatching/evolution so a pet
+ * can't transition before ~10 minutes of block time have passed.
+ *
+ * @param birthTimestampSeconds - Unix timestamp (seconds) when the pet was born.
+ * @param currentBlockHeight - Current Bitcoin block height from Esplora.
+ * @returns True when the current chain tip is strictly greater than the
+ *          estimated birth block height.
+ */
+export function isPetOldEnough(
+  birthTimestampSeconds: number | undefined,
+  currentBlockHeight: number | undefined,
+): boolean {
+  if (currentBlockHeight === undefined) return false;
+  const birthBlockHeight = getBirthBlockHeight(birthTimestampSeconds, currentBlockHeight);
+  if (birthBlockHeight === undefined) return false;
+  return currentBlockHeight > birthBlockHeight;
+}
+

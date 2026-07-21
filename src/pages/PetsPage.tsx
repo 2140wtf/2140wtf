@@ -66,6 +66,7 @@ import {
 
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
+import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 import { useSeedIdentitySync } from '@/pets/core/hooks/useSeedIdentitySync';
 
 import { getLiveShopItems, getOwnedLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
@@ -1174,6 +1175,7 @@ function PetsDashboard({
   // Layout options (hasSubHeader, noOverscroll) set at PetsPage level
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+  const { config } = useAppContext();
 
   // ─── Full-screen game mode ───
   const [gameMode, setGameMode] = useState(false);
@@ -1196,6 +1198,11 @@ function PetsDashboard({
   
   const isSleeping = companion.state === 'sleeping';
   const isEgg = companion.stage === 'egg';
+
+  // ─── Bitcoin-block age gate ───
+  // Eggs must wait for at least one real block to be mined before they can hatch.
+  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
+  const isEggOldEnough = isEgg && isPetOldEnough(companion.event.created_at, currentBlockHeight);
   
   // ─── Active Drawer ───
   const [activeDrawer, setActiveDrawer] = useState<DashboardDrawer>('none');
@@ -1743,12 +1750,19 @@ function PetsDashboard({
   // Tap the egg in the room to start or complete hatching.
   const handleEggClick = useCallback(() => {
     if (!isEgg) return;
+    if (!isEggOldEnough) {
+      toast({
+        title: 'Egg not ready',
+        description: `Wait until at least one Bitcoin block is mined (~10 min) before hatching. Current block: ${currentBlockHeight ?? '...'}`,
+      });
+      return;
+    }
     if (isIncubating) {
       setShowHatchCeremony(true);
     } else if (canStartIncubation) {
       handleStartIncubation('start');
     }
-  }, [isEgg, isIncubating, canStartIncubation, handleStartIncubation]);
+  }, [isEgg, isEggOldEnough, isIncubating, canStartIncubation, handleStartIncubation, currentBlockHeight]);
   
   // Handle opening a direct action (now opens inline card)
   const handleDirectAction = (action: DirectAction) => {
@@ -2478,6 +2492,7 @@ function PetsDashboard({
               <div className="flex flex-wrap justify-center gap-1">
                 {foodItems.map(item => {
                 const isThisUsing = isUsingItem && usingItemId === item.id;
+                const stock = profile?.storage.find(s => s.itemId === item.id)?.quantity ?? 0;
                 return (
                   <button
                     key={item.id}
@@ -2490,6 +2505,14 @@ function PetsDashboard({
                       isKitchenDisabled && !isThisUsing && 'opacity-40',
                     )}
                   >
+                    {stock > 0 && (
+                      <span
+                        className="absolute top-1 right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center z-10 shadow-sm"
+                        aria-label={`Stock: ${stock}`}
+                      >
+                        {stock}
+                      </span>
+                    )}
                     <span className="text-4xl leading-none">{item.icon}</span>
                     <span className="text-[11px] font-medium text-foreground/80">{item.name}</span>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
