@@ -38,7 +38,7 @@ export function MarketPage(): React.JSX.Element {
   });
 
   const { user } = useCurrentUser();
-  const [category, setCategory] = useState('art');
+  const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [composeOpen, setComposeOpen] = useState(false);
 
