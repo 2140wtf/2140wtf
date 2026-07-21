@@ -28,6 +28,7 @@ import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 
 import {
   KIND_PETS_STATE,
@@ -137,6 +138,8 @@ export function PetsHatchingCeremony({
   const { data: authorData } = useAuthor(user?.pubkey);
   const { isBao: isBaoWalletMode, wallet: activeWallet } = usePetsWallet();
   const { config } = useAppContext();
+  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
+  const eggTooYoung = isExistingEgg && !isPetOldEnough(existingCompanion?.event.created_at, currentBlockHeight);
   const starterGrant = usePetsStarterGrant();
 
   // ── Core state ──
@@ -657,6 +660,17 @@ export function PetsHatchingCeremony({
       setPhase('crack_3');
     } else if (phase === 'crack_3') {
       if (hatchTriggered.current) return;
+
+      // Existing eggs must be old enough (~ one real Bitcoin block) before
+      // they can hatch.
+      if (eggTooYoung) {
+        toast({
+          title: 'Egg not ready',
+          description: 'Wait until at least one Bitcoin block is mined (~10 min) before hatching.',
+        });
+        return;
+      }
+
       hatchTriggered.current = true;
 
       // Final click -> hatch!
@@ -696,7 +710,7 @@ export function PetsHatchingCeremony({
           });
         });
     }
-  }, [phase, triggerShake, executeHatch, scheduleTimeout]);
+  }, [phase, triggerShake, executeHatch, scheduleTimeout, eggTooYoung]);
 
   // ── Dialog click: complete line or advance ──
   const handleDialogClick = useCallback(() => {
