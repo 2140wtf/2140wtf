@@ -12,7 +12,6 @@ import {
   Newspaper,
   KeyRound,
   Fingerprint,
-  Sparkles,
   Zap,
   ArrowRight,
 } from 'lucide-react';
@@ -34,8 +33,6 @@ import { DialogTitle } from '@radix-ui/react-dialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
-import { saveNsec } from '@/lib/credentialManager';
-import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import {
   registerNativePasskeyAccount,
   loginNativePasskeyAccount,
@@ -88,12 +85,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     file?: string;
     extension?: string;
     passkey?: string;
-    quickstart?: string;
   }>({});
   const [activeTab, setActiveTab] = useState('secret');
   const [passkeyAvail, setPasskeyAvail] = useState<NativePasskeyAvailability | null>(null);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [quickStartLoading, setQuickStartLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const login = useLoginActions();
@@ -297,26 +292,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     reader.readAsText(file);
   };
 
-  const handleQuickStart = async () => {
-    setQuickStartLoading(true);
-    setErrors(prev => ({ ...prev, quickstart: undefined }));
-    try {
-      const sk = generateSecretKey();
-      const nsec = nip19.nsecEncode(sk);
-      const pubkey = getPublicKey(sk);
-      const npub = nip19.npubEncode(pubkey);
-
-      await saveNsec(npub, nsec);
-      login.nsec(nsec);
-      onLogin();
-      onClose();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Quick Start failed';
-      setErrors(prev => ({ ...prev, quickstart: msg }));
-      setQuickStartLoading(false);
-    }
-  };
-
   const refreshPasskeyAvailability = useCallback(async () => {
     try {
       const avail = await getNativePasskeyAvailability();
@@ -407,7 +382,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       }}
       className="w-full"
     >
-      <TabsList className="grid w-full grid-cols-5 bg-muted border rounded-none mb-4 h-auto">
+      <TabsList className="grid w-full grid-cols-4 bg-muted border rounded-none mb-4 h-auto">
         <TabsTrigger value="secret" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
           <KeyRound className="size-3.5 sm:size-4" />
           <span>Key</span>
@@ -415,10 +390,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
         <TabsTrigger value="remote" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
           <ExternalLink className="size-3.5 sm:size-4" />
           <span>Remote</span>
-        </TabsTrigger>
-        <TabsTrigger value="quickstart" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
-          <Sparkles className="size-3.5 sm:size-4" />
-          <span>Quick</span>
         </TabsTrigger>
         <TabsTrigger value="passkey" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
           <Fingerprint className="size-3.5 sm:size-4" />
@@ -581,46 +552,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               </Button>
             </div>
           )}
-        </div>
-      </TabsContent>
-
-      <TabsContent value='quickstart' className='space-y-4'>
-        <div className='text-center space-y-4'>
-          <div className="flex size-16 text-3xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
-            <Sparkles className="size-7 text-primary" />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Create a fresh Nostr account instantly. We&apos;ll generate a secret key, save it to your device, and log you in.
-          </p>
-          {errors.quickstart && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>{errors.quickstart}</AlertDescription>
-            </Alert>
-          )}
-          <Button
-            className="w-full h-12 rounded-none"
-            onClick={handleQuickStart}
-            disabled={quickStartLoading}
-          >
-            {quickStartLoading ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating account…</>
-            ) : (
-              <><Sparkles className="w-4 h-4 mr-2" /> Quick Start</>
-            )}
-          </Button>
-          <div className='mx-auto max-w-sm'>
-            <div className='p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800'>
-              <div className='flex items-center gap-2 mb-1'>
-                <span className='text-xs font-semibold text-amber-800 dark:text-amber-200'>
-                  Important
-                </span>
-              </div>
-              <p className='text-xs text-amber-900 dark:text-amber-300'>
-                Your secret key is generated locally. Make sure to back it up — it is the only way to recover this account.
-              </p>
-            </div>
-          </div>
         </div>
       </TabsContent>
 
