@@ -345,14 +345,14 @@ function PetsContent() {
     updateProfileEvent,
   } = useBlobbonautProfile();
 
-  // Active Pets wallet: real Cashu (NIP-60/NWC) by default, or BAO signet/testnet.
+  // Active Pets wallet: real Cashu (NIP-60) by default, or BAO signet/demo.
   const petsWalletResult = usePetsWallet();
   const petsWallet = petsWalletResult.wallet;
-  const isBitcoinPetsWallet = petsWalletResult.isBitcoin;
+  const isCashuPetsWallet = petsWalletResult.isCashu;
 
   // Align the active wallet mode with the profile on first load when the user
   // has never explicitly chosen a mode. This prevents a new profile (which
-  // defaults to BAO/demo) from showing the Bitcoin-sats wallet by default.
+  // defaults to BAO/demo) from showing the real-sats wallet by default.
   useEffect(() => {
     if (!profile) return;
     const hasStoredMode = (() => {
@@ -363,7 +363,7 @@ function PetsContent() {
       }
     })();
     if (hasStoredMode) return;
-    petsWalletResult.setMode(profile.walletMode === 'btc-sats' ? 'bitcoin' : 'testnet');
+    petsWalletResult.setMode(profile.walletMode === 'cashu' ? 'cashu' : 'bao');
     // Only run once when the profile first becomes available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.walletMode]);
@@ -637,7 +637,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isBitcoinPetsWallet: isBitcoinPetsWallet,
+    isCashuPetsWallet: isCashuPetsWallet,
   });
 
   const { mutateAsync: executeEvolve, isPending: isEvolving } = usePetsEvolve({
@@ -645,7 +645,7 @@ function PetsContent() {
     profile,
     ensureCanonicalBeforeAction,
     updateCompanionEvent,
-    isBitcoinPetsWallet: isBitcoinPetsWallet,
+    isCashuPetsWallet: isCashuPetsWallet,
   });
   
   // Handler for evolution (baby -> adult)
@@ -2359,7 +2359,7 @@ function PetsDashboard({
                         const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
                         await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
                         await invalidateProfile();
-                        const modeLabel = mode === 'btc-sats' ? 'BTC sats' : 'demo sats';
+                        const modeLabel = mode === 'cashu' ? 'Cashu sats' : 'BAO signet';
                         toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
                       } catch {
                         toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });
