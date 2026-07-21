@@ -20,7 +20,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { PetsCompanion, BlobbonautProfile, PetsStage } from '@/pets/core/lib/pets';
+import type { PetsCompanion, NostrPetProfile, PetsStage } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
   STAT_MAX,
@@ -81,7 +81,7 @@ export interface CanonicalActionResult {
  */
 export interface UsePetsStageTransitionParams {
   companion: PetsCompanion | null;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<CanonicalActionResult | null>;
   /** Update companion event in local cache */

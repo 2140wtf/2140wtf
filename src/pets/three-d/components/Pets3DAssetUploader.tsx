@@ -2,7 +2,7 @@
  * Pets3DAssetUploader — Let the user upload custom GLB pet/room assets.
  *
  * Assets are hosted on Blossom and persisted in the owner's kind 11125
- * Blobbonaut profile under `assets_3d`. When no custom asset is configured,
+ * Nostr pet profile under `assets_3d`. When no custom asset is configured,
  * the renderer falls back to the bundled default pet model and procedural room.
  *
  * Credit metadata (title, author, license, source URL) is stored next to the
@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePersistAssets3D } from '@/pets/three-d/hooks/usePersistAssets3D';
 import { useUploadGLBAsset } from '@/pets/three-d/hooks/useUploadGLBAsset';
 import { parseAssets3DContent } from '@/pets/three-d/lib/three-d-schema';
@@ -169,7 +169,7 @@ interface PendingUpload {
 }
 
 export function Pets3DAssetUploader() {
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
   const { upload, isPending: isUploading } = useUploadGLBAsset();
   const { mutate: persist, isPending: isSaving } = usePersistAssets3D();
 
@@ -252,7 +252,7 @@ export function Pets3DAssetUploader() {
             <DialogTitle>Asset credits &amp; license</DialogTitle>
             <DialogDescription>
               Add attribution for the GLB model. This is stored in your
-              Blobbonaut profile next to the asset reference, not inside the
+              Nostr pet profile next to the asset reference, not inside the
               GLB file itself.
             </DialogDescription>
           </DialogHeader>

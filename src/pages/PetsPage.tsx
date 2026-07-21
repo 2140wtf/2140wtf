@@ -15,10 +15,10 @@ import { useCanonicalSync } from '@/pets/core/hooks/useCanonicalSync';
 import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import { timeAgo } from '@/lib/timeAgo';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import { useBlobbonautProfileNormalization } from '@/hooks/useBlobbonautProfileNormalization';
+import { useNostrPetProfileNormalization } from '@/hooks/useNostrPetProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { addProfileSats } from '@/pets/core/lib/profile-sats';
@@ -52,14 +52,14 @@ import { getProfileUrl } from '@/lib/profileUrl';
 
 import {
   KIND_PETS_STATE,
-  KIND_BLOBBONAUT_PROFILE,
+  KIND_NOSTR_PET_PROFILE,
   updatePetsTags,
-  updateBlobbonautTags,
+  updateNostrPetProfileTags,
   statsToTagUpdates,
   filterMigratedLegacyCompanions,
   type PetsCompanion,
   type PetsStats,
-  type BlobbonautProfile,
+  type NostrPetProfile,
   type StorageItem,
   getLocalDayString,
 } from '@/pets/core/lib/pets';
@@ -157,7 +157,7 @@ import { parseRoomFurnitureContent, type FurniturePlacement, type RoomFurnitureC
 import { getEffectiveRoomFurniture } from '@/pets/rooms/lib/room-furniture-effective';
 import { RoomFurnitureEditor, RoomFurnitureEditorTrigger } from '@/pets/rooms/components/RoomFurnitureEditor';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
-import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { fetchFreshNostrPetProfile } from '@/pets/core/lib/fetchFreshNostrPetProfile';
 import { buildGuideTarget, getGuideRoomDirection, type GuideTarget } from '@/pets/rooms/lib/stat-guide-config';
 import { getActionEmotion, SEVERITY_THRESHOLDS } from '@/pets/ui/lib/status-reactions';
 import { useInteractionReaction, INVENTORY_TO_REACTION } from '@/pets/ui/hooks/useInteractionReaction';
@@ -346,7 +346,7 @@ function PetsContent() {
     isLoading: profileLoading,
     invalidate: invalidateProfile,
     updateProfileEvent,
-  } = useBlobbonautProfile();
+  } = useNostrPetProfile();
 
   // Active Pets wallet: real Cashu (NIP-60) by default, or BAO signet/demo.
   const petsWalletResult = usePetsWallet();
@@ -372,7 +372,7 @@ function PetsContent() {
   }, [profile?.walletMode]);
 
   // Auto-normalize profiles missing pettingLevel tag
-  useBlobbonautProfileNormalization({
+  useNostrPetProfileNormalization({
     profile,
     updateProfileEvent,
     invalidateProfile,
@@ -776,15 +776,15 @@ function PetsContent() {
       if (DEBUG_PETS) console.log('[PetsPage] Skipping ceremony: user has hatched pets');
       if (profile && !profile.onboardingDone && user?.pubkey) {
         fetchFreshPetsEvent(nostr, {
-          kinds: [KIND_BLOBBONAUT_PROFILE],
+          kinds: [KIND_NOSTR_PET_PROFILE],
           authors: [user.pubkey],
         }).then(prev => {
           if (!prev) return;
-          const updatedTags = updateBlobbonautTags(prev.tags, {
+          const updatedTags = updateNostrPetProfileTags(prev.tags, {
             pets_onboarding_done: 'true',
           });
           return publishEvent({
-            kind: KIND_BLOBBONAUT_PROFILE,
+            kind: KIND_NOSTR_PET_PROFILE,
             content: prev.content,
             tags: updatedTags,
             prev,
@@ -1114,7 +1114,7 @@ interface PetsDashboardProps {
   isDirectActionPending: boolean;
   actionInProgress: string | null;
   isPublishing: boolean;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   // Stage transition handlers
   onEvolve: () => Promise<void>;
   isHatching: boolean;
@@ -1366,7 +1366,7 @@ function PetsDashboard({
     if (!user?.pubkey || !furnitureDraft) return;
     setIsSavingFurniture(true);
     try {
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      const freshProfile = await fetchFreshNostrPetProfile(nostr, user.pubkey);
       if (!freshProfile) {
         toast({ title: 'Error', description: 'Could not fetch profile. Try again.' });
         return;
@@ -1379,7 +1379,7 @@ function PetsDashboard({
       };
       const content = serializeProfileContent(prev.content, { room_furniture: updatedFurniture });
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content,
         tags: prev.tags,
         prev,
@@ -1414,7 +1414,7 @@ function PetsDashboard({
     if (!user?.pubkey) return;
     setIsSavingLayout(true);
     try {
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      const freshProfile = await fetchFreshNostrPetProfile(nostr, user.pubkey);
       if (!freshProfile) {
         toast({ title: 'Error', description: 'Could not fetch profile. Try again.' });
         return;
@@ -1427,7 +1427,7 @@ function PetsDashboard({
       };
       const content = serializeProfileContent(prev.content, { room_layouts: updatedRoomLayouts });
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content,
         tags: prev.tags,
         prev,
@@ -1685,19 +1685,19 @@ function PetsDashboard({
       
       if (isCurrentCompanion) {
         // Remove companion: filter out all current_companion tags entirely
-        updatedTags = updateBlobbonautTags(canonical.profileAllTags, {})
+        updatedTags = updateNostrPetProfileTags(canonical.profileAllTags, {})
           .filter(tag => tag[0] !== 'current_companion');
       } else {
         // Set companion: first remove any existing current_companion tags, then add the new one
         const tagsWithoutCompanion = canonical.profileAllTags.filter(tag => tag[0] !== 'current_companion');
-        updatedTags = updateBlobbonautTags(tagsWithoutCompanion, {
+        updatedTags = updateNostrPetProfileTags(tagsWithoutCompanion, {
           current_companion: companion.d,
         });
       }
       
       const prev = canonical.profileEvent;
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content: prev.content,
         tags: updatedTags,
         prev,
@@ -2374,10 +2374,10 @@ function PetsDashboard({
                     onModeChange={async (mode) => {
                       if (!user?.pubkey || !profile) return;
                       try {
-                        const fresh = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+                        const fresh = await fetchFreshNostrPetProfile(nostr, user.pubkey);
                         if (!fresh) return;
-                        const newTags = updateBlobbonautTags(fresh.allTags, { wallet_mode: mode });
-                        await publishEvent({ kind: KIND_BLOBBONAUT_PROFILE, content: fresh.content, tags: newTags });
+                        const newTags = updateNostrPetProfileTags(fresh.allTags, { wallet_mode: mode });
+                        await publishEvent({ kind: KIND_NOSTR_PET_PROFILE, content: fresh.content, tags: newTags });
                         await invalidateProfile();
                         const modeLabel = mode === 'cashu' ? 'Cashu sats' : 'BAO signet';
                         toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
@@ -2795,7 +2795,7 @@ interface RoomBottomBarProps {
   companion: PetsCompanion;
   /** Projected stats (decay-applied) matching what the stat rings display. */
   currentStats: PetsStats;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   isEgg: boolean;
   isSleeping: boolean;
   isUsingItem: boolean;
@@ -3238,7 +3238,7 @@ function ClosetBar() {
 
 interface MissionsTabContentProps {
   initialPane?: QuestPane;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
   isIncubating: boolean;
   isEvolvingState: boolean;
@@ -3634,7 +3634,7 @@ function PetsTabContent({
   isHatching,
   isEvolving,
 }: PetsTabContentProps) {
-  const profile = useBlobbonautProfile().profile;
+  const profile = useNostrPetProfile().profile;
   const isTransitioning = isHatching || isEvolving;
 
   return (
@@ -3747,7 +3747,7 @@ function PetsTabContent({
 // ─── BAO Markets Quest Content ────────────────────────────────────────────────
 
 interface BaoMarketsQuestContentProps {
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
 }
 

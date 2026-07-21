@@ -1,6 +1,6 @@
 /**
  * Helpers for updating the `assets_3d` object inside a kind 11125
- * Blobbonaut profile content string.
+ * Nostr pet profile content string.
  *
  * The rest of the content JSON is preserved so unrelated fields (e.g. room
  * layouts, furniture) are not clobbered when the user uploads a GLB.

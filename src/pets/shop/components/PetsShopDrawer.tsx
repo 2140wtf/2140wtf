@@ -12,13 +12,13 @@ import { cn } from '@/lib/utils';
 import { usePetsPurchaseItem, estimateCashuSendFee } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
-import type { BlobbonautProfile, PetsCompanion } from '@/pets/core/lib/pets';
+import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import type { ShopItem, ShopItemCategory } from '../types/shop.types';
 
 interface PetsShopDrawerProps {
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   companion?: PetsCompanion | null;
   externalWallet?: (CashuWalletState & CashuWalletActions) | null;
   onCompanionUpdated?: (event: NostrEvent) => void;

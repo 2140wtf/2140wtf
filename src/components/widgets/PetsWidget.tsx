@@ -14,10 +14,10 @@ import { usePetsUseInventoryItem } from '@/pets/actions/hooks/usePetsUseInventor
 import { isActionVisibleForStage, type InventoryAction, type PetsAction } from '@/pets/actions/lib/pets-action-utils';
 import { getVisibleStats } from '@/pets/core/lib/pets-decay';
 import { getPetsStatDisplayState } from '@/pets/core/lib/pets-segments';
-import { KIND_PETS_STATE, KIND_BLOBBONAUT_PROFILE, updatePetsTags, updateBlobbonautTags, filterMigratedLegacyCompanions } from '@/pets/core/lib/pets';
+import { KIND_PETS_STATE, KIND_NOSTR_PET_PROFILE, updatePetsTags, updateNostrPetProfileTags, filterMigratedLegacyCompanions } from '@/pets/core/lib/pets';
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
 import { getStreakTagUpdates } from '@/pets/actions/lib/pets-streak';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -65,7 +65,7 @@ function getSelectedPetsKey(pubkey: string): string {
 export function PetsWidget() {
   const { user } = useCurrentUser();
   const { companions, isLoading, updateCompanionEvent } = usePetssCollection();
-  const { profile, updateProfileEvent, invalidate: invalidateProfile } = useBlobbonautProfile();
+  const { profile, updateProfileEvent, invalidate: invalidateProfile } = useNostrPetProfile();
   const { ensureCanonicalPetsBeforeAction } = usePetsMigration();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
@@ -183,17 +183,17 @@ export function PetsWidget() {
 
       let updatedTags: string[][];
       if (isCurrentCompanion) {
-        updatedTags = updateBlobbonautTags(canonical.profileAllTags, {})
+        updatedTags = updateNostrPetProfileTags(canonical.profileAllTags, {})
           .filter(tag => tag[0] !== 'current_companion');
       } else {
         const tagsWithoutCompanion = canonical.profileAllTags.filter(tag => tag[0] !== 'current_companion');
-        updatedTags = updateBlobbonautTags(tagsWithoutCompanion, {
+        updatedTags = updateNostrPetProfileTags(tagsWithoutCompanion, {
           current_companion: companion.d,
         });
       }
       const prev = canonical.profileEvent;
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content: prev.content,
         tags: updatedTags,
         prev,

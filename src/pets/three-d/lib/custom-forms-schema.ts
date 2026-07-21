@@ -1,7 +1,7 @@
 /**
  * NOSTR Pets custom species schema.
  *
- * Custom species live in the owner’s kind 11125 Blobbonaut profile content
+ * Custom species live in the owner’s kind 11125 Nostr pet profile content
  * under the `custom_forms` key. This keeps them owner-scoped and lets the
  * renderer treat built-in and custom forms uniformly after lookup.
  *
