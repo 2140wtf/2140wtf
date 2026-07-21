@@ -157,7 +157,10 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "::",
-      port: 8081,
+      port: 3500,
+      // Fail loudly instead of silently drifting to 3501 when the port is
+      // taken — the drift is confusing ("which port is the app on now?").
+      strictPort: true,
       allowedHosts: env.ALLOWED_HOSTS === "*" ? true : undefined,
       proxy: {
         '/api/stacker-news': {
@@ -169,6 +172,13 @@ export default defineConfig(({ mode }) => {
       watch: {
         ignored: [
           '**/.tools/**',
+          // Scratch dirs — .tmp holds full upstream repo clones whose tens of
+          // thousands of files exhaust the inotify watcher limit (ENOSPC).
+          '**/.tmp/**',
+          '**/.research/**',
+          '**/test-results/**',
+          '**/.claude/**',
+          '**/.agents/**',
           '**/android/**',
           '**/ios/**',
           '**/dist/**',
@@ -177,7 +187,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     preview: {
-      port: 8081,
+      port: 3500,
       proxy: {
         '/api/stacker-news': {
           target: 'https://stacker.news',
