@@ -26,6 +26,7 @@ import {
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
 import { deriveAdultFormFromSeed } from '@/pets/adult-pets/types/adult.types';
+import { BIRTH_BLOCK_TAG } from '@/pets/core/lib/pets-life';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,13 +175,14 @@ export function updatePreviewName(
  * @param preview - The preview to convert
  * @returns Tags array for Kind 31124 event
  */
-export function previewToEventTags(preview: PetsEggPreview): string[][] {
+export function previewToEventTags(preview: PetsEggPreview, birthBlockHeight?: number): string[][] {
   const now = preview.createdAt.toString();
   const { visualTraits } = preview;
-  
+
   return [
     ['d', preview.d],
     ['b', PETS_ECOSYSTEM_NAMESPACE],
+    ...(birthBlockHeight !== undefined ? [[BIRTH_BLOCK_TAG, birthBlockHeight.toString()]] : []),
     ['name', preview.name],
     ['stage', preview.stage],
     ['state', preview.state],
