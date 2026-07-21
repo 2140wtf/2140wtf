@@ -188,6 +188,12 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       port: 3500,
+      // Avoid stale chunk errors when the preview server is restarted after
+      // rebuilds. The lazy-loaded chunks are content-hashed, so a cached
+      // index.html can reference chunks that no longer exist.
+      headers: {
+        'Cache-Control': 'no-store, must-revalidate',
+      },
       proxy: {
         '/api/stacker-news': {
           target: 'https://stacker.news',
