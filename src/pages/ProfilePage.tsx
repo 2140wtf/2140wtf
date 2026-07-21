@@ -109,7 +109,7 @@ import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import type { AddrCoords } from '@/hooks/useEvent';
 import { isNostrId } from '@/lib/nostrId';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
-import { canZap } from '@/lib/canZap';
+import { useCanReceiveZaps } from '@/hooks/useCanReceiveZaps';
 import { parseAddr } from '@/lib/parseAddr';
 import { impactMedium } from '@/lib/haptics';
 import { getStorageKey } from '@/lib/storageKey';
@@ -1364,7 +1364,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   }, [pubkey, queryClient]);
   const metadataEvent = author.data?.event;
   const displayName = metadata?.name || metadata?.display_name || 'Anonymous';
-  const canReceiveDonations = useMemo(() => !!metadata && canZap(metadata), [metadata]);
+  const { canReceive: canReceiveDonations } = useCanReceiveZaps(pubkey);
 
   // NIP-A3 payment targets published by this profile. We need these eagerly
   // to decide whether to show the on-chain "Fat Zap" button (silent payments).

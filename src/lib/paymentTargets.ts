@@ -58,7 +58,7 @@ export interface PaymentTarget {
  * - `generic` methods (Monero, Ethereum, …) render a QR code, a copyable
  *   address, and a clickable native-URI button.
  */
-export type PaymentMethodKind = 'bitcoin' | 'lightning' | 'generic';
+export type PaymentMethodKind = 'bitcoin' | 'lightning' | 'generic' | 'cashu';
 
 /** Static metadata + behavior for a recognized payment type. */
 export interface PaymentMethodDef {
