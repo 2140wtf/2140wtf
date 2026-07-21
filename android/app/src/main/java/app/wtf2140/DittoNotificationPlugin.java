@@ -1,4 +1,4 @@
-package pub.ditto.app;
+package app.wtf2140;
 
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.content.Context;

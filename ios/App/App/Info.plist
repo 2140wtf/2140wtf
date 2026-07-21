@@ -61,13 +61,13 @@
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>pub.ditto.app.notification-refresh</string>
+		<string>app.wtf2140.notification-refresh</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>pub.ditto.app.bitcoin</string>
+			<string>app.wtf2140.bitcoin</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>bitcoin</string>
@@ -75,7 +75,7 @@
 		</dict>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>pub.ditto.app.nostr</string>
+			<string>app.wtf2140.nostr</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>nostr</string>

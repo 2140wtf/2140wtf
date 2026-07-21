@@ -1,18 +1,19 @@
-repository: https://gitlab.com/soapbox-pub/ditto
-
-name: Ditto
+name: 2140.wtf
 
 summary: Your content. Your vibe. Your rules.
 
 description: |
-  Ditto is an open-source Nostr client. Your content. Your vibe. Your rules,
-  and all the other stuff: games, treasure hunts, live streams,
+  2140.wtf is an open-source Nostr client. Your content. Your vibe. Your rules,
+  and all the other stuff: games, pets, prediction markets, live streams,
   and more.
 
   Features:
   - Theming — 9 built-in presets, shareable themes
   - Infinite content types — notes, articles, short videos (Vines), live streams,
     polls, follow packs, geocaching, mini-apps
+  - NOSTR Pets — hatch, raise, and battle pets; design your own species
+  - Prediction markets and polls powered by BAO
+  - Cashu ecash wallet (NIP-60) with nutzaps
   - Lightning payments — zap posts and profiles via NWC or WebLN
   - Comments on anything — posts, URLs, profiles, hashtags, books, and more
 
@@ -21,28 +22,20 @@ tags:
   - social
   - messaging
   - lightning
+  - cashu
   - decentralized
 
 license: AGPL-3.0
 
-website: https://ditto.pub
+website: https://2140.wtf
 
 icon: ./public/logo.jpg
 
-images:
-  - https://blossom.ditto.pub/47fcb3bdc414ced245fbba53b0456d9bfdf112d711ecf5cc628361a47002392a.png
-  - https://blossom.ditto.pub/e387a4c4566545c650477cee66e638131eb874a90761cf0a371e5abf1e2c7af2.png
-  - https://blossom.ditto.pub/73585c9547868da215a91f8a13543251a20967a74f6e8329231544add50e3dee.png
-  - https://blossom.ditto.pub/4216d18d5854444c64b482dbbac9e077a453f85a9d72d91bc6adf89fd1f42c36.png
-  - https://blossom.ditto.pub/a7521e652d625c57cf66fd97ea92c66b8559bcedcb805aaf375bc047415625a3.png
-  - https://blossom.ditto.pub/daf008f146391f0172b89595500f640b84eac4e146b2e081db80791819443fa0.png
-  - https://blossom.ditto.pub/22c144a792e32559a838c8f69fbb4ae22264f47ff3d04341e656748d264064bc.png
-  - https://blossom.ditto.pub/fa609e4a03e984063fbc6c474bd8a73bb088666b7c0e5561f993264f372c90ef.png
+# TODO: add 2140.wtf screenshots hosted on your own Blossom server before publishing.
+images: []
 
 release_notes: ./CHANGELOG.md
 
-metadata_sources:
-  - gitlab
 
 supported_nips:
   - "01"  # Basic protocol — events, filters, subscriptions
