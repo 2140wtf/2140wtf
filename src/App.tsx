@@ -75,7 +75,6 @@ const hardcodedConfig: AppConfig = {
   magicMouse: false,
   theme: "custom",
   customTheme: whitepaperPreset,
-  autoShareTheme: true,
   useAppRelays: true,
   useUserRelays: false,
   relayMetadata: {

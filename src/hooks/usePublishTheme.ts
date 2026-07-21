@@ -8,9 +8,7 @@ import { usePublishPreferences } from './usePublishPreferences';
 import { toast } from './useToast';
 import {
   THEME_DEFINITION_KIND,
-  ACTIVE_THEME_KIND,
   buildThemeDefinitionTags,
-  buildActiveThemeTags,
   titleToSlug,
   type ThemeDefinition,
 } from '@/lib/themeEvent';
@@ -41,7 +39,6 @@ export function usePublishTheme() {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent, isPending } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
-  const autoShareThemeEnabled = isEnabled('autoShareTheme');
   const themeDefinitionsEnabled = isEnabled('themeDefinitions');
   const deleteRequestsEnabled = isEnabled('deleteRequests');
   const queryClient = useQueryClient();
@@ -79,37 +76,6 @@ export function usePublishTheme() {
     return identifier;
   }, [user, publishEvent, queryClient, themeDefinitionsEnabled]);
 
-  /** Set a theme as the active profile theme (kind 16767). */
-  const setActiveTheme = useCallback(async (opts: {
-    themeConfig: ThemeConfig;
-    /** Author of the source theme definition */
-    sourceAuthor?: string;
-    /** d-tag of the source theme definition */
-    sourceIdentifier?: string;
-    /** Optional description from the source theme definition */
-    description?: string;
-  }) => {
-    if (!user) throw new Error('Must be logged in');
-    if (!autoShareThemeEnabled) {
-      toast({
-        title: 'Theme sharing disabled',
-        description: 'Turn on “Share active theme” in Settings → Privacy & Publishing to publish your theme.',
-      });
-      throw new Error('Theme sharing is disabled');
-    }
-
-    const resolved = resolveThemeForPublishing(opts.themeConfig);
-    const tags = buildActiveThemeTags(resolved, opts.sourceAuthor, opts.sourceIdentifier, opts.description);
-
-    await publishEvent({
-      kind: ACTIVE_THEME_KIND,
-      content: '',
-      tags,
-    });
-
-    queryClient.invalidateQueries({ queryKey: ['activeProfileTheme', user.pubkey] });
-  }, [user, publishEvent, queryClient, autoShareThemeEnabled]);
-
   /** Delete a kind 36767 theme definition. */
   const deleteTheme = useCallback(async (theme: ThemeDefinition) => {
     if (!user) throw new Error('Must be logged in');
@@ -142,25 +108,5 @@ export function usePublishTheme() {
     queryClient.invalidateQueries({ queryKey: ['streamKind'] });
   }, [user, publishEvent, queryClient, deleteRequestsEnabled]);
 
-  /** Clear the active profile theme by publishing an empty kind 16767 replacement. */
-  const clearActiveTheme = useCallback(async () => {
-    if (!user) throw new Error('Must be logged in');
-    if (!autoShareThemeEnabled) {
-      toast({
-        title: 'Theme sharing disabled',
-        description: 'Turn on “Share active theme” in Settings → Privacy & Publishing to update your published theme.',
-      });
-      throw new Error('Theme sharing is disabled');
-    }
-
-    await publishEvent({
-      kind: ACTIVE_THEME_KIND,
-      content: '',
-      tags: [],
-    });
-
-    queryClient.invalidateQueries({ queryKey: ['activeProfileTheme', user.pubkey] });
-  }, [user, publishEvent, queryClient, autoShareThemeEnabled]);
-
-  return { publishTheme, setActiveTheme, deleteTheme, clearActiveTheme, isPending };
+  return { publishTheme, deleteTheme, isPending };
 }

@@ -9,7 +9,6 @@ export type PublishFeature =
   | 'follows'
   | 'mutes'
   | 'bookmarks'
-  | 'autoShareTheme'
   | 'publishRelayList'
   | 'publishBlossomList'
   | 'notes'
@@ -47,7 +46,6 @@ const FEATURE_DEFAULTS: Record<PublishFeature, boolean> = {
   follows: true,
   mutes: true,
   bookmarks: true,
-  autoShareTheme: true,
   publishRelayList: true,
   publishBlossomList: true,
   notes: true,
