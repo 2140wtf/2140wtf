@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Camera,
   Cat,
+  Clapperboard,
   Code,
   Film,
   Gavel,
@@ -187,6 +188,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "help", label: "Help", path: "/help", icon: HelpCircle },
   { id: "about", label: "About", path: "/about", icon: Info },
   // Content types
+  { id: "media", label: "Media", path: "/media", icon: Clapperboard },
   { id: "photos", label: "Photos", path: "/photos", icon: Camera },
   { id: "videos", label: "Videos", path: "/videos", icon: Film },
   { id: "articles", label: "Articles", path: "/articles", icon: BookOpen },
