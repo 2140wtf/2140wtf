@@ -27,6 +27,8 @@ interface ZapSuccessScreenProps {
   txid?: string;
   /** Nutzap event id (Cashu only). Enables a link to the published kind 9321 event. */
   eventId?: string;
+  /** Payment rail that succeeded. Controls the headline copy. */
+  kind?: 'onchain' | 'lightning' | 'cashu';
   /** Close handler invoked by the "Done" button. */
   onClose: () => void;
 }
@@ -48,6 +50,7 @@ export function ZapSuccessScreen({
   btcPrice,
   txid,
   eventId,
+  kind,
   onClose,
 }: ZapSuccessScreenProps) {
   const { data: author } = useAuthor(recipientPubkey);
@@ -134,7 +137,15 @@ export function ZapSuccessScreen({
       {/* Headline + amount */}
       <div className="grid gap-1">
         <h2 className="text-lg font-semibold tracking-tight">
-          {recipientLabel ? 'Donation sent' : eventId ? 'Nutzap sent' : 'Bitcoin sent'}
+          {recipientLabel
+            ? 'Donation sent'
+            : kind === 'cashu' && eventId
+              ? 'Nutzap sent'
+              : kind === 'cashu'
+                ? 'Cashu sent'
+                : kind === 'lightning'
+                  ? 'Lightning sent'
+                  : 'Bitcoin sent'}
         </h2>
         <div className="text-4xl font-bold tabular-nums bg-gradient-to-br from-amber-500 to-orange-600 bg-clip-text text-transparent">
           {usdDisplay || `${amountSats.toLocaleString()} sats`}
