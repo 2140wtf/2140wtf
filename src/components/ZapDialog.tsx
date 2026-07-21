@@ -26,7 +26,6 @@ import { ZapAmountInput } from '@/components/ZapAmountInput';
 import { ZapSuccessScreen } from '@/components/ZapSuccessScreen';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
-import { useBitcoinSigner } from '@/hooks/useBitcoinSigner';
 import { useToast } from '@/hooks/useToast';
 import { useZaps } from '@/hooks/useZaps';
 import { useWallet } from '@/hooks/useWallet';
@@ -434,9 +433,7 @@ export function ZapDialog({
   // payment target via the title dropdown. If the user's signer can't sign
   // PSBTs AND Lightning is available, we transparently default to Lightning
   // instead of showing an unusable Bitcoin method as the primary option.
-  const { capability: btcCapability } = useBitcoinSigner();
   const hasLightning = canZap(author?.metadata);
-  const bitcoinUnsupported = btcCapability === 'unsupported';
 
   // A Bitcoin payment target overrides the recipient's derived Taproot
   // address. An `sp1…` code routes onto the silent-payment rail (no kind
@@ -463,6 +460,11 @@ export function ZapDialog({
   // Build the ordered list of selectable methods for this dialog.
   // Campaigns always render the single on-chain pane (no method switcher).
   // NIP-69 zap poll votes are Lightning-only.
+  //
+  // For profile zaps we no longer derive a Bitcoin address from the recipient's
+  // npub. On-chain Bitcoin is only offered when the recipient has explicitly
+  // published a NIP-A3 `payto bitcoin` target (a `bc1…` address or, preferably,
+  // a BIP-352 `sp1…` silent-payment code).
   const methods = useMemo<DialogMethod[]>(() => {
     if (campaign) return [];
     if (isPollVote) {
@@ -470,9 +472,10 @@ export function ZapDialog({
         ? [{ id: 'lightning', def: PAYMENT_METHODS.lightning }]
         : [];
     }
-    const list: DialogMethod[] = [
-      { id: 'bitcoin', def: PAYMENT_METHODS.bitcoin },
-    ];
+    const list: DialogMethod[] = [];
+    if (bitcoinTarget) {
+      list.push({ id: 'bitcoin', def: PAYMENT_METHODS.bitcoin });
+    }
     if (hasLightning || lightningTarget) {
       list.push({ id: 'lightning', def: PAYMENT_METHODS.lightning });
     }
@@ -480,11 +483,14 @@ export function ZapDialog({
       list.push({ id: t.type, def: PAYMENT_METHODS[t.type], target: t });
     }
     return list;
-  }, [campaign, hasLightning, lightningTarget, genericTargets, isPollVote]);
+  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, genericTargets, isPollVote]);
 
-  const defaultMethodId: DialogMethodId = isPollVote
-    ? 'lightning'
-    : bitcoinUnsupported && (hasLightning || lightningTarget) ? 'lightning' : 'bitcoin';
+  const defaultMethodId: DialogMethodId = useMemo(() => {
+    if (isPollVote) return 'lightning';
+    if (bitcoinTarget) return 'bitcoin';
+    if (hasLightning || lightningTarget) return 'lightning';
+    return methods[0]?.id ?? 'bitcoin';
+  }, [bitcoinTarget, hasLightning, lightningTarget, isPollVote, methods]);
   const [activeMethod, setActiveMethod] = useState<DialogMethodId>(defaultMethodId);
 
   const currentMethod =
@@ -624,9 +630,13 @@ export function ZapDialog({
   // Zap button shows for any logged-in user except when targeting oneself.
   // Campaigns bypass the self-check: a creator donating to their own
   // campaign is legitimate. NIP-69 poll authors cannot vote on their own polls.
+  //
+  // For non-campaign profile zaps, require at least one usable payment method:
+  // a declared bitcoin target, Lightning capability/target, or a generic
+  // NIP-A3 payment method. No method = nothing to zap with.
   const canOpenZap = !!user && (!!campaign || user.pubkey !== target.pubkey) &&
     (!isPollVote || user.pubkey !== target.pubkey) &&
-    (!isPollVote || methods.length > 0);
+    (campaign || methods.length > 0);
 
   if (!canOpenZap) {
     // Uncontrolled callers wrap a trigger node; render it bare so the icon
