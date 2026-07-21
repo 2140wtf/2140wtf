@@ -29,7 +29,7 @@ import {
   updatePetsTags,
 } from '@/pets/core/lib/pets';
 import { applyPetsDecay, applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
-import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
+import { useCurrentBlockHeight, isPetOldEnough, getStoredBirthBlockHeight } from '@/pets/core/lib/pets-life';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createHatchMissions, createEvolveMissions } from '../lib/evolution-missions';
 import {
@@ -146,8 +146,10 @@ export function useStartIncubation({
       }
 
       // Eggs must wait for at least one real Bitcoin block before they can
-      // start incubating (~10 minutes of block time).
-      if (!isPetOldEnough(companion.event.created_at, currentBlockHeight)) {
+      // start incubating. Prefer the stored birth_block tag; fall back to the
+      // 10-minute estimate for legacy eggs.
+      const storedBirthBlock = getStoredBirthBlockHeight(companion.event.tags);
+      if (!isPetOldEnough(companion.event.created_at, currentBlockHeight, storedBirthBlock)) {
         throw new Error('This egg is still warming. Wait until at least one Bitcoin block is mined before hatching.');
       }
 

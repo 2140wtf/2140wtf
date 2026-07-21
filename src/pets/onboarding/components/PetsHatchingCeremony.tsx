@@ -21,6 +21,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
+import { fetchBlockHeight } from '@/lib/bitcoin';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 
@@ -427,8 +428,15 @@ export function PetsHatchingCeremony({
     setIsCommitting(true);
 
     try {
-      // 1. Publish the egg event.
-      const eggTags = previewToEventTags(eggPreview);
+      // 1. Fetch the current block height and publish the egg event with a
+      //    birth_block tag. This makes hatching gates real instead of estimated.
+      let birthBlockHeight: number | undefined;
+      try {
+        birthBlockHeight = await fetchBlockHeight(config.esploraApis, AbortSignal.timeout(15000));
+      } catch (e) {
+        console.warn('[HatchingCeremony] Failed to fetch birth block height:', e);
+      }
+      const eggTags = previewToEventTags(eggPreview, birthBlockHeight);
       eggTagsRef.current = eggTags;
 
       const eggEvent = await publishEvent({
@@ -530,6 +538,7 @@ export function PetsHatchingCeremony({
     invalidateCompanion,
     scheduleTimeout,
     eggOnly,
+    config.esploraApis,
   ]);
 
   // eggOnly mode commits from the preview phase and completes there, so it
