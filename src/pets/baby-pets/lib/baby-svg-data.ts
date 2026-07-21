@@ -151,18 +151,22 @@ export const BABY_2140_BASE_SVG = `<?xml version="1.0" encoding="UTF-8"?>
   <ellipse cx="23" cy="55" rx="5" ry="3" fill="rgba(255,182,193,0.55)" />
   <ellipse cx="77" cy="55" rx="5" ry="3" fill="rgba(255,182,193,0.55)" />
 
-  <!-- Weed joint in mouth -->
-  <g transform="rotate(-12 58 63)">
-    <!-- Paper body -->
-    <rect x="54" y="61" width="13" height="3.5" rx="1.5" fill="#f1f5f9" />
-    <!-- Twisted paper tip -->
-    <path d="M 67 61.5 L 72 60 L 71 65.5 L 67 64.5 Z" fill="#e2e8f0" />
-    <!-- Glowing ember -->
-    <circle cx="71.5" cy="62.5" r="1.6" fill="#f97316" opacity="0.9" />
-    <!-- Tiny smoke wisp -->
-    <path d="M 73 61 Q 75 59 74 57" stroke="#cbd5e1" stroke-width="0.7" fill="none" stroke-linecap="round" opacity="0.7" />
-    <!-- Little green leaf on the joint -->
-    <path d="M 58 63 Q 59 61 60 63 Q 59 65 58 63" fill="#22c55e" />
+  <!-- Snoop-style spliff in mouth -->
+  <g transform="rotate(-10 56 63)">
+    <!-- Cone paper body (wider at the lit end) -->
+    <path d="M 54 63.5 L 76 59.5 L 77 63 L 55 66 Z" fill="#fefce8" stroke="#e2e8f0" stroke-width="0.5" />
+    <!-- Twisted paper crutch at mouth end -->
+    <path d="M 54 63.5 L 52 64 L 52.5 65.5 L 55 66 Z" fill="#d1d5db" />
+    <!-- Burning ember tip -->
+    <ellipse cx="77" cy="61" rx="2.2" ry="3" fill="#f97316" opacity="0.95" />
+    <ellipse cx="77.5" cy="61" rx="1" ry="1.6" fill="#fbbf24" opacity="0.9" />
+    <!-- Ash line -->
+    <path d="M 75 60.5 Q 76 61 75 62" stroke="#9ca3af" stroke-width="0.6" fill="none" />
+    <!-- Curly smoke wisp -->
+    <path d="M 79 58 Q 82 54 80 51 Q 78 48 82 45" stroke="#e2e8f0" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.6" />
+    <!-- Tiny cannabis leaf near the crutch -->
+    <path d="M 58 64 Q 59 62 60 64 Q 59 66 58 64" fill="#22c55e" />
+    <path d="M 58 64 Q 56 63 57 65 Q 58 66 58 64" fill="#22c55e" />
   </g>
 
   <!-- Flat baseball cap -->
@@ -212,12 +216,13 @@ export const BABY_2140_SLEEPING_SVG = `<?xml version="1.0" encoding="UTF-8"?>
   <ellipse cx="23" cy="55" rx="5" ry="3" fill="rgba(255,182,193,0.45)" />
   <ellipse cx="77" cy="55" rx="5" ry="3" fill="rgba(255,182,193,0.45)" />
 
-  <!-- Joint resting -->
-  <g transform="rotate(-12 58 63)">
-    <rect x="54" y="61" width="13" height="3.5" rx="1.5" fill="#f1f5f9" opacity="0.9" />
-    <path d="M 67 61.5 L 72 60 L 71 65.5 L 67 64.5 Z" fill="#e2e8f0" opacity="0.9" />
-    <circle cx="71.5" cy="62.5" r="1.4" fill="#f97316" opacity="0.7" />
-    <path d="M 58 63 Q 59 61 60 63 Q 59 65 58 63" fill="#22c55e" opacity="0.9" />
+  <!-- Spliff resting -->
+  <g transform="rotate(-10 56 63)">
+    <path d="M 54 63.5 L 76 59.5 L 77 63 L 55 66 Z" fill="#fefce8" stroke="#e2e8f0" stroke-width="0.5" opacity="0.9" />
+    <path d="M 54 63.5 L 52 64 L 52.5 65.5 L 55 66 Z" fill="#d1d5db" opacity="0.9" />
+    <ellipse cx="77" cy="61" rx="2" ry="2.8" fill="#f97316" opacity="0.7" />
+    <path d="M 58 64 Q 59 62 60 64 Q 59 66 58 64" fill="#22c55e" opacity="0.9" />
+    <path d="M 58 64 Q 56 63 57 65 Q 58 66 58 64" fill="#22c55e" opacity="0.9" />
   </g>
 
   <!-- Flat baseball cap -->
