@@ -205,7 +205,7 @@ export function PlayMusicModal({
             <div>
               <DialogTitle className="text-xl">Play Music</DialogTitle>
               <p className="text-sm text-muted-foreground">
-                Choose a track to play for your NOSTR PET
+                Choose real music from Nostr or a sample track
               </p>
             </div>
           </div>
@@ -224,7 +224,7 @@ export function PlayMusicModal({
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              Pets Catalog
+              Sample Tracks
             </button>
             <button
               type="button"
@@ -236,7 +236,7 @@ export function PlayMusicModal({
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              From Nostr
+              Nostr Music
             </button>
           </div>
         </div>
