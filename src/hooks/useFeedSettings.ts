@@ -14,10 +14,10 @@ const DEFAULT_SIDEBAR_ORDER = [
   "messages",
   "prediction-markets",
   "polls",
+  "media",
   "pets",
   "wallet",
   "events",
-  "media",
   "btcmap",
 ];
 
@@ -127,6 +127,26 @@ export function useFeedSettings() {
       next.splice(baoIdx + 1, 0, "polls");
     } else {
       next.push("polls");
+    }
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
+
+  // Migration: make sure Media is visible in the sidebar right below Polls.
+  // This only runs once for users whose saved order predates the Media group.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0 || order.includes("media")) return;
+
+    const next = [...order];
+    const pollsIdx = next.indexOf("polls");
+    if (pollsIdx !== -1) {
+      next.splice(pollsIdx + 1, 0, "media");
+    } else {
+      next.push("media");
     }
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
