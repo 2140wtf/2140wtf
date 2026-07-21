@@ -91,6 +91,7 @@ const RoadstrPage = lazy(() => import("./pages/RoadstrPage").then(m => ({ defaul
 const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default: m.MarketPage })));
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
+const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
@@ -341,6 +342,7 @@ export function AppRouter() {
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
               <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
+          <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="/groups" element={<GroupChatPage />} />
