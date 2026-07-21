@@ -1,46 +1,36 @@
 // src/pets/core/hooks/usePetsStarterGrant.ts
 //
-// Starter grant for a newly hatched pet. In testnet mode it claims BAO signet
-// sats from the faucet; in real mode it credits fake/demo starter sats to the
-// profile so the pet can live for free until the user decides to top up the
-// real Cashu wallet.
+// Starter grant for a newly hatched pet, BAO demo mode only: claims BAO
+// signet sats from the faucet into the BAO signet Cashu wallet. Mainnet
+// (cashu) mode has no starter grant — real sats are never minted for free.
 
 import { useMutation } from '@tanstack/react-query';
-import { useNostr } from '@nostrify/react';
-import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
-import { useBaoPetStarterGrant } from '@/pets/core/hooks/useBaoPetStarterGrant';
+import { useBaoPetStarterGrant, type BaoPetStarterGrantResult } from '@/pets/core/hooks/useBaoPetStarterGrant';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
-import { addProfileSats } from '@/pets/core/lib/profile-sats';
 import { devLog } from '@/lib/cashu/devLog';
 
-export interface PetsStarterGrantResult {
-  amount: number;
-  profileEvent: NostrEvent;
-}
+export type PetsStarterGrantResult = BaoPetStarterGrantResult;
 
 interface UsePetsStarterGrantOptions {
-  onProfileUpdate?: (event: NostrEvent) => void;
+  /** Called with the grant result after the BAO wallet is credited. */
+  onCredited?: (result: PetsStarterGrantResult) => void;
 }
 
 /**
  * Hook to award starter sats to a new pet.
  *
- * - Testnet mode: claims from the BAO faucet via `useBaoPetStarterGrant`.
- * - Real mode: credits `amount` fake sats to the Blobbonaut profile without
- *   touching the BAO faucet.
+ * Demo (BAO) mode only: claims from the BAO faucet via `useBaoPetStarterGrant`.
+ * In mainnet (cashu) mode the mutation throws — never call it there.
  */
 export function usePetsStarterGrant(options: UsePetsStarterGrantOptions = {}) {
-  const { onProfileUpdate } = options;
+  const { onCredited } = options;
   const { user } = useCurrentUser();
-  const { nostr } = useNostr();
-  const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { isBao } = usePetsWallet();
 
   const baoGrant = useBaoPetStarterGrant({
-    onProfileUpdate,
+    onCredited,
     enabled: isBao,
   });
 
@@ -50,19 +40,11 @@ export function usePetsStarterGrant(options: UsePetsStarterGrantOptions = {}) {
         throw new Error('You must be logged in to claim starter sats.');
       }
 
-      if (isBao) {
-        const result = await baoGrant.mutateAsync(amount);
-        return {
-          amount: result.amount,
-          profileEvent: result.profileEvent,
-        };
+      if (!isBao) {
+        throw new Error('Starter grants are only available in BAO demo mode.');
       }
 
-      // Real mode: credit fake/demo starter sats directly to the profile.
-      const { event } = await addProfileSats(nostr, publishEvent, user.pubkey, amount);
-      onProfileUpdate?.(event);
-      devLog.log(`Real-mode starter grant credited ${amount} fake sats to pet profile`);
-      return { amount, profileEvent: event };
+      return baoGrant.mutateAsync(amount);
     },
     onError: (error: Error) => {
       devLog.warn('Pets starter grant failed:', error.message);
