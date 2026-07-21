@@ -1,22 +1,29 @@
 import { createContext, useContext } from 'react';
 
-/** A track that can be played by the global audio player. */
+/** A track that can be played by the global media player. */
 export interface AudioTrack {
-  /** Nostr event ID. */
+  /** Nostr event ID or unique track identifier. */
   id: string;
   /** Track title. */
   title: string;
   /** Artist or author name. */
   artist: string;
-  /** Audio file URL. */
+  /** Audio/video file URL. */
   url: string;
   /** Artwork/cover image URL. */
   artwork?: string;
+  /** Poster/thumbnail URL for video tracks. */
+  poster?: string;
   /** Duration in seconds (from metadata). */
   duration?: number;
   /** Navigation path to the track's detail page (e.g. /naddr1…). */
   path?: string;
+  /** Media type. Defaults to audio for backward compatibility. */
+  type?: 'audio' | 'video';
 }
+
+/** Alias for non-audio consumers. */
+export type MediaTrack = AudioTrack;
 
 export interface AudioPlayerState {
   /** Currently loaded track. */
@@ -35,11 +42,15 @@ export interface AudioPlayerState {
   duration: number;
   /** Volume (0–1). */
   volume: number;
+  /** For video tracks, whether only the audio stream is shown in the mini-player. */
+  audioOnly: boolean;
 }
 
 export interface AudioPlayerActions {
   /** Play a single track. */
   playTrack: (track: AudioTrack) => void;
+  /** Play a video track in the background mini-player. */
+  playVideoTrack: (track: AudioTrack) => void;
   /** Play a playlist starting at a given index. */
   playPlaylist: (tracks: AudioTrack[], startIndex?: number) => void;
   /** Pause playback. */
@@ -50,6 +61,8 @@ export interface AudioPlayerActions {
   seek: (time: number) => void;
   /** Set volume (0–1). */
   setVolume: (v: number) => void;
+  /** Toggle audio-only mode for video tracks. */
+  setAudioOnly: (value: boolean) => void;
   /** Skip to next track (playlist mode). */
   nextTrack: () => void;
   /** Skip to previous track (playlist mode). */

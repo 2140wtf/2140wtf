@@ -2,6 +2,8 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { AudioPlayerContext, type AudioTrack } from '@/contexts/audioPlayerContextDef';
+import { useHls } from '@/hooks/useHls';
+import { MinimizedMediaBar } from '@/components/MinimizedMediaBar';
 
 const VOLUME_KEY = 'audio-player-volume';
 
@@ -16,8 +18,12 @@ function getStoredVolume(): number {
   return 0.8;
 }
 
+function isHlsUrl(url: string): boolean {
+  return /\.m3u8(\?|$)/i.test(url);
+}
+
 export function AudioPlayerProvider({ children }: { children: ReactNode }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const mediaRef = useRef<HTMLMediaElement>(null);
 
   const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(null);
   const [playlist, setPlaylist] = useState<AudioTrack[]>([]);
@@ -27,16 +33,21 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(getStoredVolume);
+  const [audioOnly, setAudioOnly] = useState(false);
 
-  // Sync volume to audio element
+  // Attach HLS support whenever the current track is a video with an HLS source.
+  const currentUrl = currentTrack?.url ?? '';
+  useHls(currentTrack?.type === 'video' ? mediaRef : { current: null }, currentUrl);
+
+  // Sync volume to media element
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
+    if (mediaRef.current) mediaRef.current.volume = volume;
   }, [volume]);
 
-  // Audio event listeners
+  // Media event listeners (work for both <audio> and <video>)
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const media = mediaRef.current;
+    if (!media) return;
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -47,31 +58,33 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         const next = currentIndex + 1;
         setCurrentIndex(next);
         setCurrentTrack(playlist[next]);
-        audio.src = playlist[next].url;
-        audio.play().catch(() => {});
+        if (!isHlsUrl(playlist[next].url)) {
+          media.src = playlist[next].url;
+        }
+        media.play().catch(() => {});
       }
     };
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onTimeUpdate = () => setCurrentTime(media.currentTime);
     const onDurationChange = () => {
-      if (audio.duration && isFinite(audio.duration)) setDuration(audio.duration);
+      if (media.duration && isFinite(media.duration)) setDuration(media.duration);
     };
 
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('loadedmetadata', onDurationChange);
+    media.addEventListener('play', onPlay);
+    media.addEventListener('pause', onPause);
+    media.addEventListener('ended', onEnded);
+    media.addEventListener('timeupdate', onTimeUpdate);
+    media.addEventListener('durationchange', onDurationChange);
+    media.addEventListener('loadedmetadata', onDurationChange);
 
     return () => {
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('loadedmetadata', onDurationChange);
+      media.removeEventListener('play', onPlay);
+      media.removeEventListener('pause', onPause);
+      media.removeEventListener('ended', onEnded);
+      media.removeEventListener('timeupdate', onTimeUpdate);
+      media.removeEventListener('durationchange', onDurationChange);
+      media.removeEventListener('loadedmetadata', onDurationChange);
     };
-  }, [playlist, currentIndex]);
+  }, [playlist, currentIndex, currentTrack]);
 
   // Media Session API — populates Android/iOS notification panel with track info and controls
   useEffect(() => {
@@ -102,7 +115,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     try {
       navigator.mediaSession.setPositionState({
         duration,
-        playbackRate: audioRef.current?.playbackRate ?? 1,
+        playbackRate: mediaRef.current?.playbackRate ?? 1,
         position: Math.min(currentTime, duration),
       });
     } catch { /* setPositionState may throw on some browsers */ }
@@ -110,19 +123,20 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
-    const audio = audioRef.current;
+    const media = mediaRef.current;
 
-    navigator.mediaSession.setActionHandler('play', () => audio?.play().catch(() => {}));
-    navigator.mediaSession.setActionHandler('pause', () => audio?.pause());
+    navigator.mediaSession.setActionHandler('play', () => media?.play().catch(() => {}));
+    navigator.mediaSession.setActionHandler('pause', () => media?.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => {
-      if (audio && audio.currentTime > 3) { audio.currentTime = 0; return; }
+      if (media && media.currentTime > 3) { media.currentTime = 0; return; }
       const prev = currentIndex - 1;
       if (prev < 0 || playlist.length === 0) return;
       setCurrentIndex(prev);
       setCurrentTrack(playlist[prev]);
       setCurrentTime(0);
       setDuration(playlist[prev].duration ?? 0);
-      if (audio) { audio.src = playlist[prev].url; audio.play().catch(() => {}); }
+      if (media && !isHlsUrl(playlist[prev].url)) { media.src = playlist[prev].url; }
+      media?.play().catch(() => {});
     });
     navigator.mediaSession.setActionHandler('nexttrack', () => {
       const next = currentIndex + 1;
@@ -131,10 +145,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       setCurrentTrack(playlist[next]);
       setCurrentTime(0);
       setDuration(playlist[next].duration ?? 0);
-      if (audio) { audio.src = playlist[next].url; audio.play().catch(() => {}); }
+      if (media && !isHlsUrl(playlist[next].url)) { media.src = playlist[next].url; }
+      media?.play().catch(() => {});
     });
     navigator.mediaSession.setActionHandler('seekto', (details) => {
-      if (audio && details.seekTime != null) audio.currentTime = details.seekTime;
+      if (media && details.seekTime != null) media.currentTime = details.seekTime;
     });
 
     return () => {
@@ -157,43 +172,65 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTrack]);
 
   const playTrack = useCallback((track: AudioTrack) => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const media = mediaRef.current;
+    if (!media) return;
     setCurrentTrack(track);
     setPlaylist([]);
     setCurrentIndex(0);
     setMinimized(false);
+    setAudioOnly(false);
     setCurrentTime(0);
     setDuration(track.duration ?? 0);
-    audio.src = track.url;
-    audio.play().catch(() => {});
+    if (!isHlsUrl(track.url)) {
+      media.src = track.url;
+    }
+    media.play().catch(() => {});
+  }, []);
+
+  const playVideoTrack = useCallback((track: AudioTrack) => {
+    const media = mediaRef.current;
+    if (!media) return;
+    setCurrentTrack(track);
+    setPlaylist([]);
+    setCurrentIndex(0);
+    setMinimized(true);
+    setAudioOnly(false);
+    setCurrentTime(0);
+    setDuration(track.duration ?? 0);
+    if (!isHlsUrl(track.url)) {
+      media.src = track.url;
+    }
+    media.play().catch(() => {});
   }, []);
 
   const playPlaylist = useCallback((tracks: AudioTrack[], startIndex = 0) => {
-    const audio = audioRef.current;
-    if (!audio || tracks.length === 0) return;
+    const media = mediaRef.current;
+    if (!media || tracks.length === 0) return;
     const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
     setPlaylist(tracks);
     setCurrentIndex(idx);
     setCurrentTrack(tracks[idx]);
     setMinimized(false);
+    setAudioOnly(false);
     setCurrentTime(0);
     setDuration(tracks[idx].duration ?? 0);
-    audio.src = tracks[idx].url;
-    audio.play().catch(() => {});
+    if (!isHlsUrl(tracks[idx].url)) {
+      media.src = tracks[idx].url;
+    }
+    media.play().catch(() => {});
   }, []);
 
   const pause = useCallback(() => {
-    audioRef.current?.pause();
+    mediaRef.current?.pause();
   }, []);
 
   const resume = useCallback(() => {
-    audioRef.current?.play().catch(() => {});
+    mediaRef.current?.play().catch(() => {});
   }, []);
 
   const seek = useCallback((time: number) => {
-    const audio = audioRef.current;
-    if (audio) audio.currentTime = time;
+    const media = mediaRef.current;
+    if (media) media.currentTime = time;
   }, []);
 
   const setVolume = useCallback((v: number) => {
@@ -202,25 +239,31 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(VOLUME_KEY, String(clamped)); } catch { /* ignore */ }
   }, []);
 
+  const setAudioOnlyMode = useCallback((value: boolean) => {
+    setAudioOnly(value);
+  }, []);
+
   const nextTrack = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || playlist.length === 0) return;
+    const media = mediaRef.current;
+    if (!media || playlist.length === 0) return;
     const next = currentIndex + 1;
     if (next >= playlist.length) return;
     setCurrentIndex(next);
     setCurrentTrack(playlist[next]);
     setCurrentTime(0);
     setDuration(playlist[next].duration ?? 0);
-    audio.src = playlist[next].url;
-    audio.play().catch(() => {});
+    if (!isHlsUrl(playlist[next].url)) {
+      media.src = playlist[next].url;
+    }
+    media.play().catch(() => {});
   }, [playlist, currentIndex]);
 
   const prevTrack = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || playlist.length === 0) return;
+    const media = mediaRef.current;
+    if (!media || playlist.length === 0) return;
     // If more than 3 seconds in, restart current track
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0;
+    if (media.currentTime > 3) {
+      media.currentTime = 0;
       return;
     }
     const prev = currentIndex - 1;
@@ -229,8 +272,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTrack(playlist[prev]);
     setCurrentTime(0);
     setDuration(playlist[prev].duration ?? 0);
-    audio.src = playlist[prev].url;
-    audio.play().catch(() => {});
+    if (!isHlsUrl(playlist[prev].url)) {
+      media.src = playlist[prev].url;
+    }
+    media.play().catch(() => {});
   }, [playlist, currentIndex]);
 
   const minimize = useCallback(() => setMinimized(true), []);
@@ -238,15 +283,16 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const expand = useCallback(() => setMinimized(false), []);
 
   const stop = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.src = '';
+    const media = mediaRef.current;
+    if (media) {
+      media.pause();
+      media.src = '';
     }
     setCurrentTrack(null);
     setPlaylist([]);
     setCurrentIndex(0);
     setMinimized(false);
+    setAudioOnly(false);
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -255,15 +301,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   return (
     <AudioPlayerContext.Provider
       value={{
-        currentTrack, playlist, currentIndex, minimized, isPlaying, currentTime, duration, volume,
-        playTrack, playPlaylist, pause, resume, seek, setVolume, nextTrack, prevTrack, minimize, expand, stop,
+        currentTrack, playlist, currentIndex, minimized, isPlaying, currentTime, duration, volume, audioOnly,
+        playTrack, playVideoTrack, playPlaylist, pause, resume, seek, setVolume, setAudioOnly: setAudioOnlyMode,
+        nextTrack, prevTrack, minimize, expand, stop,
       }}
     >
-      {/* Hidden global audio element */}
-      <audio ref={audioRef} preload="metadata" className="hidden" />
       {children}
+      <MinimizedMediaBar mediaRef={mediaRef} />
     </AudioPlayerContext.Provider>
   );
 }
-
-
