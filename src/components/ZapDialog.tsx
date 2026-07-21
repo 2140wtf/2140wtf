@@ -35,7 +35,7 @@ import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { usePaymentTargets } from '@/hooks/usePaymentTargets';
 import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
-import { useNutzapInfo, canReceiveNutzap } from '@/hooks/useNutzapInfo';
+
 import { canZap } from '@/lib/canZap';
 import { parseCampaign } from '@/lib/campaign';
 import {
@@ -372,7 +372,7 @@ export function ZapDialog({
   const [success, setSuccess] = useState<
     | { kind: 'onchain'; amountSats: number; txid: string }
     | { kind: 'lightning'; amountSats: number }
-    | { kind: 'cashu'; amountSats: number; eventId: string }
+    | { kind: 'cashu'; amountSats: number; eventId?: string }
     | null
   >(null);
 
@@ -459,12 +459,10 @@ export function ZapDialog({
   // Cashu / NIP-61 Nutzap capability. The recipient must publish a kind 10019
   // event with accepted mints; the sender needs an initialized Cashu wallet.
   const cashuWallet = useCashuWalletContext();
-  const { data: nutzapInfo } = useNutzapInfo(target.pubkey);
   const hasCashu =
     !campaign &&
     !isPollVote &&
     cashuWallet.seedAvailable &&
-    canReceiveNutzap(nutzapInfo) &&
     cashuWallet.totalBalance > 0;
 
   // Generic (non-native) payment targets — Monero, Ethereum, etc. These render
@@ -759,6 +757,7 @@ export function ZapDialog({
               btcPrice={btcPrice}
               txid={success.kind === 'onchain' ? success.txid : undefined}
               eventId={success.kind === 'cashu' ? success.eventId : undefined}
+              kind={success.kind}
               onClose={() => setOpen(false)}
             />
           ) : campaign ? (
@@ -807,7 +806,7 @@ interface ZapMethodPaneProps {
   bitcoinOverride: BitcoinRecipientOverride | undefined;
   lightningContentProps: LightningZapContentProps;
   onOnchainSuccess: (result: { txid: string; amountSats: number }) => void;
-  onCashuSuccess: (result: { amountSats: number; eventId: string }) => void;
+  onCashuSuccess: (result: { amountSats: number; eventId?: string }) => void;
   zappedEvent?: { id: string; kind: number; relay?: string };
   onClose: () => void;
 }
