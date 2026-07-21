@@ -347,7 +347,7 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         id: 'who-made-this',
         question: 'Who made this?',
         answer: [
-          'This platform is built by the 2140.wtf collective, a group of developers and artists who believe social media should be owned by its users, not corporations.',
+          'This platform is built by the 2140.wtf collective, a group of developers, artists, and activists who believe social media should be owned by its users, not corporations.',
           '2140.wtf builds open-source tools for the Nostr and Bitcoin ecosystems, including this app.',
         ],
       },
