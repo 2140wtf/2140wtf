@@ -1,0 +1,47 @@
+{
+  "name": "@bao/frost-court",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared BAO Court / FROST threshold-oracle logic for browser and Node.",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./crypto": {
+      "types": "./crypto.ts",
+      "default": "./crypto.ts"
+    },
+    "./dkg": {
+      "types": "./dkg.ts",
+      "default": "./dkg.ts"
+    },
+    "./dispute": {
+      "types": "./dispute.ts",
+      "default": "./dispute.ts"
+    },
+    "./events": {
+      "types": "./events.ts",
+      "default": "./events.ts"
+    },
+    "./selection": {
+      "types": "./selection.ts",
+      "default": "./selection.ts"
+    },
+    "./signing": {
+      "types": "./signing.ts",
+      "default": "./signing.ts"
+    },
+    "./validator": {
+      "types": "./validator.ts",
+      "default": "./validator.ts"
+    }
+  },
+  "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@vbyte/frost": "^1.1.5",
+    "nostr-tools": "^2.13.0"
+  }
+}
