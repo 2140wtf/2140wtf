@@ -2,7 +2,6 @@ import { type Theme } from "@/contexts/AppContext";
 import { type CoreThemeColors, type ThemeConfig } from "@/themes";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useEncryptedSettings } from "@/hooks/useEncryptedSettings";
-import { usePublishTheme } from "@/hooks/usePublishTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useRef, useCallback } from "react";
 import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfig } from "@/themes";
@@ -18,10 +17,8 @@ import { builtinThemes, buildThemeCssFromConfig, resolveTheme, resolveThemeConfi
 export function useTheme() {
   const { config, updateConfig } = useAppContext();
   const { updateSettings } = useEncryptedSettings();
-  const { setActiveTheme } = usePublishTheme();
   const { user } = useCurrentUser();
   const debounceTimer = useRef<NodeJS.Timeout | undefined>(undefined);
-  const autoPublishTimer = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const syncToEncrypted = useCallback((patch: { theme?: Theme; customTheme?: ThemeConfig }) => {
     if (!user) return;
@@ -34,19 +31,6 @@ export function useTheme() {
       });
     }, 1000);
   }, [user, updateSettings]);
-
-  /** Debounced auto-publish of the custom theme to profile (kind 16767). */
-  const autoPublishTheme = useCallback((themeConfig: ThemeConfig) => {
-    if (!user || !config.autoShareTheme) return;
-    if (autoPublishTimer.current) {
-      clearTimeout(autoPublishTimer.current);
-    }
-    autoPublishTimer.current = setTimeout(() => {
-      setActiveTheme({ themeConfig }).catch((error) => {
-        console.error('Failed to auto-publish theme to profile:', error);
-      });
-    }, 2000);
-  }, [user, config.autoShareTheme, setActiveTheme]);
 
   /** Switch to a builtin theme (light, dark, system) or to "custom" (preserving existing customTheme). */
   const setTheme = useCallback((theme: Theme) => {
@@ -102,29 +86,13 @@ export function useTheme() {
       customTheme: normalizedConfig,
     }));
     syncToEncrypted({ theme: 'custom', customTheme: normalizedConfig });
-    autoPublishTheme(normalizedConfig);
-  }, [updateConfig, syncToEncrypted, autoPublishTheme]);
-
-  /** Update the autoShareTheme setting. */
-  const setAutoShareTheme = useCallback((enabled: boolean) => {
-    updateConfig((currentConfig) => ({
-      ...currentConfig,
-      autoShareTheme: enabled,
-    }));
-    if (user) {
-      updateSettings.mutateAsync({ autoShareTheme: enabled }).catch((error) => {
-        console.error('Failed to sync autoShareTheme to encrypted storage:', error);
-      });
-    }
-  }, [user, updateConfig, updateSettings]);
+  }, [updateConfig, syncToEncrypted]);
 
   return {
     theme: config.theme,
     customTheme: config.customTheme,
     themes: config.themes,
-    autoShareTheme: config.autoShareTheme,
     setTheme,
     applyCustomTheme,
-    setAutoShareTheme,
   };
 }

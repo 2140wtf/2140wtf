@@ -28,7 +28,6 @@ export function TestApp({ children }: TestAppProps) {
     homePage: "feed",
     theme: "custom",
     customTheme: whitepaperPreset,
-    autoShareTheme: true,
     useAppRelays: true,
     useUserRelays: false,
     relayMetadata: {

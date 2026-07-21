@@ -1151,14 +1151,6 @@ function PrivacyNoticeStep({
         <div className="flex gap-3">
           <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
           <p className="text-sm text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">Shared theme.</span>{" "}
-            If you enable “Sync theme with profile,” your active custom theme is
-            published publicly (kind 16767) so others can see it.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <div className="mt-0.5 size-2 rounded-full bg-primary shrink-0" />
-          <p className="text-sm text-muted-foreground leading-relaxed">
             <span className="font-medium text-foreground">Relays & file servers.</span>{" "}
             Changes to your relay list (kind 10002) or Blossom servers
             (kind 10063) are published when you edit them.
