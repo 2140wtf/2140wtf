@@ -252,8 +252,9 @@ const SUGGESTED_PACK: NostrEvent = {
   tags: [
     ["title", "Suggested for you"],
     ["description", "Follow these accounts to start building your feed."],
-    ["p", "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6"],
+    // 2140.wtf canonical account first so new users always see the app icon first.
     ["p", "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416"],
+    ["p", "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6"],
     ["p", "0232eb19d1b1168e91c1a8f765d45f6839e9a7861951cd63ae18a544af8a3902"],
   ],
 };
@@ -1020,7 +1021,7 @@ function PackCard({
 
         {/* Member avatar stack */}
         <div className="flex items-center gap-1">
-          <div className="flex -space-x-2">
+          <div className="flex gap-1">
             {previewPubkeys.map((pk) => {
               const member = membersMap?.get(pk);
               const name = member?.metadata?.name || member?.metadata?.display_name || 'Anonymous';
