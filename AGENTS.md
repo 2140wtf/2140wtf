@@ -242,7 +242,7 @@ relayMetadata: {
 Adding a new configuration field requires updates in **three places**. Missing any will cause build failures or runtime issues.
 
 1. **TypeScript interface** (`src/contexts/AppContext.ts`) — add the field to the `AppConfig` interface with a JSDoc comment.
-2. **Zod schema** (`src/lib/schemas.ts`) — add the same field to `AppConfigSchema`. `DittoConfigSchema` (validates build-time `ditto.json`) is derived from `AppConfigSchema` with `.strict()` mode, so any field in `ditto.json` missing from the Zod schema causes a build error.
+2. **Zod schema** (`src/lib/schemas.ts`) — add the same field to `AppConfigSchema`. `AppConfigSchema` (validates the optional build-time `app.json`) is derived from `RuntimeAppConfigSchema` in strict mode, so any field in `app.json` missing from the Zod schema causes a build error.
 3. **Default value** (`src/contexts/AppContext.ts`) — if the field is required, add a default in `defaultConfig`. Optional fields (`?` in the interface, `.optional()` in Zod) can be omitted.
 
 ### Relay Management
@@ -348,14 +348,13 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 ## CI/CD Pipeline
 
-2140.wtf uses GitLab CI (`.gitlab-ci.yml`) with five stages:
+2140.wtf uses GitHub Actions (`.github/workflows/`):
 
-1. **test** — `npm run test` on every commit (skipped for tags).
-2. **deploy** — `deploy-nsite` builds and uploads `dist/` to nsite via nsyte (default branch only).
-3. **build** — `build-apk` produces a signed APK and AAB (Linux); `build-ipa` produces a signed IPA on the self-hosted Mac runner; `release-notes` extracts the changelog section + summary paragraph from `CHANGELOG.md`. All three run on tags only.
-4. **release** — creates a GitLab Release with the changelog body and APK / AAB / IPA artifacts (tags only).
-5. **publish** — `publish-zapstore` (APK → Zapstore), `publish-google-play` (AAB → Google Play with the release summary as "What's new"), and `publish-app-store` (IPA → App Store Connect with the release summary as "What's New", runs on the self-hosted Mac runner because `fastlane deliver` shells out to Apple's iTMSTransporter to push the binary and that tool only exists inside Xcode), tags only.
+1. **test** (`test.yml`) — `npm run test` on every push and PR to `main`.
+2. **deploy** (`deploy.yml`) — builds `dist/` and deploys to GitHub Pages on pushes to `main`.
 
-To cut a release, load the **`release`** skill — it walks through version bumping (`X.Y.Z`), changelog generation, native build-file updates, and tagging/pushing (`vX.Y.Z`) to trigger the CI pipeline.
+Native builds (APK / IPA) and store publishing (Zapstore, Google Play, App Store) are not yet wired into GitHub Actions; `zapstore.yaml` stays at root for a future publish workflow.
+
+To cut a release, load the **`release`** skill — it walks through version bumping (`X.Y.Z`), changelog generation, native build-file updates, and tagging (`vX.Y.Z`).
 
 For CI credential setup and rotation (Zapstore NIP-46 bunker, nsyte `nbunksec`, Google Play service-account JSON, Android keystore, App Store Connect API key, fastlane match), load the **`ci-cd-publishing`** skill. For Mac runner operations (SSH access, restarting, debugging fastlane locally, yearly cert rotation), load the **`mac-runner`** skill.
