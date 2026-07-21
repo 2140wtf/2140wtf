@@ -2,7 +2,7 @@
  * Daily Login Bonus for NOSTR PETS
  *
  * Awards demo sats the first time a user opens the Pets page each local day.
- * Tracks last login day and consecutive streak on the Blobbonaut profile.
+ * Tracks last login day and consecutive streak on the Nostr pet profile.
  */
 
 import { getLocalDayString, getDaysDifference } from '@/pets/core/lib/pets';

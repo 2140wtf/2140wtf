@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { usePetsPurchaseItem } from './usePetsPurchaseItem';
-import { parseBlobbonautEvent, KIND_BLOBBONAUT_PROFILE } from '@/pets/core/lib/pets';
+import { parseNostrPetProfileEvent, KIND_NOSTR_PET_PROFILE } from '@/pets/core/lib/pets';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
 const PUBKEY = '0000000000000000000000000000000000000000000000000000000000000001';
@@ -42,7 +42,7 @@ vi.mock('@/hooks/useToast', () => ({
 
 function createProfileEvent(walletMode: 'bao' | 'cashu', sats = 20_000): NostrEvent {
   return {
-    kind: KIND_BLOBBONAUT_PROFILE,
+    kind: KIND_NOSTR_PET_PROFILE,
     pubkey: PUBKEY,
     created_at: 1000,
     id: 'profile-id',
@@ -79,7 +79,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
       sendNutzap,
     } as unknown as CashuWalletState & CashuWalletActions;
 
-    const profile = parseBlobbonautEvent(createProfileEvent('cashu', 20_000))!;
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
@@ -107,7 +107,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
       error: 'mint unreachable',
     } as unknown as CashuWalletState & CashuWalletActions;
 
-    const profile = parseBlobbonautEvent(createProfileEvent('cashu', 20_000))!;
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
@@ -126,7 +126,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
       sendNutzap: vi.fn(),
     } as unknown as CashuWalletState & CashuWalletActions;
 
-    const profile = parseBlobbonautEvent(createProfileEvent('cashu', 20_000))!;
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
@@ -154,7 +154,7 @@ describe('usePetsPurchaseItem bao mode', () => {
       sendNutzap,
     } as unknown as CashuWalletState & CashuWalletActions;
 
-    const profile = parseBlobbonautEvent(createProfileEvent('bao', 20_000))!;
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
@@ -178,7 +178,7 @@ describe('usePetsPurchaseItem bao mode', () => {
       sendNutzap: vi.fn(),
     } as unknown as CashuWalletState & CashuWalletActions;
 
-    const profile = parseBlobbonautEvent(createProfileEvent('bao', 10))!;
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 10))!;
     const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });

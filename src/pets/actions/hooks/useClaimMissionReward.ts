@@ -19,9 +19,9 @@ import { toast } from '@/hooks/useToast';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import {
-  KIND_BLOBBONAUT_PROFILE,
-  updateBlobbonautTags,
-  parseBlobbonautEvent,
+  KIND_NOSTR_PET_PROFILE,
+  updateNostrPetProfileTags,
+  parseNostrPetProfileEvent,
 } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import type { MissionsContent } from '@/pets/core/lib/missions';
@@ -65,11 +65,11 @@ export function useAwardDailySats(
 
       // Fetch fresh profile from relays to avoid stale-read overwrites
       const prev = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
+        kinds: [KIND_NOSTR_PET_PROFILE],
         authors: [user.pubkey],
       });
 
-      const freshProfile = prev ? parseBlobbonautEvent(prev) : undefined;
+      const freshProfile = prev ? parseNostrPetProfileEvent(prev) : undefined;
 
       // Idempotency: skip if rewards for this date were already claimed
       const alreadyClaimedDate = freshProfile?.dailyRewardsClaimedAt;
@@ -84,7 +84,7 @@ export function useAwardDailySats(
       const newSatsTotal = currentSats + satsToAward;
 
       // Update sats and claimed-date tags
-      const updatedTags = updateBlobbonautTags(prev?.tags ?? [], {
+      const updatedTags = updateNostrPetProfileTags(prev?.tags ?? [], {
         sats: newSatsTotal.toString(),
         daily_rewards_claimed_at: missions.date,
       });
@@ -93,7 +93,7 @@ export function useAwardDailySats(
       const content = serializeProfileContent(prev?.content ?? '', { missions });
 
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content,
         tags: updatedTags,
         prev: prev ?? undefined,
@@ -105,7 +105,7 @@ export function useAwardDailySats(
     },
     onSuccess: ({ satsAwarded }) => {
       if (user?.pubkey) {
-        queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
+        queryClient.invalidateQueries({ queryKey: ['nostr-pet-profile', user.pubkey] });
       }
       if (satsAwarded > 0) {
         toast({

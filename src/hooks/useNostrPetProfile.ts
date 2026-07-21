@@ -7,19 +7,19 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from './useCurrentUser';
 import { useLocalStorage } from './useLocalStorage';
 import {
-  KIND_BLOBBONAUT_PROFILE,
-  BLOBBONAUT_PROFILE_KINDS,
+  KIND_NOSTR_PET_PROFILE,
+  NOSTR_PET_PROFILE_KINDS,
   PETS_CACHE_KEY,
-  getBlobbonautQueryDValues,
-  isValidBlobbonautEvent,
-  isLegacyBlobbonautKind,
-  parseBlobbonautEvent,
+  getNostrPetProfileQueryDValues,
+  isValidNostrPetProfileEvent,
+  isLegacyNostrPetProfileKind,
+  parseNostrPetProfileEvent,
   type PetsBootCache,
-  type BlobbonautProfile,
+  type NostrPetProfile,
 } from '@/pets/core/lib/pets';
 
 /**
- * Hook to fetch and manage the Blobbonaut Profile for the logged-in user.
+ * Hook to fetch and manage the Nostr Pet Profile for the logged-in user.
  * 
  * Features:
  * - localStorage boot cache for instant UI on page load
@@ -29,7 +29,7 @@ import {
  * - Provides the parsed profile or null if none exists
  * - Returns `needsKindMigration` flag if profile is on legacy kind
  */
-export function useBlobbonautProfile() {
+export function useNostrPetProfile() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
@@ -42,7 +42,7 @@ export function useBlobbonautProfile() {
   
   // Get the cached profile immediately on mount (before async query)
   // Validate that the cache belongs to the current user
-  const cachedProfile = useMemo((): BlobbonautProfile | null => {
+  const cachedProfile = useMemo((): NostrPetProfile | null => {
     if (!bootCache || !user?.pubkey) {
       return null;
     }
@@ -67,7 +67,7 @@ export function useBlobbonautProfile() {
   // Debug logging removed - was causing console flood on every render
   // If debugging is needed, uncomment this block temporarily:
   // if (import.meta.env.DEV) {
-  //   console.log('[useBlobbonautProfile] Hook state:', {
+  //   console.log('[useNostrPetProfile] Hook state:', {
   //     pubkey: user?.pubkey,
   //     enabled: !!user?.pubkey,
   //     hasCachedProfile: !!cachedProfile,
@@ -76,18 +76,18 @@ export function useBlobbonautProfile() {
   
   // Main query to fetch the profile from relays
   const query = useQuery({
-    queryKey: ['blobbonaut-profile', user?.pubkey],
+    queryKey: ['nostr-pet-profile', user?.pubkey],
     queryFn: async ({ signal }) => {
       if (!user?.pubkey) {
         return null;
       }
       
       // Query with all possible d-tag values (canonical + legacy)
-      const dValues = getBlobbonautQueryDValues(user.pubkey);
+      const dValues = getNostrPetProfileQueryDValues(user.pubkey);
       
       // Query BOTH current (11125) and legacy (31125) kinds for migration support
       const filter = {
-        kinds: [...BLOBBONAUT_PROFILE_KINDS],
+        kinds: [...NOSTR_PET_PROFILE_KINDS],
         authors: [user.pubkey],
         '#d': dValues,
       };
@@ -95,26 +95,26 @@ export function useBlobbonautProfile() {
       const events = await queryPetsRelay(nostr, [filter], { signal });
       
       // Filter to valid events
-      const validEvents = events.filter(isValidBlobbonautEvent);
+      const validEvents = events.filter(isValidNostrPetProfileEvent);
       
       if (validEvents.length === 0) {
         return null;
       }
       
       // Separate by kind: prefer current kind (11125) over legacy (31125)
-      const currentKindEvents = validEvents.filter(e => e.kind === KIND_BLOBBONAUT_PROFILE);
-      const legacyKindEvents = validEvents.filter(e => isLegacyBlobbonautKind(e));
+      const currentKindEvents = validEvents.filter(e => e.kind === KIND_NOSTR_PET_PROFILE);
+      const legacyKindEvents = validEvents.filter(e => isLegacyNostrPetProfileKind(e));
       
       // If we have any current kind events, use the newest one
       if (currentKindEvents.length > 0) {
         const sorted = currentKindEvents.sort((a, b) => b.created_at - a.created_at);
-        return parseBlobbonautEvent(sorted[0]) ?? null;
+        return parseNostrPetProfileEvent(sorted[0]) ?? null;
       }
       
       // Otherwise fall back to legacy kind (migration needed)
       if (legacyKindEvents.length > 0) {
         const sorted = legacyKindEvents.sort((a, b) => b.created_at - a.created_at);
-        return parseBlobbonautEvent(sorted[0]) ?? null;
+        return parseNostrPetProfileEvent(sorted[0]) ?? null;
       }
       
       return null;
@@ -181,15 +181,15 @@ export function useBlobbonautProfile() {
   // Helper to invalidate and refetch after publishing
   const invalidate = useCallback(() => {
     if (user?.pubkey) {
-      queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
+      queryClient.invalidateQueries({ queryKey: ['nostr-pet-profile', user.pubkey] });
     }
   }, [queryClient, user?.pubkey]);
   
   // Update the profile event in the query cache (optimistic update)
   const updateProfileEvent = useCallback((event: NostrEvent) => {
-    const parsed = parseBlobbonautEvent(event);
+    const parsed = parseNostrPetProfileEvent(event);
     if (parsed && user?.pubkey) {
-      queryClient.setQueryData(['blobbonaut-profile', user.pubkey], parsed);
+      queryClient.setQueryData(['nostr-pet-profile', user.pubkey], parsed);
       // Also update boot cache (preserve companions) with stable comparison
       setBootCache(prev => {
         // Check if the profile actually changed
@@ -224,7 +224,7 @@ export function useBlobbonautProfile() {
   const needsKindMigration = useMemo(() => {
     const profile = query.data;
     if (!profile) return false;
-    return isLegacyBlobbonautKind(profile.event);
+    return isLegacyNostrPetProfileKind(profile.event);
   }, [query.data]);
   
   return {

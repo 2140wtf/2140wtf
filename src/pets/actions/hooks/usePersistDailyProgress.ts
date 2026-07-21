@@ -3,7 +3,7 @@
  *
  * Daily missions live in the per-user session store (keyed by pubkey).
  * This hook listens for changes and debounce-publishes the updated state to the
- * kind 11125 Blobbonaut profile content JSON so progress survives page refreshes.
+ * kind 11125 Nostr pet profile content JSON so progress survives page refreshes.
  *
  * Design:
  * - Listens to 'daily-missions-updated' CustomEvent (same event the tracker fires)
@@ -24,7 +24,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
-import { KIND_BLOBBONAUT_PROFILE, getCanonicalBlobbonautD } from '@/pets/core/lib/pets';
+import { KIND_NOSTR_PET_PROFILE, getCanonicalNostrPetProfileD } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 import { readDailyFromStorage } from '../lib/daily-mission-tracker';
 import { areAllDailyComplete } from '../lib/daily-missions';
@@ -90,9 +90,9 @@ export function usePersistDailyProgress(
     try {
       // Fetch the fresh profile event from relays
       const prev = await fetchFreshPetsEvent(nostrRef.current, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
+        kinds: [KIND_NOSTR_PET_PROFILE],
         authors: [pubkey],
-        '#d': [getCanonicalBlobbonautD(pubkey)],
+        '#d': [getCanonicalNostrPetProfileD(pubkey)],
       });
 
       // Safety: never publish a kind 11125 event without an existing profile.
@@ -119,7 +119,7 @@ export function usePersistDailyProgress(
       }
 
       const event = await publishEventRef.current({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content,
         // Preserve existing tags exactly — do NOT modify sats
         tags: prev.tags,

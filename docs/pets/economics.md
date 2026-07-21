@@ -10,7 +10,7 @@ There is one currency in the Pets economy:
 |---|---|---|---|
 | `sats` | Daily login bonus, daily missions, BAO rewards, battles | Shop items (food, toys, medicine, hygiene, energy), adoption, rerolls | kind 11125 `sats` tag |
 
-`sats` are demo sats when `wallet_mode` is `demo-sats` and real BTC sats when `wallet_mode` is `btc-sats`. All breed categories share this balance. New Blobbonauts start with `0` sats and must claim daily rewards to earn their first sats.
+`sats` are demo sats when `wallet_mode` is `demo-sats` and real BTC sats when `wallet_mode` is `btc-sats`. All breed categories share this balance. New Nostr pets start with `0` sats and must claim daily rewards to earn their first sats.
 
 ## Category Abilities
 
@@ -109,7 +109,7 @@ Rewards are paid in `sats` (demo sats by default; real BTC sats once `btc-sats` 
 ## Economy Safety Rules
 
 - All currency values are non-negative integers.
-- New Blobbonauts start with `0` sats and must claim daily rewards to earn their first sats.
+- New Nostr pets start with `0` sats and must claim daily rewards to earn their first sats.
 - `demo-sats` is the default wallet mode; `btc-sats` is gated by a feature flag while real-sats settlement is still being tested.
 - Profile content JSON is the source of truth for BAO streaks.
 - Kind 31124 tags remain the source of truth for pet state, rarity, and breeding cooldowns.

@@ -1,5 +1,5 @@
 /**
- * useBlobbonautProfileNormalization - Auto-normalize profiles
+ * useNostrPetProfileNormalization - Auto-normalize profiles
  * 
  * This hook handles two types of normalization:
  * 
@@ -18,28 +18,28 @@ import { usePublishPreferences } from './usePublishPreferences';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 import {
-  KIND_BLOBBONAUT_PROFILE,
+  KIND_NOSTR_PET_PROFILE,
   profileNeedsPettingLevelNormalization,
   profileNeedsOnboardingTagMigration,
   buildNormalizedProfileTags,
-  isLegacyBlobbonautKind,
-  type BlobbonautProfile,
+  isLegacyNostrPetProfileKind,
+  type NostrPetProfile,
 } from '@/pets/core/lib/pets';
 
-interface UseBlobbonautProfileNormalizationOptions {
+interface UseNostrPetProfileNormalizationOptions {
   /** The current profile (null if doesn't exist) */
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called to update profile event in cache after publishing */
   updateProfileEvent: (event: import('@nostrify/nostrify').NostrEvent) => void;
   /** Called to invalidate profile query */
   invalidateProfile: () => void;
 }
 
-export function useBlobbonautProfileNormalization({
+export function useNostrPetProfileNormalization({
   profile,
   updateProfileEvent,
   invalidateProfile,
-}: UseBlobbonautProfileNormalizationOptions) {
+}: UseNostrPetProfileNormalizationOptions) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -61,7 +61,7 @@ export function useBlobbonautProfileNormalization({
     
     // Check what normalization is needed
     const needsTagNormalization = profileNeedsPettingLevelNormalization(profile);
-    const needsKindMigration = isLegacyBlobbonautKind(profile.event);
+    const needsKindMigration = isLegacyNostrPetProfileKind(profile.event);
     const needsOnboardingMigration = profileNeedsOnboardingTagMigration(profile);
     
     // If no normalization needed, mark as seen and return
@@ -85,7 +85,7 @@ export function useBlobbonautProfileNormalization({
       try {
         // Fetch fresh profile from relays to avoid stale-read overwrites
         const fresh = await fetchFreshEvent(nostr, {
-          kinds: [KIND_BLOBBONAUT_PROFILE],
+          kinds: [KIND_NOSTR_PET_PROFILE],
           authors: [user.pubkey],
         });
         // If no fresh profile found on relays, use the cached one (first publish)
@@ -100,7 +100,7 @@ export function useBlobbonautProfileNormalization({
         
         // Always publish to the NEW kind (11125), regardless of source kind
         const event = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
+          kind: KIND_NOSTR_PET_PROFILE,
           content: base.content,
           tags: normalizedTags,
           prev: base,
@@ -109,7 +109,7 @@ export function useBlobbonautProfileNormalization({
         updateProfileEvent(event);
         invalidateProfile();
         
-        console.log('[ProfileNormalization] Profile normalized successfully to kind', KIND_BLOBBONAUT_PROFILE);
+        console.log('[ProfileNormalization] Profile normalized successfully to kind', KIND_NOSTR_PET_PROFILE);
       } catch (error) {
         console.error('[ProfileNormalization] Failed to normalize profile:', error);
         // Remove from set so it can retry on next render

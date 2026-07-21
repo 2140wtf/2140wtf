@@ -28,21 +28,21 @@ import { cn } from '@/lib/utils';
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { fetchFreshBlobbonautProfile } from '@/pets/core/lib/fetchFreshBlobbonautProfile';
+import { fetchFreshNostrPetProfile } from '@/pets/core/lib/fetchFreshNostrPetProfile';
 import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 
 import {
   KIND_PETS_STATE,
-  KIND_BLOBBONAUT_PROFILE,
-  INITIAL_BLOBBONAUT_SATS,
+  KIND_NOSTR_PET_PROFILE,
+  INITIAL_NOSTR_PET_SATS,
   BAO_PET_STARTER_GRANT_SATS,
   PETS_PREVIEW_REROLL_SATS,
   STAT_MAX,
-  buildBlobbonautTags,
-  updateBlobbonautTags,
+  buildNostrPetProfileTags,
+  updateNostrPetProfileTags,
   updatePetsTags,
   parsePetsEvent,
-  type BlobbonautProfile,
+  type NostrPetProfile,
   type PetsCompanion,
 } from '@/pets/core/lib/pets';
 import { usePetsStarterGrant } from '@/pets/core/hooks/usePetsStarterGrant';
@@ -103,7 +103,7 @@ const starterGrantAttemptedFor = new Set<string>();
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface PetsHatchingCeremonyProps {
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   updateProfileEvent: (event: NostrEvent) => void;
   updateCompanionEvent: (event: NostrEvent) => void;
   invalidateProfile: () => void;
@@ -300,17 +300,17 @@ export function PetsHatchingCeremony({
           const suggestedName =
             authorData?.metadata?.name ||
             authorData?.metadata?.display_name ||
-            'Blobbonaut';
+            'NOSTR Pet';
 
-          const baseTags = buildBlobbonautTags(user.pubkey);
+          const baseTags = buildNostrPetProfileTags(user.pubkey);
           const tagsWithName = [
             ...baseTags,
             ['name', suggestedName],
-            ['sats', INITIAL_BLOBBONAUT_SATS.toString()],
+            ['sats', INITIAL_NOSTR_PET_SATS.toString()],
           ];
 
           const profileEvent = await publishEvent({
-            kind: KIND_BLOBBONAUT_PROFILE,
+            kind: KIND_NOSTR_PET_PROFILE,
             content: '',
             tags: tagsWithName,
           });
@@ -468,7 +468,7 @@ export function PetsHatchingCeremony({
       // 3. Update profile with has[] entry. Fetch fresh profile first because
       //    the starter grant (or a concurrent update) may have changed it.
       const profileBeforeHas = profileRef.current;
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      const freshProfile = await fetchFreshNostrPetProfile(nostr, user.pubkey);
       if (!mountedRef.current) return;
 
       const baseProfile = freshProfile ?? profileBeforeHas;
@@ -482,12 +482,12 @@ export function PetsHatchingCeremony({
           .map(([, v]) => v);
         const newHas = [...existingHas, eggPreview.d];
 
-        const updatedTags = updateBlobbonautTags(baseTags, {
+        const updatedTags = updateNostrPetProfileTags(baseTags, {
           has: newHas,
         });
 
         const updatedProfileEvent = await publishEvent({
-          kind: KIND_BLOBBONAUT_PROFILE,
+          kind: KIND_NOSTR_PET_PROFILE,
           content: baseContent,
           tags: updatedTags,
           prev: prevEvent,
@@ -769,15 +769,15 @@ export function PetsHatchingCeremony({
     // Mark onboarding done
     const currentProfile = profileRef.current;
     if (currentProfile && user?.pubkey) {
-      const freshProfile = await fetchFreshBlobbonautProfile(nostr, user.pubkey);
+      const freshProfile = await fetchFreshNostrPetProfile(nostr, user.pubkey);
       if (!mountedRef.current) return;
 
       const baseEvent = freshProfile?.event ?? currentProfile.event;
-      const updatedTags = updateBlobbonautTags(baseEvent.tags, {
+      const updatedTags = updateNostrPetProfileTags(baseEvent.tags, {
         pets_onboarding_done: 'true',
       });
       const profileEvent = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content: baseEvent.content ?? '',
         tags: updatedTags,
         prev: baseEvent,

@@ -224,7 +224,7 @@ export const KIND_LABELS: Record<number, string> = {
   10074: 'Currently reading',
   10075: 'To be read',
   // NOSTR PETS
-  11125: 'Blobbonaut profile',
+  11125: 'Nostr pet profile',
 
   // 2140.wtf custom kinds
   12473: 'Birdex',

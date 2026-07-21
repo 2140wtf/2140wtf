@@ -1,10 +1,10 @@
 /**
- * Hook to read the current user's custom species forms from their Blobbonaut profile.
+ * Hook to read the current user's custom species forms from their Nostr pet profile.
  */
 
 import { useMemo } from 'react';
 
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { readCustomFormsMap, type CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 
 /**
@@ -12,7 +12,7 @@ import { readCustomFormsMap, type CustomPetForm } from '@/pets/three-d/lib/custo
  * Returns an empty object if no profile or no custom forms are stored.
  */
 export function useCustomForms(): Record<string, CustomPetForm> {
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
 
   return useMemo(() => readCustomFormsMap(profile?.content), [profile?.content]);
 }
