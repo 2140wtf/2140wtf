@@ -5,12 +5,12 @@ import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 
 function getAppId(): string {
   try {
-    const dittoPath = path.resolve(process.cwd(), 'ditto.json');
-    const raw = fs.readFileSync(dittoPath, 'utf-8');
+    const configPath = path.resolve(process.cwd(), 'e2e/fixtures/ditto.json');
+    const raw = fs.readFileSync(configPath, 'utf-8');
     const parsed = JSON.parse(raw) as { appId?: string };
-    return parsed.appId ?? 'ditto';
+    return parsed.appId ?? '2140wtf';
   } catch {
-    return 'ditto';
+    return '2140wtf';
   }
 }
 
