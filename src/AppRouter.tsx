@@ -9,7 +9,6 @@ import { BackButtonHandler } from "@/components/BackButtonHandler";
 import { InitialSyncGate } from "@/components/InitialSyncGate";
 import { DeepLinkHandler } from "@/components/DeepLinkHandler";
 import { HighlightSelectionButton } from "@/components/HighlightSelectionButton";
-import { MinimizedAudioBar } from "@/components/MinimizedAudioBar";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { sidebarItemIcon } from "@/lib/sidebarItems";
 import { Toaster } from "./components/ui/toaster";
@@ -228,11 +227,10 @@ function ProfileRedirect() {
 
 export function AppRouter() {
   return (
-    <AudioPlayerProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AudioPlayerProvider>
         <Toaster />
         <VersionCheck />
-        <MinimizedAudioBar />
         <AudioNavigationGuard />
         <DeepLinkHandler />
         <BackButtonHandler />
@@ -379,8 +377,8 @@ export function AppRouter() {
             </Route>
           </Routes>
         </InitialSyncGate>
-      </BrowserRouter>
-    </AudioPlayerProvider>
+      </AudioPlayerProvider>
+    </BrowserRouter>
   );
 }
 export default AppRouter;

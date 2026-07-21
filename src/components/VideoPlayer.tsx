@@ -1,14 +1,16 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import type Hls from 'hls.js';
-import { Play, Pause, Volume1, Volume2, VolumeX, Expand } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+
+import { Play, Pause, Volume1, Volume2, VolumeX, Expand, PictureInPicture2 } from 'lucide-react';
 import { Blurhash } from 'react-blurhash';
 import { cn } from '@/lib/utils';
 import { isValidBlurhash } from '@/lib/blurhash';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { useBlossomFallback } from '@/hooks/useBlossomFallback';
+import { useHls } from '@/hooks/useHls';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 import { useVideoThumbnail } from '@/hooks/useVideoThumbnail';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { formatTime } from '@/lib/formatTime';
 import { BLANK_POSTER } from '@/lib/blankPoster';
 
@@ -26,6 +28,10 @@ interface VideoPlayerProps {
   artist?: string;
   /** When true, the video auto-plays muted without requiring a click. */
   autoPlay?: boolean;
+  /** Optional time in seconds to start playback at. */
+  startTime?: number;
+  /** Optional unique identifier for the video track (used for background playback). */
+  trackId?: string;
 }
 
 /** Parses a NIP-94 `dim` string like "1280x720" into `{ width, height }`. */
@@ -37,50 +43,9 @@ function parseDim(dim: string | undefined): { width: number; height: number } | 
 }
 
 
-/** Attaches hls.js to a video element for HLS streams on non-Safari browsers. */
-function useHls(videoRef: React.RefObject<HTMLVideoElement | null>, src: string) {
-  const hlsRef = useRef<Hls | null>(null);
-
-  const isHls = /\.m3u8(\?|$)/i.test(src);
-
-  const attach = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !isHls) return;
-
-    // Safari supports HLS natively
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = src;
-      return;
-    }
-
-    // Dynamically import hls.js to keep it out of the main bundle
-    import('hls.js').then(({ default: HlsLib }) => {
-      // Guard against stale closure (component unmounted or src changed)
-      if (videoRef.current !== video) return;
-      if (!HlsLib.isSupported()) return;
-
-      const hls = new HlsLib({ startLevel: -1, autoStartLoad: true });
-      hlsRef.current = hls;
-      hls.loadSource(src);
-      hls.attachMedia(video);
-    }).catch(() => {
-      // hls.js is bundled; failure is unexpected. Ignore to keep video fallback.
-    });
-  }, [videoRef, src, isHls]);
-
-  useEffect(() => {
-    attach();
-    return () => {
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
-    };
-  }, [attach]);
-
-  return { isHls };
-}
-
-export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, autoPlay }: VideoPlayerProps) {
+export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, autoPlay, startTime, trackId }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const startTimeApplied = useRef(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const safeOriginalSrc = sanitizeUrl(originalSrc) ?? '';
@@ -88,6 +53,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
   const { src, onError: onBlossomError } = useBlossomFallback(safeOriginalSrc);
   const { isHls } = useHls(videoRef, src);
   const { config } = useAppContext();
+  const audioPlayer = useAudioPlayer();
   const shouldAutoPlay = autoPlay ?? config.autoplayVideos;
 
   const generatedPoster = useVideoThumbnail(src, safePoster);
@@ -149,6 +115,26 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
       return () => video.removeEventListener('loadeddata', attemptPlay);
     }
   }, [shouldAutoPlay]);
+
+  // Apply optional start time once the video is ready.
+  useEffect(() => {
+    if (startTimeApplied.current) return;
+    const video = videoRef.current;
+    if (!video || !startTime || startTime <= 0) return;
+
+    const apply = () => {
+      if (startTimeApplied.current) return;
+      startTimeApplied.current = true;
+      video.currentTime = startTime;
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      apply();
+    } else {
+      video.addEventListener('loadedmetadata', apply, { once: true });
+      return () => video.removeEventListener('loadedmetadata', apply);
+    }
+  }, [startTime]);
 
   // Media Session API — registers OS lock-screen / notification controls
   useEffect(() => {
@@ -219,6 +205,24 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     if (video.requestFullscreen) {
       video.requestFullscreen();
     }
+  };
+
+  const handleBackgroundPlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+
+    audioPlayer.playVideoTrack({
+      id: trackId ?? src,
+      title: title || 'Video',
+      artist: artist || '',
+      url: src,
+      artwork: safePoster ?? generatedPoster,
+      poster: safePoster ?? generatedPoster,
+      type: 'video',
+      duration: duration > 0 ? duration : undefined,
+    });
+    video.pause();
   };
 
   const handleSeek = (e: React.MouseEvent) => {
@@ -418,6 +422,17 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
             </span>
 
             <div className="flex-1" />
+
+            {/* Fullscreen */}
+            {/* Background play */}
+            <button
+              onClick={handleBackgroundPlay}
+              className="text-white hover:text-white/80 transition-colors"
+              aria-label="Play in background"
+              title="Play in background"
+            >
+              <PictureInPicture2 className="size-[18px]" />
+            </button>
 
             {/* Fullscreen */}
             <button
