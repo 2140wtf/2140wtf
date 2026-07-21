@@ -6,6 +6,7 @@ import {
   Check,
   CloudDownload,
   Copy,
+  Landmark,
   RefreshCw,
   Shield,
   Trash2,
@@ -34,6 +35,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
+import { Link } from 'react-router-dom';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
@@ -287,6 +289,13 @@ export function CashuWalletTab() {
               Add
             </Button>
           </div>
+
+          <Button variant='outline' size='sm' className='w-full gap-2' asChild>
+            <Link to='/mints'>
+              <Landmark className='size-4' />
+              Discover mints
+            </Link>
+          </Button>
 
           <div className='flex flex-wrap gap-2'>
             <Button variant='outline' size='sm' onClick={() => setShowSeedBackup(true)}>
