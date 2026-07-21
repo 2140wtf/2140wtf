@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { AudioPlayerContext, type AudioTrack } from '@/contexts/audioPlayerContextDef';
@@ -24,6 +24,7 @@ function isHlsUrl(url: string): boolean {
 
 export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const mediaRef = useRef<HTMLMediaElement>(null);
+  const pendingPlayRef = useRef<{ id: string; url: string } | null>(null);
 
   const [currentTrack, setCurrentTrack] = useState<AudioTrack | null>(null);
   const [playlist, setPlaylist] = useState<AudioTrack[]>([]);
@@ -38,6 +39,35 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // Attach HLS support whenever the current track is a video with an HLS source.
   const currentUrl = currentTrack?.url ?? '';
   useHls(currentTrack?.type === 'video' ? mediaRef : { current: null }, currentUrl);
+
+  // Start playback once the media element is mounted after the first play.
+  // The <audio>/<video> element lives inside MinimizedMediaBar, which only
+  // renders once currentTrack is set, so mediaRef is null at the moment the
+  // user clicks play. This effect retries the pending play after commit.
+  useLayoutEffect(() => {
+    const media = mediaRef.current;
+    const pending = pendingPlayRef.current;
+    if (!media || !currentTrack || !pending || pending.id !== currentTrack.id) return;
+    if (!isHlsUrl(currentTrack.url)) {
+      media.src = currentTrack.url;
+    }
+    media.play().catch(() => {});
+    pendingPlayRef.current = null;
+  }, [currentTrack]);
+
+  // Helper to assign src and play, or queue playback if the media element
+  // hasn't mounted yet.
+  const startPlayback = useCallback((track: AudioTrack, media: HTMLMediaElement | null) => {
+    if (!media) {
+      pendingPlayRef.current = { id: track.id, url: track.url };
+      return;
+    }
+    pendingPlayRef.current = null;
+    if (!isHlsUrl(track.url)) {
+      media.src = track.url;
+    }
+    media.play().catch(() => {});
+  }, []);
 
   // Sync volume to media element
   useEffect(() => {
@@ -172,8 +202,6 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }, [currentTrack]);
 
   const playTrack = useCallback((track: AudioTrack) => {
-    const media = mediaRef.current;
-    if (!media) return;
     setCurrentTrack(track);
     setPlaylist([]);
     setCurrentIndex(0);
@@ -181,15 +209,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     setAudioOnly(false);
     setCurrentTime(0);
     setDuration(track.duration ?? 0);
-    if (!isHlsUrl(track.url)) {
-      media.src = track.url;
-    }
-    media.play().catch(() => {});
-  }, []);
+    startPlayback(track, mediaRef.current);
+  }, [startPlayback]);
 
   const playVideoTrack = useCallback((track: AudioTrack) => {
-    const media = mediaRef.current;
-    if (!media) return;
     setCurrentTrack(track);
     setPlaylist([]);
     setCurrentIndex(0);
@@ -197,28 +220,22 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     setAudioOnly(false);
     setCurrentTime(0);
     setDuration(track.duration ?? 0);
-    if (!isHlsUrl(track.url)) {
-      media.src = track.url;
-    }
-    media.play().catch(() => {});
-  }, []);
+    startPlayback(track, mediaRef.current);
+  }, [startPlayback]);
 
   const playPlaylist = useCallback((tracks: AudioTrack[], startIndex = 0) => {
-    const media = mediaRef.current;
-    if (!media || tracks.length === 0) return;
+    if (tracks.length === 0) return;
     const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    const track = tracks[idx];
     setPlaylist(tracks);
     setCurrentIndex(idx);
-    setCurrentTrack(tracks[idx]);
+    setCurrentTrack(track);
     setMinimized(false);
     setAudioOnly(false);
     setCurrentTime(0);
-    setDuration(tracks[idx].duration ?? 0);
-    if (!isHlsUrl(tracks[idx].url)) {
-      media.src = tracks[idx].url;
-    }
-    media.play().catch(() => {});
-  }, []);
+    setDuration(track.duration ?? 0);
+    startPlayback(track, mediaRef.current);
+  }, [startPlayback]);
 
   const pause = useCallback(() => {
     mediaRef.current?.pause();
