@@ -934,7 +934,8 @@ export function PetsHatchingCeremony({
           <Button
             variant="outline"
             size="lg"
-            className="w-full border-white/40 text-white hover:bg-white/10 hover:text-white"
+            className="w-full border-white/50 bg-transparent hover:bg-white/10"
+            style={{ color: 'white' }}
             disabled={isCommitting || isRerolling}
             onClick={handleReroll}
           >
