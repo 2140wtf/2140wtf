@@ -2,13 +2,25 @@
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Upload, AlertTriangle, ChevronDown, ChevronUp, Loader2, ExternalLink, Newspaper } from 'lucide-react';
+import {
+  Upload,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  ExternalLink,
+  Newspaper,
+  KeyRound,
+  Fingerprint,
+  Sparkles,
+  Zap,
+  ArrowRight,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
 import {
   useLoginActions,
@@ -22,6 +34,14 @@ import { DialogTitle } from '@radix-ui/react-dialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
+import { saveNsec } from '@/lib/credentialManager';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import {
+  registerNativePasskeyAccount,
+  loginNativePasskeyAccount,
+  getNativePasskeyAvailability,
+  type NativePasskeyAvailability,
+} from '@/lib/nativePasskeyAuth';
 
 interface LoginDialogProps {
   isOpen: boolean;
@@ -59,18 +79,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
   const [nostrConnectParams, setNostrConnectParams] = useState<NostrConnectParams | null>(null);
   const [nostrConnectUri, setNostrConnectUri] = useState<string>('');
   const [connectError, setConnectError] = useState<string | null>(null);
-  // Progress status for the nostrconnect handshake. `null` means the user
-  // hasn't kicked off the handshake yet (or they canceled/retried) — we show
-  // the QR / "Open Signer App" button. Once the handshake advances we swap
-  // the QR/button area for a spinner with a live-updating status line, so
-  // the user knows something is happening while the signer app is working.
   const [connectStatus, setConnectStatus] = useState<NostrConnectStatus | null>(null);
-  // Tracks whether the user has explicitly initiated the handshake from the
-  // mobile UI (tapped "Open Signer App"). The subscription itself starts
-  // listening as soon as params are generated — without this flag we'd flip
-  // the dialog into the progress view the moment the user enters the Remote
-  // Signer tab, before they've done anything. Desktop doesn't need this:
-  // it stays on the QR until the handshake advances past `awaiting-connect`.
   const [hasOpenedSigner, setHasOpenedSigner] = useState(false);
   const [showBunkerInput, setShowBunkerInput] = useState(false);
   const [errors, setErrors] = useState<{
@@ -78,15 +87,17 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     bunker?: string;
     file?: string;
     extension?: string;
+    passkey?: string;
+    quickstart?: string;
   }>({});
+  const [activeTab, setActiveTab] = useState('secret');
+  const [passkeyAvail, setPasskeyAvail] = useState<NativePasskeyAvailability | null>(null);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [quickStartLoading, setQuickStartLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const login = useLoginActions();
 
-  // Keep stable refs to props/actions so the listening effect below doesn't
-  // re-run on every parent render (parents typically pass inline arrow
-  // functions for onLogin/onClose, and useLoginActions returns a fresh object
-  // each render).
   const onLoginRef = useRef(onLogin);
   const onCloseRef = useRef(onClose);
   const loginRef = useRef(login);
@@ -94,12 +105,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   useEffect(() => { loginRef.current = login; }, [login]);
 
-  // Check if on mobile device
   const isMobile = useIsMobile();
-  // Check if extension is available
   const hasExtension = 'nostr' in window;
+  const hasWebLN = typeof window !== 'undefined' && 'webln' in window;
 
-  // Generate nostrconnect params (sync) - just creates the QR code data
   const generateConnectSession = useCallback(() => {
     const relayUrls = login.getRelayUrls();
     const params = generateNostrConnectParams(relayUrls);
@@ -113,14 +122,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     setConnectError(null);
   }, [login, config.appName, shareOrigin]);
 
-  // Start listening for connection (async) - runs once after params are set.
-  //
-  // Deps are intentionally limited to `nostrConnectParams` so that parent
-  // re-renders (which produce fresh onLogin/onClose closures and a fresh
-  // `login` object from useLoginActions) do NOT tear down an in-flight
-  // subscription. Previously this effect re-ran on every render, repeatedly
-  // flipping a local `cancelled` flag to true and causing a successful
-  // nostrconnect response to be silently swallowed after the signer approved.
   useEffect(() => {
     if (!nostrConnectParams) return;
 
@@ -137,14 +138,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             setConnectStatus(status);
           },
         );
-        // If the dialog was explicitly closed (handled by the isOpen effect,
-        // which aborts the controller), don't try to re-close it. Otherwise,
-        // the user is logged in — close the dialog and notify the parent.
         if (controller.signal.aborted) return;
         onLoginRef.current();
         onCloseRef.current();
       } catch (error) {
-        // AbortError means we intentionally aborted (dialog closed or retry)
         if (error instanceof Error && error.name === 'AbortError') return;
         if (controller.signal.aborted) return;
         console.error('Nostrconnect failed:', error);
@@ -155,15 +152,11 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
 
     startListening();
 
-    // Cleanup aborts the in-flight handshake when the params change (e.g. the
-    // user retried) or when the component unmounts. Because the deps are limited
-    // to `nostrConnectParams`, normal parent re-renders will NOT tear this down.
     return () => {
       controller.abort();
     };
   }, [nostrConnectParams]);
 
-  // Clean up on close
   useEffect(() => {
     if (!isOpen) {
       setNostrConnectParams(null);
@@ -171,13 +164,11 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       setConnectError(null);
       setConnectStatus(null);
       setHasOpenedSigner(false);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      setActiveTab('secret');
+      setErrors({});
     }
   }, [isOpen]);
 
-  // Retry connection with new params
   const handleRetry = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -187,18 +178,11 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     setConnectError(null);
     setConnectStatus(null);
     setHasOpenedSigner(false);
-    // Generate new session after state clears
     setTimeout(() => generateConnectSession(), 0);
   }, [generateConnectSession]);
 
-  // When the app resumes from background (after signer app), poll for the response
-  // Open the nostrconnect URI in the system - this will launch a signer app like Amber if installed
   const handleOpenSignerApp = () => {
     if (!nostrConnectUri) return;
-    // Flip into the progress view *synchronously* before navigating so that
-    // when the user returns from the signer app, the dialog is already
-    // showing "Waiting for signer connection…" — not the original button
-    // they're worried they need to re-tap.
     setHasOpenedSigner(true);
     window.location.href = nostrConnectUri;
   };
@@ -226,12 +210,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     }
   };
 
-
   const executeLogin = (key: string) => {
     setIsLoading(true);
     setErrors({});
 
-    // Use a timeout to allow the UI to update before the synchronous login call
     setTimeout(() => {
       try {
         login.nsec(key);
@@ -275,7 +257,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       await login.bunker(bunkerUri);
       onLogin();
       onClose();
-      // Clear the URI from memory
       setBunkerUri('');
     } catch {
       setErrors(prev => ({
@@ -316,12 +297,81 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     reader.readAsText(file);
   };
 
-  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
+  const handleQuickStart = async () => {
+    setQuickStartLoading(true);
+    setErrors(prev => ({ ...prev, quickstart: undefined }));
+    try {
+      const sk = generateSecretKey();
+      const nsec = nip19.nsecEncode(sk);
+      const pubkey = getPublicKey(sk);
+      const npub = nip19.npubEncode(pubkey);
+
+      await saveNsec(npub, nsec);
+      login.nsec(nsec);
+      onLogin();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Quick Start failed';
+      setErrors(prev => ({ ...prev, quickstart: msg }));
+      setQuickStartLoading(false);
+    }
+  };
+
+  const refreshPasskeyAvailability = useCallback(async () => {
+    try {
+      const avail = await getNativePasskeyAvailability();
+      setPasskeyAvail(avail);
+    } catch {
+      setPasskeyAvail({ available: false, prf: false, largeBlob: false, enrolled: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    refreshPasskeyAvailability();
+  }, [isOpen, refreshPasskeyAvailability]);
+
+  const handlePasskeyRegister = async () => {
+    setPasskeyLoading(true);
+    setErrors(prev => ({ ...prev, passkey: undefined }));
+    try {
+      const result = await registerNativePasskeyAccount();
+      login.nsec(result.identity.nsec);
+      onLogin();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Passkey setup failed';
+      setErrors(prev => ({ ...prev, passkey: msg }));
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyLoading(true);
+    setErrors(prev => ({ ...prev, passkey: undefined }));
+    try {
+      const identity = await loginNativePasskeyAccount();
+      login.nsec(identity.nsec);
+      onLogin();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Passkey login failed';
+      setErrors(prev => ({ ...prev, passkey: msg }));
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handleOpenWebLN = async () => {
+    try {
+      const webln = (window as unknown as { webln?: { enable?: () => Promise<unknown> } }).webln;
+      await webln?.enable?.();
+    } catch {
+      // ignore
+    }
+  };
 
   // Progressive enhancement: attempt to retrieve a stored credential from the
   // platform's password manager when the dialog opens.
-  // On Capacitor iOS this shows the iCloud Keychain credential picker.
-  // On Chromium browsers this shows the native credential chooser.
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
@@ -338,37 +388,49 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
     return () => { cancelled = true; };
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Decide whether to render the progress view in place of the QR/button.
-  // Mobile: flip in as soon as the user taps "Open Signer App" (tracked by
-  // `hasOpenedSigner`) so they see feedback the moment they return from the
-  // signer. Desktop: keep the QR visible while waiting for the signer (it's
-  // still actionable — they might scan it with a different device) and only
-  // swap once the signer has acknowledged and we're fetching the pubkey.
   const showProgressView = connectStatus !== null && (
     connectStatus === 'getting-public-key' ||
     (isMobile && hasOpenedSigner)
   );
 
   const renderTabs = () => (
-    <Tabs 
-      defaultValue="key" 
-      className="w-full"
+    <Tabs
+      value={activeTab}
       onValueChange={(value) => {
+        setActiveTab(value);
         if (value === 'remote' && !nostrConnectParams && !connectError) {
           generateConnectSession();
         }
+        if (value === 'passkey') {
+          refreshPasskeyAvailability();
+        }
       }}
+      className="w-full"
     >
-      <TabsList className="grid w-full grid-cols-2 bg-muted border rounded-none mb-4">
-        <TabsTrigger value="key" className="flex items-center gap-2 rounded-none">
-          <span>Secret Key</span>
+      <TabsList className="grid w-full grid-cols-5 bg-muted border rounded-none mb-4 h-auto">
+        <TabsTrigger value="secret" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <KeyRound className="size-3.5 sm:size-4" />
+          <span>Key</span>
         </TabsTrigger>
-        <TabsTrigger value="remote" className="flex items-center gap-2 rounded-none">
-          <span>Remote Signer</span>
+        <TabsTrigger value="remote" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <ExternalLink className="size-3.5 sm:size-4" />
+          <span>Remote</span>
+        </TabsTrigger>
+        <TabsTrigger value="quickstart" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <Sparkles className="size-3.5 sm:size-4" />
+          <span>Quick</span>
+        </TabsTrigger>
+        <TabsTrigger value="passkey" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <Fingerprint className="size-3.5 sm:size-4" />
+          <span>Passkey</span>
+        </TabsTrigger>
+        <TabsTrigger value="lightning" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <Zap className="size-3.5 sm:size-4" />
+          <span>LN</span>
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value='key' className='space-y-4'>
+      <TabsContent value='secret' className='space-y-4'>
         <form onSubmit={(e) => {
           e.preventDefault();
           handleKeyLogin();
@@ -429,7 +491,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       </TabsContent>
 
       <TabsContent value='remote' className='space-y-4'>
-        {/* Nostrconnect Section */}
         <div className='flex flex-col items-center space-y-4'>
           {connectError ? (
             <div className='flex flex-col items-center space-y-4 py-4'>
@@ -439,9 +500,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               </Button>
             </div>
           ) : showProgressView ? (
-            // Progress view — replaces the QR/button once the handshake is
-            // under way. Gives the user live feedback through each phase so
-            // a stuck signer is visibly stuck, not silently stuck.
             <div className='flex flex-col items-center space-y-4 py-6 w-full'>
               <Loader2 className='w-8 h-8 animate-spin text-primary' />
               <p className='text-sm text-muted-foreground text-center min-h-[1.25rem]'>
@@ -457,7 +515,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             </div>
           ) : nostrConnectUri ? (
             <>
-              {/* QR Code - only show on desktop */}
               {!isMobile && (
                 <div className='p-4 bg-card border rounded-none'>
                   <QRCodeCanvas
@@ -468,7 +525,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
                 </div>
               )}
 
-              {/* Open Signer App button - primary action on mobile */}
               {isMobile && (
                 <Button
                   className='w-full gap-2 py-6 rounded-none'
@@ -486,7 +542,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
           )}
         </div>
 
-        {/* Manual URI input section - collapsible */}
         <div className='pt-4 border-t border-border'>
           <button
             type='button'
@@ -528,6 +583,125 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
           )}
         </div>
       </TabsContent>
+
+      <TabsContent value='quickstart' className='space-y-4'>
+        <div className='text-center space-y-4'>
+          <div className="flex size-16 text-3xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
+            <Sparkles className="size-7 text-primary" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Create a fresh Nostr account instantly. We&apos;ll generate a secret key, save it to your device, and log you in.
+          </p>
+          {errors.quickstart && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{errors.quickstart}</AlertDescription>
+            </Alert>
+          )}
+          <Button
+            className="w-full h-12 rounded-none"
+            onClick={handleQuickStart}
+            disabled={quickStartLoading}
+          >
+            {quickStartLoading ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating account…</>
+            ) : (
+              <><Sparkles className="w-4 h-4 mr-2" /> Quick Start</>
+            )}
+          </Button>
+          <div className='mx-auto max-w-sm'>
+            <div className='p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800'>
+              <div className='flex items-center gap-2 mb-1'>
+                <span className='text-xs font-semibold text-amber-800 dark:text-amber-200'>
+                  Important
+                </span>
+              </div>
+              <p className='text-xs text-amber-900 dark:text-amber-300'>
+                Your secret key is generated locally. Make sure to back it up — it is the only way to recover this account.
+              </p>
+            </div>
+          </div>
+        </div>
+      </TabsContent>
+
+      <TabsContent value='passkey' className='space-y-4'>
+        <div className='text-center space-y-4'>
+          <div className="flex size-16 text-3xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
+            <Fingerprint className="size-7 text-primary" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Use your device&apos;s biometric authenticator (Touch ID, Face ID, Windows Hello, YubiKey) to create or unlock a Nostr account.
+          </p>
+          {errors.passkey && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{errors.passkey}</AlertDescription>
+            </Alert>
+          )}
+          {!passkeyAvail ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !passkeyAvail.available ? (
+            <p className="text-sm text-muted-foreground">
+              Passkeys are not available on this browser. Try a modern browser or device with biometric authentication.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {passkeyAvail.enrolled ? (
+                <Button
+                  className="w-full h-12 rounded-none"
+                  onClick={handlePasskeyLogin}
+                  disabled={passkeyLoading}
+                >
+                  {passkeyLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Unlocking…</>
+                  ) : (
+                    <><Fingerprint className="w-4 h-4 mr-2" /> Sign in with Passkey</>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  className="w-full h-12 rounded-none"
+                  onClick={handlePasskeyRegister}
+                  disabled={passkeyLoading}
+                >
+                  {passkeyLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Setting up…</>
+                  ) : (
+                    <><Fingerprint className="w-4 h-4 mr-2" /> Create Passkey Account</>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </TabsContent>
+
+      <TabsContent value='lightning' className='space-y-4'>
+        <div className='text-center space-y-4'>
+          <div className="flex size-16 text-3xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
+            <Zap className="size-7 text-primary" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Lightning wallet login (LNURL-auth) is coming soon. For now, use a Lightning wallet that also provides a Nostr extension, such as Alby.
+          </p>
+          {hasWebLN && (
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-none"
+              onClick={handleOpenWebLN}
+            >
+              <Zap className="w-4 h-4 mr-2" /> Open Lightning Wallet
+            </Button>
+          )}
+          {!hasExtension && (
+            <p className="text-xs text-muted-foreground">
+              No Nostr extension detected. Install Alby or another NIP-07 extension to log in with Lightning.
+            </p>
+          )}
+        </div>
+      </TabsContent>
     </Tabs>
   );
 
@@ -553,19 +727,17 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
 
         <div className='px-6 pb-6 space-y-4 overflow-y-auto'>
           {onSignupClick && (
-            <p className="text-center text-sm text-muted-foreground">
-              New here?{' '}
-              <button
-                type="button"
-                onClick={() => { onClose(); onSignupClick(); }}
-                className="text-primary hover:underline font-medium"
-              >
-                Create account
-              </button>
-            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-12 rounded-none"
+              onClick={() => { onClose(); onSignupClick(); }}
+            >
+              <ArrowRight className="w-4 h-4 mr-2" />
+              Create account
+            </Button>
           )}
 
-          {/* Extension Login Button - shown if extension is available */}
           {hasExtension && (
             <div className="space-y-3">
               {errors.extension && (
@@ -584,29 +756,20 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             </div>
           )}
 
-          {/* Tabs - wrapped in collapsible if extension is available, otherwise shown directly */}
-          {hasExtension ? (
-            <Collapsible className="space-y-4" open={isMoreOptionsOpen} onOpenChange={setIsMoreOptionsOpen}>
-              <button 
-                type="button"
-                onClick={() => setIsMoreOptionsOpen(!isMoreOptionsOpen)}
-                className="w-full flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <span>More Options</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${isMoreOptionsOpen ? 'rotate-180' : ''}`} />
-              </button>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
 
-              <CollapsibleContent>
-                {renderTabs()}
-              </CollapsibleContent>
-            </Collapsible>
-          ) : (
-            renderTabs()
-          )}
+          {renderTabs()}
         </div>
       </DialogContent>
     </Dialog>
-    );
-  };
+  );
+};
 
 export default LoginDialog;
