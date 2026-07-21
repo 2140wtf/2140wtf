@@ -31,7 +31,6 @@ import { useTabFeed } from '@/hooks/useProfileFeed';
 import { useTopicAuthors } from '@/hooks/useTopicAuthors';
 import { useSavedFeeds } from '@/hooks/useSavedFeeds';
 import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
-import { useCuratorFollowList } from '@/hooks/useCuratorFollowList';
 import { useCuratedAppFeed } from '@/hooks/useCuratedAppFeed';
 import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
@@ -87,7 +86,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const { savedFeeds } = useSavedFeeds();
   const { hashtags } = useInterests();
   const { hashtags: geotags } = useInterests('g');
-  const { data: curatorFollowList, isError: isCuratorError } = useCuratorFollowList();
   const { data: followData } = useFollowList();
   const { excludeMuted } = useMutedAuthorFilter();
   const isOnline = useIsOnline();
@@ -238,11 +236,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     hasTopicAuthors,
   );
 
-  // Curated 2140.wtf feed: latest content from the curator's follow list.
-  const topQuery = useCuratedAppFeed(
-    curatorFollowList,
-    useTopFeedForLoggedOut || !!useAppTab,
-  );
+  // Curated 2140.wtf feed: posts from the official 2140.wtf account only.
+  const topQuery = useCuratedAppFeed(useTopFeedForLoggedOut || !!useAppTab);
 
   // Unify the two query shapes behind a single interface
   const useAppQuery = useTopFeedForLoggedOut || useAppTab;
@@ -402,9 +397,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     });
   }, [feedItems, searchQuery, pollFilter]);
 
-  // Show skeletons while loading, but not if the curator list query errored
-  // (that would leave logged-out users staring at infinite skeletons).
-  const showSkeleton = (isPending || (isLoading && !rawData)) && !(useAppQuery && isCuratorError);
+  const showSkeleton = (isPending || (isLoading && !rawData));
 
   // Distinguish the empty-state cases so the message + CTAs match the cause:
   //   - Follows tab with zero follows → "follow some people" (no retry).
