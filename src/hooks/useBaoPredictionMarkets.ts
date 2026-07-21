@@ -60,9 +60,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
           }
         }
 
-        return Array.from(seen.values())
-          .filter((m) => m.state !== 'ended')
-          .sort((a, b) => b.createdAt - a.createdAt);
+        return Array.from(seen.values()).sort((a, b) => b.createdAt - a.createdAt);
       } finally {
         clearTimeout(timeoutId);
         relay.close().catch(() => {});
@@ -123,9 +121,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
 
         if (!changed) return old;
 
-        return Array.from(byMarket.values())
-          .filter((m) => m.state !== "ended")
-          .sort((a, b) => b.createdAt - a.createdAt);
+        return Array.from(byMarket.values()).sort((a, b) => b.createdAt - a.createdAt);
       });
     }
 
