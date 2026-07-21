@@ -378,7 +378,7 @@ function PetsAdoptionFlowPortal({
         invalidateCompanion={invalidateCompanion}
         setStoredSelectedD={setStoredSelectedD}
         breedCategory={breedCategory}
-        adoptionOnly={true}
+        adoptionOnly={false}
         onComplete={onComplete}
       />
     </div>,
