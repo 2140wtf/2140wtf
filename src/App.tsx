@@ -172,6 +172,13 @@ const hardcodedConfig: AppConfig = {
     safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_CUSTOM_SIGNET_MEMPOOL_URL) ??
     'https://mempool.bao.markets/api',
   baoApiUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_API_URL) ?? 'https://relay.bao.network/bao-api',
+  petsBattleEscrowPubkey:
+    ((import.meta.env as Record<string, unknown>).VITE_PETS_BATTLE_ESCROW_PUBKEY as string | undefined) || undefined,
+  petsBattleEscrowServiceUrl:
+    safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_PETS_BATTLE_ESCROW_URL) ?? undefined,
+  petsTreasuryNpub:
+    ((import.meta.env as Record<string, unknown>).VITE_PETS_TREASURY_NPUB as string | undefined) ||
+    'npub1ahqqyfxyrxn3cg7cdkh9nv6ghn07sqnc4yycwq8wlyjd3dr8wt9qjhuesp',
   contentWarningPolicy: "blur",
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
   sentryEnabled: true,

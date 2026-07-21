@@ -2,8 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
-import { useExternalSatsPayment } from '@/pets/core/hooks/useExternalSatsPayment';
 import { toast } from '@/hooks/useToast';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
@@ -80,8 +80,8 @@ function splitSatsPayment(
  *
  * Handles:
  * - Pet-bound fiat balance first for sats-priced items
- * - Real BTC sats payment via the external Cashu wallet (wallet_mode === 'btc-sats')
- * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'demo-sats')
+ * - Real sats payment via a nutzap to the 2140 treasury (wallet_mode === 'cashu')
+ * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'bao')
  * - Storage updates (stacking or adding new items)
  * - Atomic profile update
  */
@@ -93,8 +93,8 @@ export function usePetsPurchaseItem(
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+  const { config } = useAppContext();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
-  const { paySats } = useExternalSatsPayment(externalWallet);
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -128,7 +128,7 @@ export function usePetsPurchaseItem(
 
       // Use the current profile for initial wallet-mode decisions; the serialized
       // update below re-reads the freshest profile before publishing.
-      const isBtcSats = currentProfile.walletMode === 'btc-sats';
+      const isCashuMode = currentProfile.walletMode === 'cashu';
 
       // Determine the intended currency from the explicit request or the price.
       // Reject mismatched price/currency pairs so the button price always
@@ -145,7 +145,7 @@ export function usePetsPurchaseItem(
       } else {
         // For real-sats wallets default to sats when a price is ambiguous;
         // otherwise prefer the in-game fiat coin price.
-        if (isBtcSats) {
+        if (isCashuMode) {
           if (price === satsPrice) {
             resolvedCurrency = 'sats';
           } else if (price === fiatPrice) {
@@ -166,12 +166,12 @@ export function usePetsPurchaseItem(
 
       let currency: 'fiat coins' | 'demo sats' | 'sats' = 'fiat coins';
       let totalCost = 0;
-      let paymentToken: string | undefined;
+      let treasuryPaid = false;
       let petFiatSpend = 0;
       let walletSatsCost = 0;
 
       if (resolvedCurrency === 'sats') {
-        currency = isBtcSats ? 'sats' : 'demo sats';
+        currency = isCashuMode ? 'sats' : 'demo sats';
         totalCost = totalSatsCost;
 
         // Split the cost between pet-bound fiat and the wallet.
@@ -179,9 +179,16 @@ export function usePetsPurchaseItem(
         petFiatSpend = split.petFiatSpend;
         walletSatsCost = split.walletSatsCost;
 
-        if (walletSatsCost > 0 && isBtcSats) {
+        if (walletSatsCost > 0 && isCashuMode) {
           if (!externalWallet) {
             throw new Error('External wallet is not available.');
+          }
+          const treasuryNpub = config.petsTreasuryNpub;
+          if (!treasuryNpub) {
+            throw new Error('Pets treasury is not configured.');
+          }
+          if (!externalWallet.mintUrl) {
+            throw new Error('Select a mint in your Cashu wallet before buying with sats.');
           }
           const selectedMintBalance = getSelectedMintBalance(externalWallet);
           const feeReserve = estimateCashuSendFee(walletSatsCost, externalWallet.wallet ?? null);
@@ -191,10 +198,17 @@ export function usePetsPurchaseItem(
               `Insufficient balance on the selected mint. You need ${walletSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats on ${externalWallet.mintUrl ?? 'the selected mint'}.`
             );
           }
-          // Burn real sats BEFORE updating the profile so a payment failure cannot
-          // grant a free item. If the profile update fails after the token is spent,
-          // attempt to refund the token so the user does not lose sats.
-          paymentToken = await paySats(walletSatsCost, `Pets shop: ${item.name}`);
+          // Pay the 2140 treasury BEFORE updating the profile so a payment failure
+          // cannot grant a free item. Nutzaps cannot be clawed back automatically;
+          // if the profile update fails after this point we surface a clear error
+          // so support can refund from the treasury side.
+          const sent = await externalWallet.sendNutzap(walletSatsCost, treasuryNpub, externalWallet.mintUrl, {
+            memo: `Pets shop: ${item.name}`,
+          });
+          if (!sent) {
+            throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+          }
+          treasuryPaid = true;
         }
       } else {
         currency = 'fiat coins';
@@ -237,7 +251,7 @@ export function usePetsPurchaseItem(
                 `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
               );
             }
-          } else if (!isBtcSats) {
+          } else if (!isCashuMode) {
             // Demo-sats purchase: the external wallet was not charged, so deduct the
             // remaining cost from the freshest profile demo sats balance.
             const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
@@ -274,7 +288,7 @@ export function usePetsPurchaseItem(
           };
           if (resolvedCurrency === 'fiat') {
             updates.coins = (freshProfile.coins - totalFiatCost).toString();
-          } else if (!isBtcSats) {
+          } else if (!isCashuMode) {
             const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
             updates.sats = (freshProfile.sats - demoDeduction).toString();
           }
@@ -300,18 +314,15 @@ export function usePetsPurchaseItem(
             console.error('[usePetsPurchaseItem] Failed to restore pet fiat balance after profile update failure:', rollbackError);
           }
         }
-        if (paymentToken && externalWallet) {
-          try {
-            await externalWallet.receiveToken(paymentToken);
-            console.warn('[usePetsPurchaseItem] Refunded Cashu token after profile update failure:', profileError);
-          } catch (refundError) {
-            const refundMessage = refundError instanceof Error ? refundError.message : 'unknown error';
-            console.error('[usePetsPurchaseItem] Failed to refund Cashu token after profile update failure:', refundError);
-            throw new Error(
-              `Profile update failed and the Cashu refund could not be completed (${refundMessage}). ` +
-                `Save this token if possible: ${paymentToken.slice(0, 40)}...`,
-            );
-          }
+        if (treasuryPaid) {
+          // The nutzap already reached the treasury relays and cannot be clawed
+          // back automatically. Tell the user exactly what happened so support
+          // can refund from the treasury side.
+          console.error('[usePetsPurchaseItem] Profile update failed after treasury payment:', profileError);
+          throw new Error(
+            'Your payment was sent to the 2140 treasury, but the purchase could not be completed. ' +
+              'Please contact 2140 support for a refund.',
+          );
         }
         throw profileError;
       }
@@ -332,7 +343,6 @@ export function usePetsPurchaseItem(
         quantity,
         totalCost: (result.meta?.totalCost as number | undefined) ?? totalCost,
         currency: (result.meta?.currency as typeof currency | undefined) ?? currency,
-        paymentToken,
         petFiatSpend: (result.meta?.petFiatSpend as number | undefined) ?? 0,
       };
     },

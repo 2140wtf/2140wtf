@@ -38,7 +38,7 @@ export default function PetsBattlePage() {
   const navigate = useNavigate();
   const { updateProfileEvent } = useBlobbonautProfile();
 
-  const { wallet: petsWallet, isTestnet } = usePetsWallet();
+  const { wallet: petsWallet, isBao } = usePetsWallet();
   const { config } = useAppContext();
   const { seedPhrase } = useCashuSeed();
 
@@ -280,7 +280,7 @@ export default function PetsBattlePage() {
             <BattleSetup
               ownerPubkey={user.pubkey}
               onStart={handleStart}
-              allowBtcSats={isTestnet}
+              allowBtcSats={isBao}
             />
             <BattleInvitePending />
           </>
