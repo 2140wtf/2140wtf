@@ -910,6 +910,7 @@ export function PetsHatchingCeremony({
               companion={eggCompanion}
               size="lg"
               animated
+              onEggClick={commitToHatch}
               className="size-52 sm:size-60 relative"
             />
           </div>
