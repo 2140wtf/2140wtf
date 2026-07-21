@@ -48,19 +48,19 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
   const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated);
   const { realWallet, baoWallet } = usePetsWallet();
 
-  const isBtcMode = profile?.walletMode === 'btc-sats';
-  const walletBalance = isBtcMode
+  const isCashuMode = profile?.walletMode === 'cashu';
+  const walletBalance = isCashuMode
     ? (externalWallet?.balances?.[externalWallet?.mintUrl ?? ''] ?? 0)
     : 0;
   const walletLoading = externalWallet?.loading ?? false;
   const fiatCoins = profile?.coins ?? 0;
-  const demoSats = isBtcMode ? walletBalance : (profile?.sats ?? 0);
+  const demoSats = isCashuMode ? walletBalance : (profile?.sats ?? 0);
 
   // Independent balance tracking for the two rails shown in the shop header.
-  const baoTestnetBalance = baoWallet?.totalBalance ?? profile?.sats ?? 0;
-  const baoTestnetLoading = baoWallet?.loading ?? false;
-  const bitcoinSatsBalance = realWallet?.totalBalance ?? 0;
-  const bitcoinSatsLoading = realWallet?.loading ?? false;
+  const baoSignetBalance = baoWallet?.totalBalance ?? profile?.sats ?? 0;
+  const baoSignetLoading = baoWallet?.loading ?? false;
+  const cashuSatsBalance = realWallet?.totalBalance ?? 0;
+  const cashuSatsLoading = realWallet?.loading ?? false;
 
   const storageMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -104,18 +104,18 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
             <WalletIcon className="size-3" />
-            {baoTestnetLoading && baoTestnetBalance === 0 ? (
+            {baoSignetLoading && baoSignetBalance === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{baoTestnetBalance.toLocaleString()} Bao Testnet</span>
+              <span>{baoSignetBalance.toLocaleString()} BAO signet</span>
             )}
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
             <WalletIcon className="size-3" />
-            {bitcoinSatsLoading && bitcoinSatsBalance === 0 ? (
+            {cashuSatsLoading && cashuSatsBalance === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{bitcoinSatsBalance.toLocaleString()} Bitcoin sats</span>
+              <span>{cashuSatsBalance.toLocaleString()} Cashu sats</span>
             )}
           </Badge>
         </div>
@@ -134,7 +134,7 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                     const owned = storageMap.get(item.id) ?? 0;
                     const fiatPrice = item.fiatPrice ?? item.price;
                     const satsPrice = item.satsPrice ?? item.price;
-                    const feeReserve = isBtcMode
+                    const feeReserve = isCashuMode
                       ? estimateCashuSendFee(satsPrice, externalWallet?.wallet ?? null)
                       : 0;
                     const satsNeeded = satsPrice + feeReserve;
@@ -171,11 +171,11 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                                   variant="secondary"
                                   disabled={!canAfford || isPending}
                                   onClick={() => {
-                                    // In btc-sats mode always charge real sats;
+                                    // In cashu mode always charge real sats;
                                     // otherwise prefer fiat coins and fall back to
                                     // demo sats so the button price matches the
                                     // currency actually deducted.
-                                    const useFiat = !isBtcMode && canAffordFiat;
+                                    const useFiat = !isCashuMode && canAffordFiat;
                                     purchase({
                                       itemId: item.id,
                                       price: useFiat ? fiatPrice : satsPrice,

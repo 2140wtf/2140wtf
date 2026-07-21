@@ -1,6 +1,6 @@
 // src/pets/wallet/components/PetsWalletDrawer.tsx
 //
-// Wallet drawer for NOSTR PETS. Switches between the Bitcoin sats Cashu wallet
+// Wallet drawer for NOSTR PETS. Switches between the real Cashu sats wallet
 // and the BAO signet/demo wallet based on the user's chosen mode.
 
 import { useMemo, type ComponentType } from 'react';
@@ -15,23 +15,23 @@ import { BaoWalletDrawer } from './BaoWalletDrawer';
 import { CashuWalletDrawer } from './CashuWalletDrawer';
 
 interface PetsWalletDrawerProps {
-  onModeChange?: (profileMode: 'btc-sats' | 'demo-sats') => void;
+  onModeChange?: (profileMode: 'cashu' | 'bao') => void;
 }
 
 export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
-  const { wallet, mode, setMode, isTestnet } = usePetsWallet();
+  const { wallet, mode, setMode, isBao } = usePetsWallet();
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
     () => [
-      { value: 'bitcoin', label: 'Bitcoin sats', icon: Bitcoin },
-      { value: 'testnet', label: 'BAO testnet', icon: FlaskConical },
+      { value: 'cashu', label: 'Cashu sats', icon: Bitcoin },
+      { value: 'bao', label: 'BAO signet', icon: FlaskConical },
     ],
     [],
   );
 
   const handleModeChange = (next: PetsWalletMode) => {
     setMode(next);
-    onModeChange?.(next === 'bitcoin' ? 'btc-sats' : 'demo-sats');
+    onModeChange?.(next);
   };
 
   return (
@@ -40,15 +40,15 @@ export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
         <ModeSwitch mode={mode} setMode={handleModeChange} options={modeOptions} />
       </div>
       <div className="flex-1 min-h-0">
-        {isTestnet ? (
+        {isBao ? (
           <BaoWalletDrawer />
         ) : wallet ? (
           <CashuWalletDrawer
             wallet={wallet}
-            title="Bitcoin sats balance"
+            title="Cashu sats balance"
             badge="sats"
             mintPlaceholder="Select a mint"
-            invoiceDescription="Bitcoin top-up"
+            invoiceDescription="Cashu top-up"
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground">
@@ -91,9 +91,9 @@ function ModeSwitch({
         ))}
       </div>
       <p className="text-[10px] text-muted-foreground leading-relaxed">
-        {mode === 'bitcoin'
-          ? 'Bitcoin sats mode uses your main Cashu wallet. Create invoices, send tokens, and receive tokens here.'
-          : 'Testnet mode uses BAO signet sats and the BAO faucet. Shop purchases still come from this demo wallet.'}
+        {mode === 'cashu'
+          ? 'Cashu sats mode uses your main Cashu wallet — real sats. Create invoices, send tokens, and receive tokens here.'
+          : 'BAO signet mode uses free demo sats from the BAO faucet. No real money is involved.'}
       </p>
     </div>
   );
