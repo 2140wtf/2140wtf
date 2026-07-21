@@ -153,11 +153,12 @@ export function OnchainZapContent({ target, campaign, bitcoinTarget, onSuccess, 
     if (campaign) {
       return campaign.wallets.onchain?.value ?? campaign.wallets.sp?.value ?? '';
     }
-    if (bitcoinTarget) {
-      return bitcoinTarget.value;
-    }
-    return nostrPubkeyToBitcoinAddress(target.pubkey);
-  }, [campaign, bitcoinTarget, target.pubkey]);
+    // Profile zaps no longer derive a Bitcoin address from the recipient's
+    // npub. On-chain zaps are only sent when the recipient has explicitly
+    // published a NIP-A3 `payto bitcoin` target (ideally a BIP-352 `sp1…`
+    // silent-payment code, but a `bc1…` address is also accepted).
+    return bitcoinTarget?.value ?? '';
+  }, [campaign, bitcoinTarget]);
   const isSilentPayment = useMemo(
     () => looksLikeSilentPaymentAddress(recipientAddress),
     [recipientAddress],

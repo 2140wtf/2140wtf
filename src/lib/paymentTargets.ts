@@ -262,6 +262,16 @@ export function findBitcoinTarget(targets: PaymentTarget[]): PaymentTarget | und
   return targets.find((t) => t.type === 'bitcoin');
 }
 
+/**
+ * Find the BIP-352 silent-payment target (`sp1…`) in a parsed list, if any.
+ * Returns `undefined` when the only bitcoin target is a regular on-chain
+ * address (`bc1…`).
+ */
+export function findSilentPaymentTarget(targets: PaymentTarget[]): PaymentTarget | undefined {
+  const bitcoin = findBitcoinTarget(targets);
+  return bitcoin && isSilentPaymentLike(bitcoin.authority) ? bitcoin : undefined;
+}
+
 /** Find the lightning payment target (if any) in a parsed list. */
 export function findLightningTarget(targets: PaymentTarget[]): PaymentTarget | undefined {
   return targets.find((t) => t.type === 'lightning');
