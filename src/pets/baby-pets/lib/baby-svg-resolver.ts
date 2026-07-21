@@ -6,7 +6,7 @@
 
 import { Pets } from '@/pets/core/types/pets';
 import { BabyVariant, BabySvgResolverOptions } from '../types/baby.types';
-import { BABY_BASE_SVG, BABY_SLEEPING_SVG } from './baby-svg-data';
+import { BABY_BASE_SVG, BABY_SLEEPING_SVG, BABY_2140_BASE_SVG, BABY_2140_SLEEPING_SVG } from './baby-svg-data';
 
 /**
  * Get baby base SVG content
@@ -34,12 +34,17 @@ export function getBabySvgByVariant(variant: BabyVariant): string {
  */
 export function resolveBabySvg(pets: Pets, options: BabySvgResolverOptions = {}): string {
   const { isSleeping = false } = options;
-  
+
   if (pets.lifeStage !== 'baby') {
     console.warn('resolveBabySvg called with non-baby Pets');
     return getFallbackBabySvg();
   }
-  
+
+  // 2140-pets get their own glassmorphism gangster baby design.
+  if (pets.breedCategory === '2140-pets') {
+    return isSleeping ? BABY_2140_SLEEPING_SVG : BABY_2140_BASE_SVG;
+  }
+
   return isSleeping ? getBabySleepingSvg() : getBabyBaseSvg();
 }
 
