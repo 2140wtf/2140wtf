@@ -281,6 +281,8 @@ export const RuntimeAppConfigSchema = z.object({
   petsBattleEscrowPubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Optional URL to request release of battle escrow funds to the winner. */
   petsBattleEscrowServiceUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'Escrow service URL must use https://' }).optional(),
+  /** npub that receives real-sats Pets shop payments (nutzaps) in Cashu mode. */
+  petsTreasuryNpub: z.string().regex(/^npub1[02-9ac-hj-np-z]+$/).optional(),
   contentWarningPolicy: ContentWarningPolicySchema,
   sentryDsn: z.string().refine(isAllowedHttpsUrl, { message: 'Sentry DSN must use https:// or be empty' }),
   sentryEnabled: z.boolean(),

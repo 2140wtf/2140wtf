@@ -8,7 +8,7 @@ import htmlParser from "@html-eslint/parser";
 import customRules from "./eslint-rules/index.js";
 
 export default tseslint.config(
-  { ignores: ["dist", "android", "ios", ".agents", ".tools", ".research", ".tmp", "services/escrow-operator/dist", "services/escrow-operator/node_modules"] },
+  { ignores: ["dist", "android", "ios", ".agents", ".tools", ".research", ".tmp", "vendor", "services/escrow-operator/dist", "services/escrow-operator/node_modules"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

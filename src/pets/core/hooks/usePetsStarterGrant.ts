@@ -37,11 +37,11 @@ export function usePetsStarterGrant(options: UsePetsStarterGrantOptions = {}) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
-  const { isTestnet } = usePetsWallet();
+  const { isBao } = usePetsWallet();
 
   const baoGrant = useBaoPetStarterGrant({
     onProfileUpdate,
-    enabled: isTestnet,
+    enabled: isBao,
   });
 
   return useMutation<PetsStarterGrantResult, Error, number>({
@@ -50,7 +50,7 @@ export function usePetsStarterGrant(options: UsePetsStarterGrantOptions = {}) {
         throw new Error('You must be logged in to claim starter sats.');
       }
 
-      if (isTestnet) {
+      if (isBao) {
         const result = await baoGrant.mutateAsync(amount);
         return {
           amount: result.amount,
