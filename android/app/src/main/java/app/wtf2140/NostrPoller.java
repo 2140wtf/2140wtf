@@ -1,4 +1,4 @@
-package pub.ditto.app;
+package app.wtf2140;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;

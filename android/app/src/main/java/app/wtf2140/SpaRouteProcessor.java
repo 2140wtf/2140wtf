@@ -1,4 +1,4 @@
-package pub.ditto.app;
+package app.wtf2140;
 
 import android.content.Context;
 import android.content.res.AssetManager;
