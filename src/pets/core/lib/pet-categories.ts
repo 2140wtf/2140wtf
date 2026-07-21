@@ -42,7 +42,7 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   },
   {
     id: 'ditto-blobbi',
-    label: '2140 Blobbi',
+    label: 'Blobbi',
     description: 'Playful nature spirits that grow with every interaction.',
   },
   {
