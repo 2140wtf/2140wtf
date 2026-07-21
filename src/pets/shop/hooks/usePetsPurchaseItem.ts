@@ -80,8 +80,9 @@ function splitSatsPayment(
  *
  * Handles:
  * - Pet-bound fiat balance first for sats-priced items
- * - Real sats payment via a nutzap to the 2140 treasury (wallet_mode === 'cashu')
- * - Demo-sats deduction from the profile `sats` tag (wallet_mode === 'bao')
+ * - Sats payment via a nutzap to the 2140 treasury from the active wallet:
+ *   the real Cashu wallet in mainnet mode, the BAO signet Cashu wallet in
+ *   demo mode. Same rail, separated by mint — demo sats are valueless.
  * - Storage updates (stacking or adding new items)
  * - Atomic profile update
  */
@@ -179,7 +180,10 @@ export function usePetsPurchaseItem(
         petFiatSpend = split.petFiatSpend;
         walletSatsCost = split.walletSatsCost;
 
-        if (walletSatsCost > 0 && isCashuMode) {
+        if (walletSatsCost > 0) {
+          // Both modes pay the 2140 treasury by nutzap. In mainnet mode the
+          // active wallet is the user's real Cashu wallet; in demo mode it is
+          // the BAO signet Cashu wallet (valueless sats on the BAO mint).
           if (!externalWallet) {
             throw new Error('External wallet is not available.');
           }
@@ -251,16 +255,10 @@ export function usePetsPurchaseItem(
                 `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
               );
             }
-          } else if (!isCashuMode) {
-            // Demo-sats purchase: the external wallet was not charged, so deduct the
-            // remaining cost from the freshest profile demo sats balance.
-            const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
-            if (freshProfile.sats < demoDeduction) {
-              throw new Error(
-                `Insufficient demo sats. You need ${demoDeduction.toLocaleString()} but have ${freshProfile.sats.toLocaleString()}.`
-              );
-            }
           }
+          // Sats purchases were already paid by nutzap from the active wallet
+          // before this serialized update — the profile `sats` tag is never
+          // spent by the shop in either mode.
 
           // Recompute the purchase deltas from the fresh profile so concurrent
           // updates on other devices are not silently overwritten.
@@ -288,9 +286,6 @@ export function usePetsPurchaseItem(
           };
           if (resolvedCurrency === 'fiat') {
             updates.coins = (freshProfile.coins - totalFiatCost).toString();
-          } else if (!isCashuMode) {
-            const demoDeduction = resolvedCurrency === 'sats' ? walletSatsCost : totalSatsCost;
-            updates.sats = (freshProfile.sats - demoDeduction).toString();
           }
 
           const tags = updateBlobbonautTags(freshProfile.event.tags, updates);

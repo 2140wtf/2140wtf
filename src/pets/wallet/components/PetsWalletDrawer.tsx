@@ -23,8 +23,8 @@ export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
     () => [
-      { value: 'cashu', label: 'Cashu sats', icon: Bitcoin },
-      { value: 'bao', label: 'BAO signet', icon: FlaskConical },
+      { value: 'bao', label: 'Demo (BAO signet)', icon: FlaskConical },
+      { value: 'cashu', label: 'Mainnet (Cashu sats)', icon: Bitcoin },
     ],
     [],
   );
@@ -45,7 +45,7 @@ export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
         ) : wallet ? (
           <CashuWalletDrawer
             wallet={wallet}
-            title="Cashu sats balance"
+            title="Mainnet Cashu balance"
             badge="sats"
             mintPlaceholder="Select a mint"
             invoiceDescription="Cashu top-up"
@@ -92,8 +92,8 @@ function ModeSwitch({
       </div>
       <p className="text-[10px] text-muted-foreground leading-relaxed">
         {mode === 'cashu'
-          ? 'Cashu sats mode uses your main Cashu wallet — real sats. Create invoices, send tokens, and receive tokens here.'
-          : 'BAO signet mode uses free demo sats from the BAO faucet. No real money is involved.'}
+          ? 'Mainnet mode uses your main Cashu wallet — real sats. Shop purchases pay the 2140 treasury by nutzap.'
+          : 'Demo mode uses free BAO signet sats from the BAO faucet (or bao.markets). Payments run on the same Cashu rail to 2140, but no real money is involved.'}
       </p>
     </div>
   );
