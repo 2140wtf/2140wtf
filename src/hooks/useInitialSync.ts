@@ -243,9 +243,6 @@ export function useInitialSync() {
               if (parsed.customTheme) {
                 updates.customTheme = parsed.customTheme;
               }
-              if (parsed.autoShareTheme !== undefined) {
-                updates.autoShareTheme = parsed.autoShareTheme;
-              }
               if (parsed.useAppRelays !== undefined) {
                 updates.useAppRelays = parsed.useAppRelays;
               }

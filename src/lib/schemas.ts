@@ -254,7 +254,6 @@ export const RuntimeAppConfigSchema = z.object({
   magicMouse: z.boolean().optional(),
   theme: ThemeSchema,
   customTheme: ThemeConfigCompatSchema.optional(),
-  autoShareTheme: z.boolean(),
   themes: ThemesConfigSchema.optional(),
   relayMetadata: RelayMetadataSchema,
   useAppRelays: z.boolean(),
@@ -359,7 +358,6 @@ export const ContentFilterSchema = z.object({
 export const EncryptedSettingsSchema = z.looseObject({
   theme: ThemeSchema.optional(),
   customTheme: ThemeConfigCompatSchema.optional(),
-  autoShareTheme: z.boolean().optional(),
   useAppRelays: z.boolean().optional(),
   useUserRelays: z.boolean().optional(),
   feedSettings: FeedSettingsSchema.optional(),
@@ -388,7 +386,6 @@ export const EncryptedSettingsSchema = z.looseObject({
     follows: z.boolean().optional(),
     mutes: z.boolean().optional(),
     bookmarks: z.boolean().optional(),
-    autoShareTheme: z.boolean().optional(),
     publishRelayList: z.boolean().optional(),
     publishBlossomList: z.boolean().optional(),
     notes: z.boolean().optional(),

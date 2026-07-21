@@ -9,7 +9,7 @@ This document describes the two separate but overlapping theme features in 2140.
 | **App Theme** | Controls colors, fonts, and background of the local UI | Local to the user's browser | localStorage + encrypted NIP-78 sync |
 | **Profile Theme** | A set of theme values published as a Nostr event | Public, visible to other users | Kind 16767 replaceable event |
 
-The App Theme and Profile Theme share the same underlying data structure (`ThemeConfig`), and there is an optional bridge between them (`autoShareTheme`), but they are fundamentally independent systems.
+The App Theme and Profile Theme share the same underlying data structure (`ThemeConfig`), but they are fundamentally independent systems.
 
 ---
 
@@ -171,11 +171,11 @@ It also sets `data-theme-mode="dark"` or `"light"` based on background luminance
 
 #### Layer 1: localStorage (immediate)
 
-The `useLocalStorage` hook (`src/hooks/useLocalStorage.ts`) stores the full `AppConfig` under key `"nostr:app-config"`. This includes `theme`, `customTheme`, `autoShareTheme`, and `themes`. Changes are reflected immediately and support cross-tab sync via `StorageEvent`.
+The `useLocalStorage` hook (`src/hooks/useLocalStorage.ts`) stores the full `AppConfig` under key `"nostr:app-config"`. This includes `theme`, `customTheme`, and `themes`. Changes are reflected immediately and support cross-tab sync via `StorageEvent`.
 
 #### Layer 2: Encrypted NIP-78 Settings (cross-device sync)
 
-The `useEncryptedSettings` hook (`src/hooks/useEncryptedSettings.ts`) stores theme preferences in a kind 30078 addressable event, encrypted to self via NIP-44. The `EncryptedSettings` interface includes `theme`, `customTheme`, and `autoShareTheme` among other app settings.
+The `useEncryptedSettings` hook (`src/hooks/useEncryptedSettings.ts`) stores theme preferences in a kind 30078 addressable event, encrypted to self via NIP-44. The `EncryptedSettings` interface includes `theme` and `customTheme` among other app settings.
 
 Key behaviors:
 - Query is delayed 5 seconds after login to avoid competing with feed load
@@ -234,7 +234,7 @@ The user's currently active profile theme. Same tag structure as kind 36767 but 
 
 | Hook | File | Purpose |
 |---|---|---|
-| `usePublishTheme` | `src/hooks/usePublishTheme.ts` | Publish/update/delete theme definitions (36767), set/clear active profile theme (16767) |
+| `usePublishTheme` | `src/hooks/usePublishTheme.ts` | Publish/update/delete theme definitions (36767) |
 | `useUserThemes` | `src/hooks/useUserThemes.ts` | Query all kind 36767 themes by a user, deduplicated by d-tag, sorted newest first |
 | `useActiveProfileTheme` | `src/hooks/useActiveProfileTheme.ts` | Query a user's kind 16767 active profile theme |
 
@@ -253,29 +253,13 @@ Backward compatibility: if `c` tags are missing, the parser falls back to readin
 
 ---
 
-## Part 3: The Bridge Between App Theme and Profile Theme
+## Part 3: App Theme and Profile Theme Independence
 
-The two systems are connected by the **autoShareTheme** setting and the NostrSync component.
+The app theme is never published automatically. Changing the app theme only updates local config and encrypted NIP-78 settings.
 
-### App Theme -> Profile Theme
+### Profile Theme Display
 
-When `autoShareTheme` is enabled (default: `true`) and the user applies a custom theme via `applyCustomTheme()`, the `useTheme` hook automatically publishes the custom theme as a kind 16767 active profile theme, debounced by 2 seconds.
-
-```
-User picks a custom theme
-  -> applyCustomTheme() in useTheme.ts:88
-    -> Updates local config (localStorage)
-    -> Syncs to encrypted NIP-78 storage (1s debounce)
-    -> If autoShareTheme: publishes kind 16767 (2s debounce)
-```
-
-### Profile Theme -> App Theme
-
-On page load, if `autoShareTheme` is enabled, `NostrSync` (line 174) fetches the user's kind 16767 event and applies it as `customTheme` **without changing the theme mode**. This means:
-
-- If the user is on `theme: "dark"`, their profile theme is stored as `customTheme` but the UI stays in dark mode
-- If the user is on `theme: "custom"`, the profile theme's colors are applied to the UI
-- This allows the profile theme to stay in sync across devices without forcing the user into custom mode
+When visiting another user's profile, the app queries their kind 16767 active profile theme (if any) and applies it locally so visitors see that user's chosen style. It does **not** overwrite the visitor's app theme; the original theme is restored when leaving the profile.
 
 ### Theme Definitions (Kind 36767)
 
@@ -366,14 +350,14 @@ The `AppProvider` deserializer (`src/components/AppProvider.tsx:32`) validates e
 | `src/lib/fonts.ts` | Bundled font definitions |
 | `src/lib/schemas.ts` | Zod validation schemas |
 | `src/contexts/AppContext.ts` | `Theme` type, `AppConfig` interface, React context |
-| `src/hooks/useTheme.ts` | Primary theme API: `setTheme()`, `applyCustomTheme()`, `setAutoShareTheme()` |
+| `src/hooks/useTheme.ts` | Primary theme API: `setTheme()`, `applyCustomTheme()` |
 | `src/hooks/useAppContext.ts` | Context consumer hook |
 | `src/hooks/useEncryptedSettings.ts` | NIP-78 encrypted settings (cross-device sync) |
-| `src/hooks/usePublishTheme.ts` | Publish theme definitions and active profile theme |
+| `src/hooks/usePublishTheme.ts` | Publish theme definitions |
 | `src/hooks/useUserThemes.ts` | Query user's theme definitions |
 | `src/hooks/useActiveProfileTheme.ts` | Query user's active profile theme |
 | `src/components/AppProvider.tsx` | Theme application to DOM (`useApplyTheme`, `useApplyFonts`, `useApplyBackground`) |
-| `src/components/NostrSync.tsx` | Cross-device sync for encrypted settings and profile theme |
+| `src/components/NostrSync.tsx` | Cross-device sync for encrypted settings |
 | `src/components/ScopedTheme.tsx` | Scoped CSS variable overrides for subtrees |
 | `src/components/ThemeSelector.tsx` | Full settings UI for theme management |
 | `src/components/SidebarThemeDropdown.tsx` | Compact theme picker dropdown |
