@@ -65,8 +65,6 @@ export interface EncryptedSettings {
   theme?: Theme;
   /** Custom theme config (colors, fonts, background) */
   customTheme?: ThemeConfig;
-  /** Automatically publish custom theme changes to profile */
-  autoShareTheme?: boolean;
   /** Whether to use app default relays in addition to user relays */
   useAppRelays?: boolean;
   /** Whether to include the user's personal NIP-65 relay list in the effective relay set. */
@@ -109,7 +107,6 @@ export interface EncryptedSettings {
     follows?: boolean;
     mutes?: boolean;
     bookmarks?: boolean;
-    autoShareTheme?: boolean;
     publishRelayList?: boolean;
     publishBlossomList?: boolean;
     notes?: boolean;
