@@ -125,7 +125,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
         <div className="px-2 py-4">
           <ProfileSearchDropdown
             placeholder="Search..."
-            inputClassName="py-3.5 !bg-[var(--2140-raised)] !text-[var(--2140-fg)] !placeholder:text-[var(--2140-placeholder)] !border-0"
+            inputClassName="py-3.5 bg-muted text-foreground placeholder:text-muted-foreground border-0"
             enableTextSearch
           />
         </div>
