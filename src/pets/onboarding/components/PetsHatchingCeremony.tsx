@@ -898,7 +898,7 @@ export function PetsHatchingCeremony({
           </p>
         </div>
 
-        {babyCompanion && (
+        {eggCompanion && (
           <div className="relative">
             <div
               className="absolute -inset-10 rounded-full blur-2xl"
@@ -907,7 +907,7 @@ export function PetsHatchingCeremony({
               }}
             />
             <PetsStageVisual
-              companion={babyCompanion}
+              companion={eggCompanion}
               size="lg"
               animated
               className="size-52 sm:size-60 relative"
@@ -934,7 +934,7 @@ export function PetsHatchingCeremony({
           <Button
             variant="outline"
             size="lg"
-            className="w-full"
+            className="w-full border-white/40 text-white hover:bg-white/10 hover:text-white"
             disabled={isCommitting || isRerolling}
             onClick={handleReroll}
           >
