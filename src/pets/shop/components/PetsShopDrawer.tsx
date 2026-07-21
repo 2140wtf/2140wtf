@@ -49,15 +49,17 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
   const { realWallet, baoWallet } = usePetsWallet();
 
   const isCashuMode = profile?.walletMode === 'cashu';
-  const walletBalance = isCashuMode
-    ? (externalWallet?.balances?.[externalWallet?.mintUrl ?? ''] ?? 0)
-    : 0;
+  // Spendable sats always come from the active wallet's selected mint — the
+  // real Cashu wallet in mainnet mode, the BAO signet Cashu wallet in demo
+  // mode. The profile `sats` tag (in-game earnings) is not spendable here.
+  const walletBalance = externalWallet?.balances?.[externalWallet?.mintUrl ?? ''] ?? 0;
   const walletLoading = externalWallet?.loading ?? false;
   const fiatCoins = profile?.coins ?? 0;
-  const demoSats = isCashuMode ? walletBalance : (profile?.sats ?? 0);
+  const demoSats = walletBalance;
 
   // Independent balance tracking for the two rails shown in the shop header.
-  const baoSignetBalance = baoWallet?.totalBalance ?? profile?.sats ?? 0;
+  // BAO demo sats are shown from the cashu rail only (the BAO wallet).
+  const baoSignetBalance = baoWallet?.totalBalance ?? 0;
   const baoSignetLoading = baoWallet?.loading ?? false;
   const cashuSatsBalance = realWallet?.totalBalance ?? 0;
   const cashuSatsLoading = realWallet?.loading ?? false;

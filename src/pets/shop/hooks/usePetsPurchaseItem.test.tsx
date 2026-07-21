@@ -144,11 +144,13 @@ describe('usePetsPurchaseItem bao mode', () => {
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
   });
 
-  it('deducts demo sats and does not call the external wallet', async () => {
-    const sendNutzap = vi.fn();
+  it('pays the treasury from the BAO wallet and never touches profile sats', async () => {
+    const sendNutzap = vi.fn().mockResolvedValue(true);
     const externalWallet = {
       totalBalance: 500,
       loading: false,
+      mintUrl: 'https://relay.bao.network/cashu',
+      balances: { 'https://relay.bao.network/cashu': 500 },
       sendNutzap,
     } as unknown as CashuWalletState & CashuWalletActions;
 
@@ -159,20 +161,30 @@ describe('usePetsPurchaseItem bao mode', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(sendNutzap).not.toHaveBeenCalled();
+    expect(sendNutzap).toHaveBeenCalledWith(25, TREASURY_NPUB, 'https://relay.bao.network/cashu', {
+      memo: 'Pets shop: Apple',
+    });
+    // The profile `sats` tag is in-game earnings only — the shop never spends it.
     const published = mocks.publishEvent.mock.calls[0]?.[0] as NostrEvent | undefined;
-    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('19975');
+    expect(published?.tags.find((t) => t[0] === 'sats')?.[1]).toBe('20000');
   });
 
-  it('validates that the demo-sats cost is affordable', async () => {
-    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 10));
+  it('fails when the BAO wallet cannot cover the cost', async () => {
+    const externalWallet = {
+      totalBalance: 10,
+      loading: false,
+      mintUrl: 'https://relay.bao.network/cashu',
+      balances: { 'https://relay.bao.network/cashu': 10 },
+      sendNutzap: vi.fn(),
+    } as unknown as CashuWalletState & CashuWalletActions;
+
     const profile = parseBlobbonautEvent(createProfileEvent('bao', 10))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient demo sats');
+    expect(result.current.error?.message).toContain('Insufficient balance on the selected mint');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 });
