@@ -7,7 +7,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { PetsCompanion, NostrPetProfile } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
   updatePetsTags,
@@ -60,7 +60,7 @@ export interface UseItemResult {
  */
 export interface UsePetsUseInventoryItemParams {
   companion: PetsCompanion | null;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called after ensuring companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
     companion: PetsCompanion;

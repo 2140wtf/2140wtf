@@ -17,7 +17,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { getLiveShopItems } from '@/pets/shop/lib/pets-shop-items';
 import { canUseItemForStage } from '@/pets/actions/lib/pets-action-utils';
 
@@ -122,7 +122,7 @@ export function useCompanionActionMenu({
   onItemClick,
 }: UseCompanionActionMenuOptions): UseCompanionActionMenuResult {
   const location = useLocation();
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
   const storageMap = useMemo(
     () => new Map((profile?.storage ?? []).map((s) => [s.itemId, s.quantity])),
     [profile?.storage],

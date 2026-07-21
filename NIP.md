@@ -28,7 +28,7 @@ These event kinds were created by community contributors and are supported by 21
 | 1124  | Pets Social Interaction | Immutable interaction log for Pets social interactions       | See [Pets Social Interaction](#kind-1124-pets-social-interaction) below                |
 | 21124 | Pets Battle Sync       | Ephemeral encrypted in-match state stream for remote pet battles | See [Kind 21124: Pets Battle Sync](#kind-21124-pets-battle-sync) below               |
 | 10133 | Payment Targets        | Donation endpoints (Bitcoin, Lightning, Monero, …) per RFC-8905 | [NIP-A3](https://github.com/ATXMJ/nips/blob/main/A3.md); see [Kind 10133](#kind-10133-payment-targets-nip-a3) below |
-| 11125 | Blobbonaut Profile     | Owner profile with coins, achievements, and inventory            | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
+| 11125 | Nostr Pet Profile     | Owner profile with coins, achievements, and inventory            | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 14919 | Pets Interaction     | Individual pet interaction (feed, play, clean, etc.)             | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 14920 | Pets Breeding        | Breeding event between two adult Petss                         | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 14921 | Pets Record          | Immutable lifecycle record (birth, evolution, adoption)          | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
@@ -855,7 +855,7 @@ The Pets economy uses a single `sats` balance for all breed categories. In `demo
 |-----|---------|---------|
 | `sats` | Demo-sats / BTC-sats balance | `0` |
 
-New Blobbonauts start with `0` sats and earn them from daily login bonuses, daily missions, BAO trading rewards, and battles.
+New Nostr pets start with `0` sats and earn them from daily login bonuses, daily missions, BAO trading rewards, and battles.
 
 #### Kind 11125 `content` JSON — BAO trade streak
 

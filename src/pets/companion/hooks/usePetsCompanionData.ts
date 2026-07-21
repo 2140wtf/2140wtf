@@ -1,7 +1,7 @@
 /**
  * usePetsCompanionData Hook
  * 
- * Fetches the current companion data from the user's Blobbonaut profile.
+ * Fetches the current companion data from the user's Nostr pet profile.
  * This is the data layer - it handles fetching and provides companion data.
  * 
  * Uses usePetssCollection with a targeted dList (single d-tag) for efficiency.
@@ -11,7 +11,7 @@
 
 import { useMemo } from 'react';
 
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
 import type { CompanionData } from '../types/companion.types';
@@ -26,10 +26,10 @@ interface UsePetsCompanionDataResult {
 }
 
 /**
- * Hook to fetch the current companion from the user's Blobbonaut profile.
+ * Hook to fetch the current companion from the user's Nostr pet profile.
  * 
  * Flow:
- * 1. Use useBlobbonautProfile to get the profile (shared query, reactive)
+ * 1. Use useNostrPetProfile to get the profile (shared query, reactive)
  * 2. Build a dList containing just the currentCompanion (targeted fetch)
  * 3. Use usePetssCollection with the dList to get the companion
  * 4. Apply projected decay for accurate UI reactions
@@ -41,7 +41,7 @@ interface UsePetsCompanionDataResult {
  */
 export function usePetsCompanionData(): UsePetsCompanionDataResult {
   // Use the shared profile hook - this ensures reactivity when profile changes
-  const { profile, isLoading: profileLoading } = useBlobbonautProfile();
+  const { profile, isLoading: profileLoading } = useNostrPetProfile();
   
   // Extract current companion d-tag from the reactive profile
   const currentCompanionD = profile?.currentCompanion;

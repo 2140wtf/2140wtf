@@ -19,13 +19,13 @@ import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
 export const PETS_ECOSYSTEM_NAMESPACE = 'pets:ecosystem:v1';
 
 export const KIND_PETS_STATE = 31124;
-export const KIND_BLOBBONAUT_PROFILE = 11125;
+export const KIND_NOSTR_PET_PROFILE = 11125;
 
-/** @deprecated Legacy kind for Blobbonaut profiles. Use KIND_BLOBBONAUT_PROFILE (11125) instead. */
-export const KIND_BLOBBONAUT_PROFILE_LEGACY = 31125;
+/** @deprecated Legacy kind for Nostr pet profiles. Use KIND_NOSTR_PET_PROFILE (11125) instead. */
+export const KIND_NOSTR_PET_PROFILE_LEGACY = 31125;
 
-/** All Blobbonaut profile kinds to query (for migration support) */
-export const BLOBBONAUT_PROFILE_KINDS = [KIND_BLOBBONAUT_PROFILE, KIND_BLOBBONAUT_PROFILE_LEGACY] as const;
+/** All Nostr pet profile kinds to query (for migration support) */
+export const NOSTR_PET_PROFILE_KINDS = [KIND_NOSTR_PET_PROFILE, KIND_NOSTR_PET_PROFILE_LEGACY] as const;
 
 // ─── Stat Bounds ──────────────────────────────────────────────────────────────
 
@@ -60,8 +60,8 @@ export const DEFAULT_INCUBATION_TIME = 345600;
 
 // ─── Onboarding Constants ─────────────────────────────────────────────────────
 
-/** Initial demo sats given to new Blobbonauts (~one meal + a battle entry). */
-export const INITIAL_BLOBBONAUT_SATS = 2_140;
+/** Initial demo sats given to new Nostr pets (~one meal + a battle entry). */
+export const INITIAL_NOSTR_PET_SATS = 2_140;
 
 /** Cost in demo sats to reroll/generate another egg preview during onboarding */
 export const PETS_PREVIEW_REROLL_SATS = 100;
@@ -383,10 +383,10 @@ export interface StorageItem {
 }
 
 /**
- * Parsed representation of a Blobbonaut Profile event (Kind 11125).
+ * Parsed representation of a Nostr Pet Profile event (Kind 11125).
  * Also supports legacy Kind 31125 profiles.
  */
-export interface BlobbonautProfile {
+export interface NostrPetProfile {
   /** Original event for republishing */
   event: NostrEvent;
   /** The d tag value */
@@ -395,7 +395,7 @@ export interface BlobbonautProfile {
   currentCompanion: string | undefined;
   /** Whether onboarding/tutorial is complete */
   onboardingDone: boolean;
-  /** Display name for the Blobbonaut */
+  /** Display name for the Nostr pet */
   name: string | undefined;
   /** List of owned Pets d-tags */
   has: string[];
@@ -491,10 +491,10 @@ export function getCanonicalPetsD(pubkey: string, petId: string): string {
 }
 
 /**
- * Get the canonical d-tag for a Blobbonaut Profile (Kind 11125).
+ * Get the canonical d-tag for a Nostr Pet Profile (Kind 11125).
  * Format: blobbonaut-{pubkeyPrefix12}
  */
-export function getCanonicalBlobbonautD(pubkey: string): string {
+export function getCanonicalNostrPetProfileD(pubkey: string): string {
   return `blobbonaut-${getPubkeyPrefix12(pubkey)}`;
 }
 
@@ -571,7 +571,7 @@ function parseBooleanTag(tags: string[][], name: string, defaultValue = false): 
 }
 
 /**
- * Parse storage tags from a Blobbonaut Profile event (Kind 11125).
+ * Parse storage tags from a Nostr Pet Profile event (Kind 11125).
  * Storage tags format: ['storage', 'itemId:quantity']
  * 
  * @param tags - Event tags array
@@ -606,21 +606,21 @@ export function createStorageTags(storage: StorageItem[]): string[][] {
 // ─── Legacy Detection ─────────────────────────────────────────────────────────
 
 /**
- * Check if a Blobbonaut d-tag is in canonical format.
+ * Check if a Nostr pet d-tag is in canonical format.
  * Canonical: blobbonaut-{12 lowercase hex}
  */
-export function isCanonicalBlobbonautD(d: string): boolean {
+export function isCanonicalNostrPetProfileD(d: string): boolean {
   return /^blobbonaut-[0-9a-f]{12}$/.test(d);
 }
 
 /**
- * Check if a Blobbonaut d-tag is a legacy format.
+ * Check if a Nostr pet d-tag is a legacy format.
  * Legacy formats:
  * - Blobbonaut-{8-12 hex} (capitalized)
  * - blobbonaut-profile
  * - blobbonaut-{8-11 hex}
  */
-export function isLegacyBlobbonautD(d: string): boolean {
+export function isLegacyNostrPetProfileD(d: string): boolean {
   // Capitalized version
   if (/^Blobbonaut-[0-9a-fA-F]{8,12}$/.test(d)) return true;
   // Generic profile id
@@ -1152,13 +1152,13 @@ export function isValidPetsEvent(event: NostrEvent): boolean {
 }
 
 /**
- * Validate that an event has the required tags for a valid Blobbonaut profile.
+ * Validate that an event has the required tags for a valid Nostr pet profile.
  * Accepts both current kind (11125) and legacy kind (31125) for migration support.
  * Required: d, b (pets:ecosystem:v1)
  */
-export function isValidBlobbonautEvent(event: NostrEvent): boolean {
+export function isValidNostrPetProfileEvent(event: NostrEvent): boolean {
   // Accept both current and legacy kinds
-  if (event.kind !== KIND_BLOBBONAUT_PROFILE && event.kind !== KIND_BLOBBONAUT_PROFILE_LEGACY) {
+  if (event.kind !== KIND_NOSTR_PET_PROFILE && event.kind !== KIND_NOSTR_PET_PROFILE_LEGACY) {
     return false;
   }
   
@@ -1172,11 +1172,11 @@ export function isValidBlobbonautEvent(event: NostrEvent): boolean {
 }
 
 /**
- * Check if a Blobbonaut profile event is using the legacy kind (31125).
+ * Check if a Nostr pet profile event is using the legacy kind (31125).
  * Used to determine if migration is needed.
  */
-export function isLegacyBlobbonautKind(event: NostrEvent): boolean {
-  return event.kind === KIND_BLOBBONAUT_PROFILE_LEGACY;
+export function isLegacyNostrPetProfileKind(event: NostrEvent): boolean {
+  return event.kind === KIND_NOSTR_PET_PROFILE_LEGACY;
 }
 
 // ─── Event Parsing ────────────────────────────────────────────────────────────
@@ -1430,15 +1430,15 @@ export function parsePetsEvent(event: NostrEvent): PetsCompanion | undefined {
 }
 
 /**
- * Parse a Kind 11125 Blobbonaut Profile event into a structured object.
+ * Parse a Kind 11125 Nostr Pet Profile event into a structured object.
  * Also supports legacy kind 31125 profiles for migration purposes.
  * Returns undefined if the event is invalid.
  * 
  * Note: pettingLevel is parsed from both 'pettingLevel' and 'petting_level' tags
  * for backwards compatibility with legacy profiles.
  */
-export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | undefined {
-  if (!isValidBlobbonautEvent(event)) return undefined;
+export function parseNostrPetProfileEvent(event: NostrEvent): NostrPetProfile | undefined {
+  if (!isValidNostrPetProfileEvent(event)) return undefined;
 
   const tags = event.tags;
   const d = getTagValue(tags, 'd')!;
@@ -1479,7 +1479,7 @@ export function parseBlobbonautEvent(event: NostrEvent): BlobbonautProfile | und
 // ─── Tag Building Utilities ───────────────────────────────────────────────────
 
 /**
- * Build tags for a new Blobbonaut Profile (Kind 11125).
+ * Build tags for a new Nostr Pet Profile (Kind 11125).
  * Includes pettingLevel: 0 by default.
  */
 
@@ -1495,13 +1495,13 @@ export function parseWalletModeTag(tags: string[][]): 'bao' | 'cashu' {
   return 'bao';
 }
 
-export function buildBlobbonautTags(pubkey: string): string[][] {
+export function buildNostrPetProfileTags(pubkey: string): string[][] {
   return [
-    ['d', getCanonicalBlobbonautD(pubkey)],
+    ['d', getCanonicalNostrPetProfileD(pubkey)],
     ['b', PETS_ECOSYSTEM_NAMESPACE],
     ['pets_onboarding_done', 'false'],
     ['pettingLevel', '0'],
-    // New Blobbonauts start with 2,140 fiat coins for mini-games.
+    // New Nostr pets start with 2,140 fiat coins for mini-games.
     ['coins', '2140'],
     // New profiles default to the BAO signet/demo Cashu rail so the pet
     // economy shares the same wallet as bao.markets.
@@ -1671,10 +1671,10 @@ export const DEPRECATED_PETS_TAG_NAMES = new Set([
 ]);
 
 /**
- * Tags managed by the client for Kind 11125 (Blobbonaut Profile).
+ * Tags managed by the client for Kind 11125 (Nostr Pet Profile).
  * These tags are controlled by the application and may be overwritten.
  */
-export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
+export const MANAGED_NOSTR_PET_PROFILE_TAG_NAMES = new Set([
   'd', 'b', 'name', 'current_companion', 'pets_onboarding_done', 'onboarding_done', 'has', 'storage', 'sats',
   // Daily reward tags
   'daily_rewards_claimed_at', 'daily_login_last_day', 'daily_login_streak',
@@ -1692,10 +1692,10 @@ export const MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES = new Set([
 ]);
 
 /**
- * Deprecated tags for Kind 11125 (Blobbonaut Profile).
+ * Deprecated tags for Kind 11125 (Nostr Pet Profile).
  * These are stripped when republishing so old profiles migrate cleanly.
  */
-export const DEPRECATED_BLOBBONAUT_TAG_NAMES = new Set([
+export const DEPRECATED_NOSTR_PET_TAG_NAMES = new Set([
   'xp', // Old player lifetime XP; economy is sats-only now
   'level', // Derived from old xp; no longer used
 ]);
@@ -1706,7 +1706,7 @@ export const DEPRECATED_BLOBBONAUT_TAG_NAMES = new Set([
  */
 const MANAGED_TAG_NAMES = new Set([
   ...MANAGED_PETS_STATE_TAG_NAMES,
-  ...MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES,
+  ...MANAGED_NOSTR_PET_PROFILE_TAG_NAMES,
 ]);
 
 /**
@@ -1906,10 +1906,10 @@ export function mergePetsStateTagsForRepublish(
 }
 
 /**
- * Merge tags for republishing a Kind 11125 Blobbonaut Profile event.
+ * Merge tags for republishing a Kind 11125 Nostr Pet Profile event.
  * Preserves unknown tags, applies updates, and deduplicates repeated tags like 'has'.
  */
-export function mergeBlobbonautTagsForRepublish(
+export function mergeNostrPetProfileTagsForRepublish(
   existingTags: string[][],
   updates: Record<string, string | string[]>
 ): string[][] {
@@ -1919,7 +1919,7 @@ export function mergeBlobbonautTagsForRepublish(
   // Preserve existing managed tags that aren't being updated
   for (const tag of existingTags) {
     const name = tag[0];
-    if (MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES.has(name) && !updateKeys.has(name)) {
+    if (MANAGED_NOSTR_PET_PROFILE_TAG_NAMES.has(name) && !updateKeys.has(name)) {
       newTags.push(tag);
     }
   }
@@ -1937,7 +1937,7 @@ export function mergeBlobbonautTagsForRepublish(
   
   // Preserve unknown tags (tags not managed by us), excluding deprecated tags
   const unknownTags = existingTags.filter(
-    tag => !MANAGED_BLOBBONAUT_PROFILE_TAG_NAMES.has(tag[0]) && !DEPRECATED_BLOBBONAUT_TAG_NAMES.has(tag[0])
+    tag => !MANAGED_NOSTR_PET_PROFILE_TAG_NAMES.has(tag[0]) && !DEPRECATED_NOSTR_PET_TAG_NAMES.has(tag[0])
   );
   
   // Deduplicate 'has' tags
@@ -1968,23 +1968,23 @@ export function deduplicateHasTags(tags: string[][]): string[][] {
 }
 
 /**
- * Update Blobbonaut profile tags with proper deduplication.
+ * Update Nostr pet profile tags with proper deduplication.
  * Use this when updating Kind 11125 events.
  */
-export function updateBlobbonautTags(
+export function updateNostrPetProfileTags(
   existingTags: string[][],
   updates: Record<string, string | string[]>
 ): string[][] {
-  return mergeBlobbonautTagsForRepublish(existingTags, updates);
+  return mergeNostrPetProfileTagsForRepublish(existingTags, updates);
 }
 
 // ─── Profile Normalization ────────────────────────────────────────────────────
 
 /**
- * Check if a Blobbonaut profile is missing the pettingLevel tag.
+ * Check if a Nostr pet profile is missing the pettingLevel tag.
  * This helps determine if normalization is needed.
  */
-export function profileNeedsPettingLevelNormalization(profile: BlobbonautProfile): boolean {
+export function profileNeedsPettingLevelNormalization(profile: NostrPetProfile): boolean {
   // Check if either pettingLevel or petting_level tag exists in allTags
   const hasPettingLevelTag = profile.allTags.some(
     ([name]) => name === 'pettingLevel' || name === 'petting_level'
@@ -1996,7 +1996,7 @@ export function profileNeedsPettingLevelNormalization(profile: BlobbonautProfile
  * Check if a profile uses the legacy `onboarding_done` tag instead of the
  * new `pets_onboarding_done` tag. Returns true if migration is needed.
  */
-export function profileNeedsOnboardingTagMigration(profile: BlobbonautProfile): boolean {
+export function profileNeedsOnboardingTagMigration(profile: NostrPetProfile): boolean {
   const hasNewTag = profile.allTags.some(([name]) => name === 'pets_onboarding_done');
   const hasOldTag = profile.allTags.some(([name]) => name === 'onboarding_done');
   // Needs migration if: has old tag but not the new one
@@ -2011,13 +2011,13 @@ export function profileNeedsOnboardingTagMigration(profile: BlobbonautProfile): 
  *
  * Preserves all existing tags except the ones being migrated.
  */
-export function buildNormalizedProfileTags(profile: BlobbonautProfile): string[][] {
+export function buildNormalizedProfileTags(profile: NostrPetProfile): string[][] {
   let tags = profile.allTags;
   let changed = false;
 
   // Normalize pettingLevel
   if (profileNeedsPettingLevelNormalization(profile)) {
-    tags = updateBlobbonautTags(tags, { pettingLevel: '0' });
+    tags = updateNostrPetProfileTags(tags, { pettingLevel: '0' });
     changed = true;
   }
 
@@ -2026,7 +2026,7 @@ export function buildNormalizedProfileTags(profile: BlobbonautProfile): string[]
     const oldValue = tags.find(([name]) => name === 'onboarding_done')?.[1] ?? 'false';
     // Remove old tag, add new tag
     tags = tags.filter(([name]) => name !== 'onboarding_done');
-    tags = updateBlobbonautTags(tags, { pets_onboarding_done: oldValue });
+    tags = updateNostrPetProfileTags(tags, { pets_onboarding_done: oldValue });
     changed = true;
   }
 
@@ -2036,10 +2036,10 @@ export function buildNormalizedProfileTags(profile: BlobbonautProfile): string[]
 // ─── Query Helpers ────────────────────────────────────────────────────────────
 
 /**
- * Get all possible d-tag values to query for a Blobbonaut profile.
+ * Get all possible d-tag values to query for a Nostr pet profile.
  * Includes canonical and legacy formats for migration support.
  */
-export function getBlobbonautQueryDValues(pubkey: string): string[] {
+export function getNostrPetProfileQueryDValues(pubkey: string): string[] {
   const prefix12 = getPubkeyPrefix12(pubkey);
   const prefix8 = pubkey.slice(0, 8).toLowerCase();
   
@@ -2474,7 +2474,7 @@ export function findCanonicalEquivalent(
 export interface PetsBootCache {
   /** The user's pubkey this cache belongs to */
   pubkey: string;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   companion: PetsCompanion | null;
   cachedAt: number;
 }

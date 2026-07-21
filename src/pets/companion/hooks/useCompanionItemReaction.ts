@@ -19,7 +19,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import {
   KIND_PETS_STATE,
   isValidPetsEvent,
@@ -79,7 +79,7 @@ export function useCompanionItemReaction({
 }: UseCompanionItemReactionOptions): UseCompanionItemReactionResult {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
   
   // Track last reaction time to prevent spam
   const lastReactionTimeRef = useRef<number>(0);
