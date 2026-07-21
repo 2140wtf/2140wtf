@@ -19,6 +19,7 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
@@ -28,6 +29,7 @@ import {
   updatePetsTags,
 } from '@/pets/core/lib/pets';
 import { applyPetsDecay, applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
+import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createHatchMissions, createEvolveMissions } from '../lib/evolution-missions';
 import {
@@ -119,6 +121,8 @@ export function useStartIncubation({
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
+  const { config } = useAppContext();
+  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
 
   return useMutation({
     mutationFn: async (request: StartIncubationRequest): Promise<StartIncubationResult> => {
@@ -139,6 +143,12 @@ export function useStartIncubation({
 
       if (companion.stage !== 'egg') {
         throw new Error('Only eggs can be incubated');
+      }
+
+      // Eggs must wait for at least one real Bitcoin block before they can
+      // start incubating (~10 minutes of block time).
+      if (!isPetOldEnough(companion.event.created_at, currentBlockHeight)) {
+        throw new Error('This egg is still warming. Wait until at least one Bitcoin block is mined before hatching.');
       }
 
       // Validate switch mode requires stopOtherD

@@ -16,6 +16,7 @@ import { useMutation } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
@@ -26,6 +27,7 @@ import {
   updatePetsTags,
 } from '@/pets/core/lib/pets';
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
+import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
 import { validateAndRepairPetsTags } from '@/pets/core/lib/pets-tag-schema';
 import { serializeEvolutionContent } from '@/pets/core/lib/missions';
 import { createEvolveMissions } from '../lib/evolution-missions';
@@ -130,6 +132,8 @@ export function usePetsHatch({
 }: UsePetsStageTransitionParams) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
+  const { config } = useAppContext();
+  const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
 
   return useMutation({
     mutationFn: async (): Promise<StageTransitionResult> => {
@@ -156,6 +160,11 @@ export function usePetsHatch({
       // stale prop, so a concurrent hatch on another client is not republished.
       if (canonical.companion.stage !== 'egg') {
         throw new Error('Only eggs can be hatched');
+      }
+
+      // Eggs must wait for at least one real Bitcoin block before hatching.
+      if (!isPetOldEnough(canonical.companion.event.created_at, currentBlockHeight)) {
+        throw new Error('This egg is still warming. Wait until at least one Bitcoin block is mined before hatching.');
       }
 
       // ─── Apply Accumulated Decay First ───
