@@ -120,8 +120,8 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         id: 'download-app',
         question: 'Can I download this on the App Store or Google Play?',
         answer: [
-          'This site works as a web app right from your browser \u2014 no download needed! You can also "Add to Home Screen" on your phone to get an app-like experience.',
-          'On Android, you can download Nostr apps from [Zap Store](https://zapstore.dev/), a community-driven app store for the Nostr ecosystem. iOS support is planned for the future \u2014 stay tuned!',
+          'Yes! {appName} is available as a native app on the App Store and Google Play, and as an APK through [Zapstore](https://zapstore.dev/).',
+          'You can also use it right from your browser \u2014 no download needed \u2014 or "Add to Home Screen" for an app-like experience.',
         ],
       },
       {
