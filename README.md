@@ -2,13 +2,13 @@
 
 Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.com/) client that puts you in control.
 
-**[ditto.pub](https://ditto.pub)** | **[Docs](https://docs.ditto.pub)** | **[Source](https://gitlab.com/soapbox-pub/ditto)**
+**[2140.wtf](https://2140.wtf)** | **[Source](https://github.com/2140wtf/2140wtf)**
 
 ## About
 
 2140.wtf is an open-source, decentralized social media client built on the Nostr protocol. It's designed for people who want to have fun online without feeding the Big Tech machine. Express yourself with custom themes, Lightning payments, and an ever-growing set of content types -- all while owning your identity and data.
 
-Made by [Soapbox](https://soapbox.pub).
+Originally built by [Soapbox](https://soapbox.pub) as Ditto. Now developed as 2140.wtf.
 
 ## Features
 
@@ -29,13 +29,13 @@ Made by [Soapbox](https://soapbox.pub).
 ### Development
 
 ```sh
-git clone https://gitlab.com/soapbox-pub/ditto.git
-cd ditto
+git clone https://github.com/2140wtf/2140wtf.git
+cd 2140wtf
 npm install
 npm run dev
 ```
 
-The dev server starts at `http://localhost:8081`.
+The dev server starts at `http://localhost:3500`.
 
 ### Build
 
@@ -62,10 +62,10 @@ npm test
   "theme": "dark",
   "relayMetadata": {
     "relays": [
-      { "url": "wss://relay.ditto.pub", "read": true, "write": true }
+      { "url": "wss://relay.damus.io", "read": true, "write": true }
     ]
   },
-  "blossomServers": ["https://blossom.ditto.pub"],
+  "blossomServers": ["https://blossom.primal.net"],
   "feedSettings": {
     "showPosts": true,
     "showReposts": true,
@@ -139,14 +139,12 @@ public/           Static assets, icons, manifest
 
 ## Contributing
 
-We welcome contributions but have high standards. Please read the full [Contributing Guide](CONTRIBUTING.md) before submitting a merge request. The short version:
+We welcome contributions but have high standards. Please read the full [Contributing Guide](CONTRIBUTING.md) before submitting a pull request. The short version:
 
-- **Bug fixes**: One bug, one MR. Keep it small and focused.
-- **New features**: Must link to an existing issue and align with the [2140.wtf Philosophy](https://about.ditto.pub/philosophy).
+- **Bug fixes**: One bug, one PR. Keep it small and focused.
+- **New features**: Must link to an existing issue and align with the 2140.wtf Philosophy (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - **Required**: Live preview URL, before/after screenshots, completed self-review checklist.
 - **Required tools**: Claude Opus 4.6 (or latest frontier model), an AI coding agent with plan mode.
-
-Read the [2140.wtf Philosophy](https://about.ditto.pub/philosophy) to understand what 2140.wtf is and isn't.
 
 ## License
 
