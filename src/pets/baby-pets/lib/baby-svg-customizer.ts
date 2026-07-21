@@ -30,8 +30,12 @@ export function customizeBabySvg(
   // it may not fill flex containers properly
   modifiedSvg = ensureSvgFillsContainer(modifiedSvg);
 
-  // Only apply customizations if we have colors
-  if (!customization.baseColor && !customization.secondaryColor && !customization.eyeColor) {
+  // Some category-specific SVGs ship with their own curated palette (e.g. the
+  // 2140-pets glassmorphism gangster). Skip recoloring so the design stays intact.
+  const hasFixedColors = /data-pets-fixed-colors=["']true["']/.test(modifiedSvg);
+
+  // Only apply customizations if we have colors and the SVG isn't fixed-color
+  if (hasFixedColors || (!customization.baseColor && !customization.secondaryColor && !customization.eyeColor)) {
     // Still uniquify IDs if instanceId provided (even without color changes)
     if (instanceId) {
       modifiedSvg = uniquifySvgIds(modifiedSvg, instanceId);

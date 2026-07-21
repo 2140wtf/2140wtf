@@ -260,6 +260,8 @@ export function previewToPetsCompanion(preview: PetsEggPreview) {
     startIncubation: undefined, // Deprecated field, no longer used
     adultType: undefined, // Eggs don't have adult type
     customFormId: preview.breedCategory === 'custom' ? preview.breedAsset : undefined,
+    breedCategory: preview.breedCategory,
+    breedAsset: preview.breedAsset,
     fiatBalance: 2_140,
     eggScale: 1,
     
