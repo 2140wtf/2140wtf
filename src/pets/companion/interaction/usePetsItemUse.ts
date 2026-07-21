@@ -23,19 +23,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { PetsCompanion, NostrPetProfile } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
-  KIND_BLOBBONAUT_PROFILE,
+  KIND_NOSTR_PET_PROFILE,
   updatePetsTags,
   parsePetsEvent,
   isValidPetsEvent,
-  parseBlobbonautEvent,
+  parseNostrPetProfileEvent,
 } from '@/pets/core/lib/pets';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 import { applyPetsDecayForCompanion } from '@/pets/core/lib/pets-decay';
@@ -80,7 +80,7 @@ export interface UsePetsItemUseOptions {
   /** 
    * Override profile - if provided, skip fetching.
    */
-  profile?: BlobbonautProfile | null;
+  profile?: NostrPetProfile | null;
   /** Called to update the profile event in the query cache after sats are awarded. */
   updateProfileEvent?: (event: NostrEvent) => void;
 }
@@ -128,7 +128,7 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
   const queryClient = useQueryClient();
   
   // Fetch profile if not provided
-  const { profile: fetchedProfile } = useBlobbonautProfile();
+  const { profile: fetchedProfile } = useNostrPetProfile();
   const profile = options.profile ?? fetchedProfile;
   const updateProfileEvent = options.updateProfileEvent;
   
@@ -263,10 +263,10 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       // Fetch fresh profile so a purchase/consumption elsewhere does not leave
       // the ownership check stale.
       const freshProfileEvent = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
+        kinds: [KIND_NOSTR_PET_PROFILE],
         authors: [user.pubkey],
       });
-      const freshProfile = freshProfileEvent ? parseBlobbonautEvent(freshProfileEvent) : profile;
+      const freshProfile = freshProfileEvent ? parseNostrPetProfileEvent(freshProfileEvent) : profile;
       if (!freshProfile) {
         throw new Error('Profile data is invalid');
       }
@@ -444,14 +444,14 @@ export function usePetsItemUse(options: UsePetsItemUseOptions = {}): UsePetsItem
       // Update the profile cache with the freshly published profile event.
       if (user?.pubkey) {
         const freshEventAfterConsume = await fetchFreshPetsEvent(nostr, {
-          kinds: [KIND_BLOBBONAUT_PROFILE],
+          kinds: [KIND_NOSTR_PET_PROFILE],
           authors: [user.pubkey],
         });
         if (freshEventAfterConsume) {
           if (updateProfileEvent) {
             updateProfileEvent(freshEventAfterConsume);
           } else if (user?.pubkey) {
-            queryClient.setQueryData(['blobbonaut-profile', user.pubkey], freshEventAfterConsume);
+            queryClient.setQueryData(['nostr-pet-profile', user.pubkey], freshEventAfterConsume);
           }
         }
       }

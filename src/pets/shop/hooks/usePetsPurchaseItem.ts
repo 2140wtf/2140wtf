@@ -6,16 +6,16 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
-import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import type { CashuWallet, MintKeyset } from '@cashu/cashu-ts';
 
 import type { PurchaseRequest } from '../types/shop.types';
-import type { BlobbonautProfile, PetsCompanion, StorageItem } from '@/pets/core/lib/pets';
+import type { NostrPetProfile, PetsCompanion, StorageItem } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
-  updateBlobbonautTags,
+  updateNostrPetProfileTags,
   createStorageTags,
   updatePetsTags,
 } from '@/pets/core/lib/pets';
@@ -87,7 +87,7 @@ function splitSatsPayment(
  * - Atomic profile update
  */
 export function usePetsPurchaseItem(
-  currentProfile: BlobbonautProfile | null,
+  currentProfile: NostrPetProfile | null,
   companion?: PetsCompanion | null,
   externalWallet?: (CashuWalletState & CashuWalletActions) | null,
   onCompanionUpdated?: (event: NostrEvent) => void,
@@ -244,7 +244,7 @@ export function usePetsPurchaseItem(
       // double-charge (or grant a free item) by re-deriving the currency.
       let result;
       try {
-        result = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile) => {
+        result = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile) => {
           if (!freshProfile) {
             throw new Error('Profile not found on relays');
           }
@@ -288,7 +288,7 @@ export function usePetsPurchaseItem(
             updates.coins = (freshProfile.coins - totalFiatCost).toString();
           }
 
-          const tags = updateBlobbonautTags(freshProfile.event.tags, updates);
+          const tags = updateNostrPetProfileTags(freshProfile.event.tags, updates);
           return { tags, content: freshProfile.event.content, meta: { currency, totalCost, petFiatSpend } };
         });
       } catch (profileError) {
@@ -344,7 +344,7 @@ export function usePetsPurchaseItem(
     onSuccess: ({ item, quantity, totalCost, currency, petFiatSpend }) => {
       // Invalidate profile query to refetch fresh data
       if (user?.pubkey) {
-        queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
+        queryClient.invalidateQueries({ queryKey: ['nostr-pet-profile', user.pubkey] });
       }
 
       // Show success toast

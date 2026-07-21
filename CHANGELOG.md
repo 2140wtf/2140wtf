@@ -13,7 +13,7 @@
 
 ### Changed
 - Pet Shop now shows fiat, ₿AO testnet, and Bitcoin sats balances and filters items to what you own
-- New Blobbonaut profiles start with 2,140 fiat coins and one free apple
+- New Nostr pet profiles start with 2,140 fiat coins and one free apple
 - Pets wallet drawer mode syncs to profile `wallet_mode`
 - Demo/testnet pets hatch to baby but require real sats to mature to adult
 - Default home tab is "All" for logged-in users and guests
@@ -42,7 +42,7 @@
 This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade ₿AO prediction markets, vote in live poll cubes, chat in private groups, send encrypted messages, and carry a Cashu wallet — all under a fresh 2140.wtf look with light themes and a reorganized home.
 
 ### Added
-- 2140 Pets — adopt Blobbonaut eggs, hatch them, browse species, train stats, battle rivals, and earn sats rewards
+- 2140 Pets — adopt Nostr pet eggs, hatch them, browse species, train stats, battle rivals, and earn sats rewards
 - ₿AO Markets — explore prediction markets with price history, volume charts, and BTC Map links
 - Polls — vote on live polls and switch between card and 3D cube views
 - Group Chat — create private groups, manage members, and rotate secrets for safety

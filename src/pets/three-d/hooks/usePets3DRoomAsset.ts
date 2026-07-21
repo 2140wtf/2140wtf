@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import type { PetsCompanion } from '@/pets/core/lib/pets';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { parseAssets3DContent } from '@/pets/three-d/lib/three-d-schema';
 import { readCustomFormsMap } from '@/pets/three-d/lib/custom-forms-schema';
 import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
@@ -18,7 +18,7 @@ import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
 export function usePets3DRoomAsset(
   companion?: PetsCompanion | null,
 ): Asset3DEntry | undefined {
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
 
   return useMemo(() => {
     if (!profile?.content) return undefined;

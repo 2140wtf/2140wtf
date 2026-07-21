@@ -10,9 +10,9 @@ import { toast } from '@/hooks/useToast';
 import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
 import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
-import { getLocalDayString, updateBlobbonautTags } from '@/pets/core/lib/pets';
+import { getLocalDayString, updateNostrPetProfileTags } from '@/pets/core/lib/pets';
 
 export interface BattlePayoutRequest {
   /** Number of sats to award to the winner. */
@@ -29,7 +29,7 @@ export interface BattlePayoutResult {
 /**
  * Hook to pay out credits after a pet battle.
  *
- * - demo-sats: adds sats to the host's Blobbonaut profile.
+ * - demo-sats: adds sats to the host's Nostr pet profile.
  * - btc-sats: claims BAO signet/demo sats from the BAO faucet and deposits them
  *   into the user's BAO Cashu wallet (same seed/mint as bao.markets).
  *
@@ -61,7 +61,7 @@ export function useBattlePayout(
 
         // Check the daily cap and claim the faucet inside the serialized profile
         // updater so concurrent callers cannot claim twice before the tag is set.
-        const updateResult = await updateBlobbonautProfile(
+        const updateResult = await updateNostrPetProfile(
           nostr,
           publishEvent,
           user.pubkey,
@@ -102,7 +102,7 @@ export function useBattlePayout(
               throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
             }
 
-            const tags = updateBlobbonautTags(freshProfile?.event.tags ?? prevTags, {
+            const tags = updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, {
               battle_rewards_claimed_at: today,
             });
             return {
@@ -127,7 +127,7 @@ export function useBattlePayout(
 
       // Demo-sats mode: add to the in-game profile balance under the serialized
       // update helper so concurrent rewards cannot double-spend.
-      const updateResult = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+      const updateResult = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
         const today = getLocalDayString();
         if (freshProfile?.allTags.some((tag) => tag[0] === 'battle_rewards_claimed_at' && tag[1] === today)) {
           return { tags: prevTags, content: serializeProfileContent(prevContent, {}), meta: { alreadyClaimed: true, newSatsTotal: freshProfile?.sats ?? 0 } };
@@ -135,7 +135,7 @@ export function useBattlePayout(
 
         const currentSats = freshProfile?.sats ?? 0;
         const newSatsTotal = currentSats + amount;
-        const tags = updateBlobbonautTags(freshProfile?.event.tags ?? prevTags, {
+        const tags = updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, {
           sats: newSatsTotal.toString(),
           battle_rewards_claimed_at: today,
         });

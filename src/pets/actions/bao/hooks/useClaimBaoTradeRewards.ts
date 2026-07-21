@@ -7,9 +7,9 @@ import { toast } from '@/hooks/useToast';
 import { fetchFreshPetsEvent } from '@/pets/core/lib/fetchFreshPetsEvent';
 
 import {
-  KIND_BLOBBONAUT_PROFILE,
-  updateBlobbonautTags,
-  parseBlobbonautEvent,
+  KIND_NOSTR_PET_PROFILE,
+  updateNostrPetProfileTags,
+  parseNostrPetProfileEvent,
 } from '@/pets/core/lib/pets';
 import { getLocalDayString } from '@/pets/core/lib/pets';
 
@@ -81,11 +81,11 @@ export function useClaimBaoTradeRewards(
 
       // Fetch the latest profile so we never overwrite concurrent updates.
       const prev = await fetchFreshPetsEvent(nostr, {
-        kinds: [KIND_BLOBBONAUT_PROFILE],
+        kinds: [KIND_NOSTR_PET_PROFILE],
         authors: [user.pubkey],
       });
 
-      const freshProfile = prev ? parseBlobbonautEvent(prev) : undefined;
+      const freshProfile = prev ? parseNostrPetProfileEvent(prev) : undefined;
       const lifetimeBao = freshProfile?.baoLifetimeVolume ?? 0;
       const claimedDate = freshProfile?.baoRewardsClaimedAt;
 
@@ -106,7 +106,7 @@ export function useClaimBaoTradeRewards(
       const newLifetimeBao = lifetimeBao + reward.sats;
       const newTier = calculateBaoTier(newLifetimeBao);
 
-      const updatedTags = updateBlobbonautTags(prev?.tags ?? [], {
+      const updatedTags = updateNostrPetProfileTags(prev?.tags ?? [], {
         sats: newSatsTotal.toString(),
         bao_lifetime_volume: newLifetimeBao.toString(),
         bao_tier: newTier.toString(),
@@ -114,7 +114,7 @@ export function useClaimBaoTradeRewards(
       });
 
       const event = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content: prev?.content ?? '',
         tags: updatedTags,
         prev: prev ?? undefined,
@@ -132,7 +132,7 @@ export function useClaimBaoTradeRewards(
     },
     onSuccess: ({ satsAwarded, tierLabel }) => {
       if (user?.pubkey) {
-        queryClient.invalidateQueries({ queryKey: ['blobbonaut-profile', user.pubkey] });
+        queryClient.invalidateQueries({ queryKey: ['nostr-pet-profile', user.pubkey] });
       }
       if (satsAwarded > 0) {
         toast({

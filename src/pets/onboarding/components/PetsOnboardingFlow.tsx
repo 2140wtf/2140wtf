@@ -13,12 +13,12 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { PetsHatchingCeremony } from './PetsHatchingCeremony';
 
-import type { BlobbonautProfile, PetsCompanion } from '@/pets/core/lib/pets';
+import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
 import type { PetsBreedCategory } from '@/pets/core/lib/pet-categories';
 
 interface PetsOnboardingFlowProps {
   /** Current profile (null if doesn't exist) */
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called to update profile event in cache after publishing */
   updateProfileEvent: (event: NostrEvent) => void;
   /** Called to update companion event in cache after publishing */
