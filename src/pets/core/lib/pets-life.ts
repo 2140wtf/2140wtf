@@ -18,6 +18,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchBlockHeight } from '@/lib/bitcoin';
 import { DEFAULT_ESPLORA_APIS } from '@/lib/esplora';
 
+/** Tag key for the on-chain birth block height stored on pet state events. */
+export const BIRTH_BLOCK_TAG = 'birth_block';
+
 /** Average Bitcoin block time in seconds. */
 export const PET_BLOCK_TIME_SECONDS = 600;
 
@@ -117,7 +120,7 @@ export function usePetLife(birthTimestampSeconds: number | undefined): PetLife |
  * Fetch the current Bitcoin block height from Esplora APIs.
  *
  * Uses the provided URLs, or falls back to the public defaults. The result is
- * cached for 60 seconds.
+ * cached and refetched every 60 minutes to keep Esplora API usage low.
  */
 /**
  * Format a chronological age from elapsed seconds into a compact label.
@@ -148,12 +151,35 @@ export function useCurrentBlockHeight(baseUrls?: string[]): number | undefined {
   const { data } = useQuery({
     queryKey: ['bitcoin', 'block-height', urls],
     queryFn: async ({ signal }) => fetchBlockHeight(urls, signal),
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 60 * 60 * 1000,
+    refetchInterval: 60 * 60 * 1000,
     retry: 1,
   });
 
   return data;
+}
+
+/**
+ * Read a stored birth block height from pet event tags.
+ *
+ * @param tags - Event tags to inspect.
+ * @returns The stored block height, or undefined if missing/invalid.
+ */
+export function getStoredBirthBlockHeight(tags: string[][] | undefined): number | undefined {
+  if (!tags) return undefined;
+  const tag = tags.find((t) => t[0] === BIRTH_BLOCK_TAG);
+  if (!tag) return undefined;
+  const val = Number(tag[1]);
+  return Number.isFinite(val) && val >= 0 ? val : undefined;
+}
+
+/**
+ * Build a birth_block tag for a pet state event.
+ *
+ * @param blockHeight - The current Bitcoin block height at egg creation.
+ */
+export function makeBirthBlockTag(blockHeight: number): string[] {
+  return [BIRTH_BLOCK_TAG, blockHeight.toString()];
 }
 
 /**
@@ -194,9 +220,15 @@ export function getBirthBlockHeight(
 export function isPetOldEnough(
   birthTimestampSeconds: number | undefined,
   currentBlockHeight: number | undefined,
+  storedBirthBlockHeight?: number,
 ): boolean {
   if (currentBlockHeight === undefined) return false;
-  const birthBlockHeight = getBirthBlockHeight(birthTimestampSeconds, currentBlockHeight);
+  let birthBlockHeight: number | undefined;
+  if (storedBirthBlockHeight !== undefined) {
+    birthBlockHeight = storedBirthBlockHeight;
+  } else {
+    birthBlockHeight = getBirthBlockHeight(birthTimestampSeconds, currentBlockHeight);
+  }
   if (birthBlockHeight === undefined) return false;
   return currentBlockHeight > birthBlockHeight;
 }
