@@ -9,23 +9,23 @@ import { toast } from '@/hooks/useToast';
 
 import {
   KIND_PETS_STATE,
-  KIND_BLOBBONAUT_PROFILE,
+  KIND_NOSTR_PET_PROFILE,
   PETS_ECOSYSTEM_NAMESPACE,
   buildMigrationTags,
   deriveMigrationPetId,
   getCanonicalPetsD,
   isValidPetsEvent,
   migratePetInHas,
-  updateBlobbonautTags,
+  updateNostrPetProfileTags,
   parsePetsEvent,
   parseStorageTags,
   findCanonicalEquivalent,
   type PetsCompanion,
-  type BlobbonautProfile,
+  type NostrPetProfile,
   type StorageItem,
 } from '../lib/pets';
 
-import { fetchFreshBlobbonautProfile } from '../lib/fetchFreshBlobbonautProfile';
+import { fetchFreshNostrPetProfile } from '../lib/fetchFreshNostrPetProfile';
 
 /**
  * Result of a successful migration.
@@ -52,7 +52,7 @@ export interface EnsureCanonicalOptions {
   /** The companion to check/migrate */
   companion: PetsCompanion;
   /** The user's profile */
-  profile: BlobbonautProfile;
+  profile: NostrPetProfile;
   /** Callback to update the profile event in query cache */
   updateProfileEvent: (event: NostrEvent) => void;
   /** Callback to update the companion event in query cache */
@@ -131,7 +131,7 @@ export function usePetsMigration() {
    * 2. Ensures a seed exists (generates one if missing)
    * 3. Preserves name, stage, stats, state, timestamps
    * 4. Publishes a canonical 31124 event
-   * 5. Updates the Blobbonaut profile (kind 11125)
+   * 5. Updates the Nostr pet profile (kind 11125)
    * 6. Updates local state (query cache, localStorage)
    */
   const migrateLegacyPets = useCallback(async (
@@ -189,12 +189,12 @@ export function usePetsMigration() {
         profileUpdates.current_companion = canonicalD;
       }
       
-      const profileTags = updateBlobbonautTags(profile.allTags, profileUpdates);
+      const profileTags = updateNostrPetProfileTags(profile.allTags, profileUpdates);
       
       console.log('[Pets Migration] Publishing updated profile');
       
       const profileEvent = await publishEvent({
-        kind: KIND_BLOBBONAUT_PROFILE,
+        kind: KIND_NOSTR_PET_PROFILE,
         content: profile.event.content ?? '',
         tags: profileTags,
         prev: profile.event,
@@ -331,7 +331,7 @@ export function usePetsMigration() {
     // Fetch fresh data from relays (read step of read-modify-write)
     const [freshCompanion, freshProfile] = await Promise.all([
       fetchFreshCompanion(user.pubkey, cachedCompanion.d),
-      fetchFreshBlobbonautProfile(nostr, user.pubkey),
+      fetchFreshNostrPetProfile(nostr, user.pubkey),
     ]);
 
     // Use fresh data, falling back to cached only if relay fetch returned nothing
@@ -362,9 +362,9 @@ export function usePetsMigration() {
           if (profile.currentCompanion === companion.d) {
             profileUpdates.current_companion = existing.d;
           }
-          const profileTags = updateBlobbonautTags(profile.allTags, profileUpdates);
+          const profileTags = updateNostrPetProfileTags(profile.allTags, profileUpdates);
           const profileEvent = await publishEvent({
-            kind: KIND_BLOBBONAUT_PROFILE,
+            kind: KIND_NOSTR_PET_PROFILE,
             content: profile.event.content ?? '',
             tags: profileTags,
             prev: profile.event,

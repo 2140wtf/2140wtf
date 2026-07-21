@@ -4,7 +4,7 @@ import { useSeoMeta } from '@unhead/react';
 
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -36,7 +36,7 @@ import type { BattleMatchOptions } from '@/pets/battle';
 export default function PetsBattlePage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
-  const { updateProfileEvent } = useBlobbonautProfile();
+  const { updateProfileEvent } = useNostrPetProfile();
 
   const { wallet: petsWallet, isBao } = usePetsWallet();
   const { config } = useAppContext();

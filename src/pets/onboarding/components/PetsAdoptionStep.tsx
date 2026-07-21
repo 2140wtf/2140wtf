@@ -10,17 +10,17 @@ import { Egg, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface PetsAdoptionStepProps {
-  /** User's Blobbonaut name */
-  blobbonautName: string | undefined;
+  /** User's Nostr pet name */
+  nostrPetName: string | undefined;
   /** Called when user wants to start the adoption preview */
   onStartAdoption: () => void;
 }
 
 export function PetsAdoptionStep({
-  blobbonautName,
+  nostrPetName,
   onStartAdoption,
 }: PetsAdoptionStepProps) {
-  const displayName = blobbonautName || 'Blobbonaut';
+  const displayName = nostrPetName || 'NOSTR Pet';
   
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
@@ -36,7 +36,7 @@ export function PetsAdoptionStep({
             Welcome, {displayName}!
           </h1>
           <p className="text-muted-foreground text-sm sm:text-base">
-            Your Blobbonaut profile is ready. Now it's time for the exciting part - 
+            Your Nostr pet profile is ready. Now it's time for the exciting part - 
             adopting your very first Pets!
           </p>
         </div>

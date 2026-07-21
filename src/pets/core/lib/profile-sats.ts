@@ -2,7 +2,7 @@
  * Profile sats helpers.
  *
  * Provides a small, reusable read-modify-write helper for adding demo (or
- * real) sats to a Blobbonaut profile (kind 11125). It always fetches the
+ * real) sats to a Nostr pet profile (kind 11125). It always fetches the
  * freshest profile from the BAO pets relay before updating so concurrent
  * sats changes (missions, actions, poop cleanup, etc.) do not overwrite each
  * other.
@@ -13,14 +13,14 @@ import type { NostrEvent, NPool } from '@nostrify/nostrify';
 import type { EventTemplate } from '@/hooks/useNostrPublish';
 import { fetchFreshPetsEvent } from './fetchFreshPetsEvent';
 import {
-  KIND_BLOBBONAUT_PROFILE,
-  parseBlobbonautEvent,
-  updateBlobbonautTags,
+  KIND_NOSTR_PET_PROFILE,
+  parseNostrPetProfileEvent,
+  updateNostrPetProfileTags,
   createStorageTags,
-  getBlobbonautQueryDValues,
-  getCanonicalBlobbonautD,
+  getNostrPetProfileQueryDValues,
+  getCanonicalNostrPetProfileD,
   type StorageItem,
-  type BlobbonautProfile,
+  type NostrPetProfile,
 } from './pets';
 
 export type PublishEventFn = (template: EventTemplate) => Promise<NostrEvent>;
@@ -38,16 +38,16 @@ export interface ConsumeStorageItemResult {
   consumed: boolean;
 }
 
-/** Default tags for a brand-new Blobbonaut profile when no prior event exists. */
+/** Default tags for a brand-new Nostr pet profile when no prior event exists. */
 function createDefaultProfileTags(pubkey: string): string[][] {
   return [
-    ['d', getCanonicalBlobbonautD(pubkey)],
+    ['d', getCanonicalNostrPetProfileD(pubkey)],
     ['b', 'pets:ecosystem:v1'],
   ];
 }
 
 export type ProfileUpdateFn = (
-  profile: BlobbonautProfile | undefined,
+  profile: NostrPetProfile | undefined,
   prevTags: string[][],
   prevContent: string,
 ) =>
@@ -55,9 +55,9 @@ export type ProfileUpdateFn = (
   | null
   | Promise<{ tags?: string[][]; content?: string; meta?: Record<string, unknown> } | null>;
 
-export interface UpdateBlobbonautProfileResult {
+export interface UpdateNostrPetProfileResult {
   event: NostrEvent;
-  profile: BlobbonautProfile | undefined;
+  profile: NostrPetProfile | undefined;
   meta?: Record<string, unknown>;
 }
 
@@ -69,20 +69,20 @@ export interface UpdateBlobbonautProfileResult {
  * updates (shop purchases, mission rewards, poop cleanup, etc.) cannot
  * overwrite each other and double-spend in-game currency.
  */
-export async function updateBlobbonautProfile(
+export async function updateNostrPetProfile(
   nostr: NPool,
   publishEvent: PublishEventFn,
   pubkey: string,
   update: ProfileUpdateFn,
-): Promise<UpdateBlobbonautProfileResult | null> {
+): Promise<UpdateNostrPetProfileResult | null> {
   return runSerialized(pubkey, async () => {
     const prev = await fetchFreshPetsEvent(nostr, {
-      kinds: [KIND_BLOBBONAUT_PROFILE],
+      kinds: [KIND_NOSTR_PET_PROFILE],
       authors: [pubkey],
-      '#d': getBlobbonautQueryDValues(pubkey),
+      '#d': getNostrPetProfileQueryDValues(pubkey),
     });
 
-    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const profile = prev ? parseNostrPetProfileEvent(prev) : undefined;
     const updateResult = await update(profile, prev?.tags ?? createDefaultProfileTags(pubkey), prev?.content ?? '');
     if (!updateResult) return null;
 
@@ -90,7 +90,7 @@ export async function updateBlobbonautProfile(
     const content = updateResult.content ?? prev?.content ?? '';
 
     const event = await publishEvent({
-      kind: KIND_BLOBBONAUT_PROFILE,
+      kind: KIND_NOSTR_PET_PROFILE,
       content,
       tags,
       prev: prev ?? undefined,
@@ -123,7 +123,7 @@ function runSerialized<T>(pubkey: string, operation: () => Promise<T>): Promise<
 }
 
 /**
- * Add `delta` sats to the logged-in user's Blobbonaut profile.
+ * Add `delta` sats to the logged-in user's Nostr pet profile.
  *
  * - Fetches the latest kind 11125 event from the BAO pets relay.
  * - Falls back to `0` if the profile does not exist yet (actions that require
@@ -140,21 +140,21 @@ export async function addProfileSats(
 ): Promise<AddProfileSatsResult> {
   return runSerialized(pubkey, async () => {
     const prev = await fetchFreshPetsEvent(nostr, {
-      kinds: [KIND_BLOBBONAUT_PROFILE],
+      kinds: [KIND_NOSTR_PET_PROFILE],
       authors: [pubkey],
-      '#d': getBlobbonautQueryDValues(pubkey),
+      '#d': getNostrPetProfileQueryDValues(pubkey),
     });
 
-    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const profile = prev ? parseNostrPetProfileEvent(prev) : undefined;
     const prevSats = profile?.sats ?? 0;
     const newSats = Math.max(0, prevSats + delta);
 
-    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+    const tags = updateNostrPetProfileTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
       sats: newSats.toString(),
     });
 
     const event = await publishEvent({
-      kind: KIND_BLOBBONAUT_PROFILE,
+      kind: KIND_NOSTR_PET_PROFILE,
       content: prev?.content ?? profile?.content ?? '',
       tags,
       prev: prev ?? undefined,
@@ -179,12 +179,12 @@ export async function consumeStorageItem(
 ): Promise<ConsumeStorageItemResult> {
   return runSerialized(pubkey, async () => {
     const prev = await fetchFreshPetsEvent(nostr, {
-      kinds: [KIND_BLOBBONAUT_PROFILE],
+      kinds: [KIND_NOSTR_PET_PROFILE],
       authors: [pubkey],
-      '#d': getBlobbonautQueryDValues(pubkey),
+      '#d': getNostrPetProfileQueryDValues(pubkey),
     });
 
-    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const profile = prev ? parseNostrPetProfileEvent(prev) : undefined;
     const prevStorage = profile?.storage ?? [];
     const existingIndex = prevStorage.findIndex((s) => s.itemId === itemId);
 
@@ -197,12 +197,12 @@ export async function consumeStorageItem(
     ).filter((s) => s.quantity > 0);
 
     const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
-    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+    const tags = updateNostrPetProfileTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
       storage: storageValues,
     });
 
     const event = await publishEvent({
-      kind: KIND_BLOBBONAUT_PROFILE,
+      kind: KIND_NOSTR_PET_PROFILE,
       content: prev?.content ?? profile?.content ?? '',
       tags,
       prev: prev ?? undefined,
@@ -226,12 +226,12 @@ export async function restoreStorageItem(
 ): Promise<ConsumeStorageItemResult> {
   return runSerialized(pubkey, async () => {
     const prev = await fetchFreshPetsEvent(nostr, {
-      kinds: [KIND_BLOBBONAUT_PROFILE],
+      kinds: [KIND_NOSTR_PET_PROFILE],
       authors: [pubkey],
-      '#d': getBlobbonautQueryDValues(pubkey),
+      '#d': getNostrPetProfileQueryDValues(pubkey),
     });
 
-    const profile = prev ? parseBlobbonautEvent(prev) : undefined;
+    const profile = prev ? parseNostrPetProfileEvent(prev) : undefined;
     const prevStorage = profile?.storage ?? [];
     const existingIndex = prevStorage.findIndex((s) => s.itemId === itemId);
 
@@ -245,12 +245,12 @@ export async function restoreStorageItem(
     }
 
     const storageValues = createStorageTags(newStorage).map((tag) => tag[1]);
-    const tags = updateBlobbonautTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
+    const tags = updateNostrPetProfileTags(prev?.tags ?? createDefaultProfileTags(pubkey), {
       storage: storageValues,
     });
 
     const event = await publishEvent({
-      kind: KIND_BLOBBONAUT_PROFILE,
+      kind: KIND_NOSTR_PET_PROFILE,
       content: prev?.content ?? profile?.content ?? '',
       tags,
       prev: prev ?? undefined,

@@ -23,7 +23,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
-import type { PetsCompanion, BlobbonautProfile } from '@/pets/core/lib/pets';
+import type { PetsCompanion, NostrPetProfile } from '@/pets/core/lib/pets';
 import {
   KIND_PETS_STATE,
   updatePetsTags,
@@ -63,7 +63,7 @@ export interface StartIncubationRequest {
  */
 export interface UseStartIncubationParams {
   companion: PetsCompanion | null;
-  profile: BlobbonautProfile | null;
+  profile: NostrPetProfile | null;
   /** Called to ensure companion is canonical (from migration helper) */
   ensureCanonicalBeforeAction: () => Promise<{
     companion: PetsCompanion;

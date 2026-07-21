@@ -10,7 +10,7 @@ import { toast } from '@/hooks/useToast';
 import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
 import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import { updateBlobbonautProfile } from '@/pets/core/lib/profile-sats';
+import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 
 import { CHASE_FIAT_COST } from './types';
@@ -96,7 +96,7 @@ export function useChasePayout(
 
         // Record the real-sats claim on the profile, but do not touch the demo
         // `sats` tag. This keeps the two economies separate.
-        const resultMeta = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+        const resultMeta = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
           const newSatsTotal = freshProfile?.sats ?? 0;
           const content = serializeProfileContent(prevContent, {});
           return { tags: prevTags, content, meta: { newSatsTotal, claimedSats } };
@@ -115,7 +115,7 @@ export function useChasePayout(
       }
 
       // Fiat mode: deduct the run cost from in-game worthless coins.
-      const resultMeta = await updateBlobbonautProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+      const resultMeta = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
         const currentCoins = freshProfile?.coins ?? 0;
         if (currentCoins < CHASE_FIAT_COST) {
           throw new Error(

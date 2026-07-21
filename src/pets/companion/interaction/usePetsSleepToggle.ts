@@ -15,7 +15,7 @@ import { useNostr } from '@nostrify/react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useBlobbonautProfile } from '@/hooks/useBlobbonautProfile';
+import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 
@@ -42,7 +42,7 @@ export function usePetsSleepToggle(): UsePetsSleepToggleResult {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const queryClient = useQueryClient();
-  const { profile } = useBlobbonautProfile();
+  const { profile } = useNostrPetProfile();
 
   // Track pending state via ref to avoid re-renders.
   // We only use this for the guard (no duplicate calls), not for rendering.
