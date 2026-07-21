@@ -122,6 +122,7 @@ export function PlayMusicModal({
       url: parsed.url,
       durationSeconds: parsed.duration && Number.isFinite(parsed.duration) ? parsed.duration : 0,
       coverArt: parsed.artwork,
+      format: parsed.format,
       tags: parsed.format ? [parsed.format] : undefined,
     };
 
