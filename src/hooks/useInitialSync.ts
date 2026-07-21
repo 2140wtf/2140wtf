@@ -103,8 +103,18 @@ export function useInitialSync() {
     setPhase("syncing");
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    // Hard timeout: if the relay queries ignore the AbortSignal or hang, race
+    // the sync work against a timer so the user never gets permanently stuck.
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeoutId = setTimeout(() => {
+        cancelled = true;
+        controller.abort();
+        resolve();
+      }, SYNC_TIMEOUT_MS);
+    });
 
     const doSync = async () => {
       let foundSettings = false;
@@ -375,8 +385,6 @@ export function useInitialSync() {
         }
       }
 
-      clearTimeout(timeout);
-
       if (cancelled) return;
 
       if (foundSettings) {
@@ -386,11 +394,17 @@ export function useInitialSync() {
       }
     };
 
-    doSync();
+    Promise.race([doSync(), timeoutPromise]).then(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+      // If we timed out, make sure we leave the syncing state.
+      if (cancelled) {
+        setPhase((current) => (current === "syncing" ? "not-found" : current));
+      }
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
+      if (timeoutId) clearTimeout(timeoutId);
       controller.abort();
     };
   }, [
