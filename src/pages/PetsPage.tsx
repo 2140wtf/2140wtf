@@ -120,9 +120,11 @@ import { generateBaoSvg } from '@/pets/adult-pets/lib/bao-svg';
 import {
   BREED_CATEGORIES,
   getCategoryMembers,
+  getCustomCategoryMembers,
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
+import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
 import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
 import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
 import { useStatusReaction } from '@/pets/ui/hooks/useStatusReaction';
@@ -2354,7 +2356,7 @@ function PetsDashboard({
                 />
               )}
               {activeDrawer === 'species' && (
-                <SpeciesTabContent />
+                <SpeciesTabContent companion={companion ?? undefined} />
               )}
               {activeDrawer === 'shop' && (
                 <div className="flex-1 min-h-0">
@@ -3817,9 +3819,20 @@ function BaoMarketsQuestContent({ profile, updateProfileEvent }: BaoMarketsQuest
 
 // ─── Species Tab Content ──────────────────────────────────────────────────────
 
-function SpeciesTabContent() {
+interface SpeciesTabContentProps {
+  companion?: PetsCompanion | null;
+}
+
+function SpeciesTabContent({ companion }: SpeciesTabContentProps) {
   const [activeCategory, setActiveCategory] = useState<PetsBreedCategory>('2140-pets');
-  const members = getCategoryMembers(activeCategory);
+  const customForms = useCustomForms();
+
+  const members = useMemo(() => {
+    if (activeCategory !== 'custom') return getCategoryMembers(activeCategory);
+    return getCustomCategoryMembers(Object.values(customForms));
+  }, [activeCategory, customForms]);
+
+  const isCustom = activeCategory === 'custom';
 
   return (
     <div className="h-full min-h-[210px] px-3 sm:px-4 space-y-3">
@@ -3842,7 +3855,9 @@ function SpeciesTabContent() {
       </div>
 
       <p className="text-xs text-muted-foreground text-center">
-        Adult species your PET can evolve into. Select a species category above.
+        {isCustom
+          ? 'Adult species you have designed. Create more in Pets settings.'
+          : 'Adult species your PET can evolve into. Select a species category above.'}
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pb-3">
@@ -3857,7 +3872,53 @@ function SpeciesTabContent() {
             </p>
           </div>
         )}
+
+        {isCustom && members.length === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-xl border p-4 bg-card/50 max-w-xs">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-muted/40 flex items-center justify-center">
+              <Palette className="size-8 text-primary" />
+            </div>
+            <span className="text-xs font-medium text-center">No custom species yet</span>
+            <p className="text-[10px] text-muted-foreground text-center">
+              Design your own SVG (and optional GLB) species in Pets settings.
+            </p>
+            <Button asChild variant="outline" size="sm" className="w-full">
+              <Link to="/settings/pets">Create custom species</Link>
+            </Button>
+          </div>
+        )}
+
         {members.map((member) => {
+          if (isCustom && companion) {
+            const previewCompanion: PetsCompanion = {
+              ...companion,
+              stage: 'adult',
+              state: 'active',
+              progressionState: 'none',
+              breedCategory: 'custom',
+              breedAsset: isAdultFormMember(member) ? member.form : member.id,
+              adultType: undefined,
+            };
+
+            return (
+              <div
+                key={isAdultFormMember(member) ? member.form : member.id}
+                className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
+              >
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
+                  <PetsStageVisual
+                    companion={previewCompanion}
+                    size="sm"
+                    animated={false}
+                  />
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {member.label}
+                </span>
+              </div>
+            );
+          }
+
           const svg = isAdultFormMember(member)
             ? getAdultBaseSvg(member.form)
             : (() => {
