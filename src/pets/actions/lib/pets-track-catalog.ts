@@ -33,6 +33,8 @@ export interface PetsTrack {
   durationSeconds: number;
   /** Optional cover art URL */
   coverArt?: string;
+  /** Optional MIME type hint, e.g. "audio/mpeg". */
+  format?: string;
   /** Optional tags for categorization/filtering */
   tags?: string[];
 }
