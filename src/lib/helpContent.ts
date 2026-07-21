@@ -351,6 +351,14 @@ const FAQ_TEMPLATE: FAQCategory[] = [
           '2140.wtf builds open-source tools for the Nostr and Bitcoin ecosystems, including this app.',
         ],
       },
+      {
+        id: 'p2p-markets',
+        question: 'What is the stance on markets and trading?',
+        answer: [
+          '{appName} is built for peer-to-peer markets with **no middleman**. When you buy, sell, or make a prediction-market bet, you interact directly with the other person.',
+          'No platform holds your funds, no company takes a cut, and no central authority can freeze your account. Dispute resolution and escrow are transparent, opt-in tools — not forced gatekeepers.',
+        ],
+      },
     ],
   },
 ];
