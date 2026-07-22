@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, RefreshCw, Search, ShoppingBag, LayoutGrid } from 'lucide-react';
+import { Plus, RefreshCw, Search, ShoppingBag, LayoutGrid, ArrowUpDown } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 
 import { Button } from '@/components/ui/button';
@@ -16,8 +16,10 @@ import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
 import { ProductListingComposeDialog } from '@/components/marketplace/ProductListingComposeDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip99Listings } from '@/hooks/useNip99Listings';
+import type { Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
 const CATEGORIES = [
@@ -31,6 +33,37 @@ const CATEGORIES = [
   { value: 'merch', label: 'Merch' },
 ];
 
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'price-low', label: 'Price: lowest' },
+  { value: 'price-high', label: 'Price: highest' },
+] as const;
+
+type SortValue = (typeof SORT_OPTIONS)[number]['value'];
+
+/** Convert a NIP-99 price into sats for cross-currency sorting. */
+function priceInSats(price: Nip99Listing['price'], btcPrice?: number): number | undefined {
+  if (!price) return undefined;
+
+  const currency = price.currency.trim().toLowerCase();
+
+  if (currency === 'sats' || currency === 'sat') {
+    return price.value;
+  }
+  if (currency === 'msats' || currency === 'msat') {
+    return price.value / 1000;
+  }
+  if (currency === 'btc') {
+    return price.value * 1e8;
+  }
+  if (currency === 'usd' && btcPrice && btcPrice > 0) {
+    return (price.value / btcPrice) * 1e8;
+  }
+
+  return undefined;
+}
+
 export function MarketPage(): React.JSX.Element {
   const { config } = useAppContext();
   useSeoMeta({
@@ -41,14 +74,51 @@ export function MarketPage(): React.JSX.Element {
   const { user } = useCurrentUser();
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortValue>('newest');
   const [columns, setColumns] = useState<1 | 2 | 3 | 4>(2);
   const [composeOpen, setComposeOpen] = useState(false);
+
+  const { btcPrice } = useBtcPrice();
 
   const { listings, isLoading, error, refetch } = useNip99Listings({
     category,
     search,
     onlyActive: true,
   });
+
+  const sortedListings = useMemo(() => {
+    if (sort === 'newest') {
+      return listings;
+    }
+
+    const items = [...listings];
+
+    switch (sort) {
+      case 'oldest':
+        items.reverse();
+        break;
+      case 'price-low':
+      case 'price-high': {
+        const ascending = sort === 'price-low';
+        items.sort((a, b) => {
+          const aSats = priceInSats(a.price, btcPrice);
+          const bSats = priceInSats(b.price, btcPrice);
+
+          if (aSats === undefined && bSats === undefined) {
+            return b.createdAt - a.createdAt;
+          }
+          if (aSats === undefined) return 1;
+          if (bSats === undefined) return -1;
+
+          const diff = ascending ? aSats - bSats : bSats - aSats;
+          return diff || b.createdAt - a.createdAt;
+        });
+        break;
+      }
+    }
+
+    return items;
+  }, [listings, sort, btcPrice]);
 
   const gridItems = useMemo(() => {
     if (isLoading) {
@@ -64,7 +134,7 @@ export function MarketPage(): React.JSX.Element {
       ));
     }
 
-    if (listings.length === 0) {
+    if (sortedListings.length === 0) {
       return (
         <div className="col-span-full py-20 text-center text-sm text-muted-foreground">
           {error ? (
@@ -82,8 +152,8 @@ export function MarketPage(): React.JSX.Element {
       );
     }
 
-    return listings.map((listing) => <Nip99ListingCard key={listing.id} listing={listing} />);
-  }, [isLoading, listings, error, refetch]);
+    return sortedListings.map((listing) => <Nip99ListingCard key={listing.id} listing={listing} />);
+  }, [isLoading, sortedListings, error, refetch]);
 
   return (
     <main>
@@ -101,6 +171,20 @@ export function MarketPage(): React.JSX.Element {
               className="pl-9"
             />
           </div>
+
+          <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
+            <SelectTrigger className="w-full sm:w-44 gap-2">
+              <ArrowUpDown className="size-4 shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger className="w-full sm:w-44">
