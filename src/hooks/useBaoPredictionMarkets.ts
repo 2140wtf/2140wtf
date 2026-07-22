@@ -5,9 +5,149 @@ import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
 
 const RELAY = "wss://relay.bao.network";
+const API_BASE = "/bao-api/v1";
+const PUBLIC_API_BASE = "https://relay.bao.network/bao-api/v1";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
+
+interface ApiOutcome {
+  id: string;
+  label: string;
+  price: number;
+  volume: number;
+}
+
+interface ApiMarket {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  type: string;
+  status: string;
+  network: string;
+  created_at: number;
+  end_date: number;
+  outcomes: ApiOutcome[];
+  total_volume: number;
+  trade_count: number;
+  nostr_event_id?: string;
+  creator_pubkey: string;
+}
+
+interface ApiMarketsResponse {
+  data: ApiMarket[];
+}
+
+function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
+  const id = api.nostr_event_id || api.id;
+  const syntheticEvent: NostrEvent = {
+    id,
+    pubkey: api.creator_pubkey,
+    created_at: api.created_at,
+    kind: BAO_MARKET_KIND,
+    tags: [],
+    content: JSON.stringify({
+      title: api.title,
+      description: api.description,
+      outcomes: api.outcomes,
+    }),
+    sig: "",
+  };
+
+  return {
+    marketId: api.id,
+    title: api.title,
+    description: api.description,
+    category: api.category.toLowerCase(),
+    state: api.status.toLowerCase(),
+    type:
+      api.type === "categorical" || api.type === "scalar"
+        ? api.type
+        : "binary",
+    endTime: api.end_date,
+    createdAt: api.created_at,
+    outcomes: api.outcomes.map((o) => ({
+      id: o.id,
+      label: o.label,
+      probability: Number.isFinite(o.price) ? o.price : 0.5,
+    })),
+    creatorPubkey: api.creator_pubkey,
+    rawEvent: syntheticEvent,
+  };
+}
+
+async function fetchApiMarkets(category: string, signal: AbortSignal): Promise<BaoMarket[]> {
+  const params = new URLSearchParams({ limit: String(QUERY_LIMIT) });
+  if (category !== "all") {
+    params.set("category", category);
+  }
+  const publicPath = `${PUBLIC_API_BASE}/markets?${params.toString()}`;
+  const proxiedPath = `${API_BASE}/markets?${params.toString()}`;
+
+  let res: Response;
+  try {
+    res = await fetch(proxiedPath, { signal });
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!res.ok || !contentType.includes("application/json")) {
+      res = await fetch(publicPath, { signal });
+    }
+  } catch {
+    res = await fetch(publicPath, { signal });
+  }
+
+  if (!res.ok) {
+    throw new Error(`BAO markets API returned ${res.status}`);
+  }
+
+  const json = (await res.json()) as ApiMarketsResponse;
+  const data = Array.isArray(json.data) ? json.data : [];
+  return data.map(apiMarketToBaoMarket);
+}
+
+async function fetchRelayMarkets(category: string, signal: AbortSignal): Promise<BaoMarket[]> {
+  const relay = new NRelay1(RELAY);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
+
+  signal.addEventListener("abort", () => controller.abort(), { once: true });
+
+  const filter: NostrFilter = {
+    kinds: [BAO_MARKET_KIND],
+    limit: QUERY_LIMIT,
+  };
+  if (category !== "all") {
+    filter["#category"] = [category];
+  }
+
+  try {
+    const events = await relay.query([filter], { signal: controller.signal });
+
+    const dedupedEvents: typeof events = [];
+    const seenIds = new Set<string>();
+    for (const event of events) {
+      if (seenIds.has(event.id)) continue;
+      seenIds.add(event.id);
+      dedupedEvents.push(event);
+    }
+
+    const seen = new Map<string, BaoMarket>();
+    for (const event of dedupedEvents) {
+      const parsed = parseBaoMarket(event);
+      if (!parsed) continue;
+      const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
+      const existing = seen.get(key);
+      if (!existing || parsed.createdAt > existing.createdAt) {
+        seen.set(key, parsed);
+      }
+    }
+
+    return Array.from(seen.values()).sort((a, b) => b.createdAt - a.createdAt);
+  } finally {
+    clearTimeout(timeoutId);
+    relay.close().catch(() => {});
+  }
+}
 
 function getQueryKey(category: string) {
   return ["bao-prediction-markets", category];
@@ -19,7 +159,6 @@ export function useBaoPredictionMarkets(category: string = "all") {
   const query = useQuery<BaoMarket[]>({
     queryKey: getQueryKey(category),
     queryFn: async ({ signal }) => {
-      const relay = new NRelay1(RELAY);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 
@@ -27,43 +166,19 @@ export function useBaoPredictionMarkets(category: string = "all") {
         signal.addEventListener("abort", () => controller.abort(), { once: true });
       }
 
-      const filter: NostrFilter = {
-        kinds: [BAO_MARKET_KIND],
-        limit: QUERY_LIMIT,
-      };
-      if (category !== "all") {
-        filter["#category"] = [category];
-      }
-
       try {
-        const events = await relay.query([filter], { signal: controller.signal });
-
-        // Guard against relay duplicates: keep only the first occurrence of each event id.
-        const dedupedEvents: typeof events = [];
-        const seenIds = new Set<string>();
-        for (const event of events) {
-          if (seenIds.has(event.id)) continue;
-          seenIds.add(event.id);
-          dedupedEvents.push(event);
-        }
-
-        // Dedupe by (author, d-tag) so a malicious or stale copy of someone
-        // else's market cannot clobber the original.
-        const seen = new Map<string, BaoMarket>();
-        for (const event of dedupedEvents) {
-          const parsed = parseBaoMarket(event);
-          if (!parsed) continue;
-          const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
-          const existing = seen.get(key);
-          if (!existing || parsed.createdAt > existing.createdAt) {
-            seen.set(key, parsed);
+        try {
+          const apiMarkets = await fetchApiMarkets(category, controller.signal);
+          if (apiMarkets.length > 0) {
+            return apiMarkets;
           }
+        } catch (error) {
+          console.warn("[useBaoPredictionMarkets] API fetch failed, falling back to relay:", error);
         }
 
-        return Array.from(seen.values()).sort((a, b) => b.createdAt - a.createdAt);
+        return fetchRelayMarkets(category, controller.signal);
       } finally {
         clearTimeout(timeoutId);
-        relay.close().catch(() => {});
       }
     },
     staleTime: 2 * 60 * 1000,
