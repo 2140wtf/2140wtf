@@ -36,15 +36,16 @@ import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 
 import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
-import { FEED_TOPICS, getFeedTopic, getTopicTagFilter } from '@/lib/feedTopics';
+import { FEED_TOPICS, getFeedTopic } from '@/lib/feedTopics';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import { NewPostsPill } from '@/components/NewPostsPill';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
 import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import { TabButton } from '@/components/TabButton';
+import { CurateFeedDropdown } from '@/components/CurateFeedDropdown';
 import type { FeedItem } from '@/lib/feedUtils';
-import type { NostrEvent } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import type { SavedFeed } from '@/contexts/AppContext';
 
 type CoreFeedTab = 'all' | 'follows' | 'loved' | 'global' | 'communities' | 'app';
@@ -89,6 +90,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const { data: followData } = useFollowList();
   const { excludeMuted } = useMutedAuthorFilter();
   const isOnline = useIsOnline();
+  const { feedSettings } = useFeedSettings();
+  const defaultKinds = useMemo(() => getEnabledFeedKinds(feedSettings), [feedSettings]);
 
   // Tab settings from localStorage
   const showGlobalFeed = (() => {
@@ -199,10 +202,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // loading we fall back to the static author list so the tab renders
   // immediately and upgrades once the dynamic list resolves.
   const { data: dynamicTopicAuthors } = useTopicAuthors(activeTopic ?? null);
-  const topicAuthors = activeTopic
-    ? (dynamicTopicAuthors ?? activeTopic.authors)
-    : undefined;
-  const hasTopicAuthors = (topicAuthors?.length ?? 0) > 0;
 
   // When logged out and the 2140.wtf tab is active, show the "hot"
   // sorted curated feed instead of the noisy global feed. Guests can now switch
@@ -222,18 +221,45 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       ? (activeTab as UseFeedTab)
       : 'global';
   const feedQueryOptions = useMemo(() => {
-    if (activeTopic && !hasTopicAuthors) return { tagFilters: getTopicTagFilter(activeTopic) };
     if (kinds || tagFilters) return { kinds, tagFilters };
     return undefined;
-  }, [activeTopic, hasTopicAuthors, kinds, tagFilters]);
+  }, [kinds, tagFilters]);
   const feedQuery = useFeed(feedTabForQuery, feedQueryOptions);
 
-  // Author-filtered topic feeds (e.g. Bitcoin, Nostr, BAO) show posts from
-  // discovered authors, falling back to the static list while discovery loads.
-  const authorTopicQuery = useTabFeed(
-    hasTopicAuthors ? { authors: topicAuthors } : null,
+  // Topic feeds: build a concrete NostrFilter from the active topic definition.
+  // Supports author lists, tag filters, NIP-50 search, time windows, and kind
+  // overrides (e.g. long-form reads). Discovery authors upgrade the static list
+  // while they load.
+  const topicFilter = useMemo<NostrFilter | null>(() => {
+    if (!activeTopic) return null;
+
+    const filter: NostrFilter = { kinds: activeTopic.kinds ?? defaultKinds };
+
+    if (activeTopic.id === 'popular-follows' || activeTopic.id === 'follows-replies') {
+      if (!user || !followData?.pubkeys.length) return null;
+      filter.authors = [...followData.pubkeys, user.pubkey];
+    } else if (activeTopic.authors) {
+      const authors = dynamicTopicAuthors ?? activeTopic.authors;
+      if (authors.length > 0) filter.authors = authors;
+    }
+
+    if (activeTopic.tags.length > 0) {
+      filter['#t'] = activeTopic.tags.map((t) => t.toLowerCase());
+    }
+    if (activeTopic.search) {
+      filter.search = activeTopic.search;
+    }
+    if (activeTopic.sinceHours) {
+      filter.since = Math.floor(Date.now() / 1000) - activeTopic.sinceHours * 3600;
+    }
+
+    return filter;
+  }, [activeTopic, dynamicTopicAuthors, followData?.pubkeys, user, defaultKinds]);
+
+  const topicQuery = useTabFeed(
+    topicFilter,
     activeTopic ? `topic-${activeTopic.id}` : '',
-    hasTopicAuthors,
+    isTopicTab,
   );
 
   // Curated 2140.wtf feed: posts from the official 2140.wtf account only.
@@ -243,14 +269,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const useAppQuery = useTopFeedForLoggedOut || useAppTab;
   const activeQuery = useAppQuery
     ? topQuery
-    : hasTopicAuthors
-      ? authorTopicQuery
+    : isTopicTab
+      ? topicQuery
       : feedQuery;
   const queryKey = useMemo(() => {
     if (useAppQuery) return ['app-curated-feed'];
-    if (hasTopicAuthors) return ['tab-feed', `topic-${activeTopic!.id}`];
+    if (isTopicTab) return ['tab-feed', `topic-${activeTopic!.id}`];
     return ['feed', activeTab];
-  }, [useAppQuery, hasTopicAuthors, activeTopic, activeTab]);
+  }, [useAppQuery, isTopicTab, activeTopic, activeTab]);
 
   const handleRefresh = usePageRefresh(queryKey);
 
@@ -258,7 +284,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // a "N new posts" pill, without re-sorting the feed under the user's scroll.
   // Only the core author/global tabs stream — the curated 2140.wtf tab, saved
   // feeds, and hashtag/geotag tabs render their own content below.
-  const { feedSettings } = useFeedSettings();
   const streamAuthors = useMemo<string[] | undefined>(() => {
     if (feedTabForQuery === 'follows') {
       const follows = excludeMuted(followData?.pubkeys ?? []);
@@ -493,6 +518,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
             <TabButton label={communityLabel} active={activeTab === 'communities'} onClick={() => handleSetActiveTab('communities')} />
           )}
           <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
+          {!isKindSpecificPage && !tagFilters && (
+            <CurateFeedDropdown activeTab={activeTab} onSelect={handleSetActiveTab} />
+          )}
           {!isKindSpecificPage && !tagFilters && FEED_TOPICS.map((topic) => (
             <TabButton
               key={`topic:${topic.id}`}
