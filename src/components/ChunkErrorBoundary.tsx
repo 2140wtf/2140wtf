@@ -25,6 +25,23 @@ function isChunkError(error: unknown): boolean {
   return CHUNK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
+function hasRecoveryBeenAttempted(): boolean {
+  try {
+    return sessionStorage.getItem(RECOVERY_KEY) === '1';
+  } catch {
+    // sessionStorage may be unavailable in private mode / locked WebViews.
+    return false;
+  }
+}
+
+function markRecoveryAttempted(): void {
+  try {
+    sessionStorage.setItem(RECOVERY_KEY, '1');
+  } catch {
+    // Best-effort marker.
+  }
+}
+
 async function clearAppCaches(): Promise<void> {
   try {
     if (typeof caches !== 'undefined') {
@@ -47,7 +64,7 @@ async function clearAppCaches(): Promise<void> {
 
 async function recoverFromChunkError(): Promise<void> {
   await clearAppCaches();
-  sessionStorage.setItem(RECOVERY_KEY, '1');
+  markRecoveryAttempted();
   window.location.reload();
 }
 
@@ -69,7 +86,7 @@ export class ChunkErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error) {
     if (!isChunkError(error)) return;
-    if (sessionStorage.getItem(RECOVERY_KEY)) return;
+    if (hasRecoveryBeenAttempted()) return;
 
     this.setState({ recovering: true });
     recoverFromChunkError().catch(() => {
@@ -105,7 +122,14 @@ export class ChunkErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted-foreground">
             The page you were loading changed while this session was open. Reload to get the latest version.
           </p>
-          <Button onClick={() => window.location.reload()} className="w-full gap-2">
+          <Button
+            onClick={() => {
+              recoverFromChunkError().catch(() => {
+                window.location.reload();
+              });
+            }}
+            className="w-full gap-2"
+          >
             <RefreshCw className="size-4" />
             Reload page
           </Button>
