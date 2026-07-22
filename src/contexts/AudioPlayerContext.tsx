@@ -22,6 +22,12 @@ function isHlsUrl(url: string): boolean {
   return /\.m3u8(\?|$)/i.test(url);
 }
 
+function logPlayError(err: unknown): void {
+  if (err instanceof Error && err.name !== 'AbortError') {
+    console.error('[AudioPlayer] playback failed:', err.name, err.message);
+  }
+}
+
 export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const mediaRef = useRef<HTMLMediaElement>(null);
   const pendingPlayRef = useRef<{ id: string; url: string } | null>(null);
@@ -51,7 +57,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(currentTrack.url)) {
       media.src = currentTrack.url;
     }
-    media.play().catch(() => {});
+    media.play().catch(logPlayError);
     pendingPlayRef.current = null;
   }, [currentTrack]);
 
@@ -66,7 +72,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(track.url)) {
       media.src = track.url;
     }
-    media.play().catch(() => {});
+    media.play().catch(logPlayError);
   }, []);
 
   // Sync volume to media element
@@ -91,7 +97,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         if (!isHlsUrl(playlist[next].url)) {
           media.src = playlist[next].url;
         }
-        media.play().catch(() => {});
+        media.play().catch(logPlayError);
       }
     };
     const onTimeUpdate = () => setCurrentTime(media.currentTime);
@@ -155,7 +161,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!('mediaSession' in navigator)) return;
     const media = mediaRef.current;
 
-    navigator.mediaSession.setActionHandler('play', () => media?.play().catch(() => {}));
+    navigator.mediaSession.setActionHandler('play', () => media?.play().catch(logPlayError));
     navigator.mediaSession.setActionHandler('pause', () => media?.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => {
       if (media && media.currentTime > 3) { media.currentTime = 0; return; }
@@ -166,7 +172,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       setCurrentTime(0);
       setDuration(playlist[prev].duration ?? 0);
       if (media && !isHlsUrl(playlist[prev].url)) { media.src = playlist[prev].url; }
-      media?.play().catch(() => {});
+      media?.play().catch(logPlayError);
     });
     navigator.mediaSession.setActionHandler('nexttrack', () => {
       const next = currentIndex + 1;
@@ -176,7 +182,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       setCurrentTime(0);
       setDuration(playlist[next].duration ?? 0);
       if (media && !isHlsUrl(playlist[next].url)) { media.src = playlist[next].url; }
-      media?.play().catch(() => {});
+      media?.play().catch(logPlayError);
     });
     navigator.mediaSession.setActionHandler('seekto', (details) => {
       if (media && details.seekTime != null) media.currentTime = details.seekTime;
@@ -242,7 +248,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resume = useCallback(() => {
-    mediaRef.current?.play().catch(() => {});
+    mediaRef.current?.play().catch(logPlayError);
   }, []);
 
   const seek = useCallback((time: number) => {
@@ -272,7 +278,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(playlist[next].url)) {
       media.src = playlist[next].url;
     }
-    media.play().catch(() => {});
+    media.play().catch(logPlayError);
   }, [playlist, currentIndex]);
 
   const prevTrack = useCallback(() => {
@@ -292,7 +298,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(playlist[prev].url)) {
       media.src = playlist[prev].url;
     }
-    media.play().catch(() => {});
+    media.play().catch(logPlayError);
   }, [playlist, currentIndex]);
 
   const minimize = useCallback(() => setMinimized(true), []);
