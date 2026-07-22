@@ -346,6 +346,15 @@ export function NostrSync() {
         changed = true;
       }
 
+      if (
+        encryptedSettings.marketplaceRelays &&
+        JSON.stringify(encryptedSettings.marketplaceRelays) !==
+          JSON.stringify(current.marketplaceRelays ?? [])
+      ) {
+        updates.marketplaceRelays = encryptedSettings.marketplaceRelays;
+        changed = true;
+      }
+
       if (encryptedSettings.feedSettings) {
         const currentFeed = current.feedSettings;
         const remoteFeed = encryptedSettings.feedSettings;
