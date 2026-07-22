@@ -30,6 +30,7 @@ export function TestApp({ children }: TestAppProps) {
     customTheme: sunsetPreset,
     useAppRelays: true,
     useUserRelays: false,
+    marketplaceRelays: [],
     relayMetadata: {
       relays: [{ url: "wss://relay.primal.net", read: true, write: true }],
       updatedAt: 0,

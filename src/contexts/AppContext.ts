@@ -231,6 +231,8 @@ export interface AppConfig {
    * `useAppRelays` is true).
    */
   useUserRelays: boolean;
+  /** User-added relays used specifically for NIP-99 marketplace listings. */
+  marketplaceRelays?: string[];
   /** Feed and sidebar content settings */
   feedSettings: FeedSettings;
   /** Ordered list of sidebar item IDs (built-in + extra-kind). */
