@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, RefreshCw, Search, ShoppingBag } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useSeoMeta } from '@unhead/react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip99Listings } from '@/hooks/useNip99Listings';
+import { cn } from '@/lib/utils';
 
 const CATEGORIES = [
   { value: 'art', label: 'Bitcoin Art' },
@@ -40,6 +42,7 @@ export function MarketPage(): React.JSX.Element {
   const { user } = useCurrentUser();
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [columns, setColumns] = useState<1 | 2 | 3 | 4>(2);
   const [composeOpen, setComposeOpen] = useState(false);
 
   const { listings, isLoading, error, refetch } = useNip99Listings({
@@ -113,6 +116,22 @@ export function MarketPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
+          <ToggleGroup
+            type="single"
+            value={String(columns)}
+            onValueChange={(v) => {
+              if (v) setColumns(Number(v) as 1 | 2 | 3 | 4);
+            }}
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+          >
+            <ToggleGroupItem value="4" aria-label="4 columns">4</ToggleGroupItem>
+            <ToggleGroupItem value="3" aria-label="3 columns">3</ToggleGroupItem>
+            <ToggleGroupItem value="2" aria-label="2 columns">2</ToggleGroupItem>
+            <ToggleGroupItem value="1" aria-label="1 column">1</ToggleGroupItem>
+          </ToggleGroup>
+
           <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -129,7 +148,15 @@ export function MarketPage(): React.JSX.Element {
           Showing NIP-99 classified listings published by Nostr users. Artwork and products are sold by the artists, not by {config.appName}.
         </p>
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          className={cn(
+            'grid gap-4',
+            columns === 1 && 'grid-cols-1',
+            columns === 2 && 'grid-cols-2',
+            columns === 3 && 'grid-cols-3',
+            columns === 4 && 'grid-cols-4',
+          )}
+        >
           {gridItems}
         </div>
       </div>
