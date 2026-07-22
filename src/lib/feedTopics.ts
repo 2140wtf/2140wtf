@@ -25,7 +25,6 @@ export type FeedTopicId =
   | 'world'
   | 'sports'
   | 'bao'
-  | 'trending'
   | 'popular-follows'
   | 'follows-replies'
   | 'trending-24h'
@@ -141,14 +140,6 @@ export const FEED_TOPICS: FeedTopic[] = [
     authors: ['606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6'],
     tags: [],
   },
-  {
-    id: 'trending',
-    label: 'Trending',
-    description: 'Notes tagged trending, viral, or popular',
-    icon: '🔥',
-    tags: ['trending', 'viral', 'popular'],
-  },
-
   // Curated feed options inspired by Primal's home-feed menu.
   {
     id: 'popular-follows',

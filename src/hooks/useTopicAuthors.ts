@@ -23,8 +23,6 @@ const MAX_AUTHORS = 100;
  *   100 pubkeys.
  * - Topics without tags (e.g. BAO) but with a static `authors` list: return the
  *   static list unchanged so the tab still works.
- * - The "trending" topic (tag-based, no authors): returns an empty array so the
- *   caller falls back to a tag-filtered query.
  *
  * Results are cached for 10 minutes because author rankings change slowly.
  */
@@ -39,11 +37,6 @@ export function useTopicAuthors(topic: FeedTopic | null) {
       // Static-author topics without tags (e.g. BAO) bypass discovery.
       if (topic.tags.length === 0) {
         return topic.authors ?? [];
-      }
-
-      // Trending is intentionally tag-based; no author filter.
-      if (topic.id === 'trending') {
-        return [];
       }
 
       const now = Math.floor(Date.now() / 1000);
