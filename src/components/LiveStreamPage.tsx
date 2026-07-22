@@ -20,6 +20,7 @@ import { EmojifiedText } from '@/components/CustomEmoji';
 import { Nip05Badge } from '@/components/Nip05Badge';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useCanReceiveZaps } from '@/hooks/useCanReceiveZaps';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
@@ -83,6 +84,8 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
   const [descExpanded, setDescExpanded] = useState(false);
+
+  const { canReceive: streamCanReceive } = useCanReceiveZaps(event.pubkey);
 
   const title = getTag(event.tags, 'title') || 'Untitled Stream';
   const summary = getTag(event.tags, 'summary');
@@ -244,7 +247,7 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
               </div>
             </div>
             {/* Zap button — right-aligned */}
-            {user && <ZapButton event={event} />}
+            {!!user && user.pubkey !== event.pubkey && streamCanReceive && <ZapButton event={event} />}
           </div>
 
           {/* Author / Host — desktop only (on mobile it's inside the expandable details) */}
