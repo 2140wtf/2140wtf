@@ -598,6 +598,7 @@ function extractPollOptionFromReceipt(receipt: NostrEvent): string | undefined {
 function ZapPollContent({ event }: { event: NostrEvent }) {
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
+  const { mutate: publishEvent } = useNostrPublish();
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [zapDialogOpen, setZapDialogOpen] = useState(false);
 
@@ -697,6 +698,21 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
   const handleZapSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ['poll-votes', event.id, 9735, user?.pubkey ?? ''] });
     queryClient.invalidateQueries({ queryKey: ['poll-votes', event.id, 1018, user?.pubkey ?? ''] });
+
+    // Mirror BAO Markets: after a zap payment succeeds, also publish a free
+    // kind:1018 response so the vote is recorded by clients that tally
+    // text responses instead of zap receipts.
+    if (user && selectedOption) {
+      publishEvent({
+        kind: 1018,
+        content: '',
+        tags: [
+          ['e', event.id],
+          ['p', event.pubkey],
+          ['response', selectedOption],
+        ],
+      });
+    }
   };
 
   return (
