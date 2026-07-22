@@ -14,6 +14,7 @@ function makeListing(price: { value: number; currency: string } | undefined | nu
     price,
     images: [],
     categories: [],
+    paymentMethods: [],
     status: 'active',
     shippingOptionRefs: [],
     createdAt: 0,
