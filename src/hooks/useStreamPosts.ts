@@ -9,6 +9,7 @@ import { isReplyEvent } from '@/lib/nostrEvents';
 import { isEventMuted } from '@/lib/muteHelpers';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
+import { IMAGE_URL_REGEX, VIDEO_URL_REGEX } from '@/lib/mediaUrls';
 import { nip19 } from 'nostr-tools';
 import { isNostrId } from '@/lib/nostrId';
 
@@ -37,18 +38,22 @@ interface StreamPostsOptions {
   clientTags?: string[];
 }
 
-/** Check if an event has imeta tags with image MIME types. */
-function hasImageImeta(event: NostrEvent): boolean {
-  return event.tags.some(
+/** Check if an event has image media, either via imeta tags or inline image URLs. */
+function hasImageMedia(event: NostrEvent): boolean {
+  const hasImetaImage = event.tags.some(
     (tag) => tag[0] === 'imeta' && tag.slice(1).some((part) => part.startsWith('m ') && part.split(' ')[1]?.startsWith('image/')),
   );
+  return hasImetaImage || IMAGE_URL_REGEX.test(event.content);
 }
 
-/** Check if an event has imeta tags with video MIME types. */
-function hasVideoImeta(event: NostrEvent): boolean {
-  return event.tags.some(
+/** Check if an event has video media, either via imeta tags or inline video URLs. */
+function hasVideoMedia(event: NostrEvent): boolean {
+  const hasImetaVideo = event.tags.some(
     (tag) => tag[0] === 'imeta' && tag.slice(1).some((part) => part.startsWith('m ') && part.split(' ')[1]?.startsWith('video/')),
   );
+  // Use a non-global copy of the regex so repeated .test() calls are reliable.
+  const hasInlineVideo = new RegExp(VIDEO_URL_REGEX.source, 'i').test(event.content);
+  return hasImetaVideo || hasInlineVideo;
 }
 
 /**
@@ -115,8 +120,8 @@ function filterEvent(
 
   // Client-side media filtering (for streaming events only)
   if (options.mediaType !== 'all') {
-    const hasImages = hasImageImeta(event);
-    const hasVideos = hasVideoImeta(event);
+    const hasImages = hasImageMedia(event);
+    const hasVideos = hasVideoMedia(event);
     switch (options.mediaType) {
       case 'images':
         if (!hasImages || hasVideos) return false;
