@@ -9,7 +9,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { PageHeader } from '@/components/PageHeader';
 import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
@@ -20,18 +19,12 @@ import { useAuthors, type AuthorData } from '@/hooks/useAuthors';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip99Listings } from '@/hooks/useNip99Listings';
-import type { Nip99Listing } from '@/lib/nip99';
+import { PRODUCT_CATEGORIES, type ListingCategoryValue, type Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
-const CATEGORIES = [
-  { value: 'art', label: 'Bitcoin Art' },
-  { value: 'product', label: 'Products' },
+const FILTER_CATEGORIES = [
   { value: 'all', label: 'All listings' },
-  { value: 'bitcoin', label: 'Bitcoin' },
-  { value: 'photography', label: 'Photography' },
-  { value: 'digitalart', label: 'Digital Art' },
-  { value: 'print', label: 'Prints' },
-  { value: 'merch', label: 'Merch' },
+  ...PRODUCT_CATEGORIES,
 ];
 
 const SORT_OPTIONS = [
@@ -85,7 +78,7 @@ export function MarketPage(): React.JSX.Element {
   });
 
   const { user } = useCurrentUser();
-  const [category, setCategory] = useState('all');
+  const [category, setCategory] = useState<ListingCategoryValue | 'all'>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortValue>('newest');
   const [columns, setColumns] = useState<1 | 2 | 3 | 4>(2);
@@ -219,12 +212,12 @@ export function MarketPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="Category" />
+          <Select value={category} onValueChange={(value) => setCategory(value as ListingCategoryValue | 'all')}>
+            <SelectTrigger className="w-full sm:w-28 justify-between" aria-label="Filter by type">
+              <span>Type</span>
             </SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map((c) => (
+              {FILTER_CATEGORIES.map((c) => (
                 <SelectItem key={c.value} value={c.value}>
                   {c.label}
                 </SelectItem>

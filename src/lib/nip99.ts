@@ -228,6 +228,20 @@ export function formatNip99Price(price: Nip99Listing['price']): string {
   return `${amount}${freq}`;
 }
 
+/** Category options used when listing or filtering NIP-99 products. */
+export const PRODUCT_CATEGORIES = [
+  { value: 'art', label: 'Bitcoin Art' },
+  { value: 'product', label: 'Products' },
+  { value: 'bitcoin', label: 'Bitcoin' },
+  { value: 'photography', label: 'Photography' },
+  { value: 'digitalart', label: 'Digital Art' },
+  { value: 'print', label: 'Prints' },
+  { value: 'merch', label: 'Merch' },
+] as const;
+
+/** Category value type derived from PRODUCT_CATEGORIES. */
+export type ListingCategoryValue = (typeof PRODUCT_CATEGORIES)[number]['value'];
+
 export const ART_CATEGORIES = new Set([
   'art', 'bitcoinart', 'bitcoin-art', 'artwork', 'painting', 'drawing',
   'photography', 'digitalart', 'digital-art', 'print', 'poster',
