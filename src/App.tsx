@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InferSeoMetaPlugin } from "@unhead/addons";
 import { createHead, UnheadProvider } from "@unhead/react/client";
 import { AppProvider } from "@/components/AppProvider";
-import { whitepaperPreset } from "@/themes";
+import { sunsetPreset } from "@/themes";
 import { NativeNotifications } from "@/components/NativeNotifications";
 import NostrProvider from "@/components/NostrProvider";
 import { NostrSync } from "@/components/NostrSync";
@@ -76,7 +76,7 @@ const hardcodedConfig: AppConfig = {
   client: "naddr1qvzqqqru7cpzq7q6z5ns2hm5c8msyv83qwzxpxe52j8c4d4q5m92wsp9sflelkh9qqzkg6t5w3hswjl4yp",
   magicMouse: false,
   theme: "custom",
-  customTheme: whitepaperPreset,
+  customTheme: sunsetPreset,
   useAppRelays: true,
   useUserRelays: false,
   relayMetadata: {
@@ -158,7 +158,7 @@ const hardcodedConfig: AppConfig = {
     "btcmap",
   ],
   sidebarOrderVersion: 12,
-  themeDefaultVersion: 2,
+  themeDefaultVersion: 3,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
   blossomServerMetadata: {
