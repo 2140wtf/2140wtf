@@ -16,6 +16,7 @@ import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
 import { ProductListingComposeDialog } from '@/components/marketplace/ProductListingComposeDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useAuthors, type AuthorData } from '@/hooks/useAuthors';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip99Listings } from '@/hooks/useNip99Listings';
@@ -38,6 +39,7 @@ const SORT_OPTIONS = [
   { value: 'oldest', label: 'Oldest' },
   { value: 'price-low', label: 'Price: lowest' },
   { value: 'price-high', label: 'Price: highest' },
+  { value: 'merchant', label: 'Merchant' },
 ] as const;
 
 type SortValue = (typeof SORT_OPTIONS)[number]['value'];
@@ -64,6 +66,17 @@ function priceInSats(price: Nip99Listing['price'], btcPrice?: number): number | 
   return undefined;
 }
 
+/** Get a display name for a merchant, falling back to their pubkey. */
+function merchantName(pubkey: string, authors?: Map<string, AuthorData>): string {
+  const data = authors?.get(pubkey);
+  const metadata = data?.metadata;
+  return (
+    metadata?.display_name?.trim() ||
+    metadata?.name?.trim() ||
+    pubkey
+  );
+}
+
 export function MarketPage(): React.JSX.Element {
   const { config } = useAppContext();
   useSeoMeta({
@@ -85,6 +98,10 @@ export function MarketPage(): React.JSX.Element {
     search,
     onlyActive: true,
   });
+
+  const { data: authors } = useAuthors(
+    sort === 'merchant' ? listings.map((listing) => listing.pubkey) : [],
+  );
 
   const sortedListings = useMemo(() => {
     if (sort === 'newest') {
@@ -115,10 +132,21 @@ export function MarketPage(): React.JSX.Element {
         });
         break;
       }
+      case 'merchant': {
+        items.sort((a, b) => {
+          const aName = merchantName(a.pubkey, authors);
+          const bName = merchantName(b.pubkey, authors);
+          return (
+            aName.localeCompare(bName, undefined, { sensitivity: 'base' }) ||
+            b.createdAt - a.createdAt
+          );
+        });
+        break;
+      }
     }
 
     return items;
-  }, [listings, sort, btcPrice]);
+  }, [listings, sort, btcPrice, authors]);
 
   const gridItems = useMemo(() => {
     if (isLoading) {
