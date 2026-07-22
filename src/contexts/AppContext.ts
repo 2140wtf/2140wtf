@@ -233,6 +233,8 @@ export interface AppConfig {
   useUserRelays: boolean;
   /** User-added relays used specifically for NIP-99 marketplace listings. */
   marketplaceRelays?: string[];
+  /** User-added relays used for private group chat messages and welcome events. When empty, group chat falls back to the effective global relay set. */
+  groupChatRelays?: string[];
   /** Feed and sidebar content settings */
   feedSettings: FeedSettings;
   /** Ordered list of sidebar item IDs (built-in + extra-kind). */

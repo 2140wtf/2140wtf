@@ -80,6 +80,7 @@ const hardcodedConfig: AppConfig = {
   useAppRelays: true,
   useUserRelays: false,
   marketplaceRelays: [],
+  groupChatRelays: [],
   relayMetadata: {
     relays: [],
     updatedAt: 0,

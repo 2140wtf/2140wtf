@@ -71,6 +71,8 @@ export interface EncryptedSettings {
   useUserRelays?: boolean;
   /** User-added relays used specifically for NIP-99 marketplace listings. */
   marketplaceRelays?: string[];
+  /** User-added relays used for private group chat messages and welcome events. */
+  groupChatRelays?: string[];
   /** Feed and sidebar content settings */
   feedSettings?: FeedSettings;
   /** Advanced content filters */
