@@ -66,6 +66,7 @@ export function AppProvider(props: AppProviderProps) {
         const currentThemeVersion = defaultConfig.themeDefaultVersion ?? 0;
         if ((result.themeDefaultVersion ?? 0) < currentThemeVersion) {
           result.theme = defaultConfig.theme;
+          result.customTheme = defaultConfig.customTheme;
           result.themeDefaultVersion = currentThemeVersion;
         }
 
