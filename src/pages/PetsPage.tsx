@@ -2625,6 +2625,7 @@ function PetsDashboard({
               interactionProps={directInteractionProps}
               stageRef={stageRef}
               onEggClick={handleEggClick}
+              eggTapEnabled={activeDrawer === 'none'}
             />
           ) : undefined
         }
