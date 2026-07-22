@@ -164,8 +164,6 @@ export interface FeedSettings {
   feedIncludeConstellations: boolean;
   /** Include replies in the follows feed (default: true) */
   followsFeedShowReplies: boolean;
-  /** Include Private Group chat messages (kind 445) in the follows/global feed. Default: false. */
-  feedIncludeGroups: boolean;
 }
 
 /**
