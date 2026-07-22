@@ -129,9 +129,8 @@ export function MinimizedMediaBar({ mediaRef }: MinimizedMediaBarProps) {
     }
   }, []);
 
-  if (!currentTrack) return null;
-
-  const isVideo = currentTrack.type === 'video';
+  const isVideo = currentTrack?.type === 'video';
+  const hasTrack = !!currentTrack;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const hasPlaylist = playlist.length > 1;
   const canPrev = hasPlaylist && (currentIndex > 0 || currentTime > 3);
@@ -142,7 +141,11 @@ export function MinimizedMediaBar({ mediaRef }: MinimizedMediaBarProps) {
     const media = mediaRef.current;
     if (!media) return;
     if (media.paused) {
-      media.play().catch(() => {});
+      media.play().catch((err) => {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          console.error('[MinimizedMediaBar] playback failed:', err.name, err.message);
+        }
+      });
     } else {
       media.pause();
     }
@@ -190,6 +193,9 @@ export function MinimizedMediaBar({ mediaRef }: MinimizedMediaBarProps) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
+      {/* Always-mounted hidden media element so the first play() call can run
+          synchronously inside the user's click handler, satisfying Safari/iOS
+          autoplay requirements. */}
       {isVideo ? (
         <div className="flex flex-col w-72 rounded-2xl bg-background/95 backdrop-blur-md border border-border shadow-lg overflow-hidden">
           {/*
@@ -289,7 +295,7 @@ export function MinimizedMediaBar({ mediaRef }: MinimizedMediaBarProps) {
       ) : (
         <>
           <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} preload="metadata" className="hidden" />
-          {minimized && (
+          {minimized && hasTrack && (
             <div className="flex flex-col">
               <div className="flex items-center gap-2 rounded-2xl bg-background/95 backdrop-blur-md border border-border shadow-lg px-2 py-1.5 min-w-[280px] max-w-[360px]">
                 <div data-drag-handle className="cursor-grab active:cursor-grabbing shrink-0 p-1 -ml-0.5 text-muted-foreground/50 hover:text-muted-foreground">
