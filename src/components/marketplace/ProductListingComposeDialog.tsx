@@ -10,6 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -19,7 +26,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
-import { NIP99_CLASSIFIED_KIND, type DeliveryMethod, type ListingFormat } from '@/lib/nip99';
+import { NIP99_CLASSIFIED_KIND, PRODUCT_CATEGORIES, type DeliveryMethod, type ListingCategoryValue, type ListingFormat } from '@/lib/nip99';
 import { RelayPicker } from '@/components/RelayPicker';
 import { ShippingOptionForm } from '@/components/marketplace/ShippingOptionForm';
 import { useSellerShippingOptions } from '@/hooks/useShippingOptions';
@@ -63,6 +70,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
   const [format, setFormat] = useState<ListingFormat>('physical');
   const [delivery, setDelivery] = useState<DeliveryMethod>('post');
   const [location, setLocation] = useState('');
+  const [category, setCategory] = useState<ListingCategoryValue>('product');
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [relays, setRelays] = useState<string[]>([BAO_RELAY]);
@@ -85,6 +93,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
     setFormat('physical');
     setDelivery('post');
     setLocation('');
+    setCategory('product');
     setImages([]);
     setTagInput('');
     setRelays([BAO_RELAY]);
@@ -178,7 +187,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
     }
 
     const hashtags = parseTags(tagInput);
-    for (const t of new Set(['product', ...hashtags])) {
+    for (const t of new Set([category, 'product', ...hashtags])) {
       tags.push(['t', t]);
     }
 
@@ -299,7 +308,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Product type</Label>
+              <Label>Format</Label>
               <RadioGroup
                 value={format}
                 onValueChange={(v) => setFormat(v as ListingFormat)}
@@ -315,6 +324,22 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
                 </div>
               </RadioGroup>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="product-category">Type</Label>
+            <Select value={category} onValueChange={(value) => setCategory(value as ListingCategoryValue)}>
+              <SelectTrigger id="product-category" className="w-full">
+                <SelectValue placeholder="Select a type" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRODUCT_CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2 rounded-xl border border-border p-3">
@@ -393,7 +418,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">#product is added automatically.</p>
+            <p className="text-xs text-muted-foreground">The selected type and #product are added automatically.</p>
           </div>
 
           <div className="space-y-2">
