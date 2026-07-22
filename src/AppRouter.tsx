@@ -15,6 +15,7 @@ import { Toaster } from "./components/ui/toaster";
 import { MainLayout } from "./components/MainLayout";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { VersionCheck } from "./components/VersionCheck";
+import { ChunkErrorBoundary } from "./components/ChunkErrorBoundary";
 import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
@@ -237,7 +238,8 @@ export function AppRouter() {
         <ScrollToTop />
         <HighlightSelectionButton />
         <InitialSyncGate>
-          <Routes>
+          <ChunkErrorBoundary>
+            <Routes>
             {/* Auto-follow deep link: fullscreen immersive (no sidebars/nav) */}
             <Route path="/follow/:npub" element={<FollowPage />} />
 
@@ -375,7 +377,8 @@ export function AppRouter() {
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Route>
-          </Routes>
+            </Routes>
+          </ChunkErrorBoundary>
         </InitialSyncGate>
       </AudioPlayerProvider>
     </BrowserRouter>
