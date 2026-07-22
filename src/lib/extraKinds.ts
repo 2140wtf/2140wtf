@@ -337,17 +337,6 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     ],
   },
   {
-    kind: 445,
-    id: 'groups',
-    feedKey: 'feedIncludeGroups',
-    label: 'Private Group Messages',
-    description: 'Encrypted group chat messages (kind 445)',
-    addressable: false,
-    section: 'social',
-    feedOnly: true,
-    blurb: 'Encrypted group chat messages. Shown in the home feed only if enabled; most users will view them on the Private Groups page.',
-  },
-  {
     kind: 1068,
     id: 'polls',
     showKey: 'showPolls',
