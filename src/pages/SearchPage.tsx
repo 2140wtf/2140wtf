@@ -291,7 +291,7 @@ export function SearchPage() {
     const labels: string[] = [];
     if (!includeReplies) labels.push('No replies');
     if (onlyApp) labels.push('2140 users only');
-    if (mediaType !== 'all') labels.push({ images: 'Images', videos: 'Videos', none: 'No media' }[mediaType] ?? mediaType);
+    if (mediaType !== 'all') labels.push({ images: 'With image', videos: 'With video', none: 'Without media' }[mediaType] ?? mediaType);
     if (language !== 'global') labels.push(language.toUpperCase());
     if (platform !== 'nostr') labels.push({ activitypub: 'Mastodon' }[platform] ?? platform);
     if (sort !== 'recent') labels.push(sort === 'hot' ? 'Hot' : 'Trending');
@@ -652,9 +652,9 @@ export function SearchPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="images">Images</SelectItem>
-                        <SelectItem value="videos">Videos</SelectItem>
-                        <SelectItem value="none">No media</SelectItem>
+                        <SelectItem value="images">With image</SelectItem>
+                        <SelectItem value="videos">With video</SelectItem>
+                        <SelectItem value="none">Without media</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
