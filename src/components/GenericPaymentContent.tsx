@@ -3,6 +3,7 @@ import { Check, Copy, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { QRCodeCanvas } from '@/components/ui/qrcode';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
 import { type PaymentMethodDef, type PaymentTarget } from '@/lib/paymentTargets';
@@ -46,8 +47,17 @@ export function GenericPaymentContent({ method, target }: GenericPaymentContentP
     }
   };
 
+  const isBolt12 = method.type === 'bolt12';
+
   return (
     <div className="grid gap-3 px-4 py-4 w-full overflow-hidden">
+      {isBolt12 && (
+        <Alert variant="default" className="bg-muted/50 text-xs">
+          <AlertDescription>
+            BOLT12 offers are static Lightning addresses. Scan the QR or copy the offer with a BOLT12-capable wallet.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex justify-center">
         <div className="bg-white p-3 rounded-xl" aria-label={`${method.label} payment QR code`}>
           <QRCodeCanvas value={qrValue} size={220} level="M" className="block" />
