@@ -15,6 +15,8 @@ import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
 import { usePublishPreferences } from './usePublishPreferences';
 import { useToast } from './useToast';
+import { getEffectiveRelays } from '@/lib/appRelays';
+import { sendToInboxRelays } from '@/lib/inboxRelays';
 import {
   GroupChatService,
   type GroupChatGroup,
@@ -82,9 +84,20 @@ export function useGroupChat(): UseGroupChatReturn {
     () => extractPrivateKey(logins as unknown[], user?.pubkey),
     [logins, user?.pubkey],
   );
-  const relays = useMemo(
-    () => config.relayMetadata?.relays?.map((r) => r.url).filter(Boolean) ?? [],
-    [config.relayMetadata],
+  const effectiveRelays = useMemo(
+    () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays,
+    [config.relayMetadata, config.useAppRelays, config.useUserRelays],
+  );
+  const effectiveUrls = useMemo(
+    () => effectiveRelays.map((r) => r.url).filter(Boolean),
+    [effectiveRelays],
+  );
+  const groupChatRelays = useMemo(
+    () =>
+      config.groupChatRelays?.length
+        ? config.groupChatRelays
+        : effectiveRelays.map((r) => r.url).filter(Boolean),
+    [config.groupChatRelays, effectiveRelays],
   );
 
   const [service, setService] = useState<GroupChatService | null>(null);
@@ -94,13 +107,13 @@ export function useGroupChat(): UseGroupChatReturn {
       return;
     }
     try {
-      setService(new GroupChatService(user.pubkey, privateKey, relays));
+      setService(new GroupChatService(user.pubkey, privateKey, groupChatRelays));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize group chat';
       console.error('[useGroupChat] Service construction failed:', message);
       setService(null);
     }
-  }, [user, privateKey, relays]);
+  }, [user, privateKey, groupChatRelays]);
 
   const [groups, setGroups] = useState<GroupChatGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -164,15 +177,22 @@ export function useGroupChat(): UseGroupChatReturn {
   );
 
   // Subscribe to kind 1059 gift wraps for Welcome events.
+  // Listen on both the effective global relays and any custom group-chat relays
+  // so invitations are not missed when a group uses relays outside the global set.
   useEffect(() => {
     if (!service || !user) return;
 
     const ac = new AbortController();
     let alive = true;
 
+    const welcomeRelays = [
+      ...new Set([...effectiveUrls, ...(config.groupChatRelays ?? [])]),
+    ];
+    const welcomePool = welcomeRelays.length > 0 ? nostr.group(welcomeRelays) : nostr;
+
     (async () => {
       try {
-        const historical = await nostr.query(
+        const historical = await welcomePool.query(
           [{ kinds: [1059], '#p': [user.pubkey], limit: 100 }],
           { signal: ac.signal },
         );
@@ -192,7 +212,7 @@ export function useGroupChat(): UseGroupChatReturn {
 
       try {
         const now = Math.floor(Date.now() / 1000);
-        for await (const msg of nostr.req(
+        for await (const msg of welcomePool.req(
           [{ kinds: [1059], '#p': [user.pubkey], since: now, limit: 0 }],
           { signal: ac.signal },
         )) {
@@ -219,14 +239,19 @@ export function useGroupChat(): UseGroupChatReturn {
       alive = false;
       ac.abort();
     };
-  }, [nostr, service, user, refreshFromService]);
+  }, [nostr, service, user, refreshFromService, effectiveUrls, config.groupChatRelays]);
 
   // Subscribe to kind 445 group events for joined groups.
+  // Query the relays stored in each group's metadata so messages are fetched
+  // even when a group uses custom relays outside the global set.
   useEffect(() => {
     if (!service || groupsRef.current.length === 0) return;
 
     const ac = new AbortController();
     let alive = true;
+
+    const groupRelays = [...new Set(groupsRef.current.flatMap((g) => g.relays))];
+    const groupPool = groupRelays.length > 0 ? nostr.group(groupRelays) : nostr;
 
     (async () => {
       try {
@@ -236,7 +261,7 @@ export function useGroupChat(): UseGroupChatReturn {
           limit: 200,
         }));
 
-        const initial = await nostr.query(filters, { signal: ac.signal });
+        const initial = await groupPool.query(filters, { signal: ac.signal });
         for (const event of initial) {
           if (!alive) break;
           await service.processGroupEvent(event);
@@ -255,7 +280,7 @@ export function useGroupChat(): UseGroupChatReturn {
           limit: 0,
         }));
 
-        for await (const msg of nostr.req(filters, { signal: ac.signal })) {
+        for await (const msg of groupPool.req(filters, { signal: ac.signal })) {
           if (!alive) break;
           if (msg[0] === 'EVENT') {
             const event = msg[2];
@@ -288,15 +313,34 @@ export function useGroupChat(): UseGroupChatReturn {
         });
         return;
       }
+      const targetRelays = selectedGroup?.relays?.length ? selectedGroup.relays : groupChatRelays;
       for (const event of events) {
         try {
-          await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+          if (targetRelays.length > 0) {
+            await nostr.group(targetRelays).event(event, { signal: AbortSignal.timeout(5000) });
+          } else {
+            await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+          }
         } catch (err) {
           console.error('[useGroupChat] Failed to publish event:', err);
         }
+
+        // Best-effort inbox delivery for welcome gift wraps so new members receive
+        // invitations even if they don't actively read the group's relays.
+        if (event.kind === 1059) {
+          const taggedPubkeys = event.tags
+            .filter(([name]) => name === 'p' || name === 'P')
+            .map(([, pubkey]) => pubkey)
+            .filter((pubkey): pubkey is string => typeof pubkey === 'string');
+          if (taggedPubkeys.length > 0) {
+            sendToInboxRelays(nostr, event, taggedPubkeys).catch((error) => {
+              console.warn('[useGroupChat] Inbox relay delivery failed:', error);
+            });
+          }
+        }
       }
     },
-    [nostr, isEnabled, toast],
+    [nostr, isEnabled, toast, selectedGroup, groupChatRelays],
   );
 
   const createGroup = useCallback(
@@ -307,7 +351,7 @@ export function useGroupChat(): UseGroupChatReturn {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await service.createGroup(name, description, relays);
+        const result = await service.createGroup(name, description, groupChatRelays);
         if (result.success && result.data) {
           refreshFromService();
           setSelectedGroupId(result.data.nostrGroupId);
@@ -323,7 +367,7 @@ export function useGroupChat(): UseGroupChatReturn {
         setIsLoading(false);
       }
     },
-    [service, relays, refreshFromService],
+    [service, groupChatRelays, refreshFromService],
   );
 
   const sendMessage = useCallback(

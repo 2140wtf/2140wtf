@@ -355,6 +355,15 @@ export function NostrSync() {
         changed = true;
       }
 
+      if (
+        encryptedSettings.groupChatRelays &&
+        JSON.stringify(encryptedSettings.groupChatRelays) !==
+          JSON.stringify(current.groupChatRelays ?? [])
+      ) {
+        updates.groupChatRelays = encryptedSettings.groupChatRelays;
+        changed = true;
+      }
+
       if (encryptedSettings.feedSettings) {
         const currentFeed = current.feedSettings;
         const remoteFeed = encryptedSettings.feedSettings;
