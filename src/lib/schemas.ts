@@ -258,6 +258,9 @@ export const RuntimeAppConfigSchema = z.object({
   relayMetadata: RelayMetadataSchema,
   useAppRelays: z.boolean(),
   useUserRelays: z.boolean(),
+  marketplaceRelays: z.array(
+    z.string().url().refine(isAllowedRelayUrl, { message: 'Marketplace relay URL must be wss:// or ws:// localhost' }),
+  ).optional().default([]),
   feedSettings: FeedSettingsSchema,
   sidebarOrder: z.array(z.string()),
   sidebarOrderVersion: z.number().int().nonnegative().optional(),
@@ -360,6 +363,9 @@ export const EncryptedSettingsSchema = z.looseObject({
   customTheme: ThemeConfigCompatSchema.optional(),
   useAppRelays: z.boolean().optional(),
   useUserRelays: z.boolean().optional(),
+  marketplaceRelays: z.array(
+    z.string().url().refine(isAllowedRelayUrl, { message: 'Marketplace relay URL must be wss:// or ws:// localhost' }),
+  ).optional(),
   feedSettings: FeedSettingsSchema.optional(),
   contentFilters: z.array(ContentFilterSchema).optional(),
   contentWarningPolicy: ContentWarningPolicySchema.optional(),

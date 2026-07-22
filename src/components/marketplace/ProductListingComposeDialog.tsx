@@ -24,16 +24,17 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
+import { useAppContext } from '@/hooks/useAppContext';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
 import { NIP99_CLASSIFIED_KIND, PRODUCT_CATEGORIES, type DeliveryMethod, type ListingCategoryValue, type ListingFormat } from '@/lib/nip99';
+import { getEffectiveRelays } from '@/lib/appRelays';
 import { RelayPicker } from '@/components/RelayPicker';
 import { ShippingOptionForm } from '@/components/marketplace/ShippingOptionForm';
 import { useSellerShippingOptions } from '@/hooks/useShippingOptions';
 import { formatShippingOption, formatShippingService, shippingOptionAddress, type ShippingOption } from '@/lib/shippingOption';
 
 const PRODUCT_KIND = NIP99_CLASSIFIED_KIND;
-const BAO_RELAY = 'wss://relay.bao.network';
 
 interface UploadedImage {
   url: string;
@@ -59,8 +60,19 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { config } = useAppContext();
   const { isEnabled } = usePublishPreferences();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const defaultRelays = useMemo(
+    () => [
+      ...new Set([
+        ...getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays.map((r) => r.url),
+        ...(config.marketplaceRelays ?? []),
+      ]),
+    ],
+    [config.relayMetadata, config.useAppRelays, config.useUserRelays, config.marketplaceRelays],
+  );
 
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -73,7 +85,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
   const [category, setCategory] = useState<ListingCategoryValue>('product');
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [relays, setRelays] = useState<string[]>([BAO_RELAY]);
+  const [relays, setRelays] = useState<string[]>(defaultRelays);
   const [showAdvancedShipping, setShowAdvancedShipping] = useState(false);
   const [selectedShippingAddresses, setSelectedShippingAddresses] = useState<string[]>([]);
   const [localShippingOptions, setLocalShippingOptions] = useState<ShippingOption[]>([]);
@@ -96,11 +108,11 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
     setCategory('product');
     setImages([]);
     setTagInput('');
-    setRelays([BAO_RELAY]);
+    setRelays(defaultRelays);
     setShowAdvancedShipping(false);
     setSelectedShippingAddresses([]);
     setLocalShippingOptions([]);
-  }, []);
+  }, [defaultRelays]);
 
   const canPublish =
     !!user &&

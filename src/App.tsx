@@ -79,6 +79,7 @@ const hardcodedConfig: AppConfig = {
   customTheme: sunsetPreset,
   useAppRelays: true,
   useUserRelays: false,
+  marketplaceRelays: [],
   relayMetadata: {
     relays: [],
     updatedAt: 0,
