@@ -85,7 +85,7 @@ export function PrivacySettingsPage() {
               NOSTR PETS
             </CardTitle>
             <CardDescription>
-              Pet state and interactions are already sandboxed to the ₿AO relay.
+              Pet state and interactions are published to your configured relays.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">

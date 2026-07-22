@@ -146,7 +146,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
 
   useSeoMeta({
     title: `₿AO MARKETS | ${config.appName}`,
-    description: "Kind 38000 prediction markets from wss://relay.bao.network",
+    description: "Kind 38000 prediction markets on Nostr",
   });
 
   const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', showResolved ? 'all' : 'active');

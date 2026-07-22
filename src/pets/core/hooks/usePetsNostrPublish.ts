@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+
 import { useNostrPublish, type EventTemplate } from '@/hooks/useNostrPublish';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { toast } from '@/hooks/useToast';
-import { PETS_BAO_RELAY_URL } from '@/pets/core/lib/pets-relay';
+import { useAppContext } from '@/hooks/useAppContext';
+import { getEffectiveRelays } from '@/lib/appRelays';
 
 /**
  * Pet-specific `useNostrPublish` wrapper.
  *
- * Every event published through this hook is sent only to the BAO pets relay,
- * keeping pet state, Nostr pet profiles, and interactions off public relays.
+ * Pet events are published to the user's effective relay set (app defaults + any
+ * configured user relays) so pet state, profiles, and interactions are stored
+ * across the same relays as the rest of the user's data.
  *
  * Publishing is gated by the user's Privacy & Publishing preference for pets.
  */
@@ -17,6 +20,12 @@ export function usePetsNostrPublish() {
   const { isEnabled } = usePublishPreferences();
   const petsEnabled = isEnabled('pets');
   const [isPending, setIsPending] = useState(false);
+  const { config } = useAppContext();
+
+  const relayUrls = useMemo(
+    () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays.map((r) => r.url),
+    [config.relayMetadata, config.useAppRelays, config.useUserRelays],
+  );
 
   const guard = useCallback(() => {
     if (!petsEnabled) {
@@ -33,12 +42,12 @@ export function usePetsNostrPublish() {
       guard();
       setIsPending(true);
       try {
-        return await base.mutateAsync({ ...template, relays: [PETS_BAO_RELAY_URL] });
+        return await base.mutateAsync({ ...template, relays: relayUrls });
       } finally {
         setIsPending(false);
       }
     },
-    [base, guard],
+    [base, guard, relayUrls],
   );
 
   const mutate = useCallback(
@@ -46,7 +55,7 @@ export function usePetsNostrPublish() {
       guard();
       setIsPending(true);
       return base.mutate(
-        { ...template, relays: [PETS_BAO_RELAY_URL] },
+        { ...template, relays: relayUrls },
         {
           ...options,
           onSettled: (data, error, variables, onMutateResult, context) => {
@@ -56,7 +65,7 @@ export function usePetsNostrPublish() {
         },
       );
     },
-    [base, guard],
+    [base, guard, relayUrls],
   );
 
   return { mutate, mutateAsync, isPending };
