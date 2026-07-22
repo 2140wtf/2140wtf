@@ -70,6 +70,7 @@ function MainLayoutInner() {
         )}
 
         {/* Main content + right sidebar: inside Suspense so the left sidebar persists while lazy pages load */}
+        <ChunkErrorBoundary>
         <Suspense fallback={<PageSkeleton />}>
           {/* -mt-mobile-bar pulls content up behind the mobile top bar so the
               transparent SVG header arc and page content overlap seamlessly.
@@ -90,9 +91,7 @@ function MainLayoutInner() {
               sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}
               resetKeys={[location.pathname]}
             >
-              <ChunkErrorBoundary>
-                <Outlet />
-              </ChunkErrorBoundary>
+              <Outlet />
             </ErrorBoundary>
 
             {/* Desktop FAB — sticky within the feed column so it stays
@@ -112,6 +111,7 @@ function MainLayoutInner() {
           {/* Right sidebar — render page-provided sidebar, or the widget sidebar */}
           {rightSidebar !== undefined ? rightSidebar : <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
         </Suspense>
+        </ChunkErrorBoundary>
       </div>
 
       {/* Mobile bottom nav - only on small screens, slides out on scroll */}
