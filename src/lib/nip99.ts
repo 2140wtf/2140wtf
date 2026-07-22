@@ -7,7 +7,7 @@ export type ListingType = 'simple' | 'variable' | 'variation';
 export type ListingFormat = 'physical' | 'digital';
 export type DeliveryMethod = 'post' | 'collect-in-person' | 'digital';
 
-export const NIP99_PAYMENT_METHODS = ['cashu', 'lightning', 'bitcoin', 'silent-payments', 'xmr'] as const;
+export const NIP99_PAYMENT_METHODS = ['cashu', 'lightning', 'bitcoin', 'silent-payments', 'bolt12', 'xmr'] as const;
 export type Nip99PaymentMethod = typeof NIP99_PAYMENT_METHODS[number];
 
 export interface ShippingOptionRef {
@@ -210,6 +210,8 @@ export function formatNip99PaymentMethod(method: Nip99PaymentMethod): string {
       return 'Bitcoin';
     case 'silent-payments':
       return 'Silent Payments';
+    case 'bolt12':
+      return 'BOLT12';
     case 'xmr':
       return 'Monero';
   }

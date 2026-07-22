@@ -37,7 +37,7 @@ export function useCanReceiveZaps(pubkey: string | undefined): CanReceiveZapsRes
   const metadata = author.data?.metadata;
 
   const rails = useMemo(() => {
-    const lightning = canZap(metadata) || paymentTargets.some((t) => t.type === 'lightning');
+    const lightning = canZap(metadata) || paymentTargets.some((t) => t.type === 'lightning' || t.type === 'bolt12');
     const bitcoin = paymentTargets.some((t) => t.type === 'bitcoin');
     const nutzap = canReceiveNutzap(nutzapInfo);
     return { lightning, bitcoin, nutzap };
