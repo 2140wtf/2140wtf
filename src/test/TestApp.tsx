@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHead, UnheadProvider } from "@unhead/react/client";
 import { BrowserRouter } from "react-router-dom";
 import { AppProvider } from "@/components/AppProvider";
-import { whitepaperPreset } from "@/themes";
+import { sunsetPreset } from "@/themes";
 import NostrProvider from "@/components/NostrProvider";
 import type { AppConfig } from "@/contexts/AppContext";
 import { NWCProvider } from "@/contexts/NWCContext";
@@ -27,7 +27,7 @@ export function TestApp({ children }: TestAppProps) {
     appId: "2140",
     homePage: "feed",
     theme: "custom",
-    customTheme: whitepaperPreset,
+    customTheme: sunsetPreset,
     useAppRelays: true,
     useUserRelays: false,
     relayMetadata: {
@@ -98,7 +98,7 @@ export function TestApp({ children }: TestAppProps) {
     },
     sidebarOrder: [],
     sidebarOrderVersion: 1,
-    themeDefaultVersion: 2,
+    themeDefaultVersion: 3,
     nip85StatsPubkey:
       "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
     blossomServerMetadata: {
