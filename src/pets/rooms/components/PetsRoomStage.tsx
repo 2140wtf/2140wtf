@@ -292,12 +292,15 @@ export function PetsRoomStage({
               )}
 
               {/* Interaction wrapper — receives pointer events and sways. */}
-              {isEgg && onEggClick && (
+              {isEgg && onEggClick && eggTapEnabled && (
                 <div className="absolute inset-0 -m-6 pointer-events-none rounded-full border-2 border-dashed border-primary/30 animate-pulse" />
               )}
               <div
                 data-pets-visual
-                className="relative transition-all duration-500 pointer-events-auto cursor-pointer"
+                className={cn(
+                  'relative transition-all duration-500',
+                  eggTapEnabled ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none',
+                )}
                 style={{
                   width: '100%',
                   aspectRatio: '1',
@@ -306,7 +309,9 @@ export function PetsRoomStage({
                     animation: `pets-sway ${6 - (currentStats.happiness / 100) * 2}s ease-in-out infinite`,
                   } : undefined),
                 }}
-                {...(isEgg ? { onPointerEnter: interactionProps?.onPointerEnter, onPointerLeave: interactionProps?.onPointerLeave } : interactionProps)}
+                {...(eggTapEnabled
+                  ? (isEgg ? { onPointerEnter: interactionProps?.onPointerEnter, onPointerLeave: interactionProps?.onPointerLeave } : interactionProps)
+                  : undefined)}
               >
                 {/* Body animation wrapper — isolated from sway so direct-interaction
                     animations (hover-lean, poke-wiggle) don't override it. */}
@@ -328,7 +333,7 @@ export function PetsRoomStage({
                       recipe={hasDevOverride ? undefined : statusRecipe}
                       recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
                       emotion={effectiveEmotion}
-                      onEggClick={onEggClick}
+                      onEggClick={eggTapEnabled ? onEggClick : undefined}
                       facing={facing}
                       className="!size-full"
                     />
