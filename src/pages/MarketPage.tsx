@@ -187,7 +187,7 @@ export function MarketPage(): React.JSX.Element {
     <main>
       <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />} />
 
-      <div className="px-4 py-4 max-w-6xl mx-auto space-y-4">
+      <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -201,9 +201,14 @@ export function MarketPage(): React.JSX.Element {
           </div>
 
           <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
-            <SelectTrigger className="w-full sm:w-44 gap-2">
+            <SelectTrigger
+              className="w-full sm:w-10 px-0 justify-center [&>[data-radix-select-trigger-icon]]:hidden"
+              aria-label={`Sort by ${SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Sort'}`}
+            >
               <ArrowUpDown className="size-4 shrink-0 text-muted-foreground" />
-              <SelectValue placeholder="Sort" />
+              <span className="sr-only">
+                {SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Sort'}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((option) => (
