@@ -12,7 +12,7 @@ export function QRCodeCanvas({ value, size = 256, level = 'M', className }: QRCo
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !value) return;
 
     QRCode.toCanvas(
       canvasRef.current,
