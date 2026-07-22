@@ -123,7 +123,10 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       clientRef.current = client;
 
       try {
-        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        const reg = await navigator.serviceWorker.register('/sw.js', {
+          scope: '/',
+          updateViaCache: 'none',
+        });
         swRegistrationRef.current = reg;
         await navigator.serviceWorker.ready;
         if (cancelled) return;

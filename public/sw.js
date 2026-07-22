@@ -71,6 +71,27 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// --- Fetch / navigation ---
+
+/**
+ * Force navigation requests to bypass the browser cache.
+ *
+ * Vite builds use content-hashed filenames. When the app is rebuilt, an
+ * old cached index.html may reference chunks that no longer exist, causing
+ * "Failed to fetch dynamically imported module" errors. By handling
+ * navigation requests network-first we ensure the browser always loads the
+ * latest index.html and therefore the correct chunk URLs.
+ */
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(() => fetch(event.request)),
+    );
+  }
+});
+
 // --- Activate immediately ---
 
 self.addEventListener('install', () => self.skipWaiting());
