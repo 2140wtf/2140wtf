@@ -5,7 +5,6 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { HostedPollCube, type CubeThemeMode } from '@/components/HostedPollCube';
 import { PollCubeVoteOverlay } from '@/components/PollCubeVoteOverlay';
 import { Button } from '@/components/ui/button';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { cn } from '@/lib/utils';
 
 interface PollCubeCardProps {
@@ -33,7 +32,6 @@ function extractTitle(event: NostrEvent): string {
  */
 export function PollCubeCard({ poll, title, theme = 'light', className }: PollCubeCardProps) {
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const { user } = useCurrentUser();
 
   const displayTitle = title ?? extractTitle(poll);
   const isZapPoll = poll.kind === 6969;
@@ -58,12 +56,11 @@ export function PollCubeCard({ poll, title, theme = 'light', className }: PollCu
         <Button
           size="sm"
           onClick={() => setOverlayOpen(true)}
-          disabled={!user}
           className={cn(
             'gap-2',
             isZapPoll && 'bg-amber-500 text-white hover:bg-amber-500/90',
           )}
-          title={user ? buttonLabel : 'Log in to vote'}
+          title={buttonLabel}
         >
           {isZapPoll && <Zap className="size-4" />}
           {buttonLabel}
