@@ -145,7 +145,6 @@ const hardcodedConfig: AppConfig = {
     feedIncludeBirdex: true,
     feedIncludeConstellations: true,
     followsFeedShowReplies: true,
-    feedIncludeGroups: false,
   },
   sidebarOrder: [
     "feed",
