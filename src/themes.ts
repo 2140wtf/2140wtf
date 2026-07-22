@@ -192,25 +192,6 @@ export const themePresets: Record<string, ThemePreset> = {
     radius: '0',
   },
 
-  aquarium: {
-    label: 'Aquarium',
-    emoji: '🐠',
-    featured: true,
-    colors: {
-      background: '205 60% 15%',
-      text: '190 40% 92%',
-      primary: '175 80% 55%',
-    },
-    font: { family: 'Comfortaa' },
-    background: {
-      url: '/themes/aquarium.png',
-      mode: 'cover',
-      mimeType: 'image/png',
-      dimensions: '1920x1080',
-    },
-    backgroundOpacity: 0.25,
-  },
-
   space: {
     label: 'Space',
     emoji: '🚀',
@@ -277,6 +258,9 @@ export const themePresets: Record<string, ThemePreset> = {
 
 /** The default whitepaper preset, used as the app-wide default theme. */
 export const whitepaperPreset: ThemePreset = themePresets.whitepaper;
+
+/** The default sunset preset, used as the app-wide default theme. */
+export const sunsetPreset: ThemePreset = themePresets.sunset;
 
 /** Converts a camelCase key to a CSS custom property name, e.g. primaryForeground → --primary-foreground */
 export function toThemeVar(key: string): string {
