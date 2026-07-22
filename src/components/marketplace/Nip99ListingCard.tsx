@@ -20,6 +20,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMarkListingSold } from '@/hooks/useMarkListingSold';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { MarketplaceBuyDialog } from '@/components/marketplace/MarketplaceBuyDialog';
@@ -73,6 +74,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
 
   const isSeller = user?.pubkey === listing.pubkey;
   const canBuy = canCheckout(listing) && !isSeller;
+  const { startSignup } = useOnboarding();
   const [loginOpen, setLoginOpen] = useState(false);
   const [showUsd, setShowUsd] = useState(false);
 
@@ -367,6 +369,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
         isOpen={loginOpen}
         onClose={() => setLoginOpen(false)}
         onLogin={() => setLoginOpen(false)}
+        onSignupClick={startSignup}
       />
     </>
   );

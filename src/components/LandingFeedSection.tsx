@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import LoginDialog from '@/components/auth/LoginDialog';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFeed } from '@/hooks/useFeed';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { cn } from '@/lib/utils';
 import type { FeedItem } from '@/lib/feedUtils';
 
@@ -82,6 +83,7 @@ function getFeedArgs(mode: FeedMode): { tab: 'follows' | 'global'; options?: { k
 export function LandingFeedSection() {
   const { user } = useCurrentUser();
   const [mode, setMode] = useLandingFeedMode();
+  const { startSignup } = useOnboarding();
   const [loginOpen, setLoginOpen] = useState(false);
 
   const { tab, options } = getFeedArgs(mode);
@@ -217,6 +219,7 @@ export function LandingFeedSection() {
         isOpen={loginOpen}
         onClose={() => setLoginOpen(false)}
         onLogin={() => setLoginOpen(false)}
+        onSignupClick={startSignup}
       />
     </section>
   );
