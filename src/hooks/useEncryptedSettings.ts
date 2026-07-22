@@ -69,6 +69,8 @@ export interface EncryptedSettings {
   useAppRelays?: boolean;
   /** Whether to include the user's personal NIP-65 relay list in the effective relay set. */
   useUserRelays?: boolean;
+  /** User-added relays used specifically for NIP-99 marketplace listings. */
+  marketplaceRelays?: string[];
   /** Feed and sidebar content settings */
   feedSettings?: FeedSettings;
   /** Advanced content filters */
