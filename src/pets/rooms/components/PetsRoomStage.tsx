@@ -66,6 +66,8 @@ export interface PetsRoomStageProps {
   interactionReaction?: InteractionReactionState;
   /** Called when the egg is tapped on the room stage (starts/completes hatching). */
   onEggClick?: () => void;
+  /** Whether the foreground egg tap target is allowed. Disable when drawers overlay the room. */
+  eggTapEnabled?: boolean;
   /** Current horizontal facing direction. */
   facing?: PetsFacing;
   /** Whether the pointer is hovering the pet (drives hover-lean animation). */
@@ -97,6 +99,7 @@ export function PetsRoomStage({
   petsReaction,
   interactionReaction,
   onEggClick,
+  eggTapEnabled = true,
   facing,
   isHovered = false,
   interactionProps,
@@ -343,7 +346,7 @@ export function PetsRoomStage({
       <EggTapTarget
         stageRef={stageRef}
         onClick={onEggClick}
-        enabled={isEgg && !!onEggClick}
+        enabled={isEgg && !!onEggClick && eggTapEnabled}
       />
     </div>
   );
