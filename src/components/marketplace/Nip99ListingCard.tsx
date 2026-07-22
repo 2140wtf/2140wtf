@@ -24,7 +24,7 @@ import { useOnboarding } from '@/hooks/useOnboarding';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { MarketplaceBuyDialog } from '@/components/marketplace/MarketplaceBuyDialog';
-import { formatDeliveryMethod, formatNip99Price, type Nip99Listing } from '@/lib/nip99';
+import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, type Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
 interface Nip99ListingCardProps {
@@ -213,6 +213,11 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
               </Badge>
             )}
             <DeliveryBadge delivery={listing.delivery} />
+            {listing.paymentMethods.slice(0, 3).map((method) => (
+              <Badge key={method} variant="secondary" className="text-[10px]">
+                {formatNip99PaymentMethod(method)}
+              </Badge>
+            ))}
             {listing.categories.slice(0, 3).map((cat) => (
               <Badge key={cat} variant="secondary" className="text-[10px] capitalize">
                 <Tag className="w-2.5 h-2.5 mr-0.5" />
@@ -313,6 +318,11 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
             )}
 
             <div className="flex flex-wrap gap-2">
+              {listing.paymentMethods.map((method) => (
+                <Badge key={method} variant="outline" className="text-xs">
+                  {formatNip99PaymentMethod(method)}
+                </Badge>
+              ))}
               {listing.categories.map((cat) => (
                 <Badge key={cat} variant="secondary" className="text-xs capitalize">
                   {cat}

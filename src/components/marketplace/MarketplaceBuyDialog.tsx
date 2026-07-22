@@ -33,6 +33,7 @@ export function MarketplaceBuyDialog({ listing, open, onOpenChange }: Marketplac
       open={open}
       onOpenChange={onOpenChange}
       initialAmountSats={priceState.kind === 'ready' ? priceState.initialAmountSats : undefined}
+      allowedPaymentMethods={listing.paymentMethods.length > 0 ? listing.paymentMethods : undefined}
     />
   );
 }
