@@ -7,6 +7,7 @@ import { MobileBottomNav } from '@/components/MobileBottomNav';
 import { FloatingComposeButton } from '@/components/FloatingComposeButton';
 import { CursorFireEffect } from '@/components/CursorFireEffect';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { CenterColumnContext, DrawerContext, LayoutStore, LayoutStoreContext, NavHiddenContext, useLayoutSnapshot } from '@/contexts/LayoutContext';
 import { NsitePlayerContext, type NsitePlayerState } from '@/contexts/NsitePlayerContext';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -89,7 +90,9 @@ function MainLayoutInner() {
               sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}
               resetKeys={[location.pathname]}
             >
-              <Outlet />
+              <ChunkErrorBoundary>
+                <Outlet />
+              </ChunkErrorBoundary>
             </ErrorBoundary>
 
             {/* Desktop FAB — sticky within the feed column so it stays
