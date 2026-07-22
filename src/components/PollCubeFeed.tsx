@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { HostedPollCube, type CubeThemeMode } from '@/components/HostedPollCube';
+import { type CubeThemeMode } from '@/components/HostedPollCube';
+import { PollCubeCard } from '@/components/PollCubeCard';
 import { usePollFeed } from '@/hooks/usePollFeed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -74,12 +75,7 @@ export function PollCubeFeed({ filter = 'all', searchQuery = '', className, them
     <div className={cn('space-y-6 py-4', className)}>
       <div className="grid grid-cols-1 gap-6">
         {filteredPolls.map((poll) => (
-          <div key={poll.id} className="flex flex-col gap-3">
-            <HostedPollCube pollId={poll.id} title={extractTitle(poll)} event={poll} theme={theme} className="aspect-square min-h-[420px] max-h-[80vh]" />
-            <div className="text-center px-2">
-              <p className="text-sm font-bold line-clamp-2 leading-snug">{extractTitle(poll)}</p>
-            </div>
-          </div>
+          <PollCubeCard key={poll.id} poll={poll} title={extractTitle(poll)} theme={theme} />
         ))}
       </div>
       {canLoadMore && (
