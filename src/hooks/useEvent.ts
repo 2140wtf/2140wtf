@@ -2,16 +2,11 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { ZAPSTORE_RELAY } from '@/lib/appRelays';
-import { KIND_PETS_STATE } from '@/pets/core/lib/pets';
-import { PETS_BAO_RELAY_URL } from '@/pets/core/lib/pets-relay';
 import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { useCacheFirstSeed } from '@/hooks/useCacheFirstSeed';
 
 /** Kinds whose canonical home is the Zapstore relay. */
 const ZAPSTORE_KINDS = [32267, 30063, 3063];
-
-/** Kinds whose canonical home is the BAO pets relay. */
-const PETS_KINDS = [KIND_PETS_STATE];
 
 /**
  * Extract write relay URLs from a NIP-65 (kind 10002) relay list event.
@@ -181,19 +176,6 @@ export function useAddrEvent(addr: AddrCoords | undefined, relays?: string[]) {
           }
         } catch {
           // zapstore relay failed — fall through to normal flow
-        }
-      }
-
-      // For pet state events, query the BAO pets relay first.
-      if (PETS_KINDS.includes(addr.kind)) {
-        try {
-          const petEvents = await nostr.relay(PETS_BAO_RELAY_URL).query(filter, { signal: AbortSignal.timeout(5000) });
-          if (petEvents.length > 0) {
-            void store.event(petEvents[0]);
-            return petEvents[0];
-          }
-        } catch {
-          // pets relay failed — fall through to normal flow
         }
       }
 
