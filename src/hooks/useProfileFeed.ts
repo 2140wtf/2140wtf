@@ -10,6 +10,7 @@ import {
   type FeedItem,
 } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
+import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 /** Extended FeedItem with pagination metadata. */
@@ -290,26 +291,32 @@ export function useTabFeed(
       const kinds = (filter.kinds && filter.kinds.length > 0) ? filter.kinds : defaultKinds;
 
       const queryFilter: Record<string, unknown> = {
+        ...filter,
         kinds,
         limit: PAGE_SIZE,
       };
 
-      if (filter.authors && filter.authors.length > 0) {
-        queryFilter.authors = filter.authors;
-      }
-
-      if (filter.search) {
-        queryFilter.search = filter.search;
-      }
-
+      // Pagination cursor overrides any caller-supplied `until`.
       if (pageParam) {
         queryFilter.until = pageParam;
+      } else if (filter.until === undefined) {
+        delete queryFilter.until;
       }
 
-      const allEvents = await nostr.query(
-        [queryFilter as NostrFilter],
-        { signal: querySignal },
-      );
+      // The caller-supplied limit is only a hint; we always page at PAGE_SIZE.
+      if (queryFilter.limit !== PAGE_SIZE) {
+        queryFilter.limit = PAGE_SIZE;
+      }
+
+      const allEvents = filter.search
+        ? await nostr.group(APP_SEARCH_RELAYS).query(
+            [queryFilter as NostrFilter],
+            { signal: querySignal },
+          )
+        : await nostr.query(
+            [queryFilter as NostrFilter],
+            { signal: querySignal },
+          );
 
       const validEvents = allEvents.filter((ev) => ev.created_at <= now);
       const oldestQueryTimestamp = getPaginationCursor(validEvents);
