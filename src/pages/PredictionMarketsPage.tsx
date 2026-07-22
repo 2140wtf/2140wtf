@@ -149,7 +149,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
     description: "Kind 38000 prediction markets from wss://relay.bao.network",
   });
 
-  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all');
+  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', showResolved ? 'all' : 'active');
 
   const now = Math.floor(Date.now() / 1000);
 
