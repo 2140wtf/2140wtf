@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, RefreshCw, Search, ShoppingBag } from 'lucide-react';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Plus, RefreshCw, Search, ShoppingBag, LayoutGrid } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 
 import { Button } from '@/components/ui/button';
@@ -116,21 +115,16 @@ export function MarketPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
-          <ToggleGroup
-            type="single"
-            value={String(columns)}
-            onValueChange={(v) => {
-              if (v) setColumns(Number(v) as 1 | 2 | 3 | 4);
-            }}
+          <Button
             variant="outline"
             size="sm"
-            className="shrink-0"
+            className="gap-1.5 shrink-0"
+            onClick={() => setColumns((c) => ((c % 4) + 1) as 1 | 2 | 3 | 4)}
+            aria-label={`${columns} columns`}
           >
-            <ToggleGroupItem value="4" aria-label="4 columns">4</ToggleGroupItem>
-            <ToggleGroupItem value="3" aria-label="3 columns">3</ToggleGroupItem>
-            <ToggleGroupItem value="2" aria-label="2 columns">2</ToggleGroupItem>
-            <ToggleGroupItem value="1" aria-label="1 column">1</ToggleGroupItem>
-          </ToggleGroup>
+            <LayoutGrid className="size-4" />
+            {columns}
+          </Button>
 
           <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} />
