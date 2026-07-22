@@ -10,6 +10,7 @@ export const RECOVERY_KEY = 'chunk-error-recovery';
 
 export const CHUNK_ERROR_PATTERNS = [
   'Failed to fetch dynamically imported module',
+  'error loading dynamically imported module',
   'Loading chunk',
   'Loading CSS chunk',
   'Cannot find module',
@@ -17,7 +18,8 @@ export const CHUNK_ERROR_PATTERNS = [
 
 export function isChunkError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return CHUNK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+  const lower = message.toLowerCase();
+  return CHUNK_ERROR_PATTERNS.some((pattern) => lower.includes(pattern.toLowerCase()));
 }
 
 export function hasRecoveryBeenAttempted(): boolean {
