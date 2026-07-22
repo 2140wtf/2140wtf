@@ -5,6 +5,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { PollContent } from '@/components/PollContent';
 import { PollsViewContext } from '@/lib/pollsViewContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { cn } from '@/lib/utils';
 
 interface PollCubeVoteOverlayProps {
@@ -21,6 +22,7 @@ interface PollCubeVoteOverlayProps {
  * visible underneath.
  */
 export function PollCubeVoteOverlay({ event, onClose, className }: PollCubeVoteOverlayProps) {
+  const { user } = useCurrentUser();
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.currentTarget === e.target) onClose();
@@ -40,9 +42,14 @@ export function PollCubeVoteOverlay({ event, onClose, className }: PollCubeVoteO
       onClick={handleBackdropClick}
     >
       <div className="flex items-center justify-between px-3 h-11 border-b border-border shrink-0">
-        <span className="text-sm font-semibold">
-          {event.kind === 6969 ? 'Zap to vote' : 'Vote'}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold">
+            {event.kind === 6969 ? 'Zap to vote' : 'Vote'}
+          </span>
+          {!user && (
+            <span className="text-xs text-muted-foreground truncate">Log in to vote</span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onClose}
