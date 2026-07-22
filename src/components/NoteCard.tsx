@@ -1590,7 +1590,30 @@ function PhotoContent({ event }: { event: NostrEvent }) {
     return map;
   }, [photos]);
 
-  if (photos.length === 0) return null;
+  if (photos.length === 0) {
+    // Photo event with no parseable images: fall back to the description so
+    // the card isn't empty.
+    return description ? (
+      <div className="mt-2 space-y-2">
+        {title && <p className="font-semibold text-[15px]">{title}</p>}
+        <p className="text-[15px] leading-relaxed text-muted-foreground">{description}</p>
+        {hashtags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {hashtags.slice(0, 5).map((tag) => (
+              <Link
+                key={tag}
+                to={`/t/${encodeURIComponent(tag)}`}
+                className="text-xs text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                #{tag}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    ) : null;
+  }
 
   return (
     <div className="mt-2 space-y-2">
