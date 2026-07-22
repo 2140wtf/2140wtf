@@ -77,10 +77,13 @@ function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
   };
 }
 
-async function fetchApiMarkets(category: string, signal: AbortSignal): Promise<BaoMarket[]> {
+async function fetchApiMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
   const params = new URLSearchParams({ limit: String(QUERY_LIMIT) });
   if (category !== "all") {
     params.set("category", category);
+  }
+  if (status === "active") {
+    params.set("status", "active");
   }
   const publicPath = `${PUBLIC_API_BASE}/markets?${params.toString()}`;
   const proxiedPath = `${API_BASE}/markets?${params.toString()}`;
@@ -105,7 +108,11 @@ async function fetchApiMarkets(category: string, signal: AbortSignal): Promise<B
   return data.map(apiMarketToBaoMarket);
 }
 
-async function fetchRelayMarkets(category: string, signal: AbortSignal): Promise<BaoMarket[]> {
+function isMarketActive(market: BaoMarket, now: number): boolean {
+  return market.state === 'active' && (market.endTime <= 0 || market.endTime >= now);
+}
+
+async function fetchRelayMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
   const relay = new NRelay1(RELAY);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
@@ -132,9 +139,11 @@ async function fetchRelayMarkets(category: string, signal: AbortSignal): Promise
     }
 
     const seen = new Map<string, BaoMarket>();
+    const now = Math.floor(Date.now() / 1000);
     for (const event of dedupedEvents) {
       const parsed = parseBaoMarket(event);
       if (!parsed) continue;
+      if (status === 'active' && !isMarketActive(parsed, now)) continue;
       const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
       const existing = seen.get(key);
       if (!existing || parsed.createdAt > existing.createdAt) {
@@ -149,15 +158,15 @@ async function fetchRelayMarkets(category: string, signal: AbortSignal): Promise
   }
 }
 
-function getQueryKey(category: string) {
-  return ["bao-prediction-markets", category];
+function getQueryKey(category: string, status: 'active' | 'all') {
+  return ["bao-prediction-markets", category, status];
 }
 
-export function useBaoPredictionMarkets(category: string = "all") {
+export function useBaoPredictionMarkets(category: string = "all", status: 'active' | 'all' = "active") {
   const queryClient = useQueryClient();
 
   const query = useQuery<BaoMarket[]>({
-    queryKey: getQueryKey(category),
+    queryKey: getQueryKey(category, status),
     queryFn: async ({ signal }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
@@ -168,7 +177,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
 
       try {
         try {
-          const apiMarkets = await fetchApiMarkets(category, controller.signal);
+          const apiMarkets = await fetchApiMarkets(category, status, controller.signal);
           if (apiMarkets.length > 0) {
             return apiMarkets;
           }
@@ -176,7 +185,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
           console.warn("[useBaoPredictionMarkets] API fetch failed, falling back to relay:", error);
         }
 
-        return fetchRelayMarkets(category, controller.signal);
+        return fetchRelayMarkets(category, status, controller.signal);
       } finally {
         clearTimeout(timeoutId);
       }
@@ -201,6 +210,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
     if (category !== "all") {
       filter["#category"] = [category];
     }
+    const now = Math.floor(Date.now() / 1000);
 
     const pending: NostrEvent[] = [];
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -210,7 +220,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
       if (pending.length === 0 || controller.signal.aborted) return;
 
       const events = pending.splice(0, pending.length);
-      const queryKey = getQueryKey(category);
+      const queryKey = getQueryKey(category, status);
 
       queryClient.setQueryData<BaoMarket[]>(queryKey, (old = []) => {
         const seenEventIds = new Set<string>();
@@ -225,6 +235,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
 
           const parsed = parseBaoMarket(event);
           if (!parsed) continue;
+          if (status === 'active' && !isMarketActive(parsed, now)) continue;
 
           const key = `${parsed.creatorPubkey}:${parsed.marketId}`;
           const existing = byMarket.get(key);
@@ -268,7 +279,7 @@ export function useBaoPredictionMarkets(category: string = "all") {
       if (flushTimer) clearTimeout(flushTimer);
       relay.close().catch(() => {});
     };
-  }, [category, queryClient]);
+  }, [category, status, queryClient]);
 
   return query;
 }
