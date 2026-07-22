@@ -17,6 +17,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
+import { NIP99_PAYMENT_METHODS, type Nip99PaymentMethod } from '@/lib/nip99';
+import { PaymentMethodSelector } from '@/components/marketplace/PaymentMethodSelector';
 
 const ART_KIND = 30402;
 
@@ -56,6 +58,7 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
   const [status, setStatus] = useState('active');
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<Nip99PaymentMethod[]>([...NIP99_PAYMENT_METHODS]);
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -67,6 +70,7 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
     setStatus('active');
     setImages([]);
     setTagInput('');
+    setPaymentMethods([...NIP99_PAYMENT_METHODS]);
   }, []);
 
   const canPublish =
@@ -121,6 +125,11 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
       return;
     }
 
+    if (paymentMethods.length === 0) {
+      toast({ title: 'Select payment methods', description: 'Choose at least one payment method buyers can use.', variant: 'destructive' });
+      return;
+    }
+
     const tags: string[][] = [];
     const now = Math.floor(Date.now() / 1000);
 
@@ -138,6 +147,10 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
     const hashtags = parseTags(tagInput);
     for (const t of new Set(['art', ...hashtags])) {
       tags.push(['t', t]);
+    }
+
+    for (const method of paymentMethods) {
+      tags.push(['payment', method]);
     }
 
     tags.push(['published_at', String(now)]);
@@ -257,6 +270,8 @@ export function ArtListingComposeDialog({ open, onOpenChange, onSuccess }: ArtLi
               </select>
             </div>
           </div>
+
+          <PaymentMethodSelector value={paymentMethods} onChange={setPaymentMethods} />
 
           <div className="space-y-1.5">
             <Label htmlFor="art-tags">Tags (comma or space separated)</Label>
