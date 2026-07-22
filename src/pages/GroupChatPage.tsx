@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { LogIn, Lock, LogOut, Menu, Pencil, Shield, Users } from 'lucide-react';
+import { Lock, LogIn, LogOut, Menu, PanelLeft, PanelRight, Pencil, Shield, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -27,6 +27,7 @@ import { EditGroupDialog } from '@/components/group-chat/EditGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
 import { GroupAvatar } from '@/components/group-chat/GroupAvatar';
 import { NoGroupsIllustration } from '@/components/group-chat/GroupEmptyIllustrations';
+import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/useToast';
 import type { GroupChatMessage } from '@/lib/groupChatService';
 
@@ -133,6 +134,9 @@ export function GroupChatPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [mobileListOpen, setMobileListOpen] = useState(false);
+  const [mobileMembersOpen, setMobileMembersOpen] = useState(false);
+  const [showGroupList, setShowGroupList] = useState(true);
+  const [showMemberPanel, setShowMemberPanel] = useState(true);
   const [searchParams] = useSearchParams();
   const initialGroupSelected = useRef(false);
 
@@ -268,7 +272,7 @@ export function GroupChatPage() {
         <GroupChatSkeleton />
       ) : (
         <div className="flex-1 flex overflow-hidden">
-          {groups.length > 0 && (
+          {groups.length > 0 && showGroupList && (
             <div className="w-64 shrink-0 hidden sm:block">
               <GroupList
                 groups={groups}
@@ -283,7 +287,19 @@ export function GroupChatPage() {
           <div className="flex-1 flex flex-col min-w-0">
             {selectedGroup ? (
               <>
-                <div className="px-4 py-2.5 border-b flex items-center gap-3 bg-muted/20">
+                <div className="px-3 py-2.5 border-b flex items-center gap-2 sm:gap-3 bg-muted/20">
+                  {groups.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden sm:flex size-8 text-muted-foreground shrink-0"
+                      title={showGroupList ? 'Hide groups' : 'Show groups'}
+                      aria-label={showGroupList ? 'Hide groups' : 'Show groups'}
+                      onClick={() => setShowGroupList((v) => !v)}
+                    >
+                      <PanelLeft className={cn('size-4', !showGroupList && 'text-primary')} />
+                    </Button>
+                  )}
                   <GroupAvatar
                     groupId={selectedGroup.nostrGroupId}
                     name={selectedGroup.name}
@@ -330,6 +346,26 @@ export function GroupChatPage() {
                   >
                     <LogOut className="size-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground shrink-0 lg:hidden"
+                    title="Members"
+                    aria-label="Members"
+                    onClick={() => setMobileMembersOpen(true)}
+                  >
+                    <Users className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="hidden lg:flex size-8 text-muted-foreground shrink-0"
+                    title={showMemberPanel ? 'Hide members' : 'Show members'}
+                    aria-label={showMemberPanel ? 'Hide members' : 'Show members'}
+                    onClick={() => setShowMemberPanel((v) => !v)}
+                  >
+                    <PanelRight className={cn('size-4', !showMemberPanel && 'text-primary')} />
+                  </Button>
                 </div>
                 <GroupMessageList
                   group={selectedGroup}
@@ -363,7 +399,7 @@ export function GroupChatPage() {
             )}
           </div>
 
-          {selectedGroup && (
+          {selectedGroup && showMemberPanel && (
             <div className="shrink-0 hidden lg:block">
               <GroupMemberPanel
                 group={selectedGroup}
@@ -415,6 +451,27 @@ export function GroupChatPage() {
               className="border-r-0 flex-1"
             />
           </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={mobileMembersOpen} onOpenChange={setMobileMembersOpen}>
+        <SheetContent side="right" className="p-0 w-72">
+          <SheetTitle className="sr-only">Group members</SheetTitle>
+          <SheetDescription className="sr-only">Manage group members</SheetDescription>
+          {selectedGroup && (
+            <GroupMemberPanel
+              group={selectedGroup}
+              members={members}
+              isAdmin={isAdmin}
+              currentUserPubkey={user.pubkey}
+              onAddMember={async (pubkey) => {
+                await handleAddMember(pubkey);
+              }}
+              onRemoveMember={handleRemoveMember}
+              onBanMember={handleBanMember}
+              onPromoteAdmin={handlePromoteAdmin}
+            />
+          )}
         </SheetContent>
       </Sheet>
 
