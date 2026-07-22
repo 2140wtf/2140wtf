@@ -1,13 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { getEffectiveRelays } from '@/lib/appRelays';
+import { isAllowedRelayUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-
-const BAO_RELAY = 'wss://relay.bao.network';
 
 interface RelayPickerProps {
   selected: string[];
@@ -20,16 +23,24 @@ function normalizeRelayUrl(url: string): string {
 }
 
 export function RelayPicker({ selected, onChange, className }: RelayPickerProps) {
-  const { config } = useAppContext();
+  const { config, updateConfig } = useAppContext();
+  const { user } = useCurrentUser();
+  const { updateSettings } = useEncryptedSettings();
+  const [newRelay, setNewRelay] = useState('');
 
-  const relays = useMemo(() => {
-    const effective = getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays);
-    const urls = effective.relays.map((r) => r.url);
-    if (!urls.some((u) => normalizeRelayUrl(u) === normalizeRelayUrl(BAO_RELAY))) {
-      urls.unshift(BAO_RELAY);
+  const effectiveRelays = useMemo(
+    () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays,
+    [config.relayMetadata, config.useAppRelays, config.useUserRelays],
+  );
+  const effectiveUrls = effectiveRelays.map((r) => r.url);
+  const customUrls = config.marketplaceRelays ?? [];
+
+  const persistCustomRelays = (next: string[]) => {
+    updateConfig((prev) => ({ ...prev, marketplaceRelays: next }));
+    if (user) {
+      updateSettings.mutate({ marketplaceRelays: next });
     }
-    return urls;
-  }, [config.relayMetadata, config.useAppRelays, config.useUserRelays]);
+  };
 
   const toggle = (url: string) => {
     const normalized = normalizeRelayUrl(url);
@@ -41,34 +52,110 @@ export function RelayPicker({ selected, onChange, className }: RelayPickerProps)
     }
   };
 
-  return (
-    <div className={cn('space-y-3', className)}>
-      <div className="text-sm font-medium">Publish to relays</div>
-      <div className="space-y-2">
-        {relays.map((url) => {
-          const isBao = normalizeRelayUrl(url) === normalizeRelayUrl(BAO_RELAY);
-          const checked = selected.some((s) => normalizeRelayUrl(s) === normalizeRelayUrl(url));
-          return (
-            <div key={url} className="flex items-start gap-2">
-              <Checkbox
-                id={`relay-${url}`}
-                checked={checked}
-                onCheckedChange={() => toggle(url)}
-              />
-              <div className="grid gap-0.5 leading-none">
-                <Label htmlFor={`relay-${url}`} className="text-sm font-normal cursor-pointer">
-                  {url}
-                </Label>
-                {isBao && (
-                  <Badge variant="secondary" className="w-fit text-[10px]">
-                    ₿AO marketplace
-                  </Badge>
-                )}
-              </div>
-            </div>
-          );
-        })}
+  const handleAdd = () => {
+    const trimmed = newRelay.trim();
+    if (!isAllowedRelayUrl(trimmed)) return;
+
+    const normalized = normalizeRelayUrl(trimmed);
+    const allExisting = [...effectiveUrls, ...customUrls].map(normalizeRelayUrl);
+    if (allExisting.includes(normalized)) {
+      setNewRelay('');
+      return;
+    }
+
+    const next = [...customUrls, trimmed];
+    persistCustomRelays(next);
+    onChange([...selected, trimmed]);
+    setNewRelay('');
+  };
+
+  const handleRemove = (url: string) => {
+    const normalized = normalizeRelayUrl(url);
+    onChange(selected.filter((s) => normalizeRelayUrl(s) !== normalized));
+    const next = customUrls.filter((u) => normalizeRelayUrl(u) !== normalized);
+    persistCustomRelays(next);
+  };
+
+  const RelayRow = ({ url, removable }: { url: string; removable?: boolean }) => {
+    const checked = selected.some((s) => normalizeRelayUrl(s) === normalizeRelayUrl(url));
+    return (
+      <div key={url} className="flex items-start gap-2">
+        <Checkbox
+          id={`relay-${url}`}
+          checked={checked}
+          onCheckedChange={() => toggle(url)}
+        />
+        <div className="grid gap-0.5 leading-none flex-1 min-w-0">
+          <Label htmlFor={`relay-${url}`} className="text-sm font-normal cursor-pointer truncate">
+            {url}
+          </Label>
+        </div>
+        {removable && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 -mr-2 text-muted-foreground hover:text-destructive"
+            onClick={() => handleRemove(url)}
+            aria-label={`Remove ${url}`}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
       </div>
+    );
+  };
+
+  return (
+    <div className={cn('space-y-4', className)}>
+      <div className="text-sm font-medium">Publish to relays</div>
+
+      <div className="space-y-2">
+        {effectiveUrls.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Your relays</p>
+            {effectiveUrls.map((url) => (
+              <RelayRow key={url} url={url} />
+            ))}
+          </div>
+        )}
+
+        {customUrls.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Custom marketplace relays</p>
+            {customUrls.map((url) => (
+              <RelayRow key={url} url={url} removable />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Input
+          type="url"
+          placeholder="wss://relay.example.com"
+          value={newRelay}
+          onChange={(e) => setNewRelay(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+          className="text-sm"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleAdd}
+          disabled={!isAllowedRelayUrl(newRelay.trim())}
+        >
+          <Plus className="size-4 mr-1" />
+          Add
+        </Button>
+      </div>
+
       {selected.length === 0 && (
         <p className="text-xs text-muted-foreground">
           No relay selected. Select at least one relay to publish.
