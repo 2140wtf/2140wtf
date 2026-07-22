@@ -21,6 +21,8 @@ interface HostedPollCubeProps {
   className?: string;
   /** Cube-specific theme override. When 'system' (default) the cube follows the app theme. */
   theme?: CubeThemeMode;
+  /** Whether to render the floating vote button on top of the cube. */
+  showVoteButton?: boolean;
 }
 
 function encodeEventParam(event: NostrEvent): string {
@@ -39,7 +41,7 @@ function encodeEventParam(event: NostrEvent): string {
  * When the raw poll event is provided, it is passed to the embed iframe so the
  * cube can render even if BAO's relays don't have the poll.
  */
-export function HostedPollCube({ pollId, title, event, className, theme = 'light' }: HostedPollCubeProps) {
+export function HostedPollCube({ pollId, title, event, className, theme = 'light', showVoteButton = true }: HostedPollCubeProps) {
   const [loaded, setLoaded] = useState(false);
   const { data: design, isLoading } = useHostedCubeEmbed(pollId);
   const { user } = useCurrentUser();
@@ -113,7 +115,7 @@ export function HostedPollCube({ pollId, title, event, className, theme = 'light
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         onLoad={() => setLoaded(true)}
       />
-      {user && voteEvent && (
+      {showVoteButton && user && voteEvent && (
         <div className="absolute bottom-3 left-3 z-20">
           <ZapPollVoteButton event={voteEvent} compact />
         </div>
