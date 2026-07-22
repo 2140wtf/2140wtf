@@ -444,6 +444,56 @@ Rules 2140.wtf enforces:
 
 ---
 
+## NIP-99 Classified Listings: Accepted Payment Methods (2140.wtf extension)
+
+NIP-99 (`kind:30402` / `kind:30403`) does not define a tag for declaring which payment rails a seller accepts for a given listing. 2140.wtf adds an optional `payment` tag so a listing can restrict the methods shown to buyers at checkout.
+
+### Event Structure
+
+```json
+{
+  "kind": 30402,
+  "pubkey": "<seller-pubkey>",
+  "content": "Full listing description…",
+  "tags": [
+    ["d", "<unique-id>"],
+    ["title", "Signed Bitcoin poster"],
+    ["price", "21000", "SATS"],
+    ["payment", "lightning"],
+    ["payment", "bitcoin"],
+    ["payment", "cashu"],
+    ["alt", "Product listing: Signed Bitcoin poster"]
+  ]
+}
+```
+
+### Tags
+
+| Tag       | Required | Description                                                                                              |
+|-----------|----------|----------------------------------------------------------------------------------------------------------|
+| `payment` | No (≥0)  | `["payment", "<method>"]`. Declares one accepted payment rail. Omitting the tag means "accept all rails the seller has configured". |
+
+### Recognized method values
+
+| Value             | Label          | Notes                                                                                     |
+|-------------------|----------------|-------------------------------------------------------------------------------------------|
+| `cashu`           | Cashu          | Peer-to-peer ecash via NIP-61 Nutzaps.                                                    |
+| `lightning`       | Lightning      | BOLT-11 invoice or LNURL/address.                                                         |
+| `bitcoin`         | Bitcoin        | On-chain Bitcoin (including BIP-352 silent payments when the seller's target is `sp1…`). |
+| `silent-payments` | Silent Payments| BIP-352 silent payment; 2140.wtf routes through the same native Bitcoin flow.            |
+| `xmr`             | Monero         | Generic Monero address from a NIP-A3 `payto monero` target.                               |
+
+Values are case-insensitive. Unknown `payment` values are ignored on parse and do not break rendering.
+
+### 2140.wtf Implementation Notes
+
+- **Listing-level filtering.** When a listing carries one or more `payment` tags, `MarketplaceBuyDialog` passes the list to `ZapDialog`, which hides any payment rail that is not in the allowlist.
+- **Profile-level discovery is unchanged.** The buyer-side dialog still resolves the seller's `kind:10133` payment targets and `kind:10019` Cashu receiver ad; the `payment` tags only filter which of those resolved rails are offered.
+- **Bitcoin and Silent Payments overlap.** Both `bitcoin` and `silent-payments` allow the native Bitcoin method in `ZapDialog`, because that dialog already switches between on-chain and silent-payment behavior based on the seller's published `bitcoin` target authority.
+- **Monero alias.** The `xmr` value maps to the `monero` NIP-A3 payment target; `monero` is also accepted as an alias when parsing.
+
+---
+
 ## Kind 36767: Theme Definition
 
 ### Summary
