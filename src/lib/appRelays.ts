@@ -18,7 +18,6 @@ export const APP_CURATED_FEED_RELAYS: string[] = [
   'wss://relay.nostr.band/',
   'wss://nos.lol/',
   'wss://relay.mostr.pub/',
-  'wss://relay.bao.network/',
   'wss://offchain.pub/',
   'wss://relay.snort.social/',
   'wss://bitcoiner.social/',
@@ -37,7 +36,6 @@ export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev/';
  * feed the best chance of surfacing active offers.
  */
 export const NIP99_RELAYS: string[] = [
-  'wss://relay.bao.network',
   'wss://relay.ditto.pub',
   'wss://relay.dreamith.to',
   'wss://relay.nostr.band',
