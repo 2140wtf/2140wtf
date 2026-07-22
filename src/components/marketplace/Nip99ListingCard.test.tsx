@@ -56,6 +56,7 @@ function makeListing(): Nip99Listing {
     price: { value: 1000, currency: 'sats' },
     images: ['https://example.com/image.png'],
     categories: ['art'],
+    paymentMethods: ['lightning'],
     status: 'active',
     shippingOptionRefs: [],
     createdAt: 0,

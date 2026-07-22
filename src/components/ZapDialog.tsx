@@ -87,6 +87,12 @@ interface ZapDialogProps {
    * the dialog starts at the default tip amount (1,000 sats).
    */
   initialAmountSats?: number;
+  /**
+   * Optional list of payment method ids that should be offered. When omitted,
+   * all discovered payment rails are shown. Used by NIP-99 listings that declare
+   * accepted methods via `payment` tags.
+   */
+  allowedPaymentMethods?: string[];
 }
 
 // Sats presets for the Lightning tab. Lightning zaps are expected to be
@@ -302,6 +308,7 @@ export function ZapDialog({
   pollOption,
   onZapSuccess: onZapSuccessProp,
   initialAmountSats,
+  allowedPaymentMethods,
 }: ZapDialogProps) {
   // Parse kind 33863 campaigns so this dialog can route donations to the
   // campaign's declared `w` endpoint instead of the author's derived
@@ -507,8 +514,23 @@ export function ZapDialog({
       const def = PAYMENT_METHODS[t.type];
       list.push({ id: t.type, label: def.label, kind: def.kind, target: t });
     }
+
+    if (allowedPaymentMethods && allowedPaymentMethods.length > 0) {
+      const allowed = new Set(allowedPaymentMethods.map((m) => m.toLowerCase()));
+      return list.filter((m) => {
+        if (m.id === 'cashu') return allowed.has('cashu');
+        if (m.id === 'bitcoin') return allowed.has('bitcoin') || allowed.has('silent-payments');
+        if (m.id === 'lightning') return allowed.has('lightning');
+        if (m.target) {
+          if (m.id === 'monero') return allowed.has('monero') || allowed.has('xmr');
+          return allowed.has(m.id);
+        }
+        return true;
+      });
+    }
+
     return list;
-  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote]);
+  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote, allowedPaymentMethods]);
 
   const defaultMethodId: DialogMethodId = useMemo(() => {
     if (isPollVote) return 'lightning';
