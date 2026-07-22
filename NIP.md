@@ -426,8 +426,6 @@ Replaceable event (one per user) that declares a user's donation endpoints — "
 | `lightning`| Lightning  | native        | n/a (uses the built-in zap flow)       |
 | `bolt12`   | BOLT12     | generic       | `bolt12:<offer>`                       |
 | `monero`   | Monero     | generic       | `monero:<address>`                     |
-| `ethereum` | Ethereum   | generic       | `ethereum:<address>`                   |
-| `nano`     | Nano       | generic       | `nano:<address>`                       |
 | `cashme`   | Cash App   | generic       | `https://cash.app/$<handle>`           |
 | `venmo`    | Venmo      | generic       | `https://venmo.com/u/<handle>`         |
 | `revolut`  | Revolut    | generic       | `https://revolut.me/<handle>`          |
