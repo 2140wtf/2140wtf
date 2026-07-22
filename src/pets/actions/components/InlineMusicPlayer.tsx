@@ -57,7 +57,6 @@ export function InlineMusicPlayer({
     onEnded: () => {
       onPlaybackStop?.();
     },
-    mimeType: selection.track.format,
   });
   
   // Auto-start playback when first published (idle -> playing)
