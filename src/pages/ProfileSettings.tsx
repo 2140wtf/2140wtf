@@ -74,7 +74,15 @@ import { isValidAvatarShape } from '@/lib/avatarShape';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WALLET_TICKERS = [
-  '$BTC', '$ETH', '$SOL', '$XMR', '$LTC', '$DOGE', '$ADA', '$DOT', '$XRP', '$MATIC',
+  '$BTC',
+  '$BTC Silent',
+  '$Lightning',
+  '$Lightning BOLT12',
+  '$Cashu BOLT12',
+  '$XMR',
+  '$Venmo',
+  '$Revolut',
+  '$Cash App',
 ] as const;
 
 /** Bare tickers used only for detection (strips leading $). */
