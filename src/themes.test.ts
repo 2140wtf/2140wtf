@@ -144,11 +144,10 @@ describe('resolveTheme', () => {
 
 describe('themePresets', () => {
   it('includes the redesigned preset set', () => {
-    expect(Object.keys(themePresets).sort()).toEqual(['aquarium', 'banana', 'hacker', 'pink', 'space', 'sunset', 'whitepaper']);
+    expect(Object.keys(themePresets).sort()).toEqual(['banana', 'hacker', 'pink', 'space', 'sunset', 'whitepaper']);
   });
 
   it('includes generated background assets for presets that have one', () => {
-    expect(themePresets.aquarium.background?.url).toBe('/themes/aquarium.png');
     expect(themePresets.space.background?.url).toBe('/themes/space.png');
     expect(themePresets.banana.background?.url).toBe('/themes/banana.png');
   });
