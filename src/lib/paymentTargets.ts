@@ -35,6 +35,7 @@ export const PAYMENT_TARGETS_KIND = 10133;
 export type PaymentTargetType =
   | 'bitcoin'
   | 'lightning'
+  | 'bolt12'
   | 'monero'
   | 'cashme'
   | 'venmo'
@@ -112,6 +113,16 @@ function isMoneroAuthority(s: string): boolean {
   return /^[48][0-9A-Za-z]{94,105}$/.test(v);
 }
 
+/** BOLT12 static Lightning offer: bech32m string starting with `lno1`. */
+function normalizeBolt12Authority(s: string): string {
+  return s.trim().toLowerCase().replace(/^bolt12:/, '');
+}
+function isBolt12Authority(s: string): boolean {
+  const v = normalizeBolt12Authority(s);
+  if (!v) return false;
+  return /^lno1[02-9ac-hj-np-z]+$/.test(v);
+}
+
 /** Loose handle/username check for custodial apps (Cash App, Venmo, Revolut). */
 function isHandle(s: string): boolean {
   const v = s.trim().replace(/^[$@]/, '');
@@ -142,6 +153,16 @@ export const PAYMENT_METHODS: Record<PaymentTargetType, PaymentMethodDef> = {
     validate: isLightningAuthority,
     uri: () => undefined,
     placeholder: 'you@walletofsatoshi.com',
+  },
+  bolt12: {
+    type: 'bolt12',
+    label: 'BOLT12',
+    short: 'BOLT12',
+    symbol: '⚡',
+    kind: 'generic',
+    validate: isBolt12Authority,
+    uri: (a) => `bolt12:${a.trim().toLowerCase().replace(/^bolt12:/, '')}`,
+    placeholder: 'lno1…',
   },
   monero: {
     type: 'monero',
@@ -227,7 +248,8 @@ export function parsePaymentTargets(event: NostrEvent | null | undefined): Payme
     if (!isRecognizedPaymentType(rawType)) continue;
     if (byType.has(rawType)) continue; // first one wins
     if (!PAYMENT_METHODS[rawType].validate(authority)) continue;
-    byType.set(rawType, { type: rawType, authority });
+    const normalizedAuthority = rawType === 'bolt12' ? normalizeBolt12Authority(authority) : authority;
+    byType.set(rawType, { type: rawType, authority: normalizedAuthority });
   }
 
   return PAYMENT_METHOD_LIST.flatMap((m) => {
@@ -248,7 +270,8 @@ export function paymentTargetsToTags(targets: PaymentTarget[]): string[][] {
     if (!authority) continue;
     if (!PAYMENT_METHODS[t.type].validate(authority)) continue;
     if (byType.has(t.type)) continue;
-    byType.set(t.type, authority);
+    const normalizedAuthority = t.type === 'bolt12' ? normalizeBolt12Authority(authority) : authority;
+    byType.set(t.type, normalizedAuthority);
   }
 
   return PAYMENT_METHOD_LIST.flatMap((m) => {
@@ -275,6 +298,11 @@ export function findSilentPaymentTarget(targets: PaymentTarget[]): PaymentTarget
 /** Find the lightning payment target (if any) in a parsed list. */
 export function findLightningTarget(targets: PaymentTarget[]): PaymentTarget | undefined {
   return targets.find((t) => t.type === 'lightning');
+}
+
+/** Find the BOLT12 payment target (if any) in a parsed list. */
+export function findBolt12Target(targets: PaymentTarget[]): PaymentTarget | undefined {
+  return targets.find((t) => t.type === 'bolt12');
 }
 
 /** Whether a bitcoin authority is a BIP-352 silent-payment code (`sp1…`). */
