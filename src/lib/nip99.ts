@@ -7,6 +7,9 @@ export type ListingType = 'simple' | 'variable' | 'variation';
 export type ListingFormat = 'physical' | 'digital';
 export type DeliveryMethod = 'post' | 'collect-in-person' | 'digital';
 
+export const NIP99_PAYMENT_METHODS = ['cashu', 'lightning', 'bitcoin', 'silent-payments', 'xmr'] as const;
+export type Nip99PaymentMethod = typeof NIP99_PAYMENT_METHODS[number];
+
 export interface ShippingOptionRef {
   /** NIP-33 address of the referenced kind 30406 shipping option: `30406:<pubkey>:<d>`. */
   address: string;
@@ -43,6 +46,8 @@ export interface Nip99Listing {
   delivery?: DeliveryMethod;
   /** References to kind 30406 shipping-option events. */
   shippingOptionRefs: ShippingOptionRef[];
+  /** Accepted payment methods for this listing (2140.wtf `payment` tag extension). */
+  paymentMethods: Nip99PaymentMethod[];
   /** The original Nostr event, preserved so callers can sign/publish replacements or zap it. */
   event: NostrEvent;
 }
@@ -146,6 +151,10 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
 
   const images = getTags(event, 'image').filter(isAllowedImageUrl);
   const categories = getTags(event, 't').map((t) => t.toLowerCase());
+  const paymentMethods = getTags(event, 'payment')
+    .map((p) => p.toLowerCase())
+    .map((p) => (p === 'monero' ? 'xmr' : p))
+    .filter((p): p is Nip99PaymentMethod => (NIP99_PAYMENT_METHODS as readonly string[]).includes(p));
 
   const statusRaw = getTag(event, 'status')?.toLowerCase();
   let status: Nip99Listing['status'] = event.kind === NIP99_DRAFT_KIND ? 'draft' : 'active';
@@ -174,6 +183,7 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
     images,
     location: getTag(event, 'location')?.trim() || undefined,
     categories,
+    paymentMethods,
     status,
     publishedAt: publishedAt && Number.isFinite(publishedAt) ? publishedAt : undefined,
     createdAt: event.created_at,
@@ -184,6 +194,25 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
     shippingOptionRefs: parseShippingOptionRefs(event.tags),
     event,
   };
+}
+
+export function isNip99PaymentMethod(value: string): value is Nip99PaymentMethod {
+  return (NIP99_PAYMENT_METHODS as readonly string[]).includes(value.toLowerCase());
+}
+
+export function formatNip99PaymentMethod(method: Nip99PaymentMethod): string {
+  switch (method) {
+    case 'cashu':
+      return 'Cashu';
+    case 'lightning':
+      return 'Lightning';
+    case 'bitcoin':
+      return 'Bitcoin';
+    case 'silent-payments':
+      return 'Silent Payments';
+    case 'xmr':
+      return 'Monero';
+  }
 }
 
 export function dedupeNip99Listings(events: NostrEvent[]): Nip99Listing[] {

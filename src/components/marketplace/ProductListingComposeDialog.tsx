@@ -27,7 +27,8 @@ import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { cn } from '@/lib/utils';
-import { NIP99_CLASSIFIED_KIND, PRODUCT_CATEGORIES, type DeliveryMethod, type ListingCategoryValue, type ListingFormat } from '@/lib/nip99';
+import { NIP99_CLASSIFIED_KIND, PRODUCT_CATEGORIES, NIP99_PAYMENT_METHODS, type DeliveryMethod, type ListingCategoryValue, type ListingFormat, type Nip99PaymentMethod } from '@/lib/nip99';
+import { PaymentMethodSelector } from '@/components/marketplace/PaymentMethodSelector';
 import { getEffectiveRelays } from '@/lib/appRelays';
 import { RelayPicker } from '@/components/RelayPicker';
 import { ShippingOptionForm } from '@/components/marketplace/ShippingOptionForm';
@@ -86,6 +87,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [relays, setRelays] = useState<string[]>(defaultRelays);
+  const [paymentMethods, setPaymentMethods] = useState<Nip99PaymentMethod[]>([...NIP99_PAYMENT_METHODS]);
   const [showAdvancedShipping, setShowAdvancedShipping] = useState(false);
   const [selectedShippingAddresses, setSelectedShippingAddresses] = useState<string[]>([]);
   const [localShippingOptions, setLocalShippingOptions] = useState<ShippingOption[]>([]);
@@ -109,6 +111,7 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
     setImages([]);
     setTagInput('');
     setRelays(defaultRelays);
+    setPaymentMethods([...NIP99_PAYMENT_METHODS]);
     setShowAdvancedShipping(false);
     setSelectedShippingAddresses([]);
     setLocalShippingOptions([]);
@@ -179,6 +182,11 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
       return;
     }
 
+    if (paymentMethods.length === 0) {
+      toast({ title: 'Select payment methods', description: 'Choose at least one payment method buyers can use.', variant: 'destructive' });
+      return;
+    }
+
     const tags: string[][] = [];
     const now = Math.floor(Date.now() / 1000);
 
@@ -207,6 +215,10 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
       for (const address of selectedShippingAddresses) {
         tags.push(['shipping_option', address]);
       }
+    }
+
+    for (const method of paymentMethods) {
+      tags.push(['payment', method]);
     }
 
     tags.push(['published_at', String(now)]);
@@ -421,6 +433,11 @@ export function ProductListingComposeDialog({ open, onOpenChange, onSuccess }: P
               )}
             </div>
           </div>
+
+          <PaymentMethodSelector
+            value={paymentMethods}
+            onChange={setPaymentMethods}
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="product-tags">Tags (comma or space separated)</Label>
