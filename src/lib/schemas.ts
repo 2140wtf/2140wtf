@@ -261,6 +261,9 @@ export const RuntimeAppConfigSchema = z.object({
   marketplaceRelays: z.array(
     z.string().url().refine(isAllowedRelayUrl, { message: 'Marketplace relay URL must be wss:// or ws:// localhost' }),
   ).optional().default([]),
+  groupChatRelays: z.array(
+    z.string().url().refine(isAllowedRelayUrl, { message: 'Group chat relay URL must be wss:// or ws:// localhost' }),
+  ).optional().default([]),
   feedSettings: FeedSettingsSchema,
   sidebarOrder: z.array(z.string()),
   sidebarOrderVersion: z.number().int().nonnegative().optional(),
@@ -365,6 +368,9 @@ export const EncryptedSettingsSchema = z.looseObject({
   useUserRelays: z.boolean().optional(),
   marketplaceRelays: z.array(
     z.string().url().refine(isAllowedRelayUrl, { message: 'Marketplace relay URL must be wss:// or ws:// localhost' }),
+  ).optional(),
+  groupChatRelays: z.array(
+    z.string().url().refine(isAllowedRelayUrl, { message: 'Group chat relay URL must be wss:// or ws:// localhost' }),
   ).optional(),
   feedSettings: FeedSettingsSchema.optional(),
   contentFilters: z.array(ContentFilterSchema).optional(),
