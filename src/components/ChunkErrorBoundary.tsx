@@ -62,10 +62,18 @@ async function clearAppCaches(): Promise<void> {
   }
 }
 
+function buildCacheBustedHref(): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set('_cb', String(Date.now()));
+  return url.toString();
+}
+
 async function recoverFromChunkError(): Promise<void> {
   await clearAppCaches();
   markRecoveryAttempted();
-  window.location.reload();
+  // Force the browser to fetch a fresh index.html instead of reloading the
+  // possibly cached version that points to stale hashed chunks.
+  window.location.href = buildCacheBustedHref();
 }
 
 /**
@@ -125,7 +133,7 @@ export class ChunkErrorBoundary extends Component<Props, State> {
           <Button
             onClick={() => {
               recoverFromChunkError().catch(() => {
-                window.location.reload();
+                window.location.href = buildCacheBustedHref();
               });
             }}
             className="w-full gap-2"
