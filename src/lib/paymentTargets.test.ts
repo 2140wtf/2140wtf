@@ -4,6 +4,7 @@ import {
   paymentTargetsToTags,
   findBitcoinTarget,
   findLightningTarget,
+  findBolt12Target,
   isSilentPaymentLike,
   PAYMENT_TARGETS_KIND,
 } from '@/lib/paymentTargets';
@@ -71,6 +72,25 @@ describe('parsePaymentTargets', () => {
   it('detects silent payment authorities', () => {
     expect(isSilentPaymentLike('sp1qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqf')).toBe(true);
     expect(isSilentPaymentLike('bc1qexample')).toBe(false);
+  });
+
+  it('parses a BOLT12 offer target', () => {
+    const offer = 'lno1qgsyxjtl6luzd9t0prj3gf6me7yqhp0stspeq9fe5p2p5vflmxvftemgwpn0v6z7w3pk4epvmyv9e9f8g3h7r';
+    const event = makeEvent([['payto', 'bolt12', offer]]);
+    const targets = parsePaymentTargets(event);
+    expect(targets).toHaveLength(1);
+    expect(findBolt12Target(targets)?.authority).toBe(offer);
+  });
+
+  it('accepts bolt12: URI scheme and normalizes it away', () => {
+    const offer = 'lno1qgsyxjtl6luzd9t0prj3gf6me7yqhp0stspeq9fe5p2p5vflmxvftemgwpn0v6z7w3pk4epvmyv9e9f8g3h7r';
+    const tags = paymentTargetsToTags([{ type: 'bolt12', authority: `bolt12:${offer}` }]);
+    expect(tags).toEqual([['payto', 'bolt12', offer]]);
+  });
+
+  it('drops invalid BOLT12 authorities', () => {
+    const event = makeEvent([['payto', 'bolt12', 'not-an-offer']]);
+    expect(parsePaymentTargets(event)).toEqual([]);
   });
 });
 
