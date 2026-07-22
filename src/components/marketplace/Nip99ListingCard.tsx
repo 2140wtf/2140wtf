@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download, DollarSign, Bitcoin } from 'lucide-react';
+import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download, DollarSign, Bitcoin, ImageOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import LoginDialog from '@/components/auth/LoginDialog';
@@ -25,6 +25,7 @@ import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { MarketplaceBuyDialog } from '@/components/marketplace/MarketplaceBuyDialog';
 import { formatDeliveryMethod, formatNip99Price, type Nip99Listing } from '@/lib/nip99';
+import { cn } from '@/lib/utils';
 
 interface Nip99ListingCardProps {
   listing: Nip99Listing;
@@ -136,7 +137,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
           onClick={() => setDetailOpen(true)}
           className="block w-full text-left"
         >
-          <div className="aspect-[4/3] bg-muted relative overflow-hidden">
+          <div className={cn('relative overflow-hidden bg-muted', firstImage ? 'aspect-[4/3]' : 'h-10')}>
             {firstImage ? (
               <SafeImage
                 src={firstImage}
@@ -145,7 +146,8 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
+              <div className="w-full h-full flex items-center justify-center gap-1.5 text-muted-foreground text-xs border-b border-dashed border-border">
+                <ImageOff className="size-3.5" />
                 No image
               </div>
             )}
