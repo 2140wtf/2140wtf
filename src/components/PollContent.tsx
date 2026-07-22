@@ -187,6 +187,7 @@ export function PollContent({ event }: { event: NostrEvent }) {
       content: '',
       tags: [
         ['e', event.id],
+        ['p', event.pubkey],
         ['response', selectedOption],
       ],
     }, {
