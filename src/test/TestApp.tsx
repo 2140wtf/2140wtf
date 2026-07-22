@@ -96,7 +96,6 @@ export function TestApp({ children }: TestAppProps) {
       feedIncludeBirdex: false,
       feedIncludeConstellations: false,
       followsFeedShowReplies: true,
-      feedIncludeGroups: false,
     },
     sidebarOrder: [],
     sidebarOrderVersion: 1,
