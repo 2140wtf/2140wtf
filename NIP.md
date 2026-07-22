@@ -424,6 +424,7 @@ Replaceable event (one per user) that declares a user's donation endpoints — "
 |------------|------------|---------------|----------------------------------------|
 | `bitcoin`  | Bitcoin    | native        | n/a (uses the built-in send flow)      |
 | `lightning`| Lightning  | native        | n/a (uses the built-in zap flow)       |
+| `bolt12`   | BOLT12     | generic       | `bolt12:<offer>`                       |
 | `monero`   | Monero     | generic       | `monero:<address>`                     |
 | `ethereum` | Ethereum   | generic       | `ethereum:<address>`                   |
 | `nano`     | Nano       | generic       | `nano:<address>`                       |
@@ -436,6 +437,7 @@ Rules 2140.wtf enforces:
 - **At most one target per type.** When parsing, the first valid target of each type wins; the editor enforces uniqueness on save.
 - **Validation per type** — each authority is validated (bech32(m)/SP checksum for Bitcoin, lightning-address/LNURL shape for Lightning, base58 for Monero, etc.). Invalid entries are dropped on parse and rejected in the editor.
 - **Precedence over derived/kind-0 values.** A `bitcoin` payment target overrides the recipient's pubkey-derived Taproot address in the zap flow; a `lightning` payment target takes precedence over the kind-0 `lud16`/`lud06`.
+- **BOLT12 static Lightning offers.** A `bolt12` target contains a BIP-341/BOLT12 static offer (`lno1…`). 2140.wtf renders it as a QR code and copyable offer, and links out to `bolt12:<offer>`. It is treated as a Lightning-capable rail for donation buttons but uses the generic payment pane because the client does not fetch BOLT12 invoices.
 - **Bitcoin target rail.** A `bc1q…`/`bc1p…` Bitcoin target sends on-chain and still publishes a kind 8333 attribution. An `sp1…` (BIP-352 silent payment) Bitcoin target sends on the silent-payment rail and publishes **no** kind 8333 event, preserving unlinkability.
 - **Native vs. generic rendering.** Bitcoin and Lightning reuse 2140.wtf's existing purpose-built flows (no extra clickable button). Generic methods render a QR code, a copyable address, and a button that opens the **native URI** (preferred over `payto:` per the user's request) — falling back to the method's web payment page for custodial handles.
 - **Zap dialog switcher.** When a recipient has more than one available method, the zap dialog's title becomes a dropdown switcher (Bitcoin icon + down chevron) for choosing between Bitcoin, Lightning, and any declared payment targets.
@@ -481,6 +483,7 @@ NIP-99 (`kind:30402` / `kind:30403`) does not define a tag for declaring which p
 | `lightning`       | Lightning      | BOLT-11 invoice or LNURL/address.                                                         |
 | `bitcoin`         | Bitcoin        | On-chain Bitcoin (including BIP-352 silent payments when the seller's target is `sp1…`). |
 | `silent-payments` | Silent Payments| BIP-352 silent payment; 2140.wtf routes through the same native Bitcoin flow.            |
+| `bolt12`          | BOLT12         | Static Lightning offer from a NIP-A3 `payto bolt12` target.                               |
 | `xmr`             | Monero         | Generic Monero address from a NIP-A3 `payto monero` target.                               |
 
 Values are case-insensitive. Unknown `payment` values are ignored on parse and do not break rendering.
