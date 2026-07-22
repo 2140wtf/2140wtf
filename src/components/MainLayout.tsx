@@ -70,48 +70,48 @@ function MainLayoutInner() {
         )}
 
         {/* Main content + right sidebar: inside Suspense so the left sidebar persists while lazy pages load */}
-        <ChunkErrorBoundary>
-        <Suspense fallback={<PageSkeleton />}>
-          {/* -mt-mobile-bar pulls content up behind the mobile top bar so the
-              transparent SVG header arc and page content overlap seamlessly.
-              The corresponding padding-top (set in CSS) prevents content from
-              being hidden. This depends on MobileTopBar having a transparent /
-              semi-transparent background — a solid top bar would obscure the
-              content underneath. Only active below the sidebar breakpoint. */}
-          <div
-            ref={(el) => { centerColumnRef.current = el; setCenterColumnEl(el); }}
-            className={cn(
-              "relative z-0 flex-1 min-w-0 sidebar:border-l sidebar:border-r border-border bg-background/85",
-              !hideTopBar && "-mt-mobile-bar",
-              !noMaxWidth && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
-              !noOverscroll && "pb-overscroll",
-            )}
-          >
-            <ErrorBoundary
-              sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}
-              resetKeys={[location.pathname]}
-            >
-              <Outlet />
-            </ErrorBoundary>
+        <ErrorBoundary
+          sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}
+          resetKeys={[location.pathname]}
+        >
+          <ChunkErrorBoundary>
+            <Suspense fallback={<PageSkeleton />}>
+              {/* -mt-mobile-bar pulls content up behind the mobile top bar so the
+                  transparent SVG header arc and page content overlap seamlessly.
+                  The corresponding padding-top (set in CSS) prevents content from
+                  being hidden. This depends on MobileTopBar having a transparent /
+                  semi-transparent background — a solid top bar would obscure the
+                  content underneath. Only active below the sidebar breakpoint. */}
+              <div
+                ref={(el) => { centerColumnRef.current = el; setCenterColumnEl(el); }}
+                className={cn(
+                  "relative z-0 flex-1 min-w-0 sidebar:border-l sidebar:border-r border-border bg-background/85",
+                  !hideTopBar && "-mt-mobile-bar",
+                  !noMaxWidth && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
+                  !noOverscroll && "pb-overscroll",
+                )}
+              >
+                <Outlet />
 
-            {/* Desktop FAB — sticky within the feed column so it stays
-                anchored to the bottom-right of the content area, not the
-                viewport. Hidden below the sidebar breakpoint where the
-                mobile fixed FAB takes over. */}
-            {showFAB && (
-              <div className="hidden sidebar:block sticky bottom-6 z-30 pointer-events-none">
-                <div className="flex justify-end pr-4">
-                  <div className="pointer-events-auto">
-                    <FloatingComposeButton kind={fabKind} href={fabHref} onFabClick={onFabClick} icon={fabIcon} />
+                {/* Desktop FAB — sticky within the feed column so it stays
+                    anchored to the bottom-right of the content area, not the
+                    viewport. Hidden below the sidebar breakpoint where the
+                    mobile fixed FAB takes over. */}
+                {showFAB && (
+                  <div className="hidden sidebar:block sticky bottom-6 z-30 pointer-events-none">
+                    <div className="flex justify-end pr-4">
+                      <div className="pointer-events-auto">
+                        <FloatingComposeButton kind={fabKind} href={fabHref} onFabClick={onFabClick} icon={fabIcon} />
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            )}
-          </div>
-          {/* Right sidebar — render page-provided sidebar, or the widget sidebar */}
-          {rightSidebar !== undefined ? rightSidebar : <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
-        </Suspense>
-        </ChunkErrorBoundary>
+              {/* Right sidebar — render page-provided sidebar, or the widget sidebar */}
+              {rightSidebar !== undefined ? rightSidebar : <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
+            </Suspense>
+          </ChunkErrorBoundary>
+        </ErrorBoundary>
       </div>
 
       {/* Mobile bottom nav - only on small screens, slides out on scroll */}
