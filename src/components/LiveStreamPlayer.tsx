@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type Hls from 'hls.js';
-import { Play, Pause, Volume1, Volume2, VolumeX, Expand, Minimize } from 'lucide-react';
+import { Play, Pause, Volume1, Volume2, VolumeX, Expand, Minimize, Headphones, Monitor } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BLANK_POSTER } from '@/lib/blankPoster';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
@@ -14,15 +14,30 @@ interface LiveStreamPlayerProps {
   title?: string;
   /** Artist / channel name shown in OS media controls. */
   artist?: string;
+  /** Optional MIME type hint for the stream (e.g. "application/x-mpegURL", "audio/mpeg"). */
+  mimeType?: string;
 }
 
-export function LiveStreamPlayer({ src, poster, className, title, artist }: LiveStreamPlayerProps) {
+const HLS_MIME_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl'];
+
+function isHlsStream(url?: string, mimeType?: string): boolean {
+  if (mimeType) {
+    const normalized = mimeType.toLowerCase();
+    return HLS_MIME_TYPES.some((t) => normalized.includes(t));
+  }
+  return /\.m3u8(\?|$)/i.test(url ?? '');
+}
+
+export function LiveStreamPlayer({ src, poster, className, title, artist, mimeType }: LiveStreamPlayerProps) {
   const safeSrc = sanitizeUrl(src);
   const safePoster = sanitizeUrl(poster) || BLANK_POSTER;
+  const isHls = isHlsStream(safeSrc, mimeType);
+  const isAudioStream = mimeType ? mimeType.startsWith('audio/') : false;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [audioOnly, setAudioOnly] = useState(isAudioStream);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -36,18 +51,36 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
     isPlaying,
   });
 
-  // Set up HLS — dynamically imports hls.js (1.3MB) only when needed
+  // Set up media source — HLS streams get hls.js (or native Safari HLS),
+  // plain audio/video streams use the native media element directly.
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !safeSrc) return;
+    const media = videoRef.current;
+    if (!media || !safeSrc) return;
 
-    // If browser natively supports HLS (Safari), no library needed
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = safeSrc;
-      video.play().catch(() => {
+    // Plain progressive stream (MP3, MP4, WebM, Icecast, etc.)
+    if (!isHls) {
+      media.src = safeSrc;
+      media.play().catch(() => {
         setAutoplayBlocked(true);
       });
-      return;
+      return () => {
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+      };
+    }
+
+    // HLS: native support in Safari
+    if (media.canPlayType('application/vnd.apple.mpegurl')) {
+      media.src = safeSrc;
+      media.play().catch(() => {
+        setAutoplayBlocked(true);
+      });
+      return () => {
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+      };
     }
 
     let destroyed = false;
@@ -68,10 +101,10 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
 
       hlsRef.current = hls;
       hls.loadSource(safeSrc);
-      hls.attachMedia(video);
+      hls.attachMedia(media);
 
       hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {
+        media.play().catch(() => {
           setAutoplayBlocked(true);
         });
       });
@@ -103,7 +136,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
         hlsRef.current = null;
       }
     };
-  }, [safeSrc]);
+  }, [safeSrc, isHls]);
 
   // Track fullscreen changes
   useEffect(() => {
@@ -159,6 +192,11 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
     }
   }, []);
 
+  const toggleAudioOnly = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAudioOnly((prev) => !prev);
+  }, []);
+
   const handleVideoClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (autoplayBlocked) {
@@ -206,7 +244,8 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
     <div
       ref={containerRef}
       className={cn(
-        'relative lg:rounded-2xl overflow-hidden bg-black group aspect-video',
+        'relative lg:rounded-2xl overflow-hidden bg-black group',
+        audioOnly ? 'h-28 lg:h-32' : 'aspect-video',
         className,
       )}
       onMouseMove={revealControls}
@@ -217,7 +256,10 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
         ref={videoRef}
         data-no-native-poster=""
         poster={safePoster}
-        className="w-full h-full object-contain cursor-pointer"
+        className={cn(
+          'w-full h-full cursor-pointer',
+          audioOnly ? 'opacity-0 absolute inset-0' : 'object-contain',
+        )}
         playsInline
         autoPlay
         muted
@@ -242,6 +284,32 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
         </div>
       )}
 
+      {/* Audio-only artwork / title overlay */}
+      {audioOnly && (
+        <div
+          className="absolute inset-0 flex items-center px-4 gap-4 bg-cover bg-center cursor-pointer"
+          style={{ backgroundImage: safePoster ? `url(${safePoster})` : undefined }}
+          onClick={handleVideoClick}
+        >
+          <div className="absolute inset-0 bg-black/70" />
+          <div className="relative flex items-center gap-4 w-full">
+            {safePoster && (
+              <div className="hidden sm:block shrink-0">
+                <img src={safePoster} alt="" className="w-16 h-16 rounded-lg object-cover" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold uppercase mb-1">
+                <div className="size-1.5 bg-red-500 rounded-full animate-pulse" />
+                Live
+              </div>
+              <p className="text-white font-medium truncate">{title || 'Live Stream'}</p>
+              {artist && <p className="text-white/70 text-sm truncate">{artist}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Buffering spinner */}
       {isBuffering && !autoplayBlocked && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -254,7 +322,7 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
         className={cn(
           'absolute bottom-0 left-0 right-0 transition-opacity duration-200',
           'bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-10 pb-3 px-4',
-          showControls && !autoplayBlocked ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          (audioOnly || (showControls && !autoplayBlocked)) ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
       >
         <div className="flex items-center gap-3">
@@ -303,6 +371,16 @@ export function LiveStreamPlayer({ src, poster, className, title, artist }: Live
               )}
             />
           </div>
+
+          {/* Audio-only toggle */}
+          <button
+            onClick={toggleAudioOnly}
+            className="text-white hover:text-white/80 transition-colors p-1"
+            aria-label={audioOnly ? 'Switch to video' : 'Switch to audio only'}
+            title={audioOnly ? 'Switch to video' : 'Switch to audio only'}
+          >
+            {audioOnly ? <Monitor className="size-[18px]" /> : <Headphones className="size-[18px]" />}
+          </button>
 
           {/* Fullscreen */}
           <button
