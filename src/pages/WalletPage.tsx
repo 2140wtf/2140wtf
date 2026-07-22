@@ -184,22 +184,30 @@ export function WalletPage() {
               />
 
               {/* QR Code */}
-              <div className="rounded-2xl bg-white p-4 shadow-sm">
-                <QRCodeCanvas value={bitcoinAddress} size={200} level="M" />
-              </div>
+              {bitcoinAddress ? (
+                <div className="rounded-2xl bg-white p-4 shadow-sm">
+                  <QRCodeCanvas value={bitcoinAddress} size={200} level="M" />
+                </div>
+              ) : (
+                <Skeleton className="h-[232px] w-[232px] rounded-2xl" />
+              )}
 
               {/* Address + copy */}
-              <button
-                onClick={copyAddress}
-                className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-mono text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                {truncatedAddress}
-                {copiedAddress ? (
-                  <Check className="size-3.5 text-green-500" />
-                ) : (
-                  <Copy className="size-3.5" />
-                )}
-              </button>
+              {bitcoinAddress ? (
+                <button
+                  onClick={copyAddress}
+                  className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-mono text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                >
+                  {truncatedAddress}
+                  {copiedAddress ? (
+                    <Check className="size-3.5 text-green-500" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
+                </button>
+              ) : (
+                <Skeleton className="h-9 w-48 rounded-full" />
+              )}
 
               {/* Transactions */}
               {transactions && transactions.length > 0 && (
