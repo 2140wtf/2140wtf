@@ -19,13 +19,7 @@
     }
   },
   "relayMetadata": {
-    "relays": [
-      {
-        "url": "wss://relay.bao.network",
-        "read": true,
-        "write": false
-      }
-    ],
+    "relays": [],
     "updatedAt": 1781714000
   },
   "feedSettings": {
