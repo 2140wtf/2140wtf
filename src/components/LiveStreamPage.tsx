@@ -7,6 +7,7 @@ import { useSeoMeta } from '@unhead/react';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { PageHeader } from '@/components/PageHeader';
 import { LiveStreamPlayer } from '@/components/LiveStreamPlayer';
+import { guessStreamMimeType } from '@/lib/guessStreamMimeType';
 import { LiveStreamChat } from '@/components/LiveStreamChat';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
@@ -88,6 +89,7 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
   const streamUrl = getTag(event.tags, 'streaming');
   const recordingUrl = getTag(event.tags, 'recording');
   const imageUrl = getTag(event.tags, 'image');
+  const typeTag = getTag(event.tags, 'type');
   const rawStatus = getTag(event.tags, 'status');
   const status = getEffectiveStreamStatus(event);
   const currentParticipants = getTag(event.tags, 'current_participants');
@@ -105,6 +107,7 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
   // The URL to play: use the raw status tag (not the staleness heuristic)
   // so that streams marked live always try the streaming URL first.
   const playUrl = rawStatus === 'ended' ? (recordingUrl || streamUrl) : streamUrl;
+  const streamMimeType = useMemo(() => (playUrl ? guessStreamMimeType(playUrl, typeTag) : undefined), [playUrl, typeTag]);
 
   useSeoMeta({ title: `${title} - ${config.appName}` });
 
@@ -204,6 +207,7 @@ export function LiveStreamPage({ event }: LiveStreamPageProps) {
               poster={imageUrl}
               className="w-full"
               title={title}
+              mimeType={streamMimeType}
             />
           ) : (
             <div className="aspect-video lg:rounded-2xl bg-muted flex items-center justify-center border-y lg:border border-border">
