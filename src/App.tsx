@@ -16,6 +16,7 @@ import { SentryProvider } from "@/components/SentryProvider";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNsecPasteGuard } from "@/hooks/useNsecPasteGuard";
+import { useWindowChunkErrorRecovery } from "@/hooks/useWindowChunkErrorRecovery";
 import type { AppConfig } from "@/contexts/AppContext";
 import { NWCProvider } from "@/contexts/NWCContext";
 import { CashuWalletProvider } from "@/contexts/CashuWalletContext";
@@ -230,6 +231,7 @@ const defaultConfig: AppConfig = {
 
 export function App() {
   useNsecPasteGuard();
+  useWindowChunkErrorRecovery();
 
 
   return (
