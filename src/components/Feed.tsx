@@ -36,7 +36,7 @@ import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 
 import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
-import { FEED_TOPICS, getFeedTopic } from '@/lib/feedTopics';
+import { FEED_TOPICS, getFeedTopic, isFeedTopicId } from '@/lib/feedTopics';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import { NewPostsPill } from '@/components/NewPostsPill';
@@ -172,6 +172,22 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       if (!user) {
         if (rawActiveTab === 'app' && !showAppFeed) return 'all';
         if (rawActiveTab === 'communities' && !showCommunityFeed) return 'all';
+      }
+      // Removed topic tabs (e.g. the old 'trending' topic) should fall back to a
+      // valid tab instead of leaving the tab bar with nothing highlighted.
+      if (
+        !isSavedFeed &&
+        !isHashtag &&
+        !isGeotag &&
+        rawActiveTab !== 'all' &&
+        rawActiveTab !== 'follows' &&
+        rawActiveTab !== 'loved' &&
+        rawActiveTab !== 'global' &&
+        rawActiveTab !== 'communities' &&
+        rawActiveTab !== 'app' &&
+        !isFeedTopicId(rawActiveTab)
+      ) {
+        return globalFirst ? 'global' : 'all';
       }
       return rawActiveTab;
     }
