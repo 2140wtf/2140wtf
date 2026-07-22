@@ -7,15 +7,11 @@ import { getNostrIdentifierPath } from '@/lib/nostrIdentifier';
 /**
  * Handles deep links on native platforms.
  *
- * Three flavours are supported:
+ * Two flavours are supported:
  *
  *   1. `https://2140.wtf/...` universal links — the path/query/hash is
  *      forwarded verbatim to the in-app router.
- *   2. `bitcoin:...` BIP-21 payment URIs — the user is dropped on the
- *      `/wallet` page with the URI passed through `location.state.bip21Uri`
- *      so the Send dialog auto-opens with the recipient (and amount, when
- *      present) prefilled.
- *   3. `nostr:...` NIP-21 URIs — the bech32 identifier (npub, nprofile,
+ *   2. `nostr:...` NIP-21 URIs — the bech32 identifier (npub, nprofile,
  *      note, nevent, naddr) is resolved to its app route and navigated to.
  *
  * Must be rendered inside a `<BrowserRouter>`.
@@ -35,14 +31,6 @@ export function DeepLinkHandler() {
       const listener = await App.addListener('appUrlOpen', (event) => {
         const raw = event.url?.trim();
         if (!raw) return;
-
-        // BIP-21 `bitcoin:` URIs — open the wallet's Send dialog prefilled.
-        // The scheme check is case-insensitive (BIP-21 doesn't mandate case
-        // and some QR encoders uppercase the entire URI).
-        if (/^bitcoin:/i.test(raw)) {
-          navigate('/wallet', { state: { bip21Uri: raw } });
-          return;
-        }
 
         // NIP-21 `nostr:` URIs — resolve the bech32 identifier to its app
         // route and navigate. NIP-21 mandates a lowercase `nostr:` scheme,
