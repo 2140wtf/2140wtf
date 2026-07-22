@@ -160,34 +160,38 @@ export function SubHeaderBar({ children, className, innerClassName, noArc, pinne
             </svg>
           )}
           {/* Tab content sits above the SVG background */}
-          <div className="relative">
-            {/* Left scroll arrow — desktop only, shown when overflowing */}
-            {canScrollLeft && (
+          <div className="relative flex items-center">
+            {/* Left scroll arrow — shown whenever there is content to scroll to */}
+            {canScrollLeft ? (
               <button
                 type="button"
                 aria-label="Scroll tabs left"
                 onClick={() => scrollBy('left')}
-                className="hidden sidebar:flex absolute left-0 top-0 bottom-0 z-10 items-center pl-0.5 pr-1 bg-gradient-to-r from-background via-background to-transparent cursor-pointer"
+                className="shrink-0 z-10 flex items-center justify-center px-1 py-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
-                <ChevronLeft className="size-4 text-foreground/60 drop-shadow-md" strokeWidth={4} />
+                <ChevronLeft className="size-4" strokeWidth={3} />
               </button>
+            ) : (
+              <span className="shrink-0 w-2" aria-hidden />
             )}
             <div
               ref={scrollRef}
-              className={cn('relative flex overflow-x-auto scrollbar-none', innerClassName)}
+              className={cn('relative flex-1 flex overflow-x-auto scrollbar-none', innerClassName)}
             >
               {children}
             </div>
-            {/* Right scroll arrow — desktop only, shown when overflowing */}
-            {canScrollRight && (
+            {/* Right scroll arrow — shown whenever there is content to scroll to */}
+            {canScrollRight ? (
               <button
                 type="button"
                 aria-label="Scroll tabs right"
                 onClick={() => scrollBy('right')}
-                className="hidden sidebar:flex absolute right-0 top-0 bottom-0 z-10 items-center pr-0.5 pl-1 bg-gradient-to-l from-background via-background to-transparent cursor-pointer"
+                className="shrink-0 z-10 flex items-center justify-center px-1 py-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
-                <ChevronRight className="size-4 text-foreground/60 drop-shadow-md" strokeWidth={4} />
+                <ChevronRight className="size-4" strokeWidth={3} />
               </button>
+            ) : (
+              <span className="shrink-0 w-2" aria-hidden />
             )}
           </div>
         </div>
