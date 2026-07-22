@@ -5,6 +5,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useNip85EventStats, useNip85AddrStats } from '@/hooks/useNip85Stats';
 import { type ResolvedEmoji } from '@/lib/customEmoji';
 import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
+import { isMastodonBridgeEvent } from '@/lib/feedUtils';
 import { useAppContext } from '@/hooks/useAppContext';
 
 export interface TrendingTag {
@@ -113,7 +114,9 @@ export function useTrendingPosts(enabled = true) {
 
       // Sort by the order they appeared in the label event (first = most trending)
       const idOrder = new Map(eventIds.map((id, i) => [id, i]));
-      return events.sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999));
+      return events
+        .sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999))
+        .filter((event) => !isMastodonBridgeEvent(event));
     },
     enabled: enabled && !!statsPubkey,
     staleTime: 5 * 60 * 1000,
@@ -137,7 +140,7 @@ export function useSortedPosts(sort: SortMode, limit = 5, enabled = true) {
         [{ kinds: [1], search: `sort:${sort} protocol:nostr`, limit }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events;
+      return events.filter((event) => !isMastodonBridgeEvent(event));
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -171,7 +174,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
         [filter as { kinds: number[]; search: string; limit: number; until?: number }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events;
+      return events.filter((event) => !isMastodonBridgeEvent(event));
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length === 0) return undefined;
@@ -223,10 +226,11 @@ export function useInfiniteHotFeed(
         }
       }
 
-      return appRelays.query(
+      const events = await appRelays.query(
         filters as { kinds: number[]; search: string; limit: number; until?: number }[],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
+      return events.filter((event) => !isMastodonBridgeEvent(event));
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length === 0) return undefined;
