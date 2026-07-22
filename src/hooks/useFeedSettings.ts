@@ -10,13 +10,14 @@ import { useCallback, useEffect, useMemo } from "react";
 /** Default sidebar order for fresh installs. */
 const DEFAULT_SIDEBAR_ORDER = [
   "feed",
+  "wallet",
   "notifications",
   "messages",
   "prediction-markets",
   "polls",
   "media",
   "pets",
-  "wallet",
+  "https://lightningobservatory.com/",
   "events",
   "btcmap",
 ];
@@ -148,6 +149,41 @@ export function useFeedSettings() {
     } else {
       next.push("media");
     }
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
+
+  // Migration: move Wallet above Chat and add Lightning Observatory below Nostr Pets.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0) return;
+
+    const observatoryUrl = "https://lightningobservatory.com/";
+    const next = [...order];
+    let changed = false;
+
+    const walletIdx = next.indexOf("wallet");
+    const messagesIdx = next.indexOf("messages");
+    if (walletIdx !== -1 && messagesIdx !== -1 && walletIdx > messagesIdx) {
+      next.splice(walletIdx, 1);
+      next.splice(messagesIdx, 0, "wallet");
+      changed = true;
+    }
+
+    if (!next.includes(observatoryUrl)) {
+      const petsIdx = next.indexOf("pets");
+      if (petsIdx !== -1) {
+        next.splice(petsIdx + 1, 0, observatoryUrl);
+      } else {
+        next.push(observatoryUrl);
+      }
+      changed = true;
+    }
+
+    if (!changed) return;
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
     if (user) {

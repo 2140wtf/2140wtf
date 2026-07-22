@@ -161,5 +161,12 @@ export function embedLabel(url: string): string | null {
   if (extractSpotifyEmbed(url)) return 'Spotify';
   if (extractRedditPost(url)) return 'Reddit';
   if (extractArchiveOrgId(url)) return 'Internet Archive';
+  try {
+    if (new URL(url).hostname.replace(/^www\./, '').endsWith('lightningobservatory.com')) {
+      return 'Lightning Observatory';
+    }
+  } catch {
+    // ignore invalid URL
+  }
   return null;
 }
