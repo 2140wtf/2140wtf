@@ -12,7 +12,7 @@ export type GammaOrderStatus = 'pending' | 'confirmed' | 'processing' | 'complet
 export type GammaShippingStatus = 'processing' | 'shipped' | 'delivered' | 'exception';
 
 /** Payment mediums supported in Gamma Markets receipt tags. */
-export type GammaPaymentMedium = 'lightning' | 'bitcoin' | 'ecash' | 'fiat';
+export type GammaPaymentMedium = 'lightning' | 'bolt12' | 'bitcoin' | 'ecash' | 'fiat';
 
 export interface GammaOrderItem {
   listingAddress: string;
@@ -180,7 +180,12 @@ function parsePaymentOptionTag(tag: string[]): GammaPaymentOption | null {
   const medium = tag[1] as GammaPaymentMedium;
   const value = tag[2];
   if (!medium || !value) return null;
+  if (!isGammaPaymentMedium(medium)) return null;
   return { medium, reference: value, value };
+}
+
+function isGammaPaymentMedium(value: string): value is GammaPaymentMedium {
+  return ['lightning', 'bolt12', 'bitcoin', 'ecash', 'fiat'].includes(value);
 }
 
 function parseReceiptPaymentTag(tag: string[]): GammaPaymentReceipt['payments'][number] | null {
@@ -188,7 +193,7 @@ function parseReceiptPaymentTag(tag: string[]): GammaPaymentReceipt['payments'][
   const medium = tag[1] as GammaPaymentMedium;
   const reference = tag[2];
   const proof = tag[3];
-  if (!medium || !reference || !proof) return null;
+  if (!medium || !reference || !proof || !isGammaPaymentMedium(medium)) return null;
   return { medium, reference, proof };
 }
 

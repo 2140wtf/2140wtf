@@ -23,13 +23,15 @@ export interface GammaPaymentResult {
  * at the actual value to decide whether we can pay it automatically.
  */
 export function detectGammaPaymentKind(option: GammaPaymentOption): GammaPaymentKind {
+  const medium = option.medium;
   const v = option.value.trim().toLowerCase();
-  if (v.startsWith('lno1')) return 'bolt12';
-  if (v.startsWith('ln')) return 'bolt11';
-  if (v.startsWith('bc1') || v.startsWith('1') || v.startsWith('3') || v.startsWith('sp1')) {
+
+  if (medium === 'bolt12' || v.startsWith('lno1')) return 'bolt12';
+  if (medium === 'lightning' || v.startsWith('ln')) return 'bolt11';
+  if (medium === 'bitcoin' || v.startsWith('bc1') || v.startsWith('1') || v.startsWith('3') || v.startsWith('sp1')) {
     return 'bitcoin';
   }
-  if (v.startsWith('cashu') || v.startsWith('http')) return 'ecash';
+  if (medium === 'ecash' || v.startsWith('cashu') || v.startsWith('http')) return 'ecash';
   return 'unknown';
 }
 
