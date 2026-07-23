@@ -3,7 +3,7 @@
  *
  * Provides a small, reusable read-modify-write helper for adding demo (or
  * real) sats to a Nostr pet profile (kind 11125). It always fetches the
- * freshest profile from the BAO pets relay before updating so concurrent
+ * freshest profile from the user's configured relays before updating so concurrent
  * sats changes (missions, actions, poop cleanup, etc.) do not overwrite each
  * other.
  */
@@ -125,7 +125,7 @@ function runSerialized<T>(pubkey: string, operation: () => Promise<T>): Promise<
 /**
  * Add `delta` sats to the logged-in user's Nostr pet profile.
  *
- * - Fetches the latest kind 11125 event from the BAO pets relay.
+ * - Fetches the latest kind 11125 event from the user's configured relays.
  * - Falls back to `0` if the profile does not exist yet (actions that require
  *   a profile should validate that before calling this).
  * - Publishes the updated event with only the `sats` tag changed.
@@ -167,7 +167,7 @@ export async function addProfileSats(
 /**
  * Consume one unit of `itemId` from the user's storage.
  *
- * - Fetches the latest kind 11125 event from the BAO pets relay.
+ * - Fetches the latest kind 11125 event from the user's configured relays.
  * - Returns `consumed: false` if the item is not in storage or quantity is 0.
  * - Publishes the updated storage tags.
  */
