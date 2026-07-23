@@ -3,7 +3,6 @@ import { useCallback } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useDmInbox } from '@/hooks/useDmInbox';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
-import { useToast } from '@/hooks/useToast';
 import {
   buildOrderCreationPayload,
   buildPaymentReceiptPayload,
@@ -42,25 +41,15 @@ export function useGammaOrderActions() {
   const { sendMessage, isPending } = useNip17SendMessage();
   const { user } = useCurrentUser();
   const { addMessage } = useDmInbox();
-  const { toast } = useToast();
 
-  const trackSent = useCallback(
+  const sendAndTrack = useCallback(
     async (promise: ReturnType<typeof sendMessage>) => {
-      try {
-        const result = await promise;
-        const parsed = parseNip17Rumor(result.rumor, result.rumor.id);
-        if (parsed) addMessage(parsed);
-        return result;
-      } catch (error) {
-        toast({
-          title: 'Message failed',
-          description: error instanceof Error ? error.message : 'Could not send order update',
-          variant: 'destructive',
-        });
-        throw error;
-      }
+      const result = await promise;
+      const parsed = parseNip17Rumor(result.rumor, result.rumor.id);
+      if (parsed) addMessage(parsed);
+      return result;
     },
-    [addMessage, toast],
+    [addMessage],
   );
 
   const createOrder = useCallback(
@@ -87,7 +76,7 @@ export function useGammaOrderActions() {
         },
       );
 
-      await trackSent(
+      await sendAndTrack(
         sendMessage({
           recipientPubkey: args.merchantPubkey,
           content,
@@ -99,7 +88,7 @@ export function useGammaOrderActions() {
 
       return { orderId };
     },
-    [user, sendMessage, trackSent],
+    [user, sendMessage, sendAndTrack],
   );
 
   const sendPaymentRequest = useCallback(
@@ -121,7 +110,7 @@ export function useGammaOrderActions() {
         { expiration: args.expiration, note: args.note },
       );
 
-      await trackSent(
+      await sendAndTrack(
         sendMessage({
           recipientPubkey: args.buyerPubkey,
           content,
@@ -131,7 +120,7 @@ export function useGammaOrderActions() {
         }),
       );
     },
-    [user, sendMessage, trackSent],
+    [user, sendMessage, sendAndTrack],
   );
 
   const updateStatus = useCallback(
@@ -149,7 +138,7 @@ export function useGammaOrderActions() {
         { note: args.note },
       );
 
-      await trackSent(
+      await sendAndTrack(
         sendMessage({
           recipientPubkey: args.recipientPubkey,
           content,
@@ -159,7 +148,7 @@ export function useGammaOrderActions() {
         }),
       );
     },
-    [user, sendMessage, trackSent],
+    [user, sendMessage, sendAndTrack],
   );
 
   const updateShipping = useCallback(
@@ -185,7 +174,7 @@ export function useGammaOrderActions() {
         },
       );
 
-      await trackSent(
+      await sendAndTrack(
         sendMessage({
           recipientPubkey: args.buyerPubkey,
           content,
@@ -195,7 +184,7 @@ export function useGammaOrderActions() {
         }),
       );
     },
-    [user, sendMessage, trackSent],
+    [user, sendMessage, sendAndTrack],
   );
 
   const sendReceipt = useCallback(
@@ -216,7 +205,7 @@ export function useGammaOrderActions() {
         { note: args.note },
       );
 
-      await trackSent(
+      await sendAndTrack(
         sendMessage({
           recipientPubkey: args.merchantPubkey,
           content,
@@ -226,7 +215,7 @@ export function useGammaOrderActions() {
         }),
       );
     },
-    [user, sendMessage, trackSent],
+    [user, sendMessage, sendAndTrack],
   );
 
   return {
