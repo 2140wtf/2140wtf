@@ -17,6 +17,10 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGammaOrderActions } from '@/hooks/useGammaOrderActions';
 import { formatSats } from '@/lib/bitcoin';
 import {
+  isGammaOrderCreation,
+  isGammaPaymentRequest,
+  isGammaShippingUpdate,
+  isGammaStatusUpdate,
   parseGammaOrderMessage,
   parseGammaPaymentReceipt,
   type GammaOrderCreation,
@@ -105,11 +109,20 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
     });
   };
 
-  const creation = type === 1 ? (parsed as GammaOrderCreation) : null;
-  const paymentRequest = type === 2 ? (parsed as GammaPaymentRequest) : null;
-  const statusUpdate = type === 3 ? (parsed as GammaStatusUpdate) : null;
-  const shippingUpdate = type === 4 ? (parsed as GammaShippingUpdate) : null;
-  const receipt = type === 'receipt' ? (parsed as GammaPaymentReceipt) : null;
+  let creation: GammaOrderCreation | null = null;
+  let paymentRequest: GammaPaymentRequest | null = null;
+  let statusUpdate: GammaStatusUpdate | null = null;
+  let shippingUpdate: GammaShippingUpdate | null = null;
+  let receipt: GammaPaymentReceipt | null = null;
+
+  if ('type' in parsed) {
+    if (isGammaOrderCreation(parsed)) creation = parsed;
+    else if (isGammaPaymentRequest(parsed)) paymentRequest = parsed;
+    else if (isGammaStatusUpdate(parsed)) statusUpdate = parsed;
+    else if (isGammaShippingUpdate(parsed)) shippingUpdate = parsed;
+  } else {
+    receipt = parsed;
+  }
 
   const isMerchant = creation ? user?.pubkey === creation.merchantPubkey : false;
 

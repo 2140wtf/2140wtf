@@ -9,11 +9,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGammaOrders } from '@/hooks/useGammaOrders';
 import { formatSats } from '@/lib/bitcoin';
+import { parseListingAddress } from '@/lib/gammaMarkets';
 import { timeAgo } from '@/lib/timeAgo';
 
 interface OrdersTabProps {
   pubkey: string;
-  displayName?: string;
+}
+
+function formatListingLabel(address: string): string {
+  const parsed = parseListingAddress(address);
+  return parsed ? parsed.dTag : address;
 }
 
 function OrdersSkeleton() {
@@ -82,7 +87,9 @@ export function OrdersTab({ pubkey }: OrdersTabProps) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium text-sm truncate">
-                    {order.listingAddress}
+                    {order.items.length > 1
+                      ? `${order.items.length} items`
+                      : formatListingLabel(order.listingAddress)}
                   </p>
                   <Badge variant="outline" className="text-xs capitalize">
                     {order.status}
