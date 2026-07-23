@@ -93,14 +93,14 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
         const ciphertext = await withTimeout(
           secureStorage.getItem(key),
           SEED_OP_TIMEOUT_MS,
-          'Load BAO seed',
+          'Load ₿AO seed',
         );
 
         if (ciphertext) {
           const decrypted = await withTimeout(
             nip44.decrypt(pubkey, ciphertext),
             SEED_OP_TIMEOUT_MS,
-            'Decrypt BAO seed',
+            'Decrypt ₿AO seed',
           );
           if (!cancelled && currentToken === retryRef.current) {
             setSeedPhrase(decrypted);
@@ -111,12 +111,12 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
           const encrypted = await withTimeout(
             nip44.encrypt(pubkey, mnemonic),
             SEED_OP_TIMEOUT_MS,
-            'Encrypt BAO seed',
+            'Encrypt ₿AO seed',
           );
           await withTimeout(
             secureStorage.setItem(key, encrypted),
             SEED_OP_TIMEOUT_MS,
-            'Save BAO seed',
+            'Save ₿AO seed',
           );
           if (!cancelled && currentToken === retryRef.current) {
             setSeedPhrase(mnemonic);
@@ -125,7 +125,7 @@ export function useBaoCashuSeed(userSeedPhrase: string | undefined): UseBaoCashu
         }
       } catch (err: unknown) {
         if (!cancelled && currentToken === retryRef.current) {
-          setError(err instanceof Error ? err.message : 'Failed to load or create BAO seed');
+          setError(err instanceof Error ? err.message : 'Failed to load or create ₿AO seed');
           setSeedPhrase(undefined);
           setIsNew(false);
         }

@@ -41,7 +41,7 @@ export function usePetsStarterGrant(options: UsePetsStarterGrantOptions = {}) {
       }
 
       if (!isBao) {
-        throw new Error('Starter grants are only available in BAO demo mode.');
+        throw new Error('Starter grants are only available in ₿AO demo mode.');
       }
 
       return baoGrant.mutateAsync(amount);

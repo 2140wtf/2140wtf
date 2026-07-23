@@ -70,11 +70,11 @@ export function ChaseStartScreen({ coins, sats, onStart, allowSatsMode = true }:
               disabled={!allowSatsMode}
             >
               <span className="flex flex-col items-start">
-                <span className="font-semibold">{allowSatsMode ? 'Play for BAO Sats' : 'BAO Sats disabled'}</span>
+                <span className="font-semibold">{allowSatsMode ? 'Play for ₿AO Sats' : '₿AO Sats disabled'}</span>
                 <span className="text-xs text-muted-foreground font-normal">
                   {allowSatsMode
                     ? `Free to play · ${CHASE_SATS_PER_COIN} sats per coin collected`
-                    : 'Switch to BAO signet mode to play for demo sats.'}
+                    : 'Switch to ₿AO signet mode to play for demo sats.'}
                 </span>
               </span>
               <Zap className="size-5" />

@@ -366,7 +366,7 @@ export function SidebarNavList({
                 compact={compact}
                 minimal={minimal}
                 children={[
-                  { id: 'prediction-markets', label: 'BAO Markets', path: '/prediction-markets' },
+                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/prediction-markets' },
                   { id: 'market', label: 'Merchants', path: '/market' },
                 ]}
               />
