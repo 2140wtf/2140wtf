@@ -380,6 +380,7 @@ export function ZapDialog({
     | { kind: 'onchain'; amountSats: number; txid: string }
     | { kind: 'lightning'; amountSats: number }
     | { kind: 'cashu'; amountSats: number; eventId?: string }
+    | { kind: 'bolt12'; amountSats: number }
     | null
   >(null);
 
@@ -470,11 +471,7 @@ export function ZapDialog({
   // Cashu / NIP-61 Nutzap capability. The recipient must publish a kind 10019
   // event with accepted mints; the sender needs an initialized Cashu wallet.
   const cashuWallet = useCashuWalletContext();
-  const hasCashu =
-    !campaign &&
-    !isPollVote &&
-    cashuWallet.seedAvailable &&
-    cashuWallet.totalBalance > 0;
+  const hasCashu = !campaign && !isPollVote && cashuWallet.seedAvailable;
 
   // Generic (non-native) payment targets — Monero, Ethereum, etc. These render
   // a QR + native-URI button rather than a built-in send flow.
@@ -814,6 +811,9 @@ export function ZapDialog({
               onCashuSuccess={({ amountSats, eventId }) =>
                 setSuccess({ kind: 'cashu', amountSats, eventId })
               }
+              onBolt12Success={({ amountSats }) =>
+                setSuccess({ kind: 'bolt12', amountSats })
+              }
               zappedEvent={cashuZappedEvent}
               onClose={() => setOpen(false)}
             />
@@ -840,6 +840,7 @@ interface ZapMethodPaneProps {
   lightningContentProps: LightningZapContentProps;
   onOnchainSuccess: (result: { txid: string; amountSats: number }) => void;
   onCashuSuccess: (result: { amountSats: number; eventId?: string }) => void;
+  onBolt12Success: (result: { amountSats: number }) => void;
   zappedEvent?: { id: string; kind: number; relay?: string };
   onClose: () => void;
 }
@@ -852,6 +853,7 @@ function ZapMethodPane({
   lightningContentProps,
   onOnchainSuccess,
   onCashuSuccess,
+  onBolt12Success,
   zappedEvent,
   onClose,
 }: ZapMethodPaneProps) {
@@ -872,7 +874,17 @@ function ZapMethodPane({
     );
   }
   if (method?.kind === 'generic' && method.target) {
-    return <GenericPaymentContent method={PAYMENT_METHODS[method.target.type]} target={method.target} />;
+    return (
+      <GenericPaymentContent
+        method={PAYMENT_METHODS[method.target.type]}
+        target={method.target}
+        amountSats={lightningContentProps.amountSats}
+        currencyDisplay={lightningContentProps.currencyDisplay}
+        btcPrice={lightningContentProps.btcPrice}
+        onAmountChange={lightningContentProps.setAmountSats}
+        onSuccess={onBolt12Success}
+      />
+    );
   }
   // Default: native Bitcoin. Profile zaps use the derived Taproot address
   // unless a Bitcoin payment target overrides it.

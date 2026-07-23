@@ -28,7 +28,7 @@ interface ZapSuccessScreenProps {
   /** Nutzap event id (Cashu only). Enables a link to the published kind 9321 event. */
   eventId?: string;
   /** Payment rail that succeeded. Controls the headline copy. */
-  kind?: 'onchain' | 'lightning' | 'cashu';
+  kind?: 'onchain' | 'lightning' | 'cashu' | 'bolt12';
   /** Close handler invoked by the "Done" button. */
   onClose: () => void;
 }
@@ -145,7 +145,9 @@ export function ZapSuccessScreen({
                 ? 'Cashu sent'
                 : kind === 'lightning'
                   ? 'Lightning sent'
-                  : 'Bitcoin sent'}
+                  : kind === 'bolt12'
+                    ? 'BOLT12 paid'
+                    : 'Bitcoin sent'}
         </h2>
         <div className="text-4xl font-bold tabular-nums bg-gradient-to-br from-amber-500 to-orange-600 bg-clip-text text-transparent">
           {usdDisplay || `${amountSats.toLocaleString()} sats`}
