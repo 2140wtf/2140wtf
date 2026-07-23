@@ -40,7 +40,8 @@ interface DraftOption {
 }
 
 const MEDIUM_OPTIONS: { value: GammaPaymentMedium; label: string; placeholder: string }[] = [
-  { value: 'lightning', label: 'Lightning', placeholder: 'lnbc1… invoice or lno1… offer' },
+  { value: 'lightning', label: 'Lightning', placeholder: 'lnbc1… BOLT11 invoice' },
+  { value: 'bolt12', label: 'BOLT12', placeholder: 'lno1… BOLT12 offer' },
   { value: 'bitcoin', label: 'Bitcoin', placeholder: 'bc1… address or sp1… silent payment' },
   { value: 'ecash', label: 'Ecash', placeholder: 'Cashu request' },
 ];
@@ -54,7 +55,9 @@ function validateOptionValue(medium: GammaPaymentMedium, value: string): boolean
   if (!v) return false;
   switch (medium) {
     case 'lightning':
-      return v.toLowerCase().startsWith('ln') || v.toLowerCase().startsWith('lno1');
+      return v.toLowerCase().startsWith('ln') && !v.toLowerCase().startsWith('lno1');
+    case 'bolt12':
+      return v.toLowerCase().startsWith('lno1');
     case 'bitcoin':
       if (isSilentPaymentAddress(v)) return validateSilentPaymentAddress(v);
       return validateBitcoinAddress(v);
