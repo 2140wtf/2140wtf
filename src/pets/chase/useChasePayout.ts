@@ -149,8 +149,8 @@ export function useChasePayout(
     onSuccess: ({ claimedSats, newCoinsTotal, newSatsTotal }, { mode }) => {
       if (mode === 'sats' && claimedSats > 0) {
         toast({
-          title: 'BAO sats claimed!',
-          description: `Received ${claimedSats.toLocaleString()} BAO sats. Balance: ${newSatsTotal.toLocaleString()}.`,
+          title: '₿AO sats claimed!',
+          description: `Received ${claimedSats.toLocaleString()} ₿AO sats. Balance: ${newSatsTotal.toLocaleString()}.`,
         });
       } else if (mode === 'fiat') {
         toast({

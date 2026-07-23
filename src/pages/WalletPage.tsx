@@ -28,7 +28,7 @@ export function WalletPage() {
 
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
-    description: 'Your Cashu wallet, BAO demo wallet, and future Lightning layers.',
+    description: 'Your Cashu wallet, ₿AO demo wallet, and future Lightning layers.',
   });
 
   return (
@@ -43,7 +43,7 @@ export function WalletPage() {
           <div className="space-y-2 max-w-xs">
             <h2 className="text-xl font-bold">Your Wallet</h2>
             <p className="text-muted-foreground text-sm">
-              Log in to see your Cashu wallet, BAO demo wallet, and future Lightning layers.
+              Log in to see your Cashu wallet, ₿AO demo wallet, and future Lightning layers.
             </p>
           </div>
           <LoginArea className="max-w-60" />
@@ -53,7 +53,7 @@ export function WalletPage() {
           <Tabs defaultValue="cashu" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
-              <TabsTrigger value="bao-demo">BAO Demo</TabsTrigger>
+              <TabsTrigger value="bao-demo">₿AO Demo</TabsTrigger>
               <TabsTrigger value="spark">Spark</TabsTrigger>
               <TabsTrigger value="ark">Ark</TabsTrigger>
             </TabsList>
@@ -115,7 +115,7 @@ export function WalletPage() {
                     <RefreshCw className="size-5 animate-spin" />
                     <p className="font-medium text-foreground">Sign in to wallet</p>
                     <p className="text-xs text-muted-foreground/80 max-w-xs">
-                      Your signer may have opened a prompt in the background. Approve it to unlock your BAO demo wallet.
+                      Your signer may have opened a prompt in the background. Approve it to unlock your ₿AO MARKETS wallet.
                     </p>
                   </div>
                   <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
@@ -136,7 +136,7 @@ export function WalletPage() {
                 </div>
               ) : !user.signer?.nip44 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
-                  Your signer does not support NIP-44, which is required for the BAO demo wallet.
+                  Your signer does not support NIP-44, which is required for the ₿AO MARKETS wallet.
                 </div>
               ) : cashuWallet.seedAvailable && cashuWallet.seedPhrase ? (
                 <BaoWalletTab
@@ -147,7 +147,7 @@ export function WalletPage() {
               ) : (
                 <div className="py-12 flex flex-col items-center gap-4 text-center">
                   <p className="text-sm text-muted-foreground">
-                    BAO demo wallet could not be initialized.
+                    ₿AO MARKETS wallet could not be initialized.
                   </p>
                   <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
                     <RefreshCw className="size-3.5 mr-1.5" />

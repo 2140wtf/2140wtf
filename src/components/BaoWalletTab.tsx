@@ -100,7 +100,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
     if (walletError) {
       toast({
         variant: 'destructive',
-        title: 'BAO wallet error',
+        title: '₿AO wallet error',
         description: walletError,
       });
       clearWalletError();
@@ -111,7 +111,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
     if (walletSuccess) {
       toast({
         variant: 'success',
-        title: 'BAO wallet',
+        title: '₿AO wallet',
         description: walletSuccess,
       });
       clearWalletSuccess();
@@ -143,7 +143,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           <CardTitle className='flex items-center justify-between text-base font-medium'>
             <span className='flex items-center gap-2'>
               <WalletIcon className='size-5 text-primary' />
-              BAO Markets balance
+              ₿AO MARKETS balance
               <Badge variant='outline'>signet</Badge>
             </span>
             <Button variant='ghost' size='icon' className='size-7' onClick={refreshAll}>
@@ -313,7 +313,7 @@ function LightningPanel({
       toast({ variant: 'destructive', title: 'Invalid amount' });
       return;
     }
-    const quote = await wallet.requestInvoice(amount, 'BAO Lightning invoice');
+    const quote = await wallet.requestInvoice(amount, '₿AO Lightning invoice');
     if (quote) setInvoiceQuote(quote);
   };
 
@@ -464,7 +464,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
       toast({ variant: 'destructive', title: 'Invalid amount' });
       return;
     }
-    const quote = await wallet.requestInvoice(amount, 'BAO Cashu deposit');
+    const quote = await wallet.requestInvoice(amount, '₿AO Cashu deposit');
     if (quote) setInvoiceQuote(quote);
   };
 
@@ -494,7 +494,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
       <Select value={wallet.mintUrl} onValueChange={wallet.setMintUrl}>
         <SelectTrigger>
-          <SelectValue placeholder='Select a BAO mint' />
+          <SelectValue placeholder='Select a ₿AO mint' />
         </SelectTrigger>
         <SelectContent>
           {wallet.allMints.map((m) => (
@@ -514,7 +514,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
         <TabsContent value='receive' className='space-y-4 pt-2'>
           <Textarea
-            placeholder='Paste BAO Cashu token here…'
+            placeholder='Paste ₿AO Cashu token here…'
             value={receiveTokenStr}
             onChange={(e) => setReceiveTokenStr(e.target.value)}
             rows={4}

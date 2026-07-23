@@ -276,11 +276,11 @@ export const RuntimeAppConfigSchema = z.object({
   faviconUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Favicon URL template must use https://' }),
   linkPreviewUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Link preview URL template must use https://' }),
   corsProxy: z.string().refine(isAllowedUrlTemplate, { message: 'CORS proxy URL template must use https://' }),
-  baoSignetMintUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO mint URL must use https://' }).optional(),
-  baoSignetFaucetUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO faucet URL must use https://' }).optional(),
+  baoSignetMintUrl: z.string().url().refine(isAllowedHttpsUrl, { message: '₿AO mint URL must use https://' }).optional(),
+  baoSignetFaucetUrl: z.string().url().refine(isAllowedHttpsUrl, { message: '₿AO faucet URL must use https://' }).optional(),
   /** BAO Markets custom signet Mempool API root, e.g. https://mempool.bao.markets/api */
-  baoCustomSignetMempoolUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO mempool URL must use https://' }).optional(),
-  baoApiUrl: z.string().url().refine(isAllowedHttpsUrl, { message: 'BAO API URL must use https://' }).optional(),
+  baoCustomSignetMempoolUrl: z.string().url().refine(isAllowedHttpsUrl, { message: '₿AO mempool URL must use https://' }).optional(),
+  baoApiUrl: z.string().url().refine(isAllowedHttpsUrl, { message: '₿AO API URL must use https://' }).optional(),
   /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */
   petsBattleEscrowPubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   /** Optional URL to request release of battle escrow funds to the winner. */
