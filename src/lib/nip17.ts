@@ -18,6 +18,7 @@ export interface Nip17Message {
   sender: string;
   recipients: string[];
   content: string;
+  tags: string[][];
   createdAt: number;
   replyTo?: string;
   subject?: string;
@@ -50,6 +51,7 @@ export async function createNip17Rumor(
     kind?: number;
     subject?: string;
     replyTo?: { eventId: string; relayUrl?: string };
+    extraTags?: string[][];
   },
 ): Promise<Rumor> {
   const tags: string[][] = recipientPubkeys.map((pk) => ['p', pk]);
@@ -58,6 +60,9 @@ export async function createNip17Rumor(
   }
   if (options?.subject) {
     tags.push(['subject', options.subject]);
+  }
+  if (options?.extraTags) {
+    tags.push(...options.extraTags);
   }
 
   const pubkey = await signer.getPublicKey();
@@ -137,6 +142,7 @@ export async function buildNip17GiftWraps(
     kind?: number;
     subject?: string;
     replyTo?: { eventId: string; relayUrl?: string };
+    extraTags?: string[][];
   },
 ): Promise<{ rumor: Rumor; wraps: NostrEvent[] }> {
   const senderPubkey = await signer.getPublicKey();
@@ -290,6 +296,7 @@ export function parseNip17Rumor(
     sender: rumor.pubkey,
     recipients,
     content: rumor.content,
+    tags: rumor.tags,
     createdAt: rumor.created_at,
     ...(replyTo ? { replyTo } : {}),
     ...(subject ? { subject } : {}),
