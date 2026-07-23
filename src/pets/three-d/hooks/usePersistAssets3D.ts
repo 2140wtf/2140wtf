@@ -21,7 +21,7 @@ export interface PersistAssets3DPatch {
  *
  * The upload itself must be done first (see `useUploadGLBAsset`). This hook
  * only writes the resulting `Asset3DEntry` into `assets_3d` and publishes the
- * profile event to the BAO pets relay.
+ * profile event to the user's configured relays.
  */
 export function usePersistAssets3D() {
   const { profile, updateProfileEvent } = useNostrPetProfile();

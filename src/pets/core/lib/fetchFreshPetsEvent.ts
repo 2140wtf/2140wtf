@@ -10,10 +10,11 @@ interface FetchFreshPetsEventOptions {
 
 /**
  * Fetches the freshest version of a pets-related replaceable/addressable event
- * directly from the BAO pets relay and verifies its signature and author.
+ * directly from the user's configured relays and verifies its signature and
+ * author.
  *
  * Use this instead of the generic `fetchFreshEvent` for any kind 31124 or 11125
- * read-modify-write so the mutation reads from the same relay it writes to.
+ * read-modify-write so the mutation reads from the same relays it writes to.
  */
 export async function fetchFreshPetsEvent(
   nostr: NPool,
