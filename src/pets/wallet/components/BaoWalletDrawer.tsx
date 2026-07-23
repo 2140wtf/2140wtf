@@ -1,15 +1,15 @@
 // src/pets/wallet/components/BaoWalletDrawer.tsx
 //
-// BAO Demo wallet UI embedded inside the Pets section.
-// Wraps the generic Cashu wallet drawer with the BAO-specific wallet hook.
+// ₿AO MARKETS signet wallet UI embedded inside the Pets wallet.
+// Reuses the full wallet tab from /wallet (now pets-only) so users get the
+// same deposit / withdraw / rail options while in demo mode.
 
 import { Wallet as WalletIcon, Loader2 } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
-import { CashuWalletDrawer } from './CashuWalletDrawer';
+import { BaoWalletTab } from '@/components/BaoWalletTab';
 import { useMemo } from 'react';
 
 export function BaoWalletDrawer() {
@@ -26,10 +26,7 @@ export function BaoWalletDrawer() {
     [config.relayMetadata?.relays],
   );
 
-  const canInitialize = !!user && !!user.signer?.nip44 && !!seedPhrase;
-  const wallet = useBaoCashuWallet(seedPhrase ?? '', user ?? { pubkey: '', signer: {} as never }, relayUrls);
-
-  if (seedLoading || wallet.loading) {
+  if (seedLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-muted-foreground">
         <Loader2 className="size-6 animate-spin" />
@@ -38,7 +35,7 @@ export function BaoWalletDrawer() {
     );
   }
 
-  if (!canInitialize) {
+  if (!user || !user.signer?.nip44 || !seedPhrase) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground">
         <WalletIcon className="size-10 mb-3" />
@@ -48,12 +45,8 @@ export function BaoWalletDrawer() {
   }
 
   return (
-    <CashuWalletDrawer
-      wallet={wallet}
-      title="₿AO Demo balance"
-      badge="signet"
-      mintPlaceholder="Select a ₿AO mint"
-      invoiceDescription="₿AO Demo top-up"
-    />
+    <div className="p-2 overflow-y-auto h-full">
+      <BaoWalletTab seedPhrase={seedPhrase} user={user} relayUrls={relayUrls} />
+    </div>
   );
 }
