@@ -9,7 +9,7 @@ import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 import { verifyEvent, nip19 } from 'nostr-tools';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
-import type { MintQuoteResponse, MeltQuoteResponse } from '@cashu/cashu-ts';
+import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MeltQuoteResponse } from '@cashu/cashu-ts';
 import type { NostrEvent } from '@nostrify/nostrify';
 import {
   deriveMasterKey,
@@ -106,6 +106,7 @@ export interface CashuWalletActions {
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
+  payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
   sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<boolean>;
   receiveNutzap: (event: NostrEvent) => Promise<void>;
   checkMintQuote: (quote: MintQuoteResponse) => Promise<MintQuoteResponse | null>;
@@ -243,6 +244,7 @@ export function useCashuWallet(
   const receiveTokenMutexRef = useRef<Promise<void> | null>(null);
   const sendTokenMutexRef = useRef<Promise<void> | null>(null);
   const payInvoiceMutexRef = useRef<Promise<void> | null>(null);
+  const payBolt12MutexRef = useRef<Promise<void> | null>(null);
   const mintFromQuoteMutexRef = useRef<Promise<void> | null>(null);
   const processedTokenHashesRef = useRef<Set<string>>(new Set());
   const nutzapKeyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
@@ -2455,7 +2457,182 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, filterUnspentProofs, syncNip60TokenForMint]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, filterUnspentProofs]);
+
+  const payBolt12 = useCallback(async (offer: string, amountSats: number): Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }> => {
+    const trimmedOffer = typeof offer === 'string' ? offer.trim() : '';
+    if (!trimmedOffer || !/^lno1[02-9ac-hj-np-z]+$/i.test(trimmedOffer)) {
+      setError('Invalid BOLT12 offer');
+      return { success: false, amount: 0 };
+    }
+    if (!Number.isFinite(amountSats) || amountSats <= 0) {
+      setError('Invalid amount');
+      return { success: false, amount: 0 };
+    }
+    if (!wallet || !encKeyRef.current) {
+      setError('Wallet not initialized');
+      return { success: false, amount: 0 };
+    }
+    const release = await acquireMutex(payBolt12MutexRef);
+    try {
+      setLoading(true);
+      setError('');
+
+      const { amount: paidAmount, state, quote } = await storageRef.current.withProofLock(async () => {
+        const quote = await withTimeout(
+          wallet.createMeltQuoteBolt12(trimmedOffer, amountSats * 1000),
+          30000,
+          'BOLT12 melt quote creation',
+        );
+        const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(safeNormalizeMintUrl(mintUrl), encKeyRef.current!, legacyEncKeyRef.current ?? undefined));
+        const available = proofs.reduce((sum, p) => {
+          const amt = Number(p.amount);
+          return sum + (Number.isInteger(amt) && amt > 0 ? amt : 0);
+        }, 0);
+        const quoteAmount = Number(quote.amount) || 0;
+        const feeReserve = Number(quote.fee_reserve) || 0;
+        const totalNeeded = quoteAmount + feeReserve;
+
+        if (available < totalNeeded) {
+          throw new Error(`Need ${totalNeeded} sats (inc. fee), have ${available}`);
+        }
+        const quoteState = quote.state;
+        if (quoteState && quoteState !== 'UNPAID') {
+          throw new Error(`Melt quote is not available: ${quoteState}`);
+        }
+        if (!isFeeWithinMaxPpm(feeReserve, available, MAX_MINT_FEE_PPM)) {
+          throw new Error('Melt fee reserve exceeds maximum allowed');
+        }
+
+        const normalizedMint = safeNormalizeMintUrl(mintUrl);
+        const selection = wallet.selectProofsToSend(proofs, totalNeeded, true);
+        const selectedProofs = sanitizeProofs(dedupeProofs(selection.send));
+        const unselectedProofs = sanitizeProofs(dedupeProofs(selection.keep));
+        const inputAmount = sumProofAmounts(selectedProofs);
+        if (inputAmount < totalNeeded) {
+          throw new Error(`Selected proofs insufficient: need ${totalNeeded}, selected ${inputAmount}`);
+        }
+
+        let maxFeeForSelected = 0;
+        try {
+          maxFeeForSelected = wallet.getFeesForProofs(selectedProofs);
+        } catch {
+          maxFeeForSelected = Math.max(1, Math.floor(inputAmount * 0.001));
+        }
+        if (!isFeeWithinMaxPpm(feeReserve, inputAmount, MAX_MINT_FEE_PPM)) {
+          throw new Error('Melt fee reserve exceeds maximum allowed for selected proofs');
+        }
+        if (feeReserve > maxFeeForSelected) {
+          throw new Error(`Melt fee reserve (${feeReserve}) exceeds fee for selected proofs (${maxFeeForSelected})`);
+        }
+
+        await storageRef.current.writeProofRecovery(normalizedMint, selectedProofs, encKeyRef.current!);
+        const meltResult = await withTimeout(
+          wallet.meltProofsBolt12(quote, selectedProofs),
+          60000,
+          'BOLT12 melt proofs',
+          () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
+        );
+        if (!meltResult || !Array.isArray(meltResult.change)) {
+          throw new Error('Mint returned invalid BOLT12 melt response');
+        }
+        const changeAmount = sumProofAmounts(meltResult.change);
+        if (changeAmount > inputAmount - quoteAmount) {
+          throw new Error('Mint returned invalid change: exceeds available amount');
+        }
+        if (changeAmount < inputAmount - quoteAmount - feeReserve) {
+          throw new Error('Mint returned invalid change: missing required amount');
+        }
+        const actualFee = inputAmount - changeAmount - quoteAmount;
+        if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
+          throw new Error('Mint returned invalid BOLT12 melt fee');
+        }
+
+        const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
+        const activeKeysetIds = new Set(wallet.keysets.filter((k) => k.active).map((k) => k.id));
+        const localSecrets = new Set([...selectedProofs, ...unselectedProofs].map((p) => String(p?.secret)));
+        const validation = validateReceivedProofs(changeProofs, {
+          activeKeysetIds,
+          localSecrets,
+          getKeyset: (id) => wallet.keys.get(id),
+          requireDleq: true,
+        });
+        if (!validation.valid) {
+          throw new Error(`Invalid change proofs: ${validation.reason}`);
+        }
+        if (changeProofs.length > 0) {
+          await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+        }
+
+        const state = meltResult.quote?.state;
+        const paidAmount = Number(quote.amount) || 0;
+
+        const recordMeltTx = async () => {
+          try {
+            await storageRef.current.withTxLock(async () => {
+              if (state === 'UNPAID') {
+                await storageRef.current.addTransaction({
+                  type: 'melt',
+                  amount: paidAmount,
+                  memo: `BOLT12 offer ${trimmedOffer.slice(0, 20)}…`,
+                  mintUrl: normalizedMint,
+                  status: 'failed',
+                  quoteId: quote.quote,
+                });
+                return;
+              }
+              const status = state === 'PAID' ? 'completed' : 'pending';
+              await storageRef.current.addTransaction({
+                type: 'melt',
+                amount: paidAmount,
+                memo: `BOLT12 offer ${trimmedOffer.slice(0, 20)}…`,
+                mintUrl: normalizedMint,
+                status,
+                quoteId: quote.quote,
+              });
+            });
+          } catch (e) {
+            devLog.error('Failed to record BOLT12 melt tx:', e);
+          }
+        };
+
+        await recordMeltTx();
+        await refreshTransactions();
+        await calculateAllBalances();
+
+        return { quote, amount: paidAmount, state };
+      });
+
+      if (state !== 'UNPAID') {
+        await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'out', paidAmount);
+      }
+
+      if (state === 'UNPAID') {
+        if (mountedRef.current) setError('Payment failed: BOLT12 offer was not paid');
+        return { success: false, amount: 0, quote };
+      }
+      if (state === 'PENDING') {
+        if (mountedRef.current) setSuccessTimed('BOLT12 payment submitted — waiting for confirmation');
+        return { success: true, amount: paidAmount, quote, pending: true };
+      }
+      if (state !== 'PAID') {
+        devLog.warn('Unknown BOLT12 melt state:', state);
+        if (mountedRef.current) setSuccessTimed('BOLT12 payment submitted — waiting for confirmation');
+        return { success: true, amount: paidAmount, quote, pending: true };
+      }
+
+      if (mountedRef.current) setSuccessTimed('BOLT12 payment sent!');
+      return { success: true, amount: paidAmount, quote };
+    } catch (err: any) {
+      devLog.error('BOLT12 pay error:', err);
+      if (mountedRef.current) setError(`BOLT12 payment failed: ${err.message}`);
+      return { success: false, amount: 0 };
+    } finally {
+      release();
+      if (mountedRef.current) setLoading(false);
+      await triggerBackup();
+    }
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
 
   const receiveNutzap = useCallback(async (event: NostrEvent): Promise<void> => {
     const sync = nip60SyncRef.current;
@@ -3055,6 +3232,7 @@ export function useCashuWallet(
     requestInvoice,
     mintFromQuote,
     payInvoice,
+    payBolt12,
     sendNutzap,
     receiveNutzap,
     checkMintQuote,
