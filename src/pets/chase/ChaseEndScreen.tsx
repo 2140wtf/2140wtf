@@ -98,7 +98,7 @@ export function ChaseEndScreen({
               <AlertCircle className="size-4" />
               <AlertDescription>
                 {claimResult.claimed > 0
-                  ? `Claimed ${claimResult.claimed.toLocaleString()} demo sats to your BAO wallet.`
+                  ? `Claimed ${claimResult.claimed.toLocaleString()} demo sats to your ₿AO wallet.`
                   : claimResult.message ?? 'Claim failed.'}
               </AlertDescription>
             </Alert>

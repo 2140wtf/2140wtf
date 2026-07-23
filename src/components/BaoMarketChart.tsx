@@ -150,7 +150,7 @@ function addBaoWatermark(chart: IChartApi) {
       horzAlign: 'right',
       vertAlign: 'bottom',
       lines: [{
-        text: 'bao.markets',
+        text: '₿AO.markets',
         color: 'rgba(128, 128, 128, 0.08)',
         fontSize: 12,
         fontFamily: 'system-ui, sans-serif',

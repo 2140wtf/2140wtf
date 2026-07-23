@@ -68,11 +68,11 @@ export async function claimBaoSignetFaucet(
       const text = await response.text().catch(() => 'unknown error');
       devLog.warn('BAO faucet returned error:', response.status, text);
       return {
-        message: `BAO faucet error ${response.status}: ${text}`,
+        message: `₿AO faucet error ${response.status}: ${text}`,
       };
     }
     const json = (await response.json()) as unknown;
-    if (!json || typeof json !== 'object') return { message: 'BAO faucet returned an empty response.' };
+    if (!json || typeof json !== 'object') return { message: '₿AO faucet returned an empty response.' };
     const obj = json as Record<string, unknown>;
     const { token, message, remaining24h, resetsAt } = obj;
     return {
@@ -84,6 +84,6 @@ export async function claimBaoSignetFaucet(
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     devLog.error('BAO faucet request failed:', e);
-    return { message: `BAO faucet request failed: ${message}` };
+    return { message: `₿AO faucet request failed: ${message}` };
   }
 }
