@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Banknote,
   Check,
@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGammaOrderActions } from '@/hooks/useGammaOrderActions';
+import { useGammaOrder } from '@/hooks/useGammaOrders';
+import { RequestPaymentDialog } from '@/components/RequestPaymentDialog';
 import { formatSats } from '@/lib/bitcoin';
 import {
   isGammaOrderCreation,
@@ -88,11 +90,14 @@ function OrderTitle({ type }: { type: CardType }) {
 export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
   const { user } = useCurrentUser();
   const { updateStatus, isPending } = useGammaOrderActions();
+  const [requestOpen, setRequestOpen] = useState(false);
 
   const parsed = useMemo(
     () => parseGammaOrderMessage(message) ?? parseGammaPaymentReceipt(message),
     [message],
   );
+
+  const { order } = useGammaOrder(parsed?.orderId);
 
   if (!parsed) return null;
 
@@ -125,6 +130,11 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
   }
 
   const isMerchant = creation ? user?.pubkey === creation.merchantPubkey : false;
+  const canRequestPayment =
+    isMerchant &&
+    order &&
+    !order.paymentRequest &&
+    (order.status === 'pending' || order.status === 'confirmed');
 
   return (
     <div className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
@@ -344,7 +354,24 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
                 <X className="size-3.5" />
                 <span className="ml-1">Cancel</span>
               </Button>
+              <Button
+                size="sm"
+                variant={isMe ? 'secondary' : 'outline'}
+                disabled={isPending || !canRequestPayment}
+                onClick={() => setRequestOpen(true)}
+              >
+                <Banknote className="size-3.5" />
+                <span className="ml-1">Request payment</span>
+              </Button>
             </div>
+          )}
+
+          {creation && order && (
+            <RequestPaymentDialog
+              order={order}
+              open={requestOpen}
+              onOpenChange={setRequestOpen}
+            />
           )}
 
           {/* Buyer cancel action */}
