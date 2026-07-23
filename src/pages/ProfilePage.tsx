@@ -1275,7 +1275,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     'Badges': { kinds: [10008, 30008], authors: [pubkey] },
     'Likes': { kinds: [7], authors: [pubkey] },
     'Wall': { kinds: [1111], '#A': [`0:${pubkey}:`] },
-    'Orders': { kinds: [16, 17], authors: [pubkey] },
+    'Orders': {},
   } : {};
 
   const handleSaveTabEdit = async () => {
