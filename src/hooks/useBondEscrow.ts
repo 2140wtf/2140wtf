@@ -70,7 +70,7 @@ export function useBondEscrow() {
 
         const mempoolUrl = config.baoCustomSignetMempoolUrl;
         if (!mempoolUrl) {
-          throw new Error('BAO Markets custom signet Mempool URL is not configured.');
+          throw new Error('₿AO MARKETS custom signet Mempool URL is not configured.');
         }
         const verifier = createBaoMempoolVerifier(mempoolUrl);
         const expectedScriptPubKey = expectedBondScriptPubKey(rail, input.bondAddress);

@@ -2430,7 +2430,7 @@ function PetsDashboard({
                         const newTags = updateNostrPetProfileTags(fresh.allTags, { wallet_mode: mode });
                         await publishEvent({ kind: KIND_NOSTR_PET_PROFILE, content: fresh.content, tags: newTags });
                         await invalidateProfile();
-                        const modeLabel = mode === 'cashu' ? 'Cashu sats' : 'BAO signet';
+                        const modeLabel = mode === 'cashu' ? 'Cashu sats' : '₿AO signet';
                         toast({ title: 'Wallet mode', description: `${modeLabel} enabled` });
                       } catch {
                         toast({ title: 'Wallet mode', description: 'Failed to update wallet mode', variant: 'destructive' });

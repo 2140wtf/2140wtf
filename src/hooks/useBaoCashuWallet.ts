@@ -50,7 +50,7 @@ export function useBaoCashuWallet(
   const defaultMints = useMemo(() => {
     const url = config.baoSignetMintUrl?.trim();
     if (!url) return [];
-    return [{ name: 'BAO Signet Mint', url }];
+    return [{ name: '₿AO Signet Mint', url }];
   }, [config.baoSignetMintUrl]);
 
   // Use a per-pubkey DPCS backup d-tag so different identities never share BAO backup state.
@@ -79,7 +79,7 @@ export function useBaoCashuWallet(
     nip60Sync,
     defaultMints,
     deriveWalletKey: deriveBaoWalletKey,
-    walletLabel: 'BAO Demo',
+    walletLabel: '₿AO MARKETS',
     publishWalletConfig: false,
     storageNamespace: 'freedomid_bao_',
     enabled,

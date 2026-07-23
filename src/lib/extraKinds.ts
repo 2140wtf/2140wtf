@@ -349,7 +349,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     addressable: false,
     section: 'social',
     blurb: 'Ask a question, let people vote. Create free polls or paid zap polls where votes are Lightning zaps.',
-    sites: [{ name: 'BAO polls', url: 'https://bao.markets/demo/nostrpolls' }],
+    sites: [{ name: '₿AO polls', url: 'https://bao.markets/demo/nostrpolls' }],
   },
   {
     kind: 39089,
