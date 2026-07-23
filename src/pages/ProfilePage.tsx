@@ -81,6 +81,7 @@ import { BadgeThumbnail } from '@/components/BadgeThumbnail';
 import { useProfileBadges } from '@/hooks/useProfileBadges';
 import { useBadgeDefinitions } from '@/hooks/useBadgeDefinitions';
 import { ProfileTabEditModal } from '@/components/ProfileTabEditModal';
+import { OrdersTab } from '@/components/OrdersTab';
 import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
 import type { ProfileTab, ProfileTabsData, TabFilter, TabVarDef } from '@/lib/profileTabsEvent';
 import {
@@ -967,13 +968,13 @@ function ProfileImageLightbox({ imageUrl, onClose }: { imageUrl: string; onClose
 
 // ----- Main Component -----
 
-const CORE_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Badges', 'Likes', 'Wall'];
-const DEFAULT_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Likes', 'Wall'];
+const CORE_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Badges', 'Likes', 'Wall', 'Orders'];
+const DEFAULT_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Likes', 'Wall', 'Orders'];
 
 // Map from display label → internal tab id for core tabs
 const CORE_TAB_IDS: Record<string, string> = {
   'Posts': 'posts', 'Posts & replies': 'replies',
-  'Media': 'media', 'Products': 'products', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall',
+  'Media': 'media', 'Products': 'products', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall', 'Orders': 'orders',
 };
 
 // Map a canonical tab label to its user-facing display text. The canonical
@@ -1274,6 +1275,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     'Badges': { kinds: [10008, 30008], authors: [pubkey] },
     'Likes': { kinds: [7], authors: [pubkey] },
     'Wall': { kinds: [1111], '#A': [`0:${pubkey}:`] },
+    'Orders': { kinds: [16, 17], authors: [pubkey] },
   } : {};
 
   const handleSaveTabEdit = async () => {
@@ -1316,7 +1318,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
 
   // Drop active tab if it was deleted
   useEffect(() => {
-    const isCoreTab = ['posts', 'replies', 'media', 'products', 'badges', 'likes', 'wall'].includes(activeTab);
+    const isCoreTab = ['posts', 'replies', 'media', 'products', 'badges', 'likes', 'wall', 'orders'].includes(activeTab);
     if (!isCoreTab && !profileSavedTabs.find((t) => t.label === activeTab)) {
       setActiveTab(firstTabId);
     }
@@ -1338,7 +1340,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   } = useProfileFeed(
     pubkey,
     (['posts', 'replies', 'media', 'likes', 'wall', 'badges'].includes(activeTab) ? activeTab : 'posts') as CoreProfileTab,
-    hasTabs,
+    hasTabs && ['posts', 'replies', 'media', 'likes', 'wall', 'badges'].includes(activeTab),
     isAppAccount ? [1] : undefined,
   );
 
@@ -2583,6 +2585,11 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
               <div ref={scrollRef} className="h-px" />
             )}
           </div>
+        )}
+
+        {/* Orders tab — Gamma Markets order lifecycle between you and this user */}
+        {hasTabs && activeTab === 'orders' && pubkey && (
+          <OrdersTab pubkey={pubkey} displayName={displayName} />
         )}
 
         {/* Custom saved-feed tab content */}
