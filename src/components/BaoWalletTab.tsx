@@ -155,10 +155,16 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           {(cashuWallet.loading && cashuWallet.totalBalance === 0) || bitcoin.isLoading ? (
             <p className='text-sm text-muted-foreground'>Loading wallets…</p>
           ) : (
-            <div className='flex items-baseline gap-2'>
-              <span className='text-3xl font-bold'>{totalBalance}</span>
-              <span className='text-muted-foreground'>demo sats</span>
-            </div>
+            <>
+              <div className='flex items-baseline gap-2'>
+                <span className='text-3xl font-bold'>{totalBalance}</span>
+                <span className='text-muted-foreground'>demo sats</span>
+              </div>
+              <p className='text-xs text-muted-foreground mt-3 leading-relaxed'>
+                ₿AO wallet is used for educational purposes only and to empower Nostr Pets.
+                ₿AO Markets project is using a private signet for testers in demo mode.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
