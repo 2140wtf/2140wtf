@@ -14,6 +14,8 @@ import { useToast } from '@/hooks/useToast';
 export interface SendNip17MessageOptions {
   recipientPubkey: string;
   content: string;
+  /** Inner rumor kind. Defaults to kind 14 (direct message). */
+  kind?: number;
   subject?: string;
   replyTo?: { eventId: string; relayUrl?: string };
 }
@@ -94,7 +96,7 @@ export function useNip17SendMessage() {
 
     setIsPending(true);
     try {
-      const { recipientPubkey, content, subject, replyTo } = options;
+      const { recipientPubkey, content, kind, subject, replyTo } = options;
 
       const [senderDmRelays, recipientDmRelays] = await Promise.all([
         fetchDmRelays(nostr, user.pubkey, AbortSignal.timeout(5000)),
@@ -105,7 +107,7 @@ export function useNip17SendMessage() {
         user.signer,
         [recipientPubkey],
         content,
-        { subject, replyTo },
+        { kind, subject, replyTo },
       );
 
       if (wraps.length === 0) {
