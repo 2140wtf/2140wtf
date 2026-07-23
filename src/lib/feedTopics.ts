@@ -133,8 +133,8 @@ export const FEED_TOPICS: FeedTopic[] = [
   },
   {
     id: 'bao',
-    label: 'BAO',
-    description: 'Posts from the BAO network',
+    label: '₿AO',
+    description: 'Posts from the ₿AO network',
     icon: '⚡',
     iconSrc: '/bao-icon.png',
     authors: ['606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6'],
