@@ -133,6 +133,7 @@ describe('NIP-17 helpers', () => {
       sender: other,
       recipients: [viewer],
       content: 'hi',
+      tags: [],
       createdAt: 1,
     };
     expect(getNip17Participants(message, viewer)).toEqual([other]);

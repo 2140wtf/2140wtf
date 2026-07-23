@@ -18,6 +18,8 @@ export interface SendNip17MessageOptions {
   kind?: number;
   subject?: string;
   replyTo?: { eventId: string; relayUrl?: string };
+  /** Additional tags to include on the inner rumor (e.g. Gamma Markets order tags). */
+  extraTags?: string[][];
 }
 
 export interface SendNip17MessageResult {
@@ -96,7 +98,7 @@ export function useNip17SendMessage() {
 
     setIsPending(true);
     try {
-      const { recipientPubkey, content, kind, subject, replyTo } = options;
+      const { recipientPubkey, content, kind, subject, replyTo, extraTags } = options;
 
       const [senderDmRelays, recipientDmRelays] = await Promise.all([
         fetchDmRelays(nostr, user.pubkey, AbortSignal.timeout(5000)),
@@ -107,7 +109,7 @@ export function useNip17SendMessage() {
         user.signer,
         [recipientPubkey],
         content,
-        { kind, subject, replyTo },
+        { kind, subject, replyTo, extraTags },
       );
 
       if (wraps.length === 0) {
