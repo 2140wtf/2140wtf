@@ -1221,7 +1221,11 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     }
     if (profileTabsData === null) {
       // No event yet — show defaults (subset of core tabs)
-      return DEFAULT_TAB_LABELS.map((label) => ({ label, isCore: true }));
+      const isOwnProfile = user?.pubkey === pubkey;
+      const labels = isOwnProfile
+        ? DEFAULT_TAB_LABELS
+        : DEFAULT_TAB_LABELS.filter((label) => label !== 'Orders');
+      return labels.map((label) => ({ label, isCore: true }));
     }
     // Event exists — use its tab list (may be empty)
     return profileTabsData.tabs.map((t) =>
@@ -1229,7 +1233,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
         ? { label: t.label, isCore: true }
         : { label: t.label, isCore: false, tab: t },
     );
-  }, [isAppAccount, profileTabsData]);
+  }, [isAppAccount, profileTabsData, pubkey, user?.pubkey]);
 
   // Derive the ID of the first visible tab (used as default selection).
   const firstTabId = useMemo(() => {
@@ -2589,7 +2593,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
 
         {/* Orders tab — Gamma Markets order lifecycle between you and this user */}
         {hasTabs && activeTab === 'orders' && pubkey && (
-          <OrdersTab pubkey={pubkey} displayName={displayName} />
+          <OrdersTab pubkey={pubkey} />
         )}
 
         {/* Custom saved-feed tab content */}
