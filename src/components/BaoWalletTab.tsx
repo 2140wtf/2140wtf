@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Bitcoin,
   Check,
   Coins,
   Copy,
@@ -31,7 +30,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/useToast';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
-import { useBitcoinWallet } from '@/hooks/useBitcoinWallet';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
@@ -47,7 +45,6 @@ interface BaoWalletTabProps {
 }
 
 type WalletRailId =
-  | 'bitcoin'
   | 'lightning'
   | 'cashu'
   | 'liquid'
@@ -65,10 +62,10 @@ interface WalletRailConfig {
 }
 
 const WALLET_RAILS: WalletRailConfig[] = [
-  ...CHASE_RAILS.filter((rail) => rail.id !== 'onchain').map((rail) => ({
+  ...CHASE_RAILS.filter((rail) => rail.id !== 'onchain' && rail.id !== 'bitcoin').map((rail) => ({
     ...rail,
     id: rail.id as WalletRailId,
-    isReal: ['bitcoin', 'lightning', 'cashu'].includes(rail.id),
+    isReal: ['lightning', 'cashu'].includes(rail.id),
   })),
   {
     id: 'fedimint',
@@ -85,16 +82,13 @@ const RAIL_BY_ID: Record<WalletRailId, WalletRailConfig> = Object.fromEntries(
 ) as Record<WalletRailId, WalletRailConfig>;
 
 export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps) {
-  const [selectedRail, setSelectedRail] = useState<WalletRailId>('bitcoin');
+  const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
 
   const cashuWallet = useBaoCashuWallet(seedPhrase, user, relayUrls, { enableAutoClaim: false });
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = cashuWallet;
   const { toast } = useToast();
-  const bitcoin = useBitcoinWallet();
   const walletStatus = useWallet();
   const nwc = useNWC();
-
-  const totalBalance = cashuWallet.totalBalance + (bitcoin.addressData?.totalBalance ?? 0);
 
   useEffect(() => {
     if (walletError) {
@@ -120,13 +114,10 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
 
   const refreshAll = () => {
     void cashuWallet.calculateAllBalances();
-    void bitcoin.refetch();
   };
 
   const getRailBalance = (railId: WalletRailId): number => {
     switch (railId) {
-      case 'bitcoin':
-        return bitcoin.addressData?.totalBalance ?? 0;
       case 'cashu':
         return cashuWallet.totalBalance;
       default:
@@ -152,12 +143,12 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {(cashuWallet.loading && cashuWallet.totalBalance === 0) || bitcoin.isLoading ? (
-            <p className='text-sm text-muted-foreground'>Loading wallets…</p>
+          {cashuWallet.loading && cashuWallet.totalBalance === 0 ? (
+            <p className='text-sm text-muted-foreground'>Loading wallet…</p>
           ) : (
             <>
               <div className='flex items-baseline gap-2'>
-                <span className='text-3xl font-bold'>{totalBalance}</span>
+                <span className='text-3xl font-bold'>{cashuWallet.totalBalance}</span>
                 <span className='text-muted-foreground'>demo sats</span>
               </div>
               <p className='text-xs text-muted-foreground mt-3 leading-relaxed'>
@@ -204,7 +195,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {selectedRail === 'bitcoin' && <BitcoinPanel bitcoin={bitcoin} />}
           {selectedRail === 'lightning' && (
             <LightningPanel wallet={cashuWallet} walletStatus={walletStatus} nwc={nwc} />
           )}
@@ -219,7 +209,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
 }
 
 const RAIL_ICONS: Record<WalletRailId, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  bitcoin: Bitcoin,
   lightning: Zap,
   cashu: Coins,
   liquid: Droplets,
@@ -232,68 +221,6 @@ function RailIcon({ rail, className }: { rail: WalletRailConfig; className?: str
   const Icon = RAIL_ICONS[rail.id];
   if (!Icon) return null;
   return <Icon className={className} style={{ color: rail.color }} />;
-}
-
-function BitcoinPanel({ bitcoin }: { bitcoin: ReturnType<typeof useBitcoinWallet> }) {
-  const [copied, setCopied] = useState(false);
-  const { bitcoinAddress, addressData, isLoading, error, refetch } = bitcoin;
-
-  const copyAddress = async () => {
-    if (!bitcoinAddress) return;
-    try {
-      await navigator.clipboard.writeText(bitcoinAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard API not available
-    }
-  };
-
-  if (isLoading) {
-    return <p className='text-sm text-muted-foreground'>Loading on-chain wallet…</p>;
-  }
-
-  if (error) {
-    return (
-      <div className='space-y-3 text-center'>
-        <p className='text-sm text-destructive'>Failed to load balance</p>
-        <Button variant='outline' size='sm' onClick={() => refetch()}>
-          <RefreshCw className='size-3.5 mr-1.5' />
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  const truncatedAddress = bitcoinAddress
-    ? `${bitcoinAddress.slice(0, 12)}…${bitcoinAddress.slice(-8)}`
-    : '';
-
-  return (
-    <div className='space-y-5 flex flex-col items-center'>
-      <div className='flex items-baseline gap-2'>
-        <span className='text-3xl font-bold'>{addressData?.totalBalance ?? 0}</span>
-        <span className='text-muted-foreground'>demo sats</span>
-      </div>
-
-      <div className='rounded-2xl bg-white p-4 shadow-sm'>
-        <QRCodeSVG value={bitcoinAddress} size={200} level='M' />
-      </div>
-
-      <button
-        type='button'
-        onClick={copyAddress}
-        className='flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-mono text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer'
-      >
-        {truncatedAddress}
-        {copied ? (
-          <Check className='size-3.5 text-green-500' />
-        ) : (
-          <Copy className='size-3.5' />
-        )}
-      </button>
-    </div>
-  );
 }
 
 function LightningPanel({
