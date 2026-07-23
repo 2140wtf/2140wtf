@@ -462,6 +462,10 @@ export function ZapDialog({
       mode: isSilentPaymentLike(bitcoinTarget.authority) ? 'sp' : 'onchain',
     };
   }, [bitcoinTarget]);
+  const bitcoinIsSilentPayment = useMemo(
+    () => !!bitcoinTarget && isSilentPaymentLike(bitcoinTarget.authority),
+    [bitcoinTarget],
+  );
 
   // Cashu / NIP-61 Nutzap capability. The recipient must publish a kind 10019
   // event with accepted mints; the sender needs an initialized Cashu wallet.
@@ -502,7 +506,11 @@ export function ZapDialog({
     }
     const list: DialogMethod[] = [];
     if (bitcoinTarget) {
-      list.push({ id: 'bitcoin', label: 'Bitcoin', kind: 'bitcoin' });
+      list.push(
+        bitcoinIsSilentPayment
+          ? { id: 'silent-payments', label: 'Silent Payments', kind: 'bitcoin' }
+          : { id: 'bitcoin', label: 'Bitcoin', kind: 'bitcoin' },
+      );
     }
     if (hasLightning || lightningTarget) {
       list.push({ id: 'lightning', label: 'Lightning', kind: 'lightning' });
@@ -519,7 +527,8 @@ export function ZapDialog({
       const allowed = new Set(allowedPaymentMethods.map((m) => m.toLowerCase()));
       return list.filter((m) => {
         if (m.id === 'cashu') return allowed.has('cashu');
-        if (m.id === 'bitcoin') return allowed.has('bitcoin') || allowed.has('silent-payments');
+        if (m.id === 'bitcoin') return allowed.has('bitcoin');
+        if (m.id === 'silent-payments') return allowed.has('silent-payments');
         if (m.id === 'lightning') return allowed.has('lightning');
         if (m.target) {
           if (m.id === 'monero') return allowed.has('monero') || allowed.has('xmr');
@@ -530,15 +539,15 @@ export function ZapDialog({
     }
 
     return list;
-  }, [campaign, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote, allowedPaymentMethods]);
+  }, [campaign, bitcoinIsSilentPayment, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote, allowedPaymentMethods]);
 
   const defaultMethodId: DialogMethodId = useMemo(() => {
     if (isPollVote) return 'lightning';
     if (hasLightning || lightningTarget) return 'lightning';
-    if (bitcoinTarget) return 'bitcoin';
+    if (bitcoinTarget) return bitcoinIsSilentPayment ? 'silent-payments' : 'bitcoin';
     if (hasCashu) return 'cashu';
     return methods[0]?.id ?? 'bitcoin';
-  }, [bitcoinTarget, hasLightning, lightningTarget, hasCashu, isPollVote, methods]);
+  }, [bitcoinIsSilentPayment, bitcoinTarget, hasLightning, lightningTarget, hasCashu, isPollVote, methods]);
   const [activeMethod, setActiveMethod] = useState<DialogMethodId>(defaultMethodId);
 
   const currentMethod =
@@ -818,7 +827,9 @@ export function ZapDialog({
 /** Title label for the current method (native Bitcoin keeps "Send Bitcoin"). */
 function methodTitle(method: DialogMethod | undefined): string {
   if (!method) return 'Send Bitcoin';
-  if (method.kind === 'bitcoin') return 'Send Bitcoin';
+  if (method.kind === 'bitcoin') {
+    return method.id === 'silent-payments' ? 'Send Silent Payment' : 'Send Bitcoin';
+  }
   return method.label;
 }
 
