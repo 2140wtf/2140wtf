@@ -154,7 +154,10 @@ export function CreateOrderDialog({
                   type="number"
                   min={1}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setQuantity(Number.isNaN(value) || value < 1 ? 1 : value);
+                  }}
                   className="w-20"
                 />
               </div>
