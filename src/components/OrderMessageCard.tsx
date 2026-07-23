@@ -18,6 +18,7 @@ import { useGammaOrderActions } from '@/hooks/useGammaOrderActions';
 import { useGammaOrder } from '@/hooks/useGammaOrders';
 import { RequestPaymentDialog } from '@/components/RequestPaymentDialog';
 import { PayOrderDialog } from '@/components/PayOrderDialog';
+import { ShippingUpdateDialog } from '@/components/ShippingUpdateDialog';
 import { formatSats } from '@/lib/bitcoin';
 import {
   isGammaOrderCreation,
@@ -93,6 +94,7 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
   const { updateStatus, isPending } = useGammaOrderActions();
   const [requestOpen, setRequestOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  const [shippingOpen, setShippingOpen] = useState(false);
 
   const parsed = useMemo(
     () => parseGammaOrderMessage(message) ?? parseGammaPaymentReceipt(message),
@@ -143,6 +145,14 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
     isBuyer &&
     !order?.receipt &&
     (order?.status === 'pending' || order?.status === 'confirmed' || order?.status === 'processing');
+  const canMarkProcessing = isMerchant && order && order.status === 'confirmed';
+  const canMarkShipped = isMerchant && order && (order.status === 'confirmed' || order.status === 'processing');
+  const canComplete =
+    !isMerchant &&
+    order &&
+    order.status !== 'completed' &&
+    order.status !== 'cancelled' &&
+    (order.shippingStatus === 'delivered' || !order.shippingStatus);
 
   return (
     <div className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
@@ -371,6 +381,28 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
                 <Banknote className="size-3.5" />
                 <span className="ml-1">Request payment</span>
               </Button>
+              {canMarkProcessing && (
+                <Button
+                  size="sm"
+                  variant={isMe ? 'secondary' : 'outline'}
+                  disabled={isPending}
+                  onClick={() => void handleStatus('processing')}
+                >
+                  <Package className="size-3.5" />
+                  <span className="ml-1">Mark processing</span>
+                </Button>
+              )}
+              {canMarkShipped && (
+                <Button
+                  size="sm"
+                  variant={isMe ? 'secondary' : 'outline'}
+                  disabled={isPending}
+                  onClick={() => setShippingOpen(true)}
+                >
+                  <Truck className="size-3.5" />
+                  <span className="ml-1">Mark shipped</span>
+                </Button>
+              )}
             </div>
           )}
 
@@ -382,7 +414,7 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
             />
           )}
 
-          {/* Buyer cancel action */}
+          {/* Buyer cancel / complete actions */}
           {creation && !isMerchant && (
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
@@ -394,6 +426,17 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
                 <X className="size-3.5" />
                 <span className="ml-1">Cancel order</span>
               </Button>
+              {canComplete && (
+                <Button
+                  size="sm"
+                  variant={isMe ? 'secondary' : 'default'}
+                  disabled={isPending}
+                  onClick={() => void handleStatus('completed')}
+                >
+                  <Check className="size-3.5" />
+                  <span className="ml-1">Mark completed</span>
+                </Button>
+              )}
             </div>
           )}
 
@@ -417,6 +460,14 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
               paymentRequest={paymentRequest}
               open={payOpen}
               onOpenChange={setPayOpen}
+            />
+          )}
+
+          {order && (
+            <ShippingUpdateDialog
+              order={order}
+              open={shippingOpen}
+              onOpenChange={setShippingOpen}
             />
           )}
         </CardContent>
