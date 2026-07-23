@@ -1,13 +1,12 @@
-import { useMemo } from 'react';
-import { useSeoMeta } from '@unhead/react';
 import { Wallet, RefreshCw } from 'lucide-react';
+import { useSeoMeta } from '@unhead/react';
 
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
-import { BaoWalletTab } from '@/components/BaoWalletTab';
+import { ComingSoonTab } from '@/components/ComingSoonTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
@@ -17,18 +16,9 @@ export function WalletPage() {
   const { user } = useCurrentUser();
   const cashuWallet = useCashuWalletContext();
 
-  const relayUrls = useMemo(
-    () =>
-      (config.relayMetadata?.relays ?? [])
-        .filter((r) => r.read !== false || r.write !== false)
-        .map((r) => r.url)
-        .filter(Boolean),
-    [config.relayMetadata?.relays],
-  );
-
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
-    description: 'Your Cashu wallet, ₿AO demo wallet, and future Lightning layers.',
+    description: 'Your Cashu wallet and future Lightning layers.',
   });
 
   return (
@@ -43,7 +33,7 @@ export function WalletPage() {
           <div className="space-y-2 max-w-xs">
             <h2 className="text-xl font-bold">Your Wallet</h2>
             <p className="text-muted-foreground text-sm">
-              Log in to see your Cashu wallet, ₿AO demo wallet, and future Lightning layers.
+              Log in to see your Cashu wallet and future Lightning layers.
             </p>
           </div>
           <LoginArea className="max-w-60" />
@@ -51,9 +41,8 @@ export function WalletPage() {
       ) : (
         <div className="px-4 pt-6 pb-4 max-w-sm mx-auto">
           <Tabs defaultValue="cashu" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
-              <TabsTrigger value="bao-demo">₿AO Demo</TabsTrigger>
               <TabsTrigger value="spark">Spark</TabsTrigger>
               <TabsTrigger value="ark">Ark</TabsTrigger>
             </TabsList>
@@ -108,55 +97,6 @@ export function WalletPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="bao-demo">
-              {cashuWallet.seedLoading ? (
-                <div className="py-12 flex flex-col items-center gap-4 text-center">
-                  <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-                    <RefreshCw className="size-5 animate-spin" />
-                    <p className="font-medium text-foreground">Sign in to wallet</p>
-                    <p className="text-xs text-muted-foreground/80 max-w-xs">
-                      Your signer may have opened a prompt in the background. Approve it to unlock your ₿AO MARKETS wallet.
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
-                    <RefreshCw className="size-3.5 mr-1.5" />
-                    Retry after signing
-                  </Button>
-                </div>
-              ) : cashuWallet.seedError ? (
-                <div className="py-12 flex flex-col items-center gap-4 text-center">
-                  <p className="text-sm text-destructive">{cashuWallet.seedError}</p>
-                  <p className="text-xs text-muted-foreground max-w-xs">
-                    If your signer did not respond, unlock it and try again.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
-                    <RefreshCw className="size-3.5 mr-1.5" />
-                    Retry
-                  </Button>
-                </div>
-              ) : !user.signer?.nip44 ? (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  Your signer does not support NIP-44, which is required for the ₿AO MARKETS wallet.
-                </div>
-              ) : cashuWallet.seedAvailable && cashuWallet.seedPhrase ? (
-                <BaoWalletTab
-                  seedPhrase={cashuWallet.seedPhrase}
-                  user={user}
-                  relayUrls={relayUrls}
-                />
-              ) : (
-                <div className="py-12 flex flex-col items-center gap-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    ₿AO MARKETS wallet could not be initialized.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
-                    <RefreshCw className="size-3.5 mr-1.5" />
-                    Try again
-                  </Button>
-                </div>
-              )}
-            </TabsContent>
-
             <TabsContent value="spark">
               <ComingSoonTab title="Spark" description="Lightning-native Spark wallet integration is coming soon." />
             </TabsContent>
@@ -168,22 +108,5 @@ export function WalletPage() {
         </div>
       )}
     </main>
-  );
-}
-
-function ComingSoonTab({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="py-16 px-6 flex flex-col items-center text-center space-y-4">
-      <div className="p-3 rounded-full bg-primary/10">
-        <Wallet className="size-6 text-primary" />
-      </div>
-      <div className="space-y-1">
-        <h3 className="text-lg font-semibold">{title}</h3>
-        <p className="text-sm text-muted-foreground max-w-xs">{description}</p>
-      </div>
-      <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-        Coming soon
-      </span>
-    </div>
   );
 }
