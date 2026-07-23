@@ -33,7 +33,7 @@ export function BaoWalletDrawer() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-muted-foreground">
         <Loader2 className="size-6 animate-spin" />
-        <p className="text-sm">Loading BAO wallet…</p>
+        <p className="text-sm">Loading ₿AO wallet…</p>
       </div>
     );
   }
@@ -42,7 +42,7 @@ export function BaoWalletDrawer() {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center text-muted-foreground">
         <WalletIcon className="size-10 mb-3" />
-        <p className="text-sm">Your signer does not support the BAO wallet (NIP-44 required).</p>
+        <p className="text-sm">Your signer does not support the ₿AO wallet (NIP-44 required).</p>
       </div>
     );
   }
@@ -50,10 +50,10 @@ export function BaoWalletDrawer() {
   return (
     <CashuWalletDrawer
       wallet={wallet}
-      title="BAO Demo balance"
+      title="₿AO Demo balance"
       badge="signet"
-      mintPlaceholder="Select a BAO mint"
-      invoiceDescription="BAO Demo top-up"
+      mintPlaceholder="Select a ₿AO mint"
+      invoiceDescription="₿AO Demo top-up"
     />
   );
 }

@@ -53,10 +53,10 @@ export function useBattlePayout(
       if (mode === 'btc-sats') {
         const faucetUrl = config.baoSignetFaucetUrl?.trim();
         if (!faucetUrl) {
-          throw new Error('BAO faucet is not configured for real-sats payouts.');
+          throw new Error('₿AO faucet is not configured for real-sats payouts.');
         }
         if (!externalWallet) {
-          throw new Error('BAO wallet is not available.');
+          throw new Error('₿AO wallet is not available.');
         }
 
         // Check the daily cap and claim the faucet inside the serialized profile
@@ -82,14 +82,14 @@ export function useBattlePayout(
             const npub = nip19.npubEncode(user.pubkey);
             const requestAmount = clampBaoFaucetAmount(amount);
             if (requestAmount <= 0) {
-              throw new Error('BAO daily claim amount is too small or exhausted.');
+              throw new Error('₿AO daily claim amount is too small or exhausted.');
             }
             const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
             if (!result?.token) {
-              throw new Error(result?.message ?? 'BAO faucet did not return a token.');
+              throw new Error(result?.message ?? '₿AO faucet did not return a token.');
             }
             if (isBaoFaucetDailyExhausted(result)) {
-              throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
+              throw new Error(result.message ?? '₿AO 24h limit reached. Try again later.');
             }
 
             await externalWallet.receiveToken(result.token.trim());
@@ -99,7 +99,7 @@ export function useBattlePayout(
             const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
             const claimedSats = clampBaoFaucetAmount(depositedSats, result.remaining24h);
             if (claimedSats <= 0) {
-              throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
+              throw new Error(result.message ?? '₿AO 24h limit reached. Try again later.');
             }
 
             const tags = updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, {
@@ -156,7 +156,7 @@ export function useBattlePayout(
     },
     onSuccess: ({ amountAwarded, newSatsTotal }, { mode }) => {
       if (amountAwarded > 0) {
-        const label = mode === 'btc-sats' ? 'BAO sats' : 'demo sats';
+        const label = mode === 'btc-sats' ? '₿AO sats' : 'demo sats';
         toast({
           title: 'Battle reward claimed!',
           description: `You received ${amountAwarded.toLocaleString()} ${label}. Balance: ${newSatsTotal.toLocaleString()}.`,

@@ -148,14 +148,14 @@ export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, classNa
           <Trophy className="size-5 text-amber-500" />
           <div className="flex-1">
             <p className="font-medium">
-              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} {effectiveMode === 'btc-sats' ? 'BAO sats' : 'demo sats'}
+              Winner prize: {DEFAULT_PRIZE_SATS.toLocaleString()} {effectiveMode === 'btc-sats' ? '₿AO sats' : 'demo sats'}
             </p>
             <p className="text-muted-foreground">
               {effectiveMode === 'btc-sats'
-                ? 'Real BAO signet/demo sats paid from your BAO wallet.'
+                ? 'Real ₿AO signet/demo sats paid from your ₿AO wallet.'
                 : allowBtcSats
                   ? 'One prize per day in demo mode.'
-                  : 'Real-sats battles are only available in remote matches. Switch to BAO signet mode to play for BAO sats.'}
+                  : 'Real-sats battles are only available in remote matches. Switch to ₿AO signet mode to play for ₿AO sats.'}
             </p>
           </div>
         </div>

@@ -25,7 +25,7 @@ export function BattleResultOverlay({
 
   const prizeLabel = (() => {
     if (mode === 'real-sats') return `${prizeAmount * 2} real sats`;
-    if (mode === 'btc-sats') return `${prizeAmount} BAO sats`;
+    if (mode === 'btc-sats') return `${prizeAmount} ₿AO sats`;
     return `${prizeAmount} demo sats`;
   })();
 

@@ -109,7 +109,7 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
             {baoSignetLoading && baoSignetBalance === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{baoSignetBalance.toLocaleString()} BAO signet</span>
+              <span>{baoSignetBalance.toLocaleString()} ₿AO signet</span>
             )}
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
