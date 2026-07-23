@@ -14,6 +14,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "notifications",
   "messages",
   "prediction-markets",
+  "bao-funding",
   "polls",
   "media",
   "pets",
@@ -115,6 +116,25 @@ export function useFeedSettings() {
     () => computeHiddenItems(orderedItems),
     [orderedItems],
   );
+
+  // Migration: make sure ₿AO FUNDING (TEST) is visible right below ₿AO MARKETS.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0 || order.includes("bao-funding")) return;
+
+    const next = [...order];
+    const baoIdx = next.indexOf("prediction-markets");
+    if (baoIdx !== -1) {
+      next.splice(baoIdx + 1, 0, "bao-funding");
+    } else {
+      next.push("bao-funding");
+    }
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
   // Migration: make sure Polls is visible in the sidebar right below ₿AO MARKETS.
   // This only runs once for users whose saved order predates the Polls item.
