@@ -87,6 +87,22 @@ export type GammaOrderMessage =
   | GammaStatusUpdate
   | GammaShippingUpdate;
 
+export function isGammaOrderCreation(message: GammaOrderMessage): message is GammaOrderCreation {
+  return message.type === 1;
+}
+
+export function isGammaPaymentRequest(message: GammaOrderMessage): message is GammaPaymentRequest {
+  return message.type === 2;
+}
+
+export function isGammaStatusUpdate(message: GammaOrderMessage): message is GammaStatusUpdate {
+  return message.type === 3;
+}
+
+export function isGammaShippingUpdate(message: GammaOrderMessage): message is GammaShippingUpdate {
+  return message.type === 4;
+}
+
 export interface GammaPaymentReceipt {
   kind: 17;
   orderId: string;
