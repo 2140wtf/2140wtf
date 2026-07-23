@@ -63,27 +63,27 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
 
   return useMutation({
     mutationFn: async (amount: number): Promise<BaoPetStarterGrantResult> => {
-      if (!enabled) throw new Error('BAO starter grant is disabled in real-money mode.');
+      if (!enabled) throw new Error('₿AO starter grant is disabled in real-money mode.');
       if (!user?.pubkey) throw new Error('You must be logged in to claim starter sats.');
       if (!seedAvailable || !seedPhrase) {
         throw new Error('Cashu seed is not available; make sure your signer supports NIP-44.');
       }
       const faucetUrl = config.baoSignetFaucetUrl?.trim();
-      if (!faucetUrl) throw new Error('BAO faucet is not configured.');
+      if (!faucetUrl) throw new Error('₿AO faucet is not configured.');
 
       const npub = nip19.npubEncode(user.pubkey);
       const requestAmount = clampBaoFaucetAmount(amount);
       if (requestAmount <= 0) {
-        throw new Error('BAO daily claim amount is too small or exhausted.');
+        throw new Error('₿AO daily claim amount is too small or exhausted.');
       }
       const res = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
 
       if (!res?.token) {
-        const reason = res?.message || 'BAO faucet did not return a token.';
+        const reason = res?.message || '₿AO faucet did not return a token.';
         throw new Error(reason);
       }
       if (isBaoFaucetDailyExhausted(res)) {
-        throw new Error(res.message ?? 'BAO 24h limit reached. Try again later.');
+        throw new Error(res.message ?? '₿AO 24h limit reached. Try again later.');
       }
 
       await baoWallet.receiveToken(res.token.trim());
@@ -93,7 +93,7 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
       const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
       const creditedAmount = clampBaoFaucetAmount(depositedSats, res.remaining24h);
       if (creditedAmount <= 0) {
-        throw new Error(res.message ?? 'BAO faucet returned an empty token.');
+        throw new Error(res.message ?? '₿AO faucet returned an empty token.');
       }
 
       return {

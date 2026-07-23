@@ -321,7 +321,7 @@ export function usePetsEvolve({
       }
 
       if (!isCashuPetsWallet) {
-        throw new Error('BAO signet pets cannot reach the adult stage. Switch to real Cashu sats mode to evolve your NOSTR PET.');
+        throw new Error('₿AO signet pets cannot reach the adult stage. Switch to real Cashu sats mode to evolve your NOSTR PET.');
       }
 
       // ─── Ensure Canonical Before Action ───
