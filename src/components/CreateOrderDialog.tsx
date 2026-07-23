@@ -54,8 +54,11 @@ export function CreateOrderDialog({
     () => getListingPriceState(listing, btcPrice),
     [listing, btcPrice],
   );
+  const requiresShipping =
+    listing.format !== 'digital' && listing.delivery !== 'digital';
+
   const { data: sellerShippingOptions } = useSellerShippingOptions(
-    open ? listing.pubkey : undefined,
+    open && requiresShipping ? listing.pubkey : undefined,
   );
   const { createOrder, isPending } = useGammaOrderActions();
   const { toast } = useToast();
@@ -64,9 +67,6 @@ export function CreateOrderDialog({
   const [note, setNote] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [selectedShipping, setSelectedShipping] = useState('');
-
-  const requiresShipping =
-    listing.format !== 'digital' && listing.delivery !== 'digital';
 
   const availableShipping = useMemo(() => {
     if (!sellerShippingOptions) return [];
