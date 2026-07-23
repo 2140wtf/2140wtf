@@ -36,7 +36,7 @@ describe('useHasUnreadMessages', () => {
       conversations: [{
         id: 'c1',
         participants: [otherPubkey],
-        messages: [{ id: 'm1', wrapId: 'w1', kind: 14, sender: viewerPubkey, recipients: [otherPubkey], content: 'hi', createdAt: 100 }],
+        messages: [{ id: 'm1', wrapId: 'w1', kind: 14, sender: viewerPubkey, recipients: [otherPubkey], content: 'hi', tags: [], createdAt: 100 }],
         lastMessageAt: 100,
       }],
       isLoading: false,
@@ -59,8 +59,8 @@ describe('useHasUnreadMessages', () => {
         id: 'c1',
         participants: [otherPubkey],
         messages: [
-          { id: 'm1', wrapId: 'w1', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'old', createdAt: 40 },
-          { id: 'm2', wrapId: 'w2', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'new', createdAt: 60 },
+          { id: 'm1', wrapId: 'w1', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'old', tags: [], createdAt: 40 },
+          { id: 'm2', wrapId: 'w2', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'new', tags: [], createdAt: 60 },
         ],
         lastMessageAt: 60,
       }],
@@ -85,7 +85,7 @@ describe('useHasUnreadMessages', () => {
       conversations: [{
         id: 'c1',
         participants: [otherPubkey],
-        messages: [{ id: 'm1', wrapId: 'w1', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'hi', createdAt: 80 }],
+        messages: [{ id: 'm1', wrapId: 'w1', kind: 14, sender: otherPubkey, recipients: [viewerPubkey], content: 'hi', tags: [], createdAt: 80 }],
         lastMessageAt: 80,
       }],
       isLoading: false,
