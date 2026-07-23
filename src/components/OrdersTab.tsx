@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquare, Package } from 'lucide-react';
+import { Eye, MessageSquare, Package } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 
 import { Badge } from '@/components/ui/badge';
@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGammaOrders } from '@/hooks/useGammaOrders';
+import { OrderDetailDialog } from '@/components/OrderDetailDialog';
 import { formatSats } from '@/lib/bitcoin';
-import { parseListingAddress } from '@/lib/gammaMarkets';
+import { parseListingAddress, type GammaOrder } from '@/lib/gammaMarkets';
 import { timeAgo } from '@/lib/timeAgo';
 
 interface OrdersTabProps {
@@ -50,6 +51,7 @@ export function OrdersTab({ pubkey }: OrdersTabProps) {
   const { user } = useCurrentUser();
   const { orders, isLoading } = useGammaOrders(pubkey);
   const navigate = useNavigate();
+  const [detailOrder, setDetailOrder] = useState<GammaOrder | null>(null);
 
   const sortedOrders = useMemo(
     () => [...orders].sort((a, b) => b.updatedAt - a.updatedAt),
@@ -111,18 +113,38 @@ export function OrdersTab({ pubkey }: OrdersTabProps) {
                   Updated {timeAgo(order.updatedAt)}
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => navigate(`/messages/${counterpartyNpub}`)}
-              >
-                <MessageSquare className="size-4 mr-1.5" />
-                Thread
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDetailOrder(order)}
+                >
+                  <Eye className="size-4 mr-1.5" />
+                  View
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/messages/${counterpartyNpub}`)}
+                >
+                  <MessageSquare className="size-4 mr-1.5" />
+                  Thread
+                </Button>
+              </div>
             </div>
           </div>
         );
       })}
+
+      {detailOrder && (
+        <OrderDetailDialog
+          order={detailOrder}
+          open={!!detailOrder}
+          onOpenChange={(open) => {
+            if (!open) setDetailOrder(null);
+          }}
+        />
+      )}
     </div>
   );
 }
