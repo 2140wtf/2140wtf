@@ -129,6 +129,7 @@ describe('NIP-17 helpers', () => {
     const message = {
       id: '1',
       wrapId: '1',
+      kind: 14,
       sender: other,
       recipients: [viewer],
       content: 'hi',

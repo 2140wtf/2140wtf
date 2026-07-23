@@ -5,9 +5,16 @@ import { GiftWrap, PrivateDirectMessage, Seal } from 'nostr-tools/kinds';
 import type { NostrEvent, NostrSigner } from '@nostrify/nostrify';
 import { isNostrId } from './nostrId';
 
+/** Inner event kinds that 2140.wtf routes through the NIP-17 inbox. */
+export const NIP17_DM_KIND = PrivateDirectMessage;
+export const NIP17_ORDER_KIND = 16;
+export const NIP17_RECEIPT_KIND = 17;
+export const NIP17_INNER_KINDS = [NIP17_DM_KIND, NIP17_ORDER_KIND, NIP17_RECEIPT_KIND] as const;
+
 export interface Nip17Message {
   id: string;
   wrapId: string;
+  kind: number;
   sender: string;
   recipients: string[];
   content: string;
@@ -40,6 +47,7 @@ export async function createNip17Rumor(
   recipientPubkeys: string[],
   content: string,
   options?: {
+    kind?: number;
     subject?: string;
     replyTo?: { eventId: string; relayUrl?: string };
   },
@@ -55,7 +63,7 @@ export async function createNip17Rumor(
   const pubkey = await signer.getPublicKey();
 
   const rumor: UnsignedEvent = {
-    kind: PrivateDirectMessage,
+    kind: options?.kind ?? PrivateDirectMessage,
     content,
     tags,
     created_at: Math.ceil(Date.now() / 1000),
@@ -126,6 +134,7 @@ export async function buildNip17GiftWraps(
   recipientPubkeys: string[],
   content: string,
   options?: {
+    kind?: number;
     subject?: string;
     replyTo?: { eventId: string; relayUrl?: string };
   },
@@ -232,7 +241,7 @@ export async function unsealNip17Rumor(
 /**
  * Fully unwrap a kind 1059 gift wrap to a Nip17Message.
  *
- * Returns null if any layer fails or the inner event is not a kind 14 rumor.
+ * Returns null if any layer fails or the inner event is not a supported DM kind.
  */
 export async function unwrapNip17Message(
   wrap: NostrEvent,
@@ -257,7 +266,7 @@ export function parseNip17Rumor(
   rumor: NostrEvent | Rumor,
   wrapId?: string,
 ): Nip17Message | null {
-  if (rumor.kind !== PrivateDirectMessage) return null;
+  if (!NIP17_INNER_KINDS.includes(rumor.kind as typeof NIP17_INNER_KINDS[number])) return null;
   if (!hasValidRumorShape(rumor)) return null;
   if (!isNostrId(rumor.pubkey)) return null;
   if (getEventHash(rumor) !== rumor.id) return null;
@@ -277,6 +286,7 @@ export function parseNip17Rumor(
   return {
     id: rumor.id,
     wrapId: wrapId ?? rumor.id,
+    kind: rumor.kind,
     sender: rumor.pubkey,
     recipients,
     content: rumor.content,
