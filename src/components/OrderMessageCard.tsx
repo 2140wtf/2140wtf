@@ -17,6 +17,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGammaOrderActions } from '@/hooks/useGammaOrderActions';
 import { useGammaOrder } from '@/hooks/useGammaOrders';
 import { RequestPaymentDialog } from '@/components/RequestPaymentDialog';
+import { PayOrderDialog } from '@/components/PayOrderDialog';
 import { formatSats } from '@/lib/bitcoin';
 import {
   isGammaOrderCreation,
@@ -91,6 +92,7 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
   const { user } = useCurrentUser();
   const { updateStatus, isPending } = useGammaOrderActions();
   const [requestOpen, setRequestOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
 
   const parsed = useMemo(
     () => parseGammaOrderMessage(message) ?? parseGammaPaymentReceipt(message),
@@ -130,11 +132,17 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
   }
 
   const isMerchant = creation ? user?.pubkey === creation.merchantPubkey : false;
+  const isBuyer = paymentRequest ? user?.pubkey === paymentRequest.buyerPubkey : false;
   const canRequestPayment =
     isMerchant &&
     order &&
     !order.paymentRequest &&
     (order.status === 'pending' || order.status === 'confirmed');
+  const canPay =
+    paymentRequest &&
+    isBuyer &&
+    !order?.receipt &&
+    (order?.status === 'pending' || order?.status === 'confirmed' || order?.status === 'processing');
 
   return (
     <div className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
@@ -387,6 +395,29 @@ export function OrderMessageCard({ message, isMe }: OrderMessageCardProps) {
                 <span className="ml-1">Cancel order</span>
               </Button>
             </div>
+          )}
+
+          {/* Buyer pay action on payment request */}
+          {paymentRequest && canPay && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                size="sm"
+                variant={isMe ? 'secondary' : 'default'}
+                disabled={isPending}
+                onClick={() => setPayOpen(true)}
+              >
+                <Banknote className="size-3.5" />
+                <span className="ml-1">Pay</span>
+              </Button>
+            </div>
+          )}
+
+          {paymentRequest && (
+            <PayOrderDialog
+              paymentRequest={paymentRequest}
+              open={payOpen}
+              onOpenChange={setPayOpen}
+            />
           )}
         </CardContent>
       </Card>
