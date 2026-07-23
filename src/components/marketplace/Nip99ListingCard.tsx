@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download, DollarSign, Bitcoin, ImageOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { nip19 } from 'nostr-tools';
 
 import LoginDialog from '@/components/auth/LoginDialog';
 
@@ -23,7 +24,7 @@ import { useMarkListingSold } from '@/hooks/useMarkListingSold';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
-import { MarketplaceBuyDialog } from '@/components/marketplace/MarketplaceBuyDialog';
+import { CreateOrderDialog } from '@/components/CreateOrderDialog';
 import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, type Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
@@ -75,6 +76,10 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
 
   const isSeller = user?.pubkey === listing.pubkey;
   const canBuy = canCheckout(listing) && !isSeller;
+  const merchantNpub = useMemo(() => nip19.npubEncode(listing.pubkey), [listing.pubkey]);
+  const handleCreated = () => {
+    navigate(`/messages/${merchantNpub}`);
+  };
   const { startSignup } = useOnboarding();
   const [loginOpen, setLoginOpen] = useState(false);
   const [showUsd, setShowUsd] = useState(false);
@@ -370,10 +375,11 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
       </Dialog>
 
       {canBuy && (
-        <MarketplaceBuyDialog
+        <CreateOrderDialog
           listing={listing}
           open={buyOpen}
           onOpenChange={setBuyOpen}
+          onCreated={handleCreated}
         />
       )}
 
