@@ -16,6 +16,8 @@ import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useDmReadCursors } from '@/hooks/useDmReadCursors';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
+import { OrderMessageCard } from '@/components/OrderMessageCard';
+import { isGammaOrderMessage } from '@/lib/gammaMarkets';
 import { computeNip17ConversationId, parseNip17Rumor } from '@/lib/nip17';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { getDisplayName } from '@/lib/getDisplayName';
@@ -143,7 +145,9 @@ export function MessageThreadPage() {
         ) : conversation ? (
           conversation.messages.map((message) => {
             const isMe = message.sender === user.pubkey;
-            return (
+            return isGammaOrderMessage(message) ? (
+              <OrderMessageCard key={message.id} message={message} isMe={isMe} />
+            ) : (
               <div
                 key={message.id}
                 className={cn(

@@ -39,9 +39,9 @@ vi.mock('@/components/auth/LoginDialog', () => ({
     isOpen ? <div data-testid="login-dialog">Login dialog</div> : null,
 }));
 
-vi.mock('@/components/marketplace/MarketplaceBuyDialog', () => ({
-  MarketplaceBuyDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="buy-dialog">Buy dialog</div> : null,
+vi.mock('@/components/CreateOrderDialog', () => ({
+  CreateOrderDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="create-order-dialog">Create order dialog</div> : null,
 }));
 
 function makeListing(): Nip99Listing {
@@ -108,7 +108,7 @@ describe('Nip99ListingCard', () => {
     });
 
     expect(screen.getByTestId('login-dialog')).toBeInTheDocument();
-    expect(screen.queryByTestId('buy-dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('create-order-dialog')).not.toBeInTheDocument();
   });
 
   it('opens the buy dialog when a logged-in user clicks Buy', async () => {
@@ -130,6 +130,6 @@ describe('Nip99ListingCard', () => {
     });
 
     expect(screen.queryByTestId('login-dialog')).not.toBeInTheDocument();
-    expect(screen.getByTestId('buy-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('create-order-dialog')).toBeInTheDocument();
   });
 });
