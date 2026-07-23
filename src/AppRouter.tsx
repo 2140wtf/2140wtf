@@ -93,6 +93,7 @@ const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ defa
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
+const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
@@ -342,6 +343,7 @@ export function AppRouter() {
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
               <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
+              <Route path="/bao-funding" element={<BaoFundingPage />} />
           <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
