@@ -1,0 +1,216 @@
+{
+  "v": 1,
+  "commands": [
+    {
+      "name": "help",
+      "description": "List everything Concordia can do"
+    },
+    {
+      "name": "ping",
+      "description": "Round-trip latency check"
+    },
+    {
+      "name": "roll",
+      "description": "Roll a die",
+      "args": [
+        {
+          "name": "sides",
+          "type": "int",
+          "description": "How many sides (default 6)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "announce",
+      "description": "Format a two-part announcement",
+      "args": [
+        {
+          "name": "title",
+          "type": "string",
+          "description": "Announcement title",
+          "required": true
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "description": "Announcement body",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "typetest",
+      "description": "Echo back every param type, parsed",
+      "args": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "Any free text",
+          "required": true
+        },
+        {
+          "name": "count",
+          "type": "int",
+          "description": "A whole number",
+          "required": true
+        },
+        {
+          "name": "ratio",
+          "type": "number",
+          "description": "A decimal number",
+          "required": true
+        },
+        {
+          "name": "loud",
+          "type": "bool",
+          "description": "true or false",
+          "required": true
+        },
+        {
+          "name": "who",
+          "type": "user",
+          "description": "Any user (npub)",
+          "required": true
+        },
+        {
+          "name": "color",
+          "type": "choice",
+          "description": "Pick a color",
+          "required": true,
+          "choices": [
+            "red",
+            "green",
+            "blue"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "greet",
+      "description": "Greet a member in a chosen style",
+      "args": [
+        {
+          "name": "who",
+          "type": "user",
+          "description": "Who to greet",
+          "required": true
+        },
+        {
+          "name": "style",
+          "type": "choice",
+          "description": "Greeting style",
+          "required": true,
+          "choices": [
+            "formal",
+            "casual",
+            "pirate"
+          ]
+        },
+        {
+          "name": "times",
+          "type": "int",
+          "description": "Repeat 1-5 times (default 1)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "calc",
+      "description": "Do some arithmetic",
+      "args": [
+        {
+          "name": "a",
+          "type": "number",
+          "description": "First operand",
+          "required": true
+        },
+        {
+          "name": "op",
+          "type": "choice",
+          "description": "Operation",
+          "required": true,
+          "choices": [
+            "add",
+            "sub",
+            "mul",
+            "div"
+          ]
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "description": "Second operand",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "reply",
+      "description": "Get a threaded reply to your message"
+    },
+    {
+      "name": "react",
+      "description": "React to your message",
+      "args": [
+        {
+          "name": "emoji",
+          "type": "choice",
+          "description": "Which reaction",
+          "required": false,
+          "choices": [
+            "🔥",
+            "👍",
+            "❤️",
+            "😂",
+            "🫡"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit",
+      "description": "Watch me send then edit a message"
+    },
+    {
+      "name": "delete",
+      "description": "Watch a message self-destruct"
+    },
+    {
+      "name": "typing",
+      "description": "Emit a typing indicator"
+    },
+    {
+      "name": "file",
+      "description": "Receive a small encrypted attachment"
+    },
+    {
+      "name": "members",
+      "description": "The folded member list"
+    },
+    {
+      "name": "channels",
+      "description": "The channels I can see here"
+    },
+    {
+      "name": "caps",
+      "description": "My capabilities here (roles engine)"
+    },
+    {
+      "name": "roles",
+      "description": "The community roster"
+    },
+    {
+      "name": "info",
+      "description": "Community protocol + ownership summary"
+    },
+    {
+      "name": "whoami",
+      "description": "My npub and this channel id"
+    },
+    {
+      "name": "reconnect",
+      "description": "Bounce my relay sockets (reconnect drill)"
+    }
+  ]
+}

@@ -32,6 +32,8 @@ import { DEFAULT_SIDEBAR_WIDGETS, SIDEBAR_WIDGETS_VERSION } from "@/lib/sidebarW
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
 import { RemoteBattleProvider } from "@/pets/battle";
 import { WireSync } from "@/wire/WireSync";
+import { ControlPlaneSync } from "@/components/ControlPlaneSync";
+import { DecryptConsentDialog } from "@/components/DecryptConsentDialog";
 import AppRouter from "./AppRouter";
 
 const head = createHead({
@@ -269,6 +271,12 @@ export function App() {
                                     community relay + parked-wrap drain. Renders null;
                                     no UI of its own (the chat UI lands in phase 2). */}
                                 <WireSync />
+                                {/* ₿AO chat: sweep every community's control plane on
+                                    pageload (renders null). */}
+                                <ControlPlaneSync />
+                                {/* ₿AO chat: the one-time bulk-decrypt consent prompt,
+                                    mounted app-wide so any surface can trigger it. */}
+                                <DecryptConsentDialog />
                               </RemoteBattleProvider>
                             </CashuWalletProvider>
                           </DmInboxProvider>
