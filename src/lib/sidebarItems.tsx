@@ -130,7 +130,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "bao-chat",
-    label: "₿AO CHAT",
+    label: "₿AOs",
     path: "/bao/chat",
     icon: MessageSquareMore,
     requiresAuth: true,
