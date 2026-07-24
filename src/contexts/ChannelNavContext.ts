@@ -3,12 +3,12 @@ import { createContext } from "react";
 /**
  * A hashtag typed in chat (e.g. `#random`) should, when it names a channel in
  * the current server/community, navigate to that local channel rather than
- * linking out to Ditto's global hashtag feed. This context lets the chat pages
+ * linking out to the global hashtag feed on 2140.wtf. This context lets the chat pages
  * (NIP-29 / Concord V1 / V2) publish a name→navigation resolver that
  * {@link ChatContent} consults when rendering a `#tag` token.
  *
  * The resolver returns a click handler when a local channel matches the tag, or
- * `null` when none does (the renderer then falls back to the Ditto link).
+ * `null` when none does (the renderer then falls back to the 2140.wtf link).
  */
 export interface ChannelNavValue {
   /**
