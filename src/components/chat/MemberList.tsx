@@ -1,6 +1,6 @@
-import { AtSign, Ban, Bot, Copy, Crown, IdCard, MessageSquareText, MoreVertical, Music, Shield, ShieldOff, Smile, UserMinus, X } from "lucide-react";
+import { AtSign, Ban, Bot, ChevronDown, Copy, Crown, IdCard, MessageSquareText, MoreVertical, Music, Shield, ShieldOff, Smile, UserMinus, X } from "lucide-react";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BotPill } from "@/components/BotPill";
@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmojifiedText } from "@/components/chat/CustomEmoji";
+import { Switch } from "@/components/ui/switch";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useScopedIdentity } from "@/hooks/useScopedDisplayName";
 import { isStatusExpired, useUserStatus } from "@/hooks/useUserStatus2";
@@ -33,7 +34,15 @@ import { getAvatarShape } from "@/lib/avatarShape";
 import { tryNpubEncode } from "@/lib/safeNip19";
 import { cn } from "@/lib/utils";
 import { writeClipboardText } from "@/lib/clipboard";
+import {
+  DEFAULT_WOT_AGENT_MAX_DISTANCE,
+  partitionMembersByWot,
+  wotBadge,
+  wotBadgeLabel,
+  type WotBadge,
+} from "@/lib/wotFilter";
 
+import type { WotScore } from "@/lib/wot";
 import type { Nip29Admin } from "@/lib/nip29";
 import type { ComponentType, ReactNode } from "react";
 
@@ -55,11 +64,39 @@ interface MenuParts {
   Label: ComponentType<{ className?: string; children?: ReactNode }>;
 }
 
+/**
+ * Quiet web-of-trust indicator: a fixed-size dot (no layout shift) whose color
+ * encodes the member's follow-graph distance from the viewer, with the detail
+ * in a native tooltip. Renders nothing for the viewer themselves.
+ */
+function WotTrustDot({ badge }: { badge: WotBadge }) {
+  if (badge.kind === "self") return null;
+  return (
+    <span
+      title={wotBadgeLabel(badge)}
+      aria-label={wotBadgeLabel(badge)}
+      className="shrink-0 inline-flex items-center justify-center size-2"
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          badge.kind === "within" && badge.distance <= 1 && "bg-success",
+          badge.kind === "within" && badge.distance > 1 && "bg-primary/70",
+          badge.kind === "vouched" && "bg-amber-500/70",
+          badge.kind === "outside" && "bg-muted-foreground/40",
+        )}
+      />
+    </span>
+  );
+}
+
 interface MemberRowProps {
   pubkey: string;
   roles?: string[];
   /** Live presence dot (Buzz relays). Undefined = unknown (no dot). */
   presence?: "online" | "away";
+  /** Web-of-trust score for the trust dot. Undefined = still loading (no dot). */
+  wotScore?: WotScore;
   canModerate: boolean;
   /** Whether the viewer is an admin (required to grant the admin role). */
   viewerIsAdmin: boolean;
@@ -87,6 +124,7 @@ function MemberRow({
   pubkey,
   roles,
   presence,
+  wotScore,
   canModerate,
   viewerIsAdmin,
   currentUserPubkey,
@@ -129,6 +167,10 @@ function MemberRow({
       () => toast({ title: "Copy failed", variant: "destructive" }),
     );
   };
+
+  // Trust dot: nothing while scores are still resolving (fail open — a
+  // not-yet-loaded graph would otherwise paint everyone "outside").
+  const badge = wotBadge(wotScore);
 
   // Shared between the ⋮ dropdown and the right-click context menu.
   const renderMenuItems = ({ Item, Separator, Label }: MenuParts) => (
@@ -336,6 +378,7 @@ function MemberRow({
         </span>
       ) : null}
       <BotPill metadata={metadata} />
+      {badge && <WotTrustDot badge={badge} />}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -378,6 +421,22 @@ interface MemberListProps {
   viewerIsAdmin?: boolean;
   /** The viewer's own pubkey, to suppress self-moderation. */
   currentUserPubkey?: string;
+  /**
+   * Web-of-trust agent filter + trust badges (₿AO chat). When omitted, no
+   * WoT UI renders at all (NIP-29 groups, etc. keep the legacy roster).
+   */
+  wot?: {
+    /** Per-member scores from `useWot` (zero-valued while loading). */
+    scores: Map<string, WotScore>;
+    /** True only once the follow graph has loaded — badges and the filter fail open until then. */
+    resolved: boolean;
+    /** Whether the per-community "filter agents by web of trust" toggle is on. */
+    filterEnabled: boolean;
+    /** Persist the toggle (per community, owned by the caller). */
+    onFilterEnabledChange: (enabled: boolean) => void;
+    /** Trust radius in follow hops. Default {@link DEFAULT_WOT_AGENT_MAX_DISTANCE}. */
+    maxDistance?: number;
+  };
   onRemove?: (pubkey: string) => void;
   onSetRole?: (pubkey: string, roles: string[]) => void;
   /** Concord moderation (additive; NIP-29 leaves these unset). */
@@ -408,6 +467,7 @@ export function MemberList({
   canModerate,
   viewerIsAdmin = false,
   currentUserPubkey,
+  wot,
   onRemove,
   onSetRole,
   onKick,
@@ -436,6 +496,32 @@ export function MemberList({
     .filter((pubkey) => !adminMap.has(pubkey))
     .sort((a, b) => a.localeCompare(b));
 
+  // Agent filter (₿AO chat): members outside the viewer's trust radius are
+  // collapsed behind an expandable row. Community-role holders (owner, admins,
+  // moderators — the `admins` list) are community-vouched and never collapse;
+  // nor does the viewer. Fails open while scores resolve.
+  const exempt = useMemo(() => {
+    const set = new Set(admins.map((a) => a.pubkey));
+    if (currentUserPubkey) set.add(currentUserPubkey);
+    return set;
+  }, [admins, currentUserPubkey]);
+  const { visible: visibleRegulars, filtered: filteredRegulars } = useMemo(
+    () =>
+      partitionMembersByWot(regulars, wot?.scores ?? new Map(), {
+        enabled: wot?.filterEnabled ?? false,
+        resolved: wot?.resolved ?? false,
+        maxDistance: wot?.maxDistance ?? DEFAULT_WOT_AGENT_MAX_DISTANCE,
+        exempt,
+      }),
+    // `regulars` is a fresh array each render; key the memo on its contents.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [regulars.join(","), wot, exempt],
+  );
+  const [filteredOpen, setFilteredOpen] = useState(false);
+
+  /** Score for a row, or undefined while the graph loads (renders no dot). */
+  const scoreFor = (pubkey: string) => (wot?.resolved ? wot.scores.get(pubkey) : undefined);
+
   return (
     <aside
       className={cn(
@@ -456,6 +542,24 @@ export function MemberList({
           </Button>
         </div>
       )}
+      {/* Web-of-trust agent filter (₿AO chat), persisted per community by the caller. */}
+      {wot && (
+        <div className="flex items-center gap-2 px-2 py-1.5 shrink-0">
+          <Bot className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span
+            className="flex-1 min-w-0 text-xs text-muted-foreground truncate"
+            title="Collapse members beyond your web of trust (2 follow hops) behind an expandable row, and hide their messages"
+          >
+            Filter agents by web of trust
+          </span>
+          <Switch
+            checked={wot.filterEnabled}
+            onCheckedChange={wot.onFilterEnabledChange}
+            aria-label="Filter agents by web of trust"
+            className="scale-75 origin-right"
+          />
+        </div>
+      )}
       {admins.length > 0 && (
         <>
           <h3 className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -467,6 +571,7 @@ export function MemberList({
               pubkey={admin.pubkey}
               roles={admin.roles}
               presence={presence?.[admin.pubkey]}
+              wotScore={scoreFor(admin.pubkey)}
               canModerate={canModerate}
               viewerIsAdmin={viewerIsAdmin}
               currentUserPubkey={currentUserPubkey}
@@ -485,19 +590,20 @@ export function MemberList({
       )}
 
       <h3 className="px-2 py-1 mt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Members · {regulars.length}
+        Members · {visibleRegulars.length}
       </h3>
       {regulars.length === 0 ? (
         <p className="px-2 py-2 text-xs text-muted-foreground">
           No visible members. The relay may hide the member list.
         </p>
       ) : (
-        regulars.map((pubkey) => (
+        visibleRegulars.map((pubkey) => (
           <MemberRow
             key={pubkey}
             pubkey={pubkey}
             roles={memberRoles?.[pubkey] ? [memberRoles[pubkey]] : undefined}
             presence={presence?.[pubkey]}
+            wotScore={scoreFor(pubkey)}
             canModerate={canModerate}
             viewerIsAdmin={viewerIsAdmin}
             currentUserPubkey={currentUserPubkey}
@@ -512,6 +618,43 @@ export function MemberList({
             onMessage={onMessage}
           />
         ))
+      )}
+      {/* Collapsed out-of-trust members (agent filter ON). Expands in place. */}
+      {filteredRegulars.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={filteredOpen}
+            onClick={() => setFilteredOpen((v) => !v)}
+            className="flex items-center gap-1.5 px-2 py-1 mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Bot className="size-3.5 shrink-0" aria-hidden />
+            {filteredRegulars.length} filtered agent{filteredRegulars.length === 1 ? "" : "s"}
+            <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", filteredOpen && "rotate-180")} aria-hidden />
+          </button>
+          {filteredOpen &&
+            filteredRegulars.map((pubkey) => (
+              <MemberRow
+                key={pubkey}
+                pubkey={pubkey}
+                roles={memberRoles?.[pubkey] ? [memberRoles[pubkey]] : undefined}
+                presence={presence?.[pubkey]}
+                wotScore={scoreFor(pubkey)}
+                canModerate={canModerate}
+                viewerIsAdmin={viewerIsAdmin}
+                currentUserPubkey={currentUserPubkey}
+                onRemove={onRemove}
+                onSetRole={onSetRole}
+                onKick={onKick}
+                onBan={onBan}
+                banLabel={banLabel}
+                onUnban={onUnban}
+                isBanned={bannedPubkeys?.has(pubkey)}
+                onEditProfile={onEditProfile}
+                onMessage={onMessage}
+              />
+            ))}
+        </>
       )}
     </aside>
   );

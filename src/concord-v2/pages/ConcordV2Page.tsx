@@ -49,6 +49,7 @@ import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useSyncTasks } from "@/hooks/useSyncActivity";
 import { concordChannelMuteKey, useMutes } from "@/hooks/useMutes";
 import { useNotifLevels, concordChannelScopeKey } from "@/hooks/useNotifLevels";
+import { useWot } from "@/hooks/useWot";
 import { NotifLevelMenu } from "@/components/NotifLevelMenu";
 import { toast } from "@/hooks/useToast";
 import { useCommunity2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityList2";
@@ -76,9 +77,10 @@ import type { ChannelV2, CommunityV2, ImagePointer } from "@/concord-v2/lib/type
 import { cn, pickDefaultChannel } from "@/lib/utils";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { shortTimeAgo } from "@/lib/formatTime";
+import { partitionMembersByWot } from "@/lib/wotFilter";
 
 import { authorsByRecency, threadSummary } from "@/components/chat/transport";
-import type { ChatMsg, MessageReactions, MessageZaps, SendStatus, ZapPayment } from "@/components/chat/transport";
+import type { ChatMsg, ChatTransport, MessageReactions, MessageZaps, SendStatus, ZapPayment } from "@/components/chat/transport";
 
 /** Stable empty replies array so a thread-less row keeps a constant prop. */
 const EMPTY_REPLIES: ChatMsg[] = [];
@@ -979,6 +981,51 @@ export function ConcordV2Page() {
     return [...set];
   }, [coalesced, allMessages, roster, ownerHex, user, folded]);
 
+  // ── Web-of-trust agent filter (task #24 phase B) ──────────────────────────
+  // Scores from the viewer's follow graph drive (a) the trust dots in the
+  // member list and (b) the per-community "filter agents by web of trust"
+  // toggle, which collapses out-of-trust members in the roster and hides
+  // their timeline messages. Concord V2 has no explicit bot marker on its
+  // roster, so the filter applies to every non-exempt member (role holders
+  // and the viewer are exempt — see `wotExempt`); it is surfaced as an
+  // "agent filter" because agents are who it catches in practice.
+  const { scores: wotScores, isSuccess: wotSuccess, data: wotGraphEvents } = useWot(memberPubkeys);
+  // Fail open until scores are real: a loading query yields all-zero scores
+  // indistinguishable from "unreachable", and an anchor with no kind 3 at all
+  // (empty graph) can't tell friends from spam either — both stay unfiltered.
+  const wotResolved = wotSuccess && (wotGraphEvents?.length ?? 0) > 0;
+  const agentFilterEnabled = Boolean(
+    lastChannelKey && config.wotAgentFilterByCommunity?.[lastChannelKey],
+  );
+  const setAgentFilterEnabled = useCallback(
+    (enabled: boolean) => {
+      if (!lastChannelKey) return;
+      updateConfig((c) => ({
+        ...c,
+        wotAgentFilterByCommunity: { ...c.wotAgentFilterByCommunity, [lastChannelKey]: enabled },
+      }));
+    },
+    [lastChannelKey, updateConfig],
+  );
+  // Community-role holders are vouched for by the community's own trust
+  // structure (and moderators must always see each other), so they — and the
+  // viewer — can never be filtered out.
+  const wotExempt = useMemo(() => {
+    const set = new Set(memberAdmins.map((a) => a.pubkey));
+    if (user) set.add(user.pubkey);
+    return set;
+  }, [memberAdmins, user]);
+  const filteredAgentPubkeys = useMemo(() => {
+    if (!agentFilterEnabled) return new Set<string>();
+    return new Set(
+      partitionMembersByWot(memberPubkeys, wotScores, {
+        enabled: true,
+        resolved: wotResolved,
+        exempt: wotExempt,
+      }).filtered,
+    );
+  }, [agentFilterEnabled, memberPubkeys, wotScores, wotResolved, wotExempt]);
+
   const openThread = useCallback((event: ChatMsg, focusReply = false) => {
     setThreadAutoFocus(focusReply);
     setThreadRoot(event);
@@ -1049,6 +1096,17 @@ export function ConcordV2Page() {
 
   // Inject `openThread` (page-owned panel state) onto the data transport.
   const transport = useMemo(() => ({ ...baseTransport, openThread }), [baseTransport, openThread]);
+  // Agent filter choke point: the timeline renders `transport.messages`, so a
+  // filtered copy here hides filtered agents' top-level messages without
+  // touching MessageTimeline (shared with NIP-29/DMs/mesh) or the wire
+  // engine. Thread panels and reply context keep the unfiltered transport.
+  const timelineTransport = useMemo<ChatTransport>(() => {
+    if (filteredAgentPubkeys.size === 0) return transport;
+    return {
+      ...transport,
+      messages: transport.messages.filter((m) => !filteredAgentPubkeys.has(m.pubkey)),
+    };
+  }, [transport, filteredAgentPubkeys]);
   // Recently-active members, for a bot command's `user`-argument picker. Concord
   // hands its timeline to ChatComposer as `messages: []`, so it must supply this.
   const recentAuthors = useMemo(() => authorsByRecency(transport.messages), [transport.messages]);
@@ -1714,7 +1772,7 @@ export function ConcordV2Page() {
                 <>
                   <MessageTimeline
                     key={channel?.idHex ?? "none"}
-                    transport={transport}
+                    transport={timelineTransport}
                     handleRef={timelineRef}
                     syncing={channelSyncing}
                     className="flex-1 min-h-0"
@@ -1920,6 +1978,12 @@ export function ConcordV2Page() {
                   canModerate={canManageRoles || canKickAny || canBanAny}
                   viewerIsAdmin={iAmOwner}
                   currentUserPubkey={user?.pubkey}
+                  wot={{
+                    scores: wotScores,
+                    resolved: wotResolved,
+                    filterEnabled: agentFilterEnabled,
+                    onFilterEnabledChange: setAgentFilterEnabled,
+                  }}
                   onSetRole={canManageRoles ? handleSetRole : undefined}
                   onKick={canKickAny ? (pk) => moderation.kick({ target: pk }).catch(() => {}) : undefined}
                   onBan={canBanAny ? setBanTarget : undefined}
