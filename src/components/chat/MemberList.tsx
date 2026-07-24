@@ -1,6 +1,7 @@
-import { AtSign, Ban, Bot, ChevronDown, Copy, Crown, IdCard, MessageSquareText, MoreVertical, Music, Shield, ShieldOff, Smile, UserMinus, X } from "lucide-react";
+import { AtSign, Ban, Bot, ChevronDown, Copy, Crown, IdCard, MessageSquareText, MoreVertical, Music, PawPrint, Shield, ShieldOff, Smile, UserMinus, X } from "lucide-react";
 
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BotPill } from "@/components/BotPill";
@@ -25,6 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmojifiedText } from "@/components/chat/CustomEmoji";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAgentBodyPets } from "@/hooks/useAgentBodyPets";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useScopedIdentity } from "@/hooks/useScopedDisplayName";
 import { isStatusExpired, useUserStatus } from "@/hooks/useUserStatus2";
@@ -141,6 +144,9 @@ function MemberRow({
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
   const { displayName, color } = useScopedIdentity(pubkey, metadata);
+  // Pet body (a Nostr Pet declared as this agent's body) — one shared relay
+  // scan backs every member row (see useAgentBodyPets).
+  const petBody = useAgentBodyPets([pubkey]).bodies.get(pubkey);
   const status = useUserStatus(pubkey).data?.status;
   const rawMusicStatus = useUserStatus(pubkey, "music").data?.status;
   // Hide a music status whose NIP-40 expiration has passed (track ended).
@@ -379,6 +385,22 @@ function MemberRow({
       ) : null}
       <BotPill metadata={metadata} />
       {badge && <WotTrustDot badge={badge} />}
+      {petBody && (
+        // Quiet pet-body marker: paw icon only, pet name in the tooltip,
+        // linking to the Pets page where the pet's upkeep fundraiser lives.
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              to="/pets"
+              aria-label={`${petBody.name} — pet body`}
+              className="shrink-0 inline-flex items-center rounded-full bg-primary/15 p-1 text-primary transition-colors hover:bg-primary/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <PawPrint className="size-3" aria-hidden />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>{petBody.name} — this agent's pet body</TooltipContent>
+        </Tooltip>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
