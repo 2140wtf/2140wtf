@@ -11,7 +11,7 @@ import { liveEntries, rehydrateCommunity } from "@/concord-v2/lib/communityList"
 import { controlGroups } from "@/concord-v2/lib/control";
 import { openPlaneWrapsChunked } from "@/concord-v2/lib/planeSync";
 import { ackPendingWraps, peekPendingWraps, writeOpened, writeRumors } from "@/concord-v2/lib/rumorStore";
-import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
+import { registerStreamKeys, streamAuthGeneration } from "@/concord-v2/lib/streamAuth";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useEventStore } from "@/hooks/useEventStore";
 import { readFolded } from "@/lib/foldedCache";
@@ -75,13 +75,16 @@ const WATCHDOG_TICK_MS = 5_000;
  */
 const REPLAY_BATCH_MAX = 200;
 
-function cursorKey(relay: string): string {
-  return `2140:wire-cursor:${relay}`;
+function cursorKey(owner: string, relay: string): string {
+  // Keyed per account: a relay-only cursor shared across accounts lets
+  // account B resume from where account A got to and permanently skip every
+  // message in between.
+  return `2140:wire-cursor:${owner}:${relay}`;
 }
 
-function readCursor(relay: string): number | undefined {
+function readCursor(owner: string, relay: string): number | undefined {
   try {
-    const raw = localStorage.getItem(cursorKey(relay));
+    const raw = localStorage.getItem(cursorKey(owner, relay));
     const n = raw ? Number(raw) : NaN;
     return Number.isFinite(n) && n > 0 ? n : undefined;
   } catch {
@@ -89,7 +92,7 @@ function readCursor(relay: string): number | undefined {
   }
 }
 
-function writeCursor(relay: string, createdAt: number): void {
+function writeCursor(owner: string, relay: string, createdAt: number): void {
   try {
     // Clamp against the local clock: an event stamped in the future (a
     // member's skewed clock, a hostile timestamp) must not drag the cursor
@@ -97,8 +100,8 @@ function writeCursor(relay: string, createdAt: number): void {
     // would go deaf on this relay (persistently — the cursor is durable)
     // while everyone else's correctly-stamped messages stop matching.
     const next = Math.min(createdAt, Math.floor(Date.now() / 1000));
-    const prev = readCursor(relay) ?? 0;
-    if (next > prev) localStorage.setItem(cursorKey(relay), String(next));
+    const prev = readCursor(owner, relay) ?? 0;
+    if (next > prev) localStorage.setItem(cursorKey(owner, relay), String(next));
   } catch {
     // localStorage unavailable — resume from the fresh lookback next launch.
   }
@@ -133,6 +136,11 @@ function useWireConcord2Channels(): Array<{ relays: string[]; channel: ChannelV2
     refetchInterval: 2 * 60_000,
     refetchIntervalInBackground: false,
     queryFn: async () => {
+      // Account-switch guard: the registry is reset synchronously on switch,
+      // but this queryFn's IndexedDB reads may resolve AFTER that reset —
+      // registering then would re-admit the previous account's stream keys
+      // into the new session. Bail if the generation moved under us.
+      const generation = streamAuthGeneration();
       const out: Array<{ relays: string[]; channel: ChannelV2; communityIdHex: string }> = [];
       for (const entry of entries) {
         const community = rehydrateCommunity(entry);
@@ -144,6 +152,7 @@ function useWireConcord2Channels(): Array<{ relays: string[]; channel: ChannelV2
           out.push({ relays: community.relays, channel, communityIdHex: community.idHex });
           keys.push(...channel.streams.map((s) => s.group));
         }
+        if (streamAuthGeneration() !== generation) return out;
         // Scoped per community, so a relay's NIP-42 challenge only signs the
         // stream keys it actually hosts (see streamAuth.ts).
         registerStreamKeys(keys, community.relays);
@@ -245,6 +254,8 @@ export function WireSync() {
   useEffect(() => {
     if (!user || spec.subs.length === 0) return;
     const controller = new AbortController();
+    // Cursor namespace for this account (see cursorKey).
+    const owner = user.pubkey;
 
     // Per-relay "restart your round now" hooks: aborts the in-flight round and
     // skips any backoff sleep, so the loop re-REQs immediately. Driven by the
@@ -299,7 +310,7 @@ export function WireSync() {
           // Recompute the resume point each round: the cursor advanced with
           // everything the previous round ingested.
           const now = Math.floor(Date.now() / 1000);
-          const cursor = readCursor(relay);
+          const cursor = readCursor(owner, relay);
           const floor = now - MAX_CURSOR_AGE_SECONDS;
           const since = Math.max(
             cursor !== undefined ? cursor - CURSOR_OVERLAP_SECONDS : now - FRESH_LOOKBACK_SECONDS,
@@ -353,7 +364,7 @@ export function WireSync() {
             replay = [];
             await ingestWireEvents(sinksRef.current, batch, { live: false });
             ingested += batch.length;
-            writeCursor(relay, Math.max(...batch.map((e) => e.created_at)));
+            writeCursor(owner, relay, Math.max(...batch.map((e) => e.created_at)));
           };
           try {
             try {
@@ -373,7 +384,7 @@ export function WireSync() {
                   if (eosed) {
                     await ingestWireEvents(sinksRef.current, [event], { live: true });
                     ingested += 1;
-                    writeCursor(relay, event.created_at);
+                    writeCursor(owner, relay, event.created_at);
                   } else {
                     replay.push(event);
                     if (replay.length >= REPLAY_BATCH_MAX) await flushReplay();

@@ -11,6 +11,7 @@ import { NIndexedDB } from '@nostrify/indexeddb';
 import { NostrStorageContext } from '@/contexts/NostrStorageContext';
 import { EventStoreContext, type EventStoreContextType } from '@/contexts/EventStoreContext';
 import { emitRelayReopened } from '@/lib/relayReopen';
+import { normalizeRelayUrl } from '@/lib/platform';
 import { logSync } from '@/lib/syncLog';
 import {
   _resetStreamAuthRegistry,
@@ -55,6 +56,19 @@ const AUTH_MIN_INTERVAL_MS = 5_000;
  * round-trip exceeds it (and its AUTH is then delivered out-of-band).
  */
 const USER_AUTH_HEADSTART_MS = 1_200;
+
+/**
+ * Extended window the user signer gets after losing the head-start race,
+ * before NRelay1's awaited AUTH is answered with a stream key. NRelay1 grants
+ * each sub exactly ONE auth-retry per socket and fires it the moment the auth
+ * promise resolves — answering with a stream key while the user signer is
+ * merely slow (a healthy but latent NIP-46 bunker) retries user-identity-gated
+ * subs under the stream identity, the relay re-rejects them, and they die
+ * until the next reconnect. Waiting out a slow-but-alive bunker keeps those
+ * subs alive; the stream-key answer is reserved for a bunker that is truly
+ * not answering (where user-gated subs could never authenticate anyway).
+ */
+const USER_AUTH_EXTENDED_MS = 15_000;
 
 /**
  * NIP-59 gift-wrap kinds (Concord V2 wraps + ephemeral variant). See
@@ -351,6 +365,13 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     if (prevPubkeyRef.current !== currentLogin?.pubkey) {
       prevPubkeyRef.current = currentLogin?.pubkey;
       _resetStreamAuthRegistry();
+      // The signed user-AUTH cache is identity-bound: without this, a relay
+      // re-issuing the identical challenge string after an account switch
+      // would be answered with the PREVIOUS account's kind-22242 (the
+      // cache-hit path skips the sign-time pubkey validation).
+      authCacheRef.current.clear();
+      authCooldownRef.current.clear();
+      authInFlightRef.current.clear();
     }
   }, [currentLogin?.pubkey]);
 
@@ -371,6 +392,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     pool.current = new NPool({
       open(relayUrl: string) {
         const url = new URL(relayUrl);
+        // Single key form for ALL graft state (auth maps, open-relay registry,
+        // stream-auth lookups, the relayReopen signal): the normalized relay
+        // URL. `url.href` keeps a trailing slash for root-path relays
+        // (`wss://host/`) while the wire's spec and the stream-auth registry
+        // key by `normalizeRelayUrl` output (`wss://host`) — keying by href
+        // here made every cross-module lookup miss (the socket-reopen bump
+        // never fired, the stale-auth self-heal never found its relay).
+        const relayKey = normalizeRelayUrl(relayUrl) ?? url.href;
         const relay: NRelay1 = new NRelay1(url.href, {
           // Gift-wrap (1059/21059) outer signatures are redundant on the client
           // (see verifyEventSkippingWraps); skip them, verify everything else.
@@ -385,7 +414,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             if (!challenge || challenge.trim().length === 0) {
               throw new Error('AUTH failed: relay challenge is empty');
             }
-            const expectedRelay = url.href;
+            const expectedRelay = relayKey;
 
             // Remember the challenge so newly-registered Concord V2 stream keys
             // can be authenticated on this same connection later, and
@@ -420,7 +449,11 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
                 return Promise.reject(new Error('AUTH failed: no signer available (user not logged in)'));
               }
               const cached = authCacheRef.current.get(expectedRelay);
-              if (cached && cached.challenge === challenge) {
+              // The cached event is identity-bound: an account switch clears
+              // the cache (see the pubkey-change effect), but guard here too
+              // so a stale entry can never authenticate a socket as the
+              // previous account even if the clear is somehow bypassed.
+              if (cached && cached.challenge === challenge && cached.event.pubkey === loginRef.current?.pubkey) {
                 return Promise.resolve(cached.event);
               }
               const inFlight = authInFlightRef.current.get(expectedRelay);
@@ -484,16 +517,26 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             // every auth-retried sub/publish behind this promise, and for a
             // NIP-46 login the sign is a relay round-trip that may itself be
             // traveling over the socket that just reconnected. Give the user
-            // sign a short head start; if it hasn't answered, resolve NRelay1
-            // with a locally-signed STREAM-key 22242 (~4ms) so gated REQs
-            // unblock now, and deliver the user's AUTH out-of-band whenever
-            // the bunker responds (the relay accepts AUTH frames for the
-            // socket's whole lifetime and its authed set only grows).
+            // sign a short head start; if it hasn't answered, keep waiting out
+            // the extended window before falling back to a locally-signed
+            // STREAM-key 22242 — NRelay1 grants each sub ONE auth-retry per
+            // socket and fires it the moment this promise resolves, so an
+            // early stream-key answer retries user-identity-gated subs under
+            // the stream identity and the relay deletes them (see
+            // USER_AUTH_EXTENDED_MS). The user's AUTH is still delivered
+            // out-of-band whenever the bunker responds (the relay accepts AUTH
+            // frames for the socket's whole lifetime and its authed set only
+            // grows).
             const fast = await Promise.race([
               userSign.then((ev) => ev, () => undefined),
               new Promise<undefined>((r) => setTimeout(() => r(undefined), USER_AUTH_HEADSTART_MS)),
             ]);
             if (fast) return fast;
+            const extended = await Promise.race([
+              userSign.then((ev) => ev, () => undefined),
+              new Promise<undefined>((r) => setTimeout(() => r(undefined), USER_AUTH_EXTENDED_MS)),
+            ]);
+            if (extended) return extended;
             void userSign.then((ev) => {
               const live = openRelaysRef.current.get(expectedRelay);
               try {
@@ -507,9 +550,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             return streamEv;
           },
         });
-        const existing = openRelaysRef.current.get(url.href);
-        openRelaysRef.current.set(url.href, { relay, challenge: existing?.challenge });
-        watchSocketReopen(relay, url.href);
+        const existing = openRelaysRef.current.get(relayKey);
+        openRelaysRef.current.set(relayKey, { relay, challenge: existing?.challenge });
+        watchSocketReopen(relay, relayKey);
         return relay;
       },
       reqRouter(filters: NostrFilter[]): Map<URL['href'], NostrFilter[]> {
