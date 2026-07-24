@@ -14,7 +14,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "notifications",
   "messages",
   "prediction-markets",
-  "bao-funding",
+  "bao-fund",
   "polls",
   "media",
   "pets",
@@ -30,6 +30,7 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'achievements': 'badges',
   'music': 'media',
   'videos': 'media',
+  'bao-funding': 'bao-fund',
 };
 
 /**
@@ -117,17 +118,17 @@ export function useFeedSettings() {
     [orderedItems],
   );
 
-  // Migration: make sure ₿AO FUNDING (TEST) is visible right below ₿AO MARKETS.
+  // Migration: make sure ₿AO FUND (DEMO) is visible right below ₿AO MARKETS.
   useEffect(() => {
     const order = config.sidebarOrder;
-    if (order.length === 0 || order.includes("bao-funding")) return;
+    if (order.length === 0 || order.includes("bao-fund")) return;
 
     const next = [...order];
     const baoIdx = next.indexOf("prediction-markets");
     if (baoIdx !== -1) {
-      next.splice(baoIdx + 1, 0, "bao-funding");
+      next.splice(baoIdx + 1, 0, "bao-fund");
     } else {
-      next.push("bao-funding");
+      next.push("bao-fund");
     }
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
