@@ -98,9 +98,12 @@ function writeCursor(owner: string, relay: string, createdAt: number): void {
     // member's skewed clock, a hostile timestamp) must not drag the cursor
     // past `now` — every later REQ would open with `since > now` and the wire
     // would go deaf on this relay (persistently — the cursor is durable)
-    // while everyone else's correctly-stamped messages stop matching.
-    const next = Math.min(createdAt, Math.floor(Date.now() / 1000));
-    const prev = readCursor(owner, relay) ?? 0;
+    // while everyone else's correctly-stamped messages stop matching. The
+    // stored value is clamped on READ too, so a legacy poisoned cursor
+    // self-heals instead of wedging forever.
+    const now = Math.floor(Date.now() / 1000);
+    const next = Math.min(createdAt, now);
+    const prev = Math.min(readCursor(owner, relay) ?? 0, now);
     if (next > prev) localStorage.setItem(cursorKey(owner, relay), String(next));
   } catch {
     // localStorage unavailable — resume from the fresh lookback next launch.

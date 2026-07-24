@@ -77,6 +77,24 @@ export function rumorStore(): NIndexedDB {
   return store;
 }
 
+/**
+ * Close both singletons (rumors + pending wraps) so the databases can be
+ * deleted (the final-logout purge) — open connections block `deleteDatabase`.
+ * The next read reopens lazily.
+ */
+export async function closeRumorStores(): Promise<void> {
+  const open = [store, pending].filter((s): s is NIndexedDB => Boolean(s));
+  store = undefined;
+  pending = undefined;
+  await Promise.all(
+    open.map((s) =>
+      s.close().catch(() => {
+        // Already closed.
+      }),
+    ),
+  );
+}
+
 /** Warm the IndexedDB connection so the first read hits a hot store. */
 export function warmRumorStore(): void {
   try {
