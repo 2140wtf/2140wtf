@@ -136,3 +136,55 @@ export function useSearchProfiles(query: string) {
     followedPubkeys,
   };
 }
+
+/** Whether a profile matches a lowercase query by name/display_name/nip05. */
+function profileMatches(p: SearchProfile, query: string): boolean {
+  const name = p.metadata.name?.toLowerCase() ?? '';
+  const displayName = p.metadata.display_name?.toLowerCase() ?? '';
+  const nip05 = p.metadata.nip05?.toLowerCase() ?? '';
+  return name.includes(query) || displayName.includes(query) || nip05.includes(query);
+}
+
+/**
+ * Resolve a fixed set of pubkeys (e.g. a ₿AO chat channel's members) to
+ * profiles for the @-mention autocomplete, filtered by `query`. Reads cached
+ * author metadata from the Query cache; pubkeys without cached metadata still
+ * appear (matched by their npub/hex) so any member can be mentioned. Used to
+ * scope the mention menu to people in the room instead of searching all of
+ * Nostr.
+ */
+export function useMemberProfiles(pubkeys: string[], query: string) {
+  const queryClient = useQueryClient();
+
+  return useMemo<SearchProfile[]>(() => {
+    const lowerQuery = query.trim().toLowerCase();
+
+    const profiles: SearchProfile[] = pubkeys.map((pubkey) => {
+      const entry = queryClient
+        .getQueryCache()
+        .find({ queryKey: ['author', pubkey] });
+      const data = entry?.state.data as
+        | { event?: NostrEvent; metadata?: NostrMetadata }
+        | undefined;
+      return {
+        pubkey,
+        metadata: data?.metadata ?? {},
+        event: data?.event ?? ({ pubkey, tags: [], content: '', kind: 0, created_at: 0, id: '', sig: '' } as NostrEvent),
+      };
+    });
+
+    const matched = lowerQuery
+      ? profiles.filter(
+          (p) => profileMatches(p, lowerQuery) || p.pubkey.startsWith(lowerQuery),
+        )
+      : profiles;
+
+    matched.sort((a, b) => {
+      const aName = (a.metadata.name || a.metadata.display_name || a.pubkey).toLowerCase();
+      const bName = (b.metadata.name || b.metadata.display_name || b.pubkey).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+    return matched.slice(0, 10);
+  }, [pubkeys, query, queryClient]);
+}
