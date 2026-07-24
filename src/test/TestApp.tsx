@@ -38,6 +38,7 @@ export function TestApp({ children }: TestAppProps) {
     mutedChannels: [],
     notifLevels: {},
     zapsEnabled: true,
+    defaultZapAmount: 1000,
     relayMetadata: {
       relays: [{ url: "wss://relay.primal.net", read: true, write: true }],
       updatedAt: 0,
