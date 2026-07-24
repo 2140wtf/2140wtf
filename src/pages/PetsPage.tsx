@@ -6,6 +6,7 @@ import { nip19 } from 'nostr-tools';
 import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Lock, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize, Settings } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { APP_OPERATOR_PUBKEY } from '@/lib/appOperator';
 import { useAuthor } from '@/hooks/useAuthor';
 
 import { useProjectedPetsState } from '@/pets/core/hooks/useProjectedPetsState';
@@ -1228,6 +1229,7 @@ function PetsDashboard({
 }: PetsDashboardProps) {
   // Layout options (hasSubHeader, noOverscroll) set at PetsPage level
   const { user } = useCurrentUser();
+  const isAppOperator = user?.pubkey === APP_OPERATOR_PUBKEY;
   const { nostr } = useNostr();
   const { config } = useAppContext();
 
@@ -2501,11 +2503,12 @@ function PetsDashboard({
         onFurnitureMove={handleFurnitureMove}
         furnitureActiveLayer={furnitureActiveLayer}
         onFurnitureBackgroundClick={handleFurnitureBackgroundClick}
+        // Room editors are operator-only tools — hidden from regular users.
         editorSlot={
-          <PetsRoomEditorTrigger onClick={handleOpenRoomEditor} />
+          isAppOperator ? <PetsRoomEditorTrigger onClick={handleOpenRoomEditor} /> : undefined
         }
         editorSlotLeft={
-          <RoomFurnitureEditorTrigger onClick={handleOpenFurnitureEditor} />
+          isAppOperator ? <RoomFurnitureEditorTrigger onClick={handleOpenFurnitureEditor} /> : undefined
         }
         editorOverlay={isRoomEditorOpen ? (
           <PetsRoomEditor
