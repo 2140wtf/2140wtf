@@ -180,7 +180,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                 <SelectContent>
                   <SelectItem value="infra">Infra</SelectItem>
                   <SelectItem value="tools">Tools</SelectItem>
-                  <SelectItem value="daos">DAOs</SelectItem>
+                  <SelectItem value="baos">₿AOs</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -1,4 +1,5 @@
 import { Loader2, Waves } from 'lucide-react';
+import { baoApiDate } from "@/lib/baoFundraising";
 
 import { Button } from '@/components/ui/button';
 import type { BaoFundraiser } from '@/lib/baoFundraising';
@@ -27,8 +28,8 @@ export function StreamBar({ fundraiser, isOwner, onClaim, isClaiming }: {
 
   const pct = (n: number) => (raised > 0 ? Math.min(100, (n / raised) * 100) : 0);
 
-  const start = fundraiser.stream_start_at ? new Date(fundraiser.stream_start_at * 1000) : null;
-  const end = fundraiser.stream_end_at ? new Date(fundraiser.stream_end_at * 1000) : null;
+  const start = baoApiDate(fundraiser.stream_start_at);
+  const end = baoApiDate(fundraiser.stream_end_at);
   const dateFmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
