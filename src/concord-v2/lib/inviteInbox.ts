@@ -21,7 +21,8 @@
  * invites alone and the store dedups re-fetched wraps before decrypting.
  *
  * Trust note: this persists decrypted invite metadata at rest — the same
- * device-trust level as the folded caches already in use. Wiped on logout.
+ * device-trust level as the folded caches already in use. Wiped on final
+ * logout (see lib/purgeConcordStorage).
  */
 
 import { NIndexedDB } from "@nostrify/indexeddb";
