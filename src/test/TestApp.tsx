@@ -37,6 +37,7 @@ export function TestApp({ children }: TestAppProps) {
     mutedCommunities: [],
     mutedChannels: [],
     notifLevels: {},
+    wotAgentFilterByCommunity: {},
     zapsEnabled: true,
     defaultZapAmount: 1000,
     relayMetadata: {

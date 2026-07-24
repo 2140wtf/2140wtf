@@ -90,6 +90,7 @@ const hardcodedConfig: AppConfig = {
   mutedCommunities: [],
   mutedChannels: [],
   notifLevels: {},
+  wotAgentFilterByCommunity: {},
   zapsEnabled: true,
   defaultZapAmount: 1000,
   relayMetadata: {
