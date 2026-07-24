@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx'
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
+import { purgeConcordStorage } from '@/lib/purgeConcordStorage';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -28,9 +29,15 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const handleLogout = () => {
     // Close the dropdown first to avoid React error #300
     setIsOpen(false);
+    // Is this the last logged-in identity? If so, wipe the decrypted-at-rest
+    // Concord stores so a fresh login holds onto nothing from this account.
+    const isLastAccount = otherUsers.length === 0;
     // Use setTimeout to ensure the dropdown closes before removing login
     setTimeout(() => {
       removeLogin(currentUser.id);
+      if (isLastAccount) {
+        void purgeConcordStorage();
+      }
     }, 0);
   };
 

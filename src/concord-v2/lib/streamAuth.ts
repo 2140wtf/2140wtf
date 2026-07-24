@@ -205,10 +205,25 @@ export async function* signStreamAuthsChunked(
   }
 }
 
+/**
+ * Monotonic registry generation, bumped by every reset. Async producers that
+ * read stream keys across `await` points (e.g. the wire's membership queryFn)
+ * capture this before their reads and refuse to register if it changed — an
+ * in-flight registration from the previous account must not re-admit its keys
+ * into the new session after the account-switch reset.
+ */
+let registryGeneration = 0;
+
+/** Current registry generation (see `registryGeneration`). */
+export function streamAuthGeneration(): number {
+  return registryGeneration;
+}
+
 /** Test seam: forget every registered stream key and all per-relay ack state. */
 export function _resetStreamAuthRegistry(): void {
   registry.clear();
   relayAuth.clear();
+  registryGeneration++;
 }
 
 // ── Per-relay AUTH ack state ─────────────────────────────────────────────────
