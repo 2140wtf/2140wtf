@@ -78,13 +78,16 @@ relay-queryable) backs every member row, newest profile event wins.
 Concord persists decrypted content and key material locally: channel rumors
 (`2140-concord-rumors`), control-fold snapshots (`2140-concord-cache`),
 pending wraps (`2140-concord-pending`), the invite inbox
-(`2140-concord-invites`), per-relay resume cursors
-(`2140:wire-cursor:<pubkey>:<relay>`), and the decrypt-consent record. On
-**final logout** (no accounts remaining) `src/lib/purgeConcordStorage.ts`
-wipes all of it — both logout paths (`useLoginActions.logout`,
-`AccountSwitcher`) call it — so the next identity on the device can't read
-the previous account's decrypted chats. 2140's public-event cache and UI
-prefs are unaffected.
+(`2140-concord-invites`), decrypted image bytes (`concord-v2-images` Cache
+Storage), per-relay resume cursors (`2140:wire-cursor:<pubkey>:<relay>`),
+read-cut moderation markers (`concord2:read-cut-pending:*`), and the
+decrypt-consent record. On **final logout** (no accounts remaining)
+`src/lib/purgeConcordStorage.ts` wipes all of it — both logout paths
+(`useLoginActions.logout`, `AccountSwitcher`) call it, closing the
+module-level store connections first so `deleteDatabase` isn't blocked in
+the same tab — so the next identity on the device can't read the previous
+account's decrypted chats. 2140's public-event cache and UI prefs are
+unaffected.
 
 Related invariants:
 
