@@ -27,9 +27,11 @@ import { AppConfigSchema, type AppConfig as AppBuildConfig } from "@/lib/schemas
 import { secureStorage } from "@/lib/secureStorage";
 import { createEncryptedLoginStorage } from "@/lib/encryptedLoginStorage";
 import { DEFAULT_ESPLORA_APIS } from "@/lib/esplora";
+import { APP_RELAYS } from "@/lib/platform";
 import { DEFAULT_SIDEBAR_WIDGETS, SIDEBAR_WIDGETS_VERSION } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
 import { RemoteBattleProvider } from "@/pets/battle";
+import { WireSync } from "@/wire/WireSync";
 import AppRouter from "./AppRouter";
 
 const head = createHead({
@@ -81,6 +83,12 @@ const hardcodedConfig: AppConfig = {
   useUserRelays: false,
   marketplaceRelays: [],
   groupChatRelays: [],
+  appRelays: [...APP_RELAYS],
+  lastChannelByServer: {},
+  mutedCommunities: [],
+  mutedChannels: [],
+  notifLevels: {},
+  zapsEnabled: true,
   relayMetadata: {
     relays: [],
     updatedAt: 0,
@@ -257,6 +265,10 @@ export function App() {
                                 <GroupChatProvider>
                                   <AppRouter />
                                 </GroupChatProvider>
+                                {/* ₿AO chat (Concord V2) wire: one standing REQ per
+                                    community relay + parked-wrap drain. Renders null;
+                                    no UI of its own (the chat UI lands in phase 2). */}
+                                <WireSync />
                               </RemoteBattleProvider>
                             </CashuWalletProvider>
                           </DmInboxProvider>
