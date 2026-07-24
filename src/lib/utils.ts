@@ -48,3 +48,23 @@ export function formatCompactNumber(num: number): string {
   
   return formatter.format(num);
 }
+
+/**
+ * Pick the channel to show when none is selected: the stored last-visited id
+ * when it still exists, else the "general" channel, else the first. Shared by
+ * the ₿AO community page.
+ */
+export function pickDefaultChannel<T>(
+  channels: readonly T[],
+  storedId: string | undefined,
+  idOf: (c: T) => string,
+  nameOf: (c: T) => string,
+): T | undefined {
+  if (channels.length === 0) return undefined;
+  if (storedId) {
+    const stored = channels.find((c) => idOf(c) === storedId);
+    if (stored) return stored;
+  }
+  const general = channels.find((c) => nameOf(c).trim().toLowerCase() === "general");
+  return general ?? channels[0];
+}
