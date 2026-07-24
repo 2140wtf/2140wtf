@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, Lock, TrendingUp, Unlock, XCircle } from 'lucide-react';
+import { baoApiDate } from "@/lib/baoFundraising";
 
 import { BaoMarketDetailDialog } from '@/components/BaoMarketDetailDialog';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +13,10 @@ function formatSats(n: number): string {
   return Number(n).toLocaleString();
 }
 
-function formatDeadline(deadline: number | null | undefined): string | null {
-  if (!deadline) return null;
-  return new Date(deadline * 1000).toLocaleDateString(undefined, {
+function formatDeadline(deadline: number | string | null | undefined): string | null {
+  const date = baoApiDate(deadline);
+  if (!date) return null;
+  return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

@@ -141,7 +141,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "pets", label: "NOSTR PETS", path: "/pets", icon: Cat },
   {
     id: "lightning-observatory",
-    label: "LIGHTNING OBSERVATORY",
+    label: "LN OBSERVATORY",
     path: "/lightning-observatory",
     icon: Telescope,
   },
