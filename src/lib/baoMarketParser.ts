@@ -22,6 +22,8 @@ export interface BaoMarket {
   createdAt: number;
   outcomes: BaoMarketOutcome[];
   creatorPubkey: string;
+  /** Winning outcome id when the API reports the market as resolved (API-sourced only). */
+  resolution?: string | null;
   rawEvent: NostrEvent;
 }
 

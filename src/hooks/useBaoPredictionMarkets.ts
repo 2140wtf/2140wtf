@@ -3,79 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
+import { apiMarketToBaoMarket, baoApiFetch, type ApiMarket } from "@/lib/baoMarketApi";
 
 const RELAY = "wss://relay.bao.network";
-const API_BASE = "/bao-api/v1";
-const PUBLIC_API_BASE = "https://relay.bao.network/bao-api/v1";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
-
-interface ApiOutcome {
-  id: string;
-  label: string;
-  price: number;
-  volume: number;
-}
-
-interface ApiMarket {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  type: string;
-  status: string;
-  network: string;
-  created_at: number;
-  end_date: number;
-  outcomes: ApiOutcome[];
-  total_volume: number;
-  trade_count: number;
-  nostr_event_id?: string;
-  creator_pubkey: string;
-}
-
-interface ApiMarketsResponse {
-  data: ApiMarket[];
-}
-
-function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
-  const id = api.nostr_event_id || api.id;
-  const syntheticEvent: NostrEvent = {
-    id,
-    pubkey: api.creator_pubkey,
-    created_at: api.created_at,
-    kind: BAO_MARKET_KIND,
-    tags: [],
-    content: JSON.stringify({
-      title: api.title,
-      description: api.description,
-      outcomes: api.outcomes,
-    }),
-    sig: "",
-  };
-
-  return {
-    marketId: api.id,
-    title: api.title,
-    description: api.description,
-    category: api.category.toLowerCase(),
-    state: api.status.toLowerCase(),
-    type:
-      api.type === "categorical" || api.type === "scalar"
-        ? api.type
-        : "binary",
-    endTime: api.end_date,
-    createdAt: api.created_at,
-    outcomes: api.outcomes.map((o) => ({
-      id: o.id,
-      label: o.label,
-      probability: Number.isFinite(o.price) ? o.price : 0.5,
-    })),
-    creatorPubkey: api.creator_pubkey,
-    rawEvent: syntheticEvent,
-  };
-}
 
 async function fetchApiMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
   const params = new URLSearchParams({ limit: String(QUERY_LIMIT) });
@@ -85,25 +18,9 @@ async function fetchApiMarkets(category: string, status: 'active' | 'all', signa
   if (status === "active") {
     params.set("status", "active");
   }
-  const publicPath = `${PUBLIC_API_BASE}/markets?${params.toString()}`;
-  const proxiedPath = `${API_BASE}/markets?${params.toString()}`;
 
-  let res: Response;
-  try {
-    res = await fetch(proxiedPath, { signal });
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok || !contentType.includes("application/json")) {
-      res = await fetch(publicPath, { signal });
-    }
-  } catch {
-    res = await fetch(publicPath, { signal });
-  }
-
-  if (!res.ok) {
-    throw new Error(`BAO markets API returned ${res.status}`);
-  }
-
-  const json = (await res.json()) as ApiMarketsResponse;
+  const res = await baoApiFetch(`/markets?${params.toString()}`, signal);
+  const json = (await res.json()) as { data?: ApiMarket[] };
   const data = Array.isArray(json.data) ? json.data : [];
   return data.map(apiMarketToBaoMarket);
 }
