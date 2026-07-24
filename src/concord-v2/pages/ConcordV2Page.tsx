@@ -199,7 +199,7 @@ const ChatMessage2 = memo(function ChatMessage2({
   const threadInfo = threadSummary(replies);
   // Concord V2 messages are unsigned rumors sealed at the channel's stream
   // address — there's no relay-addressable event id, so the "Copy message ID" /
-  // "View on Ditto" off-ramps are nonsensical. Pass the rumor through so the
+  // "View on 2140.wtf" off-ramps are nonsensical. Pass the rumor through so the
   // context menu offers "View event JSON" instead. Drop the synthetic empty
   // `sig` the transport adds for rendering (a rumor has no signature).
   const rumor = useMemo(() => {
