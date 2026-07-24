@@ -173,6 +173,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: () => '/api/graphql',
         },
+        // Lightning Observatory stats API (no CORS headers upstream, so the
+        // in-app page fetches it same-origin here; production hosts should add
+        // the equivalent rule forwarding /lo-api/* to /api/* upstream).
+        '/lo-api': {
+          target: 'https://lightningobservatory.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/lo-api/, '/api'),
+        },
       },
       watch: {
         ignored: [
@@ -204,6 +212,14 @@ export default defineConfig(({ mode }) => {
           target: 'https://stacker.news',
           changeOrigin: true,
           rewrite: () => '/api/graphql',
+        },
+        // Lightning Observatory stats API (no CORS headers upstream, so the
+        // in-app page fetches it same-origin here; production hosts should add
+        // the equivalent rule forwarding /lo-api/* to /api/* upstream).
+        '/lo-api': {
+          target: 'https://lightningobservatory.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/lo-api/, '/api'),
         },
       },
     },
