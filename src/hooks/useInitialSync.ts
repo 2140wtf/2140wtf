@@ -279,6 +279,12 @@ export function useInitialSync() {
               if (parsed.currencyDisplay) {
                 updates.currencyDisplay = parsed.currencyDisplay;
               }
+              if (parsed.zapsEnabled !== undefined) {
+                updates.zapsEnabled = parsed.zapsEnabled;
+              }
+              if (parsed.defaultZapAmount !== undefined) {
+                updates.defaultZapAmount = parsed.defaultZapAmount;
+              }
 
               return updates;
             });
