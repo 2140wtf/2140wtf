@@ -40,6 +40,32 @@ const SUBSCRIPTION_ID_KEY = '2140-push-subscription-id';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Discord-style per-type notification preferences for the ₿AO chat
+ * (consumed by `useNotifLevels`; persisted separately from the nostr-push
+ * subscription state managed below).
+ */
+export interface PushPrefs {
+  /** Messages that mention you (p-tag). Default on. */
+  mentions: boolean;
+  /** Reactions to your messages. Default on. */
+  reactions: boolean;
+  /** Replies to your messages. Default on. */
+  replies: boolean;
+  /** Direct messages. Default on. */
+  directMessages: boolean;
+  /** Every message in your groups (not just mentions). Default on. */
+  allGroupMessages: boolean;
+}
+
+export const DEFAULT_PUSH_PREFS: PushPrefs = {
+  mentions: true,
+  reactions: true,
+  replies: true,
+  directMessages: true,
+  allGroupMessages: true,
+};
+
 function getOrCreateSubscriptionId(): string {
   const existing = localStorage.getItem(SUBSCRIPTION_ID_KEY);
   if (existing) return existing;

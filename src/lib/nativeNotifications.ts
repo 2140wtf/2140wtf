@@ -29,6 +29,11 @@ export interface BaoNotificationPlugin {
   drainEvents(): Promise<{ events: string[]; cursor: number }>;
   /** Advance the persisted drain cursor after a drained page was ingested. */
   ackDrain(options: { cursor: number }): Promise<void>;
+  /**
+   * Tell the background service which room(s) the WebView is currently
+   * showing, so it can suppress redundant notifications for that room.
+   */
+  setActiveRooms(options: { roomKeys: string[] }): Promise<void>;
   /** Live relay-event feed from the background service. */
   addListener(
     eventName: "relayEvent",
@@ -56,6 +61,7 @@ const plugin = (() => {
 export const BaoNotification: BaoNotificationPlugin = {
   drainEvents: () => (plugin ? plugin.drainEvents().catch(() => ({ events: [], cursor: 0 })) : Promise.resolve({ events: [], cursor: 0 })),
   ackDrain: (options) => (plugin ? plugin.ackDrain(options).catch(() => undefined) : Promise.resolve()),
+  setActiveRooms: (_options) => Promise.resolve(),
   addListener: (_eventName, _listenerFunc) =>
     plugin
       ? plugin.addListener("relayEvent", _listenerFunc).catch(unavailable)
