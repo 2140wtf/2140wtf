@@ -28,8 +28,8 @@
  *
  * Trust note: this persists DECRYPTED plane data at rest — the same device-trust
  * level as the folded cache and the signer's decrypt cache, which already do.
- * Anyone with local storage access already holds the keys. Wiped on logout (see
- * purgeClientStorage).
+ * Anyone with local storage access already holds the keys. Wiped on final
+ * logout (see lib/purgeConcordStorage).
  */
 
 import { NIndexedDB } from "@nostrify/indexeddb";
@@ -452,11 +452,18 @@ export function readStreamCursor(scope: string): Promise<StreamCursor | undefine
 /**
  * Merge new sync progress into a scope's cursor (best-effort). `newest` only
  * advances forward, `oldest` only recedes, `exhausted` is sticky until cleared.
+ *
+ * `newest` is clamped against the local clock: wraps are stamped with the
+ * publisher's wall clock, so one skewed (or hostile) member device could
+ * otherwise push the cursor into the future and durably wedge the scope —
+ * every later sweep would open with `since > now` and correctly-stamped
+ * messages would stop matching (same hazard the wire's writeCursor clamps).
  */
 export async function updateStreamCursor(scope: string, patch: Partial<StreamCursor>): Promise<void> {
   const prev = await readStreamCursor(scope);
+  const now = Math.floor(Date.now() / 1000);
   const next: StreamCursor = {
-    newest: Math.max(prev?.newest ?? 0, patch.newest ?? 0),
+    newest: Math.min(Math.max(prev?.newest ?? 0, patch.newest ?? 0), now),
     oldest:
       patch.oldest !== undefined
         ? prev?.oldest
