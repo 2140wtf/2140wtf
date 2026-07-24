@@ -49,14 +49,16 @@ const emptyMilestone = (): MilestoneDraft => ({
   feeBps: '214',
 });
 
-export function CreateCampaignDialog({ open, onOpenChange, onCreated }: {
+export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTitle }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string) => void;
+  /** Optional prefill for the title field (e.g. deep link from a pet's upkeep card). */
+  initialTitle?: string;
 }) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(initialTitle ?? '');
   const [description, setDescription] = useState('');
   const [runnerType, setRunnerType] = useState<'agent' | 'human' | 'agent_human'>('agent_human');
   const [rail, setRail] = useState<BaoRail>('lightning');
