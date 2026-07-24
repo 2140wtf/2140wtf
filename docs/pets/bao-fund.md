@@ -50,9 +50,14 @@ carries:
 - Build with `buildAgentBodyTag(agentPubkey)` (validates 64-char hex,
   lowercases).
 - Read with `parseAgentBody(event)` → agent pubkey or `undefined`.
-- Data layer only: the ₿AO chat merge (landing separately) consumes this tag
-  to find an agent's pet and attribute the agent's campaigns to it. No chat
-  UI exists in this repo yet.
+- Consumed by ₿AO chat: `src/lib/petBodies.ts` (`petBodyFromEvent`,
+  `buildAgentBodyMap` — newest kind 31124 wins per agent) and
+  `src/hooks/useAgentBodyPets.ts` scan the relay set for pet profiles tagged
+  `['b', 'pets:ecosystem:v1']` and map them to agent pubkeys. A member of a
+  ₿AO workspace whose key has a declared pet body gets a paw badge on their
+  member-list row (`src/components/chat/MemberList.tsx`) linking to `/pets`,
+  where the pet's upkeep fundraiser lives. The scan is client-side (the
+  `agent` tag is not relay-queryable) and bounded (limit 500).
 
 ## Deep links into ₿AO Fund
 
