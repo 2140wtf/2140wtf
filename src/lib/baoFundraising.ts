@@ -1,14 +1,16 @@
 /**
- * bao.markets fundraising API client (TEST).
+ * bao.markets fundraising API client (DEMO).
  *
  * Talks to the /v1/fundraisers surface of a bao.markets API instance over
  * HTTP only — no tournament/markets code is imported into this repo. Reads
  * are anonymous; mutations authenticate with NIP-98 (a kind-27235 event
  * signed by the user's Nostr signer, sent as `Authorization: Nostr <b64>`).
  *
- * The API is in TEST mode: contributions are recorded but no real payment is
- * verified or settled. The UI must label the flow accordingly.
+ * The API is in DEMO mode (signet): contributions are recorded but no real
+ * payment is verified or settled. The UI must label the flow accordingly.
  */
+
+export type BaoFundraiserFormat = 'milestones' | 'stream';
 
 export interface BaoFundraiser {
   id: string;
@@ -22,7 +24,19 @@ export interface BaoFundraiser {
   settlement_rail: string;
   network: string;
   created_at: string;
+  /** v2: payout format. Missing on legacy rows → treat as 'milestones'. */
+  format?: BaoFundraiserFormat;
+  category?: string | null;
+  /** v2 stream fields (unix seconds) */
+  stream_start_at?: number | null;
+  stream_end_at?: number | null;
+  claimed_sats?: number;
+  /** v2 computed stream fields returned by GET /:id */
+  stream_vested_sats?: number;
+  stream_claimable_sats?: number;
 }
+
+export type BaoMilestoneStatus = 'locked' | 'unlocked' | 'released' | 'refunded';
 
 export interface BaoMilestone {
   id: string;
@@ -31,10 +45,20 @@ export interface BaoMilestone {
   title: string;
   description: string | null;
   amount_sats: number;
-  status: 'locked' | 'unlocked' | 'released';
+  status: BaoMilestoneStatus;
   unlocked_at: string | null;
   released_at: string | null;
   payout_reference: string | null;
+  /** v2: every milestone IS a prediction market on bao.markets. */
+  market_id?: string | null;
+  question?: string | null;
+  criteria?: string | null;
+  deadline_at?: number | null;
+  /** Runner fee in basis points (100 = 1.0%, 214 = 2.14%, 421 = 4.21%). */
+  fee_bps?: number;
+  /** Outcome of the linked market once resolved. */
+  market_resolution?: 'yes' | 'no' | null;
+  proof_event_id?: string | null;
 }
 
 export interface BaoContribution {
@@ -123,20 +147,43 @@ export async function fetchContributions(id: string): Promise<BaoContribution[]>
   return res.data;
 }
 
+export interface CreateMilestoneInput {
+  title: string;
+  description?: string;
+  amount_sats: number;
+  /** Delivery criteria — becomes the prediction-market question. */
+  criteria?: string;
+  /** Unix seconds. */
+  deadline_at?: number;
+  fee_bps?: number;
+}
+
 export interface CreateFundraiserInput {
   title: string;
   description?: string;
   runner_type: 'agent' | 'human' | 'agent_human';
   goal_sats: number;
   settlement_rail: BaoRail;
-  milestones: { title: string; description?: string; amount_sats: number }[];
+  format?: BaoFundraiserFormat;
+  category?: string;
+  milestones?: CreateMilestoneInput[];
+  /** Stream format: vesting window in unix seconds (required iff format='stream'). */
+  stream_start_at?: number;
+  stream_end_at?: number;
+}
+
+export interface CreateFundraiserResult {
+  fundraiser: BaoFundraiser;
+  milestones: BaoMilestone[];
+  /** One prediction market per milestone (milestones format only). */
+  markets?: { milestone_id: string; market_id: string }[];
 }
 
 export async function createFundraiser(
   signer: SignerLike,
   input: CreateFundraiserInput,
-): Promise<{ fundraiser: BaoFundraiser; milestones: BaoMilestone[] }> {
-  const res = await apiFetch<{ data: { fundraiser: BaoFundraiser; milestones: BaoMilestone[] } }>('/v1/fundraisers', {
+): Promise<CreateFundraiserResult> {
+  const res = await apiFetch<{ data: CreateFundraiserResult }>('/v1/fundraisers', {
     method: 'POST',
     body: input,
     signer,
@@ -145,7 +192,10 @@ export async function createFundraiser(
 }
 
 export interface ContributeResult {
-  test: boolean;
+  /** DEMO mode marker (replaces the old `test` flag). */
+  demo?: boolean;
+  /** Legacy flag returned by older API versions. */
+  test?: boolean;
   payment_instructions: { kind: string } & Record<string, unknown>;
   fundraiser: BaoFundraiser;
   milestones: BaoMilestone[];
@@ -172,9 +222,28 @@ export async function releaseMilestone(
   signer: SignerLike,
   fundraiserId: string,
   milestoneId: string,
+  opts?: { payout_reference?: string; proof_event_id?: string },
 ): Promise<{ milestone: BaoMilestone; fundraiser: BaoFundraiser }> {
   const res = await apiFetch<{ data: { milestone: BaoMilestone; fundraiser: BaoFundraiser } }>(
     `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/release`,
+    { method: 'POST', body: opts ?? {}, signer },
+  );
+  return res.data;
+}
+
+export interface ClaimStreamResult {
+  demo?: boolean;
+  claimable_sats: number;
+  fundraiser: BaoFundraiser;
+}
+
+/** Claim vested sats from a stream-format fundraiser (owner only, DEMO recorded-only). */
+export async function claimStream(
+  signer: SignerLike,
+  fundraiserId: string,
+): Promise<ClaimStreamResult> {
+  const res = await apiFetch<{ data: ClaimStreamResult }>(
+    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/claim`,
     { method: 'POST', body: {}, signer },
   );
   return res.data;
