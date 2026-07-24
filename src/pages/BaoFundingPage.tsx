@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { ComputeCreditsTab } from '@/components/bao-fund/ComputeCreditsTab';
 import { CreateCampaignDialog } from '@/components/bao-fund/CreateCampaignDialog';
@@ -72,6 +73,16 @@ export function BaoFundingPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [searchParams] = useSearchParams();
+
+  // Deep links (e.g. from a pet's upkeep card):
+  //   /bao-fund?campaign=<id>      → preselect/expand that campaign
+  //   /bao-fund?create=1&title=…   → open the create dialog, prefilled
+  useEffect(() => {
+    const campaign = searchParams.get('campaign');
+    if (campaign) setSelectedId(campaign);
+    if (searchParams.get('create') === '1' && user) setCreateOpen(true);
+  }, [searchParams, user]);
 
   const listQuery = useQuery({
     queryKey: ['bao-fundraisers'],
@@ -221,6 +232,7 @@ export function BaoFundingPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(id) => { invalidate(); setSelectedId(id); }}
+        initialTitle={searchParams.get('title') ?? undefined}
       />
       <ContributeDialog
         fundraiser={contributeTarget}
