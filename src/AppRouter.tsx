@@ -343,7 +343,11 @@ export function AppRouter() {
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
               <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
-              <Route path="/bao-funding" element={<BaoFundingPage />} />
+              <Route path="/bao-fund" element={<BaoFundingPage />} />
+              <Route
+                path="/bao-funding"
+                element={<Navigate to="/bao-fund" replace />}
+              />
           <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
