@@ -36,6 +36,21 @@ function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+/**
+ * Close the shared connection and forget it, so the database can be deleted
+ * (the final-logout purge) — an open connection blocks `deleteDatabase`. The
+ * next read reopens lazily via {@link openDb}.
+ */
+export async function closeFoldedCache(): Promise<void> {
+  const pending = dbPromise;
+  dbPromise = undefined;
+  try {
+    (await pending)?.close();
+  } catch {
+    // Never opened or already closed.
+  }
+}
+
 // ── codec ─────────────────────────────────────────────────────────────────────
 // Tagged wrappers for types JSON drops. Hex is used for bytes (compact, stable).
 

@@ -6,7 +6,7 @@ import { useCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { rehydrateCommunity, liveEntries } from "@/concord-v2/lib/communityList";
 import { buildConcord2Subs, type Concord2Sub } from "@/concord-v2/lib/concordNotifications2";
 import type { FoldedControl } from "@/concord-v2/lib/control";
-import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
+import { registerStreamKeys, streamAuthGeneration } from "@/concord-v2/lib/streamAuth";
 import { readFolded } from "@/lib/foldedCache";
 
 /**
@@ -48,6 +48,10 @@ export function useConcord2Subs(): Concord2Sub[] {
     // opened/synced), so re-read them periodically to pick up new channels.
     refetchInterval: 60_000,
     queryFn: async () => {
+      // Account-switch guard (see streamAuthGeneration): this queryFn's
+      // IndexedDB reads may resolve after the switch-time registry reset —
+      // registering then would re-admit the previous account's keys.
+      const generation = streamAuthGeneration();
       const subs: Concord2Sub[] = [];
       for (const entry of entries) {
         const community = rehydrateCommunity(entry);
@@ -55,6 +59,7 @@ export function useConcord2Subs(): Concord2Sub[] {
         const folded = await readFolded<FoldedControl>(controlFoldKey(community.idHex));
         const built = buildConcord2Subs(community, folded);
         subs.push(...built.subs);
+        if (streamAuthGeneration() !== generation) return subs;
         // Register for NIP-42, scoped to the community's relays: the native
         // service bridges each relay's AUTH challenge to the WebView, which
         // signs a kind-22242 per stream key SCOPED TO THAT RELAY (see

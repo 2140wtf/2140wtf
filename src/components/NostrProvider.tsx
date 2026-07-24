@@ -538,6 +538,12 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
             ]);
             if (extended) return extended;
             void userSign.then((ev) => {
+              // Identity guard: the sign may resolve after an account switch
+              // or into the logged-out gap — delivering it would authenticate
+              // this socket as the PREVIOUS account for the socket's lifetime
+              // (the relay's authed set only grows, and no fresh challenge is
+              // issued for the new account to correct it).
+              if (!loginRef.current?.pubkey || ev.pubkey !== loginRef.current.pubkey) return;
               const live = openRelaysRef.current.get(expectedRelay);
               try {
                 live?.relay.socket.send(JSON.stringify(['AUTH', ev]));
