@@ -166,6 +166,10 @@ export interface EncryptedSettings {
   sentryDsn?: string;
   /** How to display monetary amounts ("usd" or "sats"). */
   currencyDisplay?: 'usd' | 'sats';
+  /** Whether zap/wallet/financial features are enabled in the UI. */
+  zapsEnabled?: boolean;
+  /** Preselected amount (sats) when the zap dialog opens. */
+  defaultZapAmount?: number;
   /** Whether 3D pet/room rendering is enabled. */
   pets3dEnabled?: boolean;
   /** Saved feed tabs created from the search page. */
