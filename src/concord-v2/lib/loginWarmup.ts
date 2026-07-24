@@ -31,7 +31,7 @@ import { KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { openChatBatch } from "@/concord-v2/lib/chat";
 import { sweepControl, sweepGuestbook, whenAuthSettled } from "@/concord-v2/lib/planeSync";
 import { queryByStreams, writeRumors } from "@/concord-v2/lib/rumorStore";
-import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
+import { registerStreamKeys, streamAuthGeneration } from "@/concord-v2/lib/streamAuth";
 import { controlFoldKey } from "@/concord-v2/hooks/useControlPlane2";
 import { writeFolded } from "@/lib/foldedCache";
 import { beginSyncTask } from "@/lib/syncActivity";
@@ -95,6 +95,11 @@ export async function warmupCommunities2(
   const result: WarmupResult = { communities: communities.length, channels: 0, messages: 0 };
   if (communities.length === 0) return result;
 
+  // Account-switch guard (see streamAuthGeneration): the warmup's awaited
+  // sweeps/reads may resolve after the switch-time registry reset — a late
+  // registration would re-admit the previous account's stream keys.
+  const generation = streamAuthGeneration();
+
   // Report on the sync-activity signal too: if the gate's time budget expires
   // before the warm-up finishes, the in-chat status bar carries the rest.
   const task = beginSyncTask("message history");
@@ -124,6 +129,7 @@ export async function warmupCommunities2(
         for (const channel of channelsView(c, folded)) {
           if (channel.streams.length === 0) continue;
           if (totalChannels >= MAX_WARMUP_CHANNELS) break;
+          if (streamAuthGeneration() !== generation) return result;
           registerStreamKeys(channel.streams.map((s) => s.group), c.relays);
           const list = jobs.get(c) ?? [];
           list.push(channel);
