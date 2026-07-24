@@ -11,6 +11,7 @@ import { generateSecretKey, nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { NConnectSignerBtc } from '@/lib/bitcoin-signers';
+import { purgeConcordStorage } from '@/lib/purgeConcordStorage';
 
 // NOTE: This file should not be edited except for adding new login methods.
 
@@ -181,6 +182,14 @@ export function useLoginActions() {
       const login = logins[0];
       if (login) {
         removeLogin(login.id);
+      }
+      // Final logout: wipe the decrypted-at-rest Concord stores (channel
+      // rumors, fold snapshots with stream-key material, pending wraps,
+      // invites, wire cursors, decrypt consent) so the next identity on this
+      // device can't read the previous account's decrypted ₿AO chat. When
+      // other accounts remain, their data stays.
+      if (logins.length <= 1) {
+        await purgeConcordStorage();
       }
     }
   };
