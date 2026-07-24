@@ -94,6 +94,7 @@ const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m 
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
+const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
@@ -338,6 +339,7 @@ export function AppRouter() {
               <Route path="/themes" element={<ThemesPage />} />
               <Route path="/wallet" element={<WalletPage />} />
               <Route path="/btcmap" element={<BtcMapPage />} />
+              <Route path="/lightning-observatory" element={<LightningObservatoryPage />} />
               <Route path="/roadstr" element={<RoadstrPage />} />
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />

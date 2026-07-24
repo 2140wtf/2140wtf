@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Camera,
   Cat,
+  Telescope,
   Clapperboard,
   Code,
   Film,
@@ -131,6 +132,12 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "bao-fund", label: "₿AO FUND (DEMO)", path: "/bao-fund", icon: HandCoins },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
   { id: "pets", label: "NOSTR PETS", path: "/pets", icon: Cat },
+  {
+    id: "lightning-observatory",
+    label: "LIGHTNING OBSERVATORY",
+    path: "/lightning-observatory",
+    icon: Telescope,
+  },
   {
     id: "wallet",
     label: "Wallet",
