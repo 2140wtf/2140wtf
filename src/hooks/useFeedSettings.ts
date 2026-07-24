@@ -13,6 +13,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "wallet",
   "notifications",
   "messages",
+  "bao-chat",
   "prediction-markets",
   "bao-fund",
   "polls",
@@ -209,6 +210,26 @@ export function useFeedSettings() {
     }
 
     if (!changed) return;
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
+
+  // Migration: insert ₿AO Chat (Concord V2 communities) below Chat.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0) return;
+    if (order.includes("bao-chat")) return;
+
+    const next = [...order];
+    const messagesIdx = next.indexOf("messages");
+    if (messagesIdx !== -1) {
+      next.splice(messagesIdx + 1, 0, "bao-chat");
+    } else {
+      next.push("bao-chat");
+    }
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
     if (user) {
