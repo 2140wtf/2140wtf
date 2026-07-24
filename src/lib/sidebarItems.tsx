@@ -128,7 +128,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
-  { id: "bao-funding", label: "₿AO FUNDING (TEST)", path: "/bao-funding", icon: HandCoins },
+  { id: "bao-fund", label: "₿AO FUND (DEMO)", path: "/bao-fund", icon: HandCoins },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
   { id: "pets", label: "NOSTR PETS", path: "/pets", icon: Cat },
   {
