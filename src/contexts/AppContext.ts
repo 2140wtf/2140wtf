@@ -233,6 +233,53 @@ export interface AppConfig {
   marketplaceRelays?: string[];
   /** User-added relays used for private group chat messages and welcome events. When empty, group chat falls back to the effective global relay set. */
   groupChatRelays?: string[];
+  /**
+   * ₿AO chat (Concord V2) app relays for generic community-plane traffic
+   * (membership lists, invite delivery fallbacks). Seeded from
+   * `VITE_APP_RELAYS` (see `lib/platform.ts`); user-editable. Group-scoped
+   * events never route here — Concord communities are relay-per-community.
+   */
+  appRelays: string[];
+  /**
+   * The last ₿AO channel the user had open in each community, so we can
+   * re-open it on return instead of dumping them on a channel list. Keyed by
+   * `c:${communityIdHex}` (value = channel id hex). Falls back to a "general"
+   * channel or the first channel when there's no record.
+   */
+  lastChannelByServer: Record<string, string>;
+  /**
+   * Muted ₿AO communities, by stable rail key: `c2:${communityIdHex}` for
+   * Concord V2. Muting silences all notifications from every channel in the
+   * community and suppresses its unread badge — without leaving.
+   */
+  mutedCommunities: string[];
+  /**
+   * Muted individual ₿AO channels, by stable conversation key
+   * (`c2:${communityIdHex}::${channelIdHex}`). Same effect as a community
+   * mute, scoped to one channel.
+   */
+  mutedChannels: string[];
+  /**
+   * Discord-style per-conversation notification level, keyed by the SAME
+   * stable scope keys as the mute sets:
+   *   - community: `c2:${communityIdHex}`
+   *   - channel:   `c2:${communityIdHex}::${channelIdHex}`
+   *
+   * Levels:
+   *   - `all`      — notify on every message
+   *   - `mentions` — notify only on @-mentions
+   *   - `nothing`  — silence completely, mentions included
+   *
+   * A conversation with NO entry inherits: a channel falls back to its
+   * community's level, and a community with no level falls back to the
+   * account-global default. Supersedes `mutedCommunities`/`mutedChannels`.
+   */
+  notifLevels: Record<string, "all" | "mentions" | "nothing">;
+  /**
+   * Whether zap/wallet/financial features are enabled in the UI. When off,
+   * zap buttons and wallet affordances are hidden. (₿AO chat port; default on.)
+   */
+  zapsEnabled: boolean;
   /** Feed and sidebar content settings */
   feedSettings: FeedSettings;
   /** Ordered list of sidebar item IDs (built-in + extra-kind). */
