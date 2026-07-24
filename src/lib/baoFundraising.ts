@@ -28,8 +28,8 @@ export interface BaoFundraiser {
   format?: BaoFundraiserFormat;
   category?: string | null;
   /** v2 stream fields (unix seconds) */
-  stream_start_at?: number | null;
-  stream_end_at?: number | null;
+  stream_start_at?: number | string | null;
+  stream_end_at?: number | string | null;
   claimed_sats?: number;
   /** v2 computed stream fields returned by GET /:id */
   stream_vested_sats?: number;
@@ -53,7 +53,7 @@ export interface BaoMilestone {
   market_id?: string | null;
   question?: string | null;
   criteria?: string | null;
-  deadline_at?: number | null;
+  deadline_at?: number | string | null;
   /** Runner fee in basis points (100 = 1.0%, 214 = 2.14%, 421 = 4.21%). */
   fee_bps?: number;
   /** Outcome of the linked market once resolved. */
@@ -95,6 +95,19 @@ export function baoApiBase(): string {
   // without the env var falls back to same-origin requests.
   if (import.meta.env.DEV) return 'http://localhost:3462';
   return globalThis.location?.origin ?? '';
+}
+
+
+/**
+ * Parse an API date field. TIMESTAMPTZ columns arrive as ISO strings over
+ * JSON, while older records/callers used unix seconds — accept both.
+ * Returns null for missing/unparseable values (never an Invalid Date).
+ */
+export function baoApiDate(value: number | string | null | undefined): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return new Date(value * 1000);
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
 }
 
 interface SignerLike {

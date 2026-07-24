@@ -77,8 +77,11 @@ export function LightningObservatoryPage() {
       <div className="flex items-center gap-4 px-4 pt-4 pb-5">
         <Telescope className="size-6 text-primary shrink-0" />
         <h1 className="text-xl font-bold truncate flex-1">Lightning Observatory</h1>
+        {/* Same-tab navigation (no new tab) — the browser's back button returns
+            here. An in-page iframe is impossible: the site sends
+            X-Frame-Options: DENY / frame-ancestors 'self'. */}
         <Button variant="outline" size="sm" asChild>
-          <a href={LIGHTNING_OBSERVATORY_URL} target="_blank" rel="noopener noreferrer">
+          <a href={LIGHTNING_OBSERVATORY_URL}>
             <ExternalLink className="size-4 mr-2" />
             Full observatory
           </a>

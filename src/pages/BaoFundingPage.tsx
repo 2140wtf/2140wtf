@@ -54,7 +54,7 @@ const CATEGORY_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'infra', label: 'Infra' },
   { id: 'tools', label: 'Tools' },
-  { id: 'daos', label: 'DAOs' },
+  { id: 'baos', label: '₿AOs' },
 ] as const;
 
 /**
@@ -125,7 +125,7 @@ export function BaoFundingPage() {
   const allFundraisers = listQuery.data ?? [];
   const fundraisers = categoryFilter === 'all'
     ? allFundraisers
-    : allFundraisers.filter((f) => (f.category ?? 'tools') === categoryFilter);
+    : allFundraisers.filter((f) => (f.category === 'daos' ? 'baos' : (f.category ?? 'tools')) === categoryFilter);
   const detail = detailQuery.data;
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
 
@@ -287,7 +287,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                 <Badge variant="secondary" className="gap-1"><Waves className="size-3" /> Stream</Badge>
               )}
               <Badge variant={f.status === 'open' ? 'outline' : 'default'} className="capitalize">{f.status}</Badge>
-              {f.category && <Badge variant="outline" className="capitalize">{f.category}</Badge>}
+              {f.category && <Badge variant="outline" className="capitalize">{f.category === 'daos' || f.category === 'baos' ? '₿AOs' : f.category}</Badge>}
             </CardDescription>
           </div>
           <div className="text-right shrink-0">
