@@ -13,8 +13,21 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
 
-export const BAO_API_BASE = '/bao-api/v1';
 export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
+
+/**
+ * Primary API base. Dev talks to the local bao.markets API directly (the
+ * demo/signet markets the ₿AO Fund e2e scripts create only exist there);
+ * production uses the same-origin proxied path.
+ */
+function baoPrimaryApiBase(): string {
+  const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
+  if (fromEnv) return `${fromEnv}/v1`;
+  // Plain-http localhost is a dev convenience only — production CSP blocks
+  // it, so deployed builds use the same-origin proxy path.
+  if (import.meta.env.DEV) return 'http://localhost:3462/v1';
+  return '/bao-api/v1';
+}
 
 export interface ApiOutcome {
   id: string;
@@ -90,7 +103,7 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
  * without the proxy configured, etc).
  */
 export async function baoApiFetch(path: string, signal?: AbortSignal): Promise<Response> {
-  const proxiedPath = `${BAO_API_BASE}${path}`;
+  const proxiedPath = `${baoPrimaryApiBase()}${path}`;
   const publicPath = `${BAO_PUBLIC_API_BASE}${path}`;
 
   let res: Response;
