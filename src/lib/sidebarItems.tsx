@@ -128,6 +128,13 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: MessageSquare,
     requiresAuth: true,
   },
+  {
+    id: "bao-chat",
+    label: "₿AO CHAT",
+    path: "/bao/chat",
+    icon: MessageSquareMore,
+    requiresAuth: true,
+  },
   { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
   { id: "bao-fund", label: "₿AO FUND (DEMO)", path: "/bao-fund", icon: HandCoins },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
@@ -341,6 +348,10 @@ export function isItemActive(
 
   if (id === "messages") {
     return pathname.startsWith("/messages") || pathname.startsWith("/groups");
+  }
+
+  if (id === "bao-chat") {
+    return pathname.startsWith("/bao/");
   }
 
   if (id === "media") {

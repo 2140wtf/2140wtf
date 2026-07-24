@@ -24,6 +24,17 @@ export type EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig' | 'created_
    * to the global effective relay pool.
    */
   relays?: string[];
+  /**
+   * When set, publish only to this single relay (₿AO chat / Concord traffic
+   * that must stay on one host). Takes precedence over `relays`.
+   */
+  relay?: string;
+  /**
+   * Called with the fully-signed event immediately before it is sent to the
+   * network. Lets callers optimistically insert the event into a local cache
+   * (and learn its final id) before the relay round-trip completes.
+   */
+  onSigned?: (event: NostrEvent) => void;
 };
 
 /** Returns true if the kind falls in a replaceable or addressable range. */
@@ -70,8 +81,8 @@ export function useNostrPublish(): UseMutationResult<NostrEvent, Error, EventTem
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
       if (user) {
-        // Extract `prev` and `relays` before building the event — they're not part of the Nostr event schema.
-        const { prev, relays, ...template } = t;
+        // Extract `prev`, `relays`, `relay`, and `onSigned` before building the event — they're not part of the Nostr event schema.
+        const { prev, relays, relay, onSigned, ...template } = t;
         const tags = [...(template.tags ?? [])];
 
         // Add the NIP-89 client tag if it doesn't exist
@@ -130,7 +141,12 @@ export function useNostrPublish(): UseMutationResult<NostrEvent, Error, EventTem
           );
         }
 
-        if (relays && relays.length > 0) {
+        // Let callers optimistically render the event before the network call.
+        onSigned?.(event);
+
+        if (relay) {
+          await nostr.relay(relay).event(event, { signal: AbortSignal.timeout(5000) });
+        } else if (relays && relays.length > 0) {
           await nostr.group(relays).event(event, { signal: AbortSignal.timeout(5000) });
         } else {
           await nostr.event(event, { signal: AbortSignal.timeout(5000) });

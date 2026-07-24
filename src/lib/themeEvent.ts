@@ -421,3 +421,46 @@ function normalizeLegacyColors(parsed: Record<string, unknown>): CoreThemeColors
 
   return null;
 }
+
+// ─── Ditto interop (₿AO chat) ─────────────────────────────────────────
+
+/** A named Ditto theme reduced to the 3 core colors the chat UI consumes. */
+export interface DittoTheme {
+  /** d-tag identifier (definitions only). */
+  identifier: string;
+  title: string;
+  colors: CoreThemeColors;
+}
+
+/**
+ * Parse a kind 36767 / 16767 event into a DittoTheme. Returns null if invalid.
+ * Accepts the `c`-tag format and the legacy JSON content format (4-color or
+ * 19-token) so themes published by older Ditto clients still resolve.
+ */
+export function parseDittoTheme(event: NostrEvent): DittoTheme | null {
+  if (event.kind !== THEME_DEFINITION_KIND && event.kind !== ACTIVE_THEME_KIND) return null;
+
+  // New format: colors in `c` tags. Legacy: JSON in content.
+  let colors = parseColorTags(event.tags);
+  if (!colors && event.content) {
+    try {
+      const parsed = JSON.parse(event.content) as Record<string, string>;
+      const bg = parsed.background;
+      const text = parsed.text ?? parsed.foreground;
+      const primary = parsed.primary;
+      if (bg && text && primary) {
+        const toHsl = (v: string) => (isValidHex(v) ? hexToHslString(v) : v);
+        colors = { background: toHsl(bg), text: toHsl(text), primary: toHsl(primary) };
+      }
+    } catch {
+      // ignore invalid content
+    }
+  }
+  if (!colors) return null;
+
+  const identifier = event.tags.find(([n]) => n === 'd')?.[1] ?? '';
+  const title =
+    event.tags.find(([n]) => n === 'title')?.[1] || identifier || 'Untitled theme';
+
+  return { identifier, title, colors };
+}

@@ -548,6 +548,11 @@ export class AppPool {
    * data the app actually reads back.
    */
   private shouldCache(event: NostrEvent, followed: Set<string>): boolean {
+    // NIP-59 gift-wraps (1059 + the 21059 ephemeral variant used by Concord
+    // V2) are never cached: their outer key is ephemeral/random per wrap, so
+    // they are unqueryable by author anyway, and persisting encrypted DMs or
+    // community wraps to IndexedDB only widens the on-device footprint.
+    if (event.kind === 1059 || event.kind === 21059) return false;
     if (this.loggedInPubkeys.has(event.pubkey)) return true;
     if (NKinds.replaceable(event.kind)) {
       return followed.has(event.pubkey);

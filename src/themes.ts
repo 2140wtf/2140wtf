@@ -286,6 +286,20 @@ export function buildThemeCssFromCore(colors: CoreThemeColors, tokens?: Partial<
   return buildThemeCss(coreToTokens(colors, tokens));
 }
 
+/**
+ * Build a React `style` object of CSS custom properties from core theme
+ * colors (₿AO chat: tints a profile preview card with the author's Ditto
+ * theme). Keys are `--…` custom-property names.
+ */
+export function buildThemeVarStyle(colors: CoreThemeColors): Record<string, string> {
+  const tokens = coreToTokens(colors);
+  const style: Record<string, string> = {};
+  for (const key of Object.keys(tokens) as Array<keyof ThemeTokens>) {
+    style[toThemeVar(key)] = tokens[key];
+  }
+  return style;
+}
+
 /** Build CSS from a full ThemeConfig, including advanced tokens and radius. */
 export function buildThemeCssFromConfig(config: ThemeConfig): string {
   const tokens = coreToTokens(config.colors, config.tokens);
