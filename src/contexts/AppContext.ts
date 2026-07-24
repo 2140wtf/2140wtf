@@ -280,6 +280,11 @@ export interface AppConfig {
    * zap buttons and wallet affordances are hidden. (₿AO chat port; default on.)
    */
   zapsEnabled: boolean;
+  /**
+   * Preselected amount (sats) when the zap dialog opens. A preference, not a
+   * secret — synced across devices via the encrypted settings event.
+   */
+  defaultZapAmount: number;
   /** Feed and sidebar content settings */
   feedSettings: FeedSettings;
   /** Ordered list of sidebar item IDs (built-in + extra-kind). */

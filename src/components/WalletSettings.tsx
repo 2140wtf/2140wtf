@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -15,6 +16,8 @@ import {
 import { useNWC } from '@/hooks/useNWCContext';
 import { useWallet } from '@/hooks/useWallet';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import { DEFAULT_ESPLORA_APIS } from '@/lib/esplora';
 
@@ -40,6 +43,26 @@ export function WalletSettings() {
   const { config, updateConfig } = useAppContext();
   const esploraApis = config.esploraApis;
   const [newEsploraUrl, setNewEsploraUrl] = useState('');
+
+  // ── Zap preferences (synced via encrypted settings) ───────────
+  const { updateSettings } = useEncryptedSettings();
+  const { user } = useCurrentUser();
+
+  const handleZapsEnabledChange = (checked: boolean) => {
+    updateConfig((current) => ({ ...current, zapsEnabled: checked }));
+    if (user) updateSettings.mutateAsync({ zapsEnabled: checked }).catch(() => {});
+  };
+
+  // Config updates live on every keystroke; the encrypted-settings sync only
+  // fires on blur so we don't encrypt+publish a NIP-78 event per digit typed.
+  const handleDefaultZapAmountChange = (value: string) => {
+    const n = Math.max(1, Math.floor(Number(value) || 0));
+    updateConfig((current) => ({ ...current, defaultZapAmount: n }));
+  };
+
+  const handleDefaultZapAmountBlur = () => {
+    if (user) updateSettings.mutateAsync({ defaultZapAmount: config.defaultZapAmount }).catch(() => {});
+  };
 
   const normalizeEsploraUrl = (url: string): string => {
     const trimmed = url.trim();
@@ -216,6 +239,66 @@ export function WalletSettings() {
                   <Badge variant={hasNWC ? 'default' : 'secondary'} className="text-xs">
                     {hasNWC ? 'Ready' : 'None'}
                   </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Zap preferences */}
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">Zaps</h2>
+          <div className="grid gap-3">
+            <Card className="overflow-hidden">
+              <CardContent className="flex items-center justify-between gap-4 p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center size-9 rounded-full bg-secondary shrink-0">
+                    <Zap className="size-4 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Enable zaps</p>
+                    <p className="text-xs text-muted-foreground">
+                      Show zap buttons and Lightning wallet features. Synced across devices.
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={config.zapsEnabled}
+                  onCheckedChange={handleZapsEnabledChange}
+                  aria-label="Enable zaps"
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <CardContent className="flex items-center justify-between gap-4 p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center size-9 rounded-full bg-secondary shrink-0">
+                    <Zap className="size-4 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Default zap amount</p>
+                    <p className="text-xs text-muted-foreground">
+                      Preselected amount (sats) when you open the zap dialog.
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  <Label htmlFor="default-zap-amount" className="sr-only">
+                    Default zap amount (sats)
+                  </Label>
+                  <Input
+                    id="default-zap-amount"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={config.defaultZapAmount}
+                    onChange={(e) => handleDefaultZapAmountChange(e.target.value)}
+                    onBlur={handleDefaultZapAmountBlur}
+                    className="w-28 text-right"
+                  />
                 </div>
               </CardContent>
             </Card>

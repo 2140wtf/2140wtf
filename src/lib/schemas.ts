@@ -277,6 +277,8 @@ export const RuntimeAppConfigSchema = z.object({
   notifLevels: z.record(z.string(), z.enum(['all', 'mentions', 'nothing'])).optional().default({}),
   /** Whether zap/wallet/financial features are enabled in the UI. */
   zapsEnabled: z.boolean().optional().default(true),
+  /** Preselected amount (sats) when the zap dialog opens. */
+  defaultZapAmount: z.number().int().positive().optional().default(1000),
   feedSettings: FeedSettingsSchema,
   sidebarOrder: z.array(z.string()),
   sidebarOrderVersion: z.number().int().nonnegative().optional(),
@@ -457,6 +459,10 @@ export const EncryptedSettingsSchema = z.looseObject({
   linkPreviewUrl: z.string().refine(isAllowedUrlTemplate, { message: 'Link preview URL template must use https://' }).optional(),
   sentryDsn: z.string().refine(isAllowedHttpsUrl, { message: 'Sentry DSN must use https:// or be empty' }).optional(),
   currencyDisplay: z.enum(['usd', 'sats']).optional(),
+  /** Whether zap/wallet/financial features are enabled in the UI. */
+  zapsEnabled: z.boolean().optional(),
+  /** Preselected amount (sats) when the zap dialog opens. */
+  defaultZapAmount: z.number().int().positive().optional(),
   pets3dEnabled: z.boolean().optional(),
   savedFeeds: z.array(z.unknown()).transform((arr) =>
     arr.flatMap((item) => {
