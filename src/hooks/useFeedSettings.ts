@@ -18,7 +18,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "polls",
   "media",
   "pets",
-  "https://lightningobservatory.com/",
+  "lightning-observatory",
   "events",
   "btcmap",
 ];
@@ -31,6 +31,9 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'music': 'media',
   'videos': 'media',
   'bao-funding': 'bao-fund',
+  // The observatory used to be an external-URI sidebar item pointing at the
+  // /i/ discussion page; it is now a first-class in-app page.
+  'https://lightningobservatory.com/': 'lightning-observatory',
 };
 
 /**
@@ -182,7 +185,8 @@ export function useFeedSettings() {
     const order = config.sidebarOrder;
     if (order.length === 0) return;
 
-    const observatoryUrl = "https://lightningobservatory.com/";
+    const observatoryId = "lightning-observatory";
+    const legacyObservatoryUrl = "https://lightningobservatory.com/";
     const next = [...order];
     let changed = false;
 
@@ -194,12 +198,12 @@ export function useFeedSettings() {
       changed = true;
     }
 
-    if (!next.includes(observatoryUrl)) {
+    if (!next.includes(observatoryId) && !next.includes(legacyObservatoryUrl)) {
       const petsIdx = next.indexOf("pets");
       if (petsIdx !== -1) {
-        next.splice(petsIdx + 1, 0, observatoryUrl);
+        next.splice(petsIdx + 1, 0, observatoryId);
       } else {
-        next.push(observatoryUrl);
+        next.push(observatoryId);
       }
       changed = true;
     }
