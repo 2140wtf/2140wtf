@@ -50,6 +50,21 @@ export function inviteInbox(): NIndexedDB {
   return store;
 }
 
+/**
+ * Close the singleton so the database can be deleted (the final-logout
+ * purge) — an open connection blocks `deleteDatabase`. The next read reopens
+ * lazily via {@link inviteInbox}.
+ */
+export async function closeInviteInbox(): Promise<void> {
+  const open = store;
+  store = undefined;
+  try {
+    await open?.close();
+  } catch {
+    // Already closed.
+  }
+}
+
 /** Warm the IndexedDB connection so the first inbox read hits a hot store. */
 export function warmInviteInbox(): void {
   try {
@@ -147,6 +162,12 @@ export async function inviteInboxSince(pubkey: string): Promise<number> {
 
 /** Advance the cursor to the newest wrap `created_at` seen (monotonic). */
 export async function advanceInviteInboxCursor(pubkey: string, newestWrapCreatedAt: number): Promise<void> {
-  const prev = (await readFolded<number>(cursorKey(pubkey))) ?? 0;
-  if (newestWrapCreatedAt > prev) await writeFolded(cursorKey(pubkey), newestWrapCreatedAt);
+  // Clamp against the local clock: a future-stamped invite wrap (skewed or
+  // hostile sender) must not wedge the inbox — an unclamped cursor becomes
+  // the REQ `since` floor and correctly-stamped invites stop matching (same
+  // hazard updateStreamCursor clamps). A legacy poisoned cursor self-heals.
+  const now = Math.floor(Date.now() / 1000);
+  const prev = Math.min((await readFolded<number>(cursorKey(pubkey))) ?? 0, now);
+  const next = Math.min(newestWrapCreatedAt, now);
+  if (next > prev) await writeFolded(cursorKey(pubkey), next);
 }
