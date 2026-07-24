@@ -74,6 +74,7 @@ import { getLiveShopItems, getOwnedLiveShopItems } from '@/pets/shop/lib/pets-sh
 import { usePetsPurchaseItem } from '@/pets/shop/hooks/usePetsPurchaseItem';
 import { PetsShopDrawer } from '@/pets/shop/components/PetsShopDrawer';
 import { PetsWalletDrawer } from '@/pets/wallet/components/PetsWalletDrawer';
+import { PetFundraisingCard } from '@/pets/fundraising/PetFundraisingCard';
 
 import {
   PlayMusicModal,
@@ -4107,6 +4108,9 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
           />
         </div>
       )}
+
+      {/* ─── ₿AO Fund upkeep & fundraising (DEMO) ─── */}
+      <PetFundraisingCard companion={companion} />
 
       {/* ─── Recent Help ─── */}
       {isLoading ? (
