@@ -19,7 +19,7 @@ import { useCustomEmojis } from "@/hooks/useCustomEmojis";
 import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
 import { buildEmojiMap } from "@/lib/customEmoji";
 import { writeClipboardText } from "@/lib/clipboard";
-import { dittoHashtagUrl, dittoNip19Url } from "@/lib/dittoUrl";
+import { appHashtagUrl, appNip19Url } from "@/lib/dittoUrl";
 import { getDisplayName } from "@/lib/getDisplayName";
 import { HASHTAG_PATTERN } from "@/lib/hashtag";
 import { isInviteUrl } from "@/concord-v2/lib/invite";
@@ -622,7 +622,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
   // the published event omitted the tag.
   const { emojis: viewerEmojis } = useCustomEmojis();
   // Resolves `#channel` hashtags to local-channel navigation for the current
-  // server/community (falls back to a Ditto hashtag link when unmatched).
+  // server/community (falls back to a 2140.wtf hashtag link when unmatched).
   const channelNav = useChannelNav();
   const emojiMap = useMemo(() => {
     const map = buildEmojiMap(event.tags);
@@ -905,7 +905,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
         return (
           <a
             key={key}
-            href={dittoNip19Url(token.id)}
+            href={appNip19Url(token.id)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline break-all"
@@ -916,7 +916,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
         );
       case "hashtag": {
         // A hashtag that names a channel in the current server/community
-        // navigates to that local channel; otherwise it links out to Ditto's
+        // navigates to that local channel; otherwise it links out to 2140.wtf's
         // global hashtag feed.
         const goToChannel = channelNav?.resolveChannelByName(token.tag) ?? null;
         if (goToChannel) {
@@ -937,7 +937,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
         return (
           <a
             key={key}
-            href={dittoHashtagUrl(token.tag)}
+            href={appHashtagUrl(token.tag)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary font-medium hover:underline"
@@ -1225,7 +1225,7 @@ function TruncatedNostrLink({ encode }: { encode: () => string }) {
 
   return (
     <a
-      href={dittoNip19Url(id)}
+      href={appNip19Url(id)}
       target="_blank"
       rel="noopener noreferrer"
       className="text-primary hover:underline break-all"

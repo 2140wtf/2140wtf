@@ -1,8 +1,7 @@
-import { AtSign, Check, Copy, MessageSquare, Music } from "lucide-react";
+import { AtSign, Check, Copy, ExternalLink, MessageSquare, Music } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { DittoIcon } from "@/components/brand/DittoIcon";
 import { BotPill } from "@/components/BotPill";
 import { EmojifiedText } from "@/components/chat/CustomEmoji";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +14,7 @@ import { useProfileTheme, usePrefetchProfileTheme } from "@/hooks/useProfileThem
 import { isStatusExpired, useUserStatus } from "@/hooks/useUserStatus2";
 import { toast } from "@/hooks/useToast";
 import { getAvatarShape } from "@/lib/avatarShape";
-import { dittoProfileUrl } from "@/lib/dittoUrl";
+import { appProfileUrl } from "@/lib/dittoUrl";
 import { getDisplayName } from "@/lib/getDisplayName";
 import { tryNpubEncode } from "@/lib/safeNip19";
 import { cn } from "@/lib/utils";
@@ -68,7 +67,7 @@ function ProfilePreviewBody({ pubkey, onAction }: { pubkey: string; onAction?: (
   };
 
   const shortNpub = npub ? `${npub.slice(0, 12)}…${npub.slice(-6)}` : "";
-  const dittoProfileHref = dittoProfileUrl(pubkey);
+  const appProfileHref = appProfileUrl(pubkey);
 
   return (
     <>
@@ -189,22 +188,22 @@ function ProfilePreviewBody({ pubkey, onAction }: { pubkey: string; onAction?: (
           </div>
         )}
 
-        {/* View this person on ditto.pub — the fuller social view. */}
-        {dittoProfileHref && (
+        {/* View this person on 2140.wtf — the fuller social view. */}
+        {appProfileHref && (
           <Button
             size="sm"
             className="mt-2 w-full clip-corner-lg h-8"
             asChild
           >
             <a
-              href={dittoProfileHref}
+              href={appProfileHref}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => onAction?.()}
-              title="View on Ditto"
+              title="View on 2140.wtf"
             >
-              <DittoIcon className="size-3.5 mr-1.5" />
-              View on Ditto
+              <ExternalLink className="size-3.5 mr-1.5" />
+              View on 2140.wtf
             </a>
           </Button>
         )}

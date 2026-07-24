@@ -2,7 +2,6 @@ import { Check, ExternalLink, FileDigit, FileQuestion } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { useState } from "react";
 
-import { DittoIcon } from "@/components/brand/DittoIcon";
 import { ChatContent } from "@/components/chat/ChatContent";
 import { CustomEmojiImg, EmojifiedText } from "@/components/chat/CustomEmoji";
 import { EmojiPackCard } from "@/components/chat/EmojiPackCard";
@@ -15,7 +14,7 @@ import { toast } from "@/hooks/useToast";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { writeClipboardText } from "@/lib/clipboard";
 import { getCustomEmojiUrl, isCustomEmoji, isRenderableReactionKey } from "@/lib/customEmoji";
-import { dittoEventUrl } from "@/lib/dittoUrl";
+import { appEventUrl } from "@/lib/dittoUrl";
 import { shortTimeAgo } from "@/lib/formatTime";
 import { getDisplayName } from "@/lib/getDisplayName";
 import { tryNaddrEncode, tryNeventEncode } from "@/lib/safeNip19";
@@ -63,7 +62,7 @@ function kindLabel(kind: number): string | null {
  * paste into their preferred client. Addressable events encode to an
  * `naddr` (stable across edits); everything else to an `nevent` carrying
  * the author pubkey as a relay hint. Returns `undefined` for malformed
- * id/pubkey (matching `dittoEventUrl`'s routing).
+ * id/pubkey (matching `appEventUrl`'s routing).
  */
 function eventNostrUri(event: NostrEvent): string | undefined {
   if (event.kind >= 30000 && event.kind < 40000) {
@@ -116,7 +115,7 @@ export function EmbeddedNaddr({ addr, className }: { addr: AddrCoords; className
  *
  * Modeled on Ditto's NoteCard/EmbeddedCardShell: a soft `rounded-2xl`
  * card with a whole-card hover tint, an author row (avatar + name +
- * `· timeAgo`), the height-capped note content, and a "View on Ditto"
+ * `· timeAgo`), the height-capped note content, and a "View on 2140.wtf"
  * off-ramp footer.
  */
 export function EmbeddedEventCard({ event, className }: { event: NostrEvent; className?: string }) {
@@ -141,7 +140,7 @@ function GenericEventCard({ event, className }: { event: NostrEvent; className?:
     : null;
 
   // Off-ramp to the fuller social view of this event on ditto.pub.
-  const dittoHref = dittoEventUrl(event);
+  const appHref = appEventUrl(event);
   // NIP-21 identifier to copy for pasting into any other Nostr client.
   const nostrUri = eventNostrUri(event);
 
@@ -210,10 +209,10 @@ function GenericEventCard({ event, className }: { event: NostrEvent; className?:
           </div>
         )}
 
-        {/* Off-ramp footer: view on Ditto (left) + copy id (lower-right) */}
-        {(dittoHref || nostrUri) && (
+        {/* Off-ramp footer: view on 2140.wtf (left) + copy id (lower-right) */}
+        {(appHref || nostrUri) && (
           <div className="mt-0.5 flex items-center">
-            {dittoHref && <DittoLink href={dittoHref} />}
+            {appHref && <AppLink href={appHref} />}
             {nostrUri && <CopyIdButton uri={nostrUri} className="ml-auto" />}
           </div>
         )}
@@ -223,11 +222,11 @@ function GenericEventCard({ event, className }: { event: NostrEvent; className?:
 }
 
 /**
- * "View on Ditto" off-ramp — a small primary-tinted link appended to an
+ * "View on 2140.wtf" off-ramp — a small primary-tinted link appended to an
  * embedded event card so readers can jump to the full social thread on
- * ditto.pub (images, quotes, zaps, replies) that Armada doesn't render.
+ * 2140.wtf (images, quotes, zaps, replies) that Armada doesn't render.
  */
-function DittoLink({ href, label = "View on Ditto" }: { href: string; label?: string }) {
+function AppLink({ href, label = "View on 2140.wtf" }: { href: string; label?: string }) {
   return (
     <a
       href={href}
@@ -236,7 +235,6 @@ function DittoLink({ href, label = "View on Ditto" }: { href: string; label?: st
       onClick={(e) => e.stopPropagation()}
       className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
     >
-      <DittoIcon className="size-3.5 shrink-0" />
       <span>{label}</span>
       <ExternalLink className="size-3 shrink-0" />
     </a>
