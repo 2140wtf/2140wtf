@@ -89,6 +89,7 @@ const hardcodedConfig: AppConfig = {
   mutedChannels: [],
   notifLevels: {},
   zapsEnabled: true,
+  defaultZapAmount: 1000,
   relayMetadata: {
     relays: [],
     updatedAt: 0,
