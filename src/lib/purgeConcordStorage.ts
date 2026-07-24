@@ -1,3 +1,6 @@
+import { closeInviteInbox } from "@/concord-v2/lib/inviteInbox";
+import { closeRumorStores } from "@/concord-v2/lib/rumorStore";
+import { closeFoldedCache } from "@/lib/foldedCache";
 import { resetDecryptConsent } from "@/lib/decryptConsent";
 
 /**
@@ -5,10 +8,11 @@ import { resetDecryptConsent } from "@/lib/decryptConsent";
  *
  * The Concord caches hold DECRYPTED content and secret key material at rest —
  * channel rumors (plaintext messages), the fold cache (control-fold snapshots
- * the stream keys rehydrate from), pending wraps, the invite inbox, and the
- * community root keys inside them. Anyone with local storage access holds the
- * same device trust, but a logout must not leave another identity's decrypted
- * data (or the keys that mint it) readable by the NEXT account on this device.
+ * the stream keys rehydrate from), pending wraps, the invite inbox, decrypted
+ * image bytes, and the community root keys inside them. Anyone with local
+ * storage access holds the same device trust, but a logout must not leave
+ * another identity's decrypted data (or the keys that mint it) readable by
+ * the NEXT account on this device.
  *
  * Scope is deliberately narrow — this is not Armada's scorched-earth
  * purgeClientStorage. 2140's own caches (the public-event store, theme, feed
@@ -17,8 +21,10 @@ import { resetDecryptConsent } from "@/lib/decryptConsent";
  *
  * - IndexedDB: `2140-concord-cache`, `2140-concord-rumors`,
  *   `2140-concord-pending`, `2140-concord-invites`.
- * - localStorage: every `2140:wire-cursor:*` resume cursor and the
- *   `2140:decrypt-consent` record (consent is per-person, not per-device).
+ * - Cache Storage: `concord-v2-images` (decrypted image plaintext).
+ * - localStorage: every `2140:wire-cursor:*` resume cursor, the
+ *   `2140:decrypt-consent` record (consent is per-person, not per-device),
+ *   and `concord2:read-cut-pending:*` moderation markers.
  *
  * Wire cursors are keyed per account (`2140:wire-cursor:<pubkey>:<relay>`)
  * but purged wholesale on final logout — a fresh login replays from the
@@ -33,8 +39,11 @@ const CONCORD_DB_NAMES = [
   "2140-concord-invites", // inviteInbox.ts — decrypted direct invites
 ] as const;
 
+/** Cache Storage names holding decrypted content (image.ts). */
+const CONCORD_CACHE_STORAGE_NAMES = ["concord-v2-images"] as const;
+
 /** localStorage key prefixes wiped by the purge. */
-const PURGED_LOCAL_STORAGE_PREFIXES = ["2140:wire-cursor:"] as const;
+const PURGED_LOCAL_STORAGE_PREFIXES = ["2140:wire-cursor:", "concord2:read-cut-pending:"] as const;
 
 /** Exact localStorage keys wiped by the purge. */
 const PURGED_LOCAL_STORAGE_KEYS: readonly string[] = ["2140:decrypt-consent"];
@@ -59,6 +68,19 @@ function purgeLocalStorage(): void {
   }
 }
 
+/**
+ * Close the module-level store connections first: an open connection blocks
+ * `deleteDatabase` (the request stalls in `onblocked`), which would silently
+ * leave the decrypted DBs alive for the next login in the same tab.
+ */
+async function closeConcordStores(): Promise<void> {
+  await Promise.all([
+    closeRumorStores().catch(() => undefined),
+    closeInviteInbox().catch(() => undefined),
+    closeFoldedCache().catch(() => undefined),
+  ]);
+}
+
 async function purgeIndexedDB(): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   await Promise.all(
@@ -76,9 +98,16 @@ async function purgeIndexedDB(): Promise<void> {
   );
 }
 
+async function purgeCacheStorage(): Promise<void> {
+  if (typeof caches === "undefined") return;
+  await Promise.all(
+    CONCORD_CACHE_STORAGE_NAMES.map((name) => caches.delete(name).catch(() => false)),
+  );
+}
+
 /**
  * Wipe the decrypted Concord stores (see the module docstring). Best-effort:
- * individual deletions that fail (blocked by an open tab, unavailable IDB)
+ * individual deletions that fail (blocked by an OTHER tab, unavailable IDB)
  * don't abort the rest. Resets the in-memory decrypt-consent state too, so a
  * same-page next login re-asks rather than inheriting the previous account's
  * "always" choice.
@@ -86,5 +115,6 @@ async function purgeIndexedDB(): Promise<void> {
 export async function purgeConcordStorage(): Promise<void> {
   resetDecryptConsent();
   purgeLocalStorage();
-  await purgeIndexedDB();
+  await closeConcordStores();
+  await Promise.all([purgeIndexedDB(), purgeCacheStorage()]);
 }
