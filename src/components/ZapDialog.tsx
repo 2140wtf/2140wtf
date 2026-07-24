@@ -84,7 +84,8 @@ interface ZapDialogProps {
   onZapSuccess?: (result: { amountSats: number }) => void;
   /**
    * Optional satoshi amount to prefill the amount field with. When omitted
-   * the dialog starts at the default tip amount (1,000 sats).
+   * the dialog starts at the user's configured default zap amount
+   * (`config.defaultZapAmount`, 1,000 sats unless changed in wallet settings).
    */
   initialAmountSats?: number;
   /**
@@ -406,7 +407,7 @@ export function ZapDialog({
 
   // Sats-denominated state (matches OnchainZapContent). The display follows
   // the user's currency preference and shows the alternate value in the corner.
-  const [amountSats, setAmountSats] = useState<number | string>(initialAmountSats ?? 1000);
+  const [amountSats, setAmountSats] = useState<number | string>(initialAmountSats ?? config.defaultZapAmount);
   const [copied, setCopied] = useState(false);
   const [editingAmount, setEditingAmount] = useState(false);
   const [error, setError] = useState('');
@@ -584,7 +585,7 @@ export function ZapDialog({
 
   useEffect(() => {
     if (open) {
-      setAmountSats(initialAmountSats ?? 1000);
+      setAmountSats(initialAmountSats ?? config.defaultZapAmount);
       setInvoice(null);
       setCopied(false);
       setEditingAmount(false);
@@ -593,7 +594,7 @@ export function ZapDialog({
       setSuccess(null);
       setActiveMethod(defaultMethodId);
     } else {
-      setAmountSats(initialAmountSats ?? 1000);
+      setAmountSats(initialAmountSats ?? config.defaultZapAmount);
       setInvoice(null);
       setCopied(false);
       setEditingAmount(false);
