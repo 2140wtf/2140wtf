@@ -12,6 +12,15 @@
     --bottom-nav-height: 2.75rem; /* MobileBottomNav h-11 = 44px */
     /* Pets room canvas: vertical space reserved for the bottom dock */
     --pets-room-dock-height: 82px; /* Desktop: pt-2.5 + carousel(48) + pb-6(24) */
+    /* ₿AO chat chrome surfaces: structural framing (chat header, channel
+       sidebar, member roster). Derived from shadcn tokens so custom themes
+       retint them automatically. */
+    --chrome: var(--muted);
+    --chrome-deep: var(--muted);
+    --chrome-divider: var(--border);
+    /* Safe-area bottom padding bases for the chat panes (see .pb-safe). */
+    --safe-area-pad-bottom: max(0.75rem, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    --safe-area-pad-bottom-tight: max(0.25rem, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   }
 
   .dark {
@@ -57,6 +66,116 @@
 }
 
 @layer utilities {
+  /* ── ₿AO chat chrome surfaces ───────────────────────────────────────────
+     Structural framing (chat header, channel sidebar, member roster). */
+  .bg-chrome { background-color: hsl(var(--chrome)); }
+  .bg-chrome-deep { background-color: hsl(var(--chrome-deep)); }
+  .bg-chrome-divider { background-color: hsl(var(--chrome-divider)); }
+  .border-chrome { border-color: hsl(var(--chrome-divider)); }
+
+  /* Cut-corner panel — the ₿AO chat "vessel" shape (channel rows, sidebar,
+     chat header, dialogs). Rounded corners with two opposite corners sliced
+     into a flat diagonal chamfer. */
+  .clip-corner-lg {
+    --cut: 0.7rem;
+    border-radius: 0.55rem;
+    clip-path: polygon(
+      var(--cut) 0,
+      100% 0,
+      100% calc(100% - var(--cut)),
+      calc(100% - var(--cut)) 100%,
+      0 100%,
+      0 var(--cut)
+    );
+  }
+
+  /* Chart-rule gutter tick: a thin bar in the left gutter that lights up on
+     hover and glows when the row also has .is-active. */
+  .gutter-tick {
+    position: relative;
+  }
+  .gutter-tick::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: hsl(var(--primary));
+    opacity: 0;
+    transition: height 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
+  }
+  .gutter-tick:hover::before {
+    height: 45%;
+    opacity: 0.6;
+  }
+  .gutter-tick.is-active::before {
+    height: 70%;
+    opacity: 1;
+    box-shadow: 0 0 8px hsl(var(--primary) / 0.7);
+  }
+
+  /* Cut-corner chrome dialog idiom (invite/roles dialogs). `.chrome-dialog`
+     establishes an inline-size container so contents size off the card's
+     width (cqw) instead of the viewport. */
+  .chrome-dialog {
+    container-type: inline-size;
+  }
+  .chrome-dialog-title {
+    font-size: clamp(1.25rem, 9cqw, 1.6rem);
+    overflow-wrap: anywhere;
+  }
+
+  /* Always-visible, styled scrollbar for primary chat scroll regions.
+     Reserves a stable gutter so the bar doesn't overlay content. */
+  .scrollbar-stable {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.45) transparent;
+  }
+  .scrollbar-stable::-webkit-scrollbar {
+    display: block;
+    width: 12px;
+    height: 12px;
+  }
+  .scrollbar-stable::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-stable::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.45);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.15s ease;
+  }
+  .scrollbar-stable:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.6);
+  }
+  .scrollbar-stable::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.75);
+  }
+  .scrollbar-stable::-webkit-scrollbar-thumb:active {
+    background-color: hsl(var(--muted-foreground) / 0.9);
+  }
+  .scrollbar-stable::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  /* Like safe-area-bottom, but keeps a comfortable minimum gap. In the
+     multi-pane (>=900px "sidebar") layout it drops to the tight base so the
+     account switcher, channel list footer, and composer end at the SAME
+     bottom line. */
+  .pb-safe {
+    padding-bottom: var(--safe-area-pad-bottom);
+  }
+  @media (width >= 900px) {
+    .pb-safe {
+      padding-bottom: var(--safe-area-pad-bottom-tight);
+    }
+  }
+
   /* ── Safe-area inset utilities ────────────────────────────────────────────
      Use var(--safe-area-inset-*, …) as the outer wrapper so that
      Capacitor's SystemBars plugin (which injects --safe-area-inset-* CSS

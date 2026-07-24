@@ -87,6 +87,9 @@ export interface EncryptedSettings {
   notificationsCursor?: number;
   /** Per-conversation DM read cursors (conversationId -> newest seen created_at). */
   dmReadCursors?: Record<string, number>;
+  /** ₿AO chat read-state map (scope key -> last-read timestamp), mirrored
+   *  across devices by the ReadStateProvider. */
+  readState?: Record<string, number>;
   /** Per-group read cursors (nostrGroupId -> newest seen message timestamp ms). */
   groupReadCursors?: Record<string, number>;
   /** Per-type notification preferences (all default to true/enabled) */
