@@ -1,6 +1,5 @@
 import { nip19 } from "nostr-tools";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { BlurhashCanvas } from "@/components/BlurhashCanvas";
 import { AudioMessage } from "@/components/chat/AudioMessage";
@@ -28,7 +27,6 @@ import { parseFileMessageTags, parseImetaMap } from "@/lib/imeta";
 import { KIND_DM_FILE } from "@/components/chat/messageHelpers";
 import { splitInlineCode, splitMarkdownBlocks } from "@/lib/markdown";
 import { AUDIO_EXTS, EMBED_MEDIA_URL_REGEX, IMAGE_URL_REGEX, mimeFromExt } from "@/lib/mediaUrls";
-import { relayToRouteParam } from "@/lib/platform";
 import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { cn } from "@/lib/utils";
 import { bolt11AmountSats, formatSats } from "@/lib/zaps";
@@ -950,15 +948,11 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
         );
       }
       case "relay-link":
+        // No relay detail route in this app — render the URL as text.
         return (
-          <Link
-            key={key}
-            to={`/s/${relayToRouteParam(token.url)}`}
-            className="text-primary hover:underline break-all"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <span key={key} className="text-primary break-all">
             {token.url}
-          </Link>
+          </span>
         );
       case "lightning-invoice":
         return <LightningInvoice key={key} invoice={token.invoice} />;

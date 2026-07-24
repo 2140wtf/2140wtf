@@ -88,8 +88,13 @@ export const BAO_RAIL_LABELS: Record<BaoRail, string> = {
 
 /** Base URL of the bao.markets API (no trailing slash). */
 export function baoApiBase(): string {
-  return (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '')
-    || 'http://localhost:3462';
+  const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+  // Plain-http localhost is a dev convenience only — production CSP
+  // (connect-src 'self' … https: wss:) always blocks it, so a deployed build
+  // without the env var falls back to same-origin requests.
+  if (import.meta.env.DEV) return 'http://localhost:3462';
+  return globalThis.location?.origin ?? '';
 }
 
 interface SignerLike {
