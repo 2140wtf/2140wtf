@@ -458,6 +458,24 @@ export function NostrSync() {
         changed = true;
       }
 
+      if (
+        encryptedSettings.zapsEnabled !== undefined &&
+        encryptedSettings.zapsEnabled !== current.zapsEnabled
+      ) {
+        updates.zapsEnabled = encryptedSettings.zapsEnabled;
+        changed = true;
+      }
+
+      if (
+        encryptedSettings.defaultZapAmount !== undefined &&
+        Number.isInteger(encryptedSettings.defaultZapAmount) &&
+        encryptedSettings.defaultZapAmount > 0 &&
+        encryptedSettings.defaultZapAmount !== current.defaultZapAmount
+      ) {
+        updates.defaultZapAmount = encryptedSettings.defaultZapAmount;
+        changed = true;
+      }
+
       // Return the same reference if nothing changed to prevent re-render
       return changed ? updates : current;
     });
