@@ -276,6 +276,13 @@ export interface AppConfig {
    */
   notifLevels: Record<string, "all" | "mentions" | "nothing">;
   /**
+   * Per-community "filter agents by web of trust" toggle for ₿AO chat
+   * (Concord V2), keyed by `c2:${communityIdHex}`. When on, members beyond
+   * the viewer's follow-graph trust radius (and their messages) collapse
+   * behind an expandable "N filtered agents" row. See `src/lib/wotFilter.ts`.
+   */
+  wotAgentFilterByCommunity: Record<string, boolean>;
+  /**
    * Whether zap/wallet/financial features are enabled in the UI. When off,
    * zap buttons and wallet affordances are hidden. (₿AO chat port; default on.)
    */

@@ -275,6 +275,8 @@ export const RuntimeAppConfigSchema = z.object({
   mutedChannels: z.array(z.string()).optional().default([]),
   /** Per-conversation ₿AO notification levels keyed by community/channel scope. */
   notifLevels: z.record(z.string(), z.enum(['all', 'mentions', 'nothing'])).optional().default({}),
+  /** Per-community "filter agents by web of trust" toggle (`c2:${communityIdHex}` → on). */
+  wotAgentFilterByCommunity: z.record(z.string(), z.boolean()).optional().default({}),
   /** Whether zap/wallet/financial features are enabled in the UI. */
   zapsEnabled: z.boolean().optional().default(true),
   /** Preselected amount (sats) when the zap dialog opens. */
