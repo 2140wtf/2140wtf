@@ -38,6 +38,20 @@ export function relayToHttpUrl(relayUrl: string): string {
     .replace(/\/$/, "");
 }
 
+/** Relay URL → path segment for chat deep links. */
+export function relayToRouteParam(relayUrl: string): string {
+  return encodeURIComponent(relayUrl.replace(/^wss?:\/\//i, (m) => (m.toLowerCase() === "ws://" ? "ws:" : "")));
+}
+
+/** Path segment → relay URL. `relay.internal` ⇒ wss, `ws:host` ⇒ ws. */
+export function routeParamToRelay(param: string): string | undefined {
+  const decoded = decodeURIComponent(param);
+  if (decoded.startsWith("ws:")) {
+    return normalizeRelayUrl(`ws://${decoded.slice(3)}`);
+  }
+  return normalizeRelayUrl(decoded);
+}
+
 /**
  * Default app relays: general-purpose relays used for non-group-scoped ₿AO
  * chat traffic (the Concord V2 community list, invite delivery fallbacks).
