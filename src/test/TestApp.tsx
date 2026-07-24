@@ -32,6 +32,12 @@ export function TestApp({ children }: TestAppProps) {
     useUserRelays: false,
     marketplaceRelays: [],
     groupChatRelays: [],
+    appRelays: [],
+    lastChannelByServer: {},
+    mutedCommunities: [],
+    mutedChannels: [],
+    notifLevels: {},
+    zapsEnabled: true,
     relayMetadata: {
       relays: [{ url: "wss://relay.primal.net", read: true, write: true }],
       updatedAt: 0,

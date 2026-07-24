@@ -263,6 +263,20 @@ export const RuntimeAppConfigSchema = z.object({
   groupChatRelays: z.array(
     z.string().url().refine(isAllowedRelayUrl, { message: 'Group chat relay URL must be wss:// or ws:// localhost' }),
   ).optional().default([]),
+  /** ₿AO chat (Concord V2) app relays for generic community-plane traffic. */
+  appRelays: z.array(
+    z.string().url().refine(isAllowedRelayUrl, { message: 'App relay URL must be wss:// or ws:// localhost' }),
+  ).optional().default([]),
+  /** Last-open ₿AO channel per community (`c:${communityIdHex}` → channel id hex). */
+  lastChannelByServer: z.record(z.string(), z.string()).optional().default({}),
+  /** Muted ₿AO communities (`c2:${communityIdHex}`). */
+  mutedCommunities: z.array(z.string()).optional().default([]),
+  /** Muted ₿AO channels (`c2:${communityIdHex}::${channelIdHex}`). */
+  mutedChannels: z.array(z.string()).optional().default([]),
+  /** Per-conversation ₿AO notification levels keyed by community/channel scope. */
+  notifLevels: z.record(z.string(), z.enum(['all', 'mentions', 'nothing'])).optional().default({}),
+  /** Whether zap/wallet/financial features are enabled in the UI. */
+  zapsEnabled: z.boolean().optional().default(true),
   feedSettings: FeedSettingsSchema,
   sidebarOrder: z.array(z.string()),
   sidebarOrderVersion: z.number().int().nonnegative().optional(),
