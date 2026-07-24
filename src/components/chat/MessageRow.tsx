@@ -1,5 +1,6 @@
-import { Loader2, Reply } from "lucide-react";
+import { Loader2, PawPrint, Reply } from "lucide-react";
 import { memo } from "react";
+import { Link } from "react-router-dom";
 
 import { ProfilePreviewCard } from "@/components/chat/ProfilePreviewCard";
 import { BotPill } from "@/components/BotPill";
@@ -12,6 +13,7 @@ import { shortClockTime, shortTimeAgo } from "@/lib/formatTime";
 import { cn } from "@/lib/utils";
 import { useSwipeToReply } from "@/hooks/useSwipeToReply";
 
+import type { PetBodyInfo } from "@/lib/petBodies";
 import type { ReactNode } from "react";
 
 /**
@@ -39,6 +41,13 @@ interface MessageRowProps {
    * suppressed (there's no Nostr profile behind a mesh peer).
    */
   identityOverride?: MessageIdentity;
+  /**
+   * The author's pet body (a Nostr Pet declared via the pet's `agent` tag),
+   * for ₿AO chat agents. When set, the header shows the pet's avatar and name
+   * linked to the Pets page (where its upkeep fundraiser lives) with a paw
+   * badge, instead of the bare profile display. Ignored for mesh authors.
+   */
+  petBody?: PetBodyInfo;
   /** Unix-seconds creation time, rendered as a short relative timestamp. */
   createdAt: number;
   /** The message body (rich content, poll, /me action, edit field, …). */
@@ -86,6 +95,7 @@ interface MessageRowProps {
 export const MessageRow = memo(function MessageRow({
   pubkey,
   identityOverride,
+  petBody,
   createdAt,
   children,
   pending,
@@ -108,6 +118,9 @@ export const MessageRow = memo(function MessageRow({
   const color = identityOverride?.color ?? scoped.color;
   const label = identityOverride ? undefined : scoped.label;
   const suffix = identityOverride?.suffix;
+  // Pet bodies only apply to real Nostr authors (mesh peers carry an explicit
+  // identity, and there's no pet behind a mesh peer id).
+  const pet = identityOverride ? undefined : petBody;
 
   // Swipe-to-reply: only active when `onSwipeReply` is set (touch devices).
   const swipe = useSwipeToReply(
@@ -177,6 +190,24 @@ export const MessageRow = memo(function MessageRow({
         </span>
       ) : identityOverride ? (
         <span className="shrink-0 mt-0.5">{avatar}</span>
+      ) : pet ? (
+        // Agent with a pet body: the pet's avatar, linked to the Pets page
+        // (where the pet's upkeep fundraiser lives) instead of the profile card.
+        <Link
+          to="/pets"
+          title={`${pet.name} — this agent's pet body. View its upkeep fundraiser.`}
+          className="shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Avatar className="size-10 transition-opacity hover:opacity-90">
+            {pet.picture && <AvatarImage src={pet.picture} alt={pet.name} />}
+            <AvatarFallback
+              className="bg-primary/20 text-primary"
+              style={pet.baseColor ? { backgroundColor: `${pet.baseColor}33`, color: pet.baseColor } : undefined}
+            >
+              <PawPrint className="size-5" aria-hidden />
+            </AvatarFallback>
+          </Avatar>
+        </Link>
       ) : (
         <ProfilePreviewCard pubkey={pubkey}>
           <button type="button" className="shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -204,6 +235,20 @@ export const MessageRow = memo(function MessageRow({
                   </span>
                 )}
               </span>
+            ) : pet ? (
+              // Agent with a pet body: the pet's name + a paw badge, linked to
+              // the Pets page where its upkeep fundraiser renders.
+              <Link
+                to="/pets"
+                title={`${pet.name} — this agent's pet body. View its upkeep fundraiser.`}
+                className="text-[15px] font-semibold text-primary min-w-0 inline-flex items-center gap-1.5 hover:underline focus:outline-none"
+              >
+                <span className="truncate">{pet.name}</span>
+                <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary no-underline">
+                  <PawPrint className="size-3" aria-hidden />
+                  Pet
+                </span>
+              </Link>
             ) : (
               <ProfilePreviewCard pubkey={pubkey}>
                 <button
