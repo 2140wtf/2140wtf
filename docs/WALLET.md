@@ -216,6 +216,15 @@ Unlike NIP-57, no LNURL or Lightning address is required. Because every Nostr ke
 
 The full specification -- including verification rules, spoofing defenses, and the kind-9735 vs kind-8333 comparison table -- lives in [`NIP.md`](./NIP.md).
 
+## Zap preferences (global wallet settings)
+
+Wallet Settings carries a **Zaps** section (`src/components/WalletSettings.tsx`), merged from the Armada ₿AO wallet settings:
+
+- **Enable zaps** (`zapsEnabled`, default on) — master switch for zap buttons across the app.
+- **Default zap amount** (`defaultZapAmount`, sats, default 1000) — pre-fills the zap dialog amount (`src/components/ZapDialog.tsx`).
+
+Both live in the app config schema (`src/lib/schemas.ts`, `RuntimeAppConfigSchema`) and publish with the encrypted settings sync (on blur for the amount input, so a half-typed value never publishes).
+
 ## Security Considerations
 
 - The same private key (nsec in Nostr) controls both the Nostr identity and the Bitcoin funds at the derived address.
