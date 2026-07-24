@@ -129,6 +129,13 @@ export default {
 				'0%, 100%': { transform: 'scaleY(0.35)' },
 				'50%': { transform: 'scaleY(1)' }
 			},
+			'typing-dot': {
+				// Signal-style typing pill (₿AO chat): each dot swells +
+				// brightens in sequence (staggered via animationDelay),
+				// resting dim for the back half of the cycle.
+				'0%, 44%, 100%': { transform: 'scale(1)', opacity: '0.35' },
+				'22%': { transform: 'scale(1.3)', opacity: '1' }
+			},
 			'success-pop': {
 				// Celebratory pop-in for the zap success checkmark.
 				'0%': { transform: 'scale(0.3)', opacity: '0' },
@@ -161,6 +168,7 @@ export default {
 				'collapsible-down': 'collapsible-down 0.2s ease-out',
 				'collapsible-up': 'collapsible-up 0.2s ease-out',
 				'equaliser-bar': 'equaliser-bar 0.9s ease-in-out infinite',
+			'typing-dot': 'typing-dot 1.2s ease-in-out infinite',
 				'success-pop': 'success-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both',
 				'success-halo': 'success-halo 0.9s ease-out both',
 				'success-fade-up': 'success-fade-up 0.45s ease-out both',
@@ -174,6 +182,9 @@ export default {
 		// `fullscreen:` variant — targets an element while it is the fullscreen element.
 		plugin(({ addVariant }) => {
 			addVariant('fullscreen', '&:fullscreen');
+			// `touch:` — true touch devices only (no hover, coarse pointer). Used by
+			// the ₿AO chat UI to gate tap-reveal / fat-finger affordances.
+			addVariant('touch', '@media (hover: none) and (pointer: coarse)');
 		}),
 	],
 } satisfies Config;

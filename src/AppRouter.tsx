@@ -92,6 +92,10 @@ const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default:
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
+// ₿AO chat (Concord V2 E2EE communities)
+const BaoCommunitiesPage = lazy(() => import("./pages/BaoCommunitiesPage").then(m => ({ default: m.BaoCommunitiesPage })));
+const ConcordV2Page = lazy(() => import("./concord-v2/pages/ConcordV2Page").then(m => ({ default: m.ConcordV2Page })));
+const InviteV2Page = lazy(() => import("./concord-v2/pages/InviteV2Page").then(m => ({ default: m.InviteV2Page })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
@@ -344,6 +348,12 @@ export function AppRouter() {
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
+              <Route path="/bao/chat" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/c/:communityId" element={<ConcordV2Page />} />
+              <Route path="/bao/c/:communityId/:channelId" element={<ConcordV2Page />} />
+              <Route path="/bao/invite/:naddr" element={<InviteV2Page />} />
+              {/* Armada-generated invite links use /invite/:naddr; keep parsing them. */}
+              <Route path="/invite/:naddr" element={<InviteV2Page />} />
               <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
               <Route path="/bao-fund" element={<BaoFundingPage />} />
               <Route
