@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuthor } from "@/hooks/useAuthor";
+import { useAgentBodyPets } from "@/hooks/useAgentBodyPets";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useIsTouch } from "@/hooks/useIsMobile";
 import { useResolvedMediaSrc } from "@/hooks/useResolvedMediaSrc";
@@ -412,6 +413,11 @@ const ChatMessageInner = memo(function ChatMessageInner({
   const author = useAuthor(identityOverride ? undefined : event.pubkey);
   const scopedName = useScopedDisplayName(identityOverride ? undefined : event.pubkey, author.data?.metadata);
   const displayName = identityOverride?.name ?? scopedName;
+  // Agent pet bodies: when this author is a ₿AO chat agent whose pet declares
+  // it (['agent', pubkey] on the pet's kind 31124), the header shows the pet.
+  // One shared relay scan backs every row (see useAgentBodyPets); mesh peers
+  // have no Nostr key, so they skip the lookup.
+  const { bodies: agentBodies } = useAgentBodyPets(identityOverride ? [] : [event.pubkey]);
   // A command reads as an action ("JSKitty ran /greet with Concordia"), not as a
   // wall of raw arguments. The content still carries them for the bot.
   const invocation = useMemo(
@@ -740,6 +746,7 @@ const ChatMessageInner = memo(function ChatMessageInner({
         <MessageRow
           pubkey={event.pubkey}
           identityOverride={identityOverride}
+          petBody={agentBodies.get(event.pubkey)}
           createdAt={event.created_at}
           pending={isPending}
           edited={wasEdited && !isEditing}
