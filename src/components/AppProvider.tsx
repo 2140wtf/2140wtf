@@ -70,6 +70,17 @@ export function AppProvider(props: AppProviderProps) {
           result.themeDefaultVersion = currentThemeVersion;
         }
 
+        // One-time reset: error reporting flipped from default-on to
+        // default-off (no Sentry account is provisioned). Installs that
+        // persisted sentryEnabled: true under the old default get it turned
+        // off once; anyone who re-enables it afterwards keeps their choice
+        // because their stored version then matches.
+        const currentSentryVersion = defaultConfig.sentryReportingVersion ?? 0;
+        if ((result.sentryReportingVersion ?? 0) < currentSentryVersion) {
+          result.sentryEnabled = false;
+          result.sentryReportingVersion = currentSentryVersion;
+        }
+
         // Migrate legacy blossomServers (string[]) to blossomServerMetadata
         if (!result.blossomServerMetadata) {
           const legacyServers = parsed.blossomServers;

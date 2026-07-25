@@ -204,6 +204,7 @@ const hardcodedConfig: AppConfig = {
   // a DSN, but keep the toggle honest too).
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || "",
   sentryEnabled: false,
+  sentryReportingVersion: 1,
   plausibleDomain: import.meta.env.VITE_PLAUSIBLE_DOMAIN || "",
   plausibleEndpoint: import.meta.env.VITE_PLAUSIBLE_ENDPOINT || "",
   savedFeeds: [],

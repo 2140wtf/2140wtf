@@ -308,6 +308,8 @@ export const RuntimeAppConfigSchema = z.object({
   contentWarningPolicy: ContentWarningPolicySchema,
   sentryDsn: z.string().refine(isAllowedHttpsUrl, { message: 'Sentry DSN must use https:// or be empty' }),
   sentryEnabled: z.boolean(),
+  /** Bumping this resets sentryEnabled to false once for existing installs. */
+  sentryReportingVersion: z.number().int().nonnegative().optional(),
   plausibleDomain: z.string(),
   plausibleEndpoint: z.string().refine(isAllowedHttpsUrl, { message: 'Plausible endpoint must use https:// or be empty' }),
   savedFeeds: z.array(z.unknown()).transform((arr) =>
