@@ -256,6 +256,92 @@ const PETS_FORBIDDEN_ATTRS = [
 /** Maximum SVG string length (512 KB). Pets SVGs with all emotion overlays are ~30 KB. */
 const MAX_SVG_LENGTH = 512 * 1024;
 
+/**
+ * Convert inline styles on `<stop>` elements into presentation attributes.
+ *
+ * Several pipeline assets (the generic baby/adult SVG data, the SVG
+ * customizers, renderer fallbacks) declare gradient stops as
+ * `<stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />`.
+ * This sanitizer strips inline CSS by design — which silently discarded the
+ * stop colors, and SVG's default stop-color is BLACK, so every gradient in
+ * those assets rendered as a solid black blob (the "black muppet" baby).
+ * Rewriting the two stop properties into the allowed `stop-color` /
+ * `stop-opacity` presentation attributes carries the colors through
+ * sanitization. Runs BEFORE DOMPurify; only those two properties are lifted,
+ * and quotes/brackets are stripped from values so no attribute injection is
+ * possible (the input is our own pipeline output, not user content).
+ */
+function normalizeStopStyles(svg: string): string {
+  return svg.replace(/<stop\b[^>]*>/g, (tag) => {
+    const styleMatch = tag.match(/\sstyle="([^"]*)"/);
+    if (!styleMatch) return tag;
+    const attrs: string[] = [];
+    for (const decl of styleMatch[1].split(';')) {
+      const idx = decl.indexOf(':');
+      if (idx === -1) continue;
+      const prop = decl.slice(0, idx).trim();
+      const value = decl.slice(idx + 1).trim().replace(/["'\\<>]/g, '');
+      if ((prop === 'stop-color' || prop === 'stop-opacity') && value) {
+        attrs.push(`${prop}="${value}"`);
+      }
+    }
+    let out = tag.replace(styleMatch[0], '');
+    if (attrs.length > 0) {
+      out = out.replace(/\s*(\/?)>$/, (_end, slash: string) => ` ${attrs.join(' ')}${slash ? ' /' : ''}>`);
+    }
+    return out;
+  });
+}
+
+/**
+ * Inline the pipeline's CSS custom properties before DOMPurify strips them.
+ *
+ * The ₿AO generator and the Open Design adult forms (via
+ * applyCssVariableColors) declare their palette as a
+ * `<style>:root{--baseColor:…;--secondaryColor:…;--eyeColor:…}</style>` block
+ * and reference it with `var(--baseColor)` / `var(--baseColor, #fallback)`.
+ * This sanitizer strips `<style>` tags by design — so every var() lost its
+ * definition: ₿AO bodies (no fallback) rendered BLACK, and Open Design forms
+ * silently fell back to their baked-in hex instead of the pet's colors.
+ * Substituting the declared values (fallback honored when undeclared) carries
+ * the real palette through sanitization. Runs BEFORE DOMPurify; values are
+ * restricted to color-ish characters so no CSS/attribute injection is
+ * possible (the input is our own pipeline output, not user content).
+ */
+function inlineCssVariables(svg: string): string {
+  const styleBlocks = svg.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi);
+  if (!styleBlocks) return svg;
+
+  const vars = new Map<string, string>();
+  for (const block of styleBlocks) {
+    const declRe = /(--[a-zA-Z][\w-]*)\s*:\s*([^;{}]+)\s*;/g;
+    let m: RegExpExecArray | null;
+    while ((m = declRe.exec(block)) !== null) {
+      const name = m[1];
+      const value = m[2].trim();
+      // Only accept color-ish tokens (hex, rgb()/hsl(), named colors, %).
+      if (/^[#a-zA-Z0-9.,%() -]+$/.test(value)) {
+        vars.set(name, value);
+      }
+    }
+  }
+
+  // Substitute var(--name) and var(--name, fallback); keep the fallback when
+  // the variable was not declared (e.g. a style block we couldn't parse).
+  const substituted = svg.replace(
+    /var\(\s*(--[a-zA-Z][\w-]*)\s*(?:,\s*([^)]*?)\s*)?\)/g,
+    (whole, name: string, fallback?: string) => {
+      const value = vars.get(name);
+      if (value) return value;
+      if (fallback && /^[#a-zA-Z0-9.,%() -]+$/.test(fallback.trim())) return fallback.trim();
+      return whole;
+    },
+  );
+
+  // The definitions are inlined now — drop the style blocks entirely.
+  return substituted.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SANITIZER FUNCTION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -296,7 +382,13 @@ export function sanitizePetsSvg(dirty: string): string {
   // Use the isolated petsPurify instance, NOT the global DOMPurify
   // We do NOT use USE_PROFILES because the SVG profile has its own
   // internal whitelist that conflicts with our explicit ALLOWED_TAGS/ALLOWED_ATTR.
-  return petsPurify.sanitize(dirty, {
+  // normalizeStopStyles lifts <stop> inline styles into allowed presentation
+  // attributes first — otherwise the style stripping would black out every
+  // gradient that declares its colors via style="stop-color:…".
+  // inlineCssVariables substitutes the pipeline's :root palette variables —
+  // otherwise stripping <style> would black out every var(--baseColor) fill
+  // (₿AO bodies) or downgrade Open Design forms to their fallback hexes.
+  return petsPurify.sanitize(inlineCssVariables(normalizeStopStyles(dirty)), {
     ALLOWED_TAGS: PETS_ALLOWED_TAGS,
     ALLOWED_ATTR: PETS_ALLOWED_ATTRS,
     FORBID_TAGS: PETS_FORBIDDEN_TAGS,
