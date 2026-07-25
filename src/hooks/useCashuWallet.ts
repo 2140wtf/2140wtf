@@ -11,6 +11,7 @@ import { bytesToHex } from '@noble/curves/utils.js';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MeltQuoteResponse } from '@cashu/cashu-ts';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { NRelay1 } from '@nostrify/nostrify';
 import {
   deriveMasterKey,
   deriveEncryptionKey,
@@ -93,6 +94,16 @@ export interface CashuWalletState {
   nutzaps: NostrEvent[];
 }
 
+/**
+ * Result of a nutzap send:
+ * - 'sent': the nutzap event was published — payment delivered.
+ * - 'pending': the mint swap already committed (the sats left your wallet)
+ *   but the nutzap event could not be published; it is saved and auto-retried.
+ *   Do NOT retry the payment — it will very likely land.
+ * - 'failed': nothing was committed — safe to retry.
+ */
+export type NutzapSendResult = 'sent' | 'pending' | 'failed';
+
 export interface CashuWalletActions {
   setMintUrl: (url: string) => void;
   addCustomMint: (name: string, url: string) => void;
@@ -107,7 +118,7 @@ export interface CashuWalletActions {
   mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
   payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
-  sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<boolean>;
+  sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<NutzapSendResult>;
   receiveNutzap: (event: NostrEvent) => Promise<void>;
   checkMintQuote: (quote: MintQuoteResponse) => Promise<MintQuoteResponse | null>;
   checkMeltQuote: (quote: MeltQuoteResponse) => Promise<MeltQuoteResponse | null>;
@@ -152,6 +163,30 @@ export async function acquireMutex(mutexRef: { current: Promise<void> | null }):
   });
   mutexRef.current = promise;
   return release;
+}
+
+/** Normalize a relay URL for set comparison (trailing slash/case insensitive). */
+function normalizeRelayUrlForCompare(url: string): string {
+  return url.trim().toLowerCase().replace(/\/+$/, '');
+}
+
+/** Publish an event to specific relay URLs via one-shot connections.
+ *  Returns the subset of URLs that accepted the event. Best-effort: a relay
+ *  that rejects, times out, or is unreachable is simply absent from the
+ *  result — callers decide whether that warrants a retry. */
+async function publishEventToRelayUrls(event: NostrEvent, urls: string[]): Promise<string[]> {
+  const results = await Promise.allSettled(
+    urls.map(async (url) => {
+      const relay = new NRelay1(url);
+      try {
+        await relay.event(event, { signal: AbortSignal.timeout(8_000) });
+        return url;
+      } finally {
+        try { await relay.close(); } catch { /* ignore close errors */ }
+      }
+    }),
+  );
+  return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
 }
 
 export interface UseCashuWalletOptions {
@@ -246,6 +281,12 @@ export function useCashuWallet(
   const payInvoiceMutexRef = useRef<Promise<void> | null>(null);
   const payBolt12MutexRef = useRef<Promise<void> | null>(null);
   const mintFromQuoteMutexRef = useRef<Promise<void> | null>(null);
+  /** Serializes sendNutzap against receiveNutzap (and sendNutzap against
+   *  itself): both read-modify-write the same per-mint proof store, and the
+   *  cross-tab lock does NOT serialize same-tab operations. The other wallet
+   *  ops each have their own mutex above; these two share one so a purchase
+   *  cannot overwrite an incoming nutzap's freshly saved proofs. */
+  const nutzapMutexRef = useRef<Promise<void> | null>(null);
   const processedTokenHashesRef = useRef<Set<string>>(new Set());
   const nutzapKeyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const reconcileProofRecoveryRef = useRef<() => Promise<void>>(async () => {});
@@ -385,7 +426,15 @@ export function useCashuWallet(
       }
     }
     await storageRef.current.withProofLock(async () => {
-      await storageRef.current.saveProofsForMint(normalized, recovered, encKey);
+      // MERGE with the current store — never overwrite. The store holds every
+      // proof this wallet still owns for the mint (the melt inputs were
+      // removed when the melt was attempted); replacing it with only the
+      // recovered inputs would silently wipe the rest of the balance.
+      const existing = sanitizeProofs(
+        await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined),
+      );
+      const merged = dedupeProofs([...existing, ...recovered]);
+      await storageRef.current.saveProofsForMint(normalized, merged, encKey);
       storageRef.current.writeProofStoreTimestamp(normalized);
       storageRef.current.clearProofRecovery(normalized);
       storageRef.current.clearMeltChangeRecovery(normalized);
@@ -1844,7 +1893,11 @@ export function useCashuWallet(
         await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
         const sendOpts: import('@cashu/cashu-ts').SendOptions = { proofsWeHave: proofs };
         if (recipientPubkey && recipientPubkey.length === 64) {
-          sendOpts.pubkey = recipientPubkey;
+          // NUT-11 specifies a 33-byte compressed pubkey in the P2PK data
+          // field. cashu-ts copies `pubkey` verbatim, and strict mints reject
+          // the raw x-only form at swap time — which would lock the sats with
+          // no refund path. Prefix '02' like sendNutzap does.
+          sendOpts.pubkey = '02' + recipientPubkey;
           sendOpts.includeDleq = true;
         }
         const sendResult = await withTimeout(
@@ -1948,7 +2001,18 @@ export function useCashuWallet(
       return token;
     } catch (err: any) {
       devLog.error('Send error:', err);
-      if (mountedRef.current) setError(`Failed to send: ${err.message}`);
+      // A timeout is ambiguous: the mint may have processed the swap after we
+      // stopped waiting, in which case the inputs ARE spent and the send/change
+      // proofs only existed in the dropped response. Say so explicitly instead
+      // of a bare "try again" that invites a double-send — the recovery
+      // journal (scheduled on timeout) restores the inputs only if the mint
+      // never spent them.
+      const timedOut = typeof err?.message === 'string' && err.message.includes('timed out');
+      if (mountedRef.current) {
+        setError(timedOut
+          ? 'Send timed out — the mint may still have processed it. Check your balance before sending again; if it decreased, the recovery journal will reconcile automatically.'
+          : `Failed to send: ${err.message}`);
+      }
       return null;
     } finally {
       release();
@@ -2567,6 +2631,39 @@ export function useCashuWallet(
         const state = meltResult.quote?.state;
         const paidAmount = Number(quote.amount) || 0;
 
+        // Persist the post-melt proof store, mirroring the BOLT11 melt path.
+        // Without this the spent inputs stayed in the store (balance showed
+        // money already paid out, next spend failed with spent proofs) and the
+        // change only existed in the crash-recovery journal.
+        if (state === 'UNPAID') {
+          // Mint did not pay: selected inputs are still ours — restore them.
+          const recoveredEntry = await storageRef.current.loadProofRecovery(normalizedMint, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
+          const seed = bip39SeedRef.current;
+          if (recoveredEntry && recoveredEntry.proofs.length > 0 && seed) {
+            try {
+              const recovered = await filterUnspentProofs(normalizedMint, recoveredEntry.proofs, seed);
+              const restoredProofs = sanitizeProofs(dedupeProofs([...unselectedProofs, ...recovered]));
+              await storageRef.current.saveProofsForMint(normalizedMint, restoredProofs, encKeyRef.current!);
+              storageRef.current.writeProofStoreTimestamp(normalizedMint);
+              storageRef.current.clearProofRecovery(normalizedMint);
+              storageRef.current.clearMeltChangeRecovery(normalizedMint);
+            } catch (e) {
+              devLog.warn('Could not verify unspent state during BOLT12 UNPAID recovery; keeping journal:', normalizedMint, e);
+            }
+          }
+        } else {
+          // PAID / PENDING / unknown: selected inputs are spent by the mint;
+          // persist unselected proofs plus change. Keep the input recovery
+          // journal until the quote resolves PAID.
+          const updatedProofs = sanitizeProofs(dedupeProofs([...unselectedProofs, ...changeProofs]));
+          await storageRef.current.saveProofsForMint(normalizedMint, updatedProofs, encKeyRef.current!);
+          storageRef.current.writeProofStoreTimestamp(normalizedMint);
+          if (state === 'PAID') {
+            storageRef.current.clearProofRecovery(normalizedMint);
+            storageRef.current.clearMeltChangeRecovery(normalizedMint);
+          }
+        }
+
         const recordMeltTx = async () => {
           try {
             await storageRef.current.withTxLock(async () => {
@@ -2632,7 +2729,7 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, filterUnspentProofs, syncNip60TokenForMint]);
 
   const receiveNutzap = useCallback(async (event: NostrEvent): Promise<void> => {
     const sync = nip60SyncRef.current;
@@ -2645,6 +2742,9 @@ export function useCashuWallet(
     if (processedNutzapIdsRef.current.has(event.id)) return;
     if (await storageRef.current.isProcessedNutzapId(event.id, encKey, legacyEncKeyRef.current ?? undefined)) return;
 
+    // Share the nutzap mutex with sendNutzap so an incoming redemption can
+    // never overlap a send's read-modify-write of the same proof store.
+    const releaseNutzapMutex = await acquireMutex(nutzapMutexRef);
     try {
       if (!verifyEvent(event)) {
         devLog.warn('Rejected Nutzap with invalid signature:', event.id);
@@ -2713,9 +2813,16 @@ export function useCashuWallet(
           throw new Error('Nutzap proofs are already spent');
         }
         receivedProofs = sanitizeProofs(unspent);
+        // Crash journal BEFORE persisting: the sender's proofs are already
+        // spent at the mint (the receive above succeeded), so a crash/quota
+        // failure in saveProofsForMint would otherwise burn the nutzap — the
+        // re-issued proofs exist nowhere else. The reconciler merges this
+        // journal back into the store on next load.
+        await storageRef.current.writeSendRecovery(normalized, receivedProofs, encKey);
         const merged = dedupeProofs([...existing, ...receivedProofs]);
         await storageRef.current.saveProofsForMint(normalized, merged, encKey);
         storageRef.current.writeProofStoreTimestamp(normalized);
+        storageRef.current.clearSendRecovery(normalized);
         await calculateAllBalances();
 
         await storageRef.current.withTxLock(async () => {
@@ -2752,6 +2859,8 @@ export function useCashuWallet(
       setNutzaps((prev) => (prev.some((e) => e.id === event.id) ? prev : [event, ...prev]));
     } catch (e) {
       devLog.error('Failed to receive Nutzap:', event.id, e);
+    } finally {
+      releaseNutzapMutex();
     }
   }, [wallet, mintUrl, getNip60WalletSigner, getOrCreateWallet, filterUnspentProofs, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
 
@@ -2760,19 +2869,19 @@ export function useCashuWallet(
     recipientNpubOrNprofile: string,
     mintUrl: string,
     opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } },
-  ): Promise<boolean> => {
+  ): Promise<NutzapSendResult> => {
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const walletSigner = getNip60WalletSigner();
     if (!sync || !encKey || !walletSigner || !wallet) {
       setError('Wallet not initialized');
-      return false;
+      return 'failed';
     }
     const err = validateAmount(amount);
-    if (err) { setError(err); return false; }
+    if (err) { setError(err); return 'failed'; }
     if (typeof opts?.memo !== 'undefined' && (typeof opts.memo !== 'string' || opts.memo.length > 500)) {
       setError('Memo must be a string with max 500 chars');
-      return false;
+      return 'failed';
     }
 
     let recipientIdentityPubkey: string;
@@ -2787,20 +2896,20 @@ export function useCashuWallet(
       }
     } catch {
       setError('Invalid recipient npub or nprofile');
-      return false;
+      return 'failed';
     }
 
     const normalizedMint = normalizeMintUrl(mintUrl);
     const allowedMintUrls = allMintsRef.current.map((m) => m.url);
     if (!normalizedMint || !isAllowedMintUrl(normalizedMint, allowedMintUrls)) {
       setError('Selected mint is not allowed');
-      return false;
+      return 'failed';
     }
 
     // Fetch the recipient's kind:10019 Nutzap info and verify both the author
     // and the chosen mint. A forged info event from a different author could
     // redirect Nutzaps to an attacker's wallet pubkey.
-    let recipientInfo: { pubkey: string; mints: string[] } | null = null;
+    let recipientInfo: { pubkey: string; mints: string[]; relays: string[] } | null = null;
     try {
       const infoEvents = await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
       const sorted = infoEvents
@@ -2812,11 +2921,11 @@ export function useCashuWallet(
     }
     if (!recipientInfo) {
       setError('Recipient has not published Nutzap preferences');
-      return false;
+      return 'failed';
     }
     if (!recipientInfo.mints.includes(normalizedMint)) {
       setError('Recipient does not accept this mint');
-      return false;
+      return 'failed';
     }
 
     const recipientP2pkPubkey = (() => {
@@ -2827,9 +2936,10 @@ export function useCashuWallet(
     })();
     if (!recipientP2pkPubkey) {
       setError('Recipient Nutzap pubkey is invalid');
-      return false;
+      return 'failed';
     }
 
+    const releaseNutzapMutex = await acquireMutex(nutzapMutexRef);
     try {
       if (mountedRef.current) setLoading(true);
       if (mountedRef.current) setError('');
@@ -2930,6 +3040,7 @@ export function useCashuWallet(
         zappedEvent: opts?.zappedEvent,
         timestamp: Date.now(),
         attempts: 0,
+        recipientRelays: recipientInfo.relays,
       };
       let event: NostrEvent | null = null;
       try {
@@ -2951,7 +3062,7 @@ export function useCashuWallet(
           devLog.error('Failed to save pending Nutzap after build failure:', saveErr);
         }
         if (mountedRef.current) setError('Failed to build Nutzap — saved for retry');
-        return false;
+        return 'pending';
       }
       pendingEntry.id = event.id;
       pendingEntry.event = event;
@@ -2964,20 +3075,53 @@ export function useCashuWallet(
           devLog.error('Failed to save pending Nutzap after publish failure:', saveErr);
         }
         if (mountedRef.current) setError('Failed to publish Nutzap — saved for retry');
-        return false;
+        return 'pending';
       }
-      try {
-        await storageRef.current.removePendingNutzap(event.id, encKey, legacyEncKeyRef.current ?? undefined);
-      } catch (e) {
-        devLog.warn('Failed to clear pending Nutzap after successful publish:', e);
+      // NIP-61: the Nutzap must also reach the relays the recipient listed in
+      // their kind:10019 — the recipient's wallet typically subscribes only
+      // those relays, and our app relay set may not overlap (the 2140 treasury
+      // lists only relay.bao.network, which is not an app default relay).
+      // Fan out to any recipient relays we don't already cover; failures are
+      // saved for background retry so the payment is not stranded.
+      const appRelayUrls = new Set((sync.relays ?? []).map(normalizeRelayUrlForCompare));
+      const extraRelays = [...new Set(
+        recipientInfo.relays
+          .map((u) => u.trim())
+          .filter((u) => u.length > 0 && !appRelayUrls.has(normalizeRelayUrlForCompare(u))),
+      )];
+      let undeliveredRelays: string[] = [];
+      if (extraRelays.length > 0) {
+        const deliveredUrls = await publishEventToRelayUrls(event, extraRelays);
+        const deliveredSet = new Set(deliveredUrls.map(normalizeRelayUrlForCompare));
+        undeliveredRelays = extraRelays.filter((u) => !deliveredSet.has(normalizeRelayUrlForCompare(u)));
+        if (undeliveredRelays.length > 0) {
+          devLog.warn('Nutzap not yet delivered to recipient relays, saved for retry:', undeliveredRelays);
+          try {
+            await storageRef.current.savePendingNutzap(
+              { ...pendingEntry, attempts: 1, lastAttemptAt: Date.now(), recipientRelays: undeliveredRelays },
+              encKey,
+              legacyEncKeyRef.current ?? undefined,
+            );
+          } catch (saveErr) {
+            devLog.error('Failed to save pending Nutzap for relay retry:', saveErr);
+          }
+        }
+      }
+      if (undeliveredRelays.length === 0) {
+        try {
+          await storageRef.current.removePendingNutzap(event.id, encKey, legacyEncKeyRef.current ?? undefined);
+        } catch (e) {
+          devLog.warn('Failed to clear pending Nutzap after successful publish:', e);
+        }
       }
       if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats via Nutzap`);
-      return true;
+      return 'sent';
     } catch (err: any) {
       devLog.error('Nutzap send failed:', err);
       if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
-      return false;
+      return 'failed';
     } finally {
+      releaseNutzapMutex();
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
@@ -3006,8 +3150,26 @@ export function useCashuWallet(
         if (!event) continue;
         const id = await sync.publish(event);
         if (id) {
-          await storageRef.current.removePendingNutzap(entry.id, encKey, legacyEncKeyRef.current ?? undefined);
-          devLog.log('Published pending Nutzap:', id);
+          // Also (re)deliver to any recipient kind:10019 relays still pending —
+          // the app-relay publish alone does not reach a recipient whose wallet
+          // subscribes only their own listed relays.
+          let remainingRelays = entry.recipientRelays ?? [];
+          if (remainingRelays.length > 0) {
+            const deliveredUrls = await publishEventToRelayUrls(event, remainingRelays);
+            const deliveredSet = new Set(deliveredUrls.map(normalizeRelayUrlForCompare));
+            remainingRelays = remainingRelays.filter((u) => !deliveredSet.has(normalizeRelayUrlForCompare(u)));
+          }
+          if (remainingRelays.length === 0) {
+            await storageRef.current.removePendingNutzap(entry.id, encKey, legacyEncKeyRef.current ?? undefined);
+            devLog.log('Published pending Nutzap:', id);
+          } else {
+            devLog.warn('Pending Nutzap still undelivered to recipient relays:', remainingRelays);
+            await storageRef.current.savePendingNutzap(
+              { ...entry, event, attempts: entry.attempts + 1, lastAttemptAt: now, recipientRelays: remainingRelays },
+              encKey,
+              legacyEncKeyRef.current ?? undefined,
+            );
+          }
         } else {
           await storageRef.current.savePendingNutzap({ ...entry, attempts: entry.attempts + 1, lastAttemptAt: now }, encKey, legacyEncKeyRef.current ?? undefined);
         }
