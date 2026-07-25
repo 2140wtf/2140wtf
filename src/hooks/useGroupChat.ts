@@ -60,7 +60,9 @@ export interface UseGroupChatReturn {
   requiresNsec: boolean;
   selectGroup: (groupId: string | null) => void;
   getMessagesForGroup: (groupId: string) => GroupChatMessage[];
-  createGroup: (name: string, description?: string) => Promise<GroupOperationResult<GroupChatGroup>>;
+  createGroup: (name: string, description?: string, relays?: string[]) => Promise<GroupOperationResult<GroupChatGroup>>;
+  /** The relay set a new group uses when the creator doesn't pick one. */
+  defaultGroupRelays: string[];
   sendMessage: (content: string) => Promise<GroupOperationResult<GroupChatMessage>>;
   addMember: (pubkey: string) => Promise<GroupOperationResult>;
   removeMember: (pubkey: string) => Promise<GroupOperationResult>;
@@ -344,14 +346,14 @@ export function useGroupChat(): UseGroupChatReturn {
   );
 
   const createGroup = useCallback(
-    async (name: string, description?: string) => {
+    async (name: string, description?: string, relays?: string[]) => {
       if (!service) {
         return { success: false, error: 'Group chat requires nsec login' } as GroupOperationResult<GroupChatGroup>;
       }
       setIsLoading(true);
       setError(null);
       try {
-        const result = await service.createGroup(name, description, groupChatRelays);
+        const result = await service.createGroup(name, description, relays?.length ? relays : groupChatRelays);
         if (result.success && result.data) {
           refreshFromService();
           setSelectedGroupId(result.data.nostrGroupId);
@@ -587,6 +589,7 @@ export function useGroupChat(): UseGroupChatReturn {
     selectGroup,
     getMessagesForGroup,
     createGroup,
+    defaultGroupRelays: groupChatRelays,
     sendMessage,
     addMember,
     removeMember,
