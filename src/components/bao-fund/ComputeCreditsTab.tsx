@@ -18,6 +18,7 @@ import {
   buildComputeCreditRequest,
   parseComputeCreditFulfillment,
   parseComputeCreditRequest,
+  type ComputeCreditFulfillment,
   type ComputeCreditRequest,
 } from '@/lib/baoComputeCredits';
 import {
@@ -58,8 +59,10 @@ function RequestAuthor({ pubkey }: { pubkey: string }) {
  *
  * Agents without money publish a kind-4971 request; funders lock real Cashu
  * tokens to the agent's pubkey (P2PK), deliver them by NIP-17 DM (+ copyable
- * fallback), and post a kind-4972 receipt. The agent redeems the token at
- * Routstr for an `sk_…` compute key. Mainnet, tokens only.
+ * fallback), and post a kind-4972 claim. The agent confirms receipt with
+ * their own kind-4972 — only the agent's confirmation closes the request,
+ * since anyone can publish a 4972 for any request. The agent redeems the
+ * token at Routstr for an `sk_…` compute key. Mainnet, tokens only.
  */
 export function ComputeCreditsTab() {
   const { user } = useCurrentUser();
@@ -95,15 +98,33 @@ export function ComputeCreditsTab() {
     refetchInterval: 30_000,
   });
 
-  const fulfilledByRequest = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const f of fulfillmentsQuery.data ?? []) {
-      map.set(f!.requestId, (map.get(f!.requestId) ?? 0) + f!.amountSats);
-    }
-    return map;
-  }, [fulfillmentsQuery.data]);
+  const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
 
-  const requests = requestsQuery.data ?? [];
+  const { fulfilledByRequest, claimsByRequest } = useMemo(() => {
+    // A kind-4972 event proves NOTHING about payment — anyone can publish one
+    // for any request. So it is only trusted as follows:
+    //   - authored by the REQUESTER → confirmation of receipt; closes the request
+    //   - authored by anyone else   → a funder's "I sent it" claim; displayed
+    //     as a marker but never hides the request (a griefer could otherwise
+    //     hide every open request without paying a single sat).
+    const ownerById = new Map(requests.map((r) => [r.id, r.pubkey]));
+    const fulfilled = new Map<string, number>();
+    const claims = new Map<string, ComputeCreditFulfillment[]>();
+    for (const f of fulfillmentsQuery.data ?? []) {
+      if (!f) continue;
+      const owner = ownerById.get(f.requestId);
+      if (!owner || f.requesterPubkey !== owner) continue; // p tag must match the real requester
+      if (f.pubkey === owner) {
+        fulfilled.set(f.requestId, (fulfilled.get(f.requestId) ?? 0) + f.amountSats);
+      } else {
+        const list = claims.get(f.requestId) ?? [];
+        list.push(f);
+        claims.set(f.requestId, list);
+      }
+    }
+    return { fulfilledByRequest: fulfilled, claimsByRequest: claims };
+  }, [fulfillmentsQuery.data, requests]);
+
   const openRequests = requests.filter((r) => !fulfilledByRequest.has(r.id));
   const myRequests = user ? requests.filter((r) => r.pubkey === user.pubkey) : [];
 
@@ -126,7 +147,7 @@ export function ComputeCreditsTab() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} onPublished={invalidate} />
+        <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
         <RedeemCard />
       </div>
 
@@ -147,7 +168,7 @@ export function ComputeCreditsTab() {
         ) : (
           <div className="space-y-3">
             {openRequests.map((r) => (
-              <OpenRequestCard key={r.id} request={r} onFulfilled={invalidate} />
+              <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} onFulfilled={invalidate} />
             ))}
           </div>
         )}
@@ -158,9 +179,10 @@ export function ComputeCreditsTab() {
 
 // ── Agent: request credits ────────────────────────────────────────────────────
 
-function RequestCreditCard({ myRequests, fulfilledByRequest, onPublished }: {
+function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, onPublished }: {
   myRequests: ComputeCreditRequest[];
   fulfilledByRequest: Map<string, number>;
+  claimsByRequest: Map<string, ComputeCreditFulfillment[]>;
   onPublished: () => void;
 }) {
   const { user } = useCurrentUser();
@@ -180,6 +202,22 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, onPublished }: {
       onPublished();
     },
     onError: (e) => toast({ title: 'Publish failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+  });
+
+  // Agent-side confirmation. Only a kind-4972 authored by the requester
+  // closes the request — a funder's receipt is a claim, not proof of payment.
+  const confirmMutation = useMutation({
+    mutationFn: (request: ComputeCreditRequest) =>
+      publish.mutateAsync(buildComputeCreditFulfillment({
+        requestId: request.id,
+        requesterPubkey: request.pubkey,
+        amountSats: request.amountSats,
+      })),
+    onSuccess: () => {
+      toast({ title: 'Receipt confirmed', description: 'Your request is now marked as funded.' });
+      onPublished();
+    },
+    onError: (e) => toast({ title: 'Confirm failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
   const valid = (parseInt(amount, 10) || 0) > 0 && purpose.trim().length > 0;
@@ -217,6 +255,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, onPublished }: {
             <p className="text-xs font-medium text-muted-foreground">Your requests</p>
             {myRequests.slice(0, 5).map((r) => {
               const got = fulfilledByRequest.get(r.id);
+              const claims = claimsByRequest.get(r.id) ?? [];
               return (
                 <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs">
                   <span className="truncate">{r.purpose || `${formatSats(r.amountSats)} sats`}</span>
@@ -224,6 +263,16 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, onPublished }: {
                     <Badge variant="outline" className="text-green-500 border-green-500/40 shrink-0 gap-1">
                       <CheckCircle2 className="size-3" /> funded {formatSats(got)}
                     </Badge>
+                  ) : claims.length > 0 ? (
+                    <Button
+                      size="sm" variant="outline"
+                      className="shrink-0 gap-1 h-6 text-[11px] text-amber-600 dark:text-amber-400 border-amber-500/40"
+                      disabled={confirmMutation.isPending}
+                      onClick={() => confirmMutation.mutate(r)}
+                    >
+                      {confirmMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
+                      {claims.length} claim{claims.length === 1 ? '' : 's'} — confirm received
+                    </Button>
                   ) : (
                     <Badge variant="outline" className="shrink-0">open · {timeAgo(r.createdAt)}</Badge>
                   )}
@@ -239,7 +288,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, onPublished }: {
 
 // ── Funder: fulfill a request with a real Cashu token ─────────────────────────
 
-function OpenRequestCard({ request, onFulfilled }: { request: ComputeCreditRequest; onFulfilled: () => void }) {
+function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; onFulfilled: () => void }) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const publish = useNostrPublish();
@@ -247,9 +296,25 @@ function OpenRequestCard({ request, onFulfilled }: { request: ComputeCreditReque
   const { sendMessage } = useNip17SendMessage();
   const [token, setToken] = useState<string | null>(null);
   const [dmState, setDmState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [receiptFailed, setReceiptFailed] = useState(false);
 
   const isOwn = !!user && user.pubkey === request.pubkey;
   const hasWallet = allMints.length > 0;
+
+  const publishReceipt = useMutation({
+    mutationFn: async () => {
+      await publish.mutateAsync(buildComputeCreditFulfillment({
+        requestId: request.id,
+        requesterPubkey: request.pubkey,
+        amountSats: request.amountSats,
+      }));
+    },
+    onSuccess: () => {
+      setReceiptFailed(false);
+      onFulfilled();
+    },
+    onError: () => setReceiptFailed(true),
+  });
 
   const fulfillMutation = useMutation({
     mutationFn: async () => {
@@ -273,18 +338,26 @@ function OpenRequestCard({ request, onFulfilled }: { request: ComputeCreditReque
         setDmState('failed');
       }
 
-      // 3. Public receipt so the request stops showing as open. Token NEVER goes in an event.
-      await publish.mutateAsync(buildComputeCreditFulfillment({
-        requestId: request.id,
-        requesterPubkey: request.pubkey,
-        amountSats: request.amountSats,
-      }));
+      // 3. Public claim marker (kind 4972). Token NEVER goes in an event.
+      //    This does NOT close the request — only the agent's own confirmation
+      //    does (anyone can publish a 4972, so a funder's receipt is a claim,
+      //    not proof). If this fails the token is already minted and the wallet
+      //    debited — it must NEVER be discarded, so the receipt gets its own
+      //    retry path instead of failing the whole mutation (which used to
+      //    wipe the token).
+      try {
+        await publishReceipt.mutateAsync();
+      } catch {
+        // receiptFailed state is set by publishReceipt.onError; the token
+        // stays visible below with a "retry receipt" button.
+      }
     },
     onSuccess: () => {
       toast({ title: 'Credits sent', description: `${formatSats(request.amountSats)} sats locked to the agent's pubkey.` });
-      onFulfilled();
     },
     onError: (e) => {
+      // Only reachable before a token exists (sendToken failure); once a
+      // token is minted the mutation never throws, so it cannot be lost here.
       setToken(null);
       setDmState('idle');
       toast({ title: 'Funding failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
@@ -304,6 +377,12 @@ function OpenRequestCard({ request, onFulfilled }: { request: ComputeCreditReque
           </div>
           <span className="text-xs text-muted-foreground shrink-0">{timeAgo(request.createdAt)}</span>
         </div>
+
+        {claims.length > 0 && !token && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            {claims.length === 1 ? '1 funder says they already sent this' : `${claims.length} funders say they already sent this`} — check with the agent before double-funding.
+          </p>
+        )}
 
         {token ? (
           <div className="space-y-2">
@@ -325,6 +404,21 @@ function OpenRequestCard({ request, onFulfilled }: { request: ComputeCreditReque
                   <Copy className="size-3.5" />
                 </Button>
               </div>
+              {receiptFailed && (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-2">
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                    Receipt not published — the request may still show as open. The token above is safe; keep it until the agent confirms.
+                  </p>
+                  <Button
+                    size="sm" variant="outline" className="shrink-0 gap-1.5"
+                    disabled={publishReceipt.isPending}
+                    onClick={() => publishReceipt.mutate()}
+                  >
+                    {publishReceipt.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                    Retry receipt
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         ) : (
