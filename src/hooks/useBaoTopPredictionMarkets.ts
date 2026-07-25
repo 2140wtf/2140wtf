@@ -10,7 +10,11 @@ const QUERY_TIMEOUT_MS = 15_000;
 async function fetchTopApiMarkets(signal: AbortSignal): Promise<ApiMarket[]> {
   const params = new URLSearchParams({
     status: 'active',
-    sort: 'volume',
+    // The route only forwards sort_by/sort_dir (the legacy `sort` param is
+    // dropped before pgGetMarkets), so `sort=volume` was silently ignored
+    // and the widget showed newest markets instead of top-volume ones.
+    sort_by: 'total_volume',
+    sort_dir: 'desc',
     limit: '20',
   });
 
