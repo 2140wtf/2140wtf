@@ -22,7 +22,7 @@ export const LIGHTNING_OBSERVATORY_URL = 'https://lightningobservatory.com/';
  * Override with VITE_LO_PROXY_URL (e.g. for a locally running wrangler dev). */
 export const LO_PROXY_URL: string =
   (import.meta.env.VITE_LO_PROXY_URL as string | undefined)?.replace(/\/+$/, '') ||
-  'https://bao-lo-proxy.baocommunity.workers.dev';
+  'https://bao-lo-proxy.hello-cbd.workers.dev';
 
 /** Live network-wide aggregate stats from `GET /api/network`. */
 export interface LightningNetworkStats {
