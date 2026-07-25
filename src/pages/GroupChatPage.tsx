@@ -140,12 +140,16 @@ export function GroupChatPage() {
   const [joinOpen, setJoinOpen] = useState(false);
   const [mobileListOpen, setMobileListOpen] = useState(false);
   const [mobileMembersOpen, setMobileMembersOpen] = useState(false);
-  const [showGroupList, setShowGroupList] = useState(true);
+  // Group list: shown when nothing is selected (you need it to pick a
+  // group), auto-collapsed once a group is open so the chat gets the width.
+  // The panel button in the group header overrides either way.
+  const [groupListToggled, setGroupListToggled] = useState<boolean | null>(null);
   // Members panel starts collapsed — it's a management table, not something
   // you need while chatting. The panel button in the group header expands it.
   const [showMemberPanel, setShowMemberPanel] = useState(false);
   const [searchParams] = useSearchParams();
   const initialGroupSelected = useRef(false);
+  const showGroupList = groupListToggled ?? !selectedGroup;
 
   useEffect(() => {
     if (isLoading || initialGroupSelected.current) return;
@@ -302,7 +306,7 @@ export function GroupChatPage() {
                       className="hidden sm:flex size-8 text-muted-foreground shrink-0"
                       title={showGroupList ? 'Hide groups' : 'Show groups'}
                       aria-label={showGroupList ? 'Hide groups' : 'Show groups'}
-                      onClick={() => setShowGroupList((v) => !v)}
+                      onClick={() => setGroupListToggled(!showGroupList)}
                     >
                       <PanelLeft className={cn('size-4', !showGroupList && 'text-primary')} />
                     </Button>
