@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { PageHeader } from '@/components/PageHeader';
+import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useGroupChatContext } from '@/hooks/useGroupChatContext';
@@ -69,6 +70,10 @@ function GroupChatSkeleton() {
 export function GroupChatPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
+  // Chat needs the whole window: drop the widgets sidebar and the center
+  // column's 600px cap (the left menu auto-collapses on this route — see
+  // MainLayout's autoCollapseLeft), so the message list gets the width.
+  useLayoutOptions({ noMaxWidth: true, rightSidebar: null });
   const {
     groups,
     selectedGroup,

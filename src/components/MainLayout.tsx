@@ -48,7 +48,7 @@ function MainLayoutInner() {
   const location = useLocation();
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const autoCollapseLeft = ['/prediction-markets', '/videos'].some((p) => location.pathname.startsWith(p));
+  const autoCollapseLeft = ['/prediction-markets', '/videos', '/groups'].some((p) => location.pathname.startsWith(p));
   useEffect(() => {
     setLeftCollapsed(autoCollapseLeft);
   }, [autoCollapseLeft]);
