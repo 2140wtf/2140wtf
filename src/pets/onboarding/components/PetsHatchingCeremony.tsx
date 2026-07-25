@@ -29,7 +29,7 @@ import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchFreshNostrPetProfile } from '@/pets/core/lib/fetchFreshNostrPetProfile';
-import { useCurrentBlockHeight, isPetOldEnough } from '@/pets/core/lib/pets-life';
+import { useCurrentBlockHeight, isPetOldEnough, getStoredBirthBlockHeight } from '@/pets/core/lib/pets-life';
 
 import {
   KIND_PETS_STATE,
@@ -143,7 +143,14 @@ export function PetsHatchingCeremony({
   const { isBao: isBaoWalletMode, wallet: activeWallet } = usePetsWallet();
   const { config } = useAppContext();
   const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
-  const eggTooYoung = isExistingEgg && !isPetOldEnough(existingCompanion?.event.created_at, currentBlockHeight);
+  // Prefer the exact birth_block tag written at egg creation (same as
+  // PetsPage's room-egg gate and useStartIncubation); fall back to the
+  // 10-minute estimate only for legacy eggs without the tag.
+  const eggTooYoung = isExistingEgg && !isPetOldEnough(
+    existingCompanion?.event.created_at,
+    currentBlockHeight,
+    getStoredBirthBlockHeight(existingCompanion?.event.tags),
+  );
   const starterGrant = usePetsStarterGrant();
 
   // ── Core state ──
@@ -388,20 +395,30 @@ export function PetsHatchingCeremony({
       });
       return false;
     }
-    const ok = await activeWallet.sendNutzap(
+    const result = await activeWallet.sendNutzap(
       PETS_PREVIEW_REROLL_SATS,
       treasuryNpub,
       activeWallet.mintUrl,
       { memo: 'Pets egg reroll' },
     );
-    if (!ok) {
+    if (result === 'pending') {
+      // The sats left the wallet but the nutzap event is queued for retry.
+      // Honor the payment — do NOT make the user pay again.
+      toast({
+        title: 'Payment sent',
+        description: 'The payment is being delivered — no need to pay again.',
+      });
+      return true;
+    }
+    if (result !== 'sent') {
       toast({
         title: 'Payment failed',
         description: 'The reroll payment did not go through. Your egg was not changed.',
         variant: 'destructive',
       });
+      return false;
     }
-    return ok;
+    return true;
   }, [activeWallet, config.petsTreasuryNpub]);
 
   // ── Preview phase: pay and generate a fresh egg ──
@@ -460,7 +477,16 @@ export function PetsHatchingCeremony({
       if (isBaoWalletMode && !starterGrantAttemptedFor.has(eggPreview.d)) {
         starterGrantAttemptedFor.add(eggPreview.d);
         try {
-          await starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS);
+          // The grant is best-effort: a failure must never block hatching —
+          // and neither may a hung call. The faucet fetch has no internal
+          // timeout, so cap the wait here (a dead endpoint otherwise stalls
+          // the commit for the kernel TCP timeout, ~2 minutes).
+          await Promise.race([
+            starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Starter grant timed out')), 15_000),
+            ),
+          ]);
         } catch (grantError) {
           // Grant failure must never block hatching.
           console.warn('[HatchingCeremony] Starter grant failed:', grantError);

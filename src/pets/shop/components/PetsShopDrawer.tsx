@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
-import { usePetsPurchaseItem, estimateCashuSendFee } from '../hooks/usePetsPurchaseItem';
+import { usePetsPurchaseItem, estimateCashuSendFee, splitSatsPayment } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
@@ -45,10 +45,12 @@ function effectSummary(effect: ShopItem['effect']): string {
 }
 
 export function PetsShopDrawer({ profile, companion, externalWallet, onCompanionUpdated }: PetsShopDrawerProps) {
-  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated);
-  const { realWallet, baoWallet } = usePetsWallet();
+  const { realWallet, baoWallet, mode } = usePetsWallet();
+  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated, mode);
 
-  const isCashuMode = profile?.walletMode === 'cashu';
+  // The rail label comes from the wallet mode that selected the active
+  // wallet, not the profile tag — same source of truth as the purchase hook.
+  const isCashuMode = mode === 'cashu';
   // Spendable sats always come from the active wallet's selected mint — the
   // real Cashu wallet in mainnet mode, the BAO signet Cashu wallet in demo
   // mode. The profile `sats` tag (in-game earnings) is not spendable here.
@@ -139,7 +141,17 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                     const feeReserve = isCashuMode
                       ? estimateCashuSendFee(satsPrice, externalWallet?.wallet ?? null)
                       : 0;
-                    const satsNeeded = satsPrice + feeReserve;
+                    // Mirror the purchase hook's demo-mode split: the pet's
+                    // bound fiat balance pays first (down to its reserve) and
+                    // the wallet only covers the remainder. Affordability must
+                    // account for the pet's share — otherwise the Buy button
+                    // stays disabled even when the pet could pay the whole
+                    // price, and the sats price shown would not match what the
+                    // wallet is actually charged.
+                    const satsSplit = isCashuMode
+                      ? { walletSatsCost: satsPrice }
+                      : splitSatsPayment(satsPrice, companion?.fiatBalance ?? 0);
+                    const satsNeeded = satsSplit.walletSatsCost + (satsSplit.walletSatsCost > 0 ? feeReserve : 0);
                     const canAffordFiat = fiatCoins >= fiatPrice;
                     const canAffordSats = demoSats >= satsNeeded;
                     const canAfford = canAffordFiat || canAffordSats;

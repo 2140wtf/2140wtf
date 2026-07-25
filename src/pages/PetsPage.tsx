@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef, type ComponentType, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
@@ -864,16 +864,51 @@ function PetsContent() {
   }, [pendingCeremonyCheck, companionDataReady, ceremonyInProgress]);
   
   // ─── CASE A: Profile still loading ───
-  if (profileLoading && !ceremonyInProgress) {
-    return <DashboardLoadingState />;
-  }
-  
-  // ─── CASE A2: Waiting for companions to decide about ceremony ───
-  if (pendingCeremonyCheck && !companionDataReady && !ceremonyInProgress) {
-    if (DEBUG_PETS) console.log('[PetsPage] Showing: loading (waiting for companions to decide ceremony)');
-    return <DashboardLoadingState />;
-  }
-  
+  // ─── Adoption/hatching flow dialog — mounted ONCE for all dashboard states ───
+  // The hatching ceremony publishes the egg and the pet profile mid-flow, which
+  // flips the very conditions that select between the dashboard states below
+  // (profile appears, companion list resolves, selection resolves). When this
+  // dialog lived inside each state's JSX, the state change unmounted it —
+  // silently killing the ceremony right after commit and stranding the user
+  // with an unhatched egg. Returning the same element as the last child of
+  // every branch below lets React preserve the dialog (and the in-flight
+  // ceremony inside it) across all state changes.
+  const adoptionFlowDialog = (
+    <Dialog
+      open={showAdoptionFlow}
+      onOpenChange={(open) => {
+        setShowAdoptionFlow(open);
+        if (!open) {
+          setSelectedBreedCategory(undefined);
+          setAdoptionStep('category');
+        }
+      }}
+    >
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+        {adoptionStep === 'category' ? (
+          <BreedCategoryPicker
+            compact
+            onSelectCategory={(cat) => {
+              setSelectedBreedCategory(cat);
+              setAdoptionStep('onboarding');
+            }}
+          />
+        ) : (
+          <PetsAdoptionFlowPortal
+            profile={profile ?? null}
+            updateProfileEvent={updateProfileEvent}
+            updateCompanionEvent={updateCompanionEvent}
+            invalidateProfile={invalidateProfile}
+            invalidateCompanion={invalidateCompanion}
+            setStoredSelectedD={setStoredSelectedD}
+            breedCategory={selectedBreedCategory}
+            onComplete={() => setShowAdoptionFlow(false)}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+
   // ─── CASE B/C: Hatching ceremony ───
   // Stays mounted until the ceremony explicitly completes, even if the
   // underlying data changes during the ceremony.
@@ -900,66 +935,39 @@ function PetsContent() {
     );
   }
   
-  // After ceremony check, if the user has no profile/pet yet, show the empty
-  // adoption prompt instead of getting stuck on a loading spinner.
-  if (!profile && !profileLoading) {
+  // ─── Dashboard states ───
+  // Every state assigns `content`; the single return at the bottom pairs it
+  // with `adoptionFlowDialog` so the dialog/ceremony survives state changes.
+  let content: ReactNode;
+
+  if (profileLoading) {
+    // ─── CASE A: Profile still loading ───
+    content = <DashboardLoadingState />;
+  } else if (pendingCeremonyCheck && !companionDataReady) {
+    // ─── CASE A2: Waiting for companions to decide about ceremony ───
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: loading (waiting for companions to decide ceremony)');
+    content = <DashboardLoadingState />;
+  } else if (!profile) {
+    // After ceremony check, if the user has no profile/pet yet, show the empty
+    // adoption prompt instead of getting stuck on a loading spinner.
     if (DEBUG_PETS) console.log('[PetsPage] Showing: no profile adoption prompt');
-    return (
-      <>
-        <BreedCategoryPicker
-          onSelectCategory={(cat) => {
-            setSelectedBreedCategory(cat);
-            setAdoptionStep('onboarding');
-            setShowAdoptionFlow(true);
-          }}
-        />
-        <Dialog
-          open={showAdoptionFlow}
-          onOpenChange={(open) => {
-            setShowAdoptionFlow(open);
-            if (!open) {
-              setSelectedBreedCategory(undefined);
-              setAdoptionStep('category');
-            }
-          }}
-        >
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            {adoptionStep === 'category' ? (
-              <BreedCategoryPicker
-                compact
-                onSelectCategory={(cat) => {
-                  setSelectedBreedCategory(cat);
-                  setAdoptionStep('onboarding');
-                }}
-              />
-            ) : (
-              <PetsAdoptionFlowPortal
-                profile={profile ?? null}
-                updateProfileEvent={updateProfileEvent}
-                updateCompanionEvent={updateCompanionEvent}
-                invalidateProfile={invalidateProfile}
-                invalidateCompanion={invalidateCompanion}
-                setStoredSelectedD={setStoredSelectedD}
-                breedCategory={selectedBreedCategory}
-                onComplete={() => setShowAdoptionFlow(false)}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-      </>
+    content = (
+      <BreedCategoryPicker
+        onSelectCategory={(cat) => {
+          setSelectedBreedCategory(cat);
+          setAdoptionStep('onboarding');
+          setShowAdoptionFlow(true);
+        }}
+      />
     );
-  }
-  
-  // ─── CASE D: Companions still loading ───
-  if (collectionLoading) {
+  } else if (collectionLoading) {
+    // ─── CASE D: Companions still loading ───
     if (DEBUG_PETS) console.log('[PetsPage] Showing: loading companions');
-    return <DashboardLoadingState />;
-  }
-  
-  // ─── CASE E: Companions not yet resolved (fetching) ───
-  if (collectionFetching && companions.length === 0) {
+    content = <DashboardLoadingState />;
+  } else if (collectionFetching && companions.length === 0) {
+    // ─── CASE E: Companions not yet resolved (fetching) ───
     if (DEBUG_PETS) console.log('[PetsPage] Showing: syncing pets from relays');
-    return (
+    content = (
       <DashboardShell>
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
           <div className="flex flex-col items-center gap-4 text-center max-w-sm">
@@ -974,121 +982,44 @@ function PetsContent() {
         </div>
       </DashboardShell>
     );
-  }
-  
-  // ─── CASE F: No pets events found on relays ───
-  // Show the adoption prompt instead of an error. The user can explicitly
-  // create their first pet; nothing is published automatically.
-  if (companions.length === 0 && !collectionLoading && !collectionFetching) {
+  } else if (companions.length === 0) {
+    // ─── CASE F: No pets events found on relays ───
+    // Show the adoption prompt instead of an error. The user can explicitly
+    // create their first pet; nothing is published automatically.
     if (DEBUG_PETS) console.log('[PetsPage] Showing: no pet adoption prompt');
-    return (
-      <>
-        <BreedCategoryPicker
-          onSelectCategory={(cat) => {
-            setSelectedBreedCategory(cat);
-            setAdoptionStep('onboarding');
-            setShowAdoptionFlow(true);
-          }}
-        />
-        <Dialog
-          open={showAdoptionFlow}
-          onOpenChange={(open) => {
-            setShowAdoptionFlow(open);
-            if (!open) {
-              setSelectedBreedCategory(undefined);
-              setAdoptionStep('category');
-            }
-          }}
-        >
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            {adoptionStep === 'category' ? (
-              <BreedCategoryPicker
-                compact
-                onSelectCategory={(cat) => {
-                  setSelectedBreedCategory(cat);
-                  setAdoptionStep('onboarding');
-                }}
-              />
-            ) : (
-              <PetsAdoptionFlowPortal
-                profile={profile ?? null}
-                updateProfileEvent={updateProfileEvent}
-                updateCompanionEvent={updateCompanionEvent}
-                invalidateProfile={invalidateProfile}
-                invalidateCompanion={invalidateCompanion}
-                setStoredSelectedD={setStoredSelectedD}
-                breedCategory={selectedBreedCategory}
-                onComplete={() => setShowAdoptionFlow(false)}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-      </>
+    content = (
+      <BreedCategoryPicker
+        onSelectCategory={(cat) => {
+          setSelectedBreedCategory(cat);
+          setAdoptionStep('onboarding');
+          setShowAdoptionFlow(true);
+        }}
+      />
     );
-  }
-  
-  // ─── CASE G/H: No valid selection or companion not resolved ───
-  // Show selector to pick which pet to display
-  if (!selectedD || !companion) {
+  } else if (!selectedD || !companion) {
+    // ─── CASE G/H: No valid selection or companion not resolved ───
+    // Show selector to pick which pet to display
     if (DEBUG_PETS) console.log('[PetsPage] Showing: pet selector');
-    return (
-      <>
-        <PetsSelectorPage
-          companions={filteredCompanions}
-          onSelect={handleSelectPets}
-          isLoading={companionFetching}
-          onAdopt={() => {
-            setSelectedBreedCategory(undefined);
-            setAdoptionStep('category');
-            setShowAdoptionFlow(true);
-          }}
-          currentCompanion={profile?.currentCompanion}
-        />
-        
-        {/* Adoption Flow Modal */}
-        <Dialog
-          open={showAdoptionFlow}
-          onOpenChange={(open) => {
-            setShowAdoptionFlow(open);
-            if (!open) {
-              setSelectedBreedCategory(undefined);
-              setAdoptionStep('category');
-            }
-          }}
-        >
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
-            {adoptionStep === 'category' ? (
-              <BreedCategoryPicker
-                compact
-                onSelectCategory={(cat) => {
-                  setSelectedBreedCategory(cat);
-                  setAdoptionStep('onboarding');
-                }}
-              />
-            ) : (
-              <PetsAdoptionFlowPortal
-                profile={profile ?? null}
-                updateProfileEvent={updateProfileEvent}
-                updateCompanionEvent={updateCompanionEvent}
-                invalidateProfile={invalidateProfile}
-                invalidateCompanion={invalidateCompanion}
-                setStoredSelectedD={setStoredSelectedD}
-                breedCategory={selectedBreedCategory}
-                onComplete={() => setShowAdoptionFlow(false)}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-      </>
+    content = (
+      <PetsSelectorPage
+        companions={filteredCompanions}
+        onSelect={handleSelectPets}
+        isLoading={companionFetching}
+        onAdopt={() => {
+          setSelectedBreedCategory(undefined);
+          setAdoptionStep('category');
+          setShowAdoptionFlow(true);
+        }}
+        currentCompanion={profile?.currentCompanion}
+      />
     );
-  }
-  
-  // ─── CASE I: Everything ready - show dashboard ───
-  // At this point: companion is PetsCompanion, selectedD is string (narrowed by Case H guard)
-  // Note: Item use registration is handled by usePetsActionsRegistration hook above
-  if (DEBUG_PETS) console.log('[PetsPage] Showing: dashboard');
-  return (
-    <PetsDashboard
+  } else {
+    // ─── CASE I: Everything ready - show dashboard ───
+    // At this point: companion is PetsCompanion, selectedD is string (narrowed by Case H guard)
+    // Note: Item use registration is handled by usePetsActionsRegistration hook above
+    if (DEBUG_PETS) console.log('[PetsPage] Showing: dashboard');
+    content = (
+      <PetsDashboard
       companion={companion}
       companions={filteredCompanions}
       selectedD={selectedD}
@@ -1119,10 +1050,19 @@ function PetsContent() {
       onDevEditorApply={handleDevEditorApply}
       isDevUpdating={isDevUpdating}
     />
+    );
+  }
+
+  // Single return for every dashboard state: the adoption/hatching dialog is
+  // always the last child, so React preserves it (and any in-flight ceremony)
+  // when `content` switches between states mid-flow.
+  return (
+    <>
+      {content}
+      {adoptionFlowDialog}
+    </>
   );
 }
-
-// ─── Dashboard Shell ──────────────────────────────────────────────────────────
 
 interface DashboardShellProps {
   children: React.ReactNode;
