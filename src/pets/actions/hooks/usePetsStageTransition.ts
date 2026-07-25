@@ -46,6 +46,19 @@ import {
 } from '../lib/daily-mission-tracker';
 import { getStreakTagUpdates } from '../lib/pets-streak';
 
+/**
+ * TESTING ONLY — allows baby→adult evolution in ₿AO demo (signet) wallet mode.
+ * Enabled by default in dev builds so the full lifecycle can be tested with
+ * valueless demo sats; production builds keep the cashu-only gate unless
+ * VITE_PETS_DEMO_EVOLVE=true is set explicitly.
+ * TODO(mainnet): remove this escape hatch (and the env flag) before mainnet
+ * launch so demo-mode pets are blocked from the adult stage again.
+ */
+const evolveEnv = import.meta.env as Record<string, unknown>;
+const ALLOW_DEMO_MODE_EVOLVE =
+  evolveEnv.VITE_PETS_DEMO_EVOLVE === 'true' ||
+  (import.meta.env.DEV && evolveEnv.VITE_PETS_DEMO_EVOLVE !== 'false');
+
 // ─── Content Helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -320,7 +333,7 @@ export function usePetsEvolve({
         throw new Error('Profile not found');
       }
 
-      if (!isCashuPetsWallet) {
+      if (!isCashuPetsWallet && !ALLOW_DEMO_MODE_EVOLVE) {
         throw new Error('₿AO signet pets cannot reach the adult stage. Switch to real Cashu sats mode to evolve your NOSTR PET.');
       }
 
