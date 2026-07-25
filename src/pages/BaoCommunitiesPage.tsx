@@ -1,15 +1,17 @@
-import { Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
+import { ChevronDown, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 
 import { JoinButton } from "@/components/auth/JoinButton";
 import { PageHeader } from "@/components/PageHeader";
+import { RelayListEditor } from "@/components/RelayListEditor";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChromeDialogContent, Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCommunityActions2 } from "@/concord-v2/hooks/useCommunityActions2";
+import { useCommunityActions2, useCreateRelayCandidates2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCommunity2, useLiveCommunities2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useConcord2Unread } from "@/concord-v2/hooks/useConcord2Unread";
@@ -98,15 +100,25 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const { create } = useCommunityActions2();
   const navigate = useNavigate();
 
+  // Advanced: which relays the community is minted on. `null` = untouched (the
+  // create path picks its own default — app relays ∪ the creator's DM relays);
+  // once the user edits, `relays` holds the explicit set. The candidate query
+  // (gated on the menu being open) resolves the same default for pre-selection.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [relays, setRelays] = useState<string[] | null>(null);
+  const { data: candidates } = useCreateRelayCandidates2(advancedOpen);
+  const effectiveRelays = relays ?? candidates ?? [];
+
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setBusy(true);
     try {
-      const { communityId, name: createdName } = await create({ name: trimmed });
+      const { communityId, name: createdName } = await create({ name: trimmed, relays: relays ?? undefined });
       toast({ title: "Community created", description: createdName });
       onOpenChange(false);
       setName("");
+      setRelays(null);
       navigate(`/bao/c/${encodeURIComponent(communityId)}`);
     } catch (e) {
       toast({
@@ -144,14 +156,40 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               maxLength={80}
               autoFocus
             />
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || !name.trim()}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-              </Button>
-            </div>
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy || !name.trim() || effectiveRelays.length === 0}>
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Choose relays"
+                    disabled={busy}
+                  >
+                    <ChevronDown className={cn("size-5 transition-transform", advancedOpen && "rotate-180")} />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                <p className="mb-2 mt-3 text-xs text-muted-foreground">
+                  Where this community lives. Members read and write here, so pick
+                  relays that accept your writes. An auth-only or DM-only relay can
+                  reject the genesis and strand the create.
+                </p>
+                <RelayListEditor
+                  relays={effectiveRelays}
+                  onChange={setRelays}
+                  onReset={candidates ? () => setRelays(candidates) : undefined}
+                  emptyText="Add at least one relay to host this community."
+                />
+              </CollapsibleContent>
+            </Collapsible>
           </form>
         </div>
       </ChromeDialogContent>
