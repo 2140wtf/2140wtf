@@ -63,8 +63,11 @@ export function MilestoneMarketWidget({ milestone }: { milestone: BaoMilestone }
             <div className="text-sm font-medium truncate">
               {milestone.idx + 1}. {milestone.title}
             </div>
+            {milestone.description && (
+              <div className="text-xs text-muted-foreground line-clamp-2">{milestone.description}</div>
+            )}
             {milestone.criteria && (
-              <div className="text-xs text-muted-foreground truncate">{milestone.criteria}</div>
+              <div className="text-xs text-muted-foreground truncate">Criteria: {milestone.criteria}</div>
             )}
           </div>
         </div>
