@@ -390,14 +390,15 @@ export function PetsRoomShell({
           />
         )}
 
-        {/* Navigation arrows — attached to canvas edges */}
+        {/* Navigation arrows — attached to canvas edges. On sm+ screens each
+            arrow grows into a pill naming its destination room. */}
         <button
           onClick={goLeft}
           disabled={isFurnitureEditing}
           className={cn(
             'group absolute left-1 top-1/2 -translate-y-1/2 z-40 pointer-events-auto',
             'flex items-center justify-center',
-            'size-10 sm:size-12 rounded-full',
+            'size-10 sm:h-12 sm:w-auto rounded-full',
             ROOM_CONTROL_SURFACE_SUBTLE,
             'text-muted-foreground/60 hover:text-foreground/80 hover:bg-background/70',
             'transition-all duration-200 active:scale-90',
@@ -412,6 +413,10 @@ export function PetsRoomShell({
             strokeWidth={4}
             style={guideRoomDirection !== 'left' ? { animation: 'room-arrow-nudge-left 2.5s ease-in-out infinite' } as CSSProperties : undefined}
           />
+          <span className="max-sm:hidden flex items-center gap-1 pr-2">
+            <leftDest.icon className="size-3.5" />
+            <span className="text-xs font-semibold">{leftDest.label}</span>
+          </span>
         </button>
 
         <button
@@ -420,7 +425,7 @@ export function PetsRoomShell({
           className={cn(
             'group absolute right-1 top-1/2 -translate-y-1/2 z-40 pointer-events-auto',
             'flex items-center justify-center',
-            'size-10 sm:size-12 rounded-full',
+            'size-10 sm:h-12 sm:w-auto rounded-full',
             ROOM_CONTROL_SURFACE_SUBTLE,
             'text-muted-foreground/60 hover:text-foreground/80 hover:bg-background/70',
             'transition-all duration-200 active:scale-90',
@@ -430,6 +435,10 @@ export function PetsRoomShell({
           )}
           aria-label={`Go to ${rightDest.label}`}
         >
+          <span className="max-sm:hidden flex items-center gap-1 pl-2">
+            <rightDest.icon className="size-3.5" />
+            <span className="text-xs font-semibold">{rightDest.label}</span>
+          </span>
           <ChevronRight
             className="size-7 sm:size-8 shrink-0"
             strokeWidth={4}
