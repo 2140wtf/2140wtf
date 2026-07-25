@@ -375,6 +375,27 @@ export function SidebarNavList({
           // 'market' is rendered as a child of the MARKETS group, skip flat rendering.
           if (id === 'market') return null;
 
+          if (id === 'bao-chat') {
+            return (
+              <SidebarGroup
+                key={id}
+                id={id}
+                active={isActive(id)}
+                editing={editing}
+                onRemove={(removeId) => onRemove(removeId, i)}
+                onClick={getOnClick?.(id)}
+                compact={compact}
+                minimal={minimal}
+                children={[
+                  { id: 'bao-chat', label: '₿AO Groups', path: '/bao/chat' },
+                  { id: 'bao-fund', label: '₿AO FUND (DEMO)', path: '/bao-fund' },
+                ]}
+              />
+            );
+          }
+          // 'bao-fund' is rendered as a child of the ₿AO Groups group, skip flat rendering.
+          if (id === 'bao-fund') return null;
+
           if (id === 'media') {
             return (
               <SidebarGroup

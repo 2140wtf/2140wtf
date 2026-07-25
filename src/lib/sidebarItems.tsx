@@ -130,7 +130,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "bao-chat",
-    label: "₿AOs",
+    label: "₿AO Groups",
     path: "/bao/chat",
     icon: MessageSquareMore,
     requiresAuth: true,
@@ -351,7 +351,7 @@ export function isItemActive(
   }
 
   if (id === "bao-chat") {
-    return pathname.startsWith("/bao/");
+    return pathname.startsWith("/bao/") || pathname.startsWith("/bao-fund");
   }
 
   if (id === "media") {
