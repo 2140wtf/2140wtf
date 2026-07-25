@@ -3,26 +3,50 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
-import { apiMarketToBaoMarket, baoApiFetch, type ApiMarket } from "@/lib/baoMarketApi";
+import { apiMarketToBaoMarket, baoApiFetchAll, fetchBaoMarketCategories, type ApiMarket } from "@/lib/baoMarketApi";
 
 const RELAY = "wss://relay.bao.network";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
+/** The API caps `limit` at 200 and paginates via `offset`/`has_more`. */
+const API_PAGE_LIMIT = 200;
+const API_MAX_PAGES = 5;
 
 async function fetchApiMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
-  const params = new URLSearchParams({ limit: String(QUERY_LIMIT) });
-  if (category !== "all") {
-    params.set("category", category);
-  }
-  if (status === "active") {
-    params.set("status", "active");
+  const byId = new Map<string, BaoMarket>();
+
+  for (let page = 0; page < API_MAX_PAGES; page++) {
+    const params = new URLSearchParams({
+      limit: String(API_PAGE_LIMIT),
+      offset: String(page * API_PAGE_LIMIT),
+    });
+    if (category !== "all") {
+      params.set("category", category);
+    }
+    if (status === "active") {
+      params.set("status", "active");
+    }
+
+    // Primary (local dev API) and public API hold different rows — merge both.
+    // Primary wins on id conflicts (it's the DB a developer is actively testing).
+    const responses = await baoApiFetchAll(`/markets?${params.toString()}`, signal);
+    if (responses.length === 0) {
+      throw new Error("BAO markets API unreachable");
+    }
+
+    let hasMore = false;
+    for (const res of responses) {
+      const json = (await res.json()) as { data?: ApiMarket[]; has_more?: boolean };
+      for (const m of json.data ?? []) {
+        if (!byId.has(m.id)) byId.set(m.id, apiMarketToBaoMarket(m));
+      }
+      hasMore = hasMore || json.has_more === true;
+    }
+    if (!hasMore) break;
   }
 
-  const res = await baoApiFetch(`/markets?${params.toString()}`, signal);
-  const json = (await res.json()) as { data?: ApiMarket[] };
-  const data = Array.isArray(json.data) ? json.data : [];
-  return data.map(apiMarketToBaoMarket);
+  return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 function isMarketActive(market: BaoMarket, now: number): boolean {
@@ -199,4 +223,17 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
   }, [category, status, queryClient]);
 
   return query;
+}
+
+/**
+ * The API's market category catalog (slugs + active counts), for the category
+ * picker. Merges the local dev API and the public API; public counts win.
+ */
+export function useBaoMarketCategories() {
+  return useQuery({
+    queryKey: ["bao-market-categories"],
+    queryFn: ({ signal }) => fetchBaoMarketCategories(signal),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 }
