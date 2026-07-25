@@ -176,8 +176,10 @@ export function usePetsOnboarding({
       if (!externalWallet?.mintUrl) {
         throw new Error('Select a mint in your Cashu wallet before paying with sats.');
       }
-      const sent = await externalWallet.sendNutzap(amount, treasuryNpub, externalWallet.mintUrl, { memo });
-      if (!sent) throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+      const result = await externalWallet.sendNutzap(amount, treasuryNpub, externalWallet.mintUrl, { memo });
+      // 'sent' or 'pending' both mean the sats are gone (pending auto-retries);
+      // only 'failed' means nothing was committed and the caller may retry.
+      if (result === 'failed') throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
     },
     [config.petsTreasuryNpub, externalWallet],
   );
