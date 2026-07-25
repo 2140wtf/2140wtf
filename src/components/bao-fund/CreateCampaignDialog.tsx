@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -72,6 +72,26 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([emptyMilestone()]);
   const [streamDays, setStreamDays] = useState('30');
 
+  // Deep-link prefill: the dialog stays mounted, so initialTitle must be
+  // re-applied whenever it changes (the useState initializer only runs at
+  // first mount — a /bao-fund?create=1&title=X navigation while already on
+  // the page used to open the dialog with a blank/stale title).
+  useEffect(() => {
+    if (open && initialTitle) setTitle(initialTitle);
+  }, [open, initialTitle]);
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setMilestones([emptyMilestone()]);
+    // Also reset the options — leaving rail/category/format behind silently
+    // creates the next campaign with the previous one's stream format or rail.
+    setRail('lightning');
+    setCategory('tools');
+    setFormat('milestones');
+    setStreamDays('30');
+  };
+
   const goal = useMemo(
     () => milestones.reduce((s, m) => s + (parseInt(m.amount, 10) || 0), 0),
     [milestones],
@@ -119,7 +139,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
         description: marketCount > 0 ? `${marketCount} prediction market${marketCount === 1 ? '' : 's'} live on bao.markets.` : undefined,
       });
       onOpenChange(false);
-      setTitle(''); setDescription(''); setMilestones([emptyMilestone()]);
+      resetForm();
       onCreated(data.fundraiser.id);
     },
     onError: (e) => toast({ title: 'Create failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
