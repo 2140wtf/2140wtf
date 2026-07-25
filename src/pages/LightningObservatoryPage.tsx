@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import { Activity, ExternalLink, MessageSquare, RefreshCw, Telescope, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -43,10 +44,10 @@ function StatCard({ label, value, loading }: { label: string; value: string; loa
 /**
  * In-app Lightning Observatory page.
  *
- * lightningobservatory.com disallows framing (`X-Frame-Options: DENY`), so the
- * full 3D observatory can't be embedded — instead this page renders the live
- * network-wide stats from its JSON API natively, links out to the full
- * experience, and keeps the NIP-73 discussion thread for the URL.
+ * Renders the live network-wide stats from the observatory's JSON API
+ * natively, links to the in-app framed 3D view (/lightning-observatory/full,
+ * proxied through the bao-lo-proxy worker), and keeps the NIP-73 discussion
+ * thread for the URL.
  */
 export function LightningObservatoryPage() {
   const { config } = useAppContext();
@@ -77,14 +78,13 @@ export function LightningObservatoryPage() {
       <div className="flex items-center gap-4 px-4 pt-4 pb-5">
         <Telescope className="size-6 text-primary shrink-0" />
         <h1 className="text-xl font-bold truncate flex-1">Lightning Observatory</h1>
-        {/* Same-tab navigation (no new tab) — the browser's back button returns
-            here. An in-page iframe is impossible: the site sends
-            X-Frame-Options: DENY / frame-ancestors 'self'. */}
+        {/* In-app framed 3D view via the bao-lo-proxy worker (the origin
+            sends X-Frame-Options: DENY; the proxy strips it). */}
         <Button variant="outline" size="sm" asChild>
-          <a href={LIGHTNING_OBSERVATORY_URL}>
+          <Link to="/lightning-observatory/full">
             <ExternalLink className="size-4 mr-2" />
             Full observatory
-          </a>
+          </Link>
         </Button>
       </div>
 
