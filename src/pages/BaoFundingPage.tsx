@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -189,7 +189,7 @@ export function BaoFundingPage() {
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
                 Can't reach the bao.markets API at <code className="text-xs">{baoApiBase()}</code>.
-                Start it locally (packages/api, port 3462) or set <code className="text-xs">VITE_BAO_FUNDRAISING_API_URL</code>.
+                Check your connection, or set <code className="text-xs">VITE_BAO_FUNDRAISING_API_URL</code> to override the endpoint.
               </CardContent>
             </Card>
           ) : fundraisers.length === 0 ? (
@@ -378,13 +378,28 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const [amount, setAmount] = useState('1000');
   const [rail, setRail] = useState<BaoRail>('lightning');
   const [instructions, setInstructions] = useState<Record<string, unknown> | null>(null);
+  // Stable idempotency key per dialog session: a retry after a network
+  // timeout (or an accidental double submit) replays server-side instead of
+  // recording the contribution twice. Regenerated when the dialog closes.
+  const idemKeyRef = useRef<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => contributeToFundraiser(user!.signer, fundraiser!.id, {
-      amount_sats: parseInt(amount, 10) || 0,
-      rail,
-    }),
+    mutationFn: () => {
+      if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
+      return contributeToFundraiser(user!.signer, fundraiser!.id, {
+        amount_sats: parseInt(amount, 10) || 0,
+        rail,
+        idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current}`,
+      });
+    },
     onSuccess: (data) => {
+      if (data.replayed) {
+        // Replay responses omit payment_instructions — setting them would
+        // blank the dialog back to the funding form after a success toast.
+        toast({ title: 'Contribution already recorded (DEMO)' });
+        onContributed();
+        return;
+      }
       setInstructions(data.payment_instructions as Record<string, unknown>);
       toast({ title: 'Contribution recorded (DEMO)' });
       onContributed();
@@ -393,7 +408,7 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   });
 
   const close = (open: boolean) => {
-    if (!open) { setInstructions(null); setAmount('1000'); }
+    if (!open) { setInstructions(null); setAmount('1000'); idemKeyRef.current = null; }
     onOpenChange(open);
   };
 
