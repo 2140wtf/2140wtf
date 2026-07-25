@@ -145,12 +145,18 @@ export function CashuZapContent({
     try {
       if (isNutzapMode) {
         const recipient = nip19.npubEncode(target.pubkey);
-        const ok = await wallet.sendNutzap(numericSats, recipient, selectedMintUrl, {
+        const result = await wallet.sendNutzap(numericSats, recipient, selectedMintUrl, {
           memo,
           zappedEvent,
         });
-        if (!ok) {
-          setError('Nutzap could not be sent. It may be queued for retry.');
+        if (result === 'failed') {
+          setError(wallet.error || 'Nutzap could not be sent.');
+          return;
+        }
+        if (result === 'pending') {
+          // Sats left the wallet; the nutzap event is queued for auto-retry.
+          // There is no event id yet — report the pending state honestly.
+          onSuccess({ amountSats: numericSats, eventId: undefined });
           return;
         }
         // sendNutzap stores the published event in wallet.nutzaps[0] (newest).
