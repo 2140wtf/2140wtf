@@ -1,20 +1,28 @@
 /**
  * Lightning Observatory HTTP API client.
  *
- * lightningobservatory.com sends `X-Frame-Options: DENY`, so the full 3D
- * observatory cannot be iframed into the app. What it does expose is a small
- * JSON API with live network-wide aggregate stats, which we render natively.
+ * lightningobservatory.com sends `X-Frame-Options: DENY` and no CORS headers.
+ * The bao-lo-proxy Cloudflare Worker (LO_PROXY_URL) strips those, so the full
+ * 3D observatory is iframed at /lightning-observatory/full and the JSON API is
+ * fetched through the proxy when no same-origin proxy exists.
  *
- * The API sends no CORS headers, so — like the bao.markets client — we try a
- * same-origin proxied path first (vite dev/preview proxy, or a production
- * host rule forwarding `/lo-api/*` to `https://lightningobservatory.com/api/*`)
- * and fall back to the public host (works if the observatory enables CORS).
+ * Fetch order: same-origin `/lo-api/*` (vite dev/preview proxy or a production
+ * host rule) → worker proxy → public host (works if CORS is ever enabled).
  */
 
 export const LO_API_BASE = '/lo-api';
 export const LO_PUBLIC_API_BASE = 'https://lightningobservatory.com/api';
 
 export const LIGHTNING_OBSERVATORY_URL = 'https://lightningobservatory.com/';
+
+/** Origin of the bao-lo-proxy Cloudflare Worker (bao.markets repo,
+ * observatory-proxy-worker). The proxy strips the observatory's
+ * X-Frame-Options/frame-ancestors so the full 3D view can be iframed, adds
+ * CORS headers to the JSON API, and proxies the live WebSocket feed.
+ * Override with VITE_LO_PROXY_URL (e.g. for a locally running wrangler dev). */
+export const LO_PROXY_URL: string =
+  (import.meta.env.VITE_LO_PROXY_URL as string | undefined)?.replace(/\/+$/, '') ||
+  'https://bao-lo-proxy.baocommunity.workers.dev';
 
 /** Live network-wide aggregate stats from `GET /api/network`. */
 export interface LightningNetworkStats {
@@ -56,27 +64,33 @@ export function parseLightningNetworkStats(json: unknown): LightningNetworkStats
 }
 
 /**
- * Fetch a path from the proxied API first, falling back to the public host
- * when the proxy is missing or returns a non-JSON response (mirrors
- * `baoApiFetch` in baoMarketApi.ts).
+ * Fetch a path from the proxied API first, falling back to the CORS-enabled
+ * bao-lo-proxy worker and then the public host (works if the observatory
+ * enables CORS). Mirrors `baoApiFetch` in baoMarketApi.ts.
  */
 export async function loApiFetch(path: string, signal?: AbortSignal): Promise<Response> {
-  const proxiedPath = `${LO_API_BASE}${path}`;
-  const publicPath = `${LO_PUBLIC_API_BASE}${path}`;
+  const candidates = [
+    `${LO_API_BASE}${path}`,
+    `${LO_PROXY_URL}/api${path}`,
+    `${LO_PUBLIC_API_BASE}${path}`,
+  ];
 
-  let res: Response;
-  try {
-    res = await fetch(proxiedPath, { signal });
-    const contentType = res.headers.get('content-type') ?? '';
-    if (!res.ok || !contentType.includes('application/json')) {
-      res = await fetch(publicPath, { signal });
+  let res: Response | null = null;
+  for (const url of candidates) {
+    try {
+      const attempt = await fetch(url, { signal });
+      const contentType = attempt.headers.get('content-type') ?? '';
+      if (attempt.ok && contentType.includes('application/json')) {
+        res = attempt;
+        break;
+      }
+    } catch {
+      // try the next candidate
     }
-  } catch {
-    res = await fetch(publicPath, { signal });
   }
 
-  if (!res.ok) {
-    throw new Error(`Lightning Observatory API returned ${res.status}`);
+  if (!res || !res.ok) {
+    throw new Error(`Lightning Observatory API returned ${res?.status ?? 'no response'}`);
   }
 
   return res;
