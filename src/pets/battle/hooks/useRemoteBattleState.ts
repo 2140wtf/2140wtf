@@ -88,7 +88,7 @@ export interface UseRemoteBattleReturn extends RemoteBattleState {
   acceptInvite: (invite: BattleInvitePayload, localPet: PetsCompanion, guestEscrowPubkey?: string) => Promise<void>;
   declineInvite: (invite: BattleInvitePayload) => Promise<void>;
   cancelInvite: () => Promise<void>;
-  sendEscrowDeposit: (token: string) => void;
+  sendEscrowDeposit: (token: string) => Promise<boolean>;
   startFight: () => void;
   sendHostSnapshot: (snapshot: RemoteBattleStateSnapshot) => void;
   sendGuestInput: (input: PlayerInput) => void;
@@ -542,11 +542,11 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
   }, [clearInviteTimer, publishSync, sendMessage, setError, stopSync]);
 
   const sendEscrowDeposit = useCallback(
-    (token: string) => {
+    async (token: string): Promise<boolean> => {
       const current = stateRef.current;
-      if (!current.battleId || !current.opponentPubkey) return;
-      if (current.escrow.mode !== 'real-sats') return;
-      if (typeof token !== 'string' || token.length === 0) return;
+      if (!current.battleId || !current.opponentPubkey) return false;
+      if (current.escrow.mode !== 'real-sats') return false;
+      if (typeof token !== 'string' || token.length === 0) return false;
 
       const playerIndex = current.role === 'host' ? 0 : 1;
       const payload: BattleEscrowDepositPayload = {
@@ -556,8 +556,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         token,
         amount: current.matchOptions?.prizeAmount ?? 0,
       };
-      void publishSync(payload);
+      // Await the publish and report failure: the caller's wallet was already
+      // debited for this token, so a lost publish must surface, not vanish.
+      const event = await publishSync(payload);
+      if (!event) return false;
       updateEscrow(playerIndex === 0 ? { hostDepositToken: token } : { guestDepositToken: token });
+      return true;
     },
     [publishSync, updateEscrow],
   );

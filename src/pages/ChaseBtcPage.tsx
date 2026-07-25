@@ -97,6 +97,26 @@ export default function ChaseBtcPage() {
 
   const payout = useChasePayout(updateProfileEvent, petsWallet);
 
+  // Fiat runs settle automatically when the run ends — the run cost is
+  // deducted from in-game coins. Without this the fiat branch of
+  // useChasePayout was dead code and fiat runs were free despite the start
+  // screen advertising a coin cost.
+  const fiatSettledRef = useRef(false);
+  useEffect(() => {
+    if (status === 'running') {
+      fiatSettledRef.current = false;
+      return;
+    }
+    if (status !== 'ended' || mode !== 'fiat' || fiatSettledRef.current) return;
+    fiatSettledRef.current = true;
+    payout.mutate({
+      satsWon: state.result.satsWon,
+      coinsCollected: state.result.coinsCollected,
+      mode: 'fiat',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, mode, payout.mutate]);
+
   // In real-money mode the BAO faucet is not available, so sats mode is disabled.
   useEffect(() => {
     if (isCashu && mode === 'sats') {

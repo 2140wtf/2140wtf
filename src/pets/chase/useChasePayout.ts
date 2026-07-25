@@ -83,7 +83,19 @@ export function useChasePayout(
           throw new Error(result.message ?? 'BAO faucet did not return a token.');
         }
 
-        await externalWallet.receiveToken(result.token.trim());
+        // The faucet has already counted this claim against the daily limit.
+        // The wallet journals failed receives (pending-receive entries) and
+        // retries them automatically, so a transient mint/network failure here
+        // does not lose the sats — tell the user that instead of a bare
+        // "claim failed" that invites a second faucet attempt.
+        try {
+          await externalWallet.receiveToken(result.token.trim());
+        } catch (receiveErr) {
+          const detail = receiveErr instanceof Error ? receiveErr.message : String(receiveErr);
+          throw new Error(
+            `The faucet issued your token, but the wallet could not redeem it yet (${detail}). It will keep retrying in the background — do not claim again.`,
+          );
+        }
 
         // Credit the profile ledger with the actual amount that arrived in the
         // wallet, not the faucet's `remaining24h` report, which can disagree.
