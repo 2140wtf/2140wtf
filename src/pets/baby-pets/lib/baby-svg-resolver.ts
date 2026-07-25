@@ -7,6 +7,8 @@
 import { Pets } from '@/pets/core/types/pets';
 import { BabyVariant, BabySvgResolverOptions } from '../types/baby.types';
 import { BABY_BASE_SVG, BABY_SLEEPING_SVG, BABY_2140_BASE_SVG, BABY_2140_SLEEPING_SVG } from './baby-svg-data';
+import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
+import { generateBaoBabySvg } from '@/pets/adult-pets/lib/bao-svg';
 
 /**
  * Get baby base SVG content
@@ -43,6 +45,14 @@ export function resolveBabySvg(pets: Pets, options: BabySvgResolverOptions = {})
   // 2140-pets get their own glassmorphism gangster baby design.
   if (pets.breedCategory === '2140-pets') {
     return isSleeping ? BABY_2140_SLEEPING_SVG : BABY_2140_BASE_SVG;
+  }
+
+  // ₿AO babies resemble their mature trading-card form: same creature, same
+  // recipe palette, minus the rare back/aura accessories they grow into.
+  if (pets.breedCategory === 'bao' && pets.breedAsset) {
+    const baoRecipe = getBaoRecipeById(pets.breedAsset);
+    if (baoRecipe) return generateBaoBabySvg(baoRecipe);
+    // Unknown ₿AO asset → fall through to the generic baby.
   }
 
   return isSleeping ? getBabySleepingSvg() : getBabyBaseSvg();
