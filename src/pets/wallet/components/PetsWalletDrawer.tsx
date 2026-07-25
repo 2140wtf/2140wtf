@@ -6,19 +6,26 @@
 import { useMemo, type ComponentType } from 'react';
 import {
   Bitcoin,
+  Coins,
   FlaskConical,
+  PiggyBank,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { usePetsWallet, type PetsWalletMode } from '@/pets/core/hooks/usePetsWallet';
+import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
 import { BaoWalletDrawer } from './BaoWalletDrawer';
 import { CashuWalletDrawer } from './CashuWalletDrawer';
 
 interface PetsWalletDrawerProps {
   onModeChange?: (profileMode: 'cashu' | 'bao') => void;
+  /** Pet profile — source of the in-game fiat coins balance. */
+  profile?: NostrPetProfile | null;
+  /** Selected pet — source of the pet-bound fiat balance. */
+  companion?: PetsCompanion | null;
 }
 
-export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
+export function PetsWalletDrawer({ onModeChange, profile, companion }: PetsWalletDrawerProps) {
   const { wallet, mode, setMode, isBao } = usePetsWallet();
 
   const modeOptions: { value: PetsWalletMode; label: string; icon: typeof Bitcoin }[] = useMemo(
@@ -36,8 +43,9 @@ export function PetsWalletDrawer({ onModeChange }: PetsWalletDrawerProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-4 pb-2">
+      <div className="p-4 pb-2 space-y-2">
         <ModeSwitch mode={mode} setMode={handleModeChange} options={modeOptions} />
+        <InGameBalances profile={profile} companion={companion} />
       </div>
       <div className="flex-1 min-h-0">
         {isBao ? (
@@ -94,6 +102,59 @@ function ModeSwitch({
         {mode === 'cashu'
           ? 'Mainnet mode uses your main Cashu wallet — real sats. Shop purchases pay the 2140 treasury by nutzap.'
           : 'Demo mode uses free ₿AO signet sats from the ₿AO faucet (or bao.markets). Payments run on the same Cashu rail to 2140, but no real money is involved.'}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * In-game fiat balances. These are play money recorded as tags on the pet's
+ * Nostr events — they are NOT sats of any kind, cannot be withdrawn, and are
+ * shown separately from the wallet rails so nobody confuses them with real
+ * money:
+ * - `coins` — 2140 fiat coins (shop and mini-games)
+ * - pet balance — fiat bound to the selected pet (eggs start with 2140)
+ * - `sats` — despite the tag name, in-game demo points earned from
+ *   care/missions; never spendable as sats anywhere
+ */
+function InGameBalances({
+  profile,
+  companion,
+}: {
+  profile?: NostrPetProfile | null;
+  companion?: PetsCompanion | null;
+}) {
+  const coins = profile?.coins ?? 0;
+  const petFiat = companion?.fiatBalance ?? 0;
+  const demoPoints = profile?.sats ?? 0;
+
+  return (
+    <div className="rounded-xl border p-3 space-y-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        In-game balances (not sats)
+      </p>
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5">
+          <Coins className="size-3.5 text-amber-500" /> 2140 coins (fiat)
+        </span>
+        <span className="tabular-nums font-medium">{coins.toLocaleString()}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5">
+          <PiggyBank className="size-3.5 text-emerald-500" /> Pet balance (fiat)
+        </span>
+        <span className="tabular-nums font-medium">{petFiat.toLocaleString()}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5">
+          <FlaskConical className="size-3.5 text-primary" /> Demo points (in-game)
+        </span>
+        <span className="tabular-nums font-medium">{demoPoints.toLocaleString()}</span>
+      </div>
+      <p className="text-[10px] text-muted-foreground leading-relaxed">
+        Play money for the Pets game, stored on your pet's Nostr events — it can never be
+        withdrawn or swapped for sats. The wallet rails below are separate: ₿AO signet
+        (demo Cashu) in demo mode, real Cashu sats in mainnet mode.
       </p>
     </div>
   );
