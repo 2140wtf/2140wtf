@@ -86,6 +86,7 @@ export function GroupChatPage() {
     selectGroup,
     getMessagesForGroup,
     createGroup,
+    defaultGroupRelays,
     sendMessage,
     addMember,
     removeMember,
@@ -185,8 +186,8 @@ export function GroupChatPage() {
     );
   }
 
-  const handleCreate = async (name: string, description?: string) => {
-    const result = await createGroup(name, description);
+  const handleCreate = async (name: string, description?: string, relays?: string[]) => {
+    const result = await createGroup(name, description, relays);
     if (result.success) {
       toast({ title: 'Group created' });
     } else {
@@ -490,6 +491,7 @@ export function GroupChatPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreate={handleCreate}
+        defaultRelays={defaultGroupRelays}
       />
       {selectedGroup && (
         <EditGroupDialog
