@@ -34,6 +34,7 @@ const DAY = 86_400;
 
 interface MilestoneDraft {
   title: string;
+  description: string;
   amount: string;
   criteria: string;
   /** Days from now (7–50 per the fund spec). */
@@ -41,8 +42,12 @@ interface MilestoneDraft {
   feeBps: string;
 }
 
+/** Every milestone is a public market — the API rejects thin descriptions. */
+const MILESTONE_DESCRIPTION_MIN = 50;
+
 const emptyMilestone = (): MilestoneDraft => ({
   title: '',
+  description: '',
   amount: '',
   criteria: '',
   deadlineDays: '21',
@@ -99,6 +104,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
         category,
         milestones: milestones.map((m) => ({
           title: m.title.trim(),
+          description: m.description.trim(),
           amount_sats: parseInt(m.amount, 10) || 0,
           criteria: m.criteria.trim() || undefined,
           deadline_at: m.deadlineDays ? now + (parseInt(m.deadlineDays, 10) || 21) * DAY : undefined,
@@ -122,7 +128,10 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const valid =
     title.trim().length > 0 &&
     goal >= 1000 &&
-    (format === 'stream' || milestones.every((m) => m.title.trim() && (parseInt(m.amount, 10) || 0) > 0));
+    (format === 'stream' || milestones.every((m) =>
+      m.title.trim() &&
+      m.description.trim().length >= MILESTONE_DESCRIPTION_MIN &&
+      (parseInt(m.amount, 10) || 0) > 0));
 
   const patchMilestone = (i: number, patch: Partial<MilestoneDraft>) =>
     setMilestones((ms) => ms.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -248,6 +257,18 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                       <Trash2 className="size-4 text-destructive" />
                     </Button>
                   </div>
+                  <Textarea
+                    value={m.description}
+                    onChange={(e) => patchMilestone(i, { description: e.target.value })}
+                    placeholder="What will be delivered, and how can funders verify it? (min 50 chars)"
+                    rows={2}
+                    className="text-xs"
+                  />
+                  {m.description.trim().length > 0 && m.description.trim().length < MILESTONE_DESCRIPTION_MIN && (
+                    <p className="text-[11px] text-amber-500">
+                      {MILESTONE_DESCRIPTION_MIN - m.description.trim().length} more characters needed — funders read this before betting.
+                    </p>
+                  )}
                   <Input
                     value={m.criteria}
                     onChange={(e) => patchMilestone(i, { criteria: e.target.value })}
