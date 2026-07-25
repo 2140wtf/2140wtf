@@ -153,11 +153,18 @@ export function CashuWalletTab() {
       toast({ variant: 'destructive', title: 'Missing fields', description: 'Recipient and mint are required.' });
       return;
     }
-    const ok = await wallet.sendNutzap(amount, nutzapRecipient.trim(), nutzapMintUrl, { memo: nutzapMemo.trim() });
-    if (ok) {
+    const result = await wallet.sendNutzap(amount, nutzapRecipient.trim(), nutzapMintUrl, { memo: nutzapMemo.trim() });
+    if (result === 'sent') {
       setNutzapAmount('');
       setNutzapRecipient('');
       setNutzapMemo('');
+    } else if (result === 'pending') {
+      // Sats left the wallet; the nutzap is queued for auto-retry. Clear the
+      // form so the user does not send twice.
+      setNutzapAmount('');
+      setNutzapRecipient('');
+      setNutzapMemo('');
+      toast({ title: 'Nutzap queued', description: 'The payment is being delivered — no need to send it again.' });
     }
   };
 

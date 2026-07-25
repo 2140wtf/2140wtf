@@ -454,6 +454,20 @@ export class CrossTabLock {
 
   async acquire(): Promise<void> {
     if (this.depth > 0 && this.owner) {
+      // Verify we still hold the lease before re-entering. If this tab was
+      // suspended past the lease expiry, another tab may have taken the lock
+      // while our in-memory owner/depth still claim it — proceeding then
+      // would run two writers concurrently and corrupt the proof store.
+      if (!(await this.refreshOwnLease())) {
+        if (this.extendTimer) {
+          clearInterval(this.extendTimer);
+          this.extendTimer = null;
+        }
+        this.owner = null;
+        this.depth = 0;
+        this.useIdb = false;
+        throw new Error('Wallet lock was lost while held — another tab may have taken it');
+      }
       this.depth++;
       return;
     }
@@ -548,6 +562,36 @@ export class CrossTabLock {
       this.storageAbortController?.abort();
       this.storageAbortController = null;
     }
+  }
+
+  /**
+   * Re-validate (and renew) our own lease record. Returns false when the
+   * record is gone or owned by another tab — i.e. the lock was lost.
+   */
+  private async refreshOwnLease(): Promise<boolean> {
+    if (!this.owner) return false;
+    if (this.useIdb) {
+      try {
+        const db = await openLockDB();
+        const tx = db.transaction(LOCK_STORE, 'readwrite');
+        const store = tx.objectStore(LOCK_STORE);
+        const current = await idbRequest<IdbLockRecord | undefined>(store.get(this.key));
+        if (current?.token !== this.owner) return false;
+        current.expires = Date.now() + LOCK_LEASE_MS;
+        await idbRequest(store.put(current));
+        return true;
+      } catch {
+        // IDB hiccup — the extend timer already tolerates transient failures;
+        // don't break reentrancy on a flaky read.
+        return true;
+      }
+    }
+    const rec = readLock(this.key);
+    if (rec?.owner !== this.owner) return false;
+    try {
+      writeLock(this.key, { owner: this.owner, expires: Date.now() + LOCK_LEASE_MS });
+    } catch { /* renewal is best-effort; ownership is what matters */ }
+    return true;
   }
 
   release(): void {
@@ -1234,6 +1278,9 @@ export interface PendingNutzapEntry {
   timestamp: number;
   attempts: number;
   lastAttemptAt?: number;
+  /** Relays from the recipient's kind:10019 that still need this Nutzap
+   *  republished (NIP-61 delivery). Absent/empty = app-relay publish sufficed. */
+  recipientRelays?: string[];
 }
 
 export async function loadPendingNutzaps(encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<PendingNutzapEntry[]> {
