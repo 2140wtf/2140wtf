@@ -325,6 +325,8 @@ export interface AppConfig {
   sentryDsn: string;
   /** Whether the user has enabled Sentry error reporting. */
   sentryEnabled: boolean;
+  /** Bumping this resets sentryEnabled to false once for existing installs. */
+  sentryReportingVersion?: number;
   /** Plausible Analytics domain (empty string = disabled). */
   plausibleDomain: string;
   /** Plausible Analytics API endpoint (empty string = use default). */
