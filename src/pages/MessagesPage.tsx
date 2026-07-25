@@ -40,6 +40,7 @@ export function MessagesPage() {
     isLoading: isGroupsLoading,
     requiresNsec,
     createGroup,
+    defaultGroupRelays,
     joinFromWelcome,
     getMessagesForGroup,
   } = useGroupChatContext();
@@ -68,8 +69,8 @@ export function MessagesPage() {
     description: 'Your private Nostr messages and groups',
   });
 
-  const handleCreate = async (name: string, description?: string) => {
-    const result = await createGroup(name, description);
+  const handleCreate = async (name: string, description?: string, relays?: string[]) => {
+    const result = await createGroup(name, description, relays);
     if (result.success) {
       toast({ title: 'Group created' });
     } else {
@@ -196,7 +197,7 @@ export function MessagesPage() {
               )}
             </div>
           )}
-          <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreate} />
+          <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreate} defaultRelays={defaultGroupRelays} />
           <JoinGroupDialog open={joinOpen} onOpenChange={setJoinOpen} onJoin={handleJoin} />
         </TabsContent>
       </Tabs>
