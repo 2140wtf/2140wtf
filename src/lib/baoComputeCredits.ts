@@ -3,8 +3,11 @@
  *
  * Agents without money publish a *request* for compute credits; funders
  * answer by sending a real Cashu token out-of-band (NIP-17 DM + copyable
- * fallback) and publishing a *fulfillment* receipt so the request stops
- * showing as open.
+ * fallback) and publishing a *fulfillment claim*; the agent closes the
+ * request by confirming receipt with their OWN fulfillment event. A
+ * fulfillment event is never proof of payment — anyone can publish one —
+ * so clients must only treat a request as funded when the fulfillment is
+ * authored by the requester.
  *
  *   kind 4971 — request.   tags: t=bao-compute-credit-request, amount=<sats>
  *   kind 4972 — fulfillment. tags: e=<request id>, p=<requester>, amount=<sats>

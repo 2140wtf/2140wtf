@@ -90,11 +90,9 @@ export const BAO_RAIL_LABELS: Record<BaoRail, string> = {
 export function baoApiBase(): string {
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
   if (fromEnv) return fromEnv;
-  // Plain-http localhost is a dev convenience only — production CSP
-  // (connect-src 'self' … https: wss:) always blocks it, so a deployed build
-  // without the env var falls back to same-origin requests.
-  if (import.meta.env.DEV) return 'http://localhost:3462';
-  return globalThis.location?.origin ?? '';
+  // No local API: dev and deployed builds alike talk to the public bao.markets
+  // API. The env var remains as an explicit override.
+  return 'https://relay.bao.network/bao-api';
 }
 
 
@@ -223,13 +221,19 @@ export interface ContributeResult {
 export async function contributeToFundraiser(
   signer: SignerLike,
   id: string,
-  input: { amount_sats: number; rail: BaoRail; reference?: string },
+  input: { amount_sats: number; rail: BaoRail; reference?: string; idempotencyKey?: string },
 ): Promise<ContributeResult> {
   const res = await apiFetch<{ data: ContributeResult }>(`/v1/fundraisers/${encodeURIComponent(id)}/contribute`, {
     method: 'POST',
     body: {
-      ...input,
-      idempotency_key: `2140:${id}:${input.rail}:${input.amount_sats}:${Date.now()}`,
+      amount_sats: input.amount_sats,
+      rail: input.rail,
+      reference: input.reference,
+      // The caller should pass a STABLE key per checkout intent so a retry
+      // after a network timeout dedupes server-side (the API returns
+      // `replayed: true` for repeats). A per-call Date.now() key — the old
+      // behaviour — made every retry a brand-new contribution.
+      idempotency_key: input.idempotencyKey ?? `2140:${id}:${input.rail}:${input.amount_sats}:${crypto.randomUUID()}`,
     },
     signer,
   });
