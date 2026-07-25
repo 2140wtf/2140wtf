@@ -366,4 +366,93 @@ describe('sanitizer isolation', () => {
     expect(petsSanitized).not.toContain('href');
     expect(petsSanitized).not.toContain('javascript');
   });
+
+  it('lifts <stop> inline styles into stop-color/stop-opacity attributes', () => {
+    // Regression: several pipeline assets declare stops as
+    // <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />.
+    // Stripping the inline style without lifting the colors left bare stops,
+    // and SVG's default stop-color is BLACK — every such gradient rendered as
+    // a solid black blob (the "black muppet" baby).
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <defs>
+        <radialGradient id="g" cx="0.3" cy="0.25">
+          <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+          <stop offset="60%" style="stop-color:#7c3aed;stop-opacity:0.5" />
+          <stop offset="100%" stop-color="#6d28d9" />
+        </radialGradient>
+      </defs>
+      <path d="M 50 15 L 60 30" fill="url(#g)" />
+    </svg>`;
+
+    const sanitized = sanitizePetsSvg(svg);
+
+    expect(sanitized).not.toContain('style=');
+    expect(sanitized).toContain('stop-color="#8b5cf6"');
+    expect(sanitized).toContain('stop-color="#7c3aed"');
+    expect(sanitized).toContain('stop-opacity="0.5"');
+    // Attribute-form stops were already fine and must be untouched.
+    expect(sanitized).toContain('stop-color="#6d28d9"');
+  });
+
+  it('keeps the generic baby SVG body colors through sanitization', async () => {
+    // End-to-end guard for the baby pipeline asset that rendered black.
+    const { BABY_BASE_SVG } = await import('@/pets/baby-pets/lib/baby-svg-data');
+    const sanitized = sanitizePetsSvg(BABY_BASE_SVG);
+
+    // No bare stops: every stop must carry an explicit stop-color.
+    const stops = sanitized.match(/<stop\b[^>]*>/g) ?? [];
+    expect(stops.length).toBeGreaterThan(0);
+    for (const stop of stops) {
+      expect(stop).toContain('stop-color=');
+    }
+    expect(sanitized).toContain('#8b5cf6');
+  });
+
+  it('inlines :root CSS custom properties referenced via var()', () => {
+    // Regression: the ₿AO generator and Open Design adult forms declare their
+    // palette as <style>:root{--baseColor:…}</style> + var(--baseColor) refs.
+    // Stripping the style tag without inlining left var() undefined — ₿AO
+    // bodies (no fallback) rendered BLACK, Open Design forms silently fell
+    // back to baked-in hexes instead of the pet's colors.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+      <defs>
+        <style>
+          :root {
+            --baseColor: #f7931a;
+            --secondaryColor: #4d94ff;
+          }
+        </style>
+        <radialGradient id="g" cx="40%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="var(--secondaryColor)" />
+          <stop offset="100%" stop-color="var(--baseColor)" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="100" cy="112" rx="56" ry="50" fill="url(#g)" stroke="var(--secondaryColor)" />
+      <circle cx="78" cy="104" r="4" fill="var(--eyeColor, #22d3ee)" />
+    </svg>`;
+
+    const sanitized = sanitizePetsSvg(svg);
+
+    expect(sanitized).not.toContain('<style');
+    expect(sanitized).not.toContain('var(--');
+    expect(sanitized).toContain('stop-color="#4d94ff"');
+    expect(sanitized).toContain('stop-color="#f7931a"');
+    expect(sanitized).toContain('stroke="#4d94ff"');
+    // Undeclared variable → the var() fallback is honored.
+    expect(sanitized).toContain('fill="#22d3ee"');
+  });
+
+  it('keeps the ₿AO adult palette through sanitization', async () => {
+    // End-to-end guard for the ₿AO pipeline asset that rendered black.
+    const { generateBaoSvg, customizeBaoSvg } = await import('@/pets/adult-pets/lib/bao-svg');
+    const { BAO_RECIPE } = await import('@/pets/adult-pets/lib/bao-recipe');
+    const recipe = BAO_RECIPE[0];
+    const svg = customizeBaoSvg(generateBaoSvg(recipe), recipe, 'test-inst');
+    const sanitized = sanitizePetsSvg(svg);
+
+    expect(sanitized).not.toContain('var(--');
+    expect(sanitized).toContain(recipe.palette.base);
+    expect(sanitized).toContain(recipe.palette.secondary);
+    expect(sanitized).toContain(recipe.palette.eye);
+  });
 });
