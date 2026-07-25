@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { ComputeCreditsTab } from '@/components/bao-fund/ComputeCreditsTab';
@@ -295,7 +295,13 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
             <div className="text-xs text-muted-foreground">{pct}% funded</div>
           </div>
         </div>
+        {f.description && !expanded && (
+          <p className="text-sm text-muted-foreground line-clamp-2 mt-2">{f.description}</p>
+        )}
         <Progress value={pct} className="h-2 mt-2" />
+        <div className="flex items-center justify-center gap-1 pt-1.5 text-[11px] text-muted-foreground">
+          {expanded ? (<>Show less <ChevronUp className="size-3.5" /></>) : (<>Read more <ChevronDown className="size-3.5" /></>)}
+        </div>
       </CardHeader>
 
       {expanded && (
