@@ -327,7 +327,9 @@ describe('useCashuWallet locked-token wrappers', () => {
     expect(sendSpy).toHaveBeenCalledWith(
       21,
       expect.any(Array),
-      expect.objectContaining({ pubkey: validPubkey, includeDleq: true }),
+      // NUT-11 locks use the 33-byte compressed pubkey; the wallet prefixes
+      // '02' to the x-only recipient key (strict mints reject x-only data).
+      expect.objectContaining({ pubkey: '02' + validPubkey, includeDleq: true }),
     );
   });
 
