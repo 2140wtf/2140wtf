@@ -16,16 +16,15 @@ import { type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
 export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
 
 /**
- * Primary API base. Dev talks to the local bao.markets API directly (the
- * demo/signet markets the ₿AO Fund e2e scripts create only exist there);
- * production uses the same-origin proxied path.
+ * Primary API base. There is no local API: dev and deployed builds alike talk
+ * to the public bao.markets API. Deployed builds try the same-origin proxy
+ * first and fall back to the public host inside baoApiFetch; the env var
+ * remains as an explicit override.
  */
 function baoPrimaryApiBase(): string {
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
   if (fromEnv) return `${fromEnv}/v1`;
-  // Plain-http localhost is a dev convenience only — production CSP blocks
-  // it, so deployed builds use the same-origin proxy path.
-  if (import.meta.env.DEV) return 'http://localhost:3462/v1';
+  if (import.meta.env.DEV) return BAO_PUBLIC_API_BASE;
   return '/bao-api/v1';
 }
 
@@ -122,6 +121,55 @@ export async function baoApiFetch(path: string, signal?: AbortSignal): Promise<R
   }
 
   return res;
+}
+
+/**
+ * Fetch a path from BOTH the primary and public bases in parallel (when they
+ * differ), returning every ok+JSON response. Used for collection endpoints
+ * where the local dev API and the public API hold different rows (the local
+ * dev DB only has e2e test markets; production has the full catalog).
+ */
+export async function baoApiFetchAll(path: string, signal?: AbortSignal): Promise<Response[]> {
+  const primary = `${baoPrimaryApiBase()}${path}`;
+  const publicUrl = `${BAO_PUBLIC_API_BASE}${path}`;
+
+  const tryFetch = async (url: string): Promise<Response | null> => {
+    try {
+      const res = await fetch(url, { signal });
+      const contentType = res.headers.get('content-type') ?? '';
+      return res.ok && contentType.includes('application/json') ? res : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const urls = primary === publicUrl ? [primary] : [primary, publicUrl];
+  const results = await Promise.all(urls.map(tryFetch));
+  return results.filter((r): r is Response => r !== null);
+}
+
+/** One entry of the API's GET /categories catalog. */
+export interface BaoMarketCategory {
+  slug: string;
+  label: string;
+  count: number;
+  active_count: number;
+}
+
+/**
+ * Fetch the market category catalog. Public-API entries win on slug conflicts
+ * (they carry the real counts); primary-only slugs are appended.
+ */
+export async function fetchBaoMarketCategories(signal?: AbortSignal): Promise<BaoMarketCategory[]> {
+  const responses = await baoApiFetchAll('/categories', signal);
+  const bySlug = new Map<string, BaoMarketCategory>();
+  for (const res of [...responses].reverse()) {
+    const json = (await res.json()) as { data?: BaoMarketCategory[] };
+    for (const c of json.data ?? []) {
+      if (!bySlug.has(c.slug)) bySlug.set(c.slug, c);
+    }
+  }
+  return Array.from(bySlug.values());
 }
 
 /** Fetch a single market by id (e.g. a ₿AO Fund milestone market). */
