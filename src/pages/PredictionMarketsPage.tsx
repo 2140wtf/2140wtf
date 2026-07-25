@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/toggle-group";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
-import { useBaoPredictionMarkets } from "@/hooks/useBaoPredictionMarkets";
+import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
@@ -150,12 +150,15 @@ export function PredictionMarketsPage(): React.JSX.Element {
   });
 
   const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', showResolved ? 'all' : 'active');
+  const { data: apiCategories = [] } = useBaoMarketCategories();
 
   const now = Math.floor(Date.now() / 1000);
 
   const activeMarkets = useMemo(() => {
     return markets.filter((m) => {
       if (m.state === 'ended') return false;
+      // ₿AO Fund milestone markets live on the ₿AO Fund page, not here.
+      if (m.category === 'fundraiser') return false;
       if (!showResolved) {
         if (m.state !== 'active') return false;
         if (m.endTime > 0 && m.endTime < now) return false;
@@ -164,13 +167,29 @@ export function PredictionMarketsPage(): React.JSX.Element {
     });
   }, [markets, showResolved, now]);
 
+  // Category picker: the API catalog (with live counts), falling back to the
+  // categories present in the loaded markets when the catalog is unavailable.
   const categories = useMemo(() => {
+    if (apiCategories.length > 0) {
+      const visible = apiCategories
+        .filter((c) => c.slug !== 'fundraiser' && (showResolved ? c.count : c.active_count) > 0)
+        .sort((a, b) => (showResolved ? b.count - a.count : b.active_count - a.active_count));
+      return ['all', ...visible.map((c) => c.slug)];
+    }
     const set = new Set<string>();
     for (const m of activeMarkets) {
       if (m.category) set.add(m.category);
     }
     return ['all', ...Array.from(set).sort()];
-  }, [activeMarkets]);
+  }, [apiCategories, activeMarkets, showResolved]);
+
+  const categoryCount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of apiCategories) {
+      map.set(c.slug, showResolved ? c.count : c.active_count);
+    }
+    return map;
+  }, [apiCategories, showResolved]);
 
   const filteredAndSorted = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -292,7 +311,9 @@ export function PredictionMarketsPage(): React.JSX.Element {
             <SelectContent>
               {categories.map((c) => (
                 <SelectItem key={c} value={c}>
-                  {c === 'all' ? 'All categories' : titleCaseCategory(c)}
+                  {c === 'all'
+                    ? 'All categories'
+                    : `${titleCaseCategory(c)}${categoryCount.has(c) ? ` (${categoryCount.get(c)})` : ''}`}
                 </SelectItem>
               ))}
             </SelectContent>
