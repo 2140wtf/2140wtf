@@ -7,9 +7,12 @@
 // - "bao" mode keeps the BAO signet/demo wallet for free faucet claims and
 //   BAO signet play. No real money is involved.
 //
-// The choice is persisted per-browser in localStorage and defaults to cashu mode.
+// The choice is persisted per-user in localStorage (keyed by pubkey) and
+// defaults to cashu mode. Per-user scoping matters: a shared browser must
+// never let account B inherit account A's rail, because the rail decides
+// whether shop purchases move real sats or valueless demo sats.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -26,23 +29,43 @@ import type { NUser } from '@nostrify/react/login';
 
 export type PetsWalletMode = 'cashu' | 'bao';
 
-const STORAGE_KEY = 'pets:walletMode';
+const STORAGE_KEY_PREFIX = 'pets:walletMode';
 
-function loadStoredMode(): PetsWalletMode {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === 'bao' || raw === 'testnet') return 'bao';
-    // Legacy 'real'/'bitcoin' or any unknown value defaults to cashu.
-    if (raw === 'real' || raw === 'bitcoin' || raw === 'cashu') return 'cashu';
-  } catch {
-    // localStorage may be unavailable in private mode / SSR.
-  }
-  return 'cashu';
+function storageKeyFor(pubkey: string | undefined): string {
+  return pubkey ? `${STORAGE_KEY_PREFIX}:${pubkey}` : STORAGE_KEY_PREFIX;
 }
 
-function saveStoredMode(mode: PetsWalletMode): void {
+/**
+ * Load the stored wallet mode for a specific user. The key is scoped by
+ * pubkey so that switching accounts on a shared browser never leaks the
+ * previous account's rail choice (a real-sats vs demo-sats confusion risk).
+ * A legacy unscoped value is migrated into the scoped key on first read.
+ */
+export function loadStoredPetsWalletMode(pubkey: string | undefined): PetsWalletMode | null {
   try {
-    localStorage.setItem(STORAGE_KEY, mode);
+    const scoped = localStorage.getItem(storageKeyFor(pubkey));
+    const legacy = pubkey ? localStorage.getItem(STORAGE_KEY_PREFIX) : null;
+    const raw = scoped ?? legacy;
+    let mode: PetsWalletMode | null = null;
+    if (raw === 'bao' || raw === 'testnet') mode = 'bao';
+    // Legacy 'real'/'bitcoin' or 'cashu'.
+    else if (raw === 'real' || raw === 'bitcoin' || raw === 'cashu') mode = 'cashu';
+    // Migrate the legacy unscoped value into the scoped key, then drop it so
+    // the next account on this browser cannot inherit it.
+    if (mode && pubkey && !scoped && legacy) {
+      localStorage.setItem(storageKeyFor(pubkey), mode);
+      localStorage.removeItem(STORAGE_KEY_PREFIX);
+    }
+    return mode;
+  } catch {
+    // localStorage may be unavailable in private mode / SSR.
+    return null;
+  }
+}
+
+function saveStoredMode(pubkey: string | undefined, mode: PetsWalletMode): void {
+  try {
+    localStorage.setItem(storageKeyFor(pubkey), mode);
   } catch {
     // ignore
   }
@@ -80,12 +103,23 @@ export function usePetsWallet(): UsePetsWalletResult {
   const { user } = useCurrentUser();
   const { seedPhrase, available: seedAvailable } = useCashuSeed();
   const nip60Sync = useNip60Sync();
-  const [mode, setModeState] = useState<PetsWalletMode>(loadStoredMode);
+  const [mode, setModeState] = useState<PetsWalletMode>(
+    () => loadStoredPetsWalletMode(user?.pubkey) ?? 'cashu',
+  );
 
-  const setMode = useCallback((next: PetsWalletMode) => {
-    saveStoredMode(next);
-    setModeState(next);
-  }, []);
+  // Re-load the stored mode whenever the account changes (login/logout/switch)
+  // so one user's rail choice never leaks into another user's session.
+  useEffect(() => {
+    setModeState(loadStoredPetsWalletMode(user?.pubkey) ?? 'cashu');
+  }, [user?.pubkey]);
+
+  const setMode = useCallback(
+    (next: PetsWalletMode) => {
+      saveStoredMode(user?.pubkey, next);
+      setModeState(next);
+    },
+    [user?.pubkey],
+  );
 
   const relayUrls = useMemo(
     () =>

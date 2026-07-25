@@ -70,7 +70,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
   });
 
   it('pays the treasury via nutzap and does not deduct profile sats', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue(true);
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
@@ -80,7 +80,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'cashu'), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -97,7 +97,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
   });
 
   it('fails the purchase when the treasury payment fails', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue(false);
+    const sendNutzap = vi.fn().mockResolvedValue('failed');
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
@@ -108,7 +108,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'cashu'), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -127,7 +127,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'cashu'), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -145,7 +145,7 @@ describe('usePetsPurchaseItem bao mode', () => {
   });
 
   it('pays the treasury from the BAO wallet and never touches profile sats', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue(true);
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
     const externalWallet = {
       totalBalance: 500,
       loading: false,
@@ -155,7 +155,7 @@ describe('usePetsPurchaseItem bao mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'bao'), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
@@ -179,12 +179,136 @@ describe('usePetsPurchaseItem bao mode', () => {
     } as unknown as CashuWalletState & CashuWalletActions;
 
     const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 10))!;
-    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'bao'), { wrapper });
 
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toContain('Insufficient balance on the selected mint');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('charges REAL sats when the charged wallet is mainnet even if the profile tag says bao', async () => {
+    // Profile tag desynced (stale 'bao') but the caller handed us the real
+    // Cashu wallet with walletMode 'cashu' — the purchase must be labeled and
+    // treated as real sats, and pet fiat must NOT offset the cost.
+    mocks.publishEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const externalWallet = {
+      totalBalance: 5_000,
+      loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 5_000 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    const companion = {
+      fiatBalance: 2_140,
+      event: { kind: 31124, tags: [['fiat_balance', '2140']], content: '' },
+    } as never;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, companion, externalWallet, undefined, 'cashu'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Full cost charged to the real wallet — no pet-fiat offset.
+    expect(sendNutzap).toHaveBeenCalledWith(25, TREASURY_NPUB, 'https://mock.mint', {
+      memo: 'Pets shop: Apple',
+    });
+    // No companion fiat deduction event was published (only the profile update).
+    for (const call of mocks.publishEvent.mock.calls) {
+      const ev = call[0] as NostrEvent;
+      expect(ev.tags.some((t) => t[0] === 'fiat_balance')).toBe(false);
+    }
+    expect(result.current.data?.currency).toBe('sats');
+  });
+
+  it('treats the purchase as DEMO when the charged wallet is the BAO wallet even if the profile tag says cashu', async () => {
+    // Profile tag desynced (stale 'cashu') but the charged wallet is the BAO
+    // signet wallet — the receipt must say "demo sats", never "sats".
+    mocks.publishEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const externalWallet = {
+      totalBalance: 500,
+      loading: false,
+      mintUrl: 'https://relay.bao.network/cashu',
+      balances: { 'https://relay.bao.network/cashu': 500 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'bao'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.currency).toBe('demo sats');
+  });
+
+  it('falls back to the profile tag only when no wallet mode is provided', async () => {
+    mocks.publishEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const externalWallet = {
+      totalBalance: 500,
+      loading: false,
+      mintUrl: 'https://relay.bao.network/cashu',
+      balances: { 'https://relay.bao.network/cashu': 500 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet), { wrapper });
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.currency).toBe('demo sats');
+  });
+
+  it('lets pet fiat offset the cost in DEMO mode only', async () => {
+    mocks.publishEvent.mockImplementation(async (event: NostrEvent) => event);
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
+    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const externalWallet = {
+      totalBalance: 500,
+      loading: false,
+      mintUrl: 'https://relay.bao.network/cashu',
+      balances: { 'https://relay.bao.network/cashu': 500 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    // Pet can cover the whole 25-sat apple and keep the 100-sat reserve.
+    const companion = {
+      fiatBalance: 2_140,
+      event: { kind: 31124, tags: [['fiat_balance', '2140']], content: '' },
+    } as never;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, companion, externalWallet, undefined, 'bao'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Fully covered by pet fiat — the wallet is never charged in demo mode.
+    expect(sendNutzap).not.toHaveBeenCalled();
+    expect(result.current.data?.petFiatSpend).toBe(25);
   });
 });
