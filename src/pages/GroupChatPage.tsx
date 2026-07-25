@@ -141,7 +141,9 @@ export function GroupChatPage() {
   const [mobileListOpen, setMobileListOpen] = useState(false);
   const [mobileMembersOpen, setMobileMembersOpen] = useState(false);
   const [showGroupList, setShowGroupList] = useState(true);
-  const [showMemberPanel, setShowMemberPanel] = useState(true);
+  // Members panel starts collapsed — it's a management table, not something
+  // you need while chatting. The panel button in the group header expands it.
+  const [showMemberPanel, setShowMemberPanel] = useState(false);
   const [searchParams] = useSearchParams();
   const initialGroupSelected = useRef(false);
 
