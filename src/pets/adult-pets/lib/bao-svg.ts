@@ -77,6 +77,11 @@ function renderAccessories(accessories: BaoAccessories): string {
 export interface BaoSvgOptions {
   /** Optional CSS class added to the SVG root in addition to the defaults. */
   className?: string;
+  /**
+   * Mark the SVG as carrying its own curated palette so the baby customizer
+   * skips seed-based recoloring (the recipe palette IS the identity).
+   */
+  fixedColors?: boolean;
 }
 
 /**
@@ -87,11 +92,12 @@ export function generateBaoSvg(recipe: BaoRecipe, options: BaoSvgOptions = {}): 
   const glowId = `bao-glow-${recipe.id}`;
   const bodyGradientId = `bao-body-${recipe.id}`;
   const rootClass = cn('pets-adult-art', 'bao-art', `bao-${recipe.id}`, options.className);
+  const fixedColorsAttr = options.fixedColors ? ' data-pets-fixed-colors="true"' : '';
 
   const parts: string[] = [];
   parts.push(renderAccessories(recipe.accessories));
 
-  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="${rootClass}" data-bao-id="${recipe.id}">
+  return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" class="${rootClass}" data-bao-id="${recipe.id}"${fixedColorsAttr}>
   <defs>
     <style>
       :root {
@@ -152,6 +158,28 @@ export function customizeBaoSvg(
   let svg = ensureSvgFillsContainer(svgText);
   svg = uniquifySvgIds(svg, instanceId);
   return svg;
+}
+
+/**
+ * Generate the baby-stage SVG for a ₿AO variation.
+ *
+ * Every baby should resemble its mature form: a ₿AO baby is the same creature
+ * with the same recipe palette and the identity accessories (horns, marking),
+ * minus the rare flex (back piece, aura) it grows into at adulthood. The
+ * recipe palette is the identity, so the SVG is marked fixed-colors to keep
+ * the baby customizer from seed-recoloring it.
+ */
+export function generateBaoBabySvg(recipe: BaoRecipe): string {
+  const babyRecipe: BaoRecipe = {
+    ...recipe,
+    accessories: {
+      horns: recipe.accessories.horns,
+      marking: recipe.accessories.marking,
+      back: 'none',
+      aura: 'none',
+    },
+  };
+  return generateBaoSvg(babyRecipe, { className: 'bao-baby-art', fixedColors: true });
 }
 
 // Small class-name merge helper to avoid pulling in the full utils module.
