@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { nip19 } from 'nostr-tools';
 import { ArrowLeft, Swords, UserSearch, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -114,7 +114,36 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   };
 
   const [isDepositing, setIsDepositing] = useState(false);
+  const [depositError, setDepositError] = useState<string | null>(null);
   const depositAttemptedRef = useRef(false);
+  // Retains the minted deposit token until it is DELIVERED. The wallet is
+  // debited at mint time, so losing this string on a publish failure would
+  // strand real sats locked to the escrow operator.
+  const pendingDepositTokenRef = useRef<string | null>(null);
+
+  const attemptDeposit = useCallback(async () => {
+    if (!petsWallet || !operatorPubkey) return;
+    setIsDepositing(true);
+    setDepositError(null);
+    try {
+      const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
+      let token = pendingDepositTokenRef.current;
+      if (!token) {
+        token = await petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`);
+        if (!token) throw new Error(petsWallet.error ?? 'Wallet did not return a deposit token.');
+        pendingDepositTokenRef.current = token;
+      }
+      const delivered = await remote.sendEscrowDeposit(token);
+      if (!delivered) throw new Error('Failed to deliver the escrow deposit — your sats are safe in the deposit token; retry to deliver it.');
+      pendingDepositTokenRef.current = null;
+    } catch (err) {
+      console.error('[RemoteBattleSetup] escrow deposit failed:', err);
+      setDepositError(err instanceof Error ? err.message : 'Escrow deposit failed.');
+    } finally {
+      setIsDepositing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.sendEscrowDeposit]);
 
   useEffect(() => {
     if (remote.escrow.mode !== 'real-sats') return;
@@ -132,16 +161,8 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
     if (petsWallet.totalBalance < amount) return;
 
     depositAttemptedRef.current = true;
-    setIsDepositing(true);
-    petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`)
-      .then((token) => {
-        if (token) {
-          remote.sendEscrowDeposit(token);
-        }
-      })
-      .catch((err) => console.error('[RemoteBattleSetup] escrow deposit failed:', err))
-      .finally(() => setIsDepositing(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void attemptDeposit();
+     
   }, [
     remote.escrow.mode,
     remote.phase,
@@ -155,6 +176,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
     petsWallet,
     operatorPubkey,
     isDepositing,
+    attemptDeposit,
   ]);
 
   if (remote.phase === 'inviting') {
@@ -192,7 +214,20 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                     ? 'Locking your stake in escrow…'
                     : 'Waiting for escrow deposits…'}
               </div>
-              {!escrowReady && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {!escrowReady && !depositError && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {depositError && !escrowReady && (
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">{depositError}</p>
+                  <Button
+                    size="sm" variant="outline" className="gap-1.5"
+                    disabled={isDepositing}
+                    onClick={() => void attemptDeposit()}
+                  >
+                    {isDepositing ? <Loader2 className="size-3.5 animate-spin" /> : <Lock className="size-3.5" />}
+                    Retry deposit
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Starting the battle…</p>
