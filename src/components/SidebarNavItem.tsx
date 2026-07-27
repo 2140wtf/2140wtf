@@ -387,13 +387,13 @@ export function SidebarNavList({
                 compact={compact}
                 minimal={minimal}
                 children={[
-                  { id: 'bao-chat', label: '₿AO Groups', path: '/bao/chat' },
-                  { id: 'bao-fund', label: '₿AO FUND (DEMO)', path: '/bao-fund' },
+                  { id: 'bao-chat', label: 'Create ₿AO', path: '/bao/chat' },
+                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao-fund' },
                 ]}
               />
             );
           }
-          // 'bao-fund' is rendered as a child of the ₿AO Groups group, skip flat rendering.
+          // 'bao-fund' is rendered as a child of the ₿AOs group, skip flat rendering.
           if (id === 'bao-fund') return null;
 
           if (id === 'media') {
