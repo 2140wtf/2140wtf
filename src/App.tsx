@@ -82,7 +82,9 @@ const hardcodedConfig: AppConfig = {
   theme: "custom",
   customTheme: sunsetPreset,
   useAppRelays: true,
-  useUserRelays: false,
+  // Use the logged-in user's NIP-65 relay list by default (like Amethyst/Primal),
+  // so their feed matches what they see on other clients. Settings can opt out.
+  useUserRelays: true,
   marketplaceRelays: [],
   groupChatRelays: [],
   appRelays: [...APP_RELAYS],

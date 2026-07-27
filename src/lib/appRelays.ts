@@ -85,6 +85,20 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://relay.damus.io/', read: false, write: true },
     { url: 'wss://nos.lol/', read: true, write: false },
     { url: 'wss://relay.nostr.band/', read: true, write: false },
+    // Broad general-purpose relays for better content discovery. Paid/AUTH-
+    // gated relays (nostr.land, nostr.wine) and bunker relays (nsecbunker)
+    // are deliberately excluded — they reject anonymous traffic.
+    { url: 'wss://offchain.pub/', read: true, write: true },
+    { url: 'wss://relay.snort.social/', read: true, write: true },
+    { url: 'wss://bitcoiner.social/', read: true, write: true },
+    { url: 'wss://nostr.bitcoiner.social/', read: true, write: true },
+    { url: 'wss://nostr.jcloud.es/', read: true, write: true },
+    // Directory/bridge relays: great for profile, relay-list, and contact
+    // discovery; read-only here to keep publishes on full-content relays.
+    { url: 'wss://purplepag.es/', read: true, write: false },
+    { url: 'wss://relay.mostr.pub/', read: true, write: false },
+    { url: 'wss://nostr-relay.psfoundation.info/', read: true, write: false },
+    { url: 'wss://nostr.swiss-enigma.ch/', read: true, write: false },
   ],
   updatedAt: 0,
 };
