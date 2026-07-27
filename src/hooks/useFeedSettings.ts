@@ -122,7 +122,7 @@ export function useFeedSettings() {
     [orderedItems],
   );
 
-  // Migration: make sure ₿AO FUND (DEMO) is visible right below ₿AO MARKETS.
+  // Migration: make sure Fund my ₿AO is visible right below ₿AO MARKETS.
   useEffect(() => {
     const order = config.sidebarOrder;
     if (order.length === 0 || order.includes("bao-fund")) return;
