@@ -291,8 +291,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     route: 'events',
     addressable: true,
     section: 'social',
-    blurb: 'Events and meetups on Nostr. RSVP and see who else is going. Create and manage events on Plektos.',
-    sites: [{ url: 'https://plektos.app', name: 'Plektos' }],
+    blurb: 'Events and meetups on Nostr. Browse the list or the map, RSVP, and see who else is going. Create your own with the button on the Events page.',
   },
   {
     kind: 1315,
