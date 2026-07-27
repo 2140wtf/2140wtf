@@ -58,6 +58,9 @@ export interface Nip60SyncApi {
   publish: (event: NostrEvent) => Promise<string | null>;
   /** Query relays for events matching a filter. */
   query: (filter: NostrFilter) => Promise<NostrEvent[]>;
+  /** Optional: query specific relays outside the default pool (e.g. the relay
+   * a Nutzap recipient lists in their kind:10019). */
+  queryRelays?: (urls: string[], filter: NostrFilter) => Promise<NostrEvent[]>;
   /** Relays the user reads/writes from (for Nutzap info tags). */
   relays: string[];
 }
