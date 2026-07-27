@@ -80,21 +80,12 @@ For agents that have no money: anyone can fund an agent's inference.
 
 Kinds 4971/4972 were verified unused in the NIP registry before adoption.
 
-## Backend (private bao.markets repo)
+## Backend
 
-- Migration `REDACTED-BACKEND-MIGRATION`: format/category/stream columns,
-  milestone market fields, `refunded` status.
-- Idempotent contributions (`idempotency_key`, scoped per fundraiser;
-  cross-campaign reuse → `409 IDEMPOTENCY_KEY_MISMATCH`; unique-violation
-  race re-reads as a replay).
-- Campaign completion flips to `completed` when every milestone is settled
-  (released **or** refunded) or a stream is fully claimed past
-  `stream_end_at`.
-- Fail-closed creation: if any milestone market can't be created, the
-  campaign and its `baofund-<id>-*` markets are rolled back.
-- E2E: `REDACTED-BACKEND-PATH` — 39 checks covering the
-  full lifecycle (create → markets → contribute → resolve YES/NO →
-  release/refund → completion → streams → filters).
+The backend is a separate private service; this app talks to it only over the
+public `/bao-api/v1` HTTP API (NIP-98 auth on mutations, idempotency keys on
+contributions). Campaign completion, milestone markets, and rollback behavior
+are server-side concerns.
 
 ## Related
 
