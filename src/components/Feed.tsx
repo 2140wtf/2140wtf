@@ -10,7 +10,7 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { FeedEmptyState } from '@/components/FeedEmptyState';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Heart, Loader2, MapPin } from 'lucide-react';
+import { Heart, Loader2, MapPin, Shield } from 'lucide-react';
 import LoginDialog from '@/components/auth/LoginDialog';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -41,6 +41,9 @@ import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
 import { NewPostsPill } from '@/components/NewPostsPill';
 import { SubHeaderBar } from '@/components/SubHeaderBar';
+import { WotFilterBar } from '@/components/WotFilterBar';
+import { useWotFilterSetting } from '@/hooks/useWotFilterSetting';
+import { useWotRanks } from '@/hooks/useWotRanks';
 import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import { TabButton } from '@/components/TabButton';
 import { CurateFeedDropdown } from '@/components/CurateFeedDropdown';
@@ -436,6 +439,26 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     });
   }, [feedItems, searchQuery, pollFilter]);
 
+  // Web-of-Trust filter (home feed only): when enabled, authors below the
+  // rank threshold — and unknown authors, who count as rank 0 — are removed.
+  // Ranks come from NIP-85 assertions; while they load, the list stays
+  // unfiltered so the feed never flashes empty.
+  const wotFilter = useWotFilterSetting();
+  const wotActive = !!user && !kinds && wotFilter.enabled;
+  const wotAuthors = useMemo(
+    () => (wotActive ? visibleItems.map((item) => item.event.pubkey) : []),
+    [wotActive, visibleItems],
+  );
+  const { ranks: wotRanks, isLoading: wotLoading, scoredCount: wotScored, totalCount: wotTotal } =
+    useWotRanks(wotAuthors, wotActive);
+  const wotFilteredItems = useMemo(() => {
+    if (!wotActive || wotFilter.threshold <= 0 || !wotRanks) return visibleItems;
+    return visibleItems.filter(
+      (item) => (wotRanks.get(item.event.pubkey) ?? 0) >= wotFilter.threshold,
+    );
+  }, [wotActive, wotFilter.threshold, wotRanks, visibleItems]);
+  const wotHiddenCount = visibleItems.length - wotFilteredItems.length;
+
   const showSkeleton = (isPending || (isLoading && !rawData));
 
   // Distinguish the empty-state cases so the message + CTAs match the cause:
@@ -537,6 +560,21 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {!isKindSpecificPage && !tagFilters && (
             <CurateFeedDropdown activeTab={activeTab} onSelect={handleSetActiveTab} />
           )}
+          {!isKindSpecificPage && !tagFilters && (
+            <button
+              type="button"
+              onClick={() => wotFilter.setEnabled(!wotFilter.enabled)}
+              aria-pressed={wotFilter.enabled}
+              title="Web of Trust filter"
+              className={cn(
+                'flex items-center justify-center gap-1 px-2 py-1.5 text-sm font-medium rounded-md transition-colors',
+                wotFilter.enabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Shield className={cn('size-3.5', wotFilter.enabled && 'fill-primary/20')} />
+              WoT
+            </button>
+          )}
           {!isKindSpecificPage && !tagFilters && FEED_TOPICS.map((topic) => (
             <TabButton
               key={`topic:${topic.id}`}
@@ -588,6 +626,17 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
 
       {/* Feed content — saved feed tab gets its own stream */}
       {user && <div style={{ height: ARC_OVERHANG_PX }} />}
+      {wotActive && (
+        <WotFilterBar
+          threshold={wotFilter.threshold}
+          onThresholdChange={wotFilter.setThreshold}
+          onDisable={() => wotFilter.setEnabled(false)}
+          hiddenCount={wotHiddenCount}
+          scoredCount={wotScored}
+          totalCount={wotTotal}
+          isLoading={wotLoading}
+        />
+      )}
       {activeHashtag ? (
         <HashtagFeedContent tag={activeHashtag} />
       ) : activeGeotag ? (
@@ -599,10 +648,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {/* New posts pill — live auto-refresh. Never re-sorts the feed:
               tapping it refreshes and scrolls to top. */}
           <NewPostsPill count={newPostCount} onClick={handleShowNewPosts} />
-          {visibleItems.length > 0 ? (
+          {wotFilteredItems.length > 0 ? (
             grid ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                {visibleItems.map((item: FeedItem) => (
+                {wotFilteredItems.map((item: FeedItem) => (
                   <NoteCard
                     key={feedItemKey(item)}
                     event={item.event}
@@ -644,7 +693,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
               </div>
             ) : (
               <div>
-                {visibleItems.map((item: FeedItem) => (
+                {wotFilteredItems.map((item: FeedItem) => (
                   <NoteCard
                     key={feedItemKey(item)}
                     event={item.event}
@@ -684,6 +733,10 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
                 )}
               </div>
             )
+          ) : wotActive && visibleItems.length > 0 && wotFilteredItems.length === 0 ? (
+            <FeedEmptyState
+              message={`Every post on this page is below WoT score ${wotFilter.threshold}. Lower the slider to see more.`}
+            />
           ) : showSkeleton ? (
             grid ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
