@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ₿AO chat disappearing messages — per-channel timer (1 min, 21 min, 1 h, 4 h, 12 h, 21 h, 3 d, 7 d) with NIP-40 expiration on both the rumor and the wrap, and a countdown badge on expiring messages
+- Podcasts Discover tab — search the full podcast catalog (iTunes directory) alongside the on-Nostr podcast feed, with quick-topic chips and copy-RSS on hover
+- Events page — Create event button, filters, and a geohash map view for NIP-52 events
+- Wallet sats presets — quick amounts 100 / 1k / 2,140 / 10k / 21.4k / 100k / 214k on invoice, send, and nutzap fields
+
+### Changed
+- Feed loads from your own NIP-65 relay list by default, with a wider default relay set
+- Sidebar ₿AO Groups is now ₿AOs with Create ₿AO / Fund my ₿AO entries
+- Zap amount presets now reach 1M sats
+
+### Fixed
+- Stacker News widget now works on the deployed site (CORS proxy fallback)
+- ₿AO chat on mobile — full-height panes, no sideways scroll void
+- Zap amount input no longer blanks out at 4 digits
+- Curate feed menu on mobile — flat sectioned list instead of flyouts
+
 ## [0.25.0] - 2026-07-08
 
 ### Added

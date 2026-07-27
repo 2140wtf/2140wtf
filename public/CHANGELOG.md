@@ -1,5 +1,61 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ₿AO chat disappearing messages — per-channel timer (1 min, 21 min, 1 h, 4 h, 12 h, 21 h, 3 d, 7 d) with NIP-40 expiration on both the rumor and the wrap, and a countdown badge on expiring messages
+- Podcasts Discover tab — search the full podcast catalog (iTunes directory) alongside the on-Nostr podcast feed, with quick-topic chips and copy-RSS on hover
+- Events page — Create event button, filters, and a geohash map view for NIP-52 events
+- Wallet sats presets — quick amounts 100 / 1k / 2,140 / 10k / 21.4k / 100k / 214k on invoice, send, and nutzap fields
+
+### Changed
+- Feed loads from your own NIP-65 relay list by default, with a wider default relay set
+- Sidebar ₿AO Groups is now ₿AOs with Create ₿AO / Fund my ₿AO entries
+- Zap amount presets now reach 1M sats
+
+### Fixed
+- Stacker News widget now works on the deployed site (CORS proxy fallback)
+- ₿AO chat on mobile — full-height panes, no sideways scroll void
+- Zap amount input no longer blanks out at 4 digits
+- Curate feed menu on mobile — flat sectioned list instead of flyouts
+
+## [0.25.0] - 2026-07-08
+
+### Added
+- NOSTR Pets v2 — design your own species, upload GLB/SVG assets, and share custom rooms
+- Bitcoin sats wallet mode for Pets alongside ₿AO testnet, with shared invoice/send UI
+- Unified "All" feed that merges follows, loved posts, communities, global hot sort, and topic tags
+- Per-topic author discovery for more dynamic feed curation
+- 3D pet preview with manual rotation, movement controls, fullscreen game mode, and procedural room
+- Asset credits, per-asset scale overrides, and default CC0 Fox model for 3D pets
+- Honey-badger built-in species and adult SVG customization
+
+### Changed
+- Pet Shop now shows fiat, ₿AO testnet, and Bitcoin sats balances and filters items to what you own
+- New Nostr pet profiles start with 2,140 fiat coins and one free apple
+- Pets wallet drawer mode syncs to profile `wallet_mode`
+- Demo/testnet pets hatch to baby but require real sats to mature to adult
+- Default home tab is "All" for logged-in users and guests
+
+### Fixed
+- Consolidated security audit fixes across Nostr event handling, Bitcoin/Cashu payments, storage, and content rendering
+  - SVG asset uploads verify local SHA-256 against the server-returned `x` tag
+  - All relay events are signature-verified before caching or returning from `AppPool`
+  - `useNostrPublish` rejects forged or mismatched `prev` events
+  - Relay, DM relay, Blossom, and encrypted-settings replaceable events are verified and author-checked
+  - Encrypted settings and read cursors merge by `created_at`, not arrival order
+  - BAO court and prediction-market events verify signatures and enforce coordinator allowlists
+  - PSBT outputs are checked against the approved payment intent after local signing
+  - On-chain zap targets are verified before address derivation
+  - Cashu mint URLs require HTTPS and an explicit allowlist; proofs are validated before storage
+  - Login secrets, NWC URIs, and DM/group read cursors are encrypted at rest with NIP-44
+  - Web credential auto-login is gated behind required browser mediation
+  - Injected config URLs are validated against an allowlist
+  - Untrusted media, link, and avatar URLs are sanitized before rendering
+- Pet purchases and item use rollback balances/storage if the Nostr publish fails
+- Pet action menu and carousels show only owned items instead of every shop item
+- Android and web fullscreen behavior for Pets game mode
+
 ## [0.24.0] - 2026-06-22
 
 This release turns 2140.wtf into a carnival. Adopt and battle 2140 Pets, trade ₿AO prediction markets, vote in live poll cubes, chat in private groups, send encrypted messages, and carry a Cashu wallet — all under a fresh 2140.wtf look with light themes and a reorganized home.
