@@ -32,6 +32,7 @@ export function NostrSync() {
     settingsCreatedAt,
     isLoading: settingsLoading,
     recentlyWritten,
+    updateSettings,
   } = useEncryptedSettings();
 
   // Track the created_at of the last applied encrypted-settings event so stale
@@ -152,6 +153,40 @@ export function NostrSync() {
       }
     }
   }, [relayListEvent, config.relayMetadata.updatedAt, updateConfig]);
+
+  // One-time migration: the app used to default `useUserRelays` to off, which
+  // silently ignored the user's own NIP-65 list and starved the feed (far
+  // fewer posts than other clients). Enable it once for users who never
+  // touched the toggle; a manual toggle records a marker in localStorage so a
+  // deliberate opt-out is never overridden. Runs off the stored relay list too,
+  // so it fires even when the kind-10002 refetch hasn't returned yet.
+  useEffect(() => {
+    if (!user || config.useUserRelays) return;
+    if (config.relayMetadata.relays.length === 0 && !relayListEvent) return;
+
+    let toggled = true;
+    try {
+      toggled = !!localStorage.getItem(getStorageKey(config.appId, "userRelaysToggled"));
+      if (!toggled) {
+        localStorage.setItem(getStorageKey(config.appId, "userRelaysToggled"), "1");
+      }
+    } catch {
+      // localStorage unavailable — treat as toggled so we never fight the user.
+    }
+    if (toggled) return;
+
+    console.log("Enabling personal relays (NIP-65 relay list found)");
+    updateConfig((current) => ({ ...current, useUserRelays: true }));
+    updateSettings.mutate({ useUserRelays: true }, { onError: () => {} });
+  }, [
+    user,
+    config.useUserRelays,
+    config.relayMetadata.relays.length,
+    relayListEvent,
+    config.appId,
+    updateConfig,
+    updateSettings,
+  ]);
 
   // Fetch the user's BUD-03 Blossom server list (kind 10063).
   // useInitialSync seeds ['blossomServerList', pubkey] into the cache on first login.
