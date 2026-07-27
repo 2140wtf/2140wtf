@@ -1,4 +1,4 @@
-import { AlertCircle, Braces, Copy, Link2, MessagesSquare, Pencil, Pin, PinOff, Reply, Trash2, Zap } from "lucide-react";
+import { AlertCircle, Braces, Copy, Link2, MessagesSquare, Pencil, Pin, PinOff, Reply, Timer, Trash2, Zap } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -40,6 +40,7 @@ import { requestCommand } from "@/hooks/useCommandBus";
 import { commandLine } from "@/lib/botCommands";
 import { isMeAction, meActionText } from "@/lib/slashCommands";
 import { shortTimeAgo } from "@/lib/formatTime";
+import { ttlBadge, ttlOf } from "@/lib/expiration";
 import { cn } from "@/lib/utils";
 
 import type { ChatMsg, MessageReactions, MessageZaps, SendStatus, ZapPayment } from "@/components/chat/transport";
@@ -750,7 +751,23 @@ const ChatMessageInner = memo(function ChatMessageInner({
           createdAt={event.created_at}
           pending={isPending}
           edited={wasEdited && !isEditing}
-          nameBadge={nameBadge}
+          nameBadge={(() => {
+            // NIP-40 self-destruct badge (Concord disappearing messages): a
+            // timer chip showing the TTL the message was sent with.
+            const ttl = ttlOf(event.tags, event.created_at);
+            const expiryBadge = ttl !== undefined && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-px text-[9px] font-medium text-muted-foreground shrink-0"
+                title="Disappearing message — hidden from everyone after the timer runs out"
+              >
+                <Timer className="size-2.5" />
+                {ttlBadge(ttl)}
+              </span>
+            );
+            if (!nameBadge) return expiryBadge;
+            if (!expiryBadge) return nameBadge;
+            return <>{nameBadge}{expiryBadge}</>;
+          })()}
           actions={toolbar}
           beforeBody={hasReplyContext ? replyContext : undefined}
           afterBody={afterBody}
