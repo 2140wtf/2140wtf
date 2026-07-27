@@ -16,6 +16,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 
 import { Button } from '@/components/ui/button';
+import { SatsPresetPills } from '@/components/SatsPresetPills';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -297,17 +298,20 @@ function LightningPanel({
 
       <TabsContent value='receive' className='space-y-4 pt-2'>
         {!invoiceQuote ? (
-          <div className='flex gap-2'>
-            <Input
-              type='number'
-              placeholder='Amount in demo sats'
-              value={invoiceAmount}
-              onChange={(e) => setInvoiceAmount(e.target.value)}
-            />
-            <Button onClick={handleCreateInvoice} disabled={wallet.loading || !invoiceAmount}>
-              <Zap className='size-4 mr-1.5' />
-              Create invoice
-            </Button>
+          <div className='space-y-2'>
+            <div className='flex gap-2'>
+              <Input
+                type='number'
+                placeholder='Amount in demo sats'
+                value={invoiceAmount}
+                onChange={(e) => setInvoiceAmount(e.target.value)}
+              />
+              <Button onClick={handleCreateInvoice} disabled={wallet.loading || !invoiceAmount}>
+                <Zap className='size-4 mr-1.5' />
+                Create invoice
+              </Button>
+            </div>
+            <SatsPresetPills value={invoiceAmount} onSelect={(s) => setInvoiceAmount(String(s))} />
           </div>
         ) : (
           <div className='space-y-4 flex flex-col items-center'>
@@ -477,6 +481,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
                 Generate token
               </Button>
             </div>
+            <SatsPresetPills value={sendAmount} onSelect={(s) => setSendAmount(String(s))} />
             {generatedToken && (
               <div className='space-y-4 flex flex-col items-center pt-2'>
                 <div className='rounded-xl bg-white p-4 shadow-sm'>
@@ -504,16 +509,19 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
         <TabsContent value='invoice' className='space-y-4 pt-2'>
           {!invoiceQuote ? (
-            <div className='flex gap-2'>
-              <Input
-                type='number'
-                placeholder='Amount in demo sats'
-                value={invoiceAmount}
-                onChange={(e) => setInvoiceAmount(e.target.value)}
-              />
-              <Button onClick={handleCreateInvoice} disabled={wallet.loading || !invoiceAmount}>
-                Create invoice
-              </Button>
+            <div className='space-y-2'>
+              <div className='flex gap-2'>
+                <Input
+                  type='number'
+                  placeholder='Amount in demo sats'
+                  value={invoiceAmount}
+                  onChange={(e) => setInvoiceAmount(e.target.value)}
+                />
+                <Button onClick={handleCreateInvoice} disabled={wallet.loading || !invoiceAmount}>
+                  Create invoice
+                </Button>
+              </div>
+              <SatsPresetPills value={invoiceAmount} onSelect={(s) => setInvoiceAmount(String(s))} />
             </div>
           ) : (
             <div className='space-y-4 flex flex-col items-center'>
