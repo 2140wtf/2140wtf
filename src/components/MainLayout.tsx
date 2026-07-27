@@ -98,7 +98,14 @@ function MainLayoutInner() {
               <div
                 ref={(el) => { centerColumnRef.current = el; setCenterColumnEl(el); }}
                 className={cn(
-                  "relative z-0 flex-1 min-w-0 sidebar:border-l sidebar:border-r border-border bg-background/85",
+                  // overflow-x-clip: chat pages (₿AO/Concord, group DMs) slide
+                  // their chat pane a full viewport-width to the right when the
+                  // channel list is revealed; without a clip here the translated
+                  // pane grows the document's scrollable width and the page can
+                  // be swiped sideways into a blank void. `clip` (not `hidden`)
+                  // so no scroll container is created and sticky/fixed
+                  // descendants keep working.
+                  "relative z-0 flex-1 min-w-0 overflow-x-clip sidebar:border-l sidebar:border-r border-border bg-background/85",
                   !hideTopBar && "-mt-mobile-bar",
                   !noMaxWidth && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
                   !noOverscroll && "pb-overscroll",
