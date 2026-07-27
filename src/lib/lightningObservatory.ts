@@ -15,8 +15,7 @@ export const LO_PUBLIC_API_BASE = 'https://lightningobservatory.com/api';
 
 export const LIGHTNING_OBSERVATORY_URL = 'https://lightningobservatory.com/';
 
-/** Origin of the bao-lo-proxy Cloudflare Worker (bao.markets repo,
- * observatory-proxy-worker). The proxy strips the observatory's
+/** Origin of the bao-lo-proxy Cloudflare Worker. The proxy strips the observatory's
  * X-Frame-Options/frame-ancestors so the full 3D view can be iframed, adds
  * CORS headers to the JSON API, and proxies the live WebSocket feed.
  * Override with VITE_LO_PROXY_URL (e.g. for a locally running wrangler dev). */
