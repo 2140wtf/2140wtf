@@ -16,6 +16,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SatsPresetPills } from '@/components/SatsPresetPills';
 import {
   Dialog,
   DialogContent,
@@ -352,16 +353,19 @@ export function CashuWalletTab() {
 
                 <TabsContent value='invoice' className='space-y-4'>
                   {!invoiceQuote ? (
-                    <div className='flex gap-2'>
-                      <Input
-                        type='number'
-                        placeholder='Amount in sats'
-                        value={invoiceAmount}
-                        onChange={(e) => setInvoiceAmount(e.target.value)}
-                      />
-                      <Button onClick={handleCreateInvoice} disabled={wallet.loading}>
-                        Create invoice
-                      </Button>
+                    <div className='space-y-2'>
+                      <div className='flex gap-2'>
+                        <Input
+                          type='number'
+                          placeholder='Amount in sats'
+                          value={invoiceAmount}
+                          onChange={(e) => setInvoiceAmount(e.target.value)}
+                        />
+                        <Button onClick={handleCreateInvoice} disabled={wallet.loading}>
+                          Create invoice
+                        </Button>
+                      </div>
+                      <SatsPresetPills value={invoiceAmount} onSelect={(s) => setInvoiceAmount(String(s))} />
                     </div>
                   ) : (
                     <div className='space-y-4 flex flex-col items-center'>
@@ -408,22 +412,25 @@ export function CashuWalletTab() {
                 </TabsList>
 
                 <TabsContent value='token' className='space-y-4'>
-                  <div className='flex gap-2'>
-                    <Input
-                      type='number'
-                      placeholder='Amount in sats'
-                      value={sendAmount}
-                      onChange={(e) => setSendAmount(e.target.value)}
-                    />
-                    <Input
-                      placeholder='Memo (optional)'
-                      value={sendMemo}
-                      onChange={(e) => setSendMemo(e.target.value)}
-                    />
-                    <Button onClick={handleSendToken} disabled={wallet.loading}>
-                      <ArrowUpRight className='size-4 mr-1.5' />
-                      Generate token
-                    </Button>
+                  <div className='space-y-2'>
+                    <div className='flex gap-2'>
+                      <Input
+                        type='number'
+                        placeholder='Amount in sats'
+                        value={sendAmount}
+                        onChange={(e) => setSendAmount(e.target.value)}
+                      />
+                      <Input
+                        placeholder='Memo (optional)'
+                        value={sendMemo}
+                        onChange={(e) => setSendMemo(e.target.value)}
+                      />
+                      <Button onClick={handleSendToken} disabled={wallet.loading}>
+                        <ArrowUpRight className='size-4 mr-1.5' />
+                        Generate token
+                      </Button>
+                    </div>
+                    <SatsPresetPills value={sendAmount} onSelect={(s) => setSendAmount(String(s))} />
                   </div>
                   {generatedToken && (
                     <div className='space-y-4 flex flex-col items-center pt-2'>
@@ -493,6 +500,7 @@ export function CashuWalletTab() {
                   </SelectContent>
                 </Select>
               </div>
+              <SatsPresetPills value={nutzapAmount} onSelect={(s) => setNutzapAmount(String(s))} />
               <Input
                 placeholder='Memo (optional)'
                 value={nutzapMemo}
