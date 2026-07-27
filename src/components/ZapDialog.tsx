@@ -99,7 +99,7 @@ interface ZapDialogProps {
 // Sats presets for the Lightning tab. Lightning zaps are expected to be
 // much smaller than on-chain sends (which have a fixed per-tx fee floor),
 // so the presets stay in tip-jar territory.
-const LIGHTNING_SATS_PRESETS = [100, 500, 1000, 5000, 10000];
+const LIGHTNING_SATS_PRESETS = [100, 1000, 10000, 100000, 1000000];
 
 /**
  * Identifier for a selectable payment method in the dialog. Native methods use
