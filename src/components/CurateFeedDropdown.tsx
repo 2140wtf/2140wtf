@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { FEED_TOPICS } from '@/lib/feedTopics';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 
 interface CuratedOption {
@@ -83,6 +85,11 @@ function OptionItem({ option, activeTab, onSelect }: { option: CuratedOption; ac
 
 export function CurateFeedDropdown({ activeTab, onSelect }: CurateFeedDropdownProps) {
   const isCuratedActive = CURATED_IDS.has(activeTab);
+  // On narrow screens the nested flyout sub-menus (w-72 opening sideways from a
+  // w-72 parent) cannot fit the viewport — the "second menu" lands off-screen
+  // and is unreachable. Render the same options as a flat, sectioned list that
+  // stays inside the screen instead.
+  const isMobile = useIsMobile();
 
   return (
     <DropdownMenu>
@@ -100,6 +107,47 @@ export function CurateFeedDropdown({ activeTab, onSelect }: CurateFeedDropdownPr
         </button>
       </DropdownMenuTrigger>
 
+      {isMobile ? (
+        <DropdownMenuContent align="start" className="w-[min(18rem,calc(100vw-1rem))] max-h-[70dvh] overflow-y-auto">
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Social</DropdownMenuLabel>
+          {SOCIAL_OPTIONS.map((option) => (
+            <OptionItem key={option.id} option={option} activeTab={activeTab} onSelect={onSelect} />
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Trending</DropdownMenuLabel>
+          {TRENDING_OPTIONS.map((option) => (
+            <OptionItem key={option.id} option={option} activeTab={activeTab} onSelect={onSelect} />
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Reads</DropdownMenuLabel>
+          {READS_OPTIONS.map((option) => (
+            <OptionItem key={option.id} option={option} activeTab={activeTab} onSelect={onSelect} />
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Topics</DropdownMenuLabel>
+          {FEED_TOPICS.filter((topic) => !HIDDEN_TOPIC_IDS.has(topic.id)).map((topic) => (
+            <DropdownMenuItem
+              key={topic.id}
+              className={cn(
+                'flex items-start gap-2 py-2 focus:bg-muted focus:text-foreground data-[highlighted]:bg-muted data-[highlighted]:text-foreground',
+                activeTab === topic.id && 'text-primary',
+              )}
+              onClick={() => onSelect(topic.id)}
+            >
+              <span className="shrink-0">{topic.iconSrc ? <img src={topic.iconSrc} alt="" className="size-4 object-contain rounded-sm" /> : topic.icon}</span>
+              <div className="flex flex-col items-start min-w-0">
+                <span className={cn('text-sm font-medium', activeTab === topic.id && 'text-primary')}>{topic.label}</span>
+                {topic.description && (
+                  <span className={cn('text-xs leading-snug', activeTab === topic.id ? 'text-primary/80' : 'text-muted-foreground')}>
+                    {topic.description}
+                  </span>
+                )}
+              </div>
+              {activeTab === topic.id && <Check className="ml-auto size-4 shrink-0 text-primary" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      ) : (
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="text-sm font-medium text-muted-foreground focus:bg-muted focus:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground hover:bg-muted hover:text-foreground">Social</DropdownMenuSubTrigger>
@@ -158,6 +206,7 @@ export function CurateFeedDropdown({ activeTab, onSelect }: CurateFeedDropdownPr
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>
+      )}
     </DropdownMenu>
   );
 }
