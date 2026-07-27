@@ -100,6 +100,24 @@ function decodeBounds(hash: string): GeohashBounds {
 }
 
 /**
+ * Decode a geohash to its cell center point. Returns undefined for invalid
+ * input instead of throwing (events from other clients carry arbitrary `g`
+ * tags).
+ */
+export function decodeGeohashCenter(hash: string): { lat: number; lon: number } | undefined {
+  if (!hash || hash.length > 12) return undefined;
+  try {
+    const bounds = decodeBounds(hash.toLowerCase());
+    return {
+      lat: (bounds.lat[0] + bounds.lat[1]) / 2,
+      lon: (bounds.lon[0] + bounds.lon[1]) / 2,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Return the neighboring geohash in one cardinal direction.
  *
  * Implemented by decoding the source hash, moving to the adjacent cell's
