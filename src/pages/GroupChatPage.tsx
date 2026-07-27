@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Lock, LogIn, LogOut, Menu, PanelLeft, PanelRight, Pencil, Shield, Users } from 'lucide-react';
+import { Lock, LogIn, LogOut, Menu, PanelLeft, PanelRight, Pencil, Shield, UserPlus, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -260,7 +260,7 @@ export function GroupChatPage() {
           </div>
         }
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -270,12 +270,16 @@ export function GroupChatPage() {
             <Menu className="size-4 mr-1.5" />
             Groups
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setJoinOpen(true)}>
-            Join group
+          {/* Icon-only below sm: three labelled buttons don't fit a phone-width
+              header next to the back arrow + title (the Create button used to
+              clip off the right edge). */}
+          <Button variant="outline" size="sm" aria-label="Join group" onClick={() => setJoinOpen(true)}>
+            <UserPlus className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Join group</span>
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Users className="size-4 mr-1.5" />
-            Create group
+          <Button size="sm" aria-label="Create group" onClick={() => setCreateOpen(true)}>
+            <Users className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Create group</span>
           </Button>
         </div>
       </PageHeader>
