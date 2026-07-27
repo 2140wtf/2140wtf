@@ -12,6 +12,7 @@ import { MessageTimeline, type MessageTimelineHandle } from "@/components/chat/M
 import { ThreadPanel } from "@/components/chat/ThreadPanel";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { CommunityInfoDialog2 } from "@/concord-v2/components/CommunityInfoDialog2";
+import { DisappearTimerButton2 } from "@/concord-v2/components/DisappearTimerButton2";
 import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
 import { InviteDialog2 } from "@/concord-v2/components/InviteDialog2";
 import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
@@ -1672,6 +1673,9 @@ export function ConcordV2Page() {
             </button>
             </div>
             <div className="ml-auto flex items-center gap-0.5">
+              {user && channel && canWrite && (
+                <DisappearTimerButton2 channelIdHex={channel.idHex} />
+              )}
               {user && !dissolved && (
                 <Tooltip>
                   <TooltipTrigger asChild>
