@@ -355,6 +355,6 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 Native builds (APK / IPA) and store publishing (Zapstore, Google Play, App Store) are not yet wired into GitHub Actions; `zapstore.yaml` stays at root for a future publish workflow.
 
-To cut a release, load the **`release`** skill — it walks through version bumping (`X.Y.Z`), changelog generation, native build-file updates, and tagging (`vX.Y.Z`).
+Releases follow semantic versioning (`vX.Y.Z` tags): bump versions, update the changelog and native build files, tag, and let CI run.
 
-For CI credential setup and rotation (Zapstore NIP-46 bunker, nsyte `nbunksec`, Google Play service-account JSON, Android keystore, App Store Connect API key, fastlane match), load the **`ci-cd-publishing`** skill. For Mac runner operations (SSH access, restarting, debugging fastlane locally, yearly cert rotation), load the **`mac-runner`** skill.
+Release credential setup and build-machine operations are documented in the maintainers' private ops notes, not in this repository.
