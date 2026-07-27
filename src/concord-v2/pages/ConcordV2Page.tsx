@@ -1529,6 +1529,13 @@ export function ConcordV2Page() {
 
   return (
     <ChannelNavContext.Provider value={channelNav}>
+      {/* Flex-row, full-height frame for the two panes. On desktop SwipeReveal
+          renders its panes in flow and expects a side-by-side flex row; on
+          mobile both panes are `absolute inset-0`, so without this wrapper the
+          center column has no in-flow height and collapses to a sliver (the
+          channel list renders 40px tall — unusable). Heights mirror the chat
+          <main>'s own mobile/desktop heights. */}
+      <div className="relative flex h-[calc(100dvh-4rem)] sidebar:h-dvh">
       <SwipeReveal
         open={channelsOpen}
         onReveal={() => setChannelsOpen(true)}
@@ -2001,6 +2008,7 @@ export function ConcordV2Page() {
           </div>
         </main>
       </SwipeReveal>
+      </div>
 
       <InviteDialog2 community={community} open={inviteOpen} onOpenChange={setInviteOpen} />
       <BanMemberDialog
