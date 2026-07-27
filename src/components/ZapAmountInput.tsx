@@ -17,7 +17,7 @@ interface ZapAmountInputProps {
   autoFocus?: boolean;
 }
 
-const DEFAULT_PRESETS = [100, 500, 1000, 5000, 10000];
+const DEFAULT_PRESETS = [100, 1000, 10000, 100000, 1000000];
 
 function formatSats(value: number): string {
   return value.toLocaleString('en-US');
@@ -73,6 +73,16 @@ export function ZapAmountInput({
     }
     return typeof amountSats === 'string' ? amountSats : formatSats(amountSats);
   }, [currencyDisplay, usdValue, amountSats]);
+
+  // Value bound to the <input type="number"> while editing. A number input
+  // cannot render locale grouping ("1,000") — binding the grouped string made
+  // the field blank out the moment the user typed a 4th digit. Keep the raw
+  // digits here; the pretty grouped format only appears on the read-only
+  // display button.
+  const editingValue = useMemo(() => {
+    if (currencyDisplay === 'usd') return displayValue;
+    return typeof amountSats === 'string' ? amountSats.replace(/,/g, '') : String(amountSats);
+  }, [currencyDisplay, displayValue, amountSats]);
 
   const cornerText = useMemo(() => {
     if (currencyDisplay === 'usd') {
@@ -155,7 +165,7 @@ export function ZapAmountInput({
               inputMode={currencyDisplay === 'usd' ? 'decimal' : 'numeric'}
               min={0}
               step={currencyDisplay === 'usd' ? '0.01' : '1'}
-              value={displayValue}
+              value={editingValue}
               onChange={handleInputChange}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
@@ -203,9 +213,11 @@ export function ZapAmountInput({
           const label =
             currencyDisplay === 'usd'
               ? (btcPrice ? satsToUSD(preset, btcPrice) : `${preset.toLocaleString()}`)
-              : preset >= 1000
-                ? `${(preset / 1000).toFixed(0)}k`
-                : preset.toLocaleString();
+              : preset >= 1_000_000
+                ? `${(preset / 1_000_000).toFixed(0)}M`
+                : preset >= 1000
+                  ? `${(preset / 1000).toFixed(0)}k`
+                  : preset.toLocaleString();
           return (
             <ToggleGroupItem
               key={preset}

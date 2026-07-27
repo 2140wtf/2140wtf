@@ -36,7 +36,7 @@ interface CashuZapContentProps {
   zappedEvent?: { id: string; kind: number; relay?: string };
 }
 
-const CASHU_SATS_PRESETS = [100, 500, 1000, 5000, 10000];
+const CASHU_SATS_PRESETS = [100, 1000, 10000, 100000, 1000000];
 
 /**
  * Cashu Nutzap send pane inside ZapDialog.
