@@ -131,6 +131,14 @@ export interface CashuWalletActions {
 
 const VALID_PROOF_STATES = new Set(['UNSPENT', 'PENDING', 'SPENT']);
 
+/**
+ * The 2140 treasury publishes its kind:10019 Nutzap info only to BAO's relay
+ * (and lists only that relay in it). BAO's relay is not an app default relay,
+ * so when a recipient's Nutzap info isn't found on the app relays we query
+ * this relay directly before giving up.
+ */
+const TREASURY_INFO_FALLBACK_RELAY = 'wss://relay.bao.network';
+
 const PENDING_RECEIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PENDING_RECEIVE_MAX_ATTEMPTS = 5;
 
@@ -2918,6 +2926,22 @@ export function useCashuWallet(
       recipientInfo = sorted.length > 0 ? parseNutzapInfoEvent(sorted[0], recipientIdentityPubkey) : null;
     } catch (e) {
       devLog.error('Failed to fetch recipient Nutzap info:', e);
+    }
+    // Fallback: the 2140 treasury's kind:10019 lives on BAO's relay, which is
+    // not in the app default relay set — query it directly before giving up.
+    if (!recipientInfo && sync.queryRelays) {
+      try {
+        const infoEvents = await sync.queryRelays(
+          [TREASURY_INFO_FALLBACK_RELAY],
+          { kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 },
+        );
+        const sorted = infoEvents
+          .filter((ev) => parseNutzapInfoEvent(ev, recipientIdentityPubkey) !== null)
+          .sort((a, b) => b.created_at - a.created_at);
+        recipientInfo = sorted.length > 0 ? parseNutzapInfoEvent(sorted[0], recipientIdentityPubkey) : null;
+      } catch (e) {
+        devLog.error('Failed to fetch recipient Nutzap info from fallback relay:', e);
+      }
     }
     if (!recipientInfo) {
       setError('Recipient has not published Nutzap preferences');
