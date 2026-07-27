@@ -146,15 +146,19 @@ export async function sealRumor(
 export function wrapSeal(
   seal: NostrEvent,
   stream: GroupKey,
-  opts?: { ephemeral?: boolean; ephemeralSk?: Uint8Array },
+  opts?: { ephemeral?: boolean; ephemeralSk?: Uint8Array; expirationAtSecs?: number },
 ): NostrEvent {
   const ephemeralSk = opts?.ephemeralSk ?? generateSecretKey();
   const ephemeralPk = getPublicKey(ephemeralSk);
+  const tags: string[][] = [["p", ephemeralPk]];
+  // NIP-40: relays honoring expiration drop the wrap (the only ciphertext they
+  // hold) at this time — the relay-side half of disappearing messages.
+  if (opts?.expirationAtSecs) tags.push(["expiration", String(opts.expirationAtSecs)]);
   return finalizeEvent(
     {
       kind: opts?.ephemeral ? KIND_WRAP_EPHEMERAL : KIND_WRAP,
       content: encryptChecked(stream.convKey, JSON.stringify(seal)),
-      tags: [["p", ephemeralPk]],
+      tags,
       created_at: Math.floor(Date.now() / 1000),
     },
     stream.sk,
