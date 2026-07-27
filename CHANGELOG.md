@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Web-of-Trust feed filter — a WoT toggle in the feed tab bar opens a 0–100 score bar on top of the feed; authors below the threshold (global GrapeRank via NIP-85 assertions) drop out of the feed, with live hidden/scored counts
 - ₿AO chat disappearing messages — per-channel timer (1 min, 21 min, 1 h, 4 h, 12 h, 21 h, 3 d, 7 d) with NIP-40 expiration on both the rumor and the wrap, and a countdown badge on expiring messages
 - Podcasts Discover tab — search the full podcast catalog (iTunes directory) alongside the on-Nostr podcast feed, with quick-topic chips and copy-RSS on hover
 - Events page — Create event button, filters, and a geohash map view for NIP-52 events
