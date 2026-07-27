@@ -285,6 +285,8 @@ export interface CalendarEvent {
   participants: CalendarParticipant[];
   /** Group id this event belongs to (`h` tag). */
   groupId?: string;
+  /** NIP-52 `g` geohash, when the author pinned the event to a place. */
+  geohash?: string;
   /** The raw signed event. */
   event: NostrEvent;
 }
@@ -305,6 +307,8 @@ export interface CalendarEventInput {
   hashtags?: string[];
   references?: string[];
   participants?: CalendarParticipant[];
+  /** NIP-52 `g` geohash for map discovery (plektos clients write this). */
+  geohash?: string;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -365,6 +369,7 @@ export function parseCalendarEvent(event: NostrEvent): CalendarEvent | undefined
     references,
     participants,
     groupId: tag(event, "h")?.[1],
+    geohash: tag(event, "g")?.[1],
     event,
   };
 }
@@ -376,9 +381,23 @@ export function parseCalendarEvent(event: NostrEvent): CalendarEvent | undefined
  * and serve it back on a group-scoped query.
  */
 export function buildCalendarEventTags(groupId: string, input: CalendarEventInput): string[][] {
+  return [["h", groupId], ...buildCalendarEventTagsShared(input)];
+}
+
+/**
+ * Build the tags for a PUBLIC NIP-52 calendar event (kind 31922/31923) — the
+ * same shape as {@link buildCalendarEventTags} minus the group `h` tag, so the
+ * event is discoverable by every events client (plektos, coracle, …) on the
+ * author's normal write relays.
+ */
+export function buildPublicCalendarEventTags(input: CalendarEventInput): string[][] {
+  return buildCalendarEventTagsShared(input);
+}
+
+/** Shared tag body for group-scoped and public NIP-52 calendar events. */
+function buildCalendarEventTagsShared(input: CalendarEventInput): string[][] {
   const tags: string[][] = [
     ["d", input.identifier],
-    ["h", groupId],
     ["title", input.title],
     ["start", input.start],
   ];
@@ -389,6 +408,7 @@ export function buildCalendarEventTags(groupId: string, input: CalendarEventInpu
   if (input.summary) tags.push(["summary", input.summary]);
   if (input.image) tags.push(["image", input.image]);
   if (input.location) tags.push(["location", input.location]);
+  if (input.geohash) tags.push(["g", input.geohash]);
   for (const t of input.hashtags ?? []) {
     if (t.trim()) tags.push(["t", t.trim()]);
   }
