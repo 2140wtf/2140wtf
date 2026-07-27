@@ -15,6 +15,7 @@ import {
   type OpenedChat,
 } from "@/concord-v2/lib/chat";
 import { KIND_COMMENT, KIND_DELETE, KIND_MESSAGE, KIND_REACTION, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
+import { expirationOf, getDisappearTtl, isExpired } from "@/concord-v2/lib/disappearing";
 import { whenAuthSettled } from "@/concord-v2/lib/planeSync";
 import {
   clearChannelExhausted,
@@ -602,14 +603,32 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
     initialData: [],
   }).data;
 
+  // Disappearing messages: expired rumors are hidden from the timeline (the
+  // rumor cache and non-NIP-40 relays keep copies — the filter is what makes
+  // them vanish for every member's client). Tick only while expiring messages
+  // are present so quiet channels never re-fold on a timer.
+  const hasExpiring = useMemo(
+    () => (query.data ?? []).some((m) => expirationOf(m.tags) !== undefined),
+    [query.data],
+  );
+  const [nowSecs, setNowSecs] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    if (!hasExpiring) return;
+    const id = setInterval(() => setNowSecs(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(id);
+  }, [hasExpiring]);
+
   const folded: FoldedTimeline = useMemo(() => {
-    const result = foldTimeline(query.data ?? [], moderation);
+    const visible = hasExpiring
+      ? (query.data ?? []).filter((m) => !isExpired(m.tags, nowSecs))
+      : (query.data ?? []);
+    const result = foldTimeline(visible, moderation);
     if (optimisticDeleted && optimisticDeleted.length > 0) {
       const hidden = new Set(optimisticDeleted);
       return { ...result, messages: result.messages.filter((m) => !hidden.has(m.rumorId)) };
     }
     return result;
-  }, [query.data, moderation, optimisticDeleted]);
+  }, [query.data, moderation, optimisticDeleted, hasExpiring, nowSecs]);
 
   return {
     /** The folded, moderated timeline + reaction tallies. */
@@ -724,6 +743,17 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
       if (kind === KIND_DELETE && target) tags.push(["k", String(targetKind ?? KIND_MESSAGE)]);
       if (extraTags) tags.push(...extraTags);
 
+      // Disappearing messages (NIP-40): the channel's sender-side timer stamps
+      // an expiration on the rumor (member clients filter expired rumors from
+      // their timelines — local caches outlive relays) and on the wrap (NIP-40
+      // relays drop the ciphertext). Visible messages only — reactions, edits
+      // and deletes stay plain so they can still reach a message before it
+      // expires.
+      const isVisible = effectiveKind === KIND_MESSAGE || effectiveKind === KIND_COMMENT;
+      const disappearTtl = isVisible ? getDisappearTtl(channel.idHex) : undefined;
+      const expiresAtSecs = disappearTtl ? Math.floor(effectiveMs / 1000) + disappearTtl : undefined;
+      if (expiresAtSecs) tags.push(["expiration", String(expiresAtSecs)]);
+
       const rumor: Rumor = buildRumor({ kind: effectiveKind, content, tags, pubkey: user.pubkey, ms: effectiveMs });
       // Discord-style delivery states for the visible kinds: the message
       // renders IMMEDIATELY as "pending" — before the seal, which for a
@@ -731,7 +761,6 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
       // outright. A message the user typed must never silently vanish: sign
       // or broadcast failure flips it to "failed" (retry/discard affordance)
       // instead of eating it.
-      const isVisible = effectiveKind === KIND_MESSAGE || effectiveKind === KIND_COMMENT;
       const opened: OpenedChat = {
         rumorId: rumor.id,
         author: user.pubkey,
@@ -777,7 +806,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
         throw err; // reactions/edits/deletes: callers own the rollback
       }
       logSync("send", `sealed ${rumor.id.slice(0, 8)} in ${sinceMs(sealStarted)} — wrapping + broadcasting to ${community.relays.length} relay(s)`);
-      const wrap = wrapSeal(seal, channel.current.group);
+      const wrap = wrapSeal(seal, channel.current.group, expiresAtSecs ? { expirationAtSecs: expiresAtSecs } : undefined);
 
       const sealed: OpenedChat = { ...opened, seal, wrapId: wrap.id, streamPk: wrap.pubkey };
       queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old) => upsert(old, [sealed]));
