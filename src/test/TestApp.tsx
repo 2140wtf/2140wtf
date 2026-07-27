@@ -29,7 +29,7 @@ export function TestApp({ children }: TestAppProps) {
     theme: "custom",
     customTheme: sunsetPreset,
     useAppRelays: true,
-    useUserRelays: false,
+    useUserRelays: true,
     marketplaceRelays: [],
     groupChatRelays: [],
     appRelays: [],

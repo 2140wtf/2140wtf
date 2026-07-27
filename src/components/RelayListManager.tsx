@@ -18,6 +18,7 @@ import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { useToast } from '@/hooks/useToast';
 import { APP_RELAYS } from '@/lib/appRelays';
+import { getStorageKey } from '@/lib/storageKey';
 import { cn } from '@/lib/utils';
 
 interface Relay {
@@ -171,6 +172,14 @@ export function RelayListManager() {
   };
 
   const handleToggleUserRelays = async (enabled: boolean) => {
+    // Record that the user explicitly chose this — the one-time auto-enable
+    // migration in NostrSync must not override a deliberate opt-out.
+    try {
+      localStorage.setItem(getStorageKey(config.appId, 'userRelaysToggled'), '1');
+    } catch {
+      // localStorage unavailable — the migration may re-run, harmless.
+    }
+
     // Update local settings immediately
     updateConfig((current) => ({
       ...current,
