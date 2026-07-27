@@ -69,33 +69,22 @@ function normalizeUrl(url: string): string {
 }
 
 /**
- * TESTING ONLY — BAO's own relay, temporarily part of the app-default set so
- * pet state (and the rest of the app) can be tested against first-party
- * infrastructure instead of relying on flaky public relays.
- *
- * This relay accumulates gibberish test traffic and MUST NOT ship to
- * production mainnet. It is included only in dev builds, or when
- * VITE_BAO_TEST_RELAY=true is set explicitly for a testing build; set
- * VITE_BAO_TEST_RELAY=false to force-exclude it in dev. Remove this entry
- * once a dedicated pets relay is deployed.
- */
-const BAO_TEST_RELAY_URL = 'wss://relay.bao.network/';
-
-const env = import.meta.env as Record<string, unknown>;
-const includeBaoTestRelay =
-  env.VITE_BAO_TEST_RELAY === 'true' || (import.meta.env.DEV && env.VITE_BAO_TEST_RELAY !== 'false');
-
-/**
  * App default relays that are used as a fallback when the user has no NIP-65 relay list,
  * and can be optionally combined with user relays.
+ *
+ * NOTE: BAO's relay (wss://relay.bao.network) is deliberately NOT an app
+ * default — the app runs on public relays. ₿AO features that need BAO
+ * infrastructure (markets, court, treasury Nutzap info) connect to it
+ * explicitly from their own modules.
  */
 export const APP_RELAYS: RelayMetadata = {
   relays: [
-    ...(includeBaoTestRelay ? [{ url: BAO_TEST_RELAY_URL, read: true, write: true }] : []),
     { url: 'wss://relay.ditto.pub/', read: true, write: true },
     { url: 'wss://relay.dreamith.to/', read: true, write: true },
     { url: 'wss://relay.primal.net/', read: false, write: true },
     { url: 'wss://relay.damus.io/', read: false, write: true },
+    { url: 'wss://nos.lol/', read: true, write: false },
+    { url: 'wss://relay.nostr.band/', read: true, write: false },
   ],
   updatedAt: 0,
 };

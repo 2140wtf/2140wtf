@@ -53,6 +53,15 @@ export function useNip60Sync(): Nip60SyncApi | undefined {
       }
     };
 
-    return { signer, publish, query, relays };
+    const queryRelays: NonNullable<Nip60SyncApi['queryRelays']> = async (urls, filter) => {
+      try {
+        return await nostr.group(urls).query([filter], { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
+      } catch (e) {
+        devLog.error('NIP-60 targeted relay query failed:', e);
+        return [];
+      }
+    };
+
+    return { signer, publish, query, queryRelays, relays };
   }, [user, nostr, config.relayMetadata?.relays]);
 }
