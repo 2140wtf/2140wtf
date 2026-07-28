@@ -34,6 +34,24 @@ interface P2PKSecret {
   pubkey?: string;
 }
 
+/**
+ * Normalize a P2PK/escrow pubkey to the lowercase x-only (64-hex) form.
+ * Accepts x-only 64-hex and compressed 66-hex ('02'/'03' + 64 hex, as produced
+ * by `deriveBattleEscrowKeypair`). Returns null for anything else.
+ */
+export function normalizeEscrowPubkey(pubkey: string | null | undefined): string | null {
+  if (typeof pubkey !== 'string') return null;
+  const lower = pubkey.toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(lower)) return lower;
+  if (/^0[23][0-9a-f]{64}$/.test(lower)) return lower.slice(2);
+  return null;
+}
+
+/** Lowercase + strip trailing slashes so mint URLs compare equal across forms. */
+function normalizeMintUrl(url: string): string {
+  return url.toLowerCase().replace(/\/+$/, '');
+}
+
 interface ParseP2PKOptions {
   /**
    * Extra NUT-11 tags (e.g. "refund", "locktime") that are allowed beyond the
@@ -85,22 +103,48 @@ function parseP2PKSecret(secret: unknown, options?: ParseP2PKOptions): P2PKSecre
 
 /**
  * Return true if every proof in the token is P2PK-locked to the given pubkey.
+ * Both the token locks and the expected pubkey are normalized to x-only form
+ * before comparison, so 64-hex and 66-hex compressed keys compare equal.
  */
 export function isTokenLockedToPubkey(
   tokenStr: string,
   pubkey: string,
   options?: ParseP2PKOptions,
 ): boolean {
+  const expected = normalizeEscrowPubkey(pubkey);
+  if (!expected) return false;
   const entries = decodeCashuToken(tokenStr);
   if (!entries || entries.length === 0) return false;
   for (const entry of entries) {
     for (const proof of entry.proofs) {
       const p = proof as { secret?: unknown } | undefined;
       const lock = parseP2PKSecret(p?.secret, options);
-      if (lock?.pubkey !== pubkey) return false;
+      if (normalizeEscrowPubkey(lock?.pubkey) !== expected) return false;
     }
   }
   return true;
+}
+
+/**
+ * Extract the distinct P2PK lock pubkeys found across all proofs in a token.
+ * Returns an empty array for fully-unlocked (bearer) tokens. Proofs whose
+ * secrets don't parse as strict P2PK are skipped, so callers deciding between
+ * "locked vs bearer" should compare against the proof count when it matters.
+ * Lock pubkeys are normalized: a 33-byte compressed key ('02'/'03' + 64 hex)
+ * is lowercased and returned as-is; the x-only 64-hex form is returned as-is.
+ */
+export function extractTokenLockPubkeys(tokenStr: string, options?: ParseP2PKOptions): string[] {
+  const entries = decodeCashuToken(tokenStr);
+  if (!entries || entries.length === 0) return [];
+  const locks = new Set<string>();
+  for (const entry of entries) {
+    for (const proof of entry.proofs) {
+      const p = proof as { secret?: unknown } | undefined;
+      const lock = parseP2PKSecret(p?.secret, options);
+      if (lock?.pubkey) locks.add(lock.pubkey.toLowerCase());
+    }
+  }
+  return [...locks];
 }
 
 /**
@@ -121,11 +165,16 @@ export interface EscrowDepositValidation {
 /**
  * Validate that a deposit token locks the expected amount to the operator
  * escrow pubkey and uses an allowed mint.
+ *
+ * @param allowedMints When provided (and non-empty), every token entry must
+ *  come from one of these mints — the escrow operator can only release
+ *  deposits whose mints match, and it rejects mixed-mint releases outright.
  */
 export function validateEscrowDeposit(
   tokenStr: string,
   expectedAmount: number,
   escrowPubkey: string,
+  allowedMints?: string[],
 ): EscrowDepositValidation {
   const amount = getTokenAmount(tokenStr);
   if (amount <= 0) {
@@ -136,6 +185,14 @@ export function validateEscrowDeposit(
   }
   if (!isTokenLockedToPubkey(tokenStr, escrowPubkey)) {
     return { valid: false, reason: 'Token is not locked to the escrow pubkey', amount };
+  }
+  if (allowedMints && allowedMints.length > 0) {
+    const allowed = new Set(allowedMints.map(normalizeMintUrl));
+    for (const entry of decodeCashuToken(tokenStr) ?? []) {
+      if (!allowed.has(normalizeMintUrl(entry.mintUrl))) {
+        return { valid: false, reason: `Token mint ${entry.mintUrl} is not one of your wallet's mints — the escrow operator can only release matching-mint deposits`, amount };
+      }
+    }
   }
   return { valid: true, amount };
 }
