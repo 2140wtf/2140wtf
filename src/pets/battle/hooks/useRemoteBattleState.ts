@@ -23,6 +23,8 @@ import {
   type BattleMode,
 } from '../lib/battleMessages';
 import { subscribeBattleMessages } from '../lib/battleNetwork';
+import { normalizeEscrowPubkey } from '../lib/cashuEscrow';
+import type { NostrEvent } from '@nostrify/nostrify';
 import type { PlayerInput } from '../types/battle.types';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 
@@ -71,6 +73,9 @@ export interface RemoteBattleState {
   guestInput: PlayerInput | null;
   winner: 0 | 1 | null;
   escrow: BattleEscrowState;
+  /** Raw host-signed battle-finished sync event (guest only) — forwarded to
+   *  the escrow operator as proof of outcome when claiming the prize. */
+  hostFinishedEvent: NostrEvent | null;
 }
 
 export interface UseRemoteBattleOptions {
@@ -132,6 +137,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
     guestInput: null,
     winner: null,
     escrow: { mode: 'demo-sats', phase: 'none' },
+    hostFinishedEvent: null,
   });
 
   const stateRef = useRef(state);
@@ -277,23 +283,26 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
             } else if (payload.type === 'battle-escrow-deposit') {
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
-              const error = validateEscrowDeposit?.(deposit.token, deposit.playerIndex, expectedAmount);
+              const error = validateEscrowDeposit?.(deposit.token, 1, expectedAmount);
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
                 return;
               }
-              updateEscrow(
-                deposit.playerIndex === 0
-                  ? { hostDepositToken: deposit.token }
-                  : { guestDepositToken: deposit.token },
-              );
+              // The sync channel only carries messages from the opponent — in
+              // the host role that is always the guest. Derive the slot from
+              // OUR role instead of trusting the payload's claimed
+              // playerIndex, which a malicious peer could use to overwrite
+              // our own deposit slot with their (invalid) token.
+              updateEscrow({ guestDepositToken: deposit.token });
             }
           } else {
             if (payload.type === 'battle-state') {
               lastHostSnapshotRef.current = payload.state;
               setState((prev) => ({ ...prev, hostSnapshot: payload.state }));
             } else if (payload.type === 'battle-finished') {
-              setState((prev) => ({ ...prev, phase: 'finished', winner: payload.winner }));
+              // Keep the raw host-signed event: the escrow operator verifies
+              // it as the outcome proof when the guest claims the prize.
+              setState((prev) => ({ ...prev, phase: 'finished', winner: payload.winner, hostFinishedEvent: event }));
               stopSync();
             } else if (payload.type === 'battle-cancel') {
               setState((prev) => ({ ...prev, phase: 'cancelled' }));
@@ -301,16 +310,14 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
             } else if (payload.type === 'battle-escrow-deposit') {
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
-              const error = validateEscrowDeposit?.(deposit.token, deposit.playerIndex, expectedAmount);
+              const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount);
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
                 return;
               }
-              updateEscrow(
-                deposit.playerIndex === 0
-                  ? { hostDepositToken: deposit.token }
-                  : { guestDepositToken: deposit.token },
-              );
+              // Guest role: the opponent on this channel is always the host
+              // (see the host-branch comment above).
+              updateEscrow({ hostDepositToken: deposit.token });
             }
           }
         },
@@ -338,10 +345,13 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         setError('You cannot battle yourself.');
         return;
       }
-      if (matchOptions.mode === 'real-sats' && (!hostEscrowPubkey || hostEscrowPubkey.length !== 64)) {
+      if (matchOptions.mode === 'real-sats' && !normalizeEscrowPubkey(hostEscrowPubkey)) {
         setError('Real-sats battles require a valid escrow pubkey.');
         return;
       }
+      // Store/send the x-only form so both sides and the escrow operator
+      // compare the same representation (derived keys are 66-char compressed).
+      const normalizedHostEscrowPubkey = normalizeEscrowPubkey(hostEscrowPubkey) ?? hostEscrowPubkey;
 
       const battleId = generateUUID();
       const sentAt = nowMs();
@@ -361,7 +371,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         escrow: {
           mode: matchOptions.mode,
           phase: matchOptions.mode === 'real-sats' ? 'awaiting_pubkeys' : 'none',
-          hostEscrowPubkey,
+          hostEscrowPubkey: normalizedHostEscrowPubkey,
         },
       });
 
@@ -375,7 +385,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           roundDurationSeconds: matchOptions.roundDurationSeconds,
           sentAt,
           mode: matchOptions.mode,
-          hostEscrowPubkey,
+          hostEscrowPubkey: normalizedHostEscrowPubkey,
         };
 
         // Start listening for the guest's accept/decline/cancel on the sync
@@ -433,10 +443,26 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         setError('This battle request has expired.');
         return;
       }
-      if (invite.mode === 'real-sats' && (!guestEscrowPubkey || guestEscrowPubkey.length !== 64)) {
+      if (invite.mode === 'real-sats' && !normalizeEscrowPubkey(guestEscrowPubkey)) {
         setError('Real-sats battles require a valid escrow pubkey.');
         return;
       }
+      // Stake sanity: the invite's prizeAmount is attacker-controlled and the
+      // accepted match auto-deposits it. Reject non-positive, fractional or
+      // absurd stakes before the wallet is ever touched.
+      if (invite.mode === 'real-sats') {
+        const prize = invite.prizeAmount;
+        if (!Number.isInteger(prize) || prize <= 0 || prize > 1_000_000) {
+          setError('This battle request has an invalid stake amount.');
+          return;
+        }
+      }
+
+      // Store/send x-only forms on both sides: the guest's own derived key is
+      // 66-char compressed, and the host's key arrives attacker-controlled in
+      // the invite, so normalize before it reaches the escrow operator.
+      const normalizedGuestEscrowPubkey = normalizeEscrowPubkey(guestEscrowPubkey) ?? guestEscrowPubkey;
+      const normalizedHostEscrowPubkey = normalizeEscrowPubkey(invite.hostEscrowPubkey) ?? invite.hostEscrowPubkey;
 
       setState({
         ...stateRef.current,
@@ -457,8 +483,8 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         escrow: {
           mode: invite.mode,
           phase: invite.mode === 'real-sats' ? 'locking' : 'none',
-          hostEscrowPubkey: invite.hostEscrowPubkey,
-          guestEscrowPubkey,
+          hostEscrowPubkey: normalizedHostEscrowPubkey,
+          guestEscrowPubkey: normalizedGuestEscrowPubkey,
         },
       });
 
@@ -468,7 +494,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           battleId: invite.battleId,
           guestPet: localPet,
           mode: invite.mode,
-          guestEscrowPubkey,
+          guestEscrowPubkey: normalizedGuestEscrowPubkey,
         };
         // Send both a formal NIP-17 DM and an ephemeral sync accept so the host
         // sees it immediately even if DM relays are slow.
@@ -653,10 +679,20 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
       guestInput: null,
       winner: null,
       escrow: resetEscrow(),
+      hostFinishedEvent: null,
     });
   }, [clearInviteTimer, stopSync, resetEscrow]);
 
 
+
+  // Real-sats: the 800ms auto-start timer almost always fires before both
+  // escrow deposits land, and startFight's escrow gate silently swallows it.
+  // Watch for escrow readiness and start the fight then.
+  useEffect(() => {
+    if (state.phase !== 'accepted' || state.role !== 'host') return;
+    if (state.escrow.mode !== 'real-sats' || state.escrow.phase !== 'ready') return;
+    startFight();
+  }, [state.phase, state.role, state.escrow.mode, state.escrow.phase, startFight]);
 
   // Cleanup on unmount.
   useEffect(() => {

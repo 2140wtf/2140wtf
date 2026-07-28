@@ -14,6 +14,7 @@ import {
   type UseRemoteBattleReturn,
 } from '../hooks/useRemoteBattleState';
 import { validateEscrowDeposit } from '../lib/cashuEscrow';
+import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 
 export interface RemoteBattleContextValue extends UseRemoteBattleReturn {
@@ -34,15 +35,18 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const { conversations, isLoading: isLoadingInbox } = useContext(DmInboxContext);
+  const { allMints } = useCashuWalletContext();
 
   const validateDeposit = useCallback(
     (token: string, _playerIndex: 0 | 1, amount: number) => {
       const escrowPubkey = config.petsBattleEscrowPubkey;
       if (!escrowPubkey) return 'Battle escrow is not configured.';
-      const result = validateEscrowDeposit(token, amount, escrowPubkey);
+      // The escrow operator rejects mixed-mint releases, so the counterparty's
+      // deposit must come from a mint this wallet also uses.
+      const result = validateEscrowDeposit(token, amount, escrowPubkey, allMints.map((m) => m.url));
       return result.valid ? null : (result.reason ?? 'Invalid escrow deposit.');
     },
-    [config.petsBattleEscrowPubkey],
+    [config.petsBattleEscrowPubkey, allMints],
   );
 
   const {

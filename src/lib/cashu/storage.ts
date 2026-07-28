@@ -28,6 +28,7 @@ export interface RecoveryEntry {
 const recoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}proof_recovery_${stringToBase64(mint)}`;
 const sendRecoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}send_recovery_${stringToBase64(mint)}`;
 const meltChangeRecoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}melt_change_recovery_${stringToBase64(mint)}`;
+const meltInputRecoveryKey = (mint: string, namespace = 'freedomid_') => `${namespace}melt_input_recovery_${stringToBase64(mint)}`;
 const proofStoreTsKey = (mint: string, namespace = 'freedomid_') => `${namespace}proof_store_ts_${stringToBase64(mint)}`;
 const mintedQuotesKey = (namespace = 'freedomid_') => `${namespace}minted_quotes`;
 
@@ -120,6 +121,46 @@ export function clearMeltChangeRecovery(mintUrl: string, namespace?: string): vo
 export async function loadMeltChangeRecovery(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<RecoveryEntry | null> {
   let encrypted: string | null = null;
   try { encrypted = localStorage.getItem(meltChangeRecoveryKey(mintUrl, namespace)); } catch { return null; }
+  if (!encrypted) return null;
+  try {
+    const decrypted = await decryptData(encrypted, key, legacyKey);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.proofs)) {
+      return { version: Number(parsed.version) || 0, timestamp: Number(parsed.timestamp) || 0, proofs: parsed.proofs };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Melt INPUT proofs, journaled in their own slot. The generic proof-recovery
+ * slot is overwritten by every later wallet op (send/receive/mint), so a
+ * pending melt's input snapshot kept there could be destroyed before the
+ * quote resolved — losing the inputs if the mint later reports UNPAID.
+ * This slot is written only by payInvoice/payBolt12 and cleared only when the
+ * melt resolves (or is restored); reconcile must not touch it while a melt is
+ * pending for the mint.
+ */
+export async function writeMeltInputRecovery(mintUrl: string, proofs: unknown[], key: CryptoKey, namespace?: string): Promise<void> {
+  try {
+    const payload: RecoveryEntry = { version: 1, timestamp: Date.now(), proofs };
+    const encrypted = await encryptData(JSON.stringify(payload), key);
+    localStorage.setItem(meltInputRecoveryKey(mintUrl, namespace), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write melt input recovery:', e);
+  }
+}
+
+export function clearMeltInputRecovery(mintUrl: string, namespace?: string): void {
+  try { localStorage.removeItem(meltInputRecoveryKey(mintUrl, namespace)); } catch { /* noop */ }
+}
+
+export async function loadMeltInputRecovery(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<RecoveryEntry | null> {
+  let encrypted: string | null = null;
+  try { encrypted = localStorage.getItem(meltInputRecoveryKey(mintUrl, namespace)); } catch { return null; }
   if (!encrypted) return null;
   try {
     const decrypted = await decryptData(encrypted, key, legacyKey);
@@ -1469,6 +1510,9 @@ export function createCashuStorage(namespace?: string) {
     writeMeltChangeRecovery: (mintUrl: string, proofs: unknown[], key: CryptoKey) => writeMeltChangeRecovery(mintUrl, proofs, key, namespace),
     clearMeltChangeRecovery: (mintUrl: string) => clearMeltChangeRecovery(mintUrl, namespace),
     loadMeltChangeRecovery: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadMeltChangeRecovery(mintUrl, key, legacyKey, namespace),
+    writeMeltInputRecovery: (mintUrl: string, proofs: unknown[], key: CryptoKey) => writeMeltInputRecovery(mintUrl, proofs, key, namespace),
+    clearMeltInputRecovery: (mintUrl: string) => clearMeltInputRecovery(mintUrl, namespace),
+    loadMeltInputRecovery: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadMeltInputRecovery(mintUrl, key, legacyKey, namespace),
     loadMintedQuotes: (key: CryptoKey, legacyKey?: CryptoKey) => loadMintedQuotes(key, legacyKey, namespace),
     writeMintedQuote: (quoteId: string, key: CryptoKey, maxAttempts?: number) => writeMintedQuote(quoteId, key, maxAttempts, namespace),
     saveMintedQuotes: (quoteIds: string[], key: CryptoKey, maxAttempts?: number) => saveMintedQuotes(quoteIds, key, maxAttempts, namespace),
