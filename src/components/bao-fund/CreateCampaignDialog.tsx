@@ -192,6 +192,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           <DialogTitle>New fundraising campaign (DEMO)</DialogTitle>
           <DialogDescription>
             Every milestone becomes a YES/NO prediction market on bao.markets — the market's resolution gates the payout.
+            Resolution is crowd-voted: experimental and gameable, so treat outcomes as a drill.
             All settlement rails are in demo: contributions are recorded only, no real sats move, and donors are warned not to send real payments.
           </DialogDescription>
         </DialogHeader>
