@@ -1,4 +1,4 @@
-import { Loader2, Shield, X } from 'lucide-react';
+import { Loader2, RefreshCw, Shield, X } from 'lucide-react';
 
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,6 +17,10 @@ interface WotFilterBarProps {
   totalCount: number;
   /** True while ranks are being fetched (nothing is filtered yet). */
   isLoading: boolean;
+  /** True when every assertions relay failed — shows a retry button. */
+  isError?: boolean;
+  /** Re-run the rank fetch after a relay failure. */
+  onRetry?: () => void;
 }
 
 /**
@@ -33,6 +37,8 @@ export function WotFilterBar({
   scoredCount,
   totalCount,
   isLoading,
+  isError,
+  onRetry,
 }: WotFilterBarProps) {
   return (
     <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
@@ -69,6 +75,15 @@ export function WotFilterBar({
             <Loader2 className="size-3 animate-spin" />
             scoring…
           </span>
+        ) : isError ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="flex items-center gap-1 text-destructive hover:underline"
+          >
+            <RefreshCw className="size-3" />
+            scoring failed — retry
+          </button>
         ) : (
           <>
             {hiddenCount > 0 ? `${hiddenCount} hidden · ` : ''}
@@ -76,6 +91,17 @@ export function WotFilterBar({
           </>
         )}
       </span>
+
+      {isError && !isLoading && (
+        <button
+          type="button"
+          onClick={onRetry}
+          aria-label="Retry WoT scoring"
+          className="sm:hidden shrink-0 rounded-full p-1 text-destructive hover:bg-muted transition-colors"
+        >
+          <RefreshCw className="size-4" />
+        </button>
+      )}
 
       <Tooltip>
         <TooltipTrigger asChild>

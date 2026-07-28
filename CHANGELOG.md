@@ -17,6 +17,9 @@
 - Zap amount presets now reach 1M sats
 
 ### Fixed
+- Web of Trust filter showing "0/N scored" — rank fetching now queries a fallback assertions relay (nos.lol) alongside the primary aggregator, works on browsers without `AbortSignal.any` (older Safari), and the score bar shows a retry button when every relay fails instead of silently scoring nobody
+- Feed ending after ~20 posts — the pagination cursor could collapse to the newest event on sparse feeds (the 6-hour outlier rule fired right at the top of the page), so every next page re-fetched the same posts and the feed stalled; the cursor now always advances at least half a page and the infinite-scroll sentinel keeps loading even when a page's posts are all hidden by the WoT/mute filters
+- A clear "You're all caught up" marker now shows at the true end of the feed instead of an abrupt stop
 - Stacker News widget now works on the deployed site (CORS proxy fallback)
 - ₿AO chat on mobile — full-height panes, no sideways scroll void
 - Zap amount input no longer blanks out at 4 digits
