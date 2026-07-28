@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/useToast';
 import {
   BAO_RAILS,
   BAO_RAIL_LABELS,
+  isBaoRailLive,
   createFundraiser,
   type BaoFundraiserFormat,
   type BaoRail,
@@ -218,9 +219,16 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
               <Select value={rail} onValueChange={(v) => setRail(v as BaoRail)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {BAO_RAILS.map((r) => <SelectItem key={r} value={r}>{BAO_RAIL_LABELS[r]}</SelectItem>)}
+                  {BAO_RAILS.map((r) => (
+                    <SelectItem key={r} value={r} disabled={!isBaoRailLive(r)}>
+                      {BAO_RAIL_LABELS[r]}{isBaoRailLive(r) ? '' : ' (soon)'}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Creating a campaign is free — no sats needed. Only the rails with live settlement are selectable for now.
+              </p>
             </div>
           </div>
 
