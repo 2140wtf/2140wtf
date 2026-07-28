@@ -11,6 +11,7 @@
 - Wallet sats presets — quick amounts 100 / 1k / 2,140 / 10k / 21.4k / 100k / 214k on invoice, send, and nutzap fields
 
 ### Changed
+- ₿AO community creation now offers the app's full feed relay set (write-enabled) instead of a capped 5 — the advanced relay picker pre-selects up to 15 and advises that a single private relay you control is best practice for privacy-focused communities
 - ₿AO Fund rail pickers now offer only the rails with live settlement (Lightning, Cashu, On-chain L1); the rest show as "soon", and the Campaigns tab + contribute dialog explain how to claim 21,400 free demo sats per rail per day on bao.markets
 - Feed loads from your own NIP-65 relay list by default, with a wider default relay set
 - Sidebar ₿AO Groups is now ₿AOs with Create ₿AO / Fund my ₿AO entries
