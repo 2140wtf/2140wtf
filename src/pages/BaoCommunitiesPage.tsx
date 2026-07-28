@@ -101,9 +101,10 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
 
   // Advanced: which relays the community is minted on. `null` = untouched (the
-  // create path picks its own default — app relays ∪ the creator's DM relays);
-  // once the user edits, `relays` holds the explicit set. The candidate query
-  // (gated on the menu being open) resolves the same default for pre-selection.
+  // create path picks its own default — app relays ∪ the write-enabled feed
+  // relay defaults ∪ CORD stock ∪ the creator's DM relays); once the user
+  // edits, `relays` holds the explicit set. The candidate query (gated on the
+  // menu being open) resolves the same default for pre-selection.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [relays, setRelays] = useState<string[] | null>(null);
   const { data: candidates } = useCreateRelayCandidates2(advancedOpen);
@@ -181,6 +182,14 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   Where this community lives. Members read and write here, so pick
                   relays that accept your writes. An auth-only or DM-only relay can
                   reject the genesis and strand the create.
+                </p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Privacy tip:</span>{" "}
+                  for a privacy-focused community, a single private relay you control
+                  is best practice. Relays can't read sealed messages, but every
+                  public relay you add can see member pubkeys and activity timing —
+                  fewer relays, less metadata. The pre-selected set is the app's
+                  full feed relay list: great for reach, loud for privacy.
                 </p>
                 <RelayListEditor
                   relays={effectiveRelays}
