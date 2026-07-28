@@ -86,6 +86,23 @@ export const BAO_RAIL_LABELS: Record<BaoRail, string> = {
   fedimint: 'Fedimint',
 };
 
+/**
+ * Rails that work end-to-end on bao.markets today: they have live settlement
+ * methods on the market coordinator (lightning / cashu / taproot≈L1) AND a
+ * working demo faucet claim. The DEMO fundraiser ledger *accepts* all nine
+ * rails (contributions are recorded, not settled), but the rest have no live
+ * settlement adapter yet — the UI offers them disabled as "soon" so nobody
+ * picks a rail that can't actually pay out.
+ */
+export const BAO_LIVE_RAILS: readonly BaoRail[] = ['lightning', 'cashu', 'l1'];
+
+export function isBaoRailLive(rail: BaoRail): boolean {
+  return BAO_LIVE_RAILS.includes(rail);
+}
+
+/** Where users claim free demo sats (₿AO Demo Network faucet, 21,400 sats per rail per 24h). */
+export const BAO_MARKETS_URL = 'https://bao.markets';
+
 /** Base URL of the bao.markets API (no trailing slash). */
 export function baoApiBase(): string {
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
