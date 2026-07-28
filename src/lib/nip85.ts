@@ -19,8 +19,15 @@ import type { NostrEvent } from '@nostrify/nostrify';
 // treat them as rank 0 ("unknown") when filtering.
 // ============================================================================
 
-/** Relay that aggregates NIP-85 trusted assertions from many providers. */
+/** Primary relay that aggregates NIP-85 trusted assertions from many providers. */
 export const NIP85_RELAY = 'wss://nip85.nostr1.com';
+
+/**
+ * Relays queried for assertions, most-specific first. The dedicated
+ * aggregator is authoritative; general relays replicate many of the same
+ * assertions and cover us when the aggregator is down or unreachable.
+ */
+export const NIP85_RELAYS = [NIP85_RELAY, 'wss://nos.lol'] as const;
 
 /** NIP-85 Trusted Assertion kind. */
 export const NIP85_KIND = 30382;

@@ -3,20 +3,45 @@ import { getZapAmountSats, getZapSenderPubkey, getTargetEventId } from '@/lib/za
 
 /**
  * Minimum gap (in seconds) between consecutive events to be considered an
- * out-of-sync boundary. If a relay returns events spanning a large time
- * range (e.g., 10h newest → 4d oldest), there will be a large gap between
- * the "main cluster" and the outliers from the stale relay.
+ * out-of-sync boundary between the page's main cluster and stragglers from
+ * a stale relay.
  */
 const MIN_GAP_SECONDS = 6 * 60 * 60; // 6 hours
+
+/**
+ * A gap only marks a straggler boundary when at least this fraction of the
+ * page sits ABOVE it (newer). Gaps near the top of a page are normal on
+ * sparse feeds and must not cut the cursor.
+ */
+const MIN_CLUSTER_FRACTION = 0.5;
+
+/**
+ * Fraction of a page's events (from the oldest end) treated as potential
+ * stragglers when no clear gap boundary exists.
+ */
+const CURSOR_TAIL_FRACTION = 0.1;
 
 /**
  * Computes a safe pagination cursor from a set of events.
  *
  * When querying multiple relays, a stale relay may return very old events
  * alongside recent ones. Using the absolute oldest timestamp as the cursor
- * would skip everything in between. This function detects large gaps in the
- * timestamp distribution and returns the oldest timestamp from the main
- * (most recent) cluster, ignoring outliers below the gap.
+ * would make the next page jump far into the past, skipping everything in
+ * between. Two rules keep the cursor safe while always making progress:
+ *
+ * 1. A gap ≥ 6h with at least half the page above it is a genuine straggler
+ *    boundary — the cursor sits just above the gap (the out-of-sync tail is
+ *    re-fetched by the next page, not skipped).
+ * 2. Otherwise the cursor is the 90th-percentile timestamp — the oldest
+ *    ~10% of the page is re-fetched as a small duplicate overlap.
+ *
+ * An earlier version cut at the first ≥6h gap walking down from the NEWEST
+ * event. On a sparse feed (e.g. follows who post once a day) that gap sits
+ * right below the newest event, so the cursor collapsed to the top of the
+ * page: every subsequent page re-fetched nearly the same events, the
+ * visible feed grew by ~1 post per page, and the feed appeared to end after
+ * a couple of pages. Both rules above always advance the cursor by at least
+ * ~half/~90% of the page.
  *
  * All events are still returned and displayed — only the cursor is adjusted.
  */
@@ -27,18 +52,17 @@ export function getPaginationCursor(events: NostrEvent[]): number {
   // Sort descending (newest first).
   const sorted = events.map((e) => e.created_at).sort((a, b) => b - a);
 
-  // Walk from newest to oldest, find the first gap larger than the threshold.
+  // Rule 1: a large gap with most of the page above it marks a straggler
+  // tail — cut just above the gap.
   for (let i = 0; i < sorted.length - 1; i++) {
-    const gap = sorted[i] - sorted[i + 1];
-    if (gap >= MIN_GAP_SECONDS) {
-      // The cursor is the timestamp just above the gap (the oldest event
-      // in the main cluster). Events below the gap are outliers.
+    if (sorted[i] - sorted[i + 1] >= MIN_GAP_SECONDS && (i + 1) / sorted.length >= MIN_CLUSTER_FRACTION) {
       return sorted[i];
     }
   }
 
-  // No large gap found — all events are in one cluster.
-  return sorted[sorted.length - 1];
+  // Rule 2: no clear boundary — step back 90% of the page.
+  const index = Math.min(sorted.length - 1, Math.floor(sorted.length * (1 - CURSOR_TAIL_FRACTION)));
+  return sorted[index];
 }
 
 /** The set of kind numbers that represent reposts (kind 6 for notes, kind 16 for everything else). */
