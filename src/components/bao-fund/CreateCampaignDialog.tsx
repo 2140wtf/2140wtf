@@ -19,6 +19,7 @@ import {
   type BaoFundraiserFormat,
   type BaoRail,
 } from '@/lib/baoFundraising';
+import { BAO_CATEGORIES } from '@/lib/baoCategories';
 
 function formatSats(n: number): string {
   return Number(n).toLocaleString();
@@ -45,6 +46,27 @@ interface MilestoneDraft {
 
 /** Every milestone is a public market — the API rejects thin descriptions. */
 const MILESTONE_DESCRIPTION_MIN = 50;
+/** Project description must give an agent enough context to scope the work. */
+const PROJECT_DESCRIPTION_MIN = 120;
+/** Delivery criteria becomes the market question — it must be unambiguous. */
+const CRITERIA_MIN = 20;
+
+/**
+ * The bao.markets API has no repo field yet, so the repository URL is stored
+ * as a machine-readable first line of the description: `Repository: <url>`.
+ * Agents resolving milestone work MUST find the code there.
+ */
+const REPO_LINE_PREFIX = 'Repository: ';
+
+/** Accept https git hosting links — GitHub, GitLab, or ngit (git over Nostr). */
+function isValidRepoUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname.includes('.') && url.pathname.length > 1;
+  } catch {
+    return false;
+  }
+}
 
 const emptyMilestone = (): MilestoneDraft => ({
   title: '',
@@ -66,6 +88,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const { toast } = useToast();
   const [title, setTitle] = useState(initialTitle ?? '');
   const [description, setDescription] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
   const [runnerType, setRunnerType] = useState<'agent' | 'human' | 'agent_human'>('agent_human');
   const [rail, setRail] = useState<BaoRail>('lightning');
   const [category, setCategory] = useState('tools');
@@ -84,6 +107,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setRepoUrl('');
     setMilestones([emptyMilestone()]);
     // Also reset the options — leaving rail/category/format behind silently
     // creates the next campaign with the previous one's stream format or rail.
@@ -101,11 +125,12 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const mutation = useMutation({
     mutationFn: () => {
       const now = Math.floor(Date.now() / 1000);
+      const fullDescription = `${REPO_LINE_PREFIX}${repoUrl.trim()}\n\n${description.trim()}`;
       if (format === 'stream') {
         const days = parseInt(streamDays, 10) || 30;
         return createFundraiser(user!.signer, {
           title: title.trim(),
-          description: description.trim() || undefined,
+          description: fullDescription,
           runner_type: runnerType,
           goal_sats: goal,
           settlement_rail: rail,
@@ -117,7 +142,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
       }
       return createFundraiser(user!.signer, {
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: fullDescription,
         runner_type: runnerType,
         goal_sats: goal,
         settlement_rail: rail,
@@ -148,10 +173,13 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
 
   const valid =
     title.trim().length > 0 &&
+    isValidRepoUrl(repoUrl.trim()) &&
+    description.trim().length >= PROJECT_DESCRIPTION_MIN &&
     goal >= 1000 &&
     (format === 'stream' || milestones.every((m) =>
       m.title.trim() &&
       m.description.trim().length >= MILESTONE_DESCRIPTION_MIN &&
+      m.criteria.trim().length >= CRITERIA_MIN &&
       (parseInt(m.amount, 10) || 0) > 0));
 
   const patchMilestone = (i: number, patch: Partial<MilestoneDraft>) =>
@@ -164,6 +192,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           <DialogTitle>New fundraising campaign (DEMO)</DialogTitle>
           <DialogDescription>
             Every milestone becomes a YES/NO prediction market on bao.markets — the market's resolution gates the payout.
+            All settlement rails are in demo: contributions are recorded only, no real sats move, and donors are warned not to send real payments.
           </DialogDescription>
         </DialogHeader>
 
@@ -187,8 +216,36 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           </div>
 
           <div className="space-y-1.5">
+            <Label htmlFor="fr-repo">Repository (required)</Label>
+            <Input
+              id="fr-repo"
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              placeholder="https://github.com/you/project — GitHub, GitLab or ngit"
+              inputMode="url"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Where the code lives. Agents resolving milestones will look here first.
+            </p>
+            {repoUrl.trim().length > 0 && !isValidRepoUrl(repoUrl.trim()) && (
+              <p className="text-[11px] text-amber-500">Enter a full https:// link to the repo.</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="fr-desc">Description</Label>
-            <Textarea id="fr-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="What will the funds build?" />
+            <Textarea
+              id="fr-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              placeholder={`What will the funds build, who runs it, and why now? Write for agents and humans (min ${PROJECT_DESCRIPTION_MIN} chars).`}
+            />
+            {description.trim().length > 0 && description.trim().length < PROJECT_DESCRIPTION_MIN && (
+              <p className="text-[11px] text-amber-500">
+                {PROJECT_DESCRIPTION_MIN - description.trim().length} more characters needed — an agent must be able to scope the work from this alone.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
@@ -202,15 +259,16 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                   <SelectItem value="human">Human</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Creating a campaign is free — no sats needed. Only the rails with live settlement are selectable for now.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="infra">Infra</SelectItem>
-                  <SelectItem value="tools">Tools</SelectItem>
-                  <SelectItem value="baos">₿AOs</SelectItem>
+                  {BAO_CATEGORIES.map((c) => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -226,9 +284,6 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Creating a campaign is free — no sats needed. Only the rails with live settlement are selectable for now.
-              </p>
             </div>
           </div>
 

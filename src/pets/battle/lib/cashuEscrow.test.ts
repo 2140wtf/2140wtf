@@ -1,15 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { getEncodedToken } from '@cashu/cashu-ts';
 
-import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit } from './cashuEscrow';
+import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey } from './cashuEscrow';
 
 const mintUrl = 'https://mint.example.com';
 const escrowPubkey = 'a'.repeat(64);
 const otherPubkey = 'b'.repeat(64);
 
-function makeToken(proofs: Array<{ id: string; amount: number; secret: string; C: string }>) {
-  return getEncodedToken({ mint: mintUrl, proofs, unit: 'sat' });
+function makeToken(proofs: Array<{ id: string; amount: number; secret: string; C: string }>, mint = mintUrl) {
+  return getEncodedToken({ mint, proofs, unit: 'sat' });
 }
+
+describe('normalizeEscrowPubkey', () => {
+  it('passes through lowercase x-only keys', () => {
+    expect(normalizeEscrowPubkey(escrowPubkey)).toBe(escrowPubkey);
+  });
+
+  it('strips the 02/03 prefix from compressed keys', () => {
+    expect(normalizeEscrowPubkey('02' + escrowPubkey)).toBe(escrowPubkey);
+    expect(normalizeEscrowPubkey('03' + escrowPubkey)).toBe(escrowPubkey);
+  });
+
+  it('lowercases uppercase input', () => {
+    expect(normalizeEscrowPubkey('02' + 'A'.repeat(64))).toBe(escrowPubkey);
+    expect(normalizeEscrowPubkey('A'.repeat(64))).toBe(escrowPubkey);
+  });
+
+  it('returns null for malformed keys', () => {
+    expect(normalizeEscrowPubkey('04' + escrowPubkey)).toBeNull();
+    expect(normalizeEscrowPubkey('xyz')).toBeNull();
+    expect(normalizeEscrowPubkey('')).toBeNull();
+    expect(normalizeEscrowPubkey(null)).toBeNull();
+    expect(normalizeEscrowPubkey(undefined)).toBeNull();
+  });
+});
 
 describe('isTokenLockedToPubkey', () => {
   it('returns true when every proof has a NUT-11 ["P2PK", pubkey] secret', () => {
@@ -65,6 +89,59 @@ describe('isTokenLockedToPubkey', () => {
     ]);
     expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(true);
   });
+
+  it('treats compressed 66-char locks and x-only 64-char keys as equal', () => {
+    // Battle escrow keys are derived compressed (66-char) while P2PK locks in
+    // tokens are usually x-only — both directions must compare equal.
+    const compressed = '02' + escrowPubkey;
+    const tokenLockedCompressed = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', compressed]), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(tokenLockedCompressed, escrowPubkey)).toBe(true);
+
+    const tokenLockedXonly = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(tokenLockedXonly, compressed)).toBe(true);
+  });
+
+  it('returns false when the expected pubkey is malformed', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C1' },
+    ]);
+    expect(isTokenLockedToPubkey(token, 'not-a-key')).toBe(false);
+  });
+});
+
+describe('extractTokenLockPubkeys', () => {
+  it('returns [] for a bearer token', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: 'plain-secret', C: 'C1' },
+    ]);
+    expect(extractTokenLockPubkeys(token)).toEqual([]);
+  });
+
+  it('extracts the distinct lock pubkeys across proofs', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C1' },
+      { id: 'ks', amount: 5, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C2' },
+      { id: 'ks', amount: 1, secret: JSON.stringify(['P2PK', otherPubkey]), C: 'C3' },
+    ]);
+    expect(extractTokenLockPubkeys(token).sort()).toEqual([escrowPubkey, otherPubkey].sort());
+  });
+
+  it('normalizes compressed keys to lowercase and skips unparseable proofs', () => {
+    const compressed = '02' + 'A'.repeat(64);
+    const token = makeToken([
+      { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', compressed]), C: 'C1' },
+      { id: 'ks', amount: 5, secret: 'not-json', C: 'C2' },
+    ]);
+    expect(extractTokenLockPubkeys(token)).toEqual([compressed.toLowerCase()]);
+  });
+
+  it('returns [] for an invalid token', () => {
+    expect(extractTokenLockPubkeys('not-a-token')).toEqual([]);
+  });
 });
 
 describe('getTokenAmount', () => {
@@ -107,5 +184,39 @@ describe('validateEscrowDeposit', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toBe('Token is not locked to the escrow pubkey');
     expect(result.amount).toBe(21);
+  });
+
+  it('accepts a compressed 66-char escrow pubkey against x-only token locks', () => {
+    const token = makeToken([
+      { id: 'ks', amount: 21, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C1' },
+    ]);
+    expect(validateEscrowDeposit(token, 21, '02' + escrowPubkey)).toEqual({ valid: true, amount: 21 });
+  });
+
+  describe('mint allowlist', () => {
+    const lockedProof = { id: 'ks', amount: 21, secret: JSON.stringify(['P2PK', escrowPubkey]), C: 'C1' };
+
+    it('accepts a deposit from an allowed mint', () => {
+      const token = makeToken([lockedProof]);
+      expect(validateEscrowDeposit(token, 21, escrowPubkey, [mintUrl]).valid).toBe(true);
+    });
+
+    it('normalizes mint URLs (case + trailing slash) before comparing', () => {
+      const token = makeToken([lockedProof]);
+      expect(validateEscrowDeposit(token, 21, escrowPubkey, ['https://MINT.example.com/']).valid).toBe(true);
+    });
+
+    it('rejects a deposit from a mint outside the allowlist', () => {
+      const token = makeToken([lockedProof], 'https://evil.mint');
+      const result = validateEscrowDeposit(token, 21, escrowPubkey, [mintUrl]);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('evil.mint');
+    });
+
+    it('skips the mint check when no allowlist is provided', () => {
+      const token = makeToken([lockedProof], 'https://any.mint');
+      expect(validateEscrowDeposit(token, 21, escrowPubkey).valid).toBe(true);
+      expect(validateEscrowDeposit(token, 21, escrowPubkey, []).valid).toBe(true);
+    });
   });
 });

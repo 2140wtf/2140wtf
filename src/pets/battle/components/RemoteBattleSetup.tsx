@@ -118,8 +118,19 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   const depositAttemptedRef = useRef(false);
   // Retains the minted deposit token until it is DELIVERED. The wallet is
   // debited at mint time, so losing this string on a publish failure would
-  // strand real sats locked to the escrow operator.
+  // strand real sats locked to the escrow operator. Mirrored to localStorage
+  // so a page refresh mid-flight doesn't lose it either.
   const pendingDepositTokenRef = useRef<string | null>(null);
+  const depositStorageKey = remote.battleId ? `bao_battle_deposit_${remote.battleId}` : null;
+
+  // Restore an undelivered deposit token after a refresh.
+  useEffect(() => {
+    if (!depositStorageKey) return;
+    try {
+      const saved = localStorage.getItem(depositStorageKey);
+      if (saved) pendingDepositTokenRef.current = saved;
+    } catch { /* storage blocked — in-memory ref still works */ }
+  }, [depositStorageKey]);
 
   const attemptDeposit = useCallback(async () => {
     if (!petsWallet || !operatorPubkey) return;
@@ -132,10 +143,16 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
         token = await petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`);
         if (!token) throw new Error(petsWallet.error ?? 'Wallet did not return a deposit token.');
         pendingDepositTokenRef.current = token;
+        if (depositStorageKey) {
+          try { localStorage.setItem(depositStorageKey, token); } catch { /* best-effort */ }
+        }
       }
       const delivered = await remote.sendEscrowDeposit(token);
       if (!delivered) throw new Error('Failed to deliver the escrow deposit — your sats are safe in the deposit token; retry to deliver it.');
       pendingDepositTokenRef.current = null;
+      if (depositStorageKey) {
+        try { localStorage.removeItem(depositStorageKey); } catch { /* best-effort */ }
+      }
     } catch (err) {
       console.error('[RemoteBattleSetup] escrow deposit failed:', err);
       setDepositError(err instanceof Error ? err.message : 'Escrow deposit failed.');
@@ -143,7 +160,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       setIsDepositing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.sendEscrowDeposit]);
+  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.sendEscrowDeposit, depositStorageKey]);
 
   useEffect(() => {
     if (remote.escrow.mode !== 'real-sats') return;
@@ -162,7 +179,6 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
 
     depositAttemptedRef.current = true;
     void attemptDeposit();
-     
   }, [
     remote.escrow.mode,
     remote.phase,
