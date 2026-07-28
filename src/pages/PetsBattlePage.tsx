@@ -29,7 +29,7 @@ import {
   DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
 } from '@/pets/battle/lib/constants';
-import { deriveBattleEscrowKeypair, requestEscrowRelease } from '@/pets/battle/lib/cashuEscrow';
+import { deriveBattleEscrowKeypair, normalizeEscrowPubkey, requestEscrowRelease } from '@/pets/battle/lib/cashuEscrow';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
 
@@ -85,10 +85,15 @@ export default function PetsBattlePage() {
     onFinishRef.current = async (winner) => {
       if (winner === null || payout.isPending) return;
 
-      // In remote matches the authoritative host announces the result.
+      // In remote matches the authoritative host announces the result. The
+      // guest forwards the host-signed finished event it received over the
+      // sync channel — sending `{}` would give the escrow operator no
+      // verifiable outcome proof and the release request would fail.
       let finishedEvent: NostrEvent | undefined;
       if (remoteRole === 'host') {
         finishedEvent = await sendRemoteFinished(winner) ?? undefined;
+      } else if (remoteRole === 'guest') {
+        finishedEvent = remote.hostFinishedEvent ?? undefined;
       }
 
       // Only the local player gets a prize when they win. Host is P1 (index 0),
@@ -103,12 +108,13 @@ export default function PetsBattlePage() {
             toast({ title: 'Escrow not configured', description: 'Cannot claim real-sats prize.', variant: 'destructive' });
             return;
           }
-          const hostPubkey = remoteRole === 'host' ? escrowKeypair.pubkey : (remote.escrow.hostEscrowPubkey ?? '');
-          const guestPubkey = remoteRole === 'guest' ? escrowKeypair.pubkey : (remote.escrow.guestEscrowPubkey ?? '');
+          const localEscrowPubkey = normalizeEscrowPubkey(escrowKeypair.pubkey) ?? escrowKeypair.pubkey;
+          const hostPubkey = remoteRole === 'host' ? localEscrowPubkey : (remote.escrow.hostEscrowPubkey ?? '');
+          const guestPubkey = remoteRole === 'guest' ? localEscrowPubkey : (remote.escrow.guestEscrowPubkey ?? '');
           const release = await requestEscrowRelease({
             serviceUrl: config.petsBattleEscrowServiceUrl,
             battleId: remote.battleId ?? '',
-            winnerPubkey: escrowKeypair.pubkey,
+            winnerPubkey: localEscrowPubkey,
             hostPubkey,
             guestPubkey,
             hostDepositToken: remote.escrow.hostDepositToken ?? '',
@@ -174,6 +180,7 @@ export default function PetsBattlePage() {
     toast,
     remoteRole,
     sendRemoteFinished,
+    remote.hostFinishedEvent,
     escrowKeypair,
     config.petsBattleEscrowServiceUrl,
     config.petsBattleEscrowPubkey,
@@ -203,6 +210,9 @@ export default function PetsBattlePage() {
     if (remote.phase !== 'accepted' && remote.phase !== 'fighting') return;
     if (!remote.localPet || !remote.opponentPet) return;
     if (state.status !== 'setup') return;
+    // Real-sats: never start the match before both escrow deposits are locked
+    // — otherwise one side can fight (and win) with zero sats at stake.
+    if (remote.escrow.mode === 'real-sats' && remote.escrow.phase !== 'ready') return;
 
     const isHost = remote.role === 'host';
     const pet1 = isHost ? remote.localPet : remote.opponentPet;
@@ -228,6 +238,7 @@ export default function PetsBattlePage() {
     remote.role,
     remote.matchOptions,
     remote.escrow.mode,
+    remote.escrow.phase,
     remote.sendHostSnapshot,
     remote.sendGuestInput,
     remote.guestInputRef,
