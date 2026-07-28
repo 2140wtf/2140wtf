@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.26.0] - 2026-07-28
 
 ### Added
 - Install app (PWA) — the mobile drawer gets an "Install app" button so users can add 2140.wtf to their home screen without an app store; Chrome shows the native prompt, iOS gets Share → Add to Home Screen instructions (service worker now registers at startup)
@@ -17,6 +17,10 @@
 - Zap amount presets now reach 1M sats
 
 ### Fixed
+- Cashu wallet concurrency — a single shared operation mutex replaces six per-operation ones, receives/mints/nutzaps journal only after proofs commit, a dedicated recovery slot protects a pending melt's input proofs, offline sends no longer swap, and the startup reconcile effect now always runs (regression tests included)
+- Pets battle escrow — escrow pubkeys are normalized, the mint allowlist is enforced, and escrow deposits report success/failure with retry UI
+- ₿AO Fund compute credits — the full trust loop works: sweep → resend → Routstr redeem, kind-4973 receipts, corroborated reputation badge, and outbox persistence
+- ₿AO Fund contribute dialog resets properly when switching fundraisers
 - Web of Trust filter showing "0/N scored" — rank fetching now queries a fallback assertions relay (nos.lol) alongside the primary aggregator, works on browsers without `AbortSignal.any` (older Safari), and the score bar shows a retry button when every relay fails instead of silently scoring nobody
 - Feed ending after ~20 posts — the pagination cursor could collapse to the newest event on sparse feeds (the 6-hour outlier rule fired right at the top of the page), so every next page re-fetched the same posts and the feed stalled; the cursor now always advances at least half a page and the infinite-scroll sentinel keeps loading even when a page's posts are all hidden by the WoT/mute filters
 - A clear "You're all caught up" marker now shows at the true end of the feed instead of an abrupt stop
