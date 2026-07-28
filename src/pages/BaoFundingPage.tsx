@@ -22,6 +22,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import {
+  BAO_MARKETS_URL,
   BAO_RAILS,
   BAO_RAIL_LABELS,
   baoApiBase,
@@ -29,10 +30,12 @@ import {
   contributeToFundraiser,
   fetchFundraiser,
   fetchFundraisers,
+  isBaoRailLive,
   releaseMilestone,
   type BaoFundraiser,
   type BaoRail,
 } from '@/lib/baoFundraising';
+import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
 
@@ -165,6 +168,20 @@ export function BaoFundingPage() {
             <p className="text-muted-foreground mt-0.5">
               Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. The Compute credits tab uses real sats.
             </p>
+            <div className="mt-2 rounded-md bg-background/60 px-3 py-2">
+              <p className="font-medium text-amber-600 dark:text-amber-400">How to get demo sats for testing</p>
+              <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-muted-foreground text-xs">
+                <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed (anti-spam is rate limits, not fees).</li>
+                <li>
+                  To contribute or trade, claim <span className="text-foreground font-medium">21,400 free demo sats per rail every 24h</span> on{' '}
+                  <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
+                    bao.markets
+                  </button>
+                  {' '}— open Wallet, pick a rail (Lightning, Cashu, or On-chain), tap Claim. Guest Nostr login, no signup.
+                </li>
+                <li>Come back here and contribute on the same rail — the demo ledger records it instantly.</li>
+              </ol>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -449,16 +466,26 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                   <button
                     key={r}
                     type="button"
+                    disabled={!isBaoRailLive(r)}
                     onClick={() => setRail(r)}
                     className={cn(
                       'rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
                       rail === r ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground',
+                      !isBaoRailLive(r) && 'opacity-40 cursor-not-allowed hover:text-muted-foreground',
                     )}
                   >
                     {BAO_RAIL_LABELS[r]}
+                    {!isBaoRailLive(r) && <span className="block text-[9px]">soon</span>}
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                Need demo sats? Claim 21,400 free sats per rail every 24h on{' '}
+                <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
+                  bao.markets
+                </button>
+                {' '}(Wallet → Claim) — signet coins, no real value.
+              </p>
             </div>
 
             <Button
