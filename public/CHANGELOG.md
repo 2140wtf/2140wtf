@@ -12,6 +12,7 @@
 - ₿AO Fund compute-credit receipts and agent reputation — fulfilled Routstr credit sends now publish kind-4973 receipts, agents earn a corroborated reputation badge once independent funders vouch for them, and credit outboxes persist across sessions
 
 ### Changed
+- ₿AO Fund warnings spell out the trust model: the Campaigns demo banner and create dialog now warn that crowd-voted market resolution is experimental and gameable (free demo sats mean anyone can shift any vote), and the Compute credits banner warns that real sats are at risk — receipts and reputation are signals, not guarantees
 - ₿AO community creation now offers the app's full feed relay set (write-enabled) instead of a capped 5 — the advanced relay picker pre-selects up to 15 and advises that a single private relay you control is best practice for privacy-focused communities
 - ₿AO Fund rail pickers now offer only the rails with live settlement (Lightning, Cashu, On-chain L1); the rest show as "soon", and the Campaigns tab + contribute dialog explain how to claim 21,400 free demo sats per rail per day on bao.markets
 - Feed loads from your own NIP-65 relay list by default, with a wider default relay set
