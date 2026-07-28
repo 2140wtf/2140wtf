@@ -449,8 +449,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     () => (wotActive ? visibleItems.map((item) => item.event.pubkey) : []),
     [wotActive, visibleItems],
   );
-  const { ranks: wotRanks, isLoading: wotLoading, scoredCount: wotScored, totalCount: wotTotal } =
-    useWotRanks(wotAuthors, wotActive);
+  const {
+    ranks: wotRanks,
+    isLoading: wotLoading,
+    isError: wotError,
+    refetch: wotRefetch,
+    scoredCount: wotScored,
+    totalCount: wotTotal,
+  } = useWotRanks(wotAuthors, wotActive);
   const wotFilteredItems = useMemo(() => {
     if (!wotActive || wotFilter.threshold <= 0 || !wotRanks) return visibleItems;
     return visibleItems.filter(
@@ -635,6 +641,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           scoredCount={wotScored}
           totalCount={wotTotal}
           isLoading={wotLoading}
+          isError={wotError}
+          onRetry={() => wotRefetch()}
         />
       )}
       {activeHashtag ? (
@@ -663,33 +671,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
                     className="border rounded-lg"
                   />
                 ))}
-                {hasNextPage && (
-                  <div ref={scrollRef} className={cn("col-span-full py-4", showLoadMoreButton && "flex justify-center")}>
-                    {showLoadMoreButton ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchNextPage()}
-                        disabled={isFetchingNextPage}
-                      >
-                        {isFetchingNextPage ? (
-                          <>
-                            <Loader2 className="size-4 animate-spin mr-1.5" />
-                            Loading…
-                          </>
-                        ) : (
-                          'Load more'
-                        )}
-                      </Button>
-                    ) : (
-                      isFetchingNextPage && (
-                        <div className="flex justify-center">
-                          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
               </div>
             ) : (
               <div>
@@ -704,33 +685,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
                     profileZapRecipient={item.profileZapRecipient}
                   />
                 ))}
-                {hasNextPage && (
-                  <div ref={scrollRef} className={cn("py-4", showLoadMoreButton && "flex justify-center")}>
-                    {showLoadMoreButton ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchNextPage()}
-                        disabled={isFetchingNextPage}
-                      >
-                        {isFetchingNextPage ? (
-                          <>
-                            <Loader2 className="size-4 animate-spin mr-1.5" />
-                            Loading…
-                          </>
-                        ) : (
-                          'Load more'
-                        )}
-                      </Button>
-                    ) : (
-                      isFetchingNextPage && (
-                        <div className="flex justify-center">
-                          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
               </div>
             )
           ) : wotActive && visibleItems.length > 0 && wotFilteredItems.length === 0 ? (
@@ -753,6 +707,43 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
             )
           ) : (
             <FeedEmptyState {...emptyProps} />
+          )}
+
+          {/* Infinite-scroll sentinel. Lives OUTSIDE the item-list branch so
+              pagination keeps running even when the current page's items are
+              all hidden (WoT filter, mute list) — otherwise the feed would
+              stall on an empty-looking page while older content exists. */}
+          {hasNextPage && !showSkeleton && (
+            <div ref={scrollRef} className={cn("col-span-full py-4", showLoadMoreButton && "flex justify-center")}>
+              {showLoadMoreButton ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-1.5" />
+                      Loading…
+                    </>
+                  ) : (
+                    'Load more'
+                  )}
+                </Button>
+              ) : (
+                isFetchingNextPage && (
+                  <div className="flex justify-center">
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                  </div>
+                )
+              )}
+            </div>
+          )}
+          {!hasNextPage && !isPending && wotFilteredItems.length > 0 && (
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              You're all caught up — pull down to refresh
+            </p>
           )}
         </PullToRefresh>
       )}
