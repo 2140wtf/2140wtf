@@ -10,6 +10,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
 import { APP_RELAYS } from "@/lib/platform";
+import { APP_RELAYS as APP_RELAY_DEFAULTS } from "@/lib/appRelays";
 import { preferPortableRelays, unusableRelaysReason } from "@/lib/relayUsability";
 import { toJoinMaterial, rehydrateCommunity, type CommunityListEntry, type JoinMaterial } from "@/concord-v2/lib/communityList";
 import { mintCommunity } from "@/concord-v2/lib/community";
@@ -166,18 +167,29 @@ export function inviteRefOf(invite: ParsedInviteLink): string {
 }
 
 /**
- * The default home-relay set for a NEW community: the app relays and the CORD
- * stock set (the wss:// interop relays every CORD client shares — jskitty,
- * asia.vectorapp, ditto, dreamith) as the reliable base, then the creator's
- * NIP-17 DM relays. A creator's inbox relays alone can be a poor community
- * home: an auth-gated or DM-only relay rejects the genesis gift wrap (kind
- * 1059), and if that's the whole set the create strands with "No relay accepted
- * the change." Leading with known write-open CORD relays guarantees the genesis
- * lands. Portable-filtered so a stray `ws://` dev relay can't lock https members
+ * The write-enabled subset of the app's default feed relays. A community can
+ * only live where members may publish, so read-only directory relays are
+ * excluded; the rest guarantee a broad, write-open home even when the
+ * creator's own relay list is tiny.
+ */
+const FEED_WRITE_RELAYS: string[] = APP_RELAY_DEFAULTS.relays
+  .filter((r) => r.write)
+  .map((r) => r.url);
+
+/**
+ * The default home-relay set for a NEW community: the creator's app relays,
+ * the write-enabled feed relay defaults, and the CORD stock set (the wss://
+ * interop relays every CORD client shares — jskitty, asia.vectorapp, ditto,
+ * dreamith) as the reliable base, then the creator's NIP-17 DM relays. A
+ * creator's inbox relays alone can be a poor community home: an auth-gated
+ * or DM-only relay rejects the genesis gift wrap (kind 1059), and if that's
+ * the whole set the create strands with "No relay accepted the change."
+ * Leading with known write-open relays guarantees the genesis lands.
+ * Portable-filtered so a stray `ws://` dev relay can't lock https members
  * out (#47), deduped, and capped to the recommended community relay count.
  */
 export function defaultCreateRelays(appRelays: string[], dmRelays: string[]): string[] {
-  return capRelays(preferPortableRelays([...appRelays, ...STOCK_RELAYS, ...dmRelays]));
+  return capRelays(preferPortableRelays([...appRelays, ...FEED_WRITE_RELAYS, ...STOCK_RELAYS, ...dmRelays]));
 }
 
 /**
