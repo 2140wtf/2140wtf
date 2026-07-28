@@ -168,6 +168,9 @@ export function BaoFundingPage() {
             <p className="text-muted-foreground mt-0.5">
               Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. The Compute credits tab uses real sats.
             </p>
+            <p className="text-muted-foreground mt-1">
+              <span className="text-amber-600 dark:text-amber-400 font-medium">Experimental:</span> demo sats are free, so market odds mean nothing — anyone can shift any vote to either side at will. Milestone resolution by crowd vote is a gameable mechanism; treat every outcome as a drill, not a signal.
+            </p>
             <div className="mt-2 rounded-md bg-background/60 px-3 py-2">
               <p className="font-medium text-amber-600 dark:text-amber-400">How to get demo sats for testing</p>
               <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-muted-foreground text-xs">
