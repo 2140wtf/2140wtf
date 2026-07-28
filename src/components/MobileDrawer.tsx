@@ -29,6 +29,7 @@ import { usePublishStatus } from '@/hooks/usePublishStatus';
 import { useToast } from '@/hooks/useToast';
 import { Input } from '@/components/ui/input';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
+import { PwaInstallButton } from '@/components/PwaInstallButton';
 import { resolveTheme, resolveThemeConfig } from '@/themes';
 
 /** Total width of the drawer background layer: 300px drawer + 36px arc overhang. */
@@ -321,6 +322,9 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                 />
               </div>
 
+              {/* Install as a home-screen app (PWA) — no store/APK needed */}
+              <PwaInstallButton onAction={handleClose} />
+
               {/* Nav items — scrollable */}
               <nav
                 className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1"
@@ -384,6 +388,9 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                   enableTextSearch
                 />
               </div>
+
+              {/* Install as a home-screen app (PWA) — no store/APK needed */}
+              <PwaInstallButton onAction={handleClose} />
 
               {/* Nav items — scrollable */}
               <nav className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-1">
