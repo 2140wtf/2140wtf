@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { Bot, CheckCircle2, Copy, Cpu, Loader2, Send, Zap } from 'lucide-react';
@@ -12,14 +12,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
   BAO_COMPUTE_CREDIT_FULFILLMENT_KIND,
+  BAO_COMPUTE_CREDIT_RECEIPT_KIND,
   BAO_COMPUTE_CREDIT_REQUEST_KIND,
   BAO_COMPUTE_CREDIT_TAG,
   buildComputeCreditFulfillment,
+  buildComputeCreditReceipt,
   buildComputeCreditRequest,
   parseComputeCreditFulfillment,
+  parseComputeCreditReceipt,
   parseComputeCreditRequest,
+  resolveCreditLockTarget,
+  aggregateAgentCreditStats,
   type ComputeCreditFulfillment,
+  type ComputeCreditReceipt,
   type ComputeCreditRequest,
+  type CreditLockMode,
 } from '@/lib/baoComputeCredits';
 import {
   ROUTSTR_BASE_URL,
@@ -27,7 +34,12 @@ import {
   routstrGetBalance,
   routstrGetInfo,
 } from '@/lib/routstr';
-import { useCashuWallet } from '@/hooks/useCashuWallet';
+import { NUTZAP_INFO_KIND, parseNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
+import { decodeCashuToken } from '@/lib/cashu/cashu';
+import { extractTokenLockPubkeys, getTokenAmount } from '@/pets/battle/lib/cashuEscrow';
+import { bytesToHex } from '@noble/curves/utils.js';
+import { nip19 } from 'nostr-tools';
+import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
@@ -52,6 +64,75 @@ function RequestAuthor({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const name = author.data?.metadata?.name;
   return <span className="font-mono">{name ?? `${pubkey.slice(0, 8)}…`}</span>;
+}
+
+/**
+ * Corroborated track record for an agent (credits review 2026-07).
+ *
+ * Every input kind is self-published — NOTHING here is proof of payment, so
+ * the copy says exactly that. "Funded" requires BOTH a non-self funder claim
+ * AND the agent's own confirmation; receipts are deduped per request and must
+ * reference the agent's own requests. Claimant pubkeys are inspectable — the
+ * real defense against sockpuppet rings.
+ */
+function AgentReputationBadge({ pubkey }: { pubkey: string }) {
+  const { nostr } = useNostr();
+  const [expanded, setExpanded] = useState<boolean | null>(null);
+
+  const statsQuery = useQuery({
+    queryKey: ['bao-compute-credit-reputation', pubkey],
+    queryFn: async ({ signal }) => {
+      // Full history (no 30d floor): the agent's own requests + receipts, and
+      // every 4972 (claims AND confirmations) addressed to them.
+      const events = await nostr.query(
+        [
+          { kinds: [BAO_COMPUTE_CREDIT_REQUEST_KIND, BAO_COMPUTE_CREDIT_RECEIPT_KIND], authors: [pubkey], limit: 500 },
+          { kinds: [BAO_COMPUTE_CREDIT_FULFILLMENT_KIND], '#p': [pubkey], limit: 500 },
+        ],
+        { signal },
+      );
+      const reqs = events.map(parseComputeCreditRequest).filter((r): r is ComputeCreditRequest => r !== null);
+      const fuls = events.map(parseComputeCreditFulfillment).filter((f) => f !== null);
+      const recs = events.map(parseComputeCreditReceipt).filter((r): r is ComputeCreditReceipt => r !== null);
+      return aggregateAgentCreditStats({ agentPubkey: pubkey, requests: reqs, fulfillments: fuls, receipts: recs });
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const stats = statsQuery.data;
+  if (!stats || (stats.requests === 0 && stats.receipts === 0)) return null;
+
+  const showClaimants = expanded ?? stats.claimants.length > 3;
+
+  return (
+    <div className="rounded-md border border-dashed px-2.5 py-1.5 text-[11px] text-muted-foreground space-y-1">
+      <p>
+        Track record: <span className="font-medium text-foreground">{stats.fundedRequests} funded</span>
+        {' · '}{stats.claimants.length} claimant{stats.claimants.length === 1 ? '' : 's'}
+        {' · '}{stats.receipts} receipt{stats.receipts === 1 ? '' : 's'}
+        {' · '}~{formatSats(stats.selfReportedSats)} sats self-reported
+      </p>
+      <p className="italic">Activity, not verified payment — check the claimants before funding.</p>
+      {stats.claimants.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => setExpanded(!showClaimants)}
+          >
+            {showClaimants ? 'Hide claimants' : `Show claimants (${stats.claimants.length})`}
+          </button>
+          {showClaimants && (
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+              {stats.claimants.map((c) => (
+                <span key={c} className="font-mono"><RequestAuthor pubkey={c} /></span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -127,10 +208,12 @@ export function ComputeCreditsTab() {
 
   const openRequests = requests.filter((r) => !fulfilledByRequest.has(r.id));
   const myRequests = user ? requests.filter((r) => r.pubkey === user.pubkey) : [];
+  const myFundedRequests = myRequests.filter((r) => fulfilledByRequest.has(r.id));
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['bao-compute-credit-requests'] });
     queryClient.invalidateQueries({ queryKey: ['bao-compute-credit-fulfillments'] });
+    queryClient.invalidateQueries({ queryKey: ['bao-compute-credit-reputation'] });
   };
 
   return (
@@ -141,14 +224,14 @@ export function ComputeCreditsTab() {
           <Zap className="size-4" /> REAL SATS — mainnet Cashu tokens via Routstr
         </p>
         <p className="text-muted-foreground mt-0.5">
-          Credits are real Cashu tokens locked to the agent's pubkey, redeemable for AI compute at{' '}
+          Credits are real Cashu tokens P2PK-locked to the agent, swept in-app, and redeemed for AI compute at{' '}
           <code className="text-xs">{ROUTSTR_BASE_URL}</code>. No demo flags here — tokens only, straight from your wallet.
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
-        <RedeemCard />
+        <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
       </div>
 
       <div className="space-y-3">
@@ -290,16 +373,47 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
 
 function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; onFulfilled: () => void }) {
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
   const { toast } = useToast();
   const publish = useNostrPublish();
-  const { allMints, sendToken } = useCashuWallet();
+  const { allMints, balances, mintUrl, sendToken } = useCashuWalletContext();
   const { sendMessage } = useNip17SendMessage();
   const [token, setToken] = useState<string | null>(null);
+  const [lockMode, setLockMode] = useState<CreditLockMode | null>(null);
+  const [allowBearer, setAllowBearer] = useState(false);
   const [dmState, setDmState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
   const [receiptFailed, setReceiptFailed] = useState(false);
 
   const isOwn = !!user && user.pubkey === request.pubkey;
   const hasWallet = allMints.length > 0;
+
+  // The minted funding token is the ONLY copy of the send proofs (the wallet
+  // persists just the change) — if this component unmounts after a DM failure
+  // (tab switch, navigation, crash) the sats are gone with the wallet already
+  // debited. Keep a localStorage outbox copy until the funder explicitly
+  // discards it (agent confirmed receipt).
+  const outboxKey = `bao_credit_outbox_${request.id}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(outboxKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { token?: unknown; lockMode?: CreditLockMode; dmState?: string };
+      if (saved && typeof saved.token === 'string' && saved.token) {
+        setToken(saved.token);
+        setLockMode(saved.lockMode ?? null);
+        setDmState(saved.dmState === 'sent' ? 'sent' : 'failed');
+      }
+    } catch { /* corrupted entry — ignore */ }
+  }, [outboxKey]);
+  useEffect(() => {
+    try {
+      if (token) localStorage.setItem(outboxKey, JSON.stringify({ token, lockMode, dmState }));
+      else localStorage.removeItem(outboxKey);
+    } catch { /* storage full/blocked — the on-screen copy still works */ }
+  }, [token, lockMode, dmState, outboxKey]);
+
+  // Shared cache with RedeemCard — which mints Routstr accepts for redeem.
+  const routstrInfoQuery = useQuery({ queryKey: ['routstr-info'], queryFn: routstrGetInfo, staleTime: 5 * 60_000, retry: 1 });
 
   const publishReceipt = useMutation({
     mutationFn: async () => {
@@ -320,25 +434,70 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
     mutationFn: async () => {
       if (!user) throw new Error('Log in to fund requests');
 
-      // 1. Mint a real Cashu token P2PK-locked to the agent's pubkey.
+      // 1. Resolve the lock target. Fetch the agent's latest VERIFIED
+      //    kind-10019 (author-checked; a forged info event could redirect the
+      //    lock to an attacker's wallet key), then apply the hierarchy:
+      //    wallet key → identity key → bearer (explicit opt-in only).
+      let nutzapInfo: { pubkey: string; mints: string[] } | null = null;
+      try {
+        const infoEvents = await nostr.query(
+          [{ kinds: [NUTZAP_INFO_KIND], authors: [request.pubkey], limit: 5 }],
+        );
+        const valid = infoEvents
+          .filter((ev) => parseNutzapInfoEvent(ev, request.pubkey) !== null)
+          .sort((a, b) => b.created_at - a.created_at);
+        nutzapInfo = valid.length > 0 ? parseNutzapInfoEvent(valid[0], request.pubkey) : null;
+      } catch {
+        nutzapInfo = null; // relay failure → identity lock fallback
+      }
+
+      const target = resolveCreditLockTarget({
+        nutzapInfo,
+        agentIdentityPubkey: request.pubkey,
+        funderMints: allMints.map((m) => m.url),
+        routstrMints: routstrInfoQuery.data?.mints ?? [],
+        activeMint: mintUrl,
+        allowBearer,
+      });
+
+      // 2. Balance check at the chosen mint — a raw "Insufficient balance: 0"
+      //    from deep in the wallet tells the funder nothing.
+      const mintBalance = balances[target.mintUrl] ?? 0;
+      if (mintBalance < request.amountSats) {
+        const short = target.mintUrl.replace(/^https?:\/\//, '');
+        throw new Error(`Not enough balance at ${short} (${mintBalance} sats). Fund that mint first.`);
+      }
+
+      // 3. Mint a real Cashu token, P2PK-locked unless bearer was opted in.
       const memo = `₿AO compute credits: ${request.purpose.slice(0, 80)}`;
-      const cashuToken = await sendToken(request.amountSats, memo, request.pubkey);
+      const cashuToken = await sendToken(
+        request.amountSats,
+        memo,
+        target.lockPubkey ?? undefined,
+        target.mintUrl,
+      );
       if (!cashuToken) throw new Error('Wallet did not return a token — check your balance and mints.');
       setToken(cashuToken);
+      setLockMode(target.mode);
 
-      // 2. Deliver the token by NIP-17 DM (best-effort; the copyable token below is the fallback).
+      // 4. Deliver the token by NIP-17 DM (best-effort; the copyable token below is the fallback).
+      const redeemHint = target.mode === 'wallet-key'
+        ? 'Locked to your wallet key — paste it in 2140.wtf → ₿AO Fund → Compute credits → Redeem; the app sweeps it to your wallet and redeems at Routstr for you.'
+        : target.mode === 'identity-key'
+          ? 'Locked to your Nostr pubkey — paste it in 2140.wtf → ₿AO Fund → Compute credits → Redeem (the sweep confirms with your signer or pasted nsec), or sweep it with your own tooling.'
+          : '⚠️ UNLOCKED bearer token — whoever sees it can claim it. Redeem it immediately at Routstr.';
       setDmState('sending');
       try {
         await sendMessage({
           recipientPubkey: request.pubkey,
-          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(request.amountSats)} sats).\n\nRedeem this Cashu token at Routstr (paste it in 2140.wtf → ₿AO Fund → Compute credits → Redeem):\n\n${cashuToken}`,
+          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(request.amountSats)} sats).\n\n${redeemHint}\n\n${cashuToken}`,
         });
         setDmState('sent');
       } catch {
         setDmState('failed');
       }
 
-      // 3. Public claim marker (kind 4972). Token NEVER goes in an event.
+      // 5. Public claim marker (kind 4972). Token NEVER goes in an event.
       //    This does NOT close the request — only the agent's own confirmation
       //    does (anyone can publish a 4972, so a funder's receipt is a claim,
       //    not proof). If this fails the token is already minted and the wallet
@@ -353,12 +512,14 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       }
     },
     onSuccess: () => {
-      toast({ title: 'Credits sent', description: `${formatSats(request.amountSats)} sats locked to the agent's pubkey.` });
+      toast({ title: 'Credits sent', description: `${formatSats(request.amountSats)} sats sent to the agent.` });
     },
     onError: (e) => {
-      // Only reachable before a token exists (sendToken failure); once a
-      // token is minted the mutation never throws, so it cannot be lost here.
+      // Only reachable before a token exists (resolution/balance/sendToken
+      // failure); once a token is minted the mutation never throws, so it
+      // cannot be lost here.
       setToken(null);
+      setLockMode(null);
       setDmState('idle');
       toast({ title: 'Funding failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     },
@@ -374,6 +535,9 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
               <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
             </div>
             <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">{request.purpose}</p>
+            <div className="mt-1.5">
+              <AgentReputationBadge pubkey={request.pubkey} />
+            </div>
           </div>
           <span className="text-xs text-muted-foreground shrink-0">{timeAgo(request.createdAt)}</span>
         </div>
@@ -393,7 +557,11 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                 {dmState === 'failed' && ' — DM failed, share it manually'}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Locked to the agent's pubkey (P2PK). Keep this copy until they confirm receipt:
+                {lockMode === 'bearer'
+                  ? '⚠️ Unlocked bearer token — whoever sees it can claim it. Keep this copy until the agent confirms receipt:'
+                  : lockMode === 'identity-key'
+                    ? "Locked to the agent's Nostr pubkey (P2PK). Keep this copy until they confirm receipt:"
+                    : "Locked to the agent's wallet key (P2PK). Keep this copy until they confirm receipt:"}
               </p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-[10px] break-all rounded bg-background/60 px-2 py-1.5 max-h-16 overflow-y-auto">{token}</code>
@@ -404,6 +572,15 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                   <Copy className="size-3.5" />
                 </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground">
+                This copy is kept on this device (survives tab switches) until you discard it.
+              </p>
+              <Button
+                size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground"
+                onClick={() => { setToken(null); setLockMode(null); setDmState('idle'); }}
+              >
+                Agent confirmed receipt — discard copy
+              </Button>
               {receiptFailed && (
                 <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-2">
                   <p className="text-[11px] text-amber-600 dark:text-amber-400">
@@ -422,19 +599,34 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              {isOwn ? 'This is your own request.' : hasWallet ? 'Real sats from your Cashu wallet, P2PK-locked to the agent.' : 'Add a Cashu mint in Wallet to fund requests.'}
-            </p>
-            {!isOwn && user && (
-              <Button
-                size="sm" className="gap-1.5 shrink-0"
-                disabled={!hasWallet || fulfillMutation.isPending}
-                onClick={() => fulfillMutation.mutate()}
-              >
-                {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                Send {formatSats(request.amountSats)} sats
-              </Button>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {isOwn ? 'This is your own request.' : hasWallet ? 'Real sats from your Cashu wallet, P2PK-locked to the agent.' : 'Add a Cashu mint in Wallet to fund requests.'}
+              </p>
+              {!isOwn && user && (
+                <Button
+                  size="sm" className="gap-1.5 shrink-0"
+                  disabled={!hasWallet || fulfillMutation.isPending}
+                  onClick={() => fulfillMutation.mutate()}
+                >
+                  {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                  Send {formatSats(request.amountSats)} sats
+                </Button>
+              )}
+            </div>
+            {!isOwn && user && hasWallet && (
+              <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={allowBearer}
+                  onChange={(e) => setAllowBearer(e.target.checked)}
+                />
+                <span>
+                  Send <span className="text-amber-600 dark:text-amber-400 font-medium">unlocked</span> (bearer token in an encrypted DM — only for agents that ask for it)
+                </span>
+              </label>
             )}
           </div>
         )}
@@ -445,10 +637,37 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
 
 // ── Agent: redeem a token at Routstr ──────────────────────────────────────────
 
-function RedeemCard() {
+/**
+ * Redeem flow (credits review 2026-07 — the old "paste locked token straight
+ * at Routstr" flow was broken: Routstr redeems via an UNSIGNED split at the
+ * mint, which NUT-11-enforcing mints reject for P2PK-locked proofs):
+ *
+ *   locked to wallet key → sweep with the wallet's own NIP-60 key (no nsec)
+ *   locked to anything else (legacy identity-key tokens) → sweep with a
+ *       pasted nsec/hex (remote-signer users included)
+ *   unlocked → straight to Routstr
+ *
+ * After a sweep the app re-sends the POST-FEE amount as an unlocked token and
+ * redeems THAT at Routstr. If Routstr fails after the sweep, the unlocked
+ * token is immediately received back so the sats return to the wallet.
+ */
+function RedeemCard({ myFundedRequests, onReceiptPublished }: {
+  myFundedRequests: ComputeCreditRequest[];
+  onReceiptPublished: () => void;
+}) {
+  const { user } = useCurrentUser();
   const { toast } = useToast();
+  const publish = useNostrPublish();
+  const { sendToken, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
   const [token, setToken] = useState('');
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [redeemedSats, setRedeemedSats] = useState(0);
+  const [identitySweep, setIdentitySweep] = useState(false);
+  const [lockHints, setLockHints] = useState<string[]>([]);
+  const [privkeyPaste, setPrivkeyPaste] = useState('');
+  const [receiptRequestId, setReceiptRequestId] = useState<string | null>(null);
+  const [receiptNote, setReceiptNote] = useState('');
+  const [receiptPublished, setReceiptPublished] = useState(false);
 
   const infoQuery = useQuery({ queryKey: ['routstr-info'], queryFn: routstrGetInfo, staleTime: 5 * 60_000, retry: 1 });
   const balanceQuery = useQuery({
@@ -458,17 +677,151 @@ function RedeemCard() {
     refetchInterval: 60_000,
   });
 
+  /** Re-send swept sats as an unlocked token for Routstr (small fee-reserve retry). */
+  const resendUnlocked = async (amount: number, mint?: string): Promise<string> => {
+    const memo = 'Routstr compute redeem';
+    let t = await sendToken(amount, memo, undefined, mint);
+    if (!t) {
+      const reserve = Math.max(1, Math.ceil(amount * 0.001));
+      if (amount - reserve > 0) t = await sendToken(amount - reserve, memo, undefined, mint);
+    }
+    if (!t) {
+      throw new Error(`Swept ${formatSats(amount)} sats to your wallet but couldn't prepare the Routstr token — your sats are safe in your wallet. Retry the redeem.`);
+    }
+    return t;
+  };
+
+  /** Redeem an unlocked token at Routstr; on failure put the bearer token back in the wallet. */
+  const redeemUnlocked = async (unlocked: string): Promise<{ apiKey: string; balance: number }> => {
+    try {
+      return await routstrCreateBalanceFromCashu(unlocked);
+    } catch (e) {
+      // receiveToken journals the token BEFORE contacting the mint and never
+      // throws (0 on failure) — so even if the receive-back fails right now,
+      // the wallet's pending-receive reconciler retries it automatically on
+      // the next app launch. Say that honestly instead of claiming the sats
+      // are already back.
+      const returned = await receiveToken(unlocked);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(returned > 0
+        ? `Routstr redeem failed (${msg}). The sats were returned to your Cashu wallet — retry when Routstr is back.`
+        : `Routstr redeem failed (${msg}). The token is saved in your wallet's recovery journal and will be credited automatically on the next app launch — retry the redeem when Routstr is back.`);
+    }
+  };
+
+  const handleRedeemSuccess = ({ apiKey: key, sats }: { apiKey: string; balance: number; sats: number }) => {
+    setApiKey(key);
+    setRedeemedSats(sats);
+    setToken('');
+    setIdentitySweep(false);
+    setLockHints([]);
+    setPrivkeyPaste('');
+    setReceiptRequestId(myFundedRequests[0]?.id ?? null);
+    setReceiptPublished(false);
+    toast({ title: 'Token redeemed', description: 'Your Routstr compute key is ready — store it somewhere safe.' });
+  };
+
   const redeemMutation = useMutation({
-    mutationFn: () => routstrCreateBalanceFromCashu(token.trim()),
-    onSuccess: ({ apiKey: key }) => {
-      setApiKey(key);
-      setToken('');
-      toast({ title: 'Token redeemed', description: 'Your Routstr compute key is ready — store it somewhere safe.' });
+    mutationFn: async (): Promise<{ apiKey: string; balance: number; sats: number }> => {
+      const raw = token.trim();
+      const locks = extractTokenLockPubkeys(raw);
+      const faceSats = getTokenAmount(raw);
+
+      if (locks.length === 0) {
+        // Bearer token — straight to Routstr.
+        const res = await redeemUnlocked(raw);
+        return { ...res, sats: faceSats };
+      }
+
+      // The sweep→resend step draws from ONE mint — a token spanning several
+      // mints would brick the flow (resend sees only the first mint's share,
+      // and the sweep already marked the token processed so retry is
+      // impossible). Refuse BEFORE touching anything; the wallet's own
+      // receive handles multi-mint tokens fine.
+      const tokenMints = [...new Set((decodeCashuToken(raw) ?? []).map((e) => e.mintUrl).filter(Boolean))];
+      if (tokenMints.length > 1) {
+        throw new Error('This token spans multiple mints — receive it in the Wallet tab first, then send yourself a single-mint token and redeem that.');
+      }
+
+      const walletPub = getWalletP2pkPubkey()?.toLowerCase() ?? null;
+      // Length-gated normalization: only 66-char compressed locks lose the
+      // 02/03 prefix — a genuine x-only 64-char lock that happens to start
+      // with those bytes must NOT be mangled.
+      const xonlyLocks = locks.map((l) => (l.length === 66 ? l.slice(2) : l));
+      if (walletPub && xonlyLocks.includes(walletPub)) {
+        // Locked to THIS wallet's NIP-60 key — sweep without any nsec.
+        const swept = await sweepWalletLockedToken(raw);
+        if (!swept) throw new Error('Sweep failed — check the wallet error, or set up your Cashu wallet first.');
+        const mint = tokenMints[0];
+        const unlocked = await resendUnlocked(swept, mint);
+        const res = await redeemUnlocked(unlocked);
+        return { ...res, sats: swept };
+      }
+
+      // Locked to a key this wallet doesn't hold. That may be the user's
+      // Nostr identity key (legacy tokens) OR a wallet key from another
+      // app/device (the funder locks to whatever the latest kind-10019
+      // advertises — not necessarily THIS browser's wallet key). Show the
+      // actual lock pubkeys so the user can tell which key is needed instead
+      // of blindly pasting an identity nsec that can never work.
+      setLockHints(locks);
+      setIdentitySweep(true);
+      throw new Error('This token is locked to a key this wallet doesn\'t hold (see below). If it\'s your Nostr key, paste your nsec/hex; if it\'s a wallet key from another app or device, sweep it there or paste that wallet\'s key.');
     },
+    onSuccess: handleRedeemSuccess,
     onError: (e) => toast({ title: 'Redeem failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
+  const identitySweepMutation = useMutation({
+    mutationFn: async (): Promise<{ apiKey: string; balance: number; sats: number }> => {
+      const raw = token.trim();
+      const v = privkeyPaste.trim();
+      let hex: string | null = null;
+      if (/^[0-9a-f]{64}$/i.test(v)) {
+        hex = v.toLowerCase();
+      } else if (v.startsWith('nsec1')) {
+        try {
+          const decoded = nip19.decode(v);
+          if (decoded.type === 'nsec') hex = bytesToHex(decoded.data);
+        } catch { /* fall through */ }
+      }
+      if (!hex) throw new Error('Invalid key — paste an nsec1… or 64-char hex private key.');
+
+      const tokenMints = [...new Set((decodeCashuToken(raw) ?? []).map((e) => e.mintUrl).filter(Boolean))];
+      if (tokenMints.length > 1) {
+        throw new Error('This token spans multiple mints — receive it in the Wallet tab first, then send yourself a single-mint token and redeem that.');
+      }
+
+      const swept = await receiveLockedToken(raw, hex);
+      if (!swept) throw new Error('Sweep failed — is this the key the token is locked to?');
+      const mint = tokenMints[0];const unlocked = await resendUnlocked(swept, mint);
+      const res = await redeemUnlocked(unlocked);
+      return { ...res, sats: swept };
+    },
+    onSuccess: handleRedeemSuccess,
+    onError: (e) => toast({ title: 'Sweep failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+  });
+
+  const receiptMutation = useMutation({
+    mutationFn: async () => {
+      if (!receiptRequestId) throw new Error('Pick the request this redeem paid for.');
+      await publish.mutateAsync(buildComputeCreditReceipt({
+        requestId: receiptRequestId,
+        amountSats: redeemedSats,
+        note: receiptNote || 'Redeemed at Routstr for AI compute.',
+        provider: 'routstr',
+      }));
+    },
+    onSuccess: () => {
+      setReceiptPublished(true);
+      toast({ title: 'Spend receipt published', description: 'Funders can now see the credit was redeemed.' });
+      onReceiptPublished();
+    },
+    onError: (e) => toast({ title: 'Receipt failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+  });
+
   const acceptedMints = infoQuery.data?.mints ?? [];
+  const busy = redeemMutation.isPending || identitySweepMutation.isPending;
 
   return (
     <Card>
@@ -478,6 +831,7 @@ function RedeemCard() {
         </CardTitle>
         <CardDescription>
           Paste a Cashu token you received → get an <code className="text-xs">sk_…</code> key that pays for AI inference.
+          Locked tokens are swept to your wallet first.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -510,6 +864,50 @@ function RedeemCard() {
                 <code className="text-[10px]">{ROUTSTR_BASE_URL}/v1</code>. Whoever holds this key can spend the balance.
               </p>
             </div>
+
+            {/* Spend receipt — published ALONGSIDE the key reveal so the moment isn't lost. */}
+            {user && !receiptPublished && (
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="text-xs font-medium">Publish a spend receipt?</p>
+                <p className="text-[11px] text-muted-foreground">
+                  A signed public note (kind {BAO_COMPUTE_CREDIT_RECEIPT_KIND}) telling funders this credit was redeemed for compute. Builds your track record. The key above is NEVER included.
+                </p>
+                {myFundedRequests.length > 0 ? (
+                  <>
+                    <select
+                      className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                      value={receiptRequestId ?? ''}
+                      onChange={(e) => setReceiptRequestId(e.target.value)}
+                    >
+                      {myFundedRequests.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {formatSats(r.amountSats)} sats — {r.purpose.slice(0, 50) || r.id.slice(0, 8)}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      value={receiptNote}
+                      onChange={(e) => setReceiptNote(e.target.value)}
+                      placeholder="Note (optional) — e.g. compute for milestone X"
+                      className="text-xs"
+                    />
+                    <Button
+                      size="sm" variant="outline" className="w-full gap-1.5"
+                      disabled={!receiptRequestId || receiptMutation.isPending}
+                      onClick={() => receiptMutation.mutate()}
+                    >
+                      {receiptMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                      Publish receipt ({formatSats(redeemedSats)} sats)
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    No funded requests found for your account — nothing to attach the receipt to.
+                  </p>
+                )}
+              </div>
+            )}
+
             <Button variant="outline" size="sm" className="w-full" onClick={() => setApiKey(null)}>
               Redeem another token
             </Button>
@@ -518,14 +916,44 @@ function RedeemCard() {
           <div className="space-y-3">
             <Textarea
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => { setToken(e.target.value); setIdentitySweep(false); setLockHints([]); }}
               rows={3}
               placeholder="cashuA… / cashuB… token from a funder"
               className={cn('font-mono text-xs')}
             />
+            {identitySweep && (
+              <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  This token is locked to a key this wallet doesn't hold. It may be your Nostr identity key (legacy tokens) or a wallet key from another app/device (the funder locks to whatever your latest kind-10019 advertises). Paste the matching private key to sweep it — it never leaves this device.
+                </p>
+                {lockHints.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400">Locked to pubkey{lockHints.length > 1 ? 's' : ''}:</p>
+                    {lockHints.map((l) => (
+                      <code key={l} className="block text-[10px] break-all rounded bg-background/60 px-2 py-1">{l}</code>
+                    ))}
+                  </div>
+                )}
+                <Input
+                  value={privkeyPaste}
+                  onChange={(e) => setPrivkeyPaste(e.target.value)}
+                  placeholder="nsec1… or 64-char hex"
+                  className="font-mono text-xs"
+                  type="password"
+                />
+                <Button
+                  size="sm" className="w-full gap-1.5"
+                  disabled={!privkeyPaste.trim() || busy}
+                  onClick={() => identitySweepMutation.mutate()}
+                >
+                  {identitySweepMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
+                  Sweep &amp; redeem
+                </Button>
+              </div>
+            )}
             <Button
               className="w-full gap-1.5"
-              disabled={!token.trim().startsWith('cashu') || redeemMutation.isPending}
+              disabled={!token.trim().startsWith('cashu') || busy}
               onClick={() => redeemMutation.mutate()}
             >
               {redeemMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
