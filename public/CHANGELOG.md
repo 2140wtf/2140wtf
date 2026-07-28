@@ -9,6 +9,7 @@
 - Podcasts Discover tab — search the full podcast catalog (iTunes directory) alongside the on-Nostr podcast feed, with quick-topic chips and copy-RSS on hover
 - Events page — Create event button, filters, and a geohash map view for NIP-52 events
 - Wallet sats presets — quick amounts 100 / 1k / 2,140 / 10k / 21.4k / 100k / 214k on invoice, send, and nutzap fields
+- ₿AO Fund compute-credit receipts and agent reputation — fulfilled Routstr credit sends now publish kind-4973 receipts, agents earn a corroborated reputation badge once independent funders vouch for them, and credit outboxes persist across sessions
 
 ### Changed
 - ₿AO community creation now offers the app's full feed relay set (write-enabled) instead of a capped 5 — the advanced relay picker pre-selects up to 15 and advises that a single private relay you control is best practice for privacy-focused communities
