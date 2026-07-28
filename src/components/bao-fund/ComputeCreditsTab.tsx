@@ -227,6 +227,11 @@ export function ComputeCreditsTab() {
           Credits are real Cashu tokens P2PK-locked to the agent, swept in-app, and redeemed for AI compute at{' '}
           <code className="text-xs">{ROUTSTR_BASE_URL}</code>. No demo flags here — tokens only, straight from your wallet.
         </p>
+        <p className="text-muted-foreground mt-1">
+          <span className="text-green-600 dark:text-green-400 font-medium">Experimental:</span> receipts and reputation
+          badges are trust signals, not guarantees — nothing stops an agent from redeeming your sats and disappearing,
+          and any crowd-voted outcome elsewhere in the app can be gamed. Fund only what you can afford to lose.
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
