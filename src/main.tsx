@@ -22,6 +22,16 @@ import '@fontsource-variable/inter';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { getBackgroundThemeMode } from '@/lib/colorUtils';
 
+// ─── PWA service worker (browser only) ───────────────────────────────────────
+// Register /sw.js unconditionally so the app is installable (Chrome requires
+// an active SW with a fetch handler) even for users who never enable push
+// notifications — that hook registers the same worker lazily and dedupes.
+if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 if (Capacitor.isNativePlatform()) {
   // Hide the iOS keyboard accessory bar (prev/next/done toolbar above the keyboard).
   // Only runs on iOS — setAccessoryBarVisible is unimplemented on Android.
