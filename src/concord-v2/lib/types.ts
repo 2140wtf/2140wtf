@@ -9,8 +9,14 @@
 
 import type { GroupKey } from "@/concord-v2/lib/derive";
 
-/** Protocol recommendation for a community's relay set (CORD-02 §6). */
-export const MAX_COMMUNITY_RELAYS = 5;
+/**
+ * Protocol recommendation for a community's relay set (CORD-02 §6). Kept in
+ * line with the app's default relay set so a creator can host a community on
+ * the same broad set their feed uses; members who care about metadata
+ * privacy are advised (in the create UI) to pare the set down to a single
+ * private relay instead.
+ */
+export const MAX_COMMUNITY_RELAYS = 15;
 
 /** Community/channel/role name cap: 64 bytes of UTF-8 (CORD-02 §6). */
 export const NAME_MAX_BYTES = 64;
