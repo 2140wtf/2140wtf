@@ -209,10 +209,13 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </p>
                 <p className="mb-2 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">Privacy tip:</span>{" "}
-                  for a privacy-focused community, a single private relay you control
-                  is best practice. Relays can't read sealed messages, but every
-                  public relay you add can see member pubkeys and activity timing —
-                  fewer relays, less metadata. The pre-selected set is the app's
+                  messages, member list, and community metadata stay sealed — relays
+                  only ever hold ciphertext. What every relay you add CAN see is
+                  traffic shape (timing and volume) and direct-invite handoffs
+                  (a direct invite p-tags the invitee once; anonymous link joins
+                  don't). For a privacy-focused community use a single relay you
+                  control, ideally with NIP-42 read auth — and prefer invite
+                  links over direct invites. The pre-selected set is the app's
                   full feed relay list: great for reach, loud for privacy.
                 </p>
                 <RelayListEditor

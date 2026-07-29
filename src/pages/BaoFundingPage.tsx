@@ -254,6 +254,7 @@ export function BaoFundingPage() {
         onOpenChange={setCreateOpen}
         onCreated={(id) => { invalidate(); setSelectedId(id); }}
         initialTitle={searchParams.get('title') ?? undefined}
+        initialRepo={searchParams.get('repo') ?? undefined}
       />
       <ContributeDialog
         fundraiser={contributeTarget}
