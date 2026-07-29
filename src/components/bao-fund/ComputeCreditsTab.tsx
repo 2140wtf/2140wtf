@@ -47,6 +47,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useAuthor } from '@/hooks/useAuthor';
 import { RoutstrExplainer } from './RoutstrExplainer';
+import { AgentGateCheck } from './AgentGateCheck';
 import { cn } from '@/lib/utils';
 
 function formatSats(n: number): string {
@@ -238,6 +239,7 @@ export function ComputeCreditsTab() {
 
       <RoutstrExplainer />
 
+      <AgentGateCheck>
       <div className="grid gap-6 md:grid-cols-2">
         <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
         <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
@@ -265,6 +267,7 @@ export function ComputeCreditsTab() {
           </div>
         )}
       </div>
+      </AgentGateCheck>
     </div>
   );
 }
