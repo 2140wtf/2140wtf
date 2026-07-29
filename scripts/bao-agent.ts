@@ -11,9 +11,10 @@
  *
  * Modes:
  *   create [--name "…"] [--agent-only]   genesis + first invite, saves owner state
- *   invite [--label L]                   mint another invite link (owner state)
+ *   invite [--label L] [--single-use]    mint another invite link (owner state)
  *   join <invite-url> [--as name]        join with a FRESH key, saves member state
- *                                        (grinds the agent_gate PoW automatically)
+ *                                        (grinds the agent_gate PoW + checks
+ *                                        single-use spend automatically)
  *   say <text> [--as name]               post to #general
  *   read [--as name]                     print #general timeline + member list
  *   whoami [--as name]                   print the identity's npub
@@ -38,7 +39,7 @@ import {
   openControlWraps,
   sealEdition,
 } from "@/concord-v2/lib/control";
-import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
+import { buildJoinRumor, currentGuestbookGroup, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
 import {
   AGENT_GATE_METADATA_KEY,
   DEFAULT_AGENT_GATE_DIFFICULTY,
@@ -48,6 +49,8 @@ import {
 import {
   buildBundleEvent,
   buildInviteUrl,
+  buildRevocationEvent,
+  inviteCommitment,
   mintLinkSigner,
   mintToken,
   parseBundleEvent,
@@ -85,6 +88,7 @@ interface SavedInvite {
   link_pk: string; // hex
   url: string;
   created_at: number;
+  max_uses?: number;
 }
 
 interface State {
@@ -242,7 +246,7 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
   await invite(name);
 }
 
-async function invite(name: string, label?: string): Promise<void> {
+async function invite(name: string, label?: string, singleUse = false): Promise<void> {
   const state = loadState(name);
   if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
   const sk = hexToBytes(state.sk);
@@ -263,10 +267,11 @@ async function invite(name: string, label?: string): Promise<void> {
     name: community.name,
     creator_npub: pubkey,
     ...(label ? { label } : {}),
+    ...(singleUse ? { max_uses: 1 } : {}),
   };
 
   const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-  await publishAll(community.relays, bundleEvent, "invite bundle");
+  await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
 
   // Member-facing Registry (vsk 8): this creator's live link coordinates.
   state.registry_version += 1;
@@ -284,10 +289,10 @@ async function invite(name: string, label?: string): Promise<void> {
   );
 
   const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
-  state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000) });
+  state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
   saveState(name, state);
 
-  console.log(`\nInvite link minted${label ? ` ("${label}")` : ""} — share EITHER origin (same secret):`);
+  console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
   for (const url of urls) console.log(`  ${url}`);
 }
 
@@ -331,7 +336,18 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   const gate = agentGateOf(folded.metadata);
   if (gate) console.log(`  agent_gate detected (pow, difficulty ${gate.difficulty}) — grinding…`);
 
-  const attribution = { creator: bundle.creator_npub ?? "", ...(bundle.label ? { label: bundle.label } : {}) };
+  // Every Join from this link cites the token commitment (sha256 of the
+  // unlock token). A single-use link is spent once the Guestbook shows one.
+  const commitment = inviteCommitment(parsed.token);
+  if (bundle.max_uses === 1) {
+    const gb = currentGuestbookGroup(community);
+    const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
+    if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(gbWraps, [gb])), commitment)) {
+      throw new Error("That invite link was single-use and has already been used. Ask for a fresh one.");
+    }
+  }
+
+  const attribution = { creator: bundle.creator_npub ?? "", ...(bundle.label ? { label: bundle.label } : {}), commitment };
   const rumor = gate
     ? grindJoinRumor(pubkey, Date.now(), gate.difficulty, attribution)
     : buildJoinRumor(pubkey, Date.now(), attribution);
@@ -398,9 +414,7 @@ async function say(name: string, text: string): Promise<void> {
 async function read(name: string): Promise<void> {
   const state = loadState(name);
   const community = communityOf(state.community, state.private_channels);
-  const channel = await generalChannel(state);
-
-  // Timeline.
+  const channel = await generalChannel(state);  // Timeline.
   const group = channelGroupKey(community.root, channel.id, 0n);
   const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] });
   const messages: { ms: number; author: string; content: string }[] = [];
@@ -437,6 +451,45 @@ async function read(name: string): Promise<void> {
   for (const [pk, status] of members) {
     console.log(`  ${nip19.npubEncode(pk)} — ${status}`);
   }
+
+  // Single-use sweep (owner): a single-use link dies the moment the Guestbook
+  // shows a Join citing its token commitment — tombstone the bundle and drop
+  // the coordinate from the Registry, like the app's useSingleUseSweep2.
+  if (state.role === "owner") {
+    const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
+    const remaining = [];
+    for (const inv of state.invites) {
+      if (inv.max_uses !== 1) {
+        remaining.push(inv);
+        continue;
+      }
+      if (!singleUseLinkUsed(opened, inviteCommitment(hexToBytes(inv.token)))) {
+        remaining.push(inv);
+        continue;
+      }
+      const sk = hexToBytes(state.sk);
+      const signer = signerOf(sk);
+      await publishAll(community.relays, buildRevocationEvent(hexToBytes(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
+      state.registry_version += 1;
+      await publishAll(
+        community.relays,
+        await sealEdition(
+          buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
+            actorPubkey: getPublicKey(sk),
+            version: BigInt(state.registry_version),
+          }),
+          currentControlGroup(community),
+          signer,
+        ),
+        "invite registry edition",
+      );
+      console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
+    }
+    if (remaining.length !== state.invites.length) {
+      state.invites = remaining;
+      saveState(name, state);
+    }
+  }
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
@@ -455,7 +508,7 @@ async function main(): Promise<void> {
       await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
       break;
     case "invite":
-      await invite(as, argValue(rest, "--label"));
+      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"));
       break;
     case "join": {
       const url = rest.find((a) => !a.startsWith("--") && a !== as);
