@@ -7,7 +7,6 @@ import { useBaoMarketPriceHistory, type PriceHistoryRange } from '@/hooks/useBao
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { hslStringToHex } from '@/lib/colorUtils';
-import { synthesizeBaoSparkline } from '@/lib/synthesizeBaoSparkline';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
 const TIME_RANGES: PriceHistoryRange[] = ['1H', '1D', '1W', '1M', 'ALL'];
@@ -75,15 +74,19 @@ function computeOutcomeData(
 
   if (historyPoints && historyPoints.length >= 2) {
     areaData = historyPoints.map((p) => ({ time: p.time, value: p.price * 100 }));
-  } else {
-    const prob = Math.max(0, Math.min(1, fallbackProb));
-    const bucketCount = range === '1H' ? 12 : 20;
+  } else if (mirroredValues && mirroredValues.length >= 2) {
+    // Binary NO derived from real YES history (parimutuel prices sum to 1).
+    const bucketCount = mirroredValues.length;
     const now = Math.floor(Date.now() / 1000);
     const step = 86400 / (bucketCount - 1);
-    const values = mirroredValues
-      ? mirroredValues.map((v) => 1 - v)
-      : synthesizeBaoSparkline(prob, `${marketId}:${outcome.label}`, bucketCount);
-    areaData = values.map((v, i) => ({ time: now - 86400 + Math.floor(i * step), value: v * 100 }));
+    areaData = mirroredValues.map((v, i) => ({
+      time: now - 86400 + Math.floor(i * step),
+      value: (1 - v) * 100,
+    }));
+  } else {
+    // No real trade history — leave empty so the chart shows the honest
+    // "No trade history yet" state instead of a fabricated sparkline.
+    areaData = [];
   }
 
   const values = areaData.map((p) => p.value);
