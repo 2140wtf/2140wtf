@@ -123,8 +123,10 @@ export async function ingestWireEvents(
   for (const [channel, wraps] of wrapsByChannel) {
     const opened = await openChatBatch(wraps, channel);
     if (opened.length === 0) continue;
+    // writeRumors rings `c2:<id>` itself AFTER the store commit — don't add
+    // the scope here: a pre-commit ring makes hooks re-read a store that
+    // can't see the message yet (one guaranteed miss per live message).
     writeRumors(opened);
-    scopes.add(`c2:${channel.idHex}`);
     const communityIdHex = spec?.v2CommunityByChannel.get(channel.idHex);
     if (live) {
       for (const c of v2Candidates(opened, channel, communityIdHex, self)) candidates.push(c);
