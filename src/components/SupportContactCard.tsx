@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, User } from 'lucide-react';
+import { MessageCircle, User, Mail } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -67,6 +67,14 @@ export function SupportContactCard({ className }: SupportContactCardProps) {
             </Link>
           </Button>
         </div>
+
+        <a
+          href="mailto:hello@2140.wtf"
+          className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Mail className="size-4" />
+          hello@2140.wtf
+        </a>
       </div>
     </div>
   );
