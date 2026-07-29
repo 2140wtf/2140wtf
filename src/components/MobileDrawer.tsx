@@ -17,7 +17,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLoginActions } from '@/hooks/useLoginActions';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useFeedSettings } from '@/hooks/useFeedSettings';
-import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useHasUnreadNotifications, useUnreadNotificationsCount } from '@/hooks/useHasUnreadNotifications';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
 import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
@@ -59,6 +59,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
   const { config } = useAppContext();
   const homePage = config.homePage;
   const hasUnread = useHasUnreadNotifications();
+  const unreadCount = useUnreadNotificationsCount();
   const hasUnreadMessages = useHasUnreadMessages();
   const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const [editing, setEditing] = useState(false);
@@ -350,6 +351,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                       if (id === 'messages') return hasUnreadMessages.hasUnread || hasUnreadGroups;
                       return undefined;
                     }}
+                    getIndicatorCount={(id) => id === 'notifications' ? unreadCount : undefined}
                     linkClassName="text-base"
                     homePage={homePage}
                     minimal
@@ -415,6 +417,7 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
                       if (id === 'messages') return hasUnreadMessages.hasUnread || hasUnreadGroups;
                       return undefined;
                     }}
+                    getIndicatorCount={(id) => id === 'notifications' ? unreadCount : undefined}
                     linkClassName="text-base"
                     homePage={homePage}
                     minimal

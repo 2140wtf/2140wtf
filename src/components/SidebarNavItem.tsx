@@ -137,6 +137,8 @@ export interface SidebarNavItemProps {
   onClick?: (e: React.MouseEvent) => void;
   profilePath?: string;
   showIndicator?: boolean;
+  /** Unread count shown as a numeric badge instead of the plain dot. */
+  indicatorCount?: number;
   /** Extra classes on the link. Defaults to 'text-lg' for desktop. */
   linkClassName?: string;
   /** Sidebar item ID configured as the homepage. */
@@ -148,7 +150,7 @@ export interface SidebarNavItemProps {
 }
 
 export function SidebarNavItem({
-  id, active, editing, onRemove, onClick, profilePath, showIndicator, linkClassName, homePage, compact, minimal,
+  id, active, editing, onRemove, onClick, profilePath, showIndicator, indicatorCount, linkClassName, homePage, compact, minimal,
 }: SidebarNavItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -193,7 +195,13 @@ export function SidebarNavItem({
         <span className={cn('shrink-0 relative', compact && 'flex items-center justify-center')}>
           {icon}
           {showIndicator && (
-            <span className="absolute -top-1 right-0 size-2.5 bg-primary rounded-full" />
+            indicatorCount !== undefined && indicatorCount > 0 ? (
+              <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-4 text-center">
+                {indicatorCount > 99 ? '99+' : indicatorCount}
+              </span>
+            ) : (
+              <span className="absolute -top-1 right-0 size-2.5 bg-primary rounded-full" />
+            )
           )}
         </span>
         {!compact && (
@@ -268,6 +276,7 @@ export interface SidebarNavListProps {
   getOnClick?: (id: string) => ((e: React.MouseEvent) => void) | undefined;
   getProfilePath?: (id: string) => string | undefined;
   getShowIndicator?: (id: string) => boolean | undefined;
+  getIndicatorCount?: (id: string) => number | undefined;
   linkClassName?: string;
   /** Sidebar item ID configured as the homepage. */
   homePage?: string;
@@ -278,7 +287,7 @@ export interface SidebarNavListProps {
 }
 
 export function SidebarNavList({
-  items, editing, onRemove, onReorder, isActive, getOnClick, getProfilePath, getShowIndicator, linkClassName, homePage, compact, minimal,
+  items, editing, onRemove, onReorder, isActive, getOnClick, getProfilePath, getShowIndicator, getIndicatorCount, linkClassName, homePage, compact, minimal,
 }: SidebarNavListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -426,6 +435,7 @@ export function SidebarNavList({
               onClick={getOnClick?.(id)}
               profilePath={getProfilePath?.(id)}
               showIndicator={getShowIndicator?.(id)}
+              indicatorCount={getIndicatorCount?.(id)}
               linkClassName={linkClassName}
               homePage={homePage}
               compact={compact}
