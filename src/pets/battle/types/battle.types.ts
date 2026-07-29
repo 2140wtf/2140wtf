@@ -80,6 +80,17 @@ export interface BattleInputState {
   p2: PlayerInput;
 }
 
+/**
+ * Which fighters are human-controlled on THIS device: both for local
+ * two-player, just one against the bot, and exactly one per side in remote
+ * matches (host = p1, guest = p2). Drives which touch buttons and keyboard
+ * instructions are shown — a bot never needs instructions.
+ */
+export interface BattleHumanPlayers {
+  p1: boolean;
+  p2: boolean;
+}
+
 export interface BattleState {
   status: BattleStatus;
   fighters: [BattleFighter, BattleFighter];
