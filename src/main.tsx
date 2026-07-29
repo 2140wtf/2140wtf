@@ -23,13 +23,21 @@ import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { getBackgroundThemeMode } from '@/lib/colorUtils';
 
 // ─── PWA service worker (browser only) ───────────────────────────────────────
-// Register /sw.js unconditionally so the app is installable (Chrome requires
+// Register /sw.js in production so the app is installable (Chrome requires
 // an active SW with a fetch handler) even for users who never enable push
 // notifications — that hook registers the same worker lazily and dedupes.
+// In dev we must NOT keep a worker: a stale production SW on the same
+// localhost origin would hijack the dev server and serve old assets.
 if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  } else {
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((r) => r.unregister())))
+      .catch(() => {});
+  }
 }
 
 if (Capacitor.isNativePlatform()) {
