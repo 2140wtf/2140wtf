@@ -89,23 +89,28 @@ export function BattleControlsHelp({
 }) {
   const p1 = 'P1: A/D move · W jump · S block · F sword · G fireball';
   const p2 = 'P2: ←/→ move · ↑ jump · ↓ block · L sword · ; fireball';
+  const combos =
+    'Combos: ×2 tap = dash · jump+sword = uppercut · block+sword = sweep · sword+fireball = MASSIVE HAMMER · air sword = air slash / swirl (hold →) / salto (hold ←) · block+air sword = dive kick · jump toward a close foe = flip-over · block+fireball = MEGA fireball · jump+fireball = anti-air · sword ×3 = chain finisher';
 
   if (variant === 'inline') {
     return (
       <div
         className={cn(
-          'hidden items-center justify-center gap-6 rounded-lg bg-muted/80 px-4 py-2 text-xs text-muted-foreground sm:flex',
+          'hidden flex-col items-center justify-center gap-1 rounded-lg bg-muted/80 px-4 py-2 text-xs text-muted-foreground sm:flex',
           className,
         )}
       >
-        <div className="flex items-center gap-1.5 font-medium">
-          <Swords className="size-3.5" />
-          {p1}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Swords className="size-3.5" />
+            {p1}
+          </div>
+          <div className="flex items-center gap-1.5 font-medium">
+            <Swords className="size-3.5" />
+            {p2}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 font-medium">
-          <Swords className="size-3.5" />
-          {p2}
-        </div>
+        <div className="max-w-[720px] text-center text-[11px] leading-snug">{combos}</div>
       </div>
     );
   }
@@ -113,7 +118,7 @@ export function BattleControlsHelp({
   return (
     <div
       className={cn(
-        'pointer-events-none absolute bottom-4 left-4 z-20 hidden rounded-lg bg-black/50 p-3 text-[10px] text-white/90 backdrop-blur-sm sm:block',
+        'pointer-events-none absolute bottom-4 left-4 z-20 hidden max-w-[300px] rounded-lg bg-black/50 p-3 text-[10px] text-white/90 backdrop-blur-sm sm:block',
         className,
       )}
     >
@@ -125,6 +130,7 @@ export function BattleControlsHelp({
         <Swords className="size-3" />
         {p2}
       </div>
+      <div className="mt-1.5 leading-snug text-white/70">{combos}</div>
     </div>
   );
 }
