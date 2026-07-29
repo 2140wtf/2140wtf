@@ -20,11 +20,14 @@ import {
   BattleSetup,
   BattleResultOverlay,
   BattleInvitePending,
+  BattleTouchControls,
   useBattleGame,
   useBattlePayout,
   emitBattleInteractionEvent,
 } from '@/pets/battle';
 import { useRemoteBattle } from '@/pets/battle';
+import { useIsLandscape, useIsTouchDevice } from '@/pets/battle/lib/useMediaQuery';
+import { Maximize, Minimize } from 'lucide-react';
 import {
   DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
@@ -89,6 +92,44 @@ export default function PetsBattlePage() {
   const { toast } = useToast();
 
   const { role: remoteRole, sendFinished: sendRemoteFinished } = remote;
+
+  const isTouch = useIsTouchDevice();
+  const isLandscape = useIsLandscape();
+
+  // Which fighters are human on THIS device: both for local two-player, just
+  // P1 against the bot, and exactly one side per device in remote matches
+  // (host = P1, guest = P2). Only humans get touch buttons / keyboard help.
+  const humanPlayers = useMemo(() => {
+    if (matchOptions.remoteMode === 'host') return { p1: true, p2: false };
+    if (matchOptions.remoteMode === 'guest') return { p1: false, p2: true };
+    if (matchOptions.isAiOpponent) return { p1: true, p2: false };
+    return { p1: true, p2: true };
+  }, [matchOptions.remoteMode, matchOptions.isAiOpponent]);
+
+  // Fullscreen battle: on touch devices entering fullscreen also asks the OS
+  // for landscape (either way up — the player can flip the phone freely).
+  const battleSectionRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        try { screen.orientation.unlock(); } catch { /* not locked */ }
+      } else {
+        await battleSectionRef.current?.requestFullscreen();
+        try {
+          // lock('landscape') still allows flipping between the two landscape
+          // orientations; unsupported platforms (iOS Safari) just throw.
+          await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape');
+        } catch { /* orientation lock unsupported */ }
+      }
+    } catch { /* fullscreen unsupported */ }
+  }, []);
 
   const localEscrowPubkey = useMemo(
     () => (escrowKeypair ? (normalizeEscrowPubkey(escrowKeypair.pubkey) ?? escrowKeypair.pubkey) : null),
@@ -407,22 +448,46 @@ export default function PetsBattlePage() {
             <BattleInvitePending />
           </>
         ) : (
-          <div className="relative flex flex-col gap-3">
+          <div
+            ref={battleSectionRef}
+            className={
+              isFullscreen
+                ? 'relative flex h-full flex-col justify-center gap-2 overflow-y-auto bg-slate-950 p-2'
+                : 'relative flex flex-col gap-3'
+            }
+          >
             <div className="flex items-center justify-between gap-3">
               <h1 className="text-lg font-bold sm:text-xl">Battle Arena</h1>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExit}
-                className="hidden sm:inline-flex"
-              >
-                Exit Arena
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen battle'}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen battle'}
+                >
+                  {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExit}
+                  className="hidden sm:inline-flex"
+                >
+                  Exit Arena
+                </Button>
+              </div>
             </div>
 
-            <BattleControlsHelp variant="inline" />
+            <BattleControlsHelp variant="inline" players={humanPlayers} />
 
-            <BattleArena state={state} inputRef={inputRef} />
+            <BattleArena state={state} inputRef={inputRef} players={humanPlayers} />
+
+            {/* Portrait touch play: buttons below the battle, thumbs never
+                cover the fight. Landscape renders edge overlays instead. */}
+            {isTouch && !isLandscape && (
+              <BattleTouchControls inputRef={inputRef} players={humanPlayers} layout="below" />
+            )}
 
             {state.status === 'finished' && (
               <BattleResultOverlay
