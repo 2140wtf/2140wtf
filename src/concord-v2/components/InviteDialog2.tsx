@@ -166,6 +166,10 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
           <UserPlus className="size-3.5" />
           Invite someone directly
         </div>
+        <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+          Direct invites p-tag the invitee's pubkey on the relays once. When member
+          anonymity matters, share an invite link instead — link joins are anonymous.
+        </p>
         <ProfileSearchSelect onSelect={handleSelect} busyPubkey={pendingPubkey} autoFocus />
         {sentPubkey && !isSendingInvite && (
           <p className="flex items-center gap-1.5 text-xs text-success">
