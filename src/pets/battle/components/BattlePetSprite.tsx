@@ -4,11 +4,14 @@ import { PetsAdultSvgRenderer } from '@/pets/ui/PetsAdultSvgRenderer';
 import { PetsBabySvgRenderer } from '@/pets/ui/PetsBabySvgRenderer';
 import { petsCompanionToPets } from '@/pets/ui/lib/adapters';
 import { MOVE_DEFS } from '../lib/moves';
+import { battleSkinFrameUrl, selectBattlePose, type BattleSkin } from '../lib/battleSprites';
 import type { BattleFighter } from '../types/battle.types';
 
 export interface BattlePetSpriteProps {
   fighter: BattleFighter;
   scale: number;
+  /** Optional Open Design skin; the SVG renderer is used when absent. */
+  skin?: BattleSkin | null;
   className?: string;
 }
 
@@ -34,15 +37,17 @@ function moveTransform(fighter: BattleFighter): string {
   return 'none';
 }
 
-export function BattlePetSprite({ fighter, scale, className }: BattlePetSpriteProps) {
+export function BattlePetSprite({ fighter, scale, skin, className }: BattlePetSpriteProps) {
   const pets = useMemo(() => petsCompanionToPets(fighter.pet), [fighter.pet]);
   const width = Math.round(fighter.width * scale);
   const height = Math.round(fighter.height * scale);
   const left = Math.round((fighter.x - fighter.width / 2) * scale);
   const bottom = Math.round(fighter.y * scale);
 
-  const dashing = fighter.dashUntil > performance.now();
+  const now = performance.now();
+  const dashing = fighter.dashUntil > now;
   const spin = moveTransform(fighter);
+  const skinUrl = skin ? battleSkinFrameUrl(skin, selectBattlePose(fighter, now)) : null;
 
   return (
     <div
@@ -64,7 +69,15 @@ export function BattlePetSprite({ fighter, scale, className }: BattlePetSpritePr
         )}
         style={{ transform: spin, transformOrigin: 'center center' }}
       >
-        {fighter.pet.stage === 'adult' ? (
+        {skinUrl ? (
+          <img
+            key={skinUrl}
+            src={skinUrl}
+            alt={fighter.pet.name}
+            draggable={false}
+            className="size-full object-contain"
+          />
+        ) : fighter.pet.stage === 'adult' ? (
           <PetsAdultSvgRenderer
             pets={pets}
             isSleeping={false}
