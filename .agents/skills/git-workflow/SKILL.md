@@ -31,6 +31,20 @@ When your changes are complete and validated, create a commit with a message tha
 
 When preparing changes for a merge request, also follow the guidelines in `CONTRIBUTING.md`. It includes a self-review checklist (step 8) that should be run against your diff before committing.
 
+## Commit Identity & Branding (build in open)
+
+2140.wtf builds in the open to promote the project. Commit authorship is part
+of the brand: when other projects take our code, the history must show who
+built it.
+
+- **Commit as `2140wtf <hello@2140.wtf>`.** The repo-local git config is set
+  to this identity — do not override it with a personal or machine identity.
+- **No LLM/tool attribution trailers.** Never add `Co-Authored-By` (or any
+  other trailer) crediting AI assistants, models, or tools. Commit messages
+  read as written by the project.
+- Other trailers that carry project meaning (`Regression-of:`, PR references)
+  are still welcome.
+
 ## Attributing Regressions
 
 When a commit fixes a bug that was introduced by an identifiable prior commit, add a `Regression-of:` trailer at the bottom of the commit message body referencing the offending commit's short SHA:
