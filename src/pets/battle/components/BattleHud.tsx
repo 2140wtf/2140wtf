@@ -1,7 +1,7 @@
 import { Swords, Flame, Shield, Timer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
-import type { BattleFighter, BattleState } from '../types/battle.types';
+import type { BattleFighter, BattleHumanPlayers, BattleState } from '../types/battle.types';
 
 export interface BattleHudProps {
   state: BattleState;
@@ -80,17 +80,24 @@ export function BattleHud({ state, className }: BattleHudProps) {
   );
 }
 
+const P1_KEYS = 'A/D move · W jump · S block · F sword · G fireball';
+const P2_KEYS = '←/→ move · ↑ jump · ↓ block · L sword · ; fireball';
+const COMBOS =
+  'Combos: ×2 tap = dash · jump+sword = uppercut · block+sword = sweep · sword+fireball = MASSIVE HAMMER · air sword = air slash / swirl (hold →) / salto (hold ←) · block+air sword = dive kick · jump toward a close foe = flip-over · block+fireball = MEGA fireball · jump+fireball = anti-air · sword ×3 = chain finisher';
+
 export function BattleControlsHelp({
   className,
   variant = 'overlay',
+  players = { p1: true, p2: true },
 }: {
   className?: string;
   variant?: 'overlay' | 'inline';
+  /** Only human-controlled fighters get instructions — a bot needs none. */
+  players?: BattleHumanPlayers;
 }) {
-  const p1 = 'P1: A/D move · W jump · S block · F sword · G fireball';
-  const p2 = 'P2: ←/→ move · ↑ jump · ↓ block · L sword · ; fireball';
-  const combos =
-    'Combos: ×2 tap = dash · jump+sword = uppercut · block+sword = sweep · sword+fireball = MASSIVE HAMMER · air sword = air slash / swirl (hold →) / salto (hold ←) · block+air sword = dive kick · jump toward a close foe = flip-over · block+fireball = MEGA fireball · jump+fireball = anti-air · sword ×3 = chain finisher';
+  const lines: string[] = [];
+  if (players.p1) lines.push(players.p2 ? `P1: ${P1_KEYS}` : P1_KEYS);
+  if (players.p2) lines.push(players.p1 ? `P2: ${P2_KEYS}` : P2_KEYS);
 
   if (variant === 'inline') {
     return (
@@ -101,16 +108,14 @@ export function BattleControlsHelp({
         )}
       >
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-1.5 font-medium">
-            <Swords className="size-3.5" />
-            {p1}
-          </div>
-          <div className="flex items-center gap-1.5 font-medium">
-            <Swords className="size-3.5" />
-            {p2}
-          </div>
+          {lines.map((line) => (
+            <div key={line} className="flex items-center gap-1.5 font-medium">
+              <Swords className="size-3.5" />
+              {line}
+            </div>
+          ))}
         </div>
-        <div className="max-w-[720px] text-center text-[11px] leading-snug">{combos}</div>
+        <div className="max-w-[720px] text-center text-[11px] leading-snug">{COMBOS}</div>
       </div>
     );
   }
@@ -122,15 +127,13 @@ export function BattleControlsHelp({
         className,
       )}
     >
-      <div className="mb-1 flex items-center gap-1 font-bold">
-        <Swords className="size-3" />
-        {p1}
-      </div>
-      <div className="flex items-center gap-1 font-bold">
-        <Swords className="size-3" />
-        {p2}
-      </div>
-      <div className="mt-1.5 leading-snug text-white/70">{combos}</div>
+      {lines.map((line, i) => (
+        <div key={line} className={cn('flex items-center gap-1 font-bold', i > 0 && 'mt-0')}>
+          <Swords className="size-3" />
+          {line}
+        </div>
+      ))}
+      <div className="mt-1.5 leading-snug text-white/70">{COMBOS}</div>
     </div>
   );
 }

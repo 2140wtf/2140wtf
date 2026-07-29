@@ -30,7 +30,9 @@ export const SWORD_HIT_STUN_MS = 200;
 export const FIREBALL_DAMAGE = 20;
 export const FIREBALL_SPEED = 300;
 export const FIREBALL_RADIUS = 14;
-export const FIREBALL_COOLDOWN_MS = 1200;
+// Fireballs are the big killer, so they can't be spammed: one per ~4s leaves
+// room to jump over a shot and forces the melee/air game between casts.
+export const FIREBALL_COOLDOWN_MS = 4000;
 export const FIREBALL_ENERGY_COST = 25;
 export const FIREBALL_HIT_STUN_MS = 220;
 export const ENERGY_REGEN_PER_SECOND = 12;

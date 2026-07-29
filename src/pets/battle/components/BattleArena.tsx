@@ -10,11 +10,14 @@ import {
 import { BattleHud } from './BattleHud';
 import { BattlePetSprite } from './BattlePetSprite';
 import { BattleTouchControls } from './BattleTouchControls';
-import type { BattleFighter, BattleState, BattleInputState } from '../types/battle.types';
+import { useIsLandscape, useIsTouchDevice } from '../lib/useMediaQuery';
+import type { BattleFighter, BattleHumanPlayers, BattleState, BattleInputState } from '../types/battle.types';
 
 export interface BattleArenaProps {
   state: BattleState;
   inputRef: React.MutableRefObject<BattleInputState>;
+  /** Human-controlled fighters on this device; touch buttons render for them only. */
+  players?: BattleHumanPlayers;
   className?: string;
 }
 
@@ -438,11 +441,13 @@ function drawProjectile(
   ctx.fill();
 }
 
-export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
+export function BattleArena({ state, inputRef, players = { p1: true, p2: true }, className }: BattleArenaProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1);
   const [spriteManifest, setSpriteManifest] = useState<BattleSpriteManifest | null>(null);
+  const isTouch = useIsTouchDevice();
+  const isLandscape = useIsLandscape();
 
   // Load the optional Open Design sprite manifest once per mount (404 →
   // procedural rendering for every fighter).
@@ -583,7 +588,11 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
       ))}
 
       <BattleHud state={state} />
-      <BattleTouchControls inputRef={inputRef} />
+      {/* Landscape touch play: thumb clusters on the arena's left/right edges.
+          In portrait the controls live below the arena (see PetsBattlePage). */}
+      {isTouch && isLandscape && (
+        <BattleTouchControls inputRef={inputRef} players={players} layout="overlay" />
+      )}
     </div>
   );
 }
