@@ -65,9 +65,9 @@ const FAQ_TEMPLATE: FAQCategory[] = [
         id: 'signer-approvals',
         question: 'Why does my signer keep asking for approvals?',
         answer: [
-          'When you log in with a remote signer (like Amber or a browser extension), it asks permission for each kind of action — signing posts, encrypting and decrypting private data (your wallet, messages, and settings).',
-          '**Choose "Always allow" when it asks** and you won\'t be asked again. If you answer "just this once", the signer will re-ask for every action — posts, pet care, wallet syncs — which can feel like a prompt every few seconds on mobile.',
-          'To change it later, open your signer app\'s connection settings for {appName} and enable auto-approve for signing and NIP-44 encrypt/decrypt.',
+          'When you log in with a remote signer (like Amber or a browser extension), it asks permission for each action type — and for signing, often **per event kind** (posts, reactions, pet updates, wallet events are all different kinds).',
+          '**Choose "Always allow" when it asks** and you won\'t be asked again for that kind. When connecting, approve the full permission list once — {appName} requests every kind it publishes up front, so there are no surprises later.',
+          'If prompts keep coming on an older connection, open your signer app\'s connection settings for {appName} and enable auto-approve for signing and NIP-44 encrypt/decrypt — or delete the connection and log in again to pick up the complete permission list.',
         ],
       },
       {
