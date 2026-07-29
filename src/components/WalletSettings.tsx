@@ -14,12 +14,78 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useNWC } from '@/hooks/useNWCContext';
+import { useNWCWalletInfo } from '@/hooks/useNWCWalletInfo';
+import type { NWCConnection } from '@/hooks/useNWC';
 import { useWallet } from '@/hooks/useWallet';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useEncryptedSettings } from '@/hooks/useEncryptedSettings';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import { DEFAULT_ESPLORA_APIS } from '@/lib/esplora';
+
+/** One NWC connection row with live service alias + balance (Rizful, Alby, …). */
+function NwcConnectionCard({
+  connection,
+  infoAlias,
+  isActive,
+  onSetActive,
+  onRemove,
+}: {
+  connection: NWCConnection;
+  infoAlias?: string;
+  isActive: boolean;
+  onSetActive: () => void;
+  onRemove: () => void;
+}) {
+  const { data: walletInfo } = useNWCWalletInfo(connection.connectionString);
+  const title = connection.alias && connection.alias !== 'NWC Wallet'
+    ? connection.alias
+    : walletInfo?.serviceAlias || infoAlias || 'Lightning Wallet';
+
+  return (
+    <Card className={isActive ? 'ring-2 ring-primary' : ''}>
+      <CardContent className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center justify-center size-9 rounded-full bg-secondary shrink-0">
+            <WalletMinimal className="size-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{title}</p>
+            <p className="text-xs text-muted-foreground">
+              {walletInfo?.balanceSats !== undefined
+                ? `${walletInfo.balanceSats.toLocaleString()} sats`
+                : isActive ? 'Active' : 'NWC Connection'}
+              {walletInfo?.balanceSats !== undefined && isActive ? ' · Active' : ''}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {isActive && <CheckCircle className="size-4 text-green-500 mr-1" />}
+          {!isActive && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onSetActive}
+              className="rounded-full"
+              title="Set as active"
+            >
+              <Zap className="size-3.5" />
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onRemove}
+            className="rounded-full text-muted-foreground hover:text-destructive"
+            title="Remove wallet"
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function WalletSettings() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -327,52 +393,16 @@ export function WalletSettings() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {connections.map((connection) => {
-                const info = connectionInfo[connection.connectionString];
-                const isActive = activeConnection === connection.connectionString;
-                return (
-                  <Card key={connection.connectionString} className={isActive ? 'ring-2 ring-primary' : ''}>
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex items-center justify-center size-9 rounded-full bg-secondary shrink-0">
-                          <WalletMinimal className="size-4 text-muted-foreground" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {connection.alias || info?.alias || 'Lightning Wallet'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {isActive ? 'Active' : 'NWC Connection'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {isActive && <CheckCircle className="size-4 text-green-500 mr-1" />}
-                        {!isActive && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleSetActive(connection.connectionString)}
-                            className="rounded-full"
-                            title="Set as active"
-                          >
-                            <Zap className="size-3.5" />
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleRemoveConnection(connection.connectionString)}
-                          className="rounded-full text-muted-foreground hover:text-destructive"
-                          title="Remove wallet"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+              {connections.map((connection) => (
+                <NwcConnectionCard
+                  key={connection.connectionString}
+                  connection={connection}
+                  infoAlias={connectionInfo[connection.connectionString]?.alias}
+                  isActive={activeConnection === connection.connectionString}
+                  onSetActive={() => handleSetActive(connection.connectionString)}
+                  onRemove={() => handleRemoveConnection(connection.connectionString)}
+                />
+              ))}
             </div>
           )}
         </div>
