@@ -68,5 +68,5 @@ export function usePetsNostrPublish() {
     [base, guard, relayUrls],
   );
 
-  return { mutate, mutateAsync, isPending };
+  return { mutate, mutateAsync, isPending, petsEnabled };
 }

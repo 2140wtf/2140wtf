@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { getEncodedToken } from '@cashu/cashu-ts';
+import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 
-import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl } from './cashu';
+import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl, checkTokenProofsSpent } from './cashu';
 
 describe('isFeeWithinMaxPpm', () => {
   it('allows zero fees', () => {
@@ -93,5 +95,62 @@ describe('deriveNutzapKey', () => {
     const nutzap = deriveNutzapKey(phrase);
     // The nutzap private key must not equal the raw seed.
     expect(Buffer.from(nutzap.privkey).toString('hex')).not.toBe(Buffer.from(seed.slice(0, 32)).toString('hex'));
+  });
+});
+
+describe('checkTokenProofsSpent (hunt regression [16])', () => {
+  const MINT = 'https://mint.example.com';
+  const encoder = new TextEncoder();
+
+  function tokenWithSecrets(...secrets: string[]): string {
+    return getEncodedToken({
+      mint: MINT,
+      proofs: secrets.map((secret) => ({
+        id: '009a1f293253e41e',
+        amount: 1,
+        secret,
+        C: `02${'cd'.repeat(32)}`,
+      })),
+    });
+  }
+
+  function yOf(secret: string): string {
+    return hashToCurve(encoder.encode(secret)).toHex(true);
+  }
+
+  /** Stubs global fetch so the mint's /v1/checkstate marks `spentSecrets` SPENT. */
+  function stubCheckstate(spentSecrets: string[]) {
+    const spentYs = new Set(spentSecrets.map(yOf));
+    return vi.fn(async (_url: unknown, init?: { body?: string }) => {
+      const body = JSON.parse(init?.body ?? '{}') as { Ys?: string[] };
+      const Ys = body.Ys ?? [];
+      return new Response(
+        JSON.stringify({ states: Ys.map((Y) => ({ Y, state: spentYs.has(Y) ? 'SPENT' : 'UNSPENT' })) }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+  }
+
+  it('returns true when every proof is SPENT at the mint', async () => {
+    const token = tokenWithSecrets('secret-a', 'secret-b');
+    vi.stubGlobal('fetch', stubCheckstate(['secret-a', 'secret-b']));
+    await expect(checkTokenProofsSpent(token)).resolves.toBe(true);
+  });
+
+  it('returns false when at least one proof is still unspent', async () => {
+    const token = tokenWithSecrets('secret-a', 'secret-b');
+    vi.stubGlobal('fetch', stubCheckstate(['secret-a']));
+    await expect(checkTokenProofsSpent(token)).resolves.toBe(false);
+  });
+
+  it('returns null for an undecodable token', async () => {
+    vi.stubGlobal('fetch', stubCheckstate([]));
+    await expect(checkTokenProofsSpent('not-a-cashu-token')).resolves.toBeNull();
+  });
+
+  it('returns null when the mint cannot be reached', async () => {
+    const token = tokenWithSecrets('secret-a');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    await expect(checkTokenProofsSpent(token)).resolves.toBeNull();
   });
 });

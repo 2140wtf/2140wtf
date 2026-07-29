@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
@@ -29,7 +29,16 @@ import {
   DEFAULT_PRIZE_SATS,
   DEFAULT_ROUND_DURATION_SECONDS,
 } from '@/pets/battle/lib/constants';
-import { deriveBattleEscrowKeypair, normalizeEscrowPubkey, requestEscrowRelease } from '@/pets/battle/lib/cashuEscrow';
+import {
+  deriveBattleEscrowKeypair,
+  normalizeEscrowPubkey,
+  requestEscrowRelease,
+  savePendingEscrowClaim,
+  loadPendingEscrowClaims,
+  clearPendingEscrowClaim,
+  PENDING_CLAIM_MAX_ATTEMPTS,
+  type PendingEscrowClaim,
+} from '@/pets/battle/lib/cashuEscrow';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
 
@@ -81,6 +90,88 @@ export default function PetsBattlePage() {
 
   const { role: remoteRole, sendFinished: sendRemoteFinished } = remote;
 
+  const localEscrowPubkey = useMemo(
+    () => (escrowKeypair ? (normalizeEscrowPubkey(escrowKeypair.pubkey) ?? escrowKeypair.pubkey) : null),
+    [escrowKeypair],
+  );
+
+  /**
+   * Execute a journaled escrow claim: ask the operator for the release (unless
+   * a release token is already journaled — the operator never releases twice,
+   * so a receive failure must not trigger a second /release call), then receive
+   * the P2PK-locked prize token into the wallet. On success the journal entry
+   * is cleared. Throws on failure; the caller keeps the journal for a retry.
+   */
+  const claimEscrowPrize = useCallback(
+    async (claim: PendingEscrowClaim): Promise<'claimed' | 'pending'> => {
+      if (!config.petsBattleEscrowServiceUrl || !petsWallet || !escrowKeypair) {
+        throw new Error('Escrow claim prerequisites are not ready.');
+      }
+      let releaseToken = claim.releaseToken;
+      if (!releaseToken) {
+        const release = await requestEscrowRelease({
+          serviceUrl: config.petsBattleEscrowServiceUrl,
+          battleId: claim.battleId,
+          winnerPubkey: claim.winnerPubkey,
+          hostPubkey: claim.hostPubkey,
+          guestPubkey: claim.guestPubkey,
+          hostDepositToken: claim.hostDepositToken,
+          guestDepositToken: claim.guestDepositToken,
+          finishedEvent: claim.finishedEvent,
+        });
+        releaseToken = release?.token;
+        if (releaseToken) {
+          // Journal the release token BEFORE the receive — losing this string
+          // would strand the prize with no way to ask the operator again.
+          savePendingEscrowClaim({ ...claim, releaseToken });
+        }
+      }
+      if (!releaseToken) return 'pending';
+      const received = await petsWallet.receiveLockedToken(releaseToken, escrowKeypair.privkey);
+      if (received <= 0) {
+        // receiveToken journaled the token into the wallet's own pending-receive
+        // recovery as well, so the prize is doubly protected — but keep OUR
+        // journal until the sats actually land.
+        throw new Error('The escrow released the prize but the wallet could not receive it yet.');
+      }
+      clearPendingEscrowClaim(claim.battleId);
+      return 'claimed';
+    },
+    [config.petsBattleEscrowServiceUrl, petsWallet, escrowKeypair],
+  );
+
+  // Retry journaled escrow claims once the wallet and escrow key are ready.
+  // This is what makes a failed/refresh-interrupted prize claim recoverable
+  // instead of stranding both players' locked stakes with the operator.
+  const claimRetryRanRef = useRef(false);
+  useEffect(() => {
+    if (claimRetryRanRef.current) return;
+    if (!petsWallet || !escrowKeypair || !localEscrowPubkey || !config.petsBattleEscrowServiceUrl) return;
+    const claims = loadPendingEscrowClaims().filter(
+      (c) => normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey && c.attempts < PENDING_CLAIM_MAX_ATTEMPTS,
+    );
+    if (claims.length === 0) return;
+    claimRetryRanRef.current = true;
+    void (async () => {
+      for (const claim of claims) {
+        try {
+          const outcome = await claimEscrowPrize(claim);
+          if (outcome === 'claimed') {
+            toast({
+              title: 'Battle prize claimed!',
+              description: `Recovered ${claim.prizeAmount * 2 > 0 ? `${(claim.prizeAmount * 2).toLocaleString()} ` : ''}real sats from a previous battle.`,
+            });
+          } else {
+            savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
+          }
+        } catch (err) {
+          console.warn('[PetsBattlePage] escrow claim retry failed:', err);
+          savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
+        }
+      }
+    })();
+  }, [petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
+
   useEffect(() => {
     onFinishRef.current = async (winner) => {
       if (winner === null || payout.isPending) return;
@@ -104,15 +195,18 @@ export default function PetsBattlePage() {
       setPendingPayout(true);
       try {
         if (matchMode === 'real-sats') {
-          if (!escrowKeypair || !config.petsBattleEscrowServiceUrl || !config.petsBattleEscrowPubkey) {
+          if (!escrowKeypair || !localEscrowPubkey || !config.petsBattleEscrowServiceUrl || !config.petsBattleEscrowPubkey) {
             toast({ title: 'Escrow not configured', description: 'Cannot claim real-sats prize.', variant: 'destructive' });
             return;
           }
-          const localEscrowPubkey = normalizeEscrowPubkey(escrowKeypair.pubkey) ?? escrowKeypair.pubkey;
           const hostPubkey = remoteRole === 'host' ? localEscrowPubkey : (remote.escrow.hostEscrowPubkey ?? '');
           const guestPubkey = remoteRole === 'guest' ? localEscrowPubkey : (remote.escrow.guestEscrowPubkey ?? '');
-          const release = await requestEscrowRelease({
-            serviceUrl: config.petsBattleEscrowServiceUrl,
+          // Journal everything the release needs BEFORE the first attempt: the
+          // deposit tokens live only in React state, so a failed request (or
+          // closing the page, or Rematch/Exit wiping the battle state) would
+          // otherwise strand both locked stakes with the operator forever.
+          // Journaled claims are retried automatically on this page.
+          const claim: PendingEscrowClaim = {
             battleId: remote.battleId ?? '',
             winnerPubkey: localEscrowPubkey,
             hostPubkey,
@@ -128,12 +222,27 @@ export default function PetsBattlePage() {
               content: finishedEvent.content,
               sig: finishedEvent.sig,
             } : {},
-          });
-          if (release?.token && petsWallet && escrowKeypair) {
-            await petsWallet.receiveLockedToken(release.token, escrowKeypair.privkey);
-            toast({ title: 'Battle prize claimed!', description: `You received ${matchOptions.prizeAmount * 2} real sats.` });
-          } else {
-            toast({ title: 'Escrow release pending', description: 'The operator will release your prize shortly.', variant: 'default' });
+            prizeAmount: matchOptions.prizeAmount,
+            createdAt: Date.now(),
+            attempts: 0,
+          };
+          savePendingEscrowClaim(claim);
+          try {
+            const outcome = await claimEscrowPrize(claim);
+            if (outcome === 'claimed') {
+              toast({ title: 'Battle prize claimed!', description: `You received ${(matchOptions.prizeAmount * 2).toLocaleString()} real sats.` });
+            } else {
+              savePendingEscrowClaim({ ...claim, attempts: 1 });
+              toast({ title: 'Escrow release pending', description: 'The operator will release your prize shortly — your claim is saved locally and retried automatically.', variant: 'default' });
+            }
+          } catch (claimErr) {
+            savePendingEscrowClaim({ ...claim, attempts: 1 });
+            const reason = claimErr instanceof Error ? claimErr.message : String(claimErr);
+            toast({
+              title: 'Prize claim saved — will retry',
+              description: `The escrow release failed (${reason}). Your claim is journaled locally and retried automatically when you return to this page.`,
+              variant: 'destructive',
+            });
           }
         } else {
           await payout.mutateAsync({
@@ -182,6 +291,8 @@ export default function PetsBattlePage() {
     sendRemoteFinished,
     remote.hostFinishedEvent,
     escrowKeypair,
+    localEscrowPubkey,
+    claimEscrowPrize,
     config.petsBattleEscrowServiceUrl,
     config.petsBattleEscrowPubkey,
     remote.battleId,

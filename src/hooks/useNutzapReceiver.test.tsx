@@ -102,4 +102,29 @@ describe('useNutzapReceiver', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mocks.nostrReq).not.toHaveBeenCalled();
   });
+
+  it('preserves mint URL path case in the #u filter and includes raw + normalized forms', async () => {
+    // Regression: the filter used to lowercase the WHOLE URL, so a mint with a
+    // case-sensitive path never matched the sender's `u` tag (relay filters
+    // match tag strings exactly) and incoming nutzaps were silently missed.
+    const caseMints = [{ name: 'Case', url: 'https://Mint-A.example.com/CaseSensitive/' }];
+    mocks.nostrReq.mockImplementation(async function* () { /* no events */ });
+
+    renderHook(
+      () => useNutzapReceiver(seedPhrase, caseMints, (ev) => mocks.received.push(ev)),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(mocks.nostrReq).toHaveBeenCalled());
+    const filters = mocks.nostrReq.mock.calls[0][0] as Array<Record<string, unknown>>;
+    const uValues = filters[0]!['#u'] as string[];
+    // Raw form (for senders that don't normalize)…
+    expect(uValues).toContain('https://Mint-A.example.com/CaseSensitive/');
+    // …and our sender's normalizeMintUrl form: host lowercased, path case kept,
+    // trailing slash stripped.
+    expect(uValues).toContain('https://mint-a.example.com/CaseSensitive');
+    // The old buggy behavior would have produced only this:
+    expect(uValues).not.toContain('https://mint-a.example.com/casesensitive/');
+    expect(uValues).not.toContain('https://mint-a.example.com/casesensitive');
+  });
 });

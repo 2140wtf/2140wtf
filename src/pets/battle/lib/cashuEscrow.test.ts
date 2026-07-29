@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getEncodedToken } from '@cashu/cashu-ts';
 
-import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey } from './cashuEscrow';
+import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey, savePendingEscrowClaim, loadPendingEscrowClaims, clearPendingEscrowClaim, type PendingEscrowClaim } from './cashuEscrow';
 
 const mintUrl = 'https://mint.example.com';
 const escrowPubkey = 'a'.repeat(64);
@@ -218,5 +218,56 @@ describe('validateEscrowDeposit', () => {
       expect(validateEscrowDeposit(token, 21, escrowPubkey).valid).toBe(true);
       expect(validateEscrowDeposit(token, 21, escrowPubkey, []).valid).toBe(true);
     });
+  });
+});
+
+describe('pending escrow claim journal (hunt regression [18])', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const claim: PendingEscrowClaim = {
+    battleId: 'battle-1',
+    winnerPubkey: escrowPubkey,
+    hostPubkey: escrowPubkey,
+    guestPubkey: otherPubkey,
+    hostDepositToken: 'cashuAhost',
+    guestDepositToken: 'cashuAguest',
+    finishedEvent: { id: 'ev', kind: 1 },
+    prizeAmount: 21,
+    createdAt: 1721000000000,
+    attempts: 0,
+  };
+
+  it('round-trips a claim through localStorage', () => {
+    savePendingEscrowClaim(claim);
+    const loaded = loadPendingEscrowClaims();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]).toEqual(claim);
+  });
+
+  it('persists the release token so a receive failure never re-asks the operator', () => {
+    savePendingEscrowClaim({ ...claim, releaseToken: 'cashuArelease', attempts: 2 });
+    const loaded = loadPendingEscrowClaims();
+    expect(loaded[0]?.releaseToken).toBe('cashuArelease');
+    expect(loaded[0]?.attempts).toBe(2);
+  });
+
+  it('clear removes only the matching battle entry', () => {
+    savePendingEscrowClaim(claim);
+    savePendingEscrowClaim({ ...claim, battleId: 'battle-2' });
+    clearPendingEscrowClaim('battle-1');
+    const loaded = loadPendingEscrowClaims();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.battleId).toBe('battle-2');
+  });
+
+  it('skips malformed entries instead of throwing', () => {
+    localStorage.setItem('bao_battle_claim_broken', '{not json');
+    localStorage.setItem('bao_battle_claim_missing-fields', JSON.stringify({ battleId: 'x' }));
+    savePendingEscrowClaim(claim);
+    const loaded = loadPendingEscrowClaims();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]?.battleId).toBe('battle-1');
   });
 });
