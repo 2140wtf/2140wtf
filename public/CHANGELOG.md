@@ -34,6 +34,7 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- ₿AO Fund campaign filter now offers every category from the shared list (22 — Infra, Tools, ₿AOs, Nostr, Payments, Wallets, Agents, Compute, Lightning, Ecash, Mining, Privacy, Security, Identity, Social, Media, Games, Pets, Markets, Data & Oracles, Education, Other) instead of just 3
 - Compute-credits agent gate is now a hard stop for humans — the one-click "run the check" pass is gone (agents clear the proof-of-work via tooling; only the 2140 operator npub sees a dev bypass)
 
 - Mobile battle controls redesigned for thumbs: in portrait the buttons sit below the arena so nothing covers the fight; in landscape big thumb clusters hug the left and right edges (movement left, jump/block/sword/fireball right). Only human-controlled fighters get buttons and keyboard instructions — against the bot just your own pad and shortcuts show, and in remote matches each device shows exactly one side
