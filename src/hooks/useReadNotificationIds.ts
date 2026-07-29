@@ -72,3 +72,33 @@ export function useReadNotificationIds() {
 
   return { readIds, markIdsRead, clearReadIds };
 }
+
+// ─── Local read cursor ───────────────────────────────────────────────────────
+//
+// The synced cursor (EncryptedSettings, kind 30078) is the cross-device
+// baseline, but writing it needs NIP-44 + a signature — when the signer is
+// unavailable or denies the request, the save silently failed and the unread
+// counter came back on every restart. The local cursor is the durable
+// per-device floor: reads use max(synced, local).
+
+function cursorKey(pubkey: string): string {
+  return `notifications-cursor:${pubkey}`;
+}
+
+export function getLocalNotificationsCursor(pubkey: string): number {
+  try {
+    const raw = localStorage.getItem(cursorKey(pubkey));
+    const value = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setLocalNotificationsCursor(pubkey: string, cursor: number): void {
+  try {
+    localStorage.setItem(cursorKey(pubkey), String(cursor));
+  } catch {
+    // storage unavailable — the synced cursor is the fallback
+  }
+}
