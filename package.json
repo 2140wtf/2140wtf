@@ -118,7 +118,7 @@
     "@scure/bip39": "^2.2.0",
     "@scure/btc-signer": "^2.2.0",
     "@sentry/react": "^10.42.0",
-    "@tanstack/react-query": "^5.56.2",
+    "@tanstack/react-query": "^5.101.4",
     "@unhead/addons": "^2.1.13",
     "@unhead/react": "^2.1.13",
     "@vbyte/frost": "^1.1.5",
