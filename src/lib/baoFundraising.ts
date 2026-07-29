@@ -34,6 +34,12 @@ export interface BaoFundraiser {
   /** v2 computed stream fields returned by GET /:id */
   stream_vested_sats?: number;
   stream_claimable_sats?: number;
+  /**
+   * Set when the campaign was created relay-first: the id of the ingested
+   * kind-38003 intent event. Clients poll the list endpoint for their intent
+   * id to learn the campaign id.
+   */
+  nostr_event_id?: string | null;
 }
 
 export type BaoMilestoneStatus = 'locked' | 'unlocked' | 'released' | 'refunded';
@@ -222,6 +228,96 @@ export async function createFundraiser(
     signer,
   });
   return res.data;
+}
+
+/** Kind of the ₿AO Fund campaign-creation intent the bao.markets bridge ingests. */
+export const BAO_FUNDRAISER_CREATE_KIND = 38003;
+
+/** Relay the bao.markets bridge subscribes to for creation intents. */
+export function baoRelayUrl(): string {
+  return (import.meta.env.VITE_BAO_RELAY_URL as string | undefined) ?? 'wss://relay.bao.network';
+}
+
+/**
+ * Network tag the bridge filters intents on. The public bao.markets
+ * deployment is the signet demo; override only when pointing at a local API.
+ */
+function baoNetwork(): string {
+  return (import.meta.env.VITE_BAO_NETWORK as string | undefined) ?? 'demo';
+}
+
+export interface RelayCreateOptions {
+  /**
+   * Publish a signed event (e.g. `useNostrPublish().mutateAsync`). Must accept
+   * the `relay` override so the intent lands on the ₿AO relay the bridge
+   * subscribes to, regardless of the user's relay set.
+   */
+  publish: (t: { kind: number; content: string; tags: string[][]; relay?: string }) => Promise<{ id: string }>;
+  /** How long to poll the list API for the ingested campaign (default 30s). */
+  timeoutMs?: number;
+  /** Poll interval (default 2s). */
+  intervalMs?: number;
+}
+
+/**
+ * Relay-first campaign creation. Publishes the SAME body the REST route
+ * accepts as a signed kind-38003 intent to the ₿AO relay; the bao.markets
+ * bridge verifies the signature (the same proof of key control as the REST
+ * route's NIP-98 auth), quota-checks the author, and runs the identical
+ * creation core. The campaign then appears in the list API carrying
+ * `nostr_event_id` = the intent's id, which we poll for.
+ *
+ * Falls back to the REST POST when the relay publish fails or the campaign
+ * doesn't surface within the timeout (bridge down, quota hit, relay policy
+ * change) — creation keeps working even with the bridge offline.
+ *
+ * The `d` tag is a random UUID per intent: kind 38003 is addressable, and a
+ * stable `d` would let a second intent REPLACE an un-ingested first one on
+ * the relay before the bridge's backfill scan ever sees it.
+ */
+export async function createFundraiserRelayFirst(
+  signer: SignerLike,
+  input: CreateFundraiserInput,
+  opts: RelayCreateOptions,
+): Promise<{ result: CreateFundraiserResult; via: 'relay' | 'rest' }> {
+  try {
+    const intent = await opts.publish({
+      kind: BAO_FUNDRAISER_CREATE_KIND,
+      content: JSON.stringify(input),
+      tags: [['d', `frc-${crypto.randomUUID()}`], ['n', baoNetwork()], ['alt', '₿AO Fund campaign create intent']],
+      relay: baoRelayUrl(),
+    });
+    const found = await pollForRelayCreatedFundraiser(intent.id, opts);
+    if (found) return { result: found, via: 'relay' };
+  } catch {
+    // Relay path unavailable — fall through to the REST route.
+  }
+  return { result: await createFundraiser(signer, input), via: 'rest' };
+}
+
+/** Poll the list API until the bridge-ingested campaign (by intent id) appears. */
+async function pollForRelayCreatedFundraiser(
+  intentEventId: string,
+  opts: RelayCreateOptions,
+): Promise<CreateFundraiserResult | null> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 30_000);
+  const interval = opts.intervalMs ?? 2_000;
+  while (Date.now() < deadline) {
+    const list = await fetchFundraisers().catch(() => null);
+    const hit = list?.find((f) => f.nostr_event_id === intentEventId);
+    if (hit) {
+      const detail = await fetchFundraiser(hit.id);
+      return {
+        fundraiser: detail.fundraiser,
+        milestones: detail.milestones,
+        markets: detail.milestones
+          .filter((m) => m.market_id)
+          .map((m) => ({ milestone_id: m.id, market_id: m.market_id! })),
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  return null;
 }
 
 export interface ContributeResult {
