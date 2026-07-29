@@ -125,6 +125,11 @@ export interface RemoteBattleStateSnapshot {
     attackCooldownUntil: number;
     fireballCooldownUntil: number;
     hitUntil: number;
+    /** Render-only move state (the guest never simulates). */
+    lastHitAt: number;
+    activeMove: { id: string; startedAt: number } | null;
+    dashUntil: number;
+    dashDir: 1 | -1;
   }>;
   projectiles: Array<{
     id: string;
@@ -132,8 +137,10 @@ export interface RemoteBattleStateSnapshot {
     x: number;
     y: number;
     vx: number;
+    vy: number;
     radius: number;
     damage: number;
+    stunMs: number;
     spawnedAt: number;
   }>;
   timeRemaining: number;

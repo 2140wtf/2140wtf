@@ -68,6 +68,29 @@ export function computeAiInput(state: BattleState, now: number): PlayerInput {
     input.sword = true;
   }
 
+  // Air game: slash or swirl when jumping through the opponent.
+  const airborne = ai.y > 20;
+  if (airborne && !input.block && distance < ai.stats.swordRange + 70) {
+    input.sword = true;
+    if (distance > 60) {
+      // Hold toward the opponent to turn it into an air swirl.
+      if (direction > 0) input.right = true;
+      else input.left = true;
+    }
+  }
+
+  // Massive fireball: far away, energy to spare, and feeling bold.
+  if (
+    distance > 380 &&
+    ai.energy >= 45 &&
+    now >= ai.fireballCooldownUntil &&
+    Math.sin(now / 900) > 0.55
+  ) {
+    input.block = true;
+    input.fireball = true;
+    return input;
+  }
+
   // Fireball when at safe distance, enough energy, and off cooldown.
   if (
     !input.block &&
@@ -77,6 +100,8 @@ export function computeAiInput(state: BattleState, now: number): PlayerInput {
     Math.sin(now / 500) > 0.3
   ) {
     input.fireball = true;
+    // Anti-air lob when the player is above.
+    if (player.y > ai.height * 0.8) input.jump = true;
   }
 
   return input;

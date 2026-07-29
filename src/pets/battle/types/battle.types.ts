@@ -1,5 +1,6 @@
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleFighterStats } from '../lib/fighterStats';
+import type { ActiveMove } from '../lib/moves';
 import type { RemoteBattleStateSnapshot } from '../lib/battleMessages';
 
 export type BattlePlayerIndex = 0 | 1;
@@ -22,9 +23,33 @@ export interface BattleFighter {
   isBlocking: boolean;
   isHit: boolean;
   hitUntil: number;
+  /** Timestamp of the most recent hit taken (drives impact-flash rendering). */
+  lastHitAt: number;
   attackCooldownUntil: number;
   fireballCooldownUntil: number;
   stats: BattleFighterStats;
+  /** Move currently being executed, null when free-acting. */
+  activeMove: ActiveMove | null;
+  /** Bitmask of melee hit windows already applied for the active move. */
+  moveHitsDone: number;
+  moveProjectileFired: boolean;
+  /** Slash chain stage (1 = slash landed, 2 = slash-2 landed), 0 = no chain. */
+  comboStage: number;
+  /** Chain window deadline for continuing the slash combo. */
+  comboUntil: number;
+  /** Dash state: dash movement is active while now < dashUntil. */
+  dashUntil: number;
+  dashDir: 1 | -1;
+  /** Double-tap detection: last direction tap direction and timestamp. */
+  lastTapDir: 1 | -1;
+  lastTapAt: number;
+  /** Previous-frame held state for edge detection. */
+  prevJump: boolean;
+  prevLeft: boolean;
+  prevRight: boolean;
+  /** Flip-over trajectory endpoints (start x, target x). */
+  moveX0: number;
+  moveX1: number;
 }
 
 export interface BattleProjectile {
@@ -33,8 +58,11 @@ export interface BattleProjectile {
   x: number;
   y: number;
   vx: number;
+  /** Vertical velocity for diagonal fireballs (0 = straight shot). */
+  vy: number;
   radius: number;
   damage: number;
+  stunMs: number;
   spawnedAt: number;
 }
 
