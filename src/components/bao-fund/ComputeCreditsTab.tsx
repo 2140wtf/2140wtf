@@ -35,7 +35,7 @@ import {
   routstrGetInfo,
 } from '@/lib/routstr';
 import { NUTZAP_INFO_KIND, parseNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
-import { decodeCashuToken } from '@/lib/cashu/cashu';
+import { checkTokenProofsSpent, decodeCashuToken } from '@/lib/cashu/cashu';
 import { extractTokenLockPubkeys, getTokenAmount } from '@/pets/battle/lib/cashuEscrow';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { nip19 } from 'nostr-tools';
@@ -696,21 +696,34 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
     return t;
   };
 
-  /** Redeem an unlocked token at Routstr; on failure put the bearer token back in the wallet. */
+  /** Redeem an unlocked token at Routstr; on failure try to put the bearer token back in the wallet. */
   const redeemUnlocked = async (unlocked: string): Promise<{ apiKey: string; balance: number }> => {
     try {
       return await routstrCreateBalanceFromCashu(unlocked);
     } catch (e) {
-      // receiveToken journals the token BEFORE contacting the mint and never
-      // throws (0 on failure) — so even if the receive-back fails right now,
-      // the wallet's pending-receive reconciler retries it automatically on
-      // the next app launch. Say that honestly instead of claiming the sats
-      // are already back.
-      const returned = await receiveToken(unlocked);
       const msg = e instanceof Error ? e.message : String(e);
-      throw new Error(returned > 0
-        ? `Routstr redeem failed (${msg}). The sats were returned to your Cashu wallet — retry when Routstr is back.`
-        : `Routstr redeem failed (${msg}). The token is saved in your wallet's recovery journal and will be credited automatically on the next app launch — retry the redeem when Routstr is back.`);
+      // receiveToken journals the token BEFORE contacting the mint and never
+      // throws (0 on failure) — so a failed receive-back still leaves the
+      // token in the wallet's pending-receive journal for automatic retries.
+      const returned = await receiveToken(unlocked);
+      if (returned > 0) {
+        throw new Error(`Routstr redeem failed (${msg}). The sats were returned to your Cashu wallet — retry when Routstr is back.`);
+      }
+      // The receive-back failed too. Routstr creates the balance server-side
+      // BEFORE responding, so a lost HTTP response means the token's proofs
+      // are already SPENT at the mint: no wallet retry can ever credit them,
+      // and claiming "automatic credit on next launch" would be a lie. Ask
+      // the mint which situation we are actually in before promising anything.
+      const spent = await checkTokenProofsSpent(unlocked);
+      if (spent === true) {
+        throw new Error(
+          `Routstr redeem failed (${msg}), and the mint confirms the token was already redeemed — Routstr created a balance but its response never reached you. ` +
+            'The sats are NOT back in your wallet. Keep this token and contact Routstr support so they can recover the API key for the balance it created.',
+        );
+      }
+      throw new Error(
+        `Routstr redeem failed (${msg}). The token is saved in your wallet's recovery journal and the wallet keeps retrying it in the background; it also stays in the input above as a backup. Retry the redeem when Routstr is back.`,
+      );
     }
   };
 

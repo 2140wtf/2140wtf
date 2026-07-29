@@ -155,11 +155,11 @@ export function CashuWalletTab() {
       return;
     }
     const result = await wallet.sendNutzap(amount, nutzapRecipient.trim(), nutzapMintUrl, { memo: nutzapMemo.trim() });
-    if (result === 'sent') {
+    if (result.status === 'sent') {
       setNutzapAmount('');
       setNutzapRecipient('');
       setNutzapMemo('');
-    } else if (result === 'pending') {
+    } else if (result.status === 'pending') {
       // Sats left the wallet; the nutzap is queued for auto-retry. Clear the
       // form so the user does not send twice.
       setNutzapAmount('');

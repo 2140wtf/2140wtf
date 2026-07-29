@@ -34,10 +34,16 @@ export function useZapPaymentListener(
       if (paidRef.current || abortController.signal.aborted) return;
       const relay = new NRelay1(url);
       try {
-        for await (const msg of relay.req(
-          [{ kinds: [9735], '#e': [target.id], since }],
-          { signal: abortController.signal },
-        )) {
+        // NIP-57 receipts only carry an `e` tag when the zap targeted an
+        // event — profile (kind 0) and QR-code zaps produce receipts with only
+        // the recipient's `p` tag, which an `#e`-only filter never matches.
+        // The exact bolt11 match above is the real disambiguator, so the broad
+        // `#p` filter is safe to add (and invoices are unique per attempt).
+        const filters = [
+          { kinds: [9735], '#e': [target.id], since },
+          { kinds: [9735], '#p': [target.pubkey], since },
+        ];
+        for await (const msg of relay.req(filters, { signal: abortController.signal })) {
           if (paidRef.current || abortController.signal.aborted) break;
           if (msg[0] !== 'EVENT') continue;
           const event = msg[2];

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   publishEvent: vi.fn(),
   fetchFreshPetsEvent: vi.fn(),
   toast: vi.fn(),
+  petsEnabled: { value: true },
 }));
 
 vi.mock('@/hooks/useCurrentUser', () => ({
@@ -29,7 +30,7 @@ vi.mock('@nostrify/react', () => ({
 }));
 
 vi.mock('@/pets/core/hooks/usePetsNostrPublish', () => ({
-  usePetsNostrPublish: () => ({ mutateAsync: mocks.publishEvent }),
+  usePetsNostrPublish: () => ({ mutateAsync: mocks.publishEvent, petsEnabled: mocks.petsEnabled.value }),
 }));
 
 vi.mock('@/pets/core/lib/fetchFreshPetsEvent', () => ({
@@ -62,6 +63,11 @@ function wrapper({ children }: { children: React.ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+beforeEach(() => {
+  mocks.petsEnabled.value = true;
+  localStorage.clear();
+});
+
 describe('usePetsPurchaseItem cashu mode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,7 +76,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
   });
 
   it('pays the treasury via nutzap and does not deduct profile sats', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
@@ -97,7 +103,7 @@ describe('usePetsPurchaseItem cashu mode', () => {
   });
 
   it('fails the purchase when the treasury payment fails', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue('failed');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'failed' });
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
@@ -145,7 +151,7 @@ describe('usePetsPurchaseItem bao mode', () => {
   });
 
   it('pays the treasury from the BAO wallet and never touches profile sats', async () => {
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 500,
       loading: false,
@@ -200,7 +206,7 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
     // treated as real sats, and pet fiat must NOT offset the cost.
     mocks.publishEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 5_000,
       loading: false,
@@ -239,7 +245,7 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
     // signet wallet — the receipt must say "demo sats", never "sats".
     mocks.publishEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 500,
       loading: false,
@@ -263,7 +269,7 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
   it('falls back to the profile tag only when no wallet mode is provided', async () => {
     mocks.publishEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 500,
       loading: false,
@@ -284,7 +290,7 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
   it('lets pet fiat offset the cost in DEMO mode only', async () => {
     mocks.publishEvent.mockImplementation(async (event: NostrEvent) => event);
     mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000));
-    const sendNutzap = vi.fn().mockResolvedValue('sent');
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
     const externalWallet = {
       totalBalance: 500,
       loading: false,
@@ -310,5 +316,82 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
     // Fully covered by pet fiat — the wallet is never charged in demo mode.
     expect(sendNutzap).not.toHaveBeenCalled();
     expect(result.current.data?.petFiatSpend).toBe(25);
+  });
+});
+
+describe('usePetsPurchaseItem hunt regressions (rounds 2-3)', () => {
+  function cashuWallet(sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' })) {
+    return {
+      totalBalance: 5_000,
+      loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 5_000 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.publishEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('cashu', 20_000));
+  });
+
+  it('[27] refuses BEFORE paying when pets publishing is disabled', async () => {
+    // Regression: the treasury nutzap used to go out first and the publish
+    // guard threw afterwards — a deterministic failure AFTER the payment.
+    mocks.petsEnabled.value = false;
+    const sendNutzap = vi.fn();
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, cashuWallet(sendNutzap), undefined, 'cashu'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toContain('Pets publishing is disabled');
+    expect(sendNutzap).not.toHaveBeenCalled();
+  });
+
+  it('[19] a paid-but-incomplete retry completes delivery WITHOUT a second nutzap', async () => {
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, cashuWallet(sendNutzap), undefined, 'cashu'),
+      { wrapper },
+    );
+    const journalKey = `pets-shop-paid-pending:${PUBKEY}:food_apple`;
+
+    // Attempt 1: payment lands, profile update fails → paid-but-incomplete.
+    mocks.publishEvent.mockRejectedValueOnce(new Error('relay down'));
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.error?.message).toContain('payment was sent to the 2140 treasury'));
+    expect(sendNutzap).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(journalKey)).not.toBeNull();
+
+    // Attempt 2: same item + quantity — completes from the journal, no re-payment.
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(sendNutzap).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(journalKey)).toBeNull();
+  });
+
+  it('[19] a retry with a different quantity refuses instead of paying again', async () => {
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, cashuWallet(sendNutzap), undefined, 'cashu'),
+      { wrapper },
+    );
+
+    mocks.publishEvent.mockRejectedValueOnce(new Error('relay down'));
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.error?.message).toContain('payment was sent to the 2140 treasury'));
+    expect(sendNutzap).toHaveBeenCalledTimes(1);
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 2, currency: 'sats' });
+    await waitFor(() => expect(result.current.error?.message).toContain('did not complete'));
+    expect(sendNutzap).toHaveBeenCalledTimes(1);
   });
 });

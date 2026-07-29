@@ -145,7 +145,9 @@ export function PetsHatchingCeremony({
   const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
   // Prefer the exact birth_block tag written at egg creation (same as
   // PetsPage's room-egg gate and useStartIncubation); fall back to the
-  // 10-minute estimate only for legacy eggs without the tag.
+  // 10-minute estimate only for legacy eggs without the tag. Using the
+  // estimate for tag-bearing eggs kept the ceremony blocked after the room
+  // had already (correctly) let the user in.
   const eggTooYoung = isExistingEgg && !isPetOldEnough(
     existingCompanion?.event.created_at,
     currentBlockHeight,
@@ -401,7 +403,7 @@ export function PetsHatchingCeremony({
       activeWallet.mintUrl,
       { memo: 'Pets egg reroll' },
     );
-    if (result === 'pending') {
+    if (result.status === 'pending') {
       // The sats left the wallet but the nutzap event is queued for retry.
       // Honor the payment — do NOT make the user pay again.
       toast({
@@ -410,7 +412,7 @@ export function PetsHatchingCeremony({
       });
       return true;
     }
-    if (result !== 'sent') {
+    if (result.status !== 'sent') {
       toast({
         title: 'Payment failed',
         description: 'The reroll payment did not go through. Your egg was not changed.',
@@ -480,7 +482,7 @@ export function PetsHatchingCeremony({
           // The grant is best-effort: a failure must never block hatching —
           // and neither may a hung call. The faucet fetch has no internal
           // timeout, so cap the wait here (a dead endpoint otherwise stalls
-          // the commit for the kernel TCP timeout, ~2 minutes).
+          // the commit for minutes on the kernel TCP timeout).
           await Promise.race([
             starterGrant.mutateAsync(BAO_PET_STARTER_GRANT_SATS),
             new Promise<never>((_, reject) =>

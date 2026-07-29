@@ -350,4 +350,17 @@ describe('token event localStorage helpers', () => {
     const loaded = await loadLastTokenEventHash('https://mint.example.com', encKey);
     expect(loaded).toBe('hashvalue');
   });
+
+  it('keeps last-token-event state separate for mints sharing a 16-byte URL prefix', async () => {
+    // Regression: makeLocalMintKey used to keep only the first 16 URL bytes
+    // (mostly the shared "https://" prefix), so these two mints shared one
+    // localStorage key and clobbered each other's last-token-event state.
+    const mintA = 'https://aaaaaaaa.one.example.com';
+    const mintB = 'https://aaaaaaaa.two.example.com';
+    expect(mintA.slice(0, 16)).toBe(mintB.slice(0, 16)); // collided under the old scheme
+    await saveLastTokenEventId(mintA, 'a'.repeat(64), encKey);
+    await saveLastTokenEventId(mintB, 'b'.repeat(64), encKey);
+    expect(await loadLastTokenEventId(mintA, encKey)).toBe('a'.repeat(64));
+    expect(await loadLastTokenEventId(mintB, encKey)).toBe('b'.repeat(64));
+  });
 });

@@ -179,7 +179,7 @@ export function usePetsOnboarding({
       const result = await externalWallet.sendNutzap(amount, treasuryNpub, externalWallet.mintUrl, { memo });
       // 'sent' or 'pending' both mean the sats are gone (pending auto-retries);
       // only 'failed' means nothing was committed and the caller may retry.
-      if (result === 'failed') throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+      if (result.status === 'failed') throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
     },
     [config.petsTreasuryNpub, externalWallet],
   );
