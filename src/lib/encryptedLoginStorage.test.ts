@@ -86,3 +86,31 @@ describe('createEncryptedLoginStorage', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('bunker logins stay plaintext for restart persistence', () => {
+  it('does not encrypt bunker-only login blobs', async () => {
+    const backend = makeBackend();
+    const storage = createEncryptedLoginStorage(backend);
+    const login = {
+      id: 'bunker:abc',
+      type: 'bunker' as const,
+      pubkey: '0000000000000000000000000000000000000000000000000000000000000001',
+      createdAt: new Date().toISOString(),
+      data: {
+        bunkerPubkey: '0000000000000000000000000000000000000000000000000000000000000002',
+        clientNsec: nip19.nsecEncode(generateSecretKey()),
+        relays: ['wss://relay.example.com'],
+      },
+    };
+    const plaintext = JSON.stringify([login]);
+
+    await storage.setItem('nostr:login', plaintext);
+
+    // Stored verbatim (ephemeral session token — encrypting it made cold
+    // starts undecryptable and logged mobile users out on every restart).
+    expect(backend.getItem('nostr:login')).toBe(plaintext);
+
+    // And readable again with no signer and no session cache.
+    expect(await storage.getItem('nostr:login')).toBe(plaintext);
+  });
+});
