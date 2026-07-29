@@ -49,7 +49,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     useInviteActions2(community);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [expiryDays, setExpiryDays] = useState<number>(0); // 0 = never
+  const [expiry, setExpiry] = useState<string>("never"); // "never" | days | "single"
   const [label, setLabel] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -88,8 +88,12 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
       return;
     }
     try {
-      const expiresAtMs = expiryDays > 0 ? Date.now() + expiryDays * 86400_000 : undefined;
-      setLink(await createLink({ expiresAtMs, label: label.trim() || undefined }));
+      const labelOpt = label.trim() || undefined;
+      setLink(
+        expiry === "single"
+          ? await createLink({ maxUses: 1, label: labelOpt })
+          : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create the link.");
     }
@@ -182,8 +186,10 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
               </button>
             </PopoverTrigger>
             <PopoverContent side="top" className="w-64 p-3 text-xs normal-case tracking-normal font-normal text-muted-foreground">
-              Anyone with the link can join. The secret lives in the # fragment, never sent to a server. Revoking a
-              link doesn't require changing anyone's keys.
+              Anyone with the link can join. The secret lives in the # fragment, never sent to a server. A
+              single-use link dies after the first join — your app auto-revokes it. Revoking stops new joins, but
+              someone who already opened the link keeps what it held; for a hard cutoff, rotate keys (ban the
+              leech) instead.
             </PopoverContent>
           </Popover>
         </div>
@@ -221,10 +227,10 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
               <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
                 <ChevronRight className={cn("size-3.5 transition-transform", optionsOpen && "rotate-90")} />
                 Link options
-                {!optionsOpen && (expiryDays > 0 || label.trim()) && (
+                {!optionsOpen && (expiry !== "never" || label.trim()) && (
                   <span className="text-foreground/70">
                     {" · "}
-                    {[expiryDays > 0 ? `expires in ${expiryDays} day${expiryDays > 1 ? "s" : ""}` : null, label.trim() ? `"${label.trim()}"` : null]
+                    {[expiry === "single" ? "single use" : expiry !== "never" ? `expires in ${expiry} day${expiry === "1" ? "" : "s"}` : null, label.trim() ? `"${label.trim()}"` : null]
                       .filter(Boolean)
                       .join(", ")}
                   </span>
@@ -232,12 +238,13 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2">
                 <div className="flex gap-2">
-                  <Select value={String(expiryDays)} onValueChange={(v) => setExpiryDays(Number(v))}>
+                  <Select value={expiry} onValueChange={setExpiry}>
                     <SelectTrigger className="w-40 shrink-0" aria-label="Link expiry">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">Never expires</SelectItem>
+                      <SelectItem value="never">Never expires</SelectItem>
+                      <SelectItem value="single">Single use</SelectItem>
                       <SelectItem value="1">Expires in 1 day</SelectItem>
                       <SelectItem value="7">Expires in 7 days</SelectItem>
                       <SelectItem value="30">Expires in 30 days</SelectItem>
@@ -262,7 +269,14 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
           <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your live links</div>
           {existing.map((e) => (
             <div key={e.token} className="flex items-center gap-2">
-              <Input readOnly value={e.url} className="min-w-0 font-mono text-[0.65rem]" onFocus={(ev) => ev.currentTarget.select()} />
+              <div className="relative min-w-0 flex-1">
+                <Input readOnly value={e.url} className="min-w-0 font-mono text-[0.65rem]" onFocus={(ev) => ev.currentTarget.select()} />
+                {e.max_uses === 1 && (
+                  <span className="absolute -top-2 left-2 rounded-sm bg-primary px-1 text-[0.6rem] font-semibold uppercase tracking-wide text-primary-foreground">
+                    single use
+                  </span>
+                )}
+              </div>
               <Button type="button" size="icon" variant="outline" className="shrink-0" aria-label="Copy link" onClick={() => handleCopy(e.url)}>
                 {copied === e.url ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
               </Button>

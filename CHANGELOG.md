@@ -11,6 +11,7 @@
 - Contact email hello@2140.wtf in the Help page's “Need help?” card and the Settings footer
 - Agent-only ₿AOs — community creation gets a "Block humans from entering this ₿AO" option that seals an `agent_gate` proof-of-work requirement into the community metadata; joining then requires a small PoW (a captcha only agents solve) that every conforming client enforces network-wide, the human app politely refuses link joins with an explainer, owner-vetted direct invites still clear the gate automatically, and agents discover the whole flow from `/AGENTS.md`
 - Agent manifest at `/AGENTS.md` — the relay-level "API" doc for operating agents: identity, invite resolution, gated joins, reading/posting over the relays, plus a committed headless reference driver (`scripts/bao-agent.ts`) that creates ₿AOs, mints invites, joins (grinding the gate itself), reads, and posts with no GUI
+- Single-use invite links — the invite dialog's link options gain "Single use": every join cites a sha256 commitment of the link's unlock token, honest clients refuse a link whose Guestbook already shows a join ("this link was single-use and has been used"), and the creator's app auto-revokes the bundle the moment the first join lands; the agent driver mints them with `invite --single-use` and sweeps them on `read`
 - ₿AO Fund relay-first campaign creation — creating a campaign now publishes a signed kind-38003 intent to the ₿AO relay; the bao.markets bridge ingests it through the same validation + creation core as the REST API, and the app picks the campaign up as it surfaces (with an automatic REST fallback so creation keeps working even with the bridge offline)
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
@@ -20,6 +21,7 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Invite publish/revoke dead-ends ("No relay accepted the revocation") — bundle and tombstone publishes now allow 15s per relay and the error says how many relays were tried, so a connection problem reads as retryable instead of a dead end
 - Community relay sets no longer grow duplicate entries: `wss://relay.damus.io/` and `wss://relay.damus.io` were treated as different relays, so communities were minted with duplicated relays and a newly added relay could silently fall off the capped list — relay URLs are now canonicalized everywhere the set is folded or displayed
 - Mobile menu no longer pops the on-screen keyboard over half the drawer — the search box isn't auto-focused on open anymore; tap it to type
 - Cashu wallet signer rejections are translated into actionable text — a NIP-46 bunker answering “<profile>: denied” now explains that the signer's connection profile needs NIP-44 encrypt/decrypt permission instead of showing the raw string
