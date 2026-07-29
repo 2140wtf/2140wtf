@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { BaoMarketChart } from '@/components/BaoMarketChart';
+import { BaoExpressTrade } from '@/components/BaoExpressTrade';
 import { cn } from '@/lib/utils';
 import { openUrl } from '@/lib/downloadFile';
 import type { BaoMarket } from '@/lib/baoMarketParser';
@@ -66,6 +68,7 @@ export function BaoMarketDetailDialog({
   open,
   onOpenChange,
 }: BaoMarketDetailDialogProps) {
+  const [showChart, setShowChart] = useState(false);
   if (!market) return null;
 
   return (
@@ -103,12 +106,11 @@ export function BaoMarketDetailDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Market chart</h3>
-            <BaoMarketChart market={market} />
-          </div>
+          {/* Express Trade — the fast path. Orders go to the bao.markets
+              API with the user's signer, no separate login needed. */}
+          <BaoExpressTrade market={market} />
 
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-1">
             <h3 className="text-sm font-semibold">Outcomes</h3>
             {market.outcomes.map((outcome) => {
               const color = getOutcomeColor(outcome.label);
@@ -130,15 +132,32 @@ export function BaoMarketDetailDialog({
             })}
           </div>
 
-          <Button
-            className="w-full mt-6"
-            onClick={() =>
-              openUrl(`https://bao.markets/demo/market/${encodeURIComponent(market.marketId)}`)
-            }
-          >
-            Trade on ₿AO MARKETS
-            <ExternalLink className="size-4 ml-2" />
-          </Button>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowChart((v) => !v)}
+            >
+              {showChart ? 'Hide chart' : 'Show chart'}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() =>
+                openUrl(`https://bao.markets/demo/market/${encodeURIComponent(market.marketId)}`)
+              }
+            >
+              bao.markets
+              <ExternalLink className="size-4 ml-2" />
+            </Button>
+          </div>
+
+          {showChart && (
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-semibold">Market chart</h3>
+              <BaoMarketChart market={market} />
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
