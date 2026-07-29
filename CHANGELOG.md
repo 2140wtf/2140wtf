@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Battle arena fullscreen mode — a maximize button in the arena header expands the fight to the full screen; on touch devices entering fullscreen also asks the OS for landscape (the phone can still flip either way up)
 - Pet battles support Open Design sprite skins — drop a `manifest.json` + animated WebP frames into `public/pets/battle/` (contract in its README: one WebP per pose/move per breed_asset, "default" fallback skin, missing poses fall back to idle) and fighters render the generated art with all manga effects intact; with no manifest the procedural renderer carries the fight, and skins can opt out of the procedural sword when weapons are baked into the art
 - ₿AO communities can link a code repository — managers set any repo URL (gitworkshop.dev NIP-34 repo, GitHub, …) in community settings, a GitBranch button in the channel header opens it for everyone, and “Fund this ₿AO” deep-links the fundraiser dialog with title + repo pre-filled
 - Community privacy model documented end-to-end (docs/BAO_PRIVACY.md): the create-dialog relay note and the invite dialog now state exactly what relays can see (traffic shape, direct-invite p-tags) and recommend single private relays and anonymous link joins for sensitive work
@@ -24,6 +25,8 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- Mobile battle controls redesigned for thumbs: in portrait the buttons sit below the arena so nothing covers the fight; in landscape big thumb clusters hug the left and right edges (movement left, jump/block/sword/fireball right). Only human-controlled fighters get buttons and keyboard instructions — against the bot just your own pad and shortcuts show, and in remote matches each device shows exactly one side
+- Fireball cooldown raised from 1.2s to 4s — fireballs stay the big killer but can't be spammed, leaving room to jump over a shot and forcing the melee and air game between casts
 - ₿AO Fund create dialog now says the quiet part out loud: ₿AO Markets is moving to mainnet on real Bitcoin rails soon, and the demo stays as the practice option
 - Sidebar “Create ₿AO” is now “Create ₿AO Community”
 - README rewritten around the real feature set (₿AO communities/markets/fund, NOSTR Pets, wallets, PWA) with the current tech stack
