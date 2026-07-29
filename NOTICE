@@ -1,0 +1,22 @@
+2140.wtf
+========
+
+2140.wtf is free software, licensed under the GNU Affero General Public
+License v3.0 (see LICENSE). We build in the open — you are welcome to
+study, fork, and reuse this code under the terms of that license, and we
+ask that you keep the 2140.wtf name and commit authorship intact so the
+project gets credit for its work.
+
+This repository contains third-party material:
+
+* Fork lineage — 2140.wtf descends from Shakespeare / ditto.pub by Alex
+  Gleason and many contributors, itself AGPL-3.0. Upstream authorship is
+  preserved in the git history.
+
+* Buzz pet characters (public/pets/buzz/) — the clay characters
+  "Bumble", "Fizz" and "Honey" from Buzz (https://buzz.xyz,
+  https://github.com/block/buzz), © Block, Inc., licensed under the
+  Apache License 2.0.
+
+* Bleep (public/pets/bleep/) — original character artwork created for
+  2140.wtf, AGPL-3.0 like the rest of the project.
