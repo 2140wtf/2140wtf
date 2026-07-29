@@ -60,7 +60,7 @@ const SILENT_REQ_TIMEOUT_MS = 30_000;
  * and cheap (one REQ frame; an empty replay on a truly quiet relay), and it
  * bounds "live went deaf" to this window instead of "until app relaunch".
  */
-const QUIET_ROTATE_MS = 90_000;
+const QUIET_ROTATE_MS = 30_000;
 /** How often a round's silence is re-checked against the deadlines above. */
 const WATCHDOG_TICK_MS = 5_000;
 /**
@@ -415,10 +415,10 @@ export function WireSync() {
             );
           }
           // A session that lived a while earned a prompt retry; a relay
-          // slamming the door (CLOSED right away) backs off up to 60s.
+          // slamming the door (CLOSED right away) backs off up to 15s.
           if (Date.now() - started > 60_000) backoff = 1_000;
           await sleep(backoff + Math.floor(Math.random() * 250));
-          backoff = Math.min(backoff * 2, 60_000);
+          backoff = Math.min(backoff * 2, 15_000);
         }
       })();
     }
