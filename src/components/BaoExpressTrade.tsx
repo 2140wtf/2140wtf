@@ -26,6 +26,8 @@ function formatSats(n: number): string {
 
 interface BaoExpressTradeProps {
   market: BaoMarket;
+  /** Outcome label to preselect (e.g. from a Buy Yes / Buy No card button). */
+  initialOutcomeLabel?: string | null;
   /** Called after a trade is placed successfully (e.g. to refresh odds). */
   onTraded?: () => void;
 }
@@ -36,11 +38,19 @@ interface BaoExpressTradeProps {
  * API with the user's signer (NIP-98), so no separate bao.markets login is
  * needed. Demo deployment: orders settle in free signet sats.
  */
-export function BaoExpressTrade({ market, onTraded }: BaoExpressTradeProps) {
+export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoExpressTradeProps) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const binary = market.outcomes.length === 2;
-  const [outcomeIdx, setOutcomeIdx] = useState(0);
+  const [outcomeIdx, setOutcomeIdx] = useState(() => {
+    if (initialOutcomeLabel) {
+      const idx = market.outcomes.findIndex(
+        (o) => o.label.toLowerCase() === initialOutcomeLabel.toLowerCase(),
+      );
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  });
   const [amount, setAmount] = useState('2140');
   const [rail, setRail] = useState<string>('cashu');
 
