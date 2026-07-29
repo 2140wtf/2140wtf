@@ -1,10 +1,10 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { BarChart3, Box, Info, RefreshCw, Search } from "lucide-react";
+import { BarChart3, Box, Info, Plus, RefreshCw, Search } from "lucide-react";
 import { useSeoMeta } from "@unhead/react";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -31,6 +31,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
 import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
+import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
 import { mergeApiAndRelayMarkets, type RelayMergedMarket } from "@/lib/baoRelayMarkets";
@@ -51,22 +52,6 @@ function formatEndDate(timestamp: number): string {
   });
 }
 
-function formatProbability(prob: number): string {
-  if (!Number.isFinite(prob)) return "—";
-  return `${Math.round(prob * 100)}%`;
-}
-
-function getOutcomeColor(label: string): { text: string; indicator?: string } {
-  const normalized = label.trim().toLowerCase();
-  if (normalized === "yes") {
-    return { text: "text-green-500", indicator: "bg-green-500" };
-  }
-  if (normalized === "no") {
-    return { text: "text-[var(--2140-bitcoin)]" };
-  }
-  return { text: "text-muted-foreground" };
-}
-
 function titleCaseCategory(name: string): string {
   return name
     .replace(/[_-]/g, ' ')
@@ -80,65 +65,92 @@ const MarketCard = memo(function MarketCard({
   market: RelayMergedMarket;
   onSelect: (market: RelayMergedMarket) => void;
 }) {
+  const isBinary = market.outcomes.length === 2;
+
   return (
     <Card
       data-market-id={market.marketId}
-      className="flex flex-col cursor-pointer hover:border-primary/50 transition-colors"
+      className="group flex flex-col cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
       onClick={() => onSelect(market)}
     >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle className="text-base leading-snug line-clamp-2">
-            {market.title}
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground line-clamp-2">
-          {market.description || "No description provided."}
-        </p>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{titleCaseCategory(market.category)}</Badge>
+      <CardContent className="flex-1 flex flex-col gap-3 p-4">
+        {/* Top meta row */}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
+            {titleCaseCategory(market.category)}
+          </Badge>
           {market.viaRelay && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+            <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">
               via relay
             </Badge>
           )}
-          <span className="text-xs text-muted-foreground">
-            Ends {formatEndDate(market.endTime)}
-          </span>
+          <span className="ml-auto tabular-nums">Ends {formatEndDate(market.endTime)}</span>
         </div>
 
-        <div className="mt-auto space-y-2">
-          {market.outcomes.slice(0, 4).map((outcome) => {
-            const color = getOutcomeColor(outcome.label);
-            return (
-              <div key={outcome.id} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className={cn('truncate max-w-[70%]', color.text)}>{outcome.label}</span>
-                  <span className="text-muted-foreground">
-                    {market.oddsAvailable ? formatProbability(outcome.probability) : "—"}
-                  </span>
-                </div>
-                {market.oddsAvailable && (
-                  <Progress
-                    value={Math.max(0, Math.min(100, (outcome.probability || 0) * 100))}
-                    className="h-1.5"
-                    indicatorClassName={color.indicator}
-                  />
-                )}
-              </div>
-            );
-          })}
-          {market.outcomes.length > 4 && (
-            <p className="text-xs text-muted-foreground">
-              +{market.outcomes.length - 4} more outcomes
-            </p>
+        {/* Title */}
+        <h3 className="text-[15px] font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          {market.title}
+        </h3>
+
+        {/* Outcomes — the visual anchor */}
+        <div className="mt-auto">
+          {isBinary && market.oddsAvailable ? (
+            <div className="grid grid-cols-2 gap-2">
+              {market.outcomes.map((outcome) => {
+                const pct = Math.round((outcome.probability || 0) * 100);
+                const isYes = outcome.label.trim().toLowerCase() === 'yes';
+                return (
+                  <div
+                    key={outcome.id}
+                    className={cn(
+                      'relative overflow-hidden rounded-lg border px-3 py-2.5 text-center',
+                      isYes ? 'border-green-500/30 bg-green-500/10' : 'border-border bg-secondary/50',
+                    )}
+                  >
+                    <div className={cn('text-xl font-bold tabular-nums leading-none', isYes ? 'text-green-600 dark:text-green-400' : 'text-foreground')}>
+                      {pct}%
+                    </div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mt-1">
+                      {outcome.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {market.outcomes.slice(0, 3).map((outcome) => {
+                const pct = Math.round((outcome.probability || 0) * 100);
+                return (
+                  <div key={outcome.id} className="space-y-0.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="truncate max-w-[75%]">{outcome.label}</span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {market.oddsAvailable ? `${pct}%` : '—'}
+                      </span>
+                    </div>
+                    {market.oddsAvailable && (
+                      <Progress value={pct} className="h-1" indicatorClassName="bg-primary/70" />
+                    )}
+                  </div>
+                );
+              })}
+              {market.outcomes.length > 3 && (
+                <p className="text-[11px] text-muted-foreground">+{market.outcomes.length - 3} more</p>
+              )}
+              {!market.oddsAvailable && (
+                <p className="text-xs text-muted-foreground italic">Odds unavailable</p>
+              )}
+            </div>
           )}
-          {!market.oddsAvailable && (
-            <p className="text-xs text-muted-foreground italic">Odds unavailable</p>
-          )}
+        </div>
+
+        {/* Trade affordance */}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[11px] text-muted-foreground">{market.type === 'binary' ? 'YES/NO market' : titleCaseCategory(market.type)}</span>
+          <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+            Trade →
+          </span>
         </div>
       </CardContent>
     </Card>
@@ -153,6 +165,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
   const [showResolved, setShowResolved] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BaoMarket | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedMarketId = searchParams.get("market");
 
@@ -304,6 +317,9 @@ export function PredictionMarketsPage(): React.JSX.Element {
         title="₿AO MARKETS"
         icon={<BarChart3 className="size-5" />}
       >
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-3.5" /> Create market
+        </Button>
         {isFetching && (
           <Box
             className="size-5 animate-spin text-muted-foreground"
@@ -428,6 +444,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
             }
           }
         }}
+      />
+
+      <CreateBaoMarketDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => refetch()}
       />
     </main>
   );
