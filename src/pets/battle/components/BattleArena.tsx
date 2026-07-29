@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ARENA_HEIGHT, ARENA_WIDTH } from '../lib/constants';
 import { MOVE_DEFS, type MoveDef } from '../lib/moves';
+import {
+  loadBattleSpriteManifest,
+  resolveBattleSkin,
+  type BattleSpriteManifest,
+} from '../lib/battleSprites';
 import { BattleHud } from './BattleHud';
 import { BattlePetSprite } from './BattlePetSprite';
 import { BattleTouchControls } from './BattleTouchControls';
@@ -437,6 +442,19 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1);
+  const [spriteManifest, setSpriteManifest] = useState<BattleSpriteManifest | null>(null);
+
+  // Load the optional Open Design sprite manifest once per mount (404 →
+  // procedural rendering for every fighter).
+  useEffect(() => {
+    let live = true;
+    loadBattleSpriteManifest().then((manifest) => {
+      if (live) setSpriteManifest(manifest);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Measure container and compute arena scale.
   useEffect(() => {
@@ -524,7 +542,11 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
 
     for (const fighter of state.fighters) {
       if (fighter.isBlocking) drawBlockShield(ctx, fighter, scale, cssHeight);
-      drawSword(ctx, fighter, scale, cssHeight, now);
+      // Skins with baked-in weapons opt out of the procedural sword.
+      const skin = resolveBattleSkin(spriteManifest, fighter.pet);
+      if (!skin || skin.proceduralSword) {
+        drawSword(ctx, fighter, scale, cssHeight, now);
+      }
       drawSlashArc(ctx, fighter, scale, cssHeight);
     }
 
@@ -532,7 +554,7 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
       drawImpactFlash(ctx, fighter, scale, cssHeight, now);
       drawMoveSfx(ctx, fighter, scale, cssHeight);
     }
-  }, [state, scale]);
+  }, [state, scale, spriteManifest]);
 
   const arenaHeight = ARENA_HEIGHT * scale;
 
@@ -556,6 +578,7 @@ export function BattleArena({ state, inputRef, className }: BattleArenaProps) {
           key={`fighter-${index}-${fighter.pet.d}`}
           fighter={fighter}
           scale={scale}
+          skin={resolveBattleSkin(spriteManifest, fighter.pet)}
         />
       ))}
 
