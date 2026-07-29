@@ -36,6 +36,7 @@ import {
   type BaoFundraiser,
   type BaoRail,
 } from '@/lib/baoFundraising';
+import { BAO_CATEGORIES } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
 import { cn } from '@/lib/utils';
@@ -56,9 +57,7 @@ function RunnerBadge({ type }: { type: BaoFundraiser['runner_type'] }) {
 
 const CATEGORY_FILTERS = [
   { id: 'all', label: 'All' },
-  { id: 'infra', label: 'Infra' },
-  { id: 'tools', label: 'Tools' },
-  { id: 'baos', label: '₿AOs' },
+  ...BAO_CATEGORIES,
 ] as const;
 
 /**
