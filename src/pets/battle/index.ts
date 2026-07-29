@@ -21,6 +21,7 @@ export {
 } from './lib/battleInteraction';
 export type {
   BattleFighter,
+  BattleHumanPlayers,
   BattleInputState,
   BattleMatchOptions,
   BattleMatchResult,
