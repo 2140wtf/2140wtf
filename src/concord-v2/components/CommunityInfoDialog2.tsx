@@ -693,8 +693,9 @@ function normalizeRelayUrl(input: string): string | null {
  * (CORD-02 §6): saving publishes an edition to old ∪ new relays, and adding
  * relays first MIRRORS the community's control/guestbook/rekey history onto
  * them so a fresh joiner reading only the new set folds a complete community.
- * Hard-capped at 5: every member's fold truncates past that (capRelays), so a
- * sixth entry would be silently dropped network-wide.
+ * Hard-capped at MAX_COMMUNITY_RELAYS (15): every member's fold truncates
+ * past that (capRelays), so a longer list would be silently dropped
+ * network-wide.
  */
 function RelaysSection({
   community,
