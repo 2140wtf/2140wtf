@@ -91,10 +91,14 @@ export function grindJoinRumor(
   pubkey: string,
   ms: number,
   difficulty: number,
-  attribution?: { creator: string; label?: string },
+  attribution?: { creator: string; label?: string; commitment?: string },
 ): Rumor {
   const baseTags: string[][] = [];
-  if (attribution) baseTags.push(["invite", attribution.creator, attribution.label ?? ""]);
+  if (attribution) {
+    const tag = ["invite", attribution.creator, attribution.label ?? ""];
+    if (attribution.commitment) tag.push(attribution.commitment);
+    baseTags.push(tag);
+  }
   for (let counter = 0; ; counter++) {
     if (counter > 1 << 26) {
       // ~67M hashes without a hit: the difficulty is abusive — stop, don't hang.

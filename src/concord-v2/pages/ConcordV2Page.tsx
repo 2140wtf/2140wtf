@@ -19,7 +19,7 @@ import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
 import { AuditLogView } from "@/concord-v2/components/AuditLogView2";
 import { BannedView } from "@/concord-v2/components/BannedView2";
 import { useBanSelfRemove2 } from "@/concord-v2/hooks/useBanSelfRemove2";
-import { useLinkAuthorityWatch2 } from "@/concord-v2/hooks/useInvites2";
+import { useLinkAuthorityWatch2, useSingleUseSweep2 } from "@/concord-v2/hooks/useInvites2";
 import { InvitesView } from "@/concord-v2/components/InvitesView2";
 import { DebugHealView } from "@/concord-v2/components/DebugHealView2";
 import { ChannelSidebarView } from "@/components/layout/ChannelSidebarView";
@@ -650,6 +650,9 @@ export function ConcordV2Page() {
   // Honest-client compliance: a stripped CREATE_INVITE means my own live
   // links must die — only my signer_sk can tombstone their bundles.
   useLinkAuthorityWatch2(baseCommunity);
+  // Single-use links die after their first Join: tombstone the bundle the
+  // moment the Guestbook shows a Join citing the link's token commitment.
+  useSingleUseSweep2(baseCommunity);
   // Durable read-cut: finish a rotating ban's rotation that a relay outage
   // dropped, from the keep-list persisted at ban time. Mounted ONCE here.
   useReadCutRetry2(baseCommunity);

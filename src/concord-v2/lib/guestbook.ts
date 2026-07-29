@@ -40,10 +40,37 @@ export function currentGuestbookGroup(community: CommunityV2): GroupKey {
 // ── Builders ─────────────────────────────────────────────────────────────────
 
 /** A self-signed Join, optionally attributing the invite link used (CORD-05 §1). */
-export function buildJoinRumor(pubkey: string, ms: number, attribution?: { creator: string; label?: string }): Rumor {
+/**
+ * A self-signed Join. `attribution.commitment` is the sha256 of the invite
+ * link's unlock token ({@link inviteCommitment}) — it tells anyone folding the
+ * Guestbook which LINK the join came through (single-use enforcement, per-link
+ * key rotations) without revealing the token.
+ */
+export function buildJoinRumor(
+  pubkey: string,
+  ms: number,
+  attribution?: { creator: string; label?: string; commitment?: string },
+): Rumor {
   const tags: string[][] = [];
-  if (attribution) tags.push(["invite", attribution.creator, attribution.label ?? ""]);
+  if (attribution) {
+    const tag = ["invite", attribution.creator, attribution.label ?? ""];
+    if (attribution.commitment) tag.push(attribution.commitment);
+    tags.push(tag);
+  }
   return buildRumor({ kind: KIND_JOIN_LEAVE, content: "join", tags, pubkey, ms });
+}
+
+/** The invite-token commitment a Join rumor cites, if any (invite tag, 4th element). */
+export function joinCommitmentOf(ev: { kind: number; content: string; tags: string[][] }): string | undefined {
+  if (ev.kind !== KIND_JOIN_LEAVE || ev.content !== "join") return undefined;
+  const tag = ev.tags.find((t) => t[0] === "invite");
+  const commitment = tag?.[3];
+  return commitment && /^[0-9a-f]{64}$/.test(commitment) ? commitment : undefined;
+}
+
+/** Whether the Guestbook already shows a Join citing this invite commitment. */
+export function singleUseLinkUsed(opened: Array<{ kind: number; content: string; tags: string[][] }>, commitment: string): boolean {
+  return opened.some((ev) => joinCommitmentOf(ev) === commitment);
 }
 
 /** A self-signed Leave. */
