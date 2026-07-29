@@ -33,6 +33,7 @@ import {
   routstrCreateBalanceFromCashu,
   routstrGetBalance,
   routstrGetInfo,
+  routstrTopupWithCashu,
 } from '@/lib/routstr';
 import { NUTZAP_INFO_KIND, parseNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
 import { checkTokenProofsSpent, decodeCashuToken } from '@/lib/cashu/cashu';
@@ -45,6 +46,7 @@ import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useAuthor } from '@/hooks/useAuthor';
+import { RoutstrExplainer } from './RoutstrExplainer';
 import { cn } from '@/lib/utils';
 
 function formatSats(n: number): string {
@@ -233,6 +235,8 @@ export function ComputeCreditsTab() {
           and any crowd-voted outcome elsewhere in the app can be gamed. Fund only what you can afford to lose.
         </p>
       </div>
+
+      <RoutstrExplainer />
 
       <div className="grid gap-6 md:grid-cols-2">
         <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
@@ -663,10 +667,12 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const publish = useNostrPublish();
+  const queryClient = useQueryClient();
   const { sendToken, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
   const [token, setToken] = useState('');
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [redeemedSats, setRedeemedSats] = useState(0);
+  const [topupToken, setTopupToken] = useState('');
   const [identitySweep, setIdentitySweep] = useState(false);
   const [lockHints, setLockHints] = useState<string[]>([]);
   const [privkeyPaste, setPrivkeyPaste] = useState('');
@@ -838,6 +844,22 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
     onError: (e) => toast({ title: 'Receipt failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
+  // Top up the revealed key with another UNLOCKED token (same NUT-11 caveat
+  // as the redeem path: Routstr redeems via an unsigned split at the mint, so
+  // P2PK-locked tokens are rejected — sweep them to the wallet first).
+  const topupMutation = useMutation({
+    mutationFn: async () => {
+      if (!apiKey) throw new Error('No compute key to top up.');
+      return routstrTopupWithCashu(apiKey, topupToken.trim());
+    },
+    onSuccess: (res) => {
+      setTopupToken('');
+      toast({ title: 'Key topped up', description: `Balance is now ${formatSats(res.balance)} msats.` });
+      queryClient.invalidateQueries({ queryKey: ['routstr-balance', apiKey] });
+    },
+    onError: (e) => toast({ title: 'Top-up failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+  });
+
   const acceptedMints = infoQuery.data?.mints ?? [];
   const busy = redeemMutation.isPending || identitySweepMutation.isPending;
 
@@ -881,6 +903,38 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 Use it as the API key with any OpenAI-compatible client pointed at{' '}
                 <code className="text-[10px]">{ROUTSTR_BASE_URL}/v1</code>. Whoever holds this key can spend the balance.
               </p>
+              <p className="text-[11px] text-muted-foreground">
+                Running an agent full-time? The{' '}
+                <a href="https://routstr.com/routstrd" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">
+                  routstrd daemon
+                </a>{' '}
+                discovers nodes on Nostr and auto-routes to the cheapest provider for each model, with a terminal
+                dashboard for balance and uptime: <code className="text-[10px]">bun install -g routstrd</code> →{' '}
+                <code className="text-[10px]">routstrd onboard</code>.
+              </p>
+            </div>
+
+            {/* Top up — nodes compete for your sats; keep this key fed instead of minting a new one. */}
+            <div className="rounded-md border p-3 space-y-2">
+              <p className="text-xs font-medium">Top up this key</p>
+              <p className="text-[11px] text-muted-foreground">
+                Paste an <span className="font-medium">unlocked</span> Cashu token to add it to this key's balance. Locked tokens are rejected by the node — redeem those to your wallet first.
+              </p>
+              <Textarea
+                value={topupToken}
+                onChange={(e) => setTopupToken(e.target.value)}
+                rows={2}
+                placeholder="cashuA… / cashuB… unlocked token"
+                className="font-mono text-xs"
+              />
+              <Button
+                size="sm" variant="outline" className="w-full gap-1.5"
+                disabled={!topupToken.trim().startsWith('cashu') || topupMutation.isPending}
+                onClick={() => topupMutation.mutate()}
+              >
+                {topupMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                Top up
+              </Button>
             </div>
 
             {/* Spend receipt — published ALONGSIDE the key reveal so the moment isn't lost. */}
