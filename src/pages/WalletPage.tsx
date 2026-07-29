@@ -1,7 +1,18 @@
-import { Wallet, RefreshCw } from 'lucide-react';
+import { Wallet, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -15,6 +26,7 @@ export function WalletPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const cashuWallet = useCashuWalletContext();
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
@@ -73,10 +85,48 @@ export function WalletPage() {
                       <RefreshCw className="size-3.5 mr-1.5" />
                       Retry
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={cashuWallet.regenerateSeed}>
+                    <Button variant="destructive" size="sm" onClick={() => setResetConfirmOpen(true)}>
                       Reset &amp; regenerate
                     </Button>
                   </div>
+
+                  <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                          <AlertTriangle className="size-5 text-destructive" />
+                          Are you sure?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2 text-left">
+                            <p>
+                              Resetting wipes the Cashu seed stored on <span className="font-semibold text-foreground">this device</span> and
+                              generates a new one. Any Cashu balance bound to the old seed — including your
+                              ₿AO testnet coins and wallet proofs — is <span className="font-semibold text-foreground">erased from this device</span>.
+                            </p>
+                            <p>
+                              Unless you have a backup of your seed phrase (or the balance lives in another
+                              wallet/app that holds it), those funds are <span className="font-semibold text-destructive">lost permanently</span>.
+                              There is no undo.
+                            </p>
+                            <p className="text-muted-foreground">
+                              Safer first step: unlock your signer and tap <span className="font-medium text-foreground">Retry</span> —
+                              most wallet errors are just a signer that hasn't approved the encryption request yet.
+                            </p>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep my wallet</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={cashuWallet.regenerateSeed}
+                        >
+                          Yes, wipe and regenerate
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               ) : !user.signer?.nip44 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
