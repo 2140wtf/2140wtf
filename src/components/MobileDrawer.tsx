@@ -111,7 +111,14 @@ export function MobileDrawer({ open, onOpenChange }: MobileDrawerProps) {
   return (
     <>
         <Sheet open={open} onOpenChange={(v) => { if (!v) setMoreMenuOpen(false); onOpenChange(v); }}>
-        <SheetContent side="left" className="w-[300px] p-0 gap-0 border-r-border flex flex-col overflow-visible">
+        <SheetContent
+          side="left"
+          className="w-[300px] p-0 gap-0 border-r-border flex flex-col overflow-visible"
+          // Don't auto-focus the first field (the search box) on open — on
+          // phones/tablets that pops the on-screen keyboard over half the
+          // menu. Users can still tap search explicitly to type.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           {/* SVG clip path definition for the drawer + arc shape.
               The clip path uses objectBoundingBox units so the arc scales with the
               background layer. The 0.893 ratio ≈ DRAWER_WIDTH / DRAWER_BG_WIDTH
