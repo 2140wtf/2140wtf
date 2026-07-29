@@ -34,6 +34,7 @@ import { isPetsSleeping } from '@/pets/core/types/pets';
 import { PetsAdultSvgRenderer } from './PetsAdultSvgRenderer';
 import { resolveAdultForm } from '@/pets/adult-pets';
 import { getBaoRecipeById } from '@/pets/adult-pets/lib/bao-recipe';
+import { isBuzzPetId, getBuzzPetAnimatedUrl } from '@/pets/core/lib/buzz-pets';
 import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 
 export interface PetsAdultVisualProps {
@@ -101,8 +102,10 @@ export function PetsAdultVisual({
   // ── State + form classes for species-specific CSS animations ───────────────
 
   const baoRecipe = pets.breedAsset ? getBaoRecipeById(pets.breedAsset) : undefined;
-  const formClass =
-    pets.breedCategory === 'custom' && pets.breedAsset
+  const isBuzz = pets.breedCategory === 'buzz' && isBuzzPetId(pets.breedAsset);
+  const formClass = isBuzz
+    ? `pets-form-buzz-${pets.breedAsset}`
+    : pets.breedCategory === 'custom' && pets.breedAsset
       ? `pets-form-custom-${pets.breedAsset}`
       : baoRecipe
         ? `pets-bao-${pets.breedAsset}`
@@ -151,16 +154,28 @@ export function PetsAdultVisual({
       )}
       style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
     >
-      <PetsAdultSvgRenderer
-        pets={pets}
-        isSleeping={isSleeping}
-        recipe={recipe}
-        recipeLabel={recipeLabel}
-        emotion={emotion}
-        bodyEffects={bodyEffects}
-        customForms={customForms}
-        className="size-full"
-      />
+      {isBuzz ? (
+        // Buzz pets are animated WebP characters (browser-native animation,
+        // alpha) — no SVG form, no eye rig. Sleeping/reaction states still
+        // apply via the container classes above.
+        <img
+          src={getBuzzPetAnimatedUrl(pets.breedAsset!)}
+          alt=""
+          draggable={false}
+          className="size-full object-contain select-none"
+        />
+      ) : (
+        <PetsAdultSvgRenderer
+          pets={pets}
+          isSleeping={isSleeping}
+          recipe={recipe}
+          recipeLabel={recipeLabel}
+          emotion={emotion}
+          bodyEffects={bodyEffects}
+          customForms={customForms}
+          className="size-full"
+        />
+      )}
     </div>
   );
 }

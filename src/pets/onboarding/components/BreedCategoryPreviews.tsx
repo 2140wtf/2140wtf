@@ -10,9 +10,11 @@ import { customizeBaoSvg, generateBaoSvg } from '@/pets/adult-pets/lib/bao-svg';
 import {
   getCategoryMembers,
   getCustomCategoryMembers,
+  getMemberAssetId,
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
+import { getBuzzPetAnimatedUrl } from '@/pets/core/lib/buzz-pets';
 import { deriveVisualTraits } from '@/pets/core/lib/pets';
 import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
 
@@ -100,10 +102,31 @@ export function BreedCategoryPreviews({
       {displayedMembers.map((member) => {
         const memberId = isAdultFormMember(member) ? member.form : member.id;
 
+        // Buzz tiles use the animated WebP directly instead of an SVG string.
+        if (category === 'buzz') {
+          return (
+            <div
+              key={memberId}
+              className={cn(
+                'relative rounded-lg bg-muted/40 overflow-hidden',
+                SIZE_CLASSES[size],
+              )}
+              title={member.label}
+            >
+              <img
+                src={getBuzzPetAnimatedUrl(getMemberAssetId(member))}
+                alt={member.label}
+                className="w-full h-full object-contain p-0.5"
+                loading="lazy"
+              />
+            </div>
+          );
+        }
+
         const svg = isAdultFormMember(member)
           ? getAdultFormPreviewSvg(member.form, category)
           : category === 'bao'
-            ? getBaoCardPreviewSvg(member.recipeId ?? member.id)
+            ? getBaoCardPreviewSvg(getMemberAssetId(member))
             : '';
 
         return (

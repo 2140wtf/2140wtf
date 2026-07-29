@@ -15,7 +15,8 @@ function makeBabyPets(overrides: Partial<Pets> = {}): Pets {
     name: 'Test Pet',
     lifeStage: 'baby',
     state: 'active',
-    breedCategory: 'ditto-blobbi',
+    breedCategory: 'buzz',
+    breedAsset: 'fizz',
     baseColor: '#f7931a',
     stats: { hunger: 100, happiness: 100, health: 100, hygiene: 100, energy: 100 },
     createdAt: 1,
@@ -24,6 +25,16 @@ function makeBabyPets(overrides: Partial<Pets> = {}): Pets {
 }
 
 describe('PetsBabyVisual — baby resembles the mature form', () => {
+  it('Buzz babies render the static first frame of their adult character', () => {
+    const { container } = render(<PetsBabyVisual pets={makeBabyPets()} />);
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('/pets/buzz/fizz.png');
+    // No SVG droplet alongside it.
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   it('non-Buzz babies keep the SVG pipeline', () => {
     const { container } = render(
       <PetsBabyVisual pets={makeBabyPets({ breedCategory: 'ditto-blobbi', breedAsset: undefined })} />,
