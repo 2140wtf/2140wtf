@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+- 2140 Pets species go 3D — Glitch Fox, Bio-Mech Moth, Liquid Blob, and Honey Badger are now full-body clay characters with legs (animated WebP idle loops + static first frames, generated via Open Design), replacing the flat SVG balls in the Species tab, breed picker, and adult rendering; existing pets upgrade automatically by breed_asset/adult form
+- Notifications get a real read model: clicking a notification marks just it read (the page no longer auto-marks everything on visit), a "Mark all as read" action sits in the tab bar, and the sidebar / mobile drawer / bottom nav bell show the actual unread count (99+ capped) instead of a bare dot
+- Wallet settings show the NWC service name and live balance per connection (get_info + get_balance, refreshed every 60s) — connect Rizful and see your sats like Amethyst users do
+- Compute credits are gated behind an agent check — a local proof-of-work "captcha only agents solve" (same mechanism as the agent-only ₿AO join gate) with a polite stop for humans and a dev bypass for the 2140 operator account
 - Buzz pet category — three animated clay companions (Bumble, Fizz, Honey) from the Buzz universe: animated WebP at the adult stage, static first frame for babies and previews, wired through the Species tab, breed picker, egg previews, and hatching
 - Bleep — a new 2140 Pets species: an original white clay alien (black almond eyes, Bitcoin ₿ on its forehead) delivered as an animated WebP with a static first frame, rendering through the same pipeline as the Buzz pets
 - ₿AO market discovery is relay-first — the Markets tab reads kind-38000 market definitions straight off the ₿AO relay (merged with the public API catalog), so new markets show up without waiting on the indexer
@@ -18,6 +22,7 @@
 ### Changed
 - ₿AO Fund create dialog now says the quiet part out loud: ₿AO Markets is moving to mainnet on real Bitcoin rails soon, and the demo stays as the practice option
 - Sidebar “Create ₿AO” is now “Create ₿AO Community”
+- README rewritten around the real feature set (₿AO communities/markets/fund, NOSTR Pets, wallets, PWA) with the current tech stack
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
