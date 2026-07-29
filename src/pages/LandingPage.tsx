@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 
 import { CalendarEventContent } from '@/components/CalendarEventContent';
 import { ClassifiedListingContent } from '@/components/ClassifiedListingContent';
+import { PwaInstallButton } from '@/components/PwaInstallButton';
 import { dedupeNip99Listings, isArtListing, NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
 
 /** The canonical 2140.wtf Nostr account. */
@@ -152,13 +153,17 @@ export function LandingPage() {
           <p className="mb-8 max-w-[62ch] text-[clamp(1.125rem,2.5vw,1.5rem)] text-[var(--2140-muted)]">
             The home for Bitcoin art, events, and writing on Nostr. A feed-native client based on 2140.wtf, made for the bitcoin culture that outlives the cycles.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               to={`/${TWO140_NPUB}`}
               className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--2140-bitcoin)] px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[var(--2140-bitcoin-hover)]"
             >
               Explore the feed <ArrowRight className="size-4" />
             </Link>
+            <PwaInstallButton
+              variant="pill"
+              className="border-[var(--2140-border)] text-[var(--2140-fg)] hover:bg-[var(--2140-raised)]"
+            />
           </div>
         </div>
       </section>
