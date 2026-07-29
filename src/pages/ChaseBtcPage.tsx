@@ -23,6 +23,7 @@ import {
   type ChaseMode,
   CHASE_FIAT_COST,
 } from '@/pets/chase';
+import { PET_FIAT_RESERVE_SATS } from '@/pets/shop/hooks/usePetsPurchaseItem';
 
 const PET_WIDTH = 64;
 const PET_HEIGHT = 64;
@@ -95,10 +96,14 @@ export default function ChaseBtcPage() {
     petHeight: PET_HEIGHT,
   });
 
-  const payout = useChasePayout(updateProfileEvent, petsWallet);
+  const payout = useChasePayout(updateProfileEvent, petsWallet, companion);
+
+  // Starter currency is one fiat rail in two pots: pet-bound fiat (spendable
+  // above a small reserve) plus account coins.
+  const starterSpendable = (profile?.coins ?? 0) + Math.max(0, (companion?.fiatBalance ?? 0) - PET_FIAT_RESERVE_SATS);
 
   // Fiat runs settle automatically when the run ends — the run cost is
-  // deducted from in-game coins. Without this the fiat branch of
+  // deducted from starter currency. Without this the fiat branch of
   // useChasePayout was dead code and fiat runs were free despite the start
   // screen advertising a coin cost.
   const fiatSettledRef = useRef(false);
@@ -137,11 +142,11 @@ export default function ChaseBtcPage() {
   );
 
   const handleRetry = useCallback(() => {
-    if (mode === 'fiat' && (profile?.coins ?? 0) < CHASE_FIAT_COST) {
+    if (mode === 'fiat' && starterSpendable < CHASE_FIAT_COST) {
       return;
     }
     handleStart(mode);
-  }, [handleStart, mode, profile?.coins]);
+  }, [handleStart, mode, starterSpendable]);
 
   const handleClaimSats = useCallback(async () => {
     if (mode !== 'sats') return { success: false, claimedAmount: 0, message: 'Not in sats mode' };
@@ -177,7 +182,6 @@ export default function ChaseBtcPage() {
     [duck, status],
   );
 
-  const coins = profile?.coins ?? 0;
   const sats = profile?.sats ?? 0;
   const isLoading = profileLoading || collectionLoading;
 
@@ -245,7 +249,7 @@ export default function ChaseBtcPage() {
             {status === 'running' && <ChaseHud state={state} mode={mode} />}
 
             {status === 'idle' && (
-              <ChaseStartScreen coins={coins} sats={sats} onStart={handleStart} allowSatsMode={!isCashu} />
+              <ChaseStartScreen coins={starterSpendable} sats={sats} onStart={handleStart} allowSatsMode={!isCashu} />
             )}
 
             {status === 'ended' && (
