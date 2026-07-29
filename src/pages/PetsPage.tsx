@@ -129,7 +129,7 @@ import {
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
-import { getBuzzPetAnimatedUrl } from '@/pets/core/lib/buzz-pets';
+import { getAnimatedCharacterUrl } from '@/pets/core/lib/animated-pets';
 import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
 import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
 import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
@@ -3918,8 +3918,8 @@ function SpeciesTabContent({ companion }: SpeciesTabContentProps) {
             );
           }
 
-          // Buzz species render the animated WebP character directly —
-          // there is no SVG form for them.
+          // Animated-character species (Buzz, Bleep) render the WebP
+          // character directly — there is no SVG form for them.
           if (member.kind === 'buzz') {
             return (
               <div
@@ -3928,7 +3928,7 @@ function SpeciesTabContent({ companion }: SpeciesTabContentProps) {
               >
                 <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
                   <img
-                    src={getBuzzPetAnimatedUrl(member.id)}
+                    src={getAnimatedCharacterUrl(member.id)}
                     alt={member.label}
                     className="w-full h-full object-contain"
                     loading="lazy"
