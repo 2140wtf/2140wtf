@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -52,6 +51,14 @@ function formatEndDate(timestamp: number): string {
   });
 }
 
+/** "5mo" / "30d"-style duration between creation and market end. */
+function formatDuration(createdAt: number, endTime: number): string {
+  if (!endTime || endTime <= 0) return 'Open';
+  const days = Math.max(0, Math.round((endTime - createdAt) / 86_400));
+  if (days >= 60) return `${Math.round(days / 30)}mo`;
+  return `${days}d`;
+}
+
 function titleCaseCategory(name: string): string {
   return name
     .replace(/[_-]/g, ' ')
@@ -63,60 +70,55 @@ const MarketCard = memo(function MarketCard({
   onSelect,
 }: {
   market: RelayMergedMarket;
-  onSelect: (market: RelayMergedMarket) => void;
+  onSelect: (market: RelayMergedMarket, outcomeLabel?: string) => void;
 }) {
   const isBinary = market.outcomes.length === 2;
+  const [yesOutcome, noOutcome] = isBinary ? market.outcomes : [undefined, undefined];
+  const yesPct = yesOutcome ? Math.round((yesOutcome.probability || 0) * 100) : 0;
+  const noPct = noOutcome ? Math.round((noOutcome.probability || 0) * 100) : 100 - yesPct;
 
   return (
     <Card
       data-market-id={market.marketId}
-      className="group flex flex-col cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-      onClick={() => onSelect(market)}
+      className="group flex flex-col transition-all hover:border-primary/40 hover:shadow-md"
     >
-      <CardContent className="flex-1 flex flex-col gap-3 p-4">
-        {/* Top meta row */}
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium">
-            {titleCaseCategory(market.category)}
-          </Badge>
+      <CardContent className="flex-1 flex flex-col gap-3 p-5">
+        {/* Category tag */}
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+          <span className="size-1.5 rounded-full bg-amber-500" />
+          {titleCaseCategory(market.category)}
           {market.viaRelay && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 text-muted-foreground">
-              via relay
-            </Badge>
+            <span className="ml-1 font-normal normal-case tracking-normal text-muted-foreground">· via relay</span>
           )}
-          <span className="ml-auto tabular-nums">Ends {formatEndDate(market.endTime)}</span>
         </div>
 
-        {/* Title */}
-        <h3 className="text-[15px] font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+        {/* Serif title — the bao.markets look */}
+        <h3
+          className="text-xl font-bold leading-snug line-clamp-3"
+          style={{ fontFamily: 'var(--title-font-family, serif)' }}
+        >
           {market.title}
         </h3>
 
-        {/* Outcomes — the visual anchor */}
-        <div className="mt-auto">
+        {market.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+            {market.description}
+          </p>
+        )}
+
+        {/* Probability row + split bar */}
+        <div className="mt-auto space-y-1.5 pt-1">
           {isBinary && market.oddsAvailable ? (
-            <div className="grid grid-cols-2 gap-2">
-              {market.outcomes.map((outcome) => {
-                const pct = Math.round((outcome.probability || 0) * 100);
-                const isYes = outcome.label.trim().toLowerCase() === 'yes';
-                return (
-                  <div
-                    key={outcome.id}
-                    className={cn(
-                      'relative overflow-hidden rounded-lg border px-3 py-2.5 text-center',
-                      isYes ? 'border-green-500/30 bg-green-500/10' : 'border-border bg-secondary/50',
-                    )}
-                  >
-                    <div className={cn('text-xl font-bold tabular-nums leading-none', isYes ? 'text-green-600 dark:text-green-400' : 'text-foreground')}>
-                      {pct}%
-                    </div>
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mt-1">
-                      {outcome.label}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              <div className="flex justify-between text-xs font-semibold tabular-nums">
+                <span className="text-amber-600 dark:text-amber-400">YES {yesPct}%</span>
+                <span className="text-muted-foreground">NO {noPct}%</span>
+              </div>
+              <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="bg-amber-500" style={{ width: `${yesPct}%` }} />
+                <div className="bg-neutral-500/70 flex-1" />
+              </div>
+            </>
           ) : (
             <div className="space-y-1.5">
               {market.outcomes.slice(0, 3).map((outcome) => {
@@ -130,7 +132,7 @@ const MarketCard = memo(function MarketCard({
                       </span>
                     </div>
                     {market.oddsAvailable && (
-                      <Progress value={pct} className="h-1" indicatorClassName="bg-primary/70" />
+                      <Progress value={pct} className="h-1" indicatorClassName="bg-amber-500/80" />
                     )}
                   </div>
                 );
@@ -145,12 +147,41 @@ const MarketCard = memo(function MarketCard({
           )}
         </div>
 
-        {/* Trade affordance */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-[11px] text-muted-foreground">{market.type === 'binary' ? 'YES/NO market' : titleCaseCategory(market.type)}</span>
-          <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-            Trade →
+        {/* Actions — Details / Buy Yes / Buy No (bao.markets row) */}
+        <div className="grid grid-cols-3 gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={() => onSelect(market)}>
+            Details
+          </Button>
+          {isBinary ? (
+            <>
+              <Button
+                size="sm"
+                className="bg-amber-500 text-black hover:bg-amber-400"
+                onClick={() => onSelect(market, yesOutcome?.label)}
+              >
+                Buy {yesOutcome?.label}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => onSelect(market, noOutcome?.label)}>
+                Buy {noOutcome?.label}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              className="col-span-2 bg-amber-500 text-black hover:bg-amber-400"
+              onClick={() => onSelect(market)}
+            >
+              Trade
+            </Button>
+          )}
+        </div>
+
+        {/* Bottom meta */}
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="rounded border border-border px-1.5 py-0.5 tabular-nums">
+            {formatDuration(market.createdAt, market.endTime)}
           </span>
+          <span className="tabular-nums">Ends {formatEndDate(market.endTime)}</span>
         </div>
       </CardContent>
     </Card>
@@ -165,6 +196,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
   const [showResolved, setShowResolved] = useState(false);
   const [selectedMarket, setSelectedMarket] = useState<BaoMarket | null>(null);
+  const [initialOutcome, setInitialOutcome] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedMarketId = searchParams.get("market");
@@ -306,7 +338,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
       <MarketCard
         key={market.marketId}
         market={market}
-        onSelect={setSelectedMarket}
+        onSelect={(m, outcomeLabel) => { setSelectedMarket(m); setInitialOutcome(outcomeLabel ?? null); }}
       />
     ));
   }, [isLoading, filteredAndSorted, error, refetch]);
@@ -433,10 +465,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
 
       <BaoMarketDetailDialog
         market={selectedMarket}
+        initialOutcomeLabel={initialOutcome}
         open={!!selectedMarket}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedMarket(null);
+            setInitialOutcome(null);
             if (selectedMarketId) {
               const next = new URLSearchParams(searchParams);
               next.delete("market");
