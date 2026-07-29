@@ -6,7 +6,32 @@ import { Capacitor } from '@capacitor/core';
 import { useCurrentUser } from './useCurrentUser';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useFollowList } from './useFollowActions';
+import { useReadNotificationIds } from './useReadNotificationIds';
 import { getEnabledNotificationKinds } from '@/lib/notificationKinds';
+
+/** Cap on the unread count query — the badge renders "99+" past this. */
+export const UNREAD_COUNT_CAP = 99;
+
+function useNotificationFilters() {
+  const { settings } = useEncryptedSettings();
+  const { data: followData } = useFollowList();
+  const prefs = settings?.notificationPreferences;
+
+  const enabledKinds = useMemo(
+    () => getEnabledNotificationKinds(prefs),
+    [prefs],
+  );
+  const followedPubkeys = useMemo(
+    () => followData?.pubkeys ?? [],
+    [followData?.pubkeys],
+  );
+  const onlyFollowing = prefs?.onlyFollowing === true;
+  const authorsFilter = onlyFollowing && followedPubkeys.length > 0
+    ? followedPubkeys
+    : undefined;
+
+  return { enabledKinds, authorsFilter };
+}
 
 /**
  * Lightweight hook that checks whether the user has any unread notifications.
@@ -85,4 +110,55 @@ export function useHasUnreadNotifications(): boolean {
   });
 
   return hasUnread;
+}
+
+/**
+ * Unread notification count for nav badges — the numeric sibling of
+ * useHasUnreadNotifications. Counts events newer than the read cursor
+ * (capped at UNREAD_COUNT_CAP) minus notifications individually marked
+ * read on this device. Render "99+" past the cap.
+ */
+export function useUnreadNotificationsCount(): number {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { settings } = useEncryptedSettings();
+  const { readIds } = useReadNotificationIds();
+
+  const notificationsCursor = settings !== undefined && settings !== null
+    ? (settings.notificationsCursor ?? 0)
+    : null;
+
+  const { enabledKinds, authorsFilter } = useNotificationFilters();
+  const kindsKey = [...enabledKinds].sort().join(',');
+  const authorsKey = authorsFilter ? authorsFilter.slice().sort().join(',') : 'all';
+
+  const { data: unreadIds = [] } = useQuery<string[]>({
+    queryKey: ['notifications-unread-ids', user?.pubkey ?? '', kindsKey, authorsKey],
+    queryFn: async ({ signal }) => {
+      if (!user || notificationsCursor === null) return [];
+
+      const filter: { kinds: number[]; '#p': string[]; since: number; limit: number; authors?: string[] } = {
+        kinds: enabledKinds,
+        '#p': [user.pubkey],
+        since: notificationsCursor + 1,
+        limit: UNREAD_COUNT_CAP,
+        ...(authorsFilter ? { authors: authorsFilter } : {}),
+      };
+
+      const events = await nostr.query(
+        [filter],
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
+      );
+
+      return events.filter((e) => e.pubkey !== user.pubkey).map((e) => e.id);
+    },
+    enabled: !!user && notificationsCursor !== null,
+    refetchInterval: 60_000,
+    placeholderData: (prev) => prev,
+  });
+
+  return useMemo(
+    () => unreadIds.filter((id) => !readIds.has(id)).length,
+    [unreadIds, readIds],
+  );
 }

@@ -6,7 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { cn } from '@/lib/utils';
 import { selectionChanged } from '@/lib/haptics';
-import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useHasUnreadNotifications, useUnreadNotificationsCount } from '@/hooks/useHasUnreadNotifications';
 import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -28,6 +28,7 @@ export function MobileBottomNav() {
   const queryClient = useQueryClient();
   const { user, metadata } = useCurrentUser();
   const hasUnread = useHasUnreadNotifications();
+  const unreadCount = useUnreadNotificationsCount();
   const hasUnreadMessages = useHasUnreadMessages();
   const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const hasUnreadChat = hasUnreadMessages.hasUnread || hasUnreadGroups;
@@ -117,9 +118,13 @@ export function MobileBottomNav() {
             >
               <span className="relative">
                 <Bell className="size-5" />
-                {hasUnread && (
+                {hasUnread && unreadCount > 0 ? (
+                  <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-4 text-center">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                ) : hasUnread ? (
                   <span className="absolute -top-1 right-0 size-2 bg-primary rounded-full" />
-                )}
+                ) : null}
               </span>
               <span className="text-[10px] font-medium">Notifications</span>
             </Link>

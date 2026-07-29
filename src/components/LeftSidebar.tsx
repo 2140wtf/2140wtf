@@ -25,7 +25,7 @@ import { useLoginActions } from '@/hooks/useLoginActions';
 
 import { useFeedSettings } from '@/hooks/useFeedSettings';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useHasUnreadNotifications } from '@/hooks/useHasUnreadNotifications';
+import { useHasUnreadNotifications, useUnreadNotificationsCount } from '@/hooks/useHasUnreadNotifications';
 import { useHasUnreadMessages } from '@/hooks/useHasUnreadMessages';
 import { useGroupChatHasUnread } from '@/hooks/useGroupChatHasUnread';
 import { VerifiedNip05Text } from '@/components/Nip05Badge';
@@ -61,6 +61,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
   const visibleHiddenItems = hiddenItems;
 
   const hasUnread = useHasUnreadNotifications();
+  const unreadCount = useUnreadNotificationsCount();
   const hasUnreadMessages = useHasUnreadMessages();
   const { hasUnread: hasUnreadGroups } = useGroupChatHasUnread();
   const userProfileUrl = useProfileUrl(user?.pubkey ?? '', metadata);
@@ -146,6 +147,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
             if (id === 'messages') return hasUnreadMessages.hasUnread || hasUnreadGroups;
             return undefined;
           }}
+          getIndicatorCount={(id) => id === 'notifications' ? unreadCount : undefined}
           homePage={homePage}
           compact={collapsed}
           minimal

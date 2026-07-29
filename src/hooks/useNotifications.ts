@@ -7,6 +7,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from './useCurrentUser';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useFollowList } from './useFollowActions';
+import { useReadNotificationIds } from './useReadNotificationIds';
 import { ALL_NOTIFICATION_KINDS, getEnabledNotificationKinds } from '@/lib/notificationKinds';
 
 const PAGE_SIZE = 20;
@@ -69,6 +70,8 @@ export interface NotificationData {
   hasUnread: boolean;
   /** Mark all current notifications as read. */
   markAsRead: () => Promise<void>;
+  /** Mark specific notification events as read (click-to-read). */
+  markIdsRead: (ids: Iterable<string>) => void;
   /** Loading state for the first page. */
   isLoading: boolean;
   /** Whether the query has completed at least once. */
@@ -190,6 +193,7 @@ export function useNotifications(): NotificationData {
   const queryClient = useQueryClient();
   const { user } = useCurrentUser();
   const { settings, updateSettings } = useEncryptedSettings();
+  const { readIds, markIdsRead, clearReadIds } = useReadNotificationIds();
   const { data: followData } = useFollowList();
 
   const prefs = settings?.notificationPreferences;
@@ -396,15 +400,16 @@ export function useNotifications(): NotificationData {
     ? Math.max(optimisticCursor.current, remoteCursor ?? 0)
     : remoteCursor;
 
-  // Build set of unread notification IDs
+  // Build set of unread notification IDs: newer than the read cursor AND
+  // not individually marked read (clicked) on this device.
   const newNotificationIds = useMemo(() => {
     if (notificationsCursor === null) return new Set<string>();
     return new Set(
       items
-        .filter((item) => item.event.created_at > notificationsCursor)
+        .filter((item) => item.event.created_at > notificationsCursor && !readIds.has(item.event.id))
         .map((item) => item.event.id),
     );
-  }, [items, notificationsCursor]);
+  }, [items, notificationsCursor, readIds]);
 
   const hasUnread = notificationsCursor !== null && newNotificationIds.size > 0;
 
@@ -447,6 +452,8 @@ export function useNotifications(): NotificationData {
         { queryKey: ['notifications-unread', user.pubkey] },
         false,
       );
+      // The cursor now covers every individually-read notification too.
+      clearReadIds();
     } catch (error) {
       console.error('Failed to mark notifications as read:', error);
       optimisticCursor.current = null;
@@ -460,6 +467,7 @@ export function useNotifications(): NotificationData {
     newNotificationIds,
     hasUnread,
     markAsRead,
+    markIdsRead,
     isLoading,
     hasFetched: isFetched,
     hasNextPage: hasNextPage ?? false,
