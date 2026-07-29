@@ -32,6 +32,8 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- Compute-credits agent gate is now a hard stop for humans — the one-click "run the check" pass is gone (agents clear the proof-of-work via tooling; only the 2140 operator npub sees a dev bypass)
+
 - Mobile battle controls redesigned for thumbs: in portrait the buttons sit below the arena so nothing covers the fight; in landscape big thumb clusters hug the left and right edges (movement left, jump/block/sword/fireball right). Only human-controlled fighters get buttons and keyboard instructions — against the bot just your own pad and shortcuts show, and in remote matches each device shows exactly one side
 - Fireball cooldown raised from 1.2s to 4s — fireballs stay the big killer but can't be spammed, leaving room to jump over a shot and forcing the melee and air game between casts
 - ₿AO Fund create dialog now says the quiet part out loud: ₿AO Markets is moving to mainnet on real Bitcoin rails soon, and the demo stays as the practice option
@@ -40,6 +42,7 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Notification unread counter no longer resurrects on every restart — the read cursor also persists locally per account (the synced write needs a NIP-44 signature that could silently fail), and all readers use max(synced, local)
 - Remote-signer sessions no longer die on every mobile app restart — the login blob was encrypted with a key stored inside the blob itself, so cold starts forced a full re-login; bunker/extension logins now persist and Amber sessions survive closing the app (nsec blobs stay encrypted at rest)
 - Signer prompt storms — the NIP-46 handshake now requests `sign_event:<kind>` for every kind the app publishes (~70), so approving once at connect covers posts, pets, wallet, and ₿AO actions instead of prompting per kind
 - ₿AO API calls no longer sign every request — NIP-98 auth headers are reused for 2 minutes (the API accepts 5), so the 30s balance poll and retries don't prompt the signer each time
