@@ -10,7 +10,7 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
-import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery } from '@/lib/cashu/storage';
+import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery } from '@/lib/cashu/storage';
 import { createNip60Signer, buildTokenEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -55,6 +55,12 @@ const mocks = vi.hoisted(() => ({
     }),
     createMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
     checkMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', state: 'PAID' }),
+    createMeltQuoteBolt12: vi.fn().mockResolvedValue({ quote: 'bolt12-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
+    checkMeltQuoteBolt12: vi.fn().mockResolvedValue({ quote: 'bolt12-quote-id', state: 'PAID' }),
+    meltProofsBolt12: vi.fn().mockResolvedValue({
+      quote: { quote: 'bolt12-quote-id', state: 'PAID' },
+      change: [{ id: 'ks', amount: 78, secret: 'change-secret-b12', C: 'C-change-b12' }],
+    }),
     meltProofs: vi.fn().mockImplementation(async (_quote: unknown, proofs: unknown[]) => {
       const callId = ++mocks.meltCallCount;
       const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
@@ -838,6 +844,231 @@ describe('useCashuWallet hunt regressions: dedicated melt-input recovery slot', 
     // …and the melt-input journal is cleared.
     expect(await loadMeltInputRecovery(mintUrl, encKey)).toBeNull();
   });
+});
+
+describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.meltCallCount = 0;
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 10, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 20, secret: 'secret-b', C: 'C-b' },
+        { id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' },
+      ],
+      encKey,
+    );
+    return { encKey };
+  }
+
+  it('payBolt12 records the melt tx WITH the encryption key, preserving encrypted history', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    // Pre-existing encrypted history — the round-2 bug wiped it by reading
+    // without the key (decryption failure → []) and saving the new tx over it.
+    await addTransaction(
+      { type: 'mint', amount: 5, memo: 'earlier tx', mintUrl, status: 'completed' },
+      encKey,
+    );
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    vi.spyOn(wallet, 'createMeltQuoteBolt12').mockResolvedValue({
+      quote: 'bolt12-quote-id',
+      amount: 21,
+      fee_reserve: 1,
+      state: 'UNPAID',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    } as never);
+    vi.spyOn(wallet, 'meltProofsBolt12').mockResolvedValue({
+      quote: { quote: 'bolt12-quote-id', state: 'PAID' },
+      change: [{ id: 'ks', amount: 78, secret: 'change-secret-b12', C: 'C-change-b12' }],
+    } as never);
+
+    const payResult = await act(async () => result.current.payBolt12('lno1qqqqqqqqqqqqqqqqqqqq', 21));
+    expect(payResult.success).toBe(true);
+
+    const txs = await loadTransactions(encKey);
+    // The earlier entry survived…
+    expect(txs.some((t) => t.memo === 'earlier tx')).toBe(true);
+    // …and the BOLT12 melt was recorded with everything the poll needs.
+    const meltTx = txs.find((t) => t.type === 'melt');
+    expect(meltTx).toBeDefined();
+    expect(meltTx!.status).toBe('completed');
+    expect(meltTx!.quoteId).toBe('bolt12-quote-id');
+    expect(meltTx!.bolt12).toBe(true);
+    expect(meltTx!.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it('records a pending melt tx and keeps the melt-input journal when meltProofs fails after quote creation', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    // Melt outcome UNKNOWN: the request timed out after the mint may have paid.
+    vi.spyOn(wallet, 'meltProofs').mockRejectedValue(new Error('Melt proofs timeout'));
+    // Keep a stray poll (10s interval) from resolving the quote mid-test.
+    vi.spyOn(wallet, 'checkMeltQuote').mockResolvedValue({ quote: 'melt-quote-id', state: 'PENDING' } as never);
+
+    const payResult = await act(async () => result.current.payInvoice('lnbc210n1pw'));
+    expect(payResult.success).toBe(false);
+
+    // A pending melt tx ties the journal to an unresolved quote — without it
+    // the startup reconcile merged the journaled (possibly spent) inputs back
+    // into the store, inflating the balance and poisoning future sends.
+    const txs = await loadTransactions(encKey);
+    const pendingMelt = txs.find((t) => t.type === 'melt' && t.status === 'pending');
+    expect(pendingMelt).toBeDefined();
+    expect(pendingMelt!.quoteId).toBe('melt-quote-id');
+    expect(pendingMelt!.memo).toContain('outcome unknown');
+
+    // The journal still holds the selected 100-sat input…
+    const journal = await loadMeltInputRecovery(mintUrl, encKey);
+    expect(journal).not.toBeNull();
+    expect(journal!.proofs).toEqual([expect.objectContaining({ secret: 'secret-c', amount: 100 })]);
+    // …and the proof store is untouched (all three original proofs present).
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b', 'secret-c']);
+  });
+
+  it('refuses to remove a custom mint that still holds a balance', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Fallback', url: 'https://fallback.example.com' }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    act(() => { result.current.addCustomMint('Test', mintUrl); });
+    await waitFor(() => expect(result.current.allMints.some((m) => m.url === mintUrl)).toBe(true));
+
+    act(() => { result.current.removeCustomMint(mintUrl); });
+    await waitFor(() => expect(result.current.error).toContain('Mint still holds 130 sats'));
+
+    // The mint and its ecash survive.
+    expect(result.current.allMints.some((m) => m.url === mintUrl)).toBe(true);
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b', 'secret-c']);
+  });
+
+  it('removes a custom mint with a zero balance and cleans up its storage', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const emptyMint = 'https://empty.example.com';
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    act(() => { result.current.addCustomMint('Empty', emptyMint); });
+    await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(true));
+
+    act(() => { result.current.removeCustomMint(emptyMint); });
+    await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(false));
+    expect(result.current.error).toBe('');
+  });
+
+  it('poll resolves a pending BOLT12 melt via the bolt12 endpoint and removes journaled inputs', async () => {
+    // Seed storage BEFORE faking timers — the cross-tab lock's polling loop
+    // misbehaves when acquisition starts under fake time.
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    // Pending BOLT12 melt tx (as recorded after a melt timeout) + the
+    // melt-input journal holding the selected 100-sat proof, which is still
+    // in the store because the melt response was lost.
+    await addTransaction(
+      {
+        type: 'melt',
+        amount: 21,
+        memo: 'BOLT12 offer lno1qqq… (outcome unknown — resolving)',
+        mintUrl,
+        status: 'pending',
+        quoteId: 'bolt12-quote-id',
+        expiresAt: Date.now() + 3600_000,
+        bolt12: true,
+      },
+      encKey,
+    );
+    await writeMeltInputRecovery(mintUrl, [{ id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' }], encKey);
+
+    // shouldAdvanceTime keeps waitFor/webcrypto working while still letting us
+    // jump the clock straight onto the 10s poll interval. setImmediate must
+    // stay REAL — fake-indexeddb (the cross-tab lock backing store) dispatches
+    // through it and would never resolve under a faked immediate.
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    });
+    try {
+      const { result } = renderHook(
+        () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.wallet).not.toBeNull());
+      const wallet = result.current.wallet;
+      if (!wallet) throw new Error('Wallet not initialized');
+
+      // The bolt11 endpoint must NOT be consulted for a bolt12 quote — make it
+      // return a contradictory state so a regression fails loudly.
+      const bolt11Check = vi.spyOn(wallet, 'checkMeltQuote').mockResolvedValue({ quote: 'bolt12-quote-id', state: 'UNPAID' } as never);
+      const bolt12Check = vi.spyOn(wallet, 'checkMeltQuoteBolt12').mockResolvedValue({ quote: 'bolt12-quote-id', state: 'PAID' } as never);
+
+      // An unrelated live crash journal in the shared proof-recovery slot —
+      // the poll must NOT clear it when resolving the melt. Written after
+      // startup reconcile has run so it isn't merged back as crash recovery.
+      const sentinel = { id: 'ks', amount: 7, secret: 'sentinel-secret', C: 'C-sentinel' };
+      await writeProofRecovery(mintUrl, [sentinel], encKey);
+
+      // Jump the clock onto the 10s poll interval.
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+
+      await waitFor(() => expect(bolt12Check).toHaveBeenCalledWith('bolt12-quote-id'));
+      expect(bolt11Check).not.toHaveBeenCalled();
+
+      await waitFor(async () => {
+        const txs = await loadTransactions(encKey);
+        expect(txs.find((t) => t.quoteId === 'bolt12-quote-id')?.status).toBe('completed');
+      });
+
+      // Spent journaled inputs removed from the store; the rest untouched.
+      const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+      expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b']);
+
+      // Melt-input journal cleared; the shared slot (and its sentinel) survives.
+      expect(await loadMeltInputRecovery(mintUrl, encKey)).toBeNull();
+      const shared = await loadProofRecovery(mintUrl, encKey);
+      expect(shared?.proofs).toEqual([expect.objectContaining({ secret: 'sentinel-secret' })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 15000);
 });
 
 describe('useCashuWallet hunt regressions: foreign-locked proof filter in send-recovery reconcile', () => {

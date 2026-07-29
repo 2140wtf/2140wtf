@@ -13,7 +13,12 @@ const mocks = vi.hoisted(() => ({
   sendPaymentMock: vi.fn(),
   getActiveConnectionMock: vi.fn(() => null),
   fetchMock: vi.fn(),
+  weblnSendMock: vi.fn(),
 }));
+
+/** Real mainnet invoice for exactly 2,000 sats (light-bolt11-decoder README fixture). */
+const REAL_INVOICE_2000_SATS =
+  'lnbc20u1p3y0x3hpp5743k2g0fsqqxj7n8qzuhns5gmkk4djeejk3wkp64ppevgekvc0jsdqcve5kzar2v9nr5gpqd4hkuetesp5ez2g297jduwc20t6lmqlsg3man0vf2jfd8ar9fh8fhn2g8yttfkqxqy9gcqcqzys9qrsgqrzjqtx3k77yrrav9hye7zar2rtqlfkytl094dsp0ms5majzth6gt7ca6uhdkxl983uywgqqqqlgqqqvx5qqjqrzjqd98kxkpyw0l9tyy8r8q57k7zpy9zjmh6sez752wj6gcumqnj3yxzhdsmg6qq56utgqqqqqqqqqqqeqqjq7jd56882gtxhrjm03c93aacyfy306m4fq0tskf83c0nmet8zc2lxyyg3saz8x6vwcp26xnrlagf9semau3qm2glysp7sv95693fphvsp54l567';
 
 vi.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mocks.toastMock }),
@@ -186,5 +191,90 @@ describe('useZaps zap request construction', () => {
     const args = mocks.makeZapRequestMock.mock.calls[0][0];
     expect(args.pubkey).toBe(target.pubkey);
     expect(args.event).toBe(target);
+  });
+});
+
+describe('useZaps invoice amount verification (hunt regression)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.signEventMock.mockImplementation(async (event: Event) => ({ ...event, sig: 'sig' }));
+    globalThis.fetch = mocks.fetchMock;
+    mocks.getZapEndpointMock.mockResolvedValue('https://zap.example.com/callback');
+    // An active NWC connection: if the invoice passes verification it is paid
+    // through sendPaymentMock — the cleanest observable for "payment attempted".
+    mocks.getActiveConnectionMock.mockReturnValue({
+      connectionString: 'nostr+walletconnect://example',
+      isConnected: true,
+    } as never);
+    mocks.sendPaymentMock.mockResolvedValue({ preimage: 'preimage' });
+    mocks.fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ pr: REAL_INVOICE_2000_SATS }),
+    });
+  });
+
+  it('pays the LNURL invoice when its amount matches the requested zap', async () => {
+    const { result } = renderHook(() => useZaps(makeTarget(), null, null));
+    await act(async () => { await result.current.zap(2000, ''); });
+    await waitFor(() => expect(mocks.sendPaymentMock).toHaveBeenCalledWith(expect.anything(), REAL_INVOICE_2000_SATS));
+  });
+
+  it('refuses to pay when the LNURL server returns an invoice for a different amount', async () => {
+    const { result } = renderHook(() => useZaps(makeTarget(), null, null));
+    // Ask for 21 sats; the server answers with a 2,000-sat invoice.
+    await act(async () => { await result.current.zap(21, ''); });
+    await waitFor(() => expect(mocks.fetchMock).toHaveBeenCalled());
+    expect(mocks.sendPaymentMock).not.toHaveBeenCalled();
+    expect(mocks.toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Zap failed' }));
+    // No invoice is left on screen either — the bad invoice is discarded.
+    expect(result.current.invoice).toBeNull();
+  });
+
+  it('refuses to pay an undecodable/amountless invoice', async () => {
+    mocks.fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ pr: 'lnbc1not-a-real-invoice' }),
+    });
+    const { result } = renderHook(() => useZaps(makeTarget(), null, null));
+    await act(async () => { await result.current.zap(21, ''); });
+    await waitFor(() => expect(mocks.fetchMock).toHaveBeenCalled());
+    expect(mocks.sendPaymentMock).not.toHaveBeenCalled();
+    expect(mocks.toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Zap failed' }));
+  });
+});
+
+describe('useZaps payInvoiceWithWebLN (hunt regression: no invoice regeneration)', () => {
+  const webln = { sendPayment: mocks.weblnSendMock };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    globalThis.fetch = mocks.fetchMock;
+    mocks.weblnSendMock.mockResolvedValue({ preimage: 'preimage' });
+  });
+
+  it('pays the given invoice directly without creating a new zap request', async () => {
+    const onZapSuccess = vi.fn();
+    const { result } = renderHook(() => useZaps(makeTarget(), webln as never, null, onZapSuccess));
+
+    await act(async () => { await result.current.payInvoiceWithWebLN(REAL_INVOICE_2000_SATS, 2000); });
+
+    expect(mocks.weblnSendMock).toHaveBeenCalledWith(REAL_INVOICE_2000_SATS);
+    // The crucial part: no second zap request, no second invoice fetch.
+    expect(mocks.makeZapRequestMock).not.toHaveBeenCalled();
+    expect(mocks.fetchMock).not.toHaveBeenCalled();
+    expect(onZapSuccess).toHaveBeenCalledWith({ amountSats: 2000 });
+    expect(result.current.invoice).toBeNull();
+  });
+
+  it('reports failure honestly and keeps state consistent when WebLN rejects', async () => {
+    mocks.weblnSendMock.mockRejectedValue(new Error('user declined'));
+    const onZapSuccess = vi.fn();
+    const { result } = renderHook(() => useZaps(makeTarget(), webln as never, null, onZapSuccess));
+
+    await act(async () => { await result.current.payInvoiceWithWebLN(REAL_INVOICE_2000_SATS, 2000); });
+
+    expect(onZapSuccess).not.toHaveBeenCalled();
+    expect(mocks.toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'WebLN payment failed' }));
+    expect(result.current.isZapping).toBe(false);
   });
 });
