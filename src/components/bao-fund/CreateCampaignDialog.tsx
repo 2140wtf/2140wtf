@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -196,17 +196,27 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New fundraising campaign (DEMO)</DialogTitle>
+          <DialogTitle>New fundraising campaign</DialogTitle>
           <DialogDescription>
             Every milestone becomes a YES/NO prediction market on bao.markets — the market's resolution gates the payout.
-            Resolution is crowd-voted: experimental and gameable, so treat outcomes as a drill.
-            All settlement rails are in demo: contributions are recorded only, no real sats move, and donors are warned not to send real payments.
-          </DialogDescription>
-          <DialogDescription className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-foreground">
-            ₿AO Markets is moving to mainnet on real Bitcoin rails soon — the demo stays available as a practice ground,
-            so anything you try here today is rehearsal for the real thing.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Unmissable demo warning: the sats are real Cashu tokens, but they
+            are signet demo sats — nothing here settles real bitcoin. */}
+        <div className="rounded-lg border-2 border-amber-500/60 bg-amber-500/10 px-4 py-3 space-y-1.5">
+          <p className="flex items-center gap-2 text-sm font-bold text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="size-4 shrink-0" />
+            DEMO — no real bitcoin moves
+          </p>
+          <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-300/90">
+            The tokens are real Cashu, but only <span className="font-semibold">signet demo sats</span> — contributions are recorded, never settled.
+            Donors must not send real payments. Resolution is crowd-voted and gameable, so treat every outcome as a drill.
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            ₿AO Markets moves to mainnet on real Bitcoin rails soon — the demo stays as the practice ground.
+          </p>
+        </div>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
