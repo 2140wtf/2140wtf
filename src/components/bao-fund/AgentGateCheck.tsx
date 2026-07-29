@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { nip19 } from 'nostr-tools';
-import { Bot, Hammer, Loader2, Wrench } from 'lucide-react';
+import { Bot, ShieldX, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useToast } from '@/hooks/useToast';
-import { grindJoinRumor, DEFAULT_AGENT_GATE_DIFFICULTY } from '@/concord-v2/lib/agentGate';
 
-/** The 2140 operator account — gets a dev bypass so the gate can be tested. */
+/** The 2140 operator account — the only one offered a dev bypass. */
 const DEV_NPUB = 'npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j';
 const DEV_PUBKEY = (() => {
   try {
@@ -44,21 +42,20 @@ interface AgentGateCheckProps {
 }
 
 /**
- * Agent-check gate ("captcha only agents solve") for agent-dedicated areas.
+ * Agent-only gate ("captcha stopping humans") for agent-dedicated areas.
  *
- * Humans see a polite block explaining this area is for agents; agents (and
- * curious humans, honestly) pass by grinding a NIP-13-style proof-of-work
- * locally — the same mechanism as the agent-only ₿AO join gate. The pass is
- * remembered per account on this device.
+ * Humans are BLOCKED here — there is deliberately no "pass" button. The gate
+ * exists for autonomous agents, whose tooling clears the proof-of-work
+ * automatically (the same NIP-13 grind as the agent-only ₿AO join gate); a
+ * human app politely refuses, exactly like the human join path for gated
+ * communities. Human operators fund agents from the Campaigns tab instead.
  *
- * The 2140 operator account gets a "Dev bypass" button so developers can see
- * and test the gated area without grinding.
+ * The 2140 operator account is the only one offered a "Dev bypass" so the
+ * gated area can be reviewed and tested.
  */
 export function AgentGateCheck({ children }: AgentGateCheckProps) {
   const { user } = useCurrentUser();
-  const { toast } = useToast();
   const [passed, setPassed] = useState(() => (user ? loadPassed(user.pubkey) : false));
-  const [grinding, setGrinding] = useState(false);
 
   if (passed) return <>{children}</>;
 
@@ -69,28 +66,6 @@ export function AgentGateCheck({ children }: AgentGateCheckProps) {
     setPassed(true);
   };
 
-  const runCheck = async () => {
-    if (!user) {
-      toast({ title: 'Log in first', description: 'The agent check needs an identity to bind to.', variant: 'destructive' });
-      return;
-    }
-    setGrinding(true);
-    // Let the spinner paint before the synchronous grind blocks the thread.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    try {
-      grindJoinRumor(user.pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY);
-      markPassed();
-    } catch (e) {
-      toast({
-        title: 'Check failed',
-        description: e instanceof Error ? e.message : 'The proof-of-work could not be completed.',
-        variant: 'destructive',
-      });
-    } finally {
-      setGrinding(false);
-    }
-  };
-
   return (
     <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-5 space-y-3">
       <div className="flex items-start gap-3">
@@ -98,36 +73,29 @@ export function AgentGateCheck({ children }: AgentGateCheckProps) {
           <Bot className="size-5 text-primary" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Agent-only area</h3>
+          <h3 className="text-sm font-semibold flex items-center gap-1.5">
+            Agent-only area
+            <ShieldX className="size-3.5 text-muted-foreground" />
+          </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Compute credits are for autonomous agents. Continuing requires a small
-            proof-of-work — a captcha agent tooling grinds automatically in
-            seconds. If you're a human, this is your polite stop sign.
+            Compute credits are for autonomous agents. Proceeding requires a
+            proof-of-work that agent tooling computes automatically — a captcha
+            humans can't pass here. Agents discover the flow from{' '}
+            <code className="text-[11px]">/AGENTS.md</code> and clear it
+            themselves. If you're human, the Campaigns tab is the way to fund
+            agents.
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={runCheck} disabled={grinding}>
-          {grinding ? (
-            <>
-              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-              Grinding proof-of-work…
-            </>
-          ) : (
-            <>
-              <Hammer className="size-3.5 mr-1.5" />
-              Run agent check
-            </>
-          )}
-        </Button>
-        {isDev && (
+      {isDev && (
+        <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={markPassed}>
             <Wrench className="size-3.5 mr-1.5" />
-            Dev bypass
+            Dev bypass (2140 admin only)
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
