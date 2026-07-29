@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { usePetsPurchaseItem } from './usePetsPurchaseItem';
+import { usePetsPurchaseItem, splitSatsPayment, splitFiatPayment, PET_FIAT_RESERVE_SATS } from './usePetsPurchaseItem';
 import { parseNostrPetProfileEvent, KIND_NOSTR_PET_PROFILE } from '@/pets/core/lib/pets';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
@@ -41,7 +41,7 @@ vi.mock('@/hooks/useToast', () => ({
   toast: mocks.toast,
 }));
 
-function createProfileEvent(walletMode: 'bao' | 'cashu', sats = 20_000): NostrEvent {
+function createProfileEvent(walletMode: 'bao' | 'cashu', sats = 20_000, coins?: number): NostrEvent {
   return {
     kind: KIND_NOSTR_PET_PROFILE,
     pubkey: PUBKEY,
@@ -54,6 +54,7 @@ function createProfileEvent(walletMode: 'bao' | 'cashu', sats = 20_000): NostrEv
       ['b', 'pets:ecosystem:v1'],
       ['wallet_mode', walletMode],
       ['sats', sats.toString()],
+      ...(coins !== undefined ? [['coins', coins.toString()]] : []),
     ],
   };
 }
@@ -316,6 +317,93 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
     // Fully covered by pet fiat — the wallet is never charged in demo mode.
     expect(sendNutzap).not.toHaveBeenCalled();
     expect(result.current.data?.petFiatSpend).toBe(25);
+  });
+});
+
+describe('starter currency split (one fiat rail, two pots)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('spends pet fiat first down to the reserve, then coins, then the wallet', () => {
+    // Pet fiat covers everything (reserve kept).
+    expect(splitSatsPayment(25, 2_140, 500)).toEqual({ petFiatSpend: 25, coinsSpend: 0, walletSatsCost: 0 });
+    // Pet fiat drains to the reserve; coins cover the rest; wallet untouched.
+    expect(splitSatsPayment(200, 150, 500)).toEqual({
+      petFiatSpend: 150 - PET_FIAT_RESERVE_SATS,
+      coinsSpend: 200 - (150 - PET_FIAT_RESERVE_SATS),
+      walletSatsCost: 0,
+    });
+    // Pet fiat below the reserve is never touched; coins then wallet.
+    expect(splitSatsPayment(200, 50, 120)).toEqual({ petFiatSpend: 0, coinsSpend: 120, walletSatsCost: 80 });
+    // Nothing but the wallet.
+    expect(splitSatsPayment(200, 0, 0)).toEqual({ petFiatSpend: 0, coinsSpend: 0, walletSatsCost: 200 });
+  });
+
+  it('omitting coins preserves the old two-pot behavior', () => {
+    expect(splitSatsPayment(25, 2_140)).toEqual({ petFiatSpend: 25, coinsSpend: 0, walletSatsCost: 0 });
+    expect(splitSatsPayment(200, 150)).toEqual({
+      petFiatSpend: 50,
+      coinsSpend: 0,
+      walletSatsCost: 150,
+    });
+  });
+
+  it('splitFiatPayment drains pet fiat then coins and rejects what starter currency cannot cover', () => {
+    expect(splitFiatPayment(25, 2_140, 0)).toEqual({ petFiatSpend: 25, coinsSpend: 0 });
+    expect(splitFiatPayment(200, 150, 500)).toEqual({ petFiatSpend: 50, coinsSpend: 150 });
+    expect(splitFiatPayment(200, 150, 100)).toBeNull();
+    expect(splitFiatPayment(0, 0, 0)).toEqual({ petFiatSpend: 0, coinsSpend: 0 });
+  });
+
+  it('a fiat purchase drains pet fiat (to the reserve) then account coins', async () => {
+    mocks.publishEvent.mockImplementation(async (event: NostrEvent) => event);
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000, 100));
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000, 100))!;
+    // 115 pet fiat → 15 spendable above the reserve; the 25-cost apple then
+    // takes the remaining 10 from the 100 account coins.
+    const companion = {
+      fiatBalance: 115,
+      event: { kind: 31124, tags: [['fiat_balance', '115']], content: '' },
+    } as never;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, companion, null, undefined, 'bao'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'fiat' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.petFiatSpend).toBe(15);
+    expect(result.current.data?.coinsSpend).toBe(10);
+
+    const published = mocks.publishEvent.mock.calls.map(([arg]) => arg as NostrEvent);
+    const companionPublish = published.find((e) => e.kind === 31124);
+    expect(companionPublish?.tags.find((t) => t[0] === 'fiat_balance')?.[1]).toBe('100');
+    const profilePublish = published.find((e) => e.kind === KIND_NOSTR_PET_PROFILE);
+    expect(profilePublish?.tags.find((t) => t[0] === 'coins')?.[1]).toBe('90');
+  });
+
+  it('refuses a fiat purchase the combined starter currency cannot cover', async () => {
+    mocks.publishEvent.mockImplementation(async (event: NostrEvent) => event);
+    mocks.fetchFreshPetsEvent.mockResolvedValue(createProfileEvent('bao', 20_000, 5));
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000, 5))!;
+    const companion = {
+      fiatBalance: 110, // only 10 spendable above the reserve → 15 total < 25
+      event: { kind: 31124, tags: [['fiat_balance', '110']], content: '' },
+    } as never;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, companion, null, undefined, 'bao'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'fiat' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toContain('Insufficient starter currency');
+    expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 });
 
