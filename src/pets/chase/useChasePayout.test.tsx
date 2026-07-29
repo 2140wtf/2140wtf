@@ -124,6 +124,59 @@ describe('useChasePayout fiat settle (hunt regression [17])', () => {
     result.current.mutate({ satsWon: 0, coinsCollected: 50, mode: 'fiat' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient coins');
+    expect(result.current.error?.message).toContain('Insufficient starter currency');
+  });
+
+  it('drains pet-bound fiat (above the reserve) before account coins', async () => {
+    // Starter currency is one rail in two pots: the pet fiat pot spends first,
+    // down to PET_FIAT_RESERVE_SATS, then coins cover the rest.
+    const startCoins = 3;
+    const petFiat = 100 + CHASE_FIAT_COST; // reserve + exactly the run cost
+    const captured = arrangeFiatProfile(startCoins);
+    const companion = {
+      fiatBalance: petFiat,
+      event: { kind: 31124, tags: [['d', 'pet-1'], ['fiat_balance', String(petFiat)]], content: '{}' },
+    } as never;
+    mocks.publishEvent.mockResolvedValue({
+      kind: 31124,
+      tags: [['d', 'pet-1'], ['fiat_balance', '100']],
+      content: '{}',
+    });
+
+    const { result } = renderHook(() => useChasePayout(vi.fn(), null, companion), { wrapper });
+    result.current.mutate({ satsWon: 0, coinsCollected: 0, mode: 'fiat' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // Pet fiat covered the whole cost down to the reserve; coins untouched.
+    const companionPublish = mocks.publishEvent.mock.calls.find(
+      ([arg]) => (arg as { kind: number }).kind === 31124,
+    )?.[0] as { tags: string[][] };
+    expect(companionPublish.tags.find((t) => t[0] === 'fiat_balance')?.[1]).toBe('100');
+    expect(captured.update?.tags.find((t) => t[0] === 'coins')?.[1]).toBe(String(startCoins));
+  });
+
+  it('rolls back the pet fiat deduction when the profile update fails', async () => {
+    const petFiat = 100 + CHASE_FIAT_COST;
+    const companion = {
+      fiatBalance: petFiat,
+      event: { kind: 31124, tags: [['d', 'pet-1'], ['fiat_balance', String(petFiat)]], content: '{}' },
+    } as never;
+    const companionEvent = {
+      kind: 31124,
+      tags: [['d', 'pet-1'], ['fiat_balance', '100']],
+      content: '{}',
+    };
+    mocks.publishEvent.mockResolvedValue(companionEvent);
+    mocks.updateNostrPetProfile.mockRejectedValue(new Error('relay down'));
+
+    const { result } = renderHook(() => useChasePayout(vi.fn(), null, companion), { wrapper });
+    result.current.mutate({ satsWon: 0, coinsCollected: 0, mode: 'fiat' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Second companion publish restores the original pet fiat balance.
+    const rollback = mocks.publishEvent.mock.calls[1]?.[0] as { tags: string[][] };
+    expect(rollback.tags.find((t) => t[0] === 'fiat_balance')?.[1]).toBe(String(petFiat));
   });
 });

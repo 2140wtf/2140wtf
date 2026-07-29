@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { type ChaseMode, CHASE_FIAT_COST, CHASE_SATS_PER_COIN, CHASE_RAILS } from './types';
 
 interface ChaseStartScreenProps {
+  /** Spendable starter currency (pet fiat above the reserve + account coins). */
   coins: number;
   sats: number;
   onStart: (mode: ChaseMode) => void;
@@ -32,7 +33,7 @@ export function ChaseStartScreen({ coins, sats, onStart, allowSatsMode = true }:
             <div className="flex items-center gap-1.5 rounded-full bg-yellow-50 dark:bg-yellow-950/30 px-3 py-1.5 border border-yellow-200 dark:border-yellow-900">
               <Coins className="size-4 text-yellow-600" />
               <span className="font-semibold">{coins.toLocaleString()}</span>
-              <span className="text-muted-foreground">coins</span>
+              <span className="text-muted-foreground">starter</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 border border-amber-200 dark:border-amber-900">
               <Zap className="size-4 text-amber-600" />
@@ -49,16 +50,16 @@ export function ChaseStartScreen({ coins, sats, onStart, allowSatsMode = true }:
               disabled={!canPlayFiat}
             >
               <span className="flex flex-col items-start">
-                <span className="font-semibold">Play with Fiat Coins</span>
+                <span className="font-semibold">Play with Starter Currency</span>
                 <span className="text-xs opacity-90 font-normal">
-                  Cost {CHASE_FIAT_COST.toLocaleString()} coins · collect for score
+                  Cost {CHASE_FIAT_COST.toLocaleString()} starter · collect for score
                 </span>
               </span>
               <Coins className="size-5" />
             </Button>
             {!canPlayFiat && (
               <p className="text-xs text-destructive text-center -mt-2">
-                Not enough coins. Fiat games cost {CHASE_FIAT_COST.toLocaleString()} coins.
+                Not enough starter currency. Fiat games cost {CHASE_FIAT_COST.toLocaleString()}.
               </p>
             )}
 
