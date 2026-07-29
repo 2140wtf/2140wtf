@@ -7,6 +7,7 @@
 | Kind  | Name                 | Description                                           |
 |-------|----------------------|-------------------------------------------------------|
 | 8333  | Onchain Zap          | Attestation that an on-chain BTC tx paid a target     |
+| 38000 | ₿AO Market Definition | Relay-first prediction-market definitions (display-only) |
 | 38003 | ₿AO Fund Create Intent | Relay-first ₿AO Fund campaign-creation request       |
 | 15683 | Love List            | The people the user truly loves (one per user)        |
 | 36767 | Theme Definition     | Shareable, named custom UI theme                      |
@@ -1331,6 +1332,60 @@ Addressable event requesting creation of a **₿AO Fund campaign** via relay ins
 | `n`   | Yes      | Network tag the bridge filters on. The public bao.markets deployment is the signet demo (`demo`); override via `VITE_BAO_NETWORK` only when pointing at a local API. |
 
 The intent is published to the ₿AO relay (`VITE_BAO_RELAY_URL`, default `wss://relay.bao.network`) regardless of the user's relay set — that's the relay the bridge subscribes to.
+
+---
+
+## Kind 38000: ₿AO Market Definition
+
+### Summary
+
+Addressable event defining a binary or multi-outcome prediction market. Market **definitions** live on the ₿AO relay (`wss://relay.bao.network`) so any Nostr client can discover and render markets without talking to the bao.markets API; live odds, charts, and settlement are computed off-chain and are deliberately out of scope for this document.
+
+A reader validates STRUCTURE before rendering — the relay is open, so malformed events are dropped silently. 2140.wtf renders valid events as market cards (relay-first discovery merged with the API catalog) and badges relay-only ones "via relay".
+
+### Event Structure
+
+```json
+{
+  "kind": 38000,
+  "pubkey": "<market-creator-pubkey>",
+  "content": "{\"title\": \"...\", \"description\": \"...\", \"outcomes\": [\"yes\", \"no\"]}",
+  "tags": [
+    ["d", "<unique-market-id>"],
+    ["title", "Will X happen before 2027?"],
+    ["c", "crypto"],
+    ["n", "demo"],
+    ["end", "1798761600"],
+    ["outcome", "yes"],
+    ["outcome", "no"],
+    ["alt", "Prediction market definition"]
+  ]
+}
+```
+
+### Tags
+
+| Tag | Required | Description |
+|-----|----------|-------------|
+| `d` | Yes | Unique market id. Kind 38000 is addressable: the `(38000, pubkey, d)` triple identifies the market. |
+| `title` | Yes* | Market question. May also live in a `data` tag JSON or content JSON. |
+| `c` / `category` | Yes | Display category (e.g. `crypto`, `bao-fund`, `sports`). |
+| `n` / `network` | Yes | Network the market settles on. The public deployment is the signet demo (`demo`); readers MUST only show events matching their own network. |
+| `end` | Yes | Unix seconds when trading closes. |
+| `outcome` | Yes* | One tag per outcome label, at least two. May also be an `outcomes` array in `data`/content JSON. |
+| `data` | Optional | JSON object mirroring title/outcomes for compact readers. |
+
+\* Required in at least one of the accepted locations.
+
+### Reading (what other clients should do)
+
+1. Query `{ kinds: [38000], '#n': [<your-network>] }` from `wss://relay.bao.network` (and optionally the user's own relays).
+2. Validate structure: `d`, category, network match, numeric `end`, a title, and ≥2 outcomes — drop anything malformed silently.
+3. Render definitions (title, outcomes, end date, category). Do NOT infer odds or settlement from the event — none is encoded.
+
+### Out of scope (by design)
+
+Escrow, payout, order books, AMM state, and resolution mechanics are **not** in the event and **not** documented here — they are operational details of the settlement layer. Clients should treat kind-38000 events as display-only definitions and hand off trading to a settlement-aware client or service.
 
 ---
 
