@@ -9,6 +9,7 @@ import {
 import { BunkerURI, NSecSigner } from '@nostrify/nostrify';
 import { generateSecretKey, nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
+import { toast } from '@/hooks/useToast';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { NConnectSignerBtc } from '@/lib/bitcoin-signers';
 import { purgeConcordStorage } from '@/lib/purgeConcordStorage';
@@ -34,6 +35,31 @@ const NOSTR_CONNECT_PERMS = [
   'nip44_encrypt',
   'nip44_decrypt',
 ].join(',');
+
+const SIGNER_TIP_KEY = '2140:signer-tip-shown';
+
+/**
+ * One-time guidance for remote-signer (NIP-46) logins: the connect handshake
+ * already requests broad perms, but signers still ask once per METHOD — and
+ * users who answer "just this once" get re-asked forever. Telling them to
+ * pick "Always allow" up front is the difference between one prompt at login
+ * and a prompt every few seconds (pet writes, settings sync, wallet events).
+ */
+function maybeToastRemoteSignerTip(login: NLoginType) {
+  try {
+    if (login.type !== 'bunker') return;
+    if (localStorage.getItem(SIGNER_TIP_KEY)) return;
+    localStorage.setItem(SIGNER_TIP_KEY, '1');
+    toast({
+      title: 'Tip: approve once, not every time',
+      description:
+        "When your signer asks to approve signing and encryption, choose 'Always allow' — otherwise it will ask again for every action (posts, pets, wallet sync).",
+      duration: 12_000,
+    });
+  } catch {
+    // localStorage unavailable — the tip is nice-to-have, never blocking.
+  }
+}
 
 /** Options for generating a nostrconnect:// URI. */
 export interface NostrConnectURIOptions {
@@ -112,6 +138,7 @@ export function useLoginActions() {
   const addAndActivate = (login: NLoginType) => {
     addLogin(login);
     setLogin(login.id);
+    maybeToastRemoteSignerTip(login);
   };
 
   return {
