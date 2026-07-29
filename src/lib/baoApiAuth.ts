@@ -24,13 +24,35 @@ export interface BaoApiSigner {
   }>;
 }
 
+/**
+ * Header cache: the API accepts NIP-98 events within a 5-minute freshness
+ * window, so a header is reusable for 2 minutes. Without this, every poll
+ * (balances every 30s, lists, retries) is a fresh sign_event — on a remote
+ * signer that's a prompt per poll.
+ */
+const HEADER_TTL_MS = 120_000;
+// Scoped per signer instance (WeakMap key) so an account switch never sends
+// a header signed by the previous account.
+const headerCache = new WeakMap<object, Map<string, { header: string; expiresAt: number }>>();
+
 /** Build the `Authorization` header value for a NIP-98 authenticated call. */
 export async function baoNip98Header(signer: BaoApiSigner, url: string, method: string): Promise<string> {
+  const cacheKey = `${method.toUpperCase()} ${url}`;
+  let perSigner = headerCache.get(signer as object);
+  if (!perSigner) {
+    perSigner = new Map();
+    headerCache.set(signer as object, perSigner);
+  }
+  const cached = perSigner.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.header;
+
   const event = await signer.signEvent({
     kind: 27235,
     created_at: Math.floor(Date.now() / 1000),
     tags: [['u', url], ['method', method]],
     content: '',
   });
-  return `Nostr ${btoa(JSON.stringify(event))}`;
+  const header = `Nostr ${btoa(JSON.stringify(event))}`;
+  perSigner.set(cacheKey, { header, expiresAt: Date.now() + HEADER_TTL_MS });
+  return header;
 }
