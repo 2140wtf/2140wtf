@@ -6,16 +6,18 @@ import { nip19 } from 'nostr-tools';
 /**
  * Encrypted login-blob storage adapter for @nostrify/react's NostrLoginProvider.
  *
- * The JSON login array (which contains nsec / clientNsec secrets) is encrypted
- * with NIP-44 self-encryption before being written to the underlying backend.
- * This protects the secrets at rest on web builds where the backend falls back
- * to plaintext localStorage.
+ * The JSON login array is encrypted with NIP-44 self-encryption before being
+ * written to the underlying backend — but ONLY when it contains an `nsec`
+ * login (a master secret). Bunker client keys are ephemeral session tokens
+ * and extension logins carry no secret, so those persist as plaintext: that
+ * keeps remote-signer sessions alive across app restarts (critical on mobile,
+ * where closing the app kills the per-tab session cache and previously forced
+ * a full re-login on every cold start).
  *
- * Because the encryption key is itself one of the logins being encrypted, cold
- * starts cannot decrypt an existing encrypted blob without help. To preserve
- * the happy-path login experience across reloads, the plaintext blob is also
- * cached in sessionStorage for the lifetime of the tab. Closing the tab clears
- * the cache and the user must authenticate again.
+ * Because the encryption key for nsec blobs is itself inside the blob, cold
+ * starts cannot decrypt them without the per-tab session cache. Closing the
+ * tab clears the cache and an nsec user must re-enter their key — the
+ * intended trade for not holding master secrets at rest.
  *
  * Plaintext values written by earlier app versions are detected on read,
  * encrypted, rewritten, and returned so the migration is transparent.
@@ -51,10 +53,20 @@ function isPlaintextLogins(raw: string): boolean {
   return raw.trimStart().startsWith('[');
 }
 
+/**
+ * The master secret that justifies encrypting the blob: an `nsec` login key.
+ *
+ * Bunker (NIP-46) client keys are NOT encrypted. A bunker clientNsec is an
+ * ephemeral session token — the master key never leaves the remote signer,
+ * a stolen client key can only REQUEST signatures the user must approve on
+ * their device (and revoke), and encrypting the blob WITH the client key
+ * stored inside it made cold starts undecryptable: every mobile app restart
+ * logged the user out. Extension logins carry no secret at all. Both persist
+ * as plaintext (the extension-only fallback that already existed).
+ */
 function getEncryptableSecret(logins: NLoginType[]): string | undefined {
   for (const login of logins) {
     if (login.type === 'nsec') return login.data.nsec;
-    if (login.type === 'bunker') return login.data.clientNsec;
   }
   return undefined;
 }
