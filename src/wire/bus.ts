@@ -33,8 +33,9 @@ export type WireScope = string;
 
 type WireListener = (scopes: ReadonlySet<WireScope>) => void;
 
-/** Coalescing window for scope flushes (ms). */
-const FLUSH_MS = 50;
+/** Coalescing window for scope flushes (ms). One frame: enough to merge a
+ * burst, short enough that a single live message paints immediately. */
+const FLUSH_MS = 16;
 
 const listeners = new Set<WireListener>();
 let pending = new Set<WireScope>();
