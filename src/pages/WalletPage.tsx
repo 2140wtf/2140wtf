@@ -77,9 +77,29 @@ export function WalletPage() {
               ) : cashuWallet.seedError ? (
                 <div className="py-12 flex flex-col items-center gap-4 text-center">
                   <p className="text-sm text-destructive">{cashuWallet.seedError}</p>
-                  <p className="text-xs text-muted-foreground max-w-xs">
-                    If your signer did not respond, unlock it and try again. You can also reset and create a new seed (this will erase any stored Cashu data for this account).
-                  </p>
+
+                  <div className="rounded-lg border border-border bg-secondary/30 px-4 py-3 text-left space-y-2 max-w-sm">
+                    <p className="text-xs font-semibold">How to resolve this</p>
+                    <ol className="list-decimal pl-4 space-y-1.5 text-xs text-muted-foreground">
+                      <li>
+                        Open your signer app or extension and look for a <span className="font-medium text-foreground">pending approval</span> —
+                        the wallet asked to encrypt/decrypt (NIP-44) and is waiting for your OK.
+                      </li>
+                      <li>
+                        If nothing is pending, open the signer's <span className="font-medium text-foreground">connections / permissions</span> for
+                        this app (in Amber: Settings → Connections → 2140.wtf) and enable
+                        <span className="font-medium text-foreground"> encrypt &amp; decrypt (NIP-44)</span> requests.
+                      </li>
+                      <li>
+                        Come back here and tap <span className="font-medium text-foreground">Retry</span> — your wallet unlocks
+                        without changing anything. No funds are touched.
+                      </li>
+                    </ol>
+                    <p className="text-[11px] text-muted-foreground/80">
+                        Only use reset if your signer is truly unavailable — see what it wipes first.
+                    </p>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={cashuWallet.retrySeed}>
                       <RefreshCw className="size-3.5 mr-1.5" />
