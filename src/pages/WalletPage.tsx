@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
+import { LightningWalletTab } from '@/components/LightningWalletTab';
 import { ComingSoonTab } from '@/components/ComingSoonTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -53,8 +54,9 @@ export function WalletPage() {
       ) : (
         <div className="px-4 pt-6 pb-4 max-w-sm mx-auto">
           <Tabs defaultValue="cashu" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
+              <TabsTrigger value="lightning">Lightning</TabsTrigger>
               <TabsTrigger value="spark">Spark</TabsTrigger>
               <TabsTrigger value="ark">Ark</TabsTrigger>
             </TabsList>
@@ -165,6 +167,10 @@ export function WalletPage() {
                   </Button>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="lightning">
+              <LightningWalletTab />
             </TabsContent>
 
             <TabsContent value="spark">
