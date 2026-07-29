@@ -7,19 +7,28 @@ export const FIGHTER_HEIGHT = 160;
 export const FIGHTER_MAX_HEALTH = 100;
 export const FIGHTER_MAX_ENERGY = 100;
 
-export const MOVE_SPEED = 260;
-export const BLOCK_MOVE_SPEED = 90;
+// Deliberately slower than a twitch fighter: the manga battle style favors
+// readable weighty movement, with dashes and special moves providing bursts.
+export const MOVE_SPEED = 165;
+export const BLOCK_MOVE_SPEED = 65;
 // Coordinate system: y = 0 is the floor, positive y is up.
-export const JUMP_VELOCITY = 620;
-export const GRAVITY = -1800;
+export const JUMP_VELOCITY = 580;
+export const GRAVITY = -1550;
+// Super jump: press jump while holding block — a high floaty leap.
+export const SUPER_JUMP_VELOCITY = 860;
+
+// Dashes: double-tap a direction for a quick burst (manga speed lines).
+export const DASH_SPEED = 560;
+export const DASH_DURATION_MS = 190;
+export const DOUBLE_TAP_MS = 300;
 
 export const SWORD_DAMAGE = 12;
-export const SWORD_RANGE = 100;
-export const SWORD_COOLDOWN_MS = 400;
-export const SWORD_HIT_STUN_MS = 180;
+export const SWORD_RANGE = 110;
+export const SWORD_COOLDOWN_MS = 420;
+export const SWORD_HIT_STUN_MS = 200;
 
 export const FIREBALL_DAMAGE = 20;
-export const FIREBALL_SPEED = 380;
+export const FIREBALL_SPEED = 300;
 export const FIREBALL_RADIUS = 14;
 export const FIREBALL_COOLDOWN_MS = 1200;
 export const FIREBALL_ENERGY_COST = 25;
