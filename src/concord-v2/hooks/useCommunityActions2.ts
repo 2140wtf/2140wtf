@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useGuestbookPublisher2 } from "@/concord-v2/hooks/useGuestbook2";
-import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
+import { buildJoinRumor, currentGuestbookGroup, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
 import {
   AGENT_GATE_METADATA_KEY,
   AgentOnlyCommunityError,
@@ -29,6 +29,7 @@ import {
 import { bytesToHex, hex32, random32 } from "@/concord-v2/lib/derive";
 import {
   encodeFragment,
+  inviteCommitment,
   parseBundleEvent,
   parseInviteLink,
   STOCK_RELAYS,
@@ -56,6 +57,14 @@ export class ControlUnreadableError extends Error {
   constructor() {
     super("Couldn't verify your access to this community. Please try again.");
     this.name = "ControlUnreadableError";
+  }
+}
+
+/** Thrown when a single-use invite link has already been spent (CORD-05 §2). */
+export class SingleUseLinkUsedError extends Error {
+  constructor() {
+    super("This invite link was single-use and has already been used. Ask for a fresh one.");
+    this.name = "SingleUseLinkUsedError";
   }
 }
 
@@ -361,6 +370,9 @@ export function useCommunityActions2() {
       // human joins (agent_gate) — check BOTH before recording the entry or
       // publishing anything. One fold serves both checks.
       const community = rehydrateCommunity(entry);
+      // The commitment every Join from this link will cite (sha256 of the
+      // unlock token) — lets the Guestbook tell which link a member used.
+      const commitment = inviteCommitment(invite.token);
       if (community) {
         const folded = await fetchControlFold(nostr, community);
         if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
@@ -368,6 +380,18 @@ export function useCommunityActions2() {
         // The human app path refuses on purpose: the gate's proof-of-work is
         // the captcha only agents solve. Agent tooling (AGENTS.md) grinds it.
         if (gate) throw new AgentOnlyCommunityError(gate.difficulty);
+        // A single-use link is spent once the Guestbook shows a Join citing
+        // its token commitment. Honest-client enforcement: a modified client
+        // skips this, so creators should rotate keys when it truly matters.
+        if (bundle.max_uses === 1) {
+          const group = currentGuestbookGroup(community);
+          const wraps = await nostr.query([{ kinds: [KIND_WRAP], authors: [group.pk] }], {
+            signal: AbortSignal.timeout(8000),
+          });
+          if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(wraps, [group])), commitment)) {
+            throw new SingleUseLinkUsedError();
+          }
+        }
       }
       await updateList({ type: "add", entry });
       queryClient.invalidateQueries({ queryKey: ["concord2", "list"] });
@@ -377,8 +401,8 @@ export function useCommunityActions2() {
       if (community) {
         void (async () => {
           const attribution = bundle.creator_npub
-            ? { creator: bundle.creator_npub, label: bundle.label }
-            : undefined;
+            ? { creator: bundle.creator_npub, label: bundle.label, commitment }
+            : { creator: "", label: bundle.label, commitment };
           const rumor = buildJoinRumor(user.pubkey, Date.now(), attribution);
           const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
           await Promise.allSettled(

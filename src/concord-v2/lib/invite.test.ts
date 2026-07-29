@@ -1,6 +1,17 @@
+import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import type { EventTemplate } from "nostr-tools/pure";
 import { describe, expect, it } from "vitest";
 
-import { bytesToHex, communityIdOf, hex32, random32 } from "@/concord-v2/lib/derive";
+import { bytesToHex, communityIdOf, guestbookGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
+import {
+  buildJoinRumor,
+  buildLeaveRumor,
+  joinCommitmentOf,
+  openGuestbookOpened,
+  openGuestbookWraps,
+  sealGuestbook,
+  singleUseLinkUsed,
+} from "@/concord-v2/lib/guestbook";
 import {
   buildBundleEvent,
   buildInviteUrl,
@@ -9,6 +20,7 @@ import {
   decodeFragment,
   encodeFragment,
   EMPTY_INVITE_LIST,
+  inviteCommitment,
   mergeInviteLists,
   mintLinkSigner,
   mintToken,
@@ -233,5 +245,58 @@ describe("invite list merge (CORD-05 §4)", () => {
     // A stale device re-merging the entry can't resurrect the revoked link.
     const c = mergeInviteLists(b, { entries: [entry], tombstones: [] });
     expect(c.entries.length).toBe(0);
+  });
+});
+
+describe("single-use links (CORD-05 §2)", () => {
+  it("max_uses round-trips through the bundle event", () => {
+    const { bundle } = makeBundle();
+    const token = mintToken();
+    const link = mintLinkSigner();
+    const single = { ...bundle, max_uses: 1 };
+    const parsed = parseBundleEvent(buildBundleEvent(single, token, link.sk), link.pk, token, Date.now());
+    expect(parsed.max_uses).toBe(1);
+
+    const multi = parseBundleEvent(buildBundleEvent(bundle, token, link.sk), link.pk, token, Date.now());
+    expect(multi.max_uses).toBeUndefined();
+  });
+
+  it("a refresh preserves the entry's max_uses", () => {
+    const { bundle } = makeBundle();
+    const token = mintToken();
+    const link = mintLinkSigner();
+    const [event] = buildRefreshedBundleEvents(bundle, [
+      { token: bytesToHex(token), signer_sk: bytesToHex(link.sk), max_uses: 1 },
+    ]);
+    const parsed = parseBundleEvent(event, link.pk, token, Date.now());
+    expect(parsed.max_uses).toBe(1);
+  });
+
+  it("the token commitment is sha256(token), stable, and not the token", () => {
+    const token = mintToken();
+    const c = inviteCommitment(token);
+    expect(c).toMatch(/^[0-9a-f]{64}$/);
+    expect(c).toBe(inviteCommitment(token));
+    expect(c).not.toBe(bytesToHex(token));
+  });
+
+  it("a Join cites the commitment; the spent-check finds exactly it", async () => {
+    const sk = generateSecretKey();
+    const pubkey = getPublicKey(sk);
+    const signer = { signEvent: async (t: EventTemplate) => finalizeEvent(t, sk) };
+    const gb = guestbookGroupKey(new Uint8Array(32).fill(6), new Uint8Array(32).fill(7), 0);
+    const token = mintToken();
+    const commitment = inviteCommitment(token);
+
+    const join = buildJoinRumor(pubkey, 1000, { creator: "ab".repeat(32), commitment });
+    expect(joinCommitmentOf(join)).toBe(commitment);
+    // Leaves and un-cited joins carry no commitment.
+    expect(joinCommitmentOf(buildLeaveRumor(pubkey, 2000))).toBeUndefined();
+    expect(joinCommitmentOf(buildJoinRumor(pubkey, 1500))).toBeUndefined();
+
+    const wrap = await sealGuestbook(join, gb, signer);
+    const opened = openGuestbookOpened(openGuestbookWraps([wrap], [gb]));
+    expect(singleUseLinkUsed(opened, commitment)).toBe(true);
+    expect(singleUseLinkUsed(opened, inviteCommitment(mintToken()))).toBe(false);
   });
 });

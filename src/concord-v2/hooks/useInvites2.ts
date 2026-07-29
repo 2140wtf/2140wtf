@@ -19,6 +19,7 @@ import {
   buildInviteUrl,
   buildRevocationEvent,
   EMPTY_INVITE_LIST,
+  inviteCommitment,
   mergeInviteLists,
   mintLinkSigner,
   mintToken,
@@ -26,6 +27,8 @@ import {
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
+import { singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { useGuestbook2 } from "@/concord-v2/hooks/useGuestbook2";
 import { KIND_INVITE_LIST } from "@/concord-v2/lib/kinds";
 import { inviteDeliveryRelays, recipientInboxRelays } from "@/concord-v2/lib/inviteRelays";
 import { toast } from "@/hooks/useToast";
@@ -210,7 +213,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
   };
 
   /** The §1 CommunityInvite bundle: everything membership is (link + direct alike). */
-  const buildBundle = (opts?: { expiresAtMs?: number; label?: string }): InviteBundle => {
+  const buildBundle = (opts?: { expiresAtMs?: number; label?: string; maxUses?: number }): InviteBundle => {
     if (!user) throw new Error("Not ready.");
     const src = bundleSource();
     if (!src) throw new Error("Not ready.");
@@ -230,6 +233,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       name: folded?.metadata?.name ?? src.name,
       ...(folded?.metadata?.icon ? { icon: folded.metadata.icon } : {}),
       ...(opts?.expiresAtMs ? { expires_at: opts.expiresAtMs } : {}),
+      ...(opts?.maxUses ? { max_uses: opts.maxUses } : {}),
       creator_npub: user.pubkey,
       ...(opts?.label ? { label: opts.label } : {}),
     };
@@ -272,8 +276,8 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
     invalidateControl2(queryClient, community.idHex);
   };
 
-  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string }>({
-    mutationFn: async ({ expiresAtMs, label }) => {
+  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string; maxUses?: number }>({
+    mutationFn: async ({ expiresAtMs, label, maxUses }) => {
       if (!user || !community) throw new Error("Not ready.");
       if (!user.signer.nip44) throw new Error("This signer can't mint invite links (NIP-44 unsupported).");
 
@@ -296,14 +300,14 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const token = mintToken();
       const link = mintLinkSigner();
-      const bundle = buildBundle({ expiresAtMs, label });
+      const bundle = buildBundle({ expiresAtMs, label, maxUses });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
       const results = await Promise.allSettled(
-        community.relays.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
+        community.relays.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) })),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error("No relay accepted the invite bundle.");
+        throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
       }
 
       const url = buildInviteUrl(shareOrigin(), link.pk, token, community.relays);
@@ -319,6 +323,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
             ...(label ? { label } : {}),
             created_at: Math.floor(Date.now() / 1000),
             ...(expiresAtMs ? { expires_at: Math.floor(expiresAtMs / 1000) } : {}),
+            ...(maxUses ? { max_uses: maxUses } : {}),
           },
         ],
         tombstones: [],
@@ -347,10 +352,10 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const tomb = buildRevocationEvent(hexToBytes(entry.signer_sk));
       const results = await Promise.allSettled(
-        community.relays.map((relay) => nostr.relay(relay).event(tomb, { signal: AbortSignal.timeout(8000) })),
+        community.relays.map((relay) => nostr.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) })),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error("No relay accepted the revocation.");
+        throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
       }
 
       await updateInviteList({
@@ -473,4 +478,54 @@ export function useLinkAuthorityWatch2(community: CommunityV2 | undefined): void
       });
     }
   }, [user, community, folded, control.isLoading, control.isFetching, myLinks, revokeLink]);
+}
+
+/**
+ * Single-use sweeper (CORD-05 §2): auto-revoke MY single-use links the moment
+ * the Guestbook shows a Join citing their token commitment. Serverless
+ * "one-time link": honest joiners already refuse a spent link (the join path
+ * checks the same commitment), and this closes the bundle itself so the link
+ * stops vending keys even to dishonest ones — while this device is online.
+ * Neither is a hard boundary against someone who resolved the bundle earlier;
+ * a key rotation is. Only the creator's device can run it (it holds the
+ * link-signer secret in the Invite List).
+ */
+export function useSingleUseSweep2(community: CommunityV2 | undefined): void {
+  const { user } = useCurrentUser();
+  const inviteList = useInviteList2();
+  const { data: opened } = useGuestbook2(community);
+  const { revokeLink } = useInviteActions2(community);
+  // Guards only the in-flight revoke per link; a failure retries on the next
+  // guestbook/list change.
+  const handled = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!user || !community || !opened || opened.length === 0) return;
+    const singles = (inviteList.data?.entries ?? []).filter(
+      (e) => e.community_id === community.idHex && e.max_uses === 1,
+    );
+    for (const entry of singles) {
+      if (handled.current.has(entry.token)) continue;
+      let used = false;
+      try {
+        used = singleUseLinkUsed(opened, inviteCommitment(hexToBytes(entry.token)));
+      } catch {
+        continue; // a malformed stored entry can't be swept; skip it
+      }
+      if (!used) continue;
+      handled.current.add(entry.token);
+      revokeLink({ url: entry.url })
+        .then(() => {
+          toast({
+            title: "Single-use link spent",
+            description: entry.label
+              ? `"${entry.label}" was used to join and has auto-revoked.`
+              : "Your single-use invite link was used to join and has auto-revoked.",
+          });
+        })
+        .catch(() => {
+          handled.current.delete(entry.token);
+        });
+    }
+  }, [user, community, opened, inviteList.data, revokeLink]);
 }
