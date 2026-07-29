@@ -202,6 +202,10 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             Resolution is crowd-voted: experimental and gameable, so treat outcomes as a drill.
             All settlement rails are in demo: contributions are recorded only, no real sats move, and donors are warned not to send real payments.
           </DialogDescription>
+          <DialogDescription className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-foreground">
+            ₿AO Markets is moving to mainnet on real Bitcoin rails soon — the demo stays available as a practice ground,
+            so anything you try here today is rehearsal for the real thing.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
