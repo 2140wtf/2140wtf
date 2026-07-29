@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
+import { agentGateOf } from "@/concord-v2/lib/agentGate";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
   buildJoinRumor,
@@ -59,6 +60,7 @@ export function useGuestbook2(community: CommunityV2 | undefined) {
         Boolean(folded && canActOnMember(folded.roster, actor, folded.ownerHex, target, Permissions.KICK)),
       snapshotAuthority,
       banned: folded?.banned,
+      joinPow: agentGateOf(folded?.metadata)?.difficulty,
     });
   }, [community, query.data, folded]);
 
@@ -76,9 +78,13 @@ export function useMembers2(
 ): { members: Set<string>; coalesced: Map<string, CoalescedMember> } {
   const { coalesced } = useGuestbook2(community);
   const { data: folded } = useControlFold2(community);
+  const gated = Boolean(agentGateOf(folded?.metadata));
   const members = useMemo(
-    () => completeMemberlist(coalesced, observed, folded?.banned ?? new Set(), folded?.bannedAt),
-    [coalesced, observed, folded],
+    () =>
+      completeMemberlist(coalesced, observed, folded?.banned ?? new Set(), folded?.bannedAt, {
+        strictRoster: gated,
+      }),
+    [coalesced, observed, folded, gated],
   );
   return { members, coalesced };
 }
