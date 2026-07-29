@@ -840,7 +840,7 @@ NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds 
 
 | Tag | Value | Description |
 |-----|-------|-------------|
-| `breed_category` | `2140-pets` \| `ditto-blobbi` \| `bao` | Visual family / gameplay category |
+| `breed_category` | `2140-pets` \| `ditto-blobbi` \| `bao` \| `buzz` \| `custom` | Visual family / gameplay category |
 | `breed_asset` | string | Adult form ID or BAO card ID |
 | `bao_rarity` | `common` \| `uncommon` \| `rare` \| `epic` \| `legendary` | ₿AO rarity tier, derived from `breed_asset` |
 

@@ -579,7 +579,7 @@ export const PETS_TAG_SCHEMA: readonly PetsTagSchema[] = [
     persistent: true,
     source: 'system',
     regenerable: false,
-    format: '2140-pets | ditto-blobbi | bao',
+    format: '2140-pets | ditto-blobbi | bao | buzz | custom',
     notes: 'Determines category-specific abilities, evolution missions, and daily quest weighting.',
   },
   {
