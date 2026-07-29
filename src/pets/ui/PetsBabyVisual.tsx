@@ -27,7 +27,7 @@ import type { BodyEffectsSpec } from './lib/bodyEffects';
 import type { PetsFacing } from './hooks/usePetsDirectInteraction';
 import type { Pets } from '@/pets/core/types/pets';
 import { isPetsSleeping } from '@/pets/core/types/pets';
-import { isBuzzPetId, getBuzzPetStaticUrl } from '@/pets/core/lib/buzz-pets';
+import { isAnimatedCharacterPet, getAnimatedCharacterStaticUrl } from '@/pets/core/lib/animated-pets';
 import { PetsBabySvgRenderer } from './PetsBabySvgRenderer';
 
 export interface PetsBabyVisualProps {
@@ -75,9 +75,10 @@ export function PetsBabyVisual({
 
   const isCompanion = renderMode === 'companion';
 
-  // Buzz babies resemble their mature form: the same clay character, shown as
-  // the static first frame — the animation is something they grow into.
-  const isBuzz = pets.breedCategory === 'buzz' && isBuzzPetId(pets.breedAsset);
+  // Animated-character babies (Buzz, Bleep) resemble their mature form: the
+  // same clay character, shown as the static first frame — the animation is
+  // something they grow into.
+  const isAnimatedCharacter = isAnimatedCharacterPet(pets.breedCategory, pets.breedAsset);
 
   const effectiveReaction = isSleeping ? 'idle' : reaction;
   const isFacingLeft = facing === 'left';
@@ -118,11 +119,11 @@ export function PetsBabyVisual({
       )}
       style={isFacingLeft ? { transform: 'scaleX(-1)' } : undefined}
     >
-      {isBuzz ? (
-        // Buzz babies are the static first frame of the animated adult WebP —
-        // no SVG form, no eye rig (the hooks above simply find nothing).
+      {isAnimatedCharacter ? (
+        // Animated-character babies are the static first frame of the adult
+        // WebP — no SVG form, no eye rig (the hooks above simply find nothing).
         <img
-          src={getBuzzPetStaticUrl(pets.breedAsset!)}
+          src={getAnimatedCharacterStaticUrl(pets.breedAsset)}
           alt=""
           draggable={false}
           className="size-full object-contain select-none"
