@@ -349,7 +349,7 @@ function RoundView({ round, now, userPubkey, votePending, onVote }: {
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        YES wins at ≥½ of cast sats (ties resolve YES); NO needs ≥⅔ and routes a 2% sabotage tax to the runner. Below {ATTESTATION_QUORUM_PCT}% quorum the window extends once, then refunds.
+        Majority of cast sats decides (ties resolve YES); NO at over half refunds the milestone, and NO at ≥⅔ also routes a 2% sabotage tax to the runner. Below {ATTESTATION_QUORUM_PCT}% quorum the window extends once, then refunds.
       </p>
     </div>
   );
