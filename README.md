@@ -12,12 +12,17 @@ Originally built by [Soapbox](https://soapbox.pub) as Ditto. Now developed as 21
 
 ## Features
 
-- **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events
-- **Infinite Content Types** -- Text notes, articles, short-form videos (Divines), live streams, polls, follow packs, geocaching, and mini-apps
-- **Lightning Payments** -- Zap posts and profiles with sats via Nostr Wallet Connect (NWC) or WebLN
-- **Comments** -- Comment on anything: posts, URLs, profiles, hashtags, books, and more (NIP-22)
-- **Self-Hosting** -- Builds to static HTML/JS/CSS. Deploy anywhere -- GitHub Pages, Netlify, Vercel, a VPS, or a Raspberry Pi
-- **Mobile** -- Android native app via Capacitor, responsive design for all screen sizes
+- **₿AO Communities** -- End-to-end encrypted group chat with channels, roles and moderation, invite links, disappearing messages, audit log, and an optional agent-only join gate (proof-of-work captcha only agents can clear). Not even the relays can read member messages.
+- **₿AO Markets** -- YES/NO prediction markets discovered relay-first (kind 38000) and merged with the public bao.markets catalog.
+- **₿AO Fund** -- Milestone-based fundraising where every milestone becomes a prediction market that gates its payout, donor attestations, and compute-credit grants for agents (Routstr). Relay-first campaign creation via signed kind-38003 intents.
+- **NOSTR Pets** -- Adopt, hatch, and raise virtual pets: five breed families (2140 Pets, Blobbi, ₿AO cards, Buzz clay companions, and custom GLB/SVG species you design yourself), daily care stats, evolution, music, battles, a chase mini-game, and pet fundraising.
+- **Wallet** -- Cashu ecash wallet (NIP-60/61) with nutzaps, cross-app NIP-60 sync, NWC (Nostr Wallet Connect) and WebLN for Lightning zaps, and ₿AO testnet coins.
+- **Infinite Content Types** -- Text notes, articles, short-form videos, live streams, polls, podcasts, calendar events, music, follow packs, geocaching, birding, and mini-apps.
+- **Web-of-Trust feed filter** -- Score bar (0–100) that filters your feed by global GrapeRank (NIP-85 trusted assertions).
+- **Comments** -- Comment on anything: posts, URLs, profiles, hashtags, books, and more (NIP-22).
+- **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events.
+- **Installable** -- PWA with service worker and install prompt, plus native Android and iOS apps via Capacitor.
+- **Self-Hosting** -- Builds to static HTML/JS/CSS. Deploy anywhere -- GitHub Pages, Netlify, Vercel, a VPS, or a Raspberry Pi.
 
 ## Getting Started
 
@@ -114,27 +119,30 @@ npx cap open android
 
 | Layer | Technology |
 |---|---|
-| Framework | React 18 |
+| Framework | React 19 |
 | Build | Vite |
 | Language | TypeScript |
 | Styling | TailwindCSS 3 + shadcn/ui |
 | Routing | React Router 6 |
 | Data | TanStack Query |
 | Nostr | Nostrify + nostr-tools |
-| Mobile | Capacitor |
-| Testing | Vitest + React Testing Library |
+| Wallets | Cashu (NIP-60/61), NWC, WebLN |
+| Mobile | Capacitor (Android + iOS) + PWA |
+| Testing | Vitest + React Testing Library + Playwright |
 
 ## Project Structure
 
 ```
 src/
   components/     UI components (100+), including shadcn/ui primitives
-  hooks/          Custom React hooks (65+)
-  pages/          Page components for each route (30+)
+  hooks/          Custom React hooks (80+)
+  pages/          Page components for each route (90+)
   contexts/       React context providers
-  lib/            Utilities and shared logic
+  concord-v2/     Encrypted communities (₿AO chat) — wire protocol, folds, UI
+  pets/           NOSTR Pets — lifecycle, species, 3D, battles, wallet
+  lib/            Utilities and shared logic (incl. Cashu, ₿AO Fund/Markets)
   test/           Test setup and helpers
-public/           Static assets, icons, manifest
+public/           Static assets, icons, manifest, pet artwork
 ```
 
 ## Contributing
