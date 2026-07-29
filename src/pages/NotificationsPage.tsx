@@ -159,6 +159,7 @@ export function NotificationsPage() {
     isLoading,
     hasFetched,
     markAsRead,
+    markIdsRead,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -171,16 +172,8 @@ export function NotificationsPage() {
     await queryClient.invalidateQueries({ queryKey: ['notifications', user?.pubkey ?? ''] });
   }, [queryClient, user?.pubkey]);
 
-  // Mark notifications as read when user visits the page
-  useEffect(() => {
-    if (!user || newNotificationIds.size === 0) return;
-
-    const timer = setTimeout(() => {
-      markAsRead();
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [user, newNotificationIds.size, markAsRead]);
+  // Notifications stay unread until the user clicks them individually or
+  // hits "Mark all as read" — the page no longer auto-marks on visit.
 
   // Intersection observer for infinite scroll
   const { ref: scrollRef, inView } = useInView({
@@ -237,6 +230,15 @@ export function NotificationsPage() {
             className="sidebar:py-5 sidebar:font-semibold"
           />
         ))}
+        {newNotificationIds.size > 0 && (
+          <button
+            type="button"
+            onClick={() => markAsRead()}
+            className="ml-auto shrink-0 px-3 py-2 text-xs font-medium text-primary hover:underline"
+          >
+            Mark all as read
+          </button>
+        )}
       </SubHeaderBar>
       <div style={{ height: ARC_OVERHANG_PX }} />
 
@@ -261,10 +263,18 @@ export function NotificationsPage() {
         ) : filteredGroups.length > 0 ? (
           <div>
             {filteredGroups.map((group) => (
-              <GroupedNotificationView
+              // Clicking a notification marks just that group as read (inner
+              // links still navigate — this only clears the unread highlight).
+              <div
                 key={group.key}
-                group={group}
-              />
+                onClick={() => {
+                  if (group.isNew) markIdsRead(group.actors.map((a) => a.event.id));
+                }}
+              >
+                <GroupedNotificationView
+                  group={group}
+                />
+              </div>
             ))}
             {hasNextPage && (
               <div ref={scrollRef} className="py-4">
