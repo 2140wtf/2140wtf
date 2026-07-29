@@ -10,6 +10,8 @@
  * payment is verified or settled. The UI must label the flow accordingly.
  */
 
+import { baoNip98Header, type BaoApiSigner } from '@/lib/baoApiAuth';
+
 export type BaoFundraiserFormat = 'milestones' | 'stream';
 
 export interface BaoFundraiser {
@@ -131,26 +133,12 @@ export function baoApiDate(value: number | string | null | undefined): Date | nu
   return Number.isNaN(parsed) ? null : new Date(parsed);
 }
 
-interface SignerLike {
-  signEvent(event: { kind: number; created_at: number; tags: string[][]; content: string }): Promise<{ id: string; pubkey: string; sig: string; kind: number; created_at: number; tags: string[][]; content: string }>;
-}
-
-async function nip98Header(signer: SignerLike, url: string, method: string): Promise<string> {
-  const event = await signer.signEvent({
-    kind: 27235,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [['u', url], ['method', method]],
-    content: '',
-  });
-  return `Nostr ${btoa(JSON.stringify(event))}`;
-}
-
-async function apiFetch<T>(path: string, opts?: { method?: string; body?: unknown; signer?: SignerLike }): Promise<T> {
+async function apiFetch<T>(path: string, opts?: { method?: string; body?: unknown; signer?: BaoApiSigner }): Promise<T> {
   const url = `${baoApiBase()}${path}`;
   const method = opts?.method ?? 'GET';
   const headers: Record<string, string> = {};
   if (opts?.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (opts?.signer) headers['Authorization'] = await nip98Header(opts.signer, url, method);
+  if (opts?.signer) headers['Authorization'] = await baoNip98Header(opts.signer, url, method);
 
   const res = await fetch(url, {
     method,
@@ -219,7 +207,7 @@ export interface CreateFundraiserResult {
 }
 
 export async function createFundraiser(
-  signer: SignerLike,
+  signer: BaoApiSigner,
   input: CreateFundraiserInput,
 ): Promise<CreateFundraiserResult> {
   const res = await apiFetch<{ data: CreateFundraiserResult }>('/v1/fundraisers', {
@@ -276,7 +264,7 @@ export interface RelayCreateOptions {
  * the relay before the bridge's backfill scan ever sees it.
  */
 export async function createFundraiserRelayFirst(
-  signer: SignerLike,
+  signer: BaoApiSigner,
   input: CreateFundraiserInput,
   opts: RelayCreateOptions,
 ): Promise<{ result: CreateFundraiserResult; via: 'relay' | 'rest' }> {
@@ -331,7 +319,7 @@ export interface ContributeResult {
 }
 
 export async function contributeToFundraiser(
-  signer: SignerLike,
+  signer: BaoApiSigner,
   id: string,
   input: { amount_sats: number; rail: BaoRail; reference?: string; idempotencyKey?: string },
 ): Promise<ContributeResult> {
@@ -353,7 +341,7 @@ export async function contributeToFundraiser(
 }
 
 export async function releaseMilestone(
-  signer: SignerLike,
+  signer: BaoApiSigner,
   fundraiserId: string,
   milestoneId: string,
   opts?: { payout_reference?: string; proof_event_id?: string },
@@ -373,7 +361,7 @@ export interface ClaimStreamResult {
 
 /** Claim vested sats from a stream-format fundraiser (owner only, DEMO recorded-only). */
 export async function claimStream(
-  signer: SignerLike,
+  signer: BaoApiSigner,
   fundraiserId: string,
 ): Promise<ClaimStreamResult> {
   const res = await apiFetch<{ data: ClaimStreamResult }>(
@@ -409,7 +397,7 @@ export interface PlaceTradeResult {
  * the outcome label instead of the id. The order debits the account bound to
  * the signer's pubkey on bao.markets (demo sats on the signet deployment).
  */
-export async function placeBaoTrade(signer: SignerLike, input: PlaceTradeInput): Promise<PlaceTradeResult> {
+export async function placeBaoTrade(signer: BaoApiSigner, input: PlaceTradeInput): Promise<PlaceTradeResult> {
   try {
     const res = await apiFetch<unknown>('/v1/amm/orders', {
       method: 'POST',

@@ -30,6 +30,7 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- ₿AO sats held on bao.markets showed as 0 in the client — bao.markets balances live in its custodial ledger (lightning, cashu, fedimint ecash, spark, liquid, ark), not in the local NIP-60 ecash wallet, so relay sync could never see them. The ₿AO wallet now fetches per-rail balances from the bao.markets API (`GET /v1/wallet/balance`) authenticated with NIP-98 — sign-only, so NIP-46 bunker and NIP-07 logins work — and shows them on each rail plus a "held on bao.markets" total, refreshed every 30s
 - ₿AO Fund create dialog: the `?repo=` deep-link prefill now actually works — the page passed the repo param to the dialog but the dialog never declared the prop, which also broke the typecheck
 - Invite publish/revoke dead-ends ("No relay accepted the revocation") — bundle and tombstone publishes now allow 15s per relay and the error says how many relays were tried, so a connection problem reads as retryable instead of a dead end
 - Community relay sets no longer grow duplicate entries: `wss://relay.damus.io/` and `wss://relay.damus.io` were treated as different relays, so communities were minted with duplicated relays and a newly added relay could silently fall off the capped list — relay URLs are now canonicalized everywhere the set is folded or displayed
