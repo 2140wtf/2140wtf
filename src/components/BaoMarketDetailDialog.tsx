@@ -59,12 +59,15 @@ function truncatePubkey(pubkey: string): string {
 
 interface BaoMarketDetailDialogProps {
   market: BaoMarket | null;
+  /** Outcome label to preselect in the trade module (from Buy Yes/No). */
+  initialOutcomeLabel?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function BaoMarketDetailDialog({
   market,
+  initialOutcomeLabel,
   open,
   onOpenChange,
 }: BaoMarketDetailDialogProps) {
@@ -108,7 +111,7 @@ export function BaoMarketDetailDialog({
 
           {/* Express Trade — the fast path. Orders go to the bao.markets
               API with the user's signer, no separate login needed. */}
-          <BaoExpressTrade market={market} />
+          <BaoExpressTrade market={market} initialOutcomeLabel={initialOutcomeLabel} />
 
           <div className="space-y-3 pt-1">
             <h3 className="text-sm font-semibold">Outcomes</h3>
