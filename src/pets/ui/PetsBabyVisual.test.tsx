@@ -35,6 +35,17 @@ describe('PetsBabyVisual — baby resembles the mature form', () => {
     expect(container.querySelector('svg')).toBeNull();
   });
 
+  it('Bleep babies (2140-pets category) render the static first frame too', () => {
+    const { container } = render(
+      <PetsBabyVisual pets={makeBabyPets({ breedCategory: '2140-pets', breedAsset: 'bleep' })} />,
+    );
+
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('/pets/bleep/bleep.png');
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   it('non-Buzz babies keep the SVG pipeline', () => {
     const { container } = render(
       <PetsBabyVisual pets={makeBabyPets({ breedCategory: 'ditto-blobbi', breedAsset: undefined })} />,

@@ -27,6 +27,7 @@ import {
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
 import { deriveAdultFormFromSeed } from '@/pets/adult-pets/types/adult.types';
+import { isBleepPetId } from '@/pets/core/lib/animated-pets';
 import { BIRTH_BLOCK_TAG } from '@/pets/core/lib/pets-life';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -219,9 +220,9 @@ export function previewToEventTags(preview: PetsEggPreview, birthBlockHeight?: n
     // Lock in the selected adult form for SVG-form categories so the pet
     // always evolves into the category member the user chose, even if the
     // seed-adjustment path is bypassed or overwritten later. ₿AO (cards) and
-    // Buzz (animated characters) render from breed_asset instead, so no
-    // SVG adult form is locked for them.
-    ...(preview.breedCategory && preview.breedCategory !== 'bao' && preview.breedCategory !== 'buzz' && preview.seed
+    // animated characters (Buzz, Bleep) render from breed_asset instead, so
+    // no SVG adult form is locked for them.
+    ...(preview.breedCategory && preview.breedCategory !== 'bao' && preview.breedCategory !== 'buzz' && !isBleepPetId(preview.breedAsset) && preview.seed
       ? [['adult_type', deriveAdultFormFromSeed(preview.seed)]]
       : []),
     ...(preview.breedCategory === 'bao' && preview.breedAsset
