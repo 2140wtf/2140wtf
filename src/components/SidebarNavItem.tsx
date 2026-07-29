@@ -396,7 +396,7 @@ export function SidebarNavList({
                 compact={compact}
                 minimal={minimal}
                 children={[
-                  { id: 'bao-chat', label: 'Create ₿AO Community', path: '/bao/chat' },
+                  { id: 'bao-chat', label: '₿AO Community', path: '/bao/chat' },
                   { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao-fund' },
                 ]}
               />
