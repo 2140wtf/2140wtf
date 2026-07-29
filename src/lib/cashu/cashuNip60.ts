@@ -13,7 +13,7 @@
  * are used for restore and cross-device convergence.
  */
 import { finalizeEvent, getPublicKey, nip44, verifyEvent } from 'nostr-tools';
-import { bytesToHex } from '@noble/curves/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { NostrFilter } from '@nostrify/nostrify';
@@ -61,6 +61,9 @@ export interface Nip60SyncApi {
   /** Optional: query specific relays outside the default pool (e.g. the relay
    * a Nutzap recipient lists in their kind:10019). */
   queryRelays?: (urls: string[], filter: NostrFilter) => Promise<NostrEvent[]>;
+  /** Optional: publish to specific relays outside the default pool (e.g. the
+   * relay another app's NIP-60 wallet lives on). */
+  publishToRelays?: (urls: string[], event: NostrEvent) => Promise<string | null>;
   /** Relays the user reads/writes from (for Nutzap info tags). */
   relays: string[];
 }
@@ -779,4 +782,70 @@ export async function restoreNip60Wallet(
     devLog.error('NIP-60 restore failed:', e);
   }
   return result;
+}
+
+/**
+ * Mint-URL aliases for the BAO signet mint. bao.markets can be configured to
+ * reach the mint through the API proxy path while 2140wtf uses the direct
+ * path; both URLs are the same mint backend, so proofs minted under either
+ * URL must merge into one logical mint.
+ */
+export const BAO_SIGNET_MINT_ALIASES: Record<string, string> = {
+  'https://relay.bao.network/bao-api/v1/proxy/cashu': 'https://relay.bao.network/cashu',
+};
+
+/** Resolve a mint URL to its canonical form when it is a known alias. */
+export function resolveMintAlias(url: string): string {
+  return BAO_SIGNET_MINT_ALIASES[url] ?? url;
+}
+
+export interface CrossAppNip60Restore {
+  result: Nip60RestoreResult;
+  /** Wallet key recovered from the identity's published config (null when the
+   * other app never published one — nothing to restore or mirror then). */
+  walletPrivkey: Uint8Array | null;
+  walletPubkey: string | null;
+}
+
+/**
+ * Cross-app NIP-60 restore: recover a wallet ANOTHER app (e.g. bao.markets)
+ * published for the same Nostr identity, without sharing key derivation.
+ *
+ * Every NIP-60 wallet stores its wallet privkey inside the identity-signed
+ * kind:17375 config (NIP-44 encrypted to self). Reading that config with the
+ * identity signer yields the wallet key, which then decrypts and filters the
+ * foreign wallet's token/history/deletion events. Works with any identity
+ * signer that supports NIP-44 (including NIP-07, where no nsec is available).
+ *
+ * The caller decides which relays to query via `queryFn` (target the other
+ * app's relay, e.g. wss://relay.bao.network) and how to merge the proofs.
+ */
+export async function restoreCrossAppNip60Wallet(
+  identitySigner: Nip60Signer,
+  queryFn: (filter: NostrFilter) => Promise<NostrEvent[]>,
+): Promise<CrossAppNip60Restore> {
+  const empty: CrossAppNip60Restore = {
+    result: { config: null, configs: [], proofsByMint: {}, history: [] },
+    walletPrivkey: null,
+    walletPubkey: null,
+  };
+  try {
+    const configEvents = await queryFn({ kinds: [WALLET_CONFIG_KIND], authors: [identitySigner.pubkey], limit: 5 });
+    const newestConfig = configEvents
+      .filter((ev) => verifyEvent(ev))
+      .sort((a, b) => b.created_at - a.created_at)[0];
+    if (!newestConfig) return empty;
+
+    const configs = await parseWalletConfigEvents(newestConfig, identitySigner);
+    const config = configs.find((c) => (c.id ?? 'default') === 'default') ?? configs[0] ?? null;
+    if (!config || !/^[0-9a-f]{64}$/i.test(config.privkey)) return empty;
+
+    const walletPrivkey = hexToBytes(config.privkey);
+    const walletSigner = createNip60Signer(walletPrivkey);
+    const result = await restoreNip60Wallet(walletSigner, identitySigner, queryFn);
+    return { result, walletPrivkey, walletPubkey: walletSigner.pubkey };
+  } catch (e) {
+    devLog.error('Cross-app NIP-60 restore failed:', e);
+    return empty;
+  }
 }
