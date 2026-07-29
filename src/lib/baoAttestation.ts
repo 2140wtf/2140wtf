@@ -34,9 +34,13 @@ export const BAO_RESOLUTION_ARTIFACT_KIND = 36789;
 
 /** Quorum: ≥50% of ring weight (by sats) must cast a ballot (spec §2). */
 export const ATTESTATION_QUORUM_PCT = 50;
-/** NO resolves only at ≥2/3 of cast sats; a tie (or bare majority NO) resolves YES. */
-export const ATTESTATION_NO_THRESHOLD_PCT = 200 / 3;
-/** Share of the milestone routed to the runner on a NO resolution (sabotage tax). */
+/** Outcome: majority of cast sats decides — YES wins ties; NO needs only a
+ * bare majority of cast to resolve NO and refund the milestone. */
+export const ATTESTATION_NO_MAJORITY_PCT = 50;
+/** Sabotage tax threshold: a NO outcome routes 2% of the milestone to the
+ * runner only when NO reaches ≥2/3 of cast sats (spec §2). */
+export const ATTESTATION_TAX_THRESHOLD_PCT = 200 / 3;
+/** Share of the milestone routed to the runner on a ≥⅔ NO resolution (sabotage tax). */
 export const ATTESTATION_SABOTAGE_TAX_PCT = 2;
 
 // ── Types mirroring GET …/attestation ────────────────────────────────────────
