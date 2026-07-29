@@ -1,5 +1,6 @@
 import {
   Check,
+  GitBranch,
   Hash,
   ImagePlus,
   Loader2,
@@ -12,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { openUrl } from "@/lib/downloadFile";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -121,7 +124,7 @@ function InfoBody({
   const [uploading, setUploading] = useState<"icon" | "banner" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [editingField, setEditingField] = useState<"name" | "description" | null>(null);
+  const [editingField, setEditingField] = useState<"name" | "description" | "repo" | null>(null);
 
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
@@ -146,10 +149,12 @@ function InfoBody({
     }
   };
 
-  const saveField = async (field: "name" | "description", value: string) => {
+  const saveField = async (field: "name" | "description" | "repo", value: string) => {
     setError(null);
     try {
-      await updateMetadata(field === "name" ? { name: value } : { description: value });
+      await updateMetadata(
+        field === "name" ? { name: value } : field === "description" ? { description: value } : { repo: value },
+      );
       setEditingField(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save changes.");
@@ -311,6 +316,65 @@ function InfoBody({
             </Button>
           )
         )}
+
+        {/* Repository — where the community's code lives (gitworkshop.dev
+            NIP-34 repo, GitHub, anywhere). Managers edit inline; everyone can
+            open it, and fundraisers for this community pre-fill from it. */}
+        {editingField === "repo" ? (
+          <InlineEdit
+            initial={metadata?.repo ?? ""}
+            saving={isUpdating}
+            multiline={false}
+            placeholder="https://gitworkshop.dev/npub…/my-repo or any git URL"
+            onCancel={() => setEditingField(null)}
+            onSave={(v) => saveField("repo", v)}
+          />
+        ) : metadata?.repo ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => openUrl(metadata.repo!)}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-secondary/40 px-2 py-1.5 text-left text-sm text-primary hover:underline"
+            >
+              <GitBranch className="size-4 shrink-0" />
+              <span className="truncate">{metadata.repo}</span>
+            </button>
+            {canManageMetadata && (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-6 shrink-0 text-muted-foreground"
+                aria-label="Edit repository"
+                onClick={() => setEditingField("repo")}
+              >
+                <Pencil className="size-3" />
+              </Button>
+            )}
+          </div>
+        ) : (
+          canManageMetadata && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full justify-start gap-1.5 text-muted-foreground"
+              onClick={() => setEditingField("repo")}
+            >
+              <GitBranch className="size-3.5" /> Add a repository
+            </Button>
+          )
+        )}
+
+        {/* Fund this community — repo pre-fills the fundraiser. */}
+        <div className="flex">
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link
+              to={`/bao-fund?create=1&title=${encodeURIComponent(name)}${metadata?.repo ? `&repo=${encodeURIComponent(metadata.repo)}` : ""}`}
+            >
+              Fund this ₿AO
+            </Link>
+          </Button>
+        </div>
 
         {error && (
           <Alert variant="destructive">

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useToast } from "@/hooks/useToast";
+import { ToastAction } from "@/components/ui/toast";
 import { useSendStatusMap, useSendStatusMapValue, type SendStatusMap } from "@/hooks/useSendStatusMap";
 import {
   buildV2CommentTags,
@@ -830,10 +832,21 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
 /** Retry / discard a failed optimistic message, and optimistic self-delete. */
 export function useMessageActions2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined) {
   const { user } = useCurrentUser();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const channelIdHex = channel?.idHex ?? null;
   const { setStatus } = useSendStatusMap(statusKey(channelIdHex));
   const { mutateAsync: send } = useSendMessage2(community, channel);
+  // Pending delete publishes, keyed by rumor id so Undo can cancel them.
+  const pendingDeletes = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  useEffect(() => {
+    const pending = pendingDeletes.current;
+    return () => {
+      for (const timer of pending.values()) clearTimeout(timer);
+      pending.clear();
+    };
+  }, []);
 
   const retry = useCallback(
     (id: string) => {
@@ -873,19 +886,38 @@ export function useMessageActions2(community: CommunityV2 | undefined, channel: 
     [queryClient, channelIdHex, setStatus],
   );
 
-  /** Optimistic delete: hide now, publish the kind-5 in the background. */
+  /** Optimistic delete with an undo window: hide now, publish after 5s. */
   const deleteMessage = useCallback(
     (id: string) => {
       if (!user || !community || !channel) return;
       queryClient.setQueryData<string[]>(deletedKey(channelIdHex), (old = []) =>
         old.includes(id) ? old : [...old, id],
       );
-      void send({ content: "", kind: KIND_DELETE, target: id }).catch(() => {
-        // Couldn't publish the delete — unhide so the user knows.
+
+      const undo = () => {
+        const timer = pendingDeletes.current.get(id);
+        if (timer) clearTimeout(timer);
+        pendingDeletes.current.delete(id);
         queryClient.setQueryData<string[]>(deletedKey(channelIdHex), (old = []) => old.filter((d) => d !== id));
+      };
+
+      pendingDeletes.current.set(
+        id,
+        setTimeout(() => {
+          pendingDeletes.current.delete(id);
+          void send({ content: "", kind: KIND_DELETE, target: id }).catch(() => {
+            // Couldn't publish the delete — unhide so the user knows.
+            queryClient.setQueryData<string[]>(deletedKey(channelIdHex), (old = []) => old.filter((d) => d !== id));
+          });
+        }, 5_000),
+      );
+
+      toast({
+        title: "Message deleted",
+        action: <ToastAction altText="Undo delete" onClick={undo}>Undo</ToastAction>,
       });
     },
-    [user, community, channel, channelIdHex, queryClient, send],
+    [user, community, channel, channelIdHex, queryClient, send, toast],
   );
 
   return { retry, discard, deleteMessage };
