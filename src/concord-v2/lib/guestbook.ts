@@ -15,6 +15,7 @@
 import type { NostrEvent } from "nostr-tools/pure";
 
 import { guestbookGroupKey, type GroupKey } from "@/concord-v2/lib/derive";
+import { meetsJoinPow } from "@/concord-v2/lib/agentGate";
 import { KIND_JOIN_LEAVE, KIND_KICK, KIND_SEAL_ENCRYPTED, KIND_SNAPSHOT } from "@/concord-v2/lib/kinds";
 import { buildRumor, openWrap, sealRumor, wrapSeal, type OpenedEvent, type Rumor, type StreamSigner } from "@/concord-v2/lib/stream";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
@@ -169,6 +170,13 @@ export function coalesceGuestbook(
     snapshotAuthority?: string;
     /** Banned npubs (the Banlist fold) — their entries are dropped entirely. */
     banned?: Set<string>;
+    /**
+     * Agent gate (agent_gate metadata): Join rumors whose id carries fewer
+     * leading zero bits than this difficulty are dropped — the network-wide
+     * half of "block humans": a join without proof-of-work never enters the
+     * roster in ANY conforming client. Leaves/kicks need no work.
+     */
+    joinPow?: number;
   },
 ): Map<string, CoalescedMember> {
   const byMember = new Map<string, CoalescedMember>();
@@ -195,6 +203,7 @@ export function coalesceGuestbook(
     if (ev.kind === KIND_JOIN_LEAVE) {
       const verb = ev.content === "join" ? "join" : ev.content === "leave" ? "leave" : undefined;
       if (!verb) continue;
+      if (verb === "join" && opts.joinPow !== undefined && !meetsJoinPow(ev.rumorId, opts.joinPow)) continue;
       const inviteTag = verb === "join" ? ev.tags.find((t) => t[0] === "invite") : undefined;
       apply({
         pubkey: ev.author,
@@ -250,6 +259,14 @@ export function completeMemberlist(
   observed: Map<string, number>,
   banned: Set<string>,
   bannedAt?: Map<string, number>,
+  opts?: {
+    /**
+     * Agent-gated communities: only Guestbook Joins count — observed activity
+     * must NOT admit a member who never cleared the gate (a human holding the
+     * bundle could otherwise post once and appear on the roster).
+     */
+    strictRoster?: boolean;
+  },
 ): Set<string> {
   // A Join or activity that predates a member's most recent ban is STALE: a ban
   // is a departure the Guestbook never records (self-removal is network-silent),
@@ -266,6 +283,7 @@ export function completeMemberlist(
   for (const [pk, m] of coalesced) {
     if (m.state === "join" && !banned.has(pk) && !stalePreBan(pk, m.ms)) out.add(pk);
   }
+  if (opts?.strictRoster) return out;
   for (const [pk, seenMs] of observed) {
     if (banned.has(pk) || stalePreBan(pk, seenMs)) continue;
     const m = coalesced.get(pk);

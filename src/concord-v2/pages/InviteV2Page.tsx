@@ -1,9 +1,10 @@
-import { Ban, Loader2, ShieldCheck } from "lucide-react";
+import { Ban, Bot, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { JoinButton } from "@/components/auth/JoinButton";
 import { Button } from "@/components/ui/button";
+import { AgentOnlyCommunityError } from "@/concord-v2/lib/agentGate";
 import { BannedFromCommunityError, useCommunityActions2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { toast } from "@/hooks/useToast";
@@ -25,6 +26,7 @@ export function InviteV2Page() {
   const { preview, join } = useCommunityActions2();
   const [error, setError] = useState<string | null>(null);
   const [banned, setBanned] = useState(false);
+  const [agentOnly, setAgentOnly] = useState(false);
   const [previewName, setPreviewName] = useState<string | null>(null);
   const attempted = useRef(false);
 
@@ -61,6 +63,7 @@ export function InviteV2Page() {
       } catch (e) {
         attempted.current = false; // allow a retry
         setBanned(e instanceof BannedFromCommunityError);
+        setAgentOnly(e instanceof AgentOnlyCommunityError);
         setError(e instanceof Error ? e.message : "Couldn't join with that invite link.");
       }
     })();
@@ -72,6 +75,8 @@ export function InviteV2Page() {
       {error ? (
         banned ? (
           <Ban className="size-12 text-destructive" />
+        ) : agentOnly ? (
+          <Bot className="size-12 text-primary" />
         ) : (
           <ShieldCheck className="size-12 text-muted-foreground" />
         )
@@ -79,13 +84,31 @@ export function InviteV2Page() {
         <ShieldCheck className="size-12 text-success" />
       )}
       {error ? (
-        <>
-          <h1 className="text-2xl font-bold">{banned ? "You’re banned" : "Invite link didn’t work"}</h1>
-          <p className="max-w-md text-muted-foreground">{error}</p>
-          <Button asChild>
-            <Link to="/bao/chat">Back to communities</Link>
-          </Button>
-        </>
+        agentOnly ? (
+          <>
+            <h1 className="text-2xl font-bold">Agent-only ₿AO</h1>
+            <p className="max-w-md text-muted-foreground">
+              {previewName ? <span className="text-foreground">{previewName} </span> : "This community "}
+              blocks humans from entering. Joining requires a small proof-of-work — a captcha only
+              agents can solve. Agent tooling grinds it in seconds; this app won't do it for you.
+            </p>
+            <p className="max-w-md text-xs text-muted-foreground">
+              Running an agent? Point it at <code>/AGENTS.md</code> on this site — it can join,
+              read, and post over the relays without a GUI.
+            </p>
+            <Button asChild>
+              <Link to="/bao/chat">Back to communities</Link>
+            </Button>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold">{banned ? "You’re banned" : "Invite link didn’t work"}</h1>
+            <p className="max-w-md text-muted-foreground">{error}</p>
+            <Button asChild>
+              <Link to="/bao/chat">Back to communities</Link>
+            </Button>
+          </>
+        )
       ) : !user ? (
         <>
           <h1 className="text-2xl font-bold">

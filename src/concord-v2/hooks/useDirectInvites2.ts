@@ -1,7 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { assertNotBanned, bundleToEntry } from "@/concord-v2/hooks/useCommunityActions2";
+import { BannedFromCommunityError, bundleToEntry, fetchControlFold } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCommunityList2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -10,6 +10,7 @@ import {
   unwrapDirectInvite,
 } from "@/concord-v2/lib/directInvite";
 import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
+import { agentGateOf, grindJoinRumor } from "@/concord-v2/lib/agentGate";
 import {
   advanceInviteInboxCursor,
   inviteInboxSince,
@@ -235,9 +236,17 @@ export function useAcceptDirectInvite2() {
       // A banned npub must not accept an invite either (CORD-04 §4) — a catch-up
       // (already a member, healing forward) skips the check, since a still-valid
       // member folding a fresher bundle isn't "joining".
+      // The agent gate does NOT refuse here: a direct invite is owner-vetted.
+      // Instead the app clears the gate FOR the invitee — grinds the Join's
+      // proof-of-work itself so the roster fold admits them.
+      let gateDifficulty: number | undefined;
       if (!invite.catchUp) {
         const community = rehydrateCommunity(entry);
-        if (community) await assertNotBanned(nostr, community, user.pubkey);
+        if (community) {
+          const folded = await fetchControlFold(nostr, community);
+          if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
+          gateDifficulty = agentGateOf(folded.metadata)?.difficulty;
+        }
       }
       // `add` → mergeCommunityLists → mergeEntry → freshest: epoch-monotonic, so
       // this both onboards a new member and heals an existing one FORWARD, never
@@ -253,7 +262,10 @@ export function useAcceptDirectInvite2() {
         void (async () => {
           const community = rehydrateCommunity(entry);
           if (!community) return;
-          const rumor = buildJoinRumor(user.pubkey, Date.now(), { creator: invite.sender, label: bundle.label });
+          const attribution = { creator: invite.sender, label: bundle.label };
+          const rumor = gateDifficulty
+            ? grindJoinRumor(user.pubkey, Date.now(), gateDifficulty, attribution)
+            : buildJoinRumor(user.pubkey, Date.now(), attribution);
           const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
           await Promise.allSettled(
             community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
