@@ -108,7 +108,15 @@ export function useCashuSeed(): UseCashuSeedResult {
         }
       } catch (err: unknown) {
         if (!cancelled && currentToken === retryRef.current) {
-          setError(err instanceof Error ? err.message : 'Failed to load or create Cashu seed');
+          const raw = err instanceof Error ? err.message : '';
+          // Remote signers (NIP-46 bunkers like Amber) reject with strings
+          // like "aka-profiles: denied" when the connection profile lacks
+          // NIP-44 encrypt/decrypt permission — translate that into an
+          // actionable message instead of the raw signer string.
+          const message = /denied/i.test(raw)
+            ? `Your signer rejected the encryption request (${raw}). Enable NIP-44 encrypt/decrypt permission for this app in your signer's connection settings, then retry.`
+            : raw || 'Failed to load or create Cashu seed';
+          setError(message);
           setSeedPhrase(undefined);
         }
       } finally {
