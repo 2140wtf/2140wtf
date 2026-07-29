@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, MessagesSquare, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -898,6 +898,10 @@ export function ConcordV2Page() {
    * openable from the header toggle. On real desktop it stays on. */
   const [membersVisible, setMembersVisible] = useState(() => !isTouchDevice);
   const [membersOpen, setMembersOpen] = useState(false);
+  // Focus mode: one toggle in the header collapses BOTH side panels — the
+  // channel list on the left and the members panel on the right — so the chat
+  // column takes the full width. Second click restores.
+  const [focusMode, setFocusMode] = useState(false);
   // Mobile: landing on the community root (no channel in the URL) shows the
   // channel list, not a chat pane — selecting a community should let you pick a
   // channel, not auto-dive into one. A deep link with a channel opens chat
@@ -1548,7 +1552,7 @@ export function ConcordV2Page() {
         underlay={
           // (Armada rendered its ServerRail beside the channel list here; in
           // ₿AO cross-community navigation lives on the /bao/chat list page.)
-          channelList(() => setChannelsOpen(false), "flex-1 sidebar:flex-none")
+          channelList(() => setChannelsOpen(false), focusMode ? "hidden" : "flex-1 sidebar:flex-none")
         }
       >
         <main className="flex-1 min-w-0 flex flex-col safe-area-top h-[calc(100dvh-4rem)] sidebar:h-dvh">
@@ -1716,6 +1720,21 @@ export function ConcordV2Page() {
               >
                 <Users className="size-4" />
               </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn("size-8 touch:size-11", focusMode && "text-primary")}
+                    aria-label={focusMode ? "Exit focus mode" : "Focus mode — chat only"}
+                    aria-pressed={focusMode}
+                    onClick={() => setFocusMode((v) => !v)}
+                  >
+                    {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{focusMode ? "Show side panels" : "Focus mode — collapse both side panels"}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1986,21 +2005,21 @@ export function ConcordV2Page() {
                 "overflow-hidden",
                 "absolute inset-0 z-20 sidebar:static sidebar:z-auto",
                 "sidebar:shrink-0 sidebar:w-0 sidebar:transition-[width] sidebar:duration-200 sidebar:ease-out",
-                membersOpen ? "" : "pointer-events-none sidebar:pointer-events-auto",
-                membersVisible && "sidebar:w-[16.5rem]",
+                membersOpen && !focusMode ? "" : "pointer-events-none sidebar:pointer-events-auto",
+                membersVisible && !focusMode && "sidebar:w-[16.5rem]",
               )}
             >
               <div
                 className={cn(
                   "absolute inset-0 bg-background transition-opacity duration-200 ease-out sidebar:hidden",
-                  membersOpen ? "opacity-100" : "opacity-0",
+                  membersOpen && !focusMode ? "opacity-100" : "opacity-0",
                 )}
               />
               <div
                 className={cn(
                   "relative h-full flex w-full sidebar:w-[16.5rem] transition-transform duration-200 ease-out",
-                  membersOpen ? "translate-x-0" : "translate-x-full",
-                  membersVisible ? "sidebar:translate-x-0" : "sidebar:translate-x-full",
+                  membersOpen && !focusMode ? "translate-x-0" : "translate-x-full",
+                  membersVisible && !focusMode ? "sidebar:translate-x-0" : "sidebar:translate-x-full",
                 )}
               >
                 <MemberList
