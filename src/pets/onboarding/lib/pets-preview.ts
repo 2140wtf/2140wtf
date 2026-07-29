@@ -22,6 +22,7 @@ import {
 
 import {
   getRandomCategoryMember,
+  getMemberAssetId,
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
@@ -134,7 +135,7 @@ export function generateEggPreviewForCategory(
   return {
     ...base,
     breedCategory: category,
-    breedAsset: member.recipeId ?? member.id,
+    breedAsset: getMemberAssetId(member),
   };
 }
 
@@ -215,10 +216,12 @@ export function previewToEventTags(preview: PetsEggPreview, birthBlockHeight?: n
     ['special_ability', visualTraits.specialAbility],
     ...(preview.breedCategory ? [['breed_category', preview.breedCategory]] : []),
     ...(preview.breedAsset ? [['breed_asset', preview.breedAsset]] : []),
-    // Lock in the selected adult form for non-₿AO categories so the pet
+    // Lock in the selected adult form for SVG-form categories so the pet
     // always evolves into the category member the user chose, even if the
-    // seed-adjustment path is bypassed or overwritten later.
-    ...(preview.breedCategory && preview.breedCategory !== 'bao' && preview.seed
+    // seed-adjustment path is bypassed or overwritten later. ₿AO (cards) and
+    // Buzz (animated characters) render from breed_asset instead, so no
+    // SVG adult form is locked for them.
+    ...(preview.breedCategory && preview.breedCategory !== 'bao' && preview.breedCategory !== 'buzz' && preview.seed
       ? [['adult_type', deriveAdultFormFromSeed(preview.seed)]]
       : []),
     ...(preview.breedCategory === 'bao' && preview.breedAsset

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { nip19 } from 'nostr-tools';
-import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Lock, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Maximize, Minimize, Settings } from 'lucide-react';
+import { Egg, Moon, Sun, RefreshCw, Check, Plus, Camera, Footprints, Wrench, Theater, ExternalLink, Utensils, Gamepad2, Sparkles, Pill, Music, Mic, Loader2, Lock, Target, Droplets, Heart, Zap, Refrigerator, ShowerHead, Candy, TowelRack, X, Activity, Users, TrendingUp, Swords, Wallet, ShoppingBag, ArrowLeftRight, Cat, Bitcoin, Palette, Bug, Maximize, Minimize, Settings } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { APP_OPERATOR_PUBKEY } from '@/lib/appOperator';
@@ -125,9 +125,11 @@ import {
   BREED_CATEGORIES,
   getCategoryMembers,
   getCustomCategoryMembers,
+  getMemberAssetId,
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
+import { getBuzzPetAnimatedUrl } from '@/pets/core/lib/buzz-pets';
 import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
 import { getAllNeeds } from '@/pets/companion/interaction/needDetection';
 import { PetsDevEditor, usePetsDevUpdate, type PetsDevUpdates, PetsEmotionPanel, useEffectiveEmotion, isLocalhostDev } from '@/pets/dev';
@@ -258,6 +260,7 @@ function BreedCategoryPicker({
     '2140-pets': Sparkles,
     'ditto-blobbi': Cat,
     bao: Wallet,
+    buzz: Bug,
     custom: Palette,
   };
 
@@ -3915,10 +3918,33 @@ function SpeciesTabContent({ companion }: SpeciesTabContentProps) {
             );
           }
 
+          // Buzz species render the animated WebP character directly —
+          // there is no SVG form for them.
+          if (member.kind === 'buzz') {
+            return (
+              <div
+                key={member.id}
+                className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
+              >
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
+                  <img
+                    src={getBuzzPetAnimatedUrl(member.id)}
+                    alt={member.label}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {member.label}
+                </span>
+              </div>
+            );
+          }
+
           const svg = isAdultFormMember(member)
             ? getAdultBaseSvg(member.form)
             : (() => {
-                const recipe = getBaoRecipeById(member.recipeId ?? member.id);
+                const recipe = getBaoRecipeById(getMemberAssetId(member));
                 return recipe ? generateBaoSvg(recipe) : '';
               })();
 

@@ -74,9 +74,10 @@ describe('resolveBabySvg — every baby resembles its mature form', () => {
     expect(svg).not.toContain('bao-art');
   });
 
-  it('other categories (ditto-blobbi, custom) keep the generic droplet', () => {
-    // (The buzz category does not exist in this repo.)
-    for (const breedCategory of ['ditto-blobbi', 'custom'] as const) {
+  it('other categories (ditto-blobbi, buzz, custom) keep the generic droplet', () => {
+    // Buzz babies resemble their adult via the static Buzz PNG in
+    // PetsBabyVisual, not via this SVG resolver.
+    for (const breedCategory of ['ditto-blobbi', 'buzz', 'custom'] as const) {
       const svg = resolveBabySvg(makeBabyPets({ breedCategory, breedAsset: 'fizz' }));
       expect(svg).toContain('petsBodyGradient');
     }
