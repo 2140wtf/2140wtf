@@ -713,6 +713,9 @@ export interface Transaction {
   quoteId?: string;
   /** Unix ms after which a pending mint/melt quote should be considered expired. */
   expiresAt?: number;
+  /** True for BOLT12 (offer) melts — the pending-melt poll must use the
+   *  bolt12 quote endpoint; the bolt11 endpoint can never resolve them. */
+  bolt12?: boolean;
 }
 
 export interface StoredMint {

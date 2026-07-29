@@ -11,6 +11,7 @@ import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted }
 import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
+import { updateNostrPetProfileTags } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
 
 import { CHASE_FIAT_COST } from './types';
@@ -126,7 +127,10 @@ export function useChasePayout(
         };
       }
 
-      // Fiat mode: deduct the run cost from in-game worthless coins.
+      // Fiat mode: deduct the run cost from in-game worthless coins and credit
+      // the coins collected during the run. The tag list must be UPDATED with
+      // the new balance — returning the unmodified tags (the old bug) made the
+      // settle a silent no-op: runs were free and winnings vanished.
       const resultMeta = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
         const currentCoins = freshProfile?.coins ?? 0;
         if (currentCoins < CHASE_FIAT_COST) {
@@ -134,12 +138,13 @@ export function useChasePayout(
             `Insufficient coins. You need ${CHASE_FIAT_COST} coins but only have ${currentCoins.toLocaleString()}.`
           );
         }
-        const newCoinsTotal = currentCoins - CHASE_FIAT_COST;
+        const winnings = Math.max(0, coinsCollected);
+        const newCoinsTotal = currentCoins - CHASE_FIAT_COST + winnings;
         const content = serializeProfileContent(prevContent, {});
         return {
-          tags: freshProfile?.event.tags ?? prevTags,
+          tags: updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, { coins: String(newCoinsTotal) }),
           content,
-          meta: { newCoinsTotal, amountAwarded: Math.max(0, coinsCollected) },
+          meta: { newCoinsTotal, amountAwarded: winnings },
         };
       });
 

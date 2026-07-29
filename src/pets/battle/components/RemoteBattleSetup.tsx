@@ -103,9 +103,27 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
 
   const canSend = !!localPet && !!opponentPubkey;
 
+  // Never send (or silently strand) a real-sats battle the local wallet cannot
+  // stake: the auto-deposit effect below skips deposits it cannot afford, and
+  // without surfacing that, both players wait on escrow forever.
+  const requiredDepositSats = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
+  const walletBalanceSats = petsWallet?.totalBalance ?? 0;
+  const hasStakeBalance = walletBalanceSats >= requiredDepositSats;
+  const myDepositToken = remote.role === 'host'
+    ? remote.escrow.hostDepositToken
+    : remote.escrow.guestDepositToken;
+  const awaitingMyDeposit =
+    remote.escrow.mode === 'real-sats' &&
+    (remote.phase === 'accepted' || remote.phase === 'inviting') &&
+    !!petsWallet &&
+    !!operatorPubkey &&
+    !myDepositToken;
+  const insufficientForDeposit = awaitingMyDeposit && !hasStakeBalance;
+
   const handleSendInvite = async () => {
     if (!localPet || !opponentPubkey) return;
     if (battleMode === 'real-sats' && !escrowKeypair) return;
+    if (battleMode === 'real-sats' && !hasStakeBalance) return;
     await remote.sendInvite(opponentPubkey, localPet, {
       prizeAmount: DEFAULT_PRIZE_SATS,
       roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
@@ -205,6 +223,11 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
             <p className="text-sm text-muted-foreground">
               Waiting for opponent… {Math.ceil((remote.timeLeftMs ?? 0) / 1000)}s
             </p>
+            {battleMode === 'real-sats' && !hasStakeBalance && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Your wallet balance ({walletBalanceSats.toLocaleString()} sats) is below the {requiredDepositSats.toLocaleString()}-sat stake — top up before the opponent accepts or the battle cannot start.
+              </p>
+            )}
           </div>
           <Button variant="outline" onClick={remote.cancelInvite}>
             Cancel
@@ -230,7 +253,19 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                     ? 'Locking your stake in escrow…'
                     : 'Waiting for escrow deposits…'}
               </div>
-              {!escrowReady && !depositError && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {!escrowReady && !depositError && !insufficientForDeposit && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {insufficientForDeposit && !escrowReady && (
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Insufficient balance — this battle stakes {requiredDepositSats.toLocaleString()} sats but your wallet has {walletBalanceSats.toLocaleString()}. Top up your Cashu wallet and the deposit is sent automatically.
+                  </p>
+                  {remote.role === 'host' && (
+                    <Button size="sm" variant="outline" onClick={() => void remote.cancelInvite()}>
+                      Cancel battle
+                    </Button>
+                  )}
+                </div>
+              )}
               {depositError && !escrowReady && (
                 <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
                   <p className="text-xs text-amber-600 dark:text-amber-400">{depositError}</p>
@@ -359,9 +394,16 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
             {battleMode === 'real-sats' ? 'real sats' : 'demo sats'}
           </p>
           {battleMode === 'real-sats' ? (
-            <p className="text-muted-foreground">
-              Both players lock {DEFAULT_PRIZE_SATS.toLocaleString()} real sats in escrow before the battle. The winner claims both stakes.
-            </p>
+            <>
+              <p className="text-muted-foreground">
+                Both players lock {DEFAULT_PRIZE_SATS.toLocaleString()} real sats in escrow before the battle. The winner claims both stakes.
+              </p>
+              {!hasStakeBalance && (
+                <p className="text-amber-600 dark:text-amber-400">
+                  Your wallet balance ({walletBalanceSats.toLocaleString()} sats) is below the stake — top up your Cashu wallet to send a real-sats battle request.
+                </p>
+              )}
+            </>
           ) : (
             <p className="text-muted-foreground">
               Real-sats battles require real Cashu mode and a configured escrow operator.
@@ -372,7 +414,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
         <Button
           size="lg"
           className="w-full"
-          disabled={!canSend}
+          disabled={!canSend || (battleMode === 'real-sats' && !hasStakeBalance)}
           onClick={handleSendInvite}
         >
           <Swords className="mr-2 size-4" />

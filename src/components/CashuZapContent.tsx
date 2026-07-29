@@ -149,23 +149,19 @@ export function CashuZapContent({
           memo,
           zappedEvent,
         });
-        if (result === 'failed') {
+        if (result.status === 'failed') {
           setError(wallet.error || 'Nutzap could not be sent.');
           return;
         }
-        if (result === 'pending') {
+        if (result.status === 'pending') {
           // Sats left the wallet; the nutzap event is queued for auto-retry.
           // There is no event id yet — report the pending state honestly.
           onSuccess({ amountSats: numericSats, eventId: undefined });
           return;
         }
-        // sendNutzap stores the published event in wallet.nutzaps[0] (newest).
-        const publishedEvent = wallet.nutzaps[0];
-        if (!publishedEvent) {
-          setError('Sent, but the published event id was not returned.');
-          return;
-        }
-        onSuccess({ amountSats: numericSats, eventId: publishedEvent.id });
+        // Sent: the result carries the published event id (sendNutzap does not
+        // add sent events to wallet.nutzaps — that list is RECEIVED nutzaps).
+        onSuccess({ amountSats: numericSats, eventId: result.eventId });
         return;
       }
 

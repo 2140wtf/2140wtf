@@ -7,6 +7,7 @@ import { usePublishPreferences } from './usePublishPreferences';
 import { useNWC } from '@/hooks/useNWCContext';
 import type { NWCConnection } from '@/hooks/useNWC';
 import { redactSecrets } from '@/lib/redactSecrets';
+import { bolt11Info } from '@/lib/zaps';
 import { nip57 } from 'nostr-tools';
 import type { Event } from 'nostr-tools';
 import type { WebLNProvider } from '@webbtc/webln-types';
@@ -254,6 +255,13 @@ export function useZaps(
         if (!newInvoice || typeof newInvoice !== 'string') {
           throw new Error('Lightning service did not return a valid invoice');
         }
+        // A compromised or buggy LNURL server could return an invoice for a
+        // different amount than requested — we pay whatever the invoice says,
+        // so verify it matches before handing it to any payment provider.
+        const invoiceMsats = bolt11Info(newInvoice).amountMsats;
+        if (invoiceMsats === null || invoiceMsats !== zapAmount) {
+          throw new Error('Lightning service returned an invoice for the wrong amount');
+        }
 
         // Get the current active NWC connection dynamically
         const currentNWCConnection = getActiveConnection();
@@ -374,11 +382,72 @@ export function useZaps(
     setInvoice(null);
   }, []);
 
+  /**
+   * Pay an ALREADY-GENERATED invoice via WebLN. Use this when the invoice is
+   * on screen (QR/copy view) — calling zap() again would create a second zap
+   * request and a second invoice, leaving the first one payable (double-pay).
+   */
+  const payInvoiceWithWebLN = async (bolt11: string, amountSats: number) => {
+    if (!webln) {
+      toast({
+        title: 'WebLN not available',
+        description: 'No WebLN provider was found in this browser.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (zapInFlightRef.current) return;
+    zapInFlightRef.current = true;
+    setIsZapping(true);
+    try {
+      // For native WebLN, we may need to enable it first
+      let webLnProvider = webln;
+      if (webln.enable && typeof webln.enable === 'function') {
+        const enabledProvider = await webln.enable();
+        // Some implementations return the provider, others return void
+        const provider = enabledProvider as WebLNProvider | undefined;
+        if (provider) {
+          webLnProvider = provider;
+        }
+      }
+
+      await webLnProvider.sendPayment(bolt11);
+
+      setIsZapping(false);
+      setInvoice(null);
+      notificationSuccess();
+
+      // Invalidate zap queries to refresh counts
+      queryClient.invalidateQueries({ queryKey: ['zaps'] });
+
+      if (onZapSuccess) {
+        onZapSuccess({ amountSats });
+      } else {
+        toast({
+          title: 'Zap successful!',
+          description: `You sent ${amountSats} sats to the author.`,
+        });
+      }
+    } catch (weblnError) {
+      const rawMessage = weblnError instanceof Error ? weblnError.message : 'Unknown WebLN error';
+      console.error('WebLN payment failed:', redactSecrets(rawMessage));
+      toast({
+        title: 'WebLN payment failed',
+        description: 'The invoice was not paid — scan the QR or try again.',
+        variant: 'destructive',
+      });
+      setIsZapping(false);
+    } finally {
+      zapInFlightRef.current = false;
+    }
+  };
+
   return {
     zap,
     isZapping,
     invoice,
     setInvoice,
     resetInvoice,
+    payInvoiceWithWebLN,
   };
 }

@@ -230,7 +230,10 @@ export async function saveLastNutzapInfoHash(hash: string, encKey: CryptoKey, na
 function makeLocalMintKey(prefix: string, mintUrl: string, namespace?: string): string | null {
   const normalized = normalizeMintUrl(mintUrl);
   if (!normalized) return null;
-  return (namespace || '') + prefix + bytesToHex(new TextEncoder().encode(normalized)).slice(0, 32);
+  // Full hex of the normalized URL — no truncation. The old `.slice(0, 32)`
+  // kept only the first 16 URL bytes (mostly the shared "https://" prefix),
+  // so different mints could share last-token-event localStorage keys.
+  return (namespace || '') + prefix + bytesToHex(new TextEncoder().encode(normalized));
 }
 
 export async function loadLastTokenEventId(mintUrl: string, encKey: CryptoKey, namespace?: string): Promise<string | null> {
