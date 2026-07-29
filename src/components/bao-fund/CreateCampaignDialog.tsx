@@ -79,12 +79,14 @@ const emptyMilestone = (): MilestoneDraft => ({
   feeBps: '214',
 });
 
-export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTitle }: {
+export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTitle, initialRepo }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string) => void;
   /** Optional prefill for the title field (e.g. deep link from a pet's upkeep card). */
   initialTitle?: string;
+  /** Optional prefill for the repo URL field (deep link ?repo=). */
+  initialRepo?: string;
 }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publishEvent } = useNostrPublish();
@@ -105,7 +107,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   // the page used to open the dialog with a blank/stale title).
   useEffect(() => {
     if (open && initialTitle) setTitle(initialTitle);
-  }, [open, initialTitle]);
+    if (open && initialRepo) setRepoUrl(initialRepo);
+  }, [open, initialTitle, initialRepo]);
 
   const resetForm = () => {
     setTitle('');

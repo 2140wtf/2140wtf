@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, MessagesSquare, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, MessagesSquare, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -36,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { openUrl } from "@/lib/downloadFile";
 import { ChannelNavContext } from "@/contexts/ChannelNavContext";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { ComposerBoundsProvider } from "@/contexts/ComposerBoundsContext";
@@ -1676,6 +1677,22 @@ export function ConcordV2Page() {
             </button>
             </div>
             <div className="ml-auto flex items-center gap-0.5">
+              {folded?.metadata?.repo && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 touch:size-11"
+                      aria-label="Open community repository"
+                      onClick={() => openUrl(folded.metadata!.repo as string)}
+                    >
+                      <GitBranch className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{folded.metadata.repo as string}</TooltipContent>
+                </Tooltip>
+              )}
               {user && channel && canWrite && (
                 <DisappearTimerButton2 channelIdHex={channel.idHex} />
               )}
