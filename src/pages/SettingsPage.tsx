@@ -1,12 +1,15 @@
 import { useSeoMeta } from '@unhead/react';
 import { lazy, Suspense, useState, useEffect, useRef } from 'react';
-import { ChevronRight, Settings } from 'lucide-react';
+import { ChevronRight, Settings, Smartphone } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { PageHeader } from '@/components/PageHeader';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { IntroImage } from '@/components/IntroImage';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
+import { PwaInstallButton } from '@/components/PwaInstallButton';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 import { toast } from '@/hooks/useToast';
 
 const RequestToVanishDialog = lazy(() => import('@/components/RequestToVanishDialog').then(m => ({ default: m.RequestToVanishDialog })));
@@ -99,6 +102,8 @@ export function SettingsPage() {
   const [sigilVisible, setSigilVisible] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { canInstall } = usePwaInstall();
+  const showInstallCard = !Capacitor.isNativePlatform() && canInstall;
 
   useEffect(() => {
     if (config.magicMouse) return;
@@ -152,6 +157,26 @@ export function SettingsPage() {
         <span className="text-primary/50 text-xs tracking-[0.3em] select-none">✦</span>
         <div className="h-px flex-1 bg-gradient-to-l from-transparent via-primary/40 to-primary/60" />
       </div>
+
+      {/* Install app — PWA. Chrome/Android prompts natively, iOS gets the
+          Share → Add to Home Screen walkthrough. Hidden once installed or in
+          the native shell. */}
+      {showInstallCard && (
+        <div className="px-4 pb-5">
+          <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-full bg-primary/10 p-2 shrink-0">
+                <Smartphone className="size-4 text-primary" />
+              </div>
+              <div className="space-y-0.5 min-w-0">
+                <p className="text-sm font-semibold">Install 2140.wtf</p>
+                <p className="text-xs text-muted-foreground">Add the app to your home screen — no app store needed.</p>
+              </div>
+            </div>
+            <PwaInstallButton variant="pill" className="shrink-0" />
+          </div>
+        </div>
+      )}
 
       {/* Settings menu */}
       <div className="px-4">
