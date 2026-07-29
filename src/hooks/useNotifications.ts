@@ -7,7 +7,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from './useCurrentUser';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useFollowList } from './useFollowActions';
-import { useReadNotificationIds } from './useReadNotificationIds';
+import { useReadNotificationIds, getLocalNotificationsCursor, setLocalNotificationsCursor } from './useReadNotificationIds';
 import { ALL_NOTIFICATION_KINDS, getEnabledNotificationKinds } from '@/lib/notificationKinds';
 
 const PAGE_SIZE = 20;
@@ -387,18 +387,23 @@ export function useNotifications(): NotificationData {
     });
   }, [data?.pages]);
 
-  // Only use cursor if settings have actually loaded, otherwise null
+  // Only use cursor if settings have actually loaded, otherwise null.
+  // The local cursor is the durable per-device floor: it survives signer
+  // failures (the synced write needs NIP-44) and app restarts.
   const remoteCursor = settings !== undefined && settings !== null
     ? (settings.notificationsCursor ?? 0)
     : null;
+  const localCursor = user ? getLocalNotificationsCursor(user.pubkey) : 0;
 
   // Optimistic local cursor — updated immediately on markAsRead so that
   // newNotificationIds collapses to empty before the query cache catches up,
   // preventing the NotificationsPage effect from re-triggering markAsRead.
   const optimisticCursor = useRef<number | null>(null);
   const notificationsCursor = optimisticCursor.current !== null
-    ? Math.max(optimisticCursor.current, remoteCursor ?? 0)
-    : remoteCursor;
+    ? Math.max(optimisticCursor.current, remoteCursor ?? 0, localCursor)
+    : remoteCursor !== null
+      ? Math.max(remoteCursor, localCursor)
+      : null;
 
   // Build set of unread notification IDs: newer than the read cursor AND
   // not individually marked read (clicked) on this device.
@@ -430,6 +435,9 @@ export function useNotifications(): NotificationData {
     // Update optimistic cursor immediately so unread state clears before
     // the query cache updates, preventing re-trigger loops.
     optimisticCursor.current = newestTimestamp;
+    // Persist locally FIRST — durable even if the synced write below fails
+    // (signer unavailable/denied), so the counter stays cleared on restart.
+    setLocalNotificationsCursor(user.pubkey, newestTimestamp);
 
     try {
       await updateSettings.mutateAsync({
