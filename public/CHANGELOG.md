@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Lightning wallet tab on the Wallet page — the connected NWC wallet (Rizful, Alby, Coinos) shows its live balance Amethyst-style, refreshed every 60s, with a connect prompt when no wallet is linked
 - Express Trade on ₿AO Markets — the market dialog is trade-first: pick a side, amount with sats presets, rail (Lightning/Cashu/On-Chain/Liquid), and Place Trade posts straight to the bao.markets API with your signer (NIP-98) — no separate bao.markets login needed; the chart sits behind a toggle
 - Fund pane in ₿AO communities — a "Fund" entry below Threads shows the community's linked fundraiser; owners can start one (pre-filled with community name + repo), import by id/URL, or unlink, and every member folds the same view
 - Focus mode in ₿AO chat — one header button collapses both side panels (channel list + members) so the chat takes the full width
