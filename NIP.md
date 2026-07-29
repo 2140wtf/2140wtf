@@ -7,6 +7,7 @@
 | Kind  | Name                 | Description                                           |
 |-------|----------------------|-------------------------------------------------------|
 | 8333  | Onchain Zap          | Attestation that an on-chain BTC tx paid a target     |
+| 38003 | ₿AO Fund Create Intent | Relay-first ₿AO Fund campaign-creation request       |
 | 15683 | Love List            | The people the user truly loves (one per user)        |
 | 36767 | Theme Definition     | Shareable, named custom UI theme                      |
 | 16767 | Active Profile Theme | The user's currently active theme (one per user)      |
@@ -1298,6 +1299,38 @@ Clients MUST verify each kind 8333 event on-chain before counting it toward the 
 - The "raised" headline on the campaign card is fetched directly from the on-chain `w` address (cumulative `funded_txo_sum` from the configured Esplora endpoint, default mempool.space). Donations count regardless of whether the donor published a Nostr receipt; the number does not regress when the beneficiary spends from the address. Silent-payment-only campaigns show no aggregate.
 
 2140.wtf does NOT consult `agora.moderation` labels for surfacing decisions — every parseable kind 33863 event renders.
+
+---
+
+## Kind 38003: ₿AO Fund Campaign Create Intent
+
+### Summary
+
+Addressable event requesting creation of a **₿AO Fund campaign** via relay instead of the REST API. The bao.markets bridge subscribes to the ₿AO relay for kind 38003, verifies the event signature (the same proof of key control as the REST route's NIP-98 auth), quota-checks the author, and runs the identical creation core. The ingested campaign then appears in the public list API carrying `nostr_event_id` set to the intent event's id, which the client polls for (30s, 2s interval). If the relay publish fails or the campaign doesn't surface in time, the client falls back to the REST POST — creation keeps working with the bridge offline.
+
+### Event Structure
+
+```json
+{
+  "kind": 38003,
+  "pubkey": "<campaign-owner-pubkey>",
+  "content": "<JSON: same body as the REST create route>",
+  "tags": [
+    ["d", "frc-<random-uuid>"],
+    ["n", "demo"],
+    ["alt", "₿AO Fund campaign create intent"]
+  ]
+}
+```
+
+### Tags
+
+| Tag   | Required | Description                                                                                                                            |
+|-------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `d`   | Yes      | Random UUID per intent (`frc-` prefixed). Kind 38003 is addressable: a stable `d` would let a second intent REPLACE an un-ingested first one on the relay before the bridge's backfill scan sees it. |
+| `n`   | Yes      | Network tag the bridge filters on. The public bao.markets deployment is the signet demo (`demo`); override via `VITE_BAO_NETWORK` only when pointing at a local API. |
+
+The intent is published to the ₿AO relay (`VITE_BAO_RELAY_URL`, default `wss://relay.bao.network`) regardless of the user's relay set — that's the relay the bridge subscribes to.
 
 ---
 
