@@ -20,6 +20,8 @@ import {
   parseNutzapEvent,
   createNip60Signer,
   restoreNip60Wallet,
+  restoreCrossAppNip60Wallet,
+  resolveMintAlias,
   computeContentHash,
   loadLastTokenEventId,
   saveLastTokenEventId,
@@ -314,6 +316,71 @@ describe('restoreNip60Wallet', () => {
     expect(restored.proofsByMint['https://mint.example.com'].map((p) => (p as { amount: number }).amount)).toEqual([
       2,
     ]);
+  });
+});
+
+describe('restoreCrossAppNip60Wallet', () => {
+  it('recovers the wallet key from the identity config and restores foreign tokens', async () => {
+    // Simulates bao.markets: wallet key unrelated to anything we can derive
+    // locally; config published by the identity; tokens signed by the wallet key.
+    const identityPrivkey = generateSecretKey();
+    const identitySigner = createNip60Signer(identityPrivkey);
+    const foreignWalletPrivkey = generateSecretKey();
+    const foreignWalletSigner = createNip60Signer(foreignWalletPrivkey);
+
+    const config = buildWalletConfigPayload(foreignWalletPrivkey, ['https://relay.bao.network/cashu']);
+    const configEvent = await buildWalletConfigEvent(config, identitySigner);
+    const token = await buildTokenEvent('https://relay.bao.network/cashu', [{ amount: 21 }], foreignWalletSigner);
+
+    const queryFn = async (filter: { kinds: number[]; authors?: string[] }) => {
+      if (filter.kinds.includes(WALLET_CONFIG_KIND)) return [configEvent!];
+      if (filter.kinds.includes(TOKEN_KIND)) return filter.authors?.includes(foreignWalletSigner.pubkey) ? [token!] : [];
+      if (filter.kinds.includes(DELETE_KIND)) return [];
+      if (filter.kinds.includes(HISTORY_KIND)) return [];
+      return [];
+    };
+
+    const { result, walletPrivkey, walletPubkey } = await restoreCrossAppNip60Wallet(identitySigner, queryFn as never);
+    expect(walletPubkey).toBe(foreignWalletSigner.pubkey);
+    expect(walletPrivkey).not.toBeNull();
+    expect(result.config?.mints).toEqual(['https://relay.bao.network/cashu']);
+    expect(result.proofsByMint['https://relay.bao.network/cashu']).toHaveLength(1);
+  });
+
+  it('returns nulls when the identity never published a config', async () => {
+    const identitySigner = createNip60Signer(generateSecretKey());
+    const { result, walletPrivkey, walletPubkey } = await restoreCrossAppNip60Wallet(identitySigner, async () => []);
+    expect(result.config).toBeNull();
+    expect(walletPrivkey).toBeNull();
+    expect(walletPubkey).toBeNull();
+  });
+
+  it('ignores configs that are not signed by the identity', async () => {
+    const identitySigner = createNip60Signer(generateSecretKey());
+    const impostor = createNip60Signer(generateSecretKey());
+    const config = buildWalletConfigPayload(generateSecretKey(), ['https://mint.example.com']);
+    const forgedEvent = await buildWalletConfigEvent(config, impostor);
+
+    const queryFn = async (filter: { kinds: number[] }) =>
+      filter.kinds.includes(WALLET_CONFIG_KIND) ? [forgedEvent!] : [];
+
+    // The forged event is well-formed but authored by the wrong key; the
+    // caller's relay filter scopes authors, and verifyEvent re-checks the sig.
+    // What matters here: decryption with the identity signer fails → no key.
+    const { walletPrivkey, walletPubkey } = await restoreCrossAppNip60Wallet(identitySigner, queryFn as never);
+    expect(walletPrivkey).toBeNull();
+    expect(walletPubkey).toBeNull();
+  });
+});
+
+describe('resolveMintAlias', () => {
+  it('folds the bao.markets proxy path into the canonical mint URL', () => {
+    expect(resolveMintAlias('https://relay.bao.network/bao-api/v1/proxy/cashu')).toBe('https://relay.bao.network/cashu');
+  });
+
+  it('leaves other mint URLs untouched', () => {
+    expect(resolveMintAlias('https://mint.example.com')).toBe('https://mint.example.com');
+    expect(resolveMintAlias('https://relay.bao.network/cashu')).toBe('https://relay.bao.network/cashu');
   });
 });
 
