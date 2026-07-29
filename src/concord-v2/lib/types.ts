@@ -98,6 +98,10 @@ export interface CommunityMetadata {
   relays: string[];
   icon?: ImagePointer;
   banner?: ImagePointer;
+  /** Optional code repository for the community's work (any URL, e.g. a
+   * gitworkshop.dev NIP-34 repo or a GitHub link). Shown in the community
+   * dialog and pre-fills fundraisers created for this community. */
+  repo?: string;
   /** Client-extensible opaque fields; editors MUST round-trip what they don't understand. */
   custom?: Record<string, unknown>;
   /** Unknown top-level fields, preserved for round-tripping. */
