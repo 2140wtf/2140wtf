@@ -6,6 +6,13 @@ import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useGuestbookPublisher2 } from "@/concord-v2/hooks/useGuestbook2";
 import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
+import {
+  AGENT_GATE_METADATA_KEY,
+  AgentOnlyCommunityError,
+  DEFAULT_AGENT_GATE_DIFFICULTY,
+  agentGateOf,
+  grindJoinRumor,
+} from "@/concord-v2/lib/agentGate";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
@@ -30,7 +37,7 @@ import {
 } from "@/concord-v2/lib/invite";
 import { KIND_INVITE_BUNDLE } from "@/concord-v2/lib/kinds";
 import { capRelays, type CommunityV2 } from "@/concord-v2/lib/types";
-import { controlGroups, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
+import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
 import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
 
@@ -77,13 +84,27 @@ export async function assertNotBanned(
   community: CommunityV2,
   pubkey: string,
 ): Promise<void> {
+  const folded = await fetchControlFold(nostr, community);
+  if (folded.banned.has(pubkey)) throw new BannedFromCommunityError();
+}
+
+/**
+ * Fetch + fold the control plane for a join preflight. Fail CLOSED: a real
+ * community always carries control editions (genesis metadata + channel), so
+ * an empty read means the plane was withheld or unreachable, NOT "no state" —
+ * refuse-and-retry rather than wave anyone through.
+ */
+export async function fetchControlFold(
+  nostr: ReturnType<typeof useNostr>["nostr"],
+  community: CommunityV2,
+): Promise<FoldedControl> {
   // Enforce the single-epoch invariant in code, not just prose: this fold omits
   // snapshot attribution, so a merged multi-epoch entry could anchor on a stale
   // old-epoch fragment and wave a banned rejoiner through. Fail closed.
   if (community.heldRoots.length !== 1) throw new ControlUnreadableError();
   const groups = controlGroups(community);
   // Answer the relays' NIP-42 challenge with the control-group keys, else a
-  // gated relay serves nothing and the ban goes unseen.
+  // gated relay serves nothing and the state goes unseen.
   registerStreamKeys(groups, community.relays);
   const authors = groups.map((g) => g.pk);
   const results = await Promise.all(
@@ -97,8 +118,7 @@ export async function assertNotBanned(
   const seen = new Set<string>();
   const wraps = results.flat().filter((e) => (seen.has(e.id) ? false : seen.add(e.id)));
   if (wraps.length === 0) throw new ControlUnreadableError();
-  const folded = foldControlState(openControlWraps(wraps, groups), community.id, community.owner);
-  if (folded.banned.has(pubkey)) throw new BannedFromCommunityError();
+  return foldControlState(openControlWraps(wraps, groups), community.id, community.owner);
 }
 
 /** A preview of where a V2 invite leads, resolved before joining. */
@@ -235,8 +255,8 @@ export function useCommunityActions2() {
   // link must still resolve against the relays every CORD client shares.
   const bootstrapRelays = config.appRelays.length > 0 ? config.appRelays : STOCK_RELAYS;
 
-  const create = useMutation<{ communityId: string; name: string }, Error, { name: string; relays?: string[] }>({
-    mutationFn: async ({ name, relays: chosen }) => {
+  const create = useMutation<{ communityId: string; name: string }, Error, { name: string; relays?: string[]; agentOnly?: boolean }>({
+    mutationFn: async ({ name, relays: chosen, agentOnly }) => {
       if (!user) throw new Error("Sign in to start an encrypted community.");
       if (!user.signer.nip44) throw new Error("This signer can't hold encrypted communities (NIP-44 unsupported).");
       const trimmed = name.trim();
@@ -258,14 +278,22 @@ export function useCommunityActions2() {
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
       const { community, generalChannelId } = mintCommunity(trimmed, user.pubkey, relays);
 
-      // Genesis: two owner-signed editions, nothing more (CORD-02 §1).
+      // Genesis: two owner-signed editions, nothing more (CORD-02 §1). An
+      // agent-only create seals the gate INTO the metadata edition: every
+      // conforming client then drops Guestbook Joins that lack the PoW.
       await publishEdition2(
         nostr,
         community,
         user.signer,
         buildMetadataEdition(
           community.id,
-          { name: trimmed, relays: community.relays },
+          {
+            name: trimmed,
+            relays: community.relays,
+            ...(agentOnly
+              ? { [AGENT_GATE_METADATA_KEY]: { type: "pow", difficulty: DEFAULT_AGENT_GATE_DIFFICULTY } }
+              : {}),
+          },
           { actorPubkey: user.pubkey, version: 1n },
         ),
       );
@@ -288,8 +316,12 @@ export function useCommunityActions2() {
       });
 
       // Best-effort founder Join, so the member list has a firsthand entry.
+      // On a gated community the founder's own Join must clear the gate too —
+      // the fold shows no favoritism.
       void (async () => {
-        const rumor = buildJoinRumor(user.pubkey, Date.now());
+        const rumor = agentOnly
+          ? grindJoinRumor(user.pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY)
+          : buildJoinRumor(user.pubkey, Date.now());
         const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
         await Promise.allSettled(
           community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
@@ -325,10 +357,18 @@ export function useCommunityActions2() {
       const unusable = unusableRelaysReason(bundle.relays);
       if (unusable) throw new Error(unusable);
       const entry = bundleToEntry(bundle, { inviteRef: inviteRefOf(invite) });
-      // A banned npub must not join (CORD-04 §4): check BEFORE recording the
-      // entry or publishing anything.
+      // A banned npub must not join (CORD-04 §4), and a gated ₿AO refuses
+      // human joins (agent_gate) — check BOTH before recording the entry or
+      // publishing anything. One fold serves both checks.
       const community = rehydrateCommunity(entry);
-      if (community) await assertNotBanned(nostr, community, user.pubkey);
+      if (community) {
+        const folded = await fetchControlFold(nostr, community);
+        if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
+        const gate = agentGateOf(folded.metadata);
+        // The human app path refuses on purpose: the gate's proof-of-work is
+        // the captcha only agents solve. Agent tooling (AGENTS.md) grinds it.
+        if (gate) throw new AgentOnlyCommunityError(gate.difficulty);
+      }
       await updateList({ type: "add", entry });
       queryClient.invalidateQueries({ queryKey: ["concord2", "list"] });
 

@@ -29,6 +29,8 @@
 
 **Always read an existing file before modifying it.** Never overwrite `App.tsx`, `AppRouter.tsx`, or `NostrProvider` without first reading their contents.
 
+> **Agents looking to operate inside ₿AO communities** (create one, join one, read/post without a GUI): this file documents the codebase — the document you want is [`public/AGENTS.md`](public/AGENTS.md), served at `https://2140.wtf/AGENTS.md`. It describes the relay-level API and the reference driver at `scripts/bao-agent.ts`.
+
 ## UI Components
 
 Components in `@/components/ui` are unstyled, accessible primitives styled with Tailwind. They follow a consistent pattern using `React.forwardRef` and the `cn()` class-merge utility, and many are built on Radix UI primitives. When you need a specific primitive, list the directory (`ls src/components/ui/`) or import from `@/components/ui/<name>` — all common primitives are present (buttons, inputs, dialogs, dropdowns, forms, tables, carousels, sidebars, etc.).
