@@ -9,8 +9,9 @@
  */
 
 import type { AdultForm } from '@/pets/adult-pets/types/adult.types';
+import { BUZZ_PETS } from '@/pets/core/lib/buzz-pets';
 
-export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao' | 'custom';
+export type PetsBreedCategory = '2140-pets' | 'ditto-blobbi' | 'bao' | 'buzz' | 'custom';
 
 export interface BreedCategoryMeta {
   id: PetsBreedCategory;
@@ -32,7 +33,14 @@ export interface BaoCardMember {
   recipeId?: string;
 }
 
-export type CategoryMember = AdultFormMember | BaoCardMember;
+export interface BuzzMember {
+  kind: 'buzz';
+  /** Buzz pet id ('bumble' | 'fizz' | 'honey'); also the breed_asset tag value. */
+  id: string;
+  label: string;
+}
+
+export type CategoryMember = AdultFormMember | BaoCardMember | BuzzMember;
 
 export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
   {
@@ -49,6 +57,11 @@ export const BREED_CATEGORIES: readonly BreedCategoryMeta[] = [
     id: 'bao',
     label: '₿AO Pets',
     description: 'Animated market-born companions unlocked through ₿AO trading energy.',
+  },
+  {
+    id: 'buzz',
+    label: 'Buzz',
+    description: 'Animated clay companions from the Buzz universe.',
   },
   {
     id: 'custom',
@@ -125,11 +138,18 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
     { kind: 'adult-form', form: 'starri', label: 'Starri' },
   ],
   bao: BAO_MEMBERS,
+  buzz: BUZZ_PETS.map((p) => ({ kind: 'buzz' as const, id: p.id, label: p.label })),
   custom: [],
 };
 
 export function isAdultFormMember(member: CategoryMember): member is AdultFormMember {
   return member.kind === 'adult-form';
+}
+
+/** The `breed_asset` tag value for a category member. */
+export function getMemberAssetId(member: CategoryMember): string {
+  if (isAdultFormMember(member)) return member.form;
+  return member.kind === 'bao-card' ? member.recipeId ?? member.id : member.id;
 }
 
 export function getCategoryMembers(category: PetsBreedCategory): CategoryMember[] {

@@ -145,7 +145,7 @@ Tags that identify which visual family and specific form/card the pet belongs to
 
 | Tag | Required | Stages | Persistent | Source | Format | Description |
 |-----|----------|--------|------------|--------|--------|-------------|
-| `breed_category` | No | egg, baby, adult | Yes | system | `2140-pets\|ditto-blobbi\|bao` | Breed family |
+| `breed_category` | No | egg, baby, adult | Yes | system | `2140-pets\|ditto-blobbi\|bao\|buzz\|custom` | Breed family |
 | `breed_asset` | No | egg, baby, adult | Yes | system | string | Adult form ID (e.g. `glitchfox`) or BAO card ID (e.g. `bao-07`) |
 | `bao_rarity` | No | egg, baby, adult | Yes | system | `common\|uncommon\|rare\|epic\|legendary` | ₿AO rarity tier (BAO pets only) |
 
