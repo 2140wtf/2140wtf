@@ -31,8 +31,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/useToast';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
+import { totalBaoApiBalance } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
@@ -86,6 +88,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
 
   const cashuWallet = useBaoCashuWallet(seedPhrase, user, relayUrls, { enableAutoClaim: false });
+  const apiBalances = useBaoWalletBalances();
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = cashuWallet;
   const { toast } = useToast();
   const walletStatus = useWallet();
@@ -115,16 +118,32 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
 
   const refreshAll = () => {
     void cashuWallet.calculateAllBalances();
+    void apiBalances.refetch();
   };
 
   const getRailBalance = (railId: WalletRailId): number => {
+    const api = apiBalances.data;
     switch (railId) {
+      // Self-custody rail: local NIP-60 ecash proofs in this wallet.
       case 'cashu':
         return cashuWallet.totalBalance;
+      // Custodial rails: balances held on bao.markets, fetched from its API.
+      case 'lightning':
+        return api?.lightning ?? 0;
+      case 'liquid':
+        return api?.liquid ?? 0;
+      case 'spark':
+        return api?.spark ?? 0;
+      case 'ark':
+        return api?.ark ?? 0;
+      case 'fedimint':
+        return api?.ecash ?? 0;
       default:
         return 0;
     }
   };
+
+  const apiTotal = apiBalances.data ? totalBaoApiBalance(apiBalances.data) : null;
 
   const selectedConfig = RAIL_BY_ID[selectedRail];
 
@@ -152,6 +171,17 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
                 <span className='text-3xl font-bold'>{cashuWallet.totalBalance}</span>
                 <span className='text-muted-foreground'>testnet sats</span>
               </div>
+              {apiTotal !== null && (
+                <p className='text-sm mt-2'>
+                  <span className='tabular-nums font-medium'>{apiTotal.toLocaleString()}</span>{' '}
+                  <span className='text-muted-foreground'>sats held on bao.markets across all rails</span>
+                </p>
+              )}
+              {apiBalances.isError && (
+                <p className='text-xs text-muted-foreground mt-2'>
+                  Couldn't fetch your bao.markets balances — tap refresh to retry.
+                </p>
+              )}
               <p className='text-xs text-muted-foreground mt-3 leading-relaxed'>
                 ₿AO wallet is used for educational purposes only and to empower Nostr Pets.
                 ₿AO Markets project is using a private signet for testers in demo mode.
@@ -181,7 +211,9 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
             </div>
             <span className='text-xs font-medium leading-tight'>{rail.label}</span>
             <span className='text-xs text-muted-foreground leading-tight'>
-              {getRailBalance(rail.id)} sats
+              {rail.id === 'cashu' || apiBalances.data
+                ? `${getRailBalance(rail.id)} sats`
+                : '—'}
             </span>
           </button>
         ))}
@@ -201,7 +233,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           )}
           {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} />}
           {['liquid', 'spark', 'ark', 'fedimint'].includes(selectedRail) && (
-            <DemoPlaceholderPanel rail={selectedConfig} />
+            <DemoPlaceholderPanel rail={selectedConfig} balance={getRailBalance(selectedRail)} />
           )}
         </CardContent>
       </Card>
@@ -568,12 +600,12 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
   );
 }
 
-function DemoPlaceholderPanel({ rail }: { rail: WalletRailConfig }) {
+function DemoPlaceholderPanel({ rail, balance }: { rail: WalletRailConfig; balance: number }) {
   return (
     <div className='space-y-5'>
       <div className='flex items-baseline gap-2'>
-        <span className='text-3xl font-bold'>0</span>
-        <span className='text-muted-foreground'>demo sats</span>
+        <span className='text-3xl font-bold'>{balance}</span>
+        <span className='text-muted-foreground'>demo sats on bao.markets</span>
       </div>
 
       <Tabs defaultValue='receive' className='w-full'>
@@ -584,13 +616,13 @@ function DemoPlaceholderPanel({ rail }: { rail: WalletRailConfig }) {
 
         <TabsContent value='receive' className='pt-4'>
           <p className='text-sm text-muted-foreground text-center py-6'>
-            {rail.label} deposits are not available in this demo.
+            {rail.label} deposits are managed on bao.markets — your balance above is read from there.
           </p>
         </TabsContent>
 
         <TabsContent value='send' className='pt-4'>
           <p className='text-sm text-muted-foreground text-center py-6'>
-            {rail.label} withdrawals are not available in this demo.
+            {rail.label} withdrawals are managed on bao.markets.
           </p>
         </TabsContent>
       </Tabs>
