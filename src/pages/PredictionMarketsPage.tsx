@@ -29,9 +29,11 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
+import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
+import { mergeApiAndRelayMarkets, type RelayMergedMarket } from "@/lib/baoRelayMarkets";
 import type { BaoMarket } from "@/lib/baoMarketParser";
 
 const SORT_OPTIONS = [
@@ -75,8 +77,8 @@ const MarketCard = memo(function MarketCard({
   market,
   onSelect,
 }: {
-  market: BaoMarket;
-  onSelect: (market: BaoMarket) => void;
+  market: RelayMergedMarket;
+  onSelect: (market: RelayMergedMarket) => void;
 }) {
   return (
     <Card
@@ -98,6 +100,11 @@ const MarketCard = memo(function MarketCard({
 
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{titleCaseCategory(market.category)}</Badge>
+          {market.viaRelay && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+              via relay
+            </Badge>
+          )}
           <span className="text-xs text-muted-foreground">
             Ends {formatEndDate(market.endTime)}
           </span>
@@ -111,14 +118,16 @@ const MarketCard = memo(function MarketCard({
                 <div className="flex justify-between text-xs">
                   <span className={cn('truncate max-w-[70%]', color.text)}>{outcome.label}</span>
                   <span className="text-muted-foreground">
-                    {formatProbability(outcome.probability)}
+                    {market.oddsAvailable ? formatProbability(outcome.probability) : "—"}
                   </span>
                 </div>
-                <Progress
-                  value={Math.max(0, Math.min(100, (outcome.probability || 0) * 100))}
-                  className="h-1.5"
-                  indicatorClassName={color.indicator}
-                />
+                {market.oddsAvailable && (
+                  <Progress
+                    value={Math.max(0, Math.min(100, (outcome.probability || 0) * 100))}
+                    className="h-1.5"
+                    indicatorClassName={color.indicator}
+                  />
+                )}
               </div>
             );
           })}
@@ -126,6 +135,9 @@ const MarketCard = memo(function MarketCard({
             <p className="text-xs text-muted-foreground">
               +{market.outcomes.length - 4} more outcomes
             </p>
+          )}
+          {!market.oddsAvailable && (
+            <p className="text-xs text-muted-foreground italic">Odds unavailable</p>
           )}
         </div>
       </CardContent>
@@ -149,13 +161,22 @@ export function PredictionMarketsPage(): React.JSX.Element {
     description: "Kind 38000 prediction markets on Nostr",
   });
 
-  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', showResolved ? 'all' : 'active');
+  const statusFilter = showResolved ? 'all' : 'active';
+  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', statusFilter);
+  // Relay-first discovery: kind-38000 definitions straight from the relay, so
+  // cards render even when the bao.markets API is down. API markets win on
+  // conflicts (live odds); relay-only markets are badged "via relay".
+  const { data: relayMarkets = [] } = useBaoRelayMarkets('all', statusFilter);
+  const mergedMarkets = useMemo(
+    () => mergeApiAndRelayMarkets(markets, relayMarkets),
+    [markets, relayMarkets],
+  );
   const { data: apiCategories = [] } = useBaoMarketCategories();
 
   const now = Math.floor(Date.now() / 1000);
 
   const activeMarkets = useMemo(() => {
-    return markets.filter((m) => {
+    return mergedMarkets.filter((m) => {
       if (m.state === 'ended') return false;
       // ₿AO Fund milestone markets live on the ₿AO Fund page, not here.
       if (m.category === 'fundraiser') return false;
@@ -165,7 +186,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
       }
       return true;
     });
-  }, [markets, showResolved, now]);
+  }, [mergedMarkets, showResolved, now]);
 
   // Category picker: the API catalog (with live counts), falling back to the
   // categories present in the loaded markets when the catalog is unavailable.
@@ -227,10 +248,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
   }, [activeMarkets, search, sort, category]);
 
   useEffect(() => {
-    if (!selectedMarketId || markets.length === 0) return;
-    const market = markets.find((m) => m.marketId === selectedMarketId);
+    if (!selectedMarketId || mergedMarkets.length === 0) return;
+    const market = mergedMarkets.find((m) => m.marketId === selectedMarketId);
     if (market) setSelectedMarket(market);
-  }, [selectedMarketId, markets]);
+  }, [selectedMarketId, mergedMarkets]);
 
   const gridItems = useMemo(() => {
     if (isLoading) {
