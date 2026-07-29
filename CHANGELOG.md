@@ -41,6 +41,7 @@
 ### Fixed
 - Remote-signer sessions no longer die on every mobile app restart — the login blob was encrypted with a key stored inside the blob itself, so cold starts forced a full re-login; bunker/extension logins now persist and Amber sessions survive closing the app (nsec blobs stay encrypted at rest)
 - Signer prompt storms — the NIP-46 handshake now requests `sign_event:<kind>` for every kind the app publishes (~70), so approving once at connect covers posts, pets, wallet, and ₿AO actions instead of prompting per kind
+- ₿AO API calls no longer sign every request — NIP-98 auth headers are reused for 2 minutes (the API accepts 5), so the 30s balance poll and retries don't prompt the signer each time
 - The service worker only registers in production — a stale production SW could hijack localhost and serve old UI after fixes had shipped (dev now evicts stale workers on load)
 - Voice messages that fail to send show the real error (Blossom upload, signer, seal) instead of a generic toast
 - Pet upkeep card no longer says demo-only — it points at both demo sats and real Routstr compute credits
