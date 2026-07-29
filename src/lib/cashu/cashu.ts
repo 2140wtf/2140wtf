@@ -7,8 +7,9 @@
  */
 import { generateMnemonic, mnemonicToSeedSync, entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { getDecodedToken } from '@cashu/cashu-ts';
+import { CashuMint, CashuWallet, getDecodedToken } from '@cashu/cashu-ts';
 import { verifyDLEQProof_reblind } from '@cashu/cashu-ts/crypto/client/NUT12';
+import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';
@@ -728,4 +729,52 @@ export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
   }
 
   return entries.length > 0 ? entries : null;
+}
+
+/**
+ * Check whether every proof in a token is already SPENT at its mint.
+ *
+ * Returns `true` (all proofs spent — the token was definitely redeemed by
+ * someone), `false` (at least one proof is not spent — the token is still
+ * redeemable), or `null` when the check could not be completed (undecodable
+ * token, mint unreachable, malformed response).
+ *
+ * Used to distinguish "the recipient never saw this token" from "the
+ * recipient redeemed it but the response was lost" — e.g. Routstr creates the
+ * balance server-side before responding, so a lost HTTP response leaves the
+ * proofs spent with no API key delivered.
+ */
+export async function checkTokenProofsSpent(tokenStr: string): Promise<boolean | null> {
+  const entries = decodeCashuToken(tokenStr);
+  if (!entries || entries.length === 0) return null;
+  const encoder = new TextEncoder();
+  for (const entry of entries) {
+    const normalized = normalizeMintUrl(entry.mintUrl);
+    if (!normalized) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let states: any[];
+    try {
+      const w = new CashuWallet(new CashuMint(normalized));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      states = await w.checkProofsStates(entry.proofs as any);
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(states) || states.length !== entry.proofs.length) return null;
+    const stateByY = new Map<string, string>();
+    for (const s of states) {
+      if (!s || typeof s !== 'object' || typeof s.Y !== 'string' || typeof s.state !== 'string') return null;
+      stateByY.set(s.Y, s.state);
+    }
+    for (const p of entry.proofs) {
+      let Y: string;
+      try {
+        Y = hashToCurve(encoder.encode(String((p as { secret: unknown }).secret))).toHex(true);
+      } catch {
+        return null;
+      }
+      if (stateByY.get(Y) !== 'SPENT') return false;
+    }
+  }
+  return true;
 }

@@ -393,7 +393,7 @@ export function ZapDialog({
     [onZapSuccessProp],
   );
 
-  const { zap, isZapping, invoice, setInvoice } = useZaps(
+  const { zap, isZapping, invoice, setInvoice, payInvoiceWithWebLN } = useZaps(
     target,
     webln,
     activeNWC,
@@ -654,6 +654,14 @@ export function ZapDialog({
         setError(`Maximum vote is ${pollValueMaximum.toLocaleString()} sats.`);
         return;
       }
+    }
+
+    // An invoice is already on screen — pay THAT one. Re-running zap() would
+    // create a second zap request and a second invoice, leaving the first one
+    // payable and risking a double payment.
+    if (invoice) {
+      payInvoiceWithWebLN(invoice, numericAmountSats);
+      return;
     }
 
     zap(numericAmountSats, '');

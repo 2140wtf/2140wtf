@@ -3,7 +3,7 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
-import { deriveNutzapKey } from '@/lib/cashu/cashu';
+import { deriveNutzapKey, normalizeMintUrl } from '@/lib/cashu/cashu';
 import { devLog } from '@/lib/cashu/devLog';
 
 const NUTZAP_PAYMENT_KIND = 9321;
@@ -64,7 +64,18 @@ export function useNutzapReceiver(
   useEffect(() => {
     if (!user || !onNutzap || mintUrls.length === 0) return;
 
-    const normalizedMints = [...new Set(mintUrls.map((u) => u.trim().toLowerCase()).filter(Boolean))];
+    // Relay `#u` filters match the tag string EXACTLY. Lowercasing the whole
+    // URL (the old behavior) breaks mints with case-sensitive paths — our own
+    // sender tags `u` with normalizeMintUrl(), which only lowercases the host.
+    // Include both the normalized and the raw trimmed form so senders that do
+    // not normalize (trailing slash, default port) still match.
+    const normalizedMints = [...new Set(
+      mintUrls.flatMap((u) => {
+        const raw = u.trim();
+        const normalized = normalizeMintUrl(raw);
+        return normalized && normalized !== raw ? [raw, normalized] : [raw];
+      }).filter(Boolean),
+    )];
     if (normalizedMints.length === 0) return;
 
     const filters: NostrFilter[] = [
