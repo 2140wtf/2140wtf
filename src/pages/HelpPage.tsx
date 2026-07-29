@@ -7,6 +7,7 @@ import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { PageHeader } from '@/components/PageHeader';
 import { SupportContactCard } from '@/components/SupportContactCard';
 import { HelpFAQSection } from '@/components/HelpFAQSection';
+import { PwaInstallButton } from '@/components/PwaInstallButton';
 
 export function HelpPage() {
   const { config } = useAppContext();
@@ -25,11 +26,14 @@ export function HelpPage() {
       <SupportContactCard className="px-4 pt-2 pb-4" />
 
       {/* FAQ heading */}
-      <div className="px-4 pt-4 pb-1">
-        <h2 className="text-lg font-bold">Frequently Asked Questions</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Everything you need to know about Nostr, {config.appName}, and how it all works.
-        </p>
+      <div className="px-4 pt-4 pb-1 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">Frequently Asked Questions</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Everything you need to know about Nostr, {config.appName}, and how it all works.
+          </p>
+        </div>
+        <PwaInstallButton variant="pill" />
       </div>
 
       {/* FAQ accordion sections */}

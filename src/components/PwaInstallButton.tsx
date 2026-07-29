@@ -13,8 +13,11 @@ import { usePwaInstall } from '@/hooks/usePwaInstall';
 import { cn } from '@/lib/utils';
 
 interface PwaInstallButtonProps {
-  /** Extra classes forwarded to the `<button>` (defaults to drawer-item styling). */
+  /** Extra classes forwarded to the `<button>`. */
   className?: string;
+  /** 'drawer' (default) is the full-width drawer-item style; 'pill' is a
+   * compact rounded button for toolbars, heroes, and headings. */
+  variant?: 'drawer' | 'pill';
   /** Called after the install flow starts (e.g. close the drawer). */
   onAction?: () => void;
 }
@@ -27,7 +30,7 @@ interface PwaInstallButtonProps {
  * dialog explaining Share → Add to Home Screen. Renders nothing when the
  * app is already installed or running inside the native (Capacitor) shell.
  */
-export function PwaInstallButton({ className, onAction }: PwaInstallButtonProps) {
+export function PwaInstallButton({ className, variant = 'drawer', onAction }: PwaInstallButtonProps) {
   const { canInstall, isIos, promptInstall } = usePwaInstall();
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
@@ -43,12 +46,18 @@ export function PwaInstallButton({ className, onAction }: PwaInstallButtonProps)
     <>
       <button
         onClick={handleClick}
-        className={cn(
-          'flex items-center gap-4 w-full px-4 py-2.5 text-sm font-normal text-muted-foreground hover:bg-secondary/60 transition-colors',
-          className,
-        )}
+        className={variant === 'pill'
+          ? cn(
+              'inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/60 transition-colors',
+              className,
+            )
+          : cn(
+              'flex items-center gap-4 w-full px-4 py-2.5 text-sm font-normal text-muted-foreground hover:bg-secondary/60 transition-colors',
+              className,
+            )
+        }
       >
-        <Download className="size-5 shrink-0" />
+        <Download className={variant === 'pill' ? 'size-4 shrink-0' : 'size-5 shrink-0'} />
         <span>Install app</span>
       </button>
 
