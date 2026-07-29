@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -13,6 +13,7 @@ import { ThreadPanel } from "@/components/chat/ThreadPanel";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { CommunityInfoDialog2 } from "@/concord-v2/components/CommunityInfoDialog2";
 import { DisappearTimerButton2 } from "@/concord-v2/components/DisappearTimerButton2";
+import { FundView2 } from "@/concord-v2/components/FundView2";
 import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
 import { InviteDialog2 } from "@/concord-v2/components/InviteDialog2";
 import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
@@ -672,7 +673,7 @@ export function ConcordV2Page() {
   // Which pane the main area shows: the selected channel's chat, the
   // community-wide "@ Mentions" list, or the "Threads" list. Selecting a
   // channel returns to chat.
-  const [view, setView] = useState<"channel" | "mentions" | "threads" | "audit" | "invites" | "banned" | "health">("channel");
+  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "audit" | "invites" | "banned" | "health">("channel");
   useEffect(() => {
     if (routeChannelId) setView("channel");
   }, [routeChannelId]);
@@ -1470,6 +1471,26 @@ export function ConcordV2Page() {
                 />
               ) : null}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setView("fund");
+                onNavigate?.();
+              }}
+              className={cn(
+                "flex w-full items-center gap-2 pl-3 pr-2 py-1.5 touch:py-3 text-sm transition-colors text-left clip-corner-lg",
+                view === "fund"
+                  ? "bg-primary text-primary-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+              )}
+              aria-current={view === "fund"}
+            >
+              <HandCoins className="size-4 shrink-0" />
+              <span className="truncate flex-1 min-w-0">Fund</span>
+              {folded?.metadata?.fund_id && view !== "fund" ? (
+                <span className="shrink-0 size-2 rounded-full bg-green-500" aria-label="Fundraiser linked" />
+              ) : null}
+            </button>
           </>
         ) : undefined
       }
@@ -1584,6 +1605,11 @@ export function ConcordV2Page() {
                 <>
                   <ScrollText className="size-5 text-muted-foreground shrink-0" />
                   <h1 className="font-semibold truncate leading-tight">Audit log</h1>
+                </>
+              ) : view === "fund" ? (
+                <>
+                  <HandCoins className="size-5 text-muted-foreground shrink-0" />
+                  <h1 className="font-semibold truncate leading-tight">Fund</h1>
                 </>
               ) : view === "invites" ? (
                 <>
@@ -1818,6 +1844,12 @@ export function ConcordV2Page() {
                     onOpen={openThreadFromList}
                   />
                 </div>
+              ) : view === "fund" && community ? (
+                <FundView2
+                  community={community}
+                  metadata={folded?.metadata}
+                  canManage={canManageMetadata}
+                />
               ) : (
                 <>
                   <MessageTimeline

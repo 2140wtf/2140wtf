@@ -102,6 +102,10 @@ export interface CommunityMetadata {
    * gitworkshop.dev NIP-34 repo or a GitHub link). Shown in the community
    * dialog and pre-fills fundraisers created for this community. */
   repo?: string;
+  /** Linked ₿AO Fund campaign id — set by the owner/managers when they start
+   * or import a fundraiser for this community. Members see it in the Fund
+   * pane; only managers can change it. */
+  fund_id?: string;
   /** Client-extensible opaque fields; editors MUST round-trip what they don't understand. */
   custom?: Record<string, unknown>;
   /** Unknown top-level fields, preserved for round-tripping. */
