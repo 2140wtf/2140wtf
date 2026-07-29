@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
-import { usePetsPurchaseItem, estimateCashuSendFee, splitSatsPayment } from '../hooks/usePetsPurchaseItem';
+import { usePetsPurchaseItem, estimateCashuSendFee, splitSatsPayment, PET_FIAT_RESERVE_SATS } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
@@ -56,7 +56,11 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
   // mode. The profile `sats` tag (in-game earnings) is not spendable here.
   const walletBalance = externalWallet?.balances?.[externalWallet?.mintUrl ?? ''] ?? 0;
   const walletLoading = externalWallet?.loading ?? false;
+  // Starter currency is one fiat rail in two pots: account coins plus the
+  // pet-bound fiat balance (spendable above a small reserve).
   const fiatCoins = profile?.coins ?? 0;
+  const starterCurrency = fiatCoins + (companion?.fiatBalance ?? 0);
+  const starterSpendable = fiatCoins + Math.max(0, (companion?.fiatBalance ?? 0) - PET_FIAT_RESERVE_SATS);
   const demoSats = walletBalance;
 
   // Independent balance tracking for the two rails shown in the shop header.
@@ -103,7 +107,7 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
             {walletLoading && demoSats === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{fiatCoins.toLocaleString()} fiat</span>
+              <span>{starterCurrency.toLocaleString()} starter</span>
             )}
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
@@ -141,18 +145,19 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                     const feeReserve = isCashuMode
                       ? estimateCashuSendFee(satsPrice, externalWallet?.wallet ?? null)
                       : 0;
-                    // Mirror the purchase hook's demo-mode split: the pet's
-                    // bound fiat balance pays first (down to its reserve) and
-                    // the wallet only covers the remainder. Affordability must
-                    // account for the pet's share — otherwise the Buy button
-                    // stays disabled even when the pet could pay the whole
-                    // price, and the sats price shown would not match what the
-                    // wallet is actually charged.
+                    // Mirror the purchase hook's demo-mode split: starter
+                    // currency pays first (pet fiat down to its reserve, then
+                    // account coins) and the wallet only covers the remainder.
+                    // Affordability must account for the starter share —
+                    // otherwise the Buy button stays disabled even when
+                    // starter currency could pay the whole price, and the sats
+                    // price shown would not match what the wallet is actually
+                    // charged.
                     const satsSplit = isCashuMode
                       ? { walletSatsCost: satsPrice }
-                      : splitSatsPayment(satsPrice, companion?.fiatBalance ?? 0);
+                      : splitSatsPayment(satsPrice, companion?.fiatBalance ?? 0, profile?.coins ?? 0);
                     const satsNeeded = satsSplit.walletSatsCost + (satsSplit.walletSatsCost > 0 ? feeReserve : 0);
-                    const canAffordFiat = fiatCoins >= fiatPrice;
+                    const canAffordFiat = starterSpendable >= fiatPrice;
                     const canAffordSats = demoSats >= satsNeeded;
                     const canAfford = canAffordFiat || canAffordSats;
                     return (
@@ -173,7 +178,7 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                               <div className="flex items-center justify-between mt-2 gap-2">
                                 <div className="text-xs leading-tight">
                                   <span className={cn('font-semibold', !canAffordFiat && 'text-muted-foreground')}>
-                                    {fiatPrice.toLocaleString()} fiat
+                                    {fiatPrice.toLocaleString()} starter
                                   </span>
                                   <span className="text-muted-foreground mx-1">or</span>
                                   <span className={cn('font-semibold', !canAffordSats && 'text-muted-foreground')}>

@@ -135,7 +135,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           <CardTitle className='flex items-center justify-between text-base font-medium'>
             <span className='flex items-center gap-2'>
               <WalletIcon className='size-5 text-primary' />
-              ₿AO MARKETS balance
+              ₿AO testnet coins
               <Badge variant='outline'>signet</Badge>
             </span>
             <Button variant='ghost' size='icon' className='size-7' onClick={refreshAll}>
@@ -150,7 +150,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
             <>
               <div className='flex items-baseline gap-2'>
                 <span className='text-3xl font-bold'>{cashuWallet.totalBalance}</span>
-                <span className='text-muted-foreground'>demo sats</span>
+                <span className='text-muted-foreground'>testnet sats</span>
               </div>
               <p className='text-xs text-muted-foreground mt-3 leading-relaxed'>
                 ₿AO wallet is used for educational purposes only and to empower Nostr Pets.

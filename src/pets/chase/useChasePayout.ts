@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
@@ -11,8 +11,10 @@ import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted }
 import { decodeCashuToken } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
-import { updateNostrPetProfileTags } from '@/pets/core/lib/pets';
+import { KIND_PETS_STATE, updateNostrPetProfileTags, updatePetsTags } from '@/pets/core/lib/pets';
+import type { PetsCompanion } from '@/pets/core/lib/pets';
 import { serializeProfileContent } from '@/pets/core/lib/missions';
+import { PET_FIAT_RESERVE_SATS } from '@/pets/shop/hooks/usePetsPurchaseItem';
 
 import { CHASE_FIAT_COST } from './types';
 
@@ -35,7 +37,9 @@ export interface ChasePayoutResult {
 /**
  * Hook to settle Chase BTC run rewards.
  *
- * - fiat: deducts the run cost from in-game worthless coins.
+ * - fiat: deducts the run cost from starter currency — the pet-bound fiat
+ *   pot first (down to the reserve), then the account coins pot — and
+ *   credits the coins collected during the run.
  * - sats: claims BAO signet/demo sats from the faucet, deposits them into the BAO
  *   wallet. The in-game `sats` tag is NOT changed so real and demo balances cannot
  *   double-spend each other.
@@ -43,11 +47,13 @@ export interface ChasePayoutResult {
 export function useChasePayout(
   updateProfileEvent: (event: NostrEvent) => void,
   externalWallet?: (CashuWalletState & CashuWalletActions) | null,
+  companion?: PetsCompanion | null,
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
+  const queryClient = useQueryClient();
 
   return useMutation<ChasePayoutResult, Error, ChasePayoutRequest>({
     mutationFn: async ({ satsWon, coinsCollected, mode }) => {
@@ -127,26 +133,72 @@ export function useChasePayout(
         };
       }
 
-      // Fiat mode: deduct the run cost from in-game worthless coins and credit
-      // the coins collected during the run. The tag list must be UPDATED with
-      // the new balance — returning the unmodified tags (the old bug) made the
-      // settle a silent no-op: runs were free and winnings vanished.
-      const resultMeta = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
-        const currentCoins = freshProfile?.coins ?? 0;
-        if (currentCoins < CHASE_FIAT_COST) {
-          throw new Error(
-            `Insufficient coins. You need ${CHASE_FIAT_COST} coins but only have ${currentCoins.toLocaleString()}.`
-          );
+      // Fiat mode: deduct the run cost from starter currency — pet-bound fiat
+      // first (down to the reserve), then account coins — and credit the coins
+      // collected during the run. The tag list must be UPDATED with the new
+      // balance — returning the unmodified tags (the old bug) made the settle
+      // a silent no-op: runs were free and winnings vanished.
+      const petFiatBalance = companion?.fiatBalance ?? 0;
+      const petFiatSpend = petFiatBalance >= PET_FIAT_RESERVE_SATS
+        ? Math.min(CHASE_FIAT_COST, petFiatBalance - PET_FIAT_RESERVE_SATS)
+        : 0;
+      const coinsSpend = CHASE_FIAT_COST - petFiatSpend;
+
+      // Publish the pet-fiat deduction first (different kind than the
+      // profile), rolling it back if the profile update fails — same
+      // two-event dance as the shop purchase flow.
+      let companionEvent: NostrEvent | undefined;
+      if (petFiatSpend > 0 && companion) {
+        const petTags = updatePetsTags(companion.event.tags, {
+          fiat_balance: Math.max(0, companion.fiatBalance - petFiatSpend).toString(),
+        });
+        companionEvent = await publishEvent({
+          kind: KIND_PETS_STATE,
+          content: companion.event.content,
+          tags: petTags,
+        });
+      }
+
+      let resultMeta;
+      try {
+        resultMeta = await updateNostrPetProfile(nostr, publishEvent, user.pubkey, (freshProfile, prevTags, prevContent) => {
+          const currentCoins = freshProfile?.coins ?? 0;
+          if (currentCoins < coinsSpend) {
+            throw new Error(
+              `Insufficient starter currency. You need ${coinsSpend} coins but only have ${currentCoins.toLocaleString()}.`
+            );
+          }
+          const winnings = Math.max(0, coinsCollected);
+          const newCoinsTotal = currentCoins - coinsSpend + winnings;
+          const content = serializeProfileContent(prevContent, {});
+          return {
+            tags: updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, { coins: String(newCoinsTotal) }),
+            content,
+            meta: { newCoinsTotal, amountAwarded: winnings },
+          };
+        });
+      } catch (profileError) {
+        if (companionEvent && companion && petFiatSpend > 0) {
+          try {
+            const rollbackTags = updatePetsTags(companionEvent.tags, {
+              fiat_balance: companion.fiatBalance.toString(),
+            });
+            await publishEvent({
+              kind: KIND_PETS_STATE,
+              content: companion.event.content,
+              tags: rollbackTags,
+              prev: companionEvent,
+            });
+          } catch (rollbackError) {
+            console.error('[useChasePayout] Failed to restore pet fiat balance after profile update failure:', rollbackError);
+          }
         }
-        const winnings = Math.max(0, coinsCollected);
-        const newCoinsTotal = currentCoins - CHASE_FIAT_COST + winnings;
-        const content = serializeProfileContent(prevContent, {});
-        return {
-          tags: updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, { coins: String(newCoinsTotal) }),
-          content,
-          meta: { newCoinsTotal, amountAwarded: winnings },
-        };
-      });
+        throw profileError;
+      }
+
+      if (companionEvent) {
+        queryClient.invalidateQueries({ queryKey: ['pets-collection', user.pubkey] });
+      }
 
       if (!resultMeta) {
         throw new Error('Profile update returned no changes.');

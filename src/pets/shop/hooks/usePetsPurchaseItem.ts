@@ -107,38 +107,58 @@ export function estimateCashuSendFee(amount: number, wallet: CashuWallet | null)
 export const PET_FIAT_RESERVE_SATS = 100;
 
 /**
- * Compute how much of a sats-priced purchase should be covered by the pet's
- * bound fiat balance vs the wallet. The pet always spends first, but we leave
- * a small reserve so the pet is not emptied to zero.
+ * Compute how much of a sats-priced purchase is covered by starter currency
+ * vs the wallet. Starter currency is ONE logical fiat rail with two storage
+ * pots: the pet-bound balance spends first (down to a small reserve so the
+ * pet is not emptied to zero), then the account coins pot; only the remainder
+ * hits the wallet.
  */
 export function splitSatsPayment(
   totalSatsCost: number,
   petFiatBalance: number,
-): { petFiatSpend: number; walletSatsCost: number } {
-  if (totalSatsCost <= 0) return { petFiatSpend: 0, walletSatsCost: 0 };
-  if (petFiatBalance <= 0) return { petFiatSpend: 0, walletSatsCost: totalSatsCost };
+  coinsBalance = 0,
+): { petFiatSpend: number; coinsSpend: number; walletSatsCost: number } {
+  if (totalSatsCost <= 0) return { petFiatSpend: 0, coinsSpend: 0, walletSatsCost: 0 };
 
-  // If the pet can pay the whole cost and still keep the reserve, use pet fiat only.
-  if (petFiatBalance >= totalSatsCost + PET_FIAT_RESERVE_SATS) {
-    return { petFiatSpend: totalSatsCost, walletSatsCost: 0 };
-  }
+  // Pet-bound fiat first, always leaving the reserve untouched.
+  const petFiatSpend = petFiatBalance >= PET_FIAT_RESERVE_SATS
+    ? Math.min(totalSatsCost, petFiatBalance - PET_FIAT_RESERVE_SATS)
+    : 0;
+  const afterPet = totalSatsCost - petFiatSpend;
 
-  // If the pet balance itself is below the reserve, do not touch it; fall back to wallet.
-  if (petFiatBalance < PET_FIAT_RESERVE_SATS) {
-    return { petFiatSpend: 0, walletSatsCost: totalSatsCost };
-  }
+  // Then account coins, then the wallet.
+  const coinsSpend = Math.min(Math.max(0, coinsBalance), afterPet);
+  return { petFiatSpend, coinsSpend, walletSatsCost: afterPet - coinsSpend };
+}
 
-  // Spend pet fiat down to the reserve, cover the rest with the wallet.
-  const petFiatSpend = petFiatBalance - PET_FIAT_RESERVE_SATS;
-  return { petFiatSpend, walletSatsCost: totalSatsCost - petFiatSpend };
+/**
+ * Split a fiat-priced purchase across the starter-currency pots: pet-bound
+ * fiat first (down to the reserve), then account coins. Returns null when the
+ * combined starter currency cannot cover the cost.
+ */
+export function splitFiatPayment(
+  totalFiatCost: number,
+  petFiatBalance: number,
+  coinsBalance: number,
+): { petFiatSpend: number; coinsSpend: number } | null {
+  if (totalFiatCost <= 0) return { petFiatSpend: 0, coinsSpend: 0 };
+  const petFiatSpend = petFiatBalance >= PET_FIAT_RESERVE_SATS
+    ? Math.min(totalFiatCost, petFiatBalance - PET_FIAT_RESERVE_SATS)
+    : 0;
+  const coinsSpend = totalFiatCost - petFiatSpend;
+  if (coinsSpend > Math.max(0, coinsBalance)) return null;
+  return { petFiatSpend, coinsSpend };
 }
 
 /**
  * Hook to purchase items from the Pets Shop.
  *
  * Handles:
- * - Pet-bound fiat balance first for sats-priced items (demo mode only — see
- *   the note at the split below)
+ * - Starter currency — ONE fiat rail stored in two pots: the pet-bound fiat
+ *   balance spends first (down to a reserve), then the account coins pot.
+ *   Fiat-priced items are covered by starter currency alone; sats-priced
+ *   items use it first and the wallet covers the rest (demo mode only — see
+ *   the note at the split below).
  * - Sats payment via a nutzap to the 2140 treasury from the active wallet:
  *   the real Cashu wallet in mainnet mode, the BAO signet Cashu wallet in
  *   demo mode. Same rail, separated by mint — demo sats are valueless.
@@ -251,22 +271,25 @@ export function usePetsPurchaseItem(
       let totalCost = 0;
       let treasuryPaid = false;
       let petFiatSpend = 0;
+      let coinsSpend = 0;
       let walletSatsCost = 0;
 
       if (resolvedCurrency === 'sats') {
         currency = isCashuMode ? 'sats' : 'demo sats';
         totalCost = totalSatsCost;
 
-        // Split the cost between pet-bound fiat and the wallet — DEMO MODE
-        // ONLY. The pet's fiat_balance is a self-declared tag on the user's
-        // own companion event (every egg starts with 2140 and anyone can
-        // republish it at any value), so letting it offset REAL sats would
-        // let anyone mint themselves free items paid for by the 2140
-        // treasury. In mainnet mode the wallet always pays the full cost.
+        // Split the cost between starter currency (pet fiat, then account
+        // coins) and the wallet — DEMO MODE ONLY. Both starter pots are
+        // self-declared tags on the user's own events (every egg starts with
+        // 2140 and anyone can republish them at any value), so letting them
+        // offset REAL sats would let anyone mint themselves free items paid
+        // for by the 2140 treasury. In mainnet mode the wallet always pays
+        // the full cost.
         const split = isCashuMode
-          ? { petFiatSpend: 0, walletSatsCost: totalSatsCost }
-          : splitSatsPayment(totalSatsCost, companion?.fiatBalance ?? 0);
+          ? { petFiatSpend: 0, coinsSpend: 0, walletSatsCost: totalSatsCost }
+          : splitSatsPayment(totalSatsCost, companion?.fiatBalance ?? 0, currentProfile.coins);
         petFiatSpend = split.petFiatSpend;
+        coinsSpend = split.coinsSpend;
         walletSatsCost = split.walletSatsCost;
 
         if (walletSatsCost > 0) {
@@ -335,6 +358,19 @@ export function usePetsPurchaseItem(
       } else {
         currency = 'fiat coins';
         totalCost = totalFiatCost;
+
+        // Fiat purchases are paid from starter currency only — pet-bound fiat
+        // first (down to the reserve), then account coins. Both pots are
+        // self-declared game currency, so this is safe in either wallet mode.
+        const fiatSplit = splitFiatPayment(totalFiatCost, companion?.fiatBalance ?? 0, currentProfile.coins);
+        if (!fiatSplit) {
+          const combined = (companion?.fiatBalance ?? 0) + currentProfile.coins;
+          throw new Error(
+            `Insufficient starter currency. You need ${totalFiatCost.toLocaleString()} but have ${combined.toLocaleString()}.`
+          );
+        }
+        petFiatSpend = fiatSplit.petFiatSpend;
+        coinsSpend = fiatSplit.coinsSpend;
       }
 
       // If pet-bound fiat is being spent (demo mode only), publish the companion
@@ -380,12 +416,10 @@ export function usePetsPurchaseItem(
             throw new Error('Profile not found on relays');
           }
 
-          if (resolvedCurrency === 'fiat') {
-            if (freshProfile.coins < totalFiatCost) {
-              throw new Error(
-                `Insufficient fiat coins. You need ${totalFiatCost.toLocaleString()} but have ${freshProfile.coins.toLocaleString()}.`
-              );
-            }
+          if (coinsSpend > 0 && freshProfile.coins < coinsSpend) {
+            throw new Error(
+              `Insufficient starter currency. You need ${coinsSpend.toLocaleString()} coins but have ${freshProfile.coins.toLocaleString()}.`
+            );
           }
           // Sats purchases were already paid by nutzap from the active wallet
           // before this serialized update — the profile `sats` tag is never
@@ -415,12 +449,12 @@ export function usePetsPurchaseItem(
           const updates: Record<string, string | string[]> = {
             storage: storageValues,
           };
-          if (resolvedCurrency === 'fiat') {
-            updates.coins = (freshProfile.coins - totalFiatCost).toString();
+          if (coinsSpend > 0) {
+            updates.coins = (freshProfile.coins - coinsSpend).toString();
           }
 
           const tags = updateNostrPetProfileTags(freshProfile.event.tags, updates);
-          return { tags, content: freshProfile.event.content, meta: { currency, totalCost, petFiatSpend } };
+          return { tags, content: freshProfile.event.content, meta: { currency, totalCost, petFiatSpend, coinsSpend } };
         });
       } catch (profileError) {
         // Roll back any companion fiat deduction before rethrowing.
@@ -474,19 +508,21 @@ export function usePetsPurchaseItem(
         totalCost: (result.meta?.totalCost as number | undefined) ?? totalCost,
         currency: (result.meta?.currency as typeof currency | undefined) ?? currency,
         petFiatSpend: (result.meta?.petFiatSpend as number | undefined) ?? 0,
+        coinsSpend: (result.meta?.coinsSpend as number | undefined) ?? 0,
       };
     },
-    onSuccess: ({ item, quantity, totalCost, currency, petFiatSpend }) => {
+    onSuccess: ({ item, quantity, totalCost, currency, petFiatSpend, coinsSpend }) => {
       // Invalidate profile query to refetch fresh data
       if (user?.pubkey) {
         queryClient.invalidateQueries({ queryKey: ['nostr-pet-profile', user.pubkey] });
       }
 
       // Show success toast
-      const petPart = petFiatSpend > 0 ? ` (${petFiatSpend.toLocaleString()} from pet fiat)` : '';
+      const starterSpend = petFiatSpend + coinsSpend;
+      const starterPart = starterSpend > 0 ? ` (${starterSpend.toLocaleString()} from starter currency)` : '';
       toast({
         title: 'Purchase Successful!',
-        description: `You bought ${item.name} (×${quantity}) for ${totalCost.toLocaleString()} ${currency}.${petPart}`,
+        description: `You bought ${item.name} (×${quantity}) for ${totalCost.toLocaleString()} ${currency}.${starterPart}`,
       });
     },
     onError: (error: Error) => {
