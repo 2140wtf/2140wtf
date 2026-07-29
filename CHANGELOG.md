@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- ₿AO Fund relay-first campaign creation — creating a campaign now publishes a signed kind-38003 intent to the ₿AO relay; the bao.markets bridge ingests it through the same validation + creation core as the REST API, and the app picks the campaign up as it surfaces (with an automatic REST fallback so creation keeps working even with the bridge offline)
+- ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
+
+### Changed
+- Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
+
+### Fixed
+- ₿AO signet sats not syncing between bao.markets and 2140.wtf on the same login — the ₿AO wallet now restores the NIP-60 wallet config published by the other app (works with NIP-07 signers, no nsec needed), recovers proofs authored by that wallet key, and folds mint-URL aliases so balances match across both apps
+
 ## [0.26.0] - 2026-07-28
 
 ### Added
