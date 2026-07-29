@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { useCurrentUser } from './useCurrentUser';
 import { useEncryptedSettings } from './useEncryptedSettings';
 import { useFollowList } from './useFollowActions';
-import { useReadNotificationIds } from './useReadNotificationIds';
+import { useReadNotificationIds, getLocalNotificationsCursor } from './useReadNotificationIds';
 import { getEnabledNotificationKinds } from '@/lib/notificationKinds';
 
 /** Cap on the unread count query — the badge renders "99+" past this. */
@@ -54,9 +54,12 @@ export function useHasUnreadNotifications(): boolean {
   const { settings } = useEncryptedSettings();
 
   // Only use cursor if settings have actually loaded, otherwise null
-  const notificationsCursor = settings !== undefined && settings !== null
+  const remoteCursor = settings !== undefined && settings !== null
     ? (settings.notificationsCursor ?? 0)
     : null;
+  const notificationsCursor = remoteCursor !== null && user
+    ? Math.max(remoteCursor, getLocalNotificationsCursor(user.pubkey))
+    : remoteCursor;
 
   const { data: followData } = useFollowList();
 
@@ -124,9 +127,12 @@ export function useUnreadNotificationsCount(): number {
   const { settings } = useEncryptedSettings();
   const { readIds } = useReadNotificationIds();
 
-  const notificationsCursor = settings !== undefined && settings !== null
+  const remoteCursor = settings !== undefined && settings !== null
     ? (settings.notificationsCursor ?? 0)
     : null;
+  const notificationsCursor = remoteCursor !== null && user
+    ? Math.max(remoteCursor, getLocalNotificationsCursor(user.pubkey))
+    : remoteCursor;
 
   const { enabledKinds, authorsFilter } = useNotificationFilters();
   const kindsKey = [...enabledKinds].sort().join(',');
