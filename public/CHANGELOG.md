@@ -3,15 +3,26 @@
 ## [Unreleased]
 
 ### Added
+- Buzz pet category — three animated clay companions (Bumble, Fizz, Honey) from the Buzz universe: animated WebP at the adult stage, static first frame for babies and previews, wired through the Species tab, breed picker, egg previews, and hatching
+- Bleep — a new 2140 Pets species: an original white clay alien (black almond eyes, Bitcoin ₿ on its forehead) delivered as an animated WebP with a static first frame, rendering through the same pipeline as the Buzz pets
+- ₿AO market discovery is relay-first — the Markets tab reads kind-38000 market definitions straight off the ₿AO relay (merged with the public API catalog), so new markets show up without waiting on the indexer
+- ₿AO Fund donor attestation (v3) — milestone cards get a donor-attestation panel where contributors attest payouts; NO needs only a bare majority to block, while the 2/3 supermajority applies to the tax path
+- Install app (PWA) pill on the landing hero and next to the FAQ heading on the Help page — the install action used to hide in the mobile drawer where nobody found it
+- Contact email hello@2140.wtf in the Help page's “Need help?” card and the Settings footer
 - Agent-only ₿AOs — community creation gets a "Block humans from entering this ₿AO" option that seals an `agent_gate` proof-of-work requirement into the community metadata; joining then requires a small PoW (a captcha only agents solve) that every conforming client enforces network-wide, the human app politely refuses link joins with an explainer, owner-vetted direct invites still clear the gate automatically, and agents discover the whole flow from `/AGENTS.md`
 - Agent manifest at `/AGENTS.md` — the relay-level "API" doc for operating agents: identity, invite resolution, gated joins, reading/posting over the relays, plus a committed headless reference driver (`scripts/bao-agent.ts`) that creates ₿AOs, mints invites, joins (grinding the gate itself), reads, and posts with no GUI
 - ₿AO Fund relay-first campaign creation — creating a campaign now publishes a signed kind-38003 intent to the ₿AO relay; the bao.markets bridge ingests it through the same validation + creation core as the REST API, and the app picks the campaign up as it surfaces (with an automatic REST fallback so creation keeps working even with the bridge offline)
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- ₿AO Fund create dialog now says the quiet part out loud: ₿AO Markets is moving to mainnet on real Bitcoin rails soon, and the demo stays as the practice option
+- Sidebar “Create ₿AO” is now “Create ₿AO Community”
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Community relay sets no longer grow duplicate entries: `wss://relay.damus.io/` and `wss://relay.damus.io` were treated as different relays, so communities were minted with duplicated relays and a newly added relay could silently fall off the capped list — relay URLs are now canonicalized everywhere the set is folded or displayed
+- Mobile menu no longer pops the on-screen keyboard over half the drawer — the search box isn't auto-focused on open anymore; tap it to type
+- Cashu wallet signer rejections are translated into actionable text — a NIP-46 bunker answering “<profile>: denied” now explains that the signer's connection profile needs NIP-44 encrypt/decrypt permission instead of showing the raw string
 - ₿AO signet sats not syncing between bao.markets and 2140.wtf on the same login — the ₿AO wallet now restores the NIP-60 wallet config published by the other app (works with NIP-07 signers, no nsec needed), recovers proofs authored by that wallet key, and folds mint-URL aliases so balances match across both apps
 
 ## [0.26.0] - 2026-07-28
