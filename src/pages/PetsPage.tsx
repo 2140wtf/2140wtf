@@ -3941,6 +3941,29 @@ function SpeciesTabContent({ companion }: SpeciesTabContentProps) {
             );
           }
 
+          // 2140 species with a clay character render the animated WebP too.
+          const formAnimUrl = member.kind === 'adult-form' ? getAnimatedCharacterUrl(member.form) : undefined;
+          if (formAnimUrl && member.kind === 'adult-form') {
+            return (
+              <div
+                key={member.form}
+                className="flex flex-col items-center gap-1 rounded-xl border p-2 bg-card/50"
+              >
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted/40">
+                  <img
+                    src={formAnimUrl}
+                    alt={member.label}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {member.label}
+                </span>
+              </div>
+            );
+          }
+
           const svg = isAdultFormMember(member)
             ? getAdultBaseSvg(member.form)
             : (() => {
