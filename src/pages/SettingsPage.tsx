@@ -209,9 +209,17 @@ export function SettingsPage() {
       </div>
 
       {/* Version footer */}
-      <Link to="/changelog" className="block text-center text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors select-none pt-1 pb-2">
+      <Link to="/changelog" className="block text-center text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors select-none pt-1 pb-1">
         v{import.meta.env.VERSION}{import.meta.env.COMMIT_TAG ? '' : '+'} ({new Date(import.meta.env.BUILD_DATE).toLocaleDateString()})
       </Link>
+
+      {/* About / contact */}
+      <p className="text-center text-[11px] text-muted-foreground/50 pb-2">
+        2140.wtf ·{' '}
+        <a href="mailto:hello@2140.wtf" className="hover:text-muted-foreground transition-colors">
+          hello@2140.wtf
+        </a>
+      </p>
 
       {/* Magic sigil — appears after 2 min inactivity, only when magic is locked */}
       {!config.magicMouse && sigilVisible && (<div className="flex justify-center pt-16 pb-12">
