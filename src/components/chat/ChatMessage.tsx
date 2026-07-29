@@ -1,6 +1,6 @@
 import { AlertCircle, Braces, Copy, Link2, MessagesSquare, Pencil, Pin, PinOff, Reply, Timer, Trash2, Zap } from "lucide-react";
 import { nip19 } from "nostr-tools";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ChatContent } from "@/components/chat/ChatContent";
 import { MessageRow, type MessageIdentity } from "@/components/chat/MessageRow";
@@ -448,11 +448,6 @@ const ChatMessageInner = memo(function ChatMessageInner({
   const canPin = Boolean(onTogglePin) && canModerate && !isPending && !isFailed;
   const wasEdited = event.tags.some(([name]) => name === "edited");
   const [editText, setEditText] = useState(event.content);
-  // Two-step delete: the first click arms (highlights) the trash button, the
-  // second click within the timeout actually deletes. Prevents fat-finger
-  // deletes from a single misclick.
-  const [deleteArmed, setDeleteArmed] = useState(false);
-  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Raw-event JSON viewer (rumor context menu).
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -470,27 +465,11 @@ const ChatMessageInner = memo(function ChatMessageInner({
   const isRumor = rumor !== undefined;
   const sourceJson = JSON.stringify(rumor ?? event, null, 2);
 
-  const disarmDelete = useCallback(() => {
-    if (disarmTimer.current) clearTimeout(disarmTimer.current);
-    disarmTimer.current = null;
-    setDeleteArmed(false);
-  }, []);
-
+  // Single-click delete with an undo toast (the publish fires after a 5s
+  // undo window in useMessageActions2) — no arm/confirm dance.
   const handleDeleteClick = useCallback(() => {
-    if (deleteArmed) {
-      disarmDelete();
-      onDelete?.(event);
-    } else {
-      setDeleteArmed(true);
-      if (disarmTimer.current) clearTimeout(disarmTimer.current);
-      disarmTimer.current = setTimeout(() => setDeleteArmed(false), 3000);
-    }
-  }, [deleteArmed, disarmDelete, onDelete, event]);
-
-  // Clean up the disarm timer on unmount.
-  useEffect(() => () => {
-    if (disarmTimer.current) clearTimeout(disarmTimer.current);
-  }, []);
+    onDelete?.(event);
+  }, [onDelete, event]);
 
   // Reset the draft whenever an edit (re)starts.
   useEffect(() => {
@@ -587,20 +566,17 @@ const ChatMessageInner = memo(function ChatMessageInner({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={deleteArmed ? "Confirm delete message" : "Delete message"}
-              aria-pressed={deleteArmed}
+              aria-label="Delete message"
               className={cn(
                 "size-9 md:size-7 touch:size-11 touch:md:size-11 transition-colors",
-                deleteArmed
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : "text-muted-foreground hover:text-destructive",
+                "text-muted-foreground hover:text-destructive",
               )}
               onClick={handleDeleteClick}
             >
               <Trash2 className="size-[18px] md:size-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{deleteArmed ? "Click again to delete" : "Delete message"}</TooltipContent>
+          <TooltipContent>Delete message</TooltipContent>
         </Tooltip>
       )}
     </>
@@ -784,7 +760,6 @@ const ChatMessageInner = memo(function ChatMessageInner({
             isFailed && "bg-destructive/5",
           )}
           containerProps={{
-            onMouseLeave: disarmDelete,
             onClick: handleRowClick,
             "data-active": active || undefined,
             "data-event-id": event.id,
