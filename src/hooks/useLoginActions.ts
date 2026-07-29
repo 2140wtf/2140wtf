@@ -43,6 +43,8 @@ const PUBLISHED_EVENT_KINDS: readonly number[] = [
   10002, 10003, 10019, 10063, 10133, 15683, 16767, 16769, 30078, 36767,
   // Wallet / Cashu (NIP-60/61) + NIP-98 + onchain zaps
   7374, 7375, 7376, 9321, 8333, 17375, 27235,
+  // Blossom upload auth (BUD-02) + client auth
+  22242, 24242,
   // Pets + pet social + battles
   1124, 21124, 11125, 14919, 14920, 14921, 31124,
   // Concord V2 (₿AO communities)
