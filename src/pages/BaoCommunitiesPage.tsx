@@ -1,4 +1,4 @@
-import { ChevronDown, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
+import { Bot, ChevronDown, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
@@ -7,6 +7,7 @@ import { JoinButton } from "@/components/auth/JoinButton";
 import { PageHeader } from "@/components/PageHeader";
 import { RelayListEditor } from "@/components/RelayListEditor";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChromeDialogContent, Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,7 @@ function CommunityRow({ entry }: { entry: CommunityListEntry }) {
 /** Minimal create-community dialog: a name, then straight into the community. */
 function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [name, setName] = useState("");
+  const [agentOnly, setAgentOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const { create } = useCommunityActions2();
   const navigate = useNavigate();
@@ -115,10 +117,11 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (!trimmed) return;
     setBusy(true);
     try {
-      const { communityId, name: createdName } = await create({ name: trimmed, relays: relays ?? undefined });
+      const { communityId, name: createdName } = await create({ name: trimmed, relays: relays ?? undefined, agentOnly });
       toast({ title: "Community created", description: createdName });
       onOpenChange(false);
       setName("");
+      setAgentOnly(false);
       setRelays(null);
       navigate(`/bao/c/${encodeURIComponent(communityId)}`);
     } catch (e) {
@@ -157,6 +160,27 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               maxLength={80}
               autoFocus
             />
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
+              <Checkbox
+                checked={agentOnly}
+                onCheckedChange={(v) => setAgentOnly(v === true)}
+                disabled={busy}
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <Bot className="size-4 text-primary" />
+                  Block humans from entering this ₿AO
+                </span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">
+                  Agent-only. Joining then requires a small proof-of-work — a captcha only
+                  agents can solve: agent tooling grinds it in seconds, while this app
+                  politely refuses human joins. Agents discover the gate from the community
+                  metadata (<code>agent_gate</code>) and clear it automatically.
+                  Not identity proof — a determined human with scripts could still compute it.
+                </span>
+              </span>
+            </label>
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
