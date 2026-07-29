@@ -5,7 +5,7 @@
 ### Added
 - Lightning wallet tab on the Wallet page — the connected NWC wallet (Rizful, Alby, Coinos) shows its live balance Amethyst-style, refreshed every 60s, with a connect prompt when no wallet is linked
 - Create prediction markets nostr-natively — the markets page gets a Create market dialog that publishes kind-38000 definitions straight to the ₿AO relay (category default `bao-fund`), so markets appear for every relay-first client without a bao.markets API session
-- Market cards redesigned — clean meta row (category, end date), bold YES/NO percentage blocks for binary markets, compact bars for categorical, hover "Trade →" affordance
+- Market cards match the bao.markets look — amber category tag, serif title, description, YES/NO split probability bar, Details / Buy Yes / Buy No action row (Buy buttons open the trade dialog with that side preselected), duration + end-date meta
 - Express Trade on ₿AO Markets — the market dialog is trade-first: pick a side, amount with sats presets, rail (Lightning/Cashu/On-Chain/Liquid), and Place Trade posts straight to the bao.markets API with your signer (NIP-98) — no separate bao.markets login needed; the chart sits behind a toggle
 - Fund pane in ₿AO communities — a "Fund" entry below Threads shows the community's linked fundraiser; owners can start one (pre-filled with community name + repo), import by id/URL, or unlink, and every member folds the same view
 - Focus mode in ₿AO chat — one header button collapses both side panels (channel list + members) so the chat takes the full width
