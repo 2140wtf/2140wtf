@@ -10,14 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import {
   BAO_RAILS,
   BAO_RAIL_LABELS,
   isBaoRailLive,
-  createFundraiser,
+  createFundraiserRelayFirst,
   type BaoFundraiserFormat,
   type BaoRail,
+  type CreateFundraiserInput,
 } from '@/lib/baoFundraising';
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
 
@@ -85,6 +87,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   initialTitle?: string;
 }) {
   const { user } = useCurrentUser();
+  const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
   const [title, setTitle] = useState(initialTitle ?? '');
   const [description, setDescription] = useState('');
@@ -126,9 +129,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     mutationFn: () => {
       const now = Math.floor(Date.now() / 1000);
       const fullDescription = `${REPO_LINE_PREFIX}${repoUrl.trim()}\n\n${description.trim()}`;
-      if (format === 'stream') {
-        const days = parseInt(streamDays, 10) || 30;
-        return createFundraiser(user!.signer, {
+      const input: CreateFundraiserInput = format === 'stream'
+        ? {
           title: title.trim(),
           description: fullDescription,
           runner_type: runnerType,
@@ -137,36 +139,41 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           format: 'stream',
           category,
           stream_start_at: now,
-          stream_end_at: now + days * DAY,
-        });
-      }
-      return createFundraiser(user!.signer, {
-        title: title.trim(),
-        description: fullDescription,
-        runner_type: runnerType,
-        goal_sats: goal,
-        settlement_rail: rail,
-        format: 'milestones',
-        category,
-        milestones: milestones.map((m) => ({
-          title: m.title.trim(),
-          description: m.description.trim(),
-          amount_sats: parseInt(m.amount, 10) || 0,
-          criteria: m.criteria.trim() || undefined,
-          deadline_at: m.deadlineDays ? now + (parseInt(m.deadlineDays, 10) || 21) * DAY : undefined,
-          fee_bps: parseInt(m.feeBps, 10),
-        })),
-      });
+          stream_end_at: now + (parseInt(streamDays, 10) || 30) * DAY,
+        }
+        : {
+          title: title.trim(),
+          description: fullDescription,
+          runner_type: runnerType,
+          goal_sats: goal,
+          settlement_rail: rail,
+          format: 'milestones',
+          category,
+          milestones: milestones.map((m) => ({
+            title: m.title.trim(),
+            description: m.description.trim(),
+            amount_sats: parseInt(m.amount, 10) || 0,
+            criteria: m.criteria.trim() || undefined,
+            deadline_at: m.deadlineDays ? now + (parseInt(m.deadlineDays, 10) || 21) * DAY : undefined,
+            fee_bps: parseInt(m.feeBps, 10),
+          })),
+        };
+      // Relay-first: the intent rides Nostr to the ₿AO relay and the
+      // bao.markets bridge creates the campaign from it; REST is the fallback.
+      return createFundraiserRelayFirst(user!.signer, input, { publish: publishEvent });
     },
-    onSuccess: (data) => {
-      const marketCount = data.markets?.length ?? 0;
+    onSuccess: ({ result, via }) => {
+      const marketCount = result.markets?.length ?? 0;
+      const marketsLine = marketCount > 0 ? `${marketCount} prediction market${marketCount === 1 ? '' : 's'} live on bao.markets.` : undefined;
       toast({
         title: 'Campaign created (DEMO)',
-        description: marketCount > 0 ? `${marketCount} prediction market${marketCount === 1 ? '' : 's'} live on bao.markets.` : undefined,
+        description: via === 'relay'
+          ? `Published as a Nostr intent and ingested by bao.markets. ${marketsLine ?? ''}`.trim()
+          : marketsLine,
       });
       onOpenChange(false);
       resetForm();
-      onCreated(data.fundraiser.id);
+      onCreated(result.fundraiser.id);
     },
     onError: (e) => toast({ title: 'Create failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
