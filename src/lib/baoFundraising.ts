@@ -322,8 +322,7 @@ async function pollForRelayCreatedFundraiser(
 
 export interface ContributeResult {
   /** DEMO mode marker (replaces the old `test` flag). */
-  demo?: boolean;
-  /** Legacy flag returned by older API versions. */
+  demo?: boolean;  /** Legacy flag returned by older API versions. */
   test?: boolean;
   payment_instructions: { kind: string } & Record<string, unknown>;
   fundraiser: BaoFundraiser;
@@ -382,4 +381,61 @@ export async function claimStream(
     { method: 'POST', body: {}, signer },
   );
   return res.data;
+}
+
+// ─── Trading (Express Trade) ─────────────────────────────────────────────────
+
+export interface PlaceTradeInput {
+  marketId: string;
+  /** Outcome id (AMM) — falls back to the label for SMJ parimutuel markets. */
+  outcomeId: string;
+  outcomeLabel: string;
+  amountSats: number;
+  /** Max average price the buyer accepts, in cents of a sats-share (default 99%). */
+  maxAvgPriceCents?: number;
+  rail?: string;
+}
+
+export interface PlaceTradeResult {
+  via: 'amm' | 'smj';
+  response: unknown;
+}
+
+/**
+ * Place a trade on a ₿AO market with the user's signer (NIP-98, scope trade).
+ *
+ * Tries the AMM order route first; markets on the SMJ parimutuel pool reject
+ * with NOT_AMM_MARKET, in which case the same order goes to /v1/smj/bet with
+ * the outcome label instead of the id. The order debits the account bound to
+ * the signer's pubkey on bao.markets (demo sats on the signet deployment).
+ */
+export async function placeBaoTrade(signer: SignerLike, input: PlaceTradeInput): Promise<PlaceTradeResult> {
+  try {
+    const res = await apiFetch<unknown>('/v1/amm/orders', {
+      method: 'POST',
+      signer,
+      body: {
+        market_id: input.marketId,
+        outcome_id: input.outcomeId,
+        amount_sats: input.amountSats,
+        max_avg_price_cents: input.maxAvgPriceCents ?? 9900,
+        ...(input.rail ? { rail: input.rail } : {}),
+      },
+    });
+    return { via: 'amm', response: res };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '';
+    if (!/NOT_AMM_MARKET|SMJ/i.test(msg)) throw e;
+  }
+  const res = await apiFetch<unknown>('/v1/smj/bet', {
+    method: 'POST',
+    signer,
+    body: {
+      marketId: input.marketId,
+      outcome: input.outcomeLabel,
+      amount: input.amountSats,
+      ...(input.rail ? { rail: input.rail } : {}),
+    },
+  });
+  return { via: 'smj', response: res };
 }
