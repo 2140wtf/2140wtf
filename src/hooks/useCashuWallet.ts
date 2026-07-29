@@ -63,6 +63,8 @@ import {
   saveLastTokenEventId,
   loadLastTokenEventHash,
   saveLastTokenEventHash,
+  restoreCrossAppNip60Wallet,
+  resolveMintAlias,
   WALLET_CONFIG_KIND,
   TOKEN_KIND,
   NUTZAP_INFO_KIND,
@@ -74,6 +76,7 @@ import {
 import { createMintFetch } from '@/lib/cashu/cashuFetch';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
+import { BAO_MARKETS_RELAY } from '@/lib/baoRelayMarkets';
 
 export interface CashuWalletState {
   wallet: CashuWallet | null;
@@ -290,6 +293,12 @@ export function useCashuWallet(
   const storageRef = useRef<CashuStorage>(createCashuStorage(options?.storageNamespace ?? 'freedomid_'));
   const nip60WalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const nip60RestoredRef = useRef(false);
+  /** Wallet key recovered from the identity's cross-app NIP-60 config (BAO
+   * demo wallet only): when bao.markets published a kind:17375 config for this
+   * identity, its wallet key becomes this wallet's NIP-60 signing key so token
+   * events converge on the same author both apps read. */
+  const crossAppWalletKeyRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
+  const isBaoNamespaceRef = useRef(storageNamespaceRef.current.startsWith('freedomid_bao_'));
   const processedNutzapIdsRef = useRef<Set<string>>(new Set());
   const pendingNutzapInFlightRef = useRef(false);
   const lastSeedRef = useRef<string>('');
@@ -808,9 +817,10 @@ export function useCashuWallet(
         }
 
         // NIP-60 restore and initial sync (before DPCS fallback)
-        // BAO demo wallets are isolated: they do not restore main-wallet
-        // kind:10019/17375 config and do not publish their own config.
-        if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current && !storageNamespaceRef.current.startsWith('freedomid_bao_')) {
+        // BAO demo wallets are isolated from the main-wallet NIP-60 namespace:
+        // they skip kind:10019/17375 config sync here and instead mirror the
+        // wallet bao.markets publishes on the BAO relay (cross-app restore).
+        if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current && !isBaoNamespaceRef.current) {
           try {
             const loadedCustomMints = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
             const priorAllMints = allMintsRef.current;
@@ -828,6 +838,17 @@ export function useCashuWallet(
             allMintsRef.current = priorAllMints;
           } catch (e) {
             devLog.error('NIP-60 init sync failed:', e);
+          }
+        }
+
+        // BAO demo wallet: pull the balance the same npub holds on bao.markets
+        // (faucet claims, trade winnings) from the BAO relay. Runs every init —
+        // merge-only and idempotent, so repeated restores are safe.
+        if (!cancelled && isBaoNamespaceRef.current && nip60SyncRef.current) {
+          try {
+            await restoreFromBaoMarkets();
+          } catch (e) {
+            devLog.error('bao.markets NIP-60 init restore failed:', e);
           }
         }
 
@@ -1170,7 +1191,13 @@ export function useCashuWallet(
   }, [config.clientName, config.appName]);
 
   const getNip60WalletSigner = useCallback(() => {
-    const key = nip60WalletKeyRef.current;
+    // BAO demo wallets sign with the key recovered from bao.markets' published
+    // config so both apps converge on the same NIP-60 author. Without a
+    // cross-app key there is nothing to publish (bao.markets could not read
+    // events signed by our locally-derived key), so return null and skip.
+    const key = isBaoNamespaceRef.current
+      ? crossAppWalletKeyRef.current
+      : nip60WalletKeyRef.current;
     if (!key) return null;
     return createNip60Signer(key.privkey);
   }, []);
@@ -1189,6 +1216,15 @@ export function useCashuWallet(
     const normalized = normalizeMintUrl(mintUrl);
     if (!normalized) return;
 
+    // BAO demo wallets sync against the BAO relay (where bao.markets reads);
+    // main wallets use the app's relay pool.
+    const queryTokens = isBaoNamespaceRef.current && sync.queryRelays
+      ? (filter: Parameters<NonNullable<Nip60SyncApi['queryRelays']>>[1]) => sync.queryRelays!([BAO_MARKETS_RELAY], filter)
+      : sync.query;
+    const publishEvent = isBaoNamespaceRef.current && sync.publishToRelays
+      ? (event: NostrEvent) => sync.publishToRelays!([BAO_MARKETS_RELAY], event)
+      : sync.publish;
+
     try {
       const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
       const lastEventId = await loadLastTokenEventId(normalized, encKey);
@@ -1201,7 +1237,7 @@ export function useCashuWallet(
       let remoteHasProofs = false;
       let remoteQueryFailed = false;
       try {
-        const remoteEvents = await sync.query({ kinds: [TOKEN_KIND], authors: [walletSigner.pubkey], limit: 500 });
+        const remoteEvents = await queryTokens({ kinds: [TOKEN_KIND], authors: [walletSigner.pubkey], limit: 500 });
         for (const ev of remoteEvents) {
           const content = await parseTokenEvent(ev, walletSigner);
           if (content && content.mint === normalized) {
@@ -1238,7 +1274,7 @@ export function useCashuWallet(
         devLog.warn('Failed to build NIP-60 token event for mint:', normalized);
         return undefined;
       }
-      const publishedId = await sync.publish(tokenEvent);
+      const publishedId = await publishEvent(tokenEvent);
       if (!publishedId) {
         devLog.warn('NIP-60 token event publish failed for mint:', normalized);
         return undefined;
@@ -1246,7 +1282,7 @@ export function useCashuWallet(
 
       if (delArray.length > 0) {
         const deletion = await buildDeletionEvent(delArray, walletSigner, 'spent', [getClientTag()]);
-        if (deletion) await sync.publish(deletion).catch(() => {});
+        if (deletion) await publishEvent(deletion).catch(() => {});
       }
 
       const historyRefs: Array<{ id: string; marker: 'created' | 'destroyed' }> = [
@@ -1255,7 +1291,7 @@ export function useCashuWallet(
       ];
       if (lastEventId) historyRefs.push({ id: lastEventId, marker: 'destroyed' });
       const history = await buildHistoryEvent(direction, amount, normalized, walletSigner, historyRefs, [getClientTag()]);
-      if (history) await sync.publish(history).catch(() => {});
+      if (history) await publishEvent(history).catch(() => {});
 
       await saveLastTokenEventId(normalized, tokenEvent.id, encKey);
       await saveLastTokenEventHash(normalized, hash, encKey);
@@ -1423,6 +1459,68 @@ export function useCashuWallet(
       return false;
     }
   }, [getNip60WalletSigner, calculateAllBalances, filterUnspentProofs]);
+
+  /**
+   * BAO demo wallet only: recover the NIP-60 wallet bao.markets published for
+   * this identity on the BAO relay, and merge its proofs into the local BAO
+   * wallet. bao.markets derives its wallet key from the nsec (unavailable to
+   * NIP-07 logins) and publishes only to relay.bao.network (deliberately not
+   * an app relay), so the standard restore path can never see it. Instead we
+   * read the identity-signed kind:17375 config on the BAO relay, recover the
+   * wallet key from it (works with any NIP-44 signer), and pull the foreign
+   * wallet's token events.
+   *
+   * Merging is always-on (not just when local is empty): bao.markets may
+   * credit the wallet between sessions (faucet claims, trade wins). Dedup by
+   * proof secret + mint-side spent verification keep this idempotent.
+   *
+   * The recovered key is stored in crossAppWalletKeyRef and adopted as this
+   * wallet's NIP-60 signing key, so spends in this app publish token events
+   * under the same author bao.markets reads — balances converge both ways.
+   */
+  const restoreFromBaoMarkets = useCallback(async (): Promise<boolean> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    if (!sync?.queryRelays || !encKey) return false;
+
+    try {
+      const queryBao = (filter: Parameters<NonNullable<Nip60SyncApi['queryRelays']>>[1]) =>
+        sync.queryRelays!([BAO_MARKETS_RELAY], filter);
+      const { result, walletPrivkey, walletPubkey } = await restoreCrossAppNip60Wallet(sync.signer, queryBao);
+      if (!result.config || !walletPrivkey || !walletPubkey) return false;
+
+      crossAppWalletKeyRef.current = { privkey: walletPrivkey, pubkey: walletPubkey };
+
+      const seed = bip39SeedRef.current;
+      const mintEntries = Object.entries(result.proofsByMint);
+      if (mintEntries.length > 0 && seed) {
+        await storageRef.current.withProofLock(async () => {
+          for (const [mint, remoteProofs] of mintEntries) {
+            // bao.markets may address the mint via the API proxy path; both
+            // URLs are the same backend, so fold aliases into one logical mint.
+            const normalized = normalizeMintUrl(resolveMintAlias(mint));
+            if (!normalized || remoteProofs.length === 0) continue;
+            try {
+              const unspent = sanitizeProofs(dedupeProofs(await filterUnspentProofs(normalized, remoteProofs, seed)));
+              if (unspent.length === 0) continue;
+              const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+              const merged = dedupeProofs([...existing, ...unspent]);
+              if (merged.length !== existing.length) {
+                await storageRef.current.saveProofsForMint(normalized, merged, encKey);
+              }
+            } catch (e) {
+              devLog.warn('Failed to merge bao.markets NIP-60 proofs for mint:', normalized, e);
+            }
+          }
+        });
+        await calculateAllBalances();
+      }
+      return true;
+    } catch (e) {
+      devLog.error('bao.markets NIP-60 restore failed:', e);
+      return false;
+    }
+  }, [calculateAllBalances, filterUnspentProofs]);
 
   const initWallet = useCallback(async (seed: Uint8Array, encKeyOverride?: CryptoKey) => {
     const nonce = ++initNonceRef.current;
