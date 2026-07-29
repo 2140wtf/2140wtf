@@ -22,7 +22,7 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
   const updateMetadata = useMutation<
     void,
     Error,
-    { name?: string; description?: string; icon?: ImagePointer | null; banner?: ImagePointer | null; relays?: string[]; repo?: string | null }
+    { name?: string; description?: string; icon?: ImagePointer | null; banner?: ImagePointer | null; relays?: string[]; repo?: string | null; fund_id?: string | null }
   >({
     mutationFn: async (patch) => {
       if (!user || !community) throw new Error("Not ready.");
@@ -36,6 +36,7 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
       if (patch.banner !== undefined) next.banner = patch.banner ?? undefined;
       if (patch.relays !== undefined) next.relays = patch.relays;
       if (patch.repo !== undefined) next.repo = patch.repo?.trim() || undefined;
+      if (patch.fund_id !== undefined) next.fund_id = patch.fund_id?.trim() || undefined;
 
       // A relay-list change fans out to old ∪ new: members still folding from
       // the old relays must see the edition that moves them.
