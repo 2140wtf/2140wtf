@@ -102,9 +102,14 @@ export function BreedCategoryPreviews({
       {displayedMembers.map((member) => {
         const memberId = isAdultFormMember(member) ? member.form : member.id;
 
-        // Animated-character tiles (Buzz, Bleep) use the WebP directly
-        // instead of an SVG string.
-        if (member.kind === 'buzz') {
+        // Animated-character tiles (Buzz, Bleep, 2140 clay species) use the
+        // WebP directly instead of an SVG string.
+        const tileAnimUrl = member.kind === 'buzz'
+          ? getAnimatedCharacterUrl(getMemberAssetId(member))
+          : isAdultFormMember(member)
+            ? getAnimatedCharacterUrl(member.form)
+            : undefined;
+        if (tileAnimUrl) {
           return (
             <div
               key={memberId}
@@ -115,7 +120,7 @@ export function BreedCategoryPreviews({
               title={member.label}
             >
               <img
-                src={getAnimatedCharacterUrl(getMemberAssetId(member))}
+                src={tileAnimUrl}
                 alt={member.label}
                 className="w-full h-full object-contain p-0.5"
                 loading="lazy"

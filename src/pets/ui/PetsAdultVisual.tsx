@@ -102,9 +102,15 @@ export function PetsAdultVisual({
   // ── State + form classes for species-specific CSS animations ───────────────
 
   const baoRecipe = pets.breedAsset ? getBaoRecipeById(pets.breedAsset) : undefined;
-  const isAnimatedCharacter = isAnimatedCharacterPet(pets.breedCategory, pets.breedAsset);
+  // Animated characters render from breed_asset directly; pets minted before
+  // breed_asset existed fall back to their resolved adult form (e.g. an old
+  // glitchfox adult_type) so they still get the clay character.
+  const animAsset = pets.breedAsset ?? resolveAdultForm(pets);
+  const animUrl = getAnimatedCharacterUrl(animAsset);
+  const isAnimatedCharacter =
+    isAnimatedCharacterPet(pets.breedCategory, pets.breedAsset) || animUrl !== undefined;
   const formClass = isAnimatedCharacter
-    ? `pets-form-anim-${pets.breedAsset}`
+    ? `pets-form-anim-${animAsset}`
     : pets.breedCategory === 'custom' && pets.breedAsset
       ? `pets-form-custom-${pets.breedAsset}`
       : baoRecipe
@@ -159,7 +165,7 @@ export function PetsAdultVisual({
         // (browser-native animation, alpha) — no SVG form, no eye rig.
         // Sleeping/reaction states still apply via the container classes above.
         <img
-          src={getAnimatedCharacterUrl(pets.breedAsset)}
+          src={animUrl}
           alt=""
           draggable={false}
           className="size-full object-contain select-none"
