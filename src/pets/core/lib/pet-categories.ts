@@ -35,7 +35,7 @@ export interface BaoCardMember {
 
 export interface BuzzMember {
   kind: 'buzz';
-  /** Buzz pet id ('bumble' | 'fizz' | 'honey'); also the breed_asset tag value. */
+  /** Animated-character id ('bumble' | 'fizz' | 'honey' | 'bleep'); also the breed_asset tag value. */
   id: string;
   label: string;
 }
@@ -118,6 +118,9 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
       form: 'honey-badger',
       label: 'Honey Badger',
     },
+    // Bleep is an animated WebP character (public/pets/bleep/), not an SVG
+    // adult form — the 'buzz' member kind routes it to the WebP pipeline.
+    { kind: 'buzz', id: 'bleep', label: 'Bleep' },
   ],
   'ditto-blobbi': [
     { kind: 'adult-form', form: 'bloomi', label: 'Bloomi' },

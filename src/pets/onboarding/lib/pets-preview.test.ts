@@ -39,6 +39,8 @@ describe('generateEggPreviewForCategory', () => {
     );
     for (let i = 0; i < 30; i++) {
       const preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+      // Bleep is an animated WebP character — no SVG adult form to derive.
+      if (preview.breedAsset === 'bleep') continue;
       const form = deriveAdultFormFromSeed(preview.seed);
       expect(allowed.has(form)).toBe(true);
     }
@@ -86,7 +88,12 @@ describe('generateEggPreviewForCategory', () => {
 
 describe('previewToEventTags', () => {
   it('emits breed tags and an adult_type lock for adult-form categories', () => {
-    const preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+    // Bleep (animated character) locks no adult_type — retry past random
+    // Bleep picks so this exercises an SVG adult-form member.
+    let preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+    for (let i = 0; preview.breedAsset === 'bleep' && i < 50; i++) {
+      preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+    }
     const tags = previewToEventTags(preview);
 
     expect(getTag(tags, 'breed_category')).toBe('2140-pets');
@@ -104,6 +111,19 @@ describe('previewToEventTags', () => {
     expect(getTag(tags, 'breed_category')).toBe('bao');
     expect(getTag(tags, 'breed_asset')).toBe(preview.breedAsset);
     expect(getTag(tags, 'bao_rarity')).toBeDefined();
+    expect(getTag(tags, 'adult_type')).toBeUndefined();
+  });
+
+  it('locks no adult_type for Bleep (animated character renders from breed_asset)', () => {
+    let preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+    for (let i = 0; preview.breedAsset !== 'bleep' && i < 50; i++) {
+      preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+    }
+    expect(preview.breedAsset).toBe('bleep');
+
+    const tags = previewToEventTags(preview);
+    expect(getTag(tags, 'breed_category')).toBe('2140-pets');
+    expect(getTag(tags, 'breed_asset')).toBe('bleep');
     expect(getTag(tags, 'adult_type')).toBeUndefined();
   });
 });
