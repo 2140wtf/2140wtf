@@ -128,7 +128,7 @@ export function PetFundraisingCard({ companion }: { companion: PetsCompanion }) 
           </div>
 
           <p className="text-[10px] text-muted-foreground">
-            ₿AO Fund runs on the bao.markets signet demo — no real money.
+            Fund upkeep with demo sats (bao.markets signet — practice) or real compute credits via Routstr. Mainnet Bitcoin rails coming soon.
           </p>
         </>
       )}

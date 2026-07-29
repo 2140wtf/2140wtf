@@ -1347,8 +1347,13 @@ export function ChatComposer({ relayUrl, groupId, messages, replyTo, onCancelRep
 
       onCancelReply?.();
       onSent?.();
-    } catch {
-      toast({ title: "Error", description: "Failed to send voice message.", variant: "destructive" });
+    } catch (err) {
+      console.error('[ChatComposer] voice message failed:', err);
+      toast({
+        title: "Couldn't send voice message",
+        description: err instanceof Error ? err.message : "Failed to send voice message.",
+        variant: "destructive",
+      });
     } finally {
       setIsPublishingVoice(false);
     }
