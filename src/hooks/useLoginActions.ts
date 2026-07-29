@@ -27,9 +27,35 @@ export { generateNostrConnectParams } from '@nostrify/react/login';
  * kind number means "all event kinds" — this is the only practical choice for a
  * general-purpose client that publishes many kinds.
  */
+/**
+ * Event kinds the app publishes, requested as `sign_event:<kind>` perms at
+ * NIP-46 connect time. Remote signers (Amber) scope sign_event approval PER
+ * KIND, so asking only for bare `sign_event` leaves every new kind behind a
+ * fresh prompt — the "approve all once" users expect. Keep this in sync when
+ * adding a new published kind.
+ */
+const PUBLISHED_EVENT_KINDS: readonly number[] = [
+  // Core social
+  0, 1, 3, 4, 5, 6, 7, 8, 16, 1068, 1111, 1311, 1984, 9735, 9802,
+  // DMs + gift wraps (NIP-17, NIP-104 group chat)
+  443, 444, 445, 1059, 21059, 10051,
+  // Lists + identity
+  10002, 10003, 10019, 10063, 10133, 15683, 16767, 16769, 30078, 36767,
+  // Wallet / Cashu (NIP-60/61) + NIP-98 + onchain zaps
+  7374, 7375, 7376, 9321, 8333, 17375, 27235,
+  // Pets + pet social + battles
+  1124, 21124, 11125, 14919, 14920, 14921, 31124,
+  // Concord V2 (₿AO communities)
+  3302, 3303, 3306, 3308, 3309, 3310, 3312, 3313, 13302, 13303, 20013, 20014, 23311, 23313, 33301,
+  // ₿AO Fund / markets / attestation / compute credits
+  38000, 38003, 33863, 33831, 36789, 37107, 4971, 4972, 4973,
+  // Content kinds (articles, calendar, music, geocache, badges, repos, weather, streams)
+  30009, 30023, 31922, 31923, 36787, 34139, 37516, 30617, 30621, 16158, 30311,
+] as const;
+
 const NOSTR_CONNECT_PERMS = [
   'get_public_key',
-  'sign_event',
+  ...PUBLISHED_EVENT_KINDS.map((kind) => `sign_event:${kind}`),
   'nip04_encrypt',
   'nip04_decrypt',
   'nip44_encrypt',
