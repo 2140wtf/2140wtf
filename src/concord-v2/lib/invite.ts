@@ -14,7 +14,8 @@
  * link.
  */
 
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { decrypt as nip44Decrypt, encrypt as nip44Encrypt } from "nostr-tools/nip44";
 import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from "nostr-tools/pure";
 import type { NostrEvent } from "nostr-tools/pure";
@@ -47,6 +48,14 @@ export interface InviteBundle {
   icon?: ImagePointer;
   /** Optional, unix ms: past it the preview still renders, joining refuses. */
   expires_at?: number;
+  /**
+   * Optional use cap (1 = single-use link). Honest joiners refuse a link
+   * whose Guestbook already shows a Join citing this token's commitment, and
+   * the creator's client auto-tombstones the bundle once that first Join
+   * lands — serverless "single use". Not a hard boundary (a modified client
+   * ignores it); a key rotation is the hard boundary.
+   */
+  max_uses?: number;
   /** Optional attribution, echoed in the joiner's Guestbook Join. */
   creator_npub?: string;
   label?: string;
@@ -102,7 +111,7 @@ export function validateBundle(bundle: InviteBundle): InviteBundle {
  */
 export function buildRefreshedBundleEvents(
   bundle: InviteBundle,
-  entries: Array<{ token: string; signer_sk: string; expires_at?: number; label?: string }>,
+  entries: Array<{ token: string; signer_sk: string; expires_at?: number; label?: string; max_uses?: number }>,
 ): NostrEvent[] {
   const events: NostrEvent[] = [];
   for (const entry of entries) {
@@ -111,6 +120,7 @@ export function buildRefreshedBundleEvents(
         ...bundle,
         ...(entry.expires_at ? { expires_at: entry.expires_at * 1000 } : {}),
         ...(entry.label ? { label: entry.label } : {}),
+        ...(entry.max_uses ? { max_uses: entry.max_uses } : {}),
       };
       events.push(buildBundleEvent(perLink, hexToBytes(entry.token), hexToBytes(entry.signer_sk)));
     } catch {
@@ -452,6 +462,8 @@ export interface InviteListEntry {
   label?: string;
   created_at: number;
   expires_at?: number;
+  /** Use cap minted into the bundle (1 = single-use); drives the auto-sweep. */
+  max_uses?: number;
   [k: string]: unknown;
 }
 
@@ -504,4 +516,15 @@ export function mintLinkSigner(): { sk: Uint8Array; pk: string } {
 /** Mint a fresh 16-byte unlock token. */
 export function mintToken(): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
+}
+
+/**
+ * The public commitment to a link's unlock token: `sha256(token)` hex. A
+ * Guestbook Join cites it (4th element of the `invite` tag) so anyone folding
+ * the Guestbook can tell WHICH link a member arrived through — without the
+ * commitment revealing anything (the token is 128 bits of entropy). This is
+ * what single-use links and per-link key rotations key on.
+ */
+export function inviteCommitment(token: Uint8Array): string {
+  return bytesToHex(sha256(token));
 }
