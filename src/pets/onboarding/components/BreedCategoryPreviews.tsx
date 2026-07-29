@@ -14,7 +14,7 @@ import {
   isAdultFormMember,
   type PetsBreedCategory,
 } from '@/pets/core/lib/pet-categories';
-import { getBuzzPetAnimatedUrl } from '@/pets/core/lib/buzz-pets';
+import { getAnimatedCharacterUrl } from '@/pets/core/lib/animated-pets';
 import { deriveVisualTraits } from '@/pets/core/lib/pets';
 import { useCustomForms } from '@/pets/three-d/hooks/useCustomForms';
 
@@ -102,8 +102,9 @@ export function BreedCategoryPreviews({
       {displayedMembers.map((member) => {
         const memberId = isAdultFormMember(member) ? member.form : member.id;
 
-        // Buzz tiles use the animated WebP directly instead of an SVG string.
-        if (category === 'buzz') {
+        // Animated-character tiles (Buzz, Bleep) use the WebP directly
+        // instead of an SVG string.
+        if (member.kind === 'buzz') {
           return (
             <div
               key={memberId}
@@ -114,7 +115,7 @@ export function BreedCategoryPreviews({
               title={member.label}
             >
               <img
-                src={getBuzzPetAnimatedUrl(getMemberAssetId(member))}
+                src={getAnimatedCharacterUrl(getMemberAssetId(member))}
                 alt={member.label}
                 className="w-full h-full object-contain p-0.5"
                 loading="lazy"
