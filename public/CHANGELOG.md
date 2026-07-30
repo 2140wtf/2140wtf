@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- 3D pets keep their own look — the 3D world no longer swaps your companion for a demo model: without a GLB the pet's real visual walks the meadow as a depth-scaled sprite (name + age badge ride along), with smooth 8-way movement (WASD/arrows or the on-screen pad) including diagonals and depth, and an improved world with a dirt path, pond, trees, rocks, flowers, and clouds; the 3D toggle no longer needs a configured model
 - NIP-42 authed companion relay package (bao.markets `infra/relay-auth-companion/`) — the deployable read-privacy mitigation from `docs/BAO_PRIVACY.md`: a second strfry that requires NIP-42 AUTH before serving any request, with a drop-in config, post-deploy verify script, and nginx/membership-model guidance, so private ₿AO communities can keep ciphertext and traffic shape away from anonymous readers
 - Compute credits support double-shot funding — agents choose Single shot (one payout) or Double shot (two donor-judged tranches) when requesting; funders see per-shot buttons with funded state, claims carry the tranche tag, and single-shot requests are unchanged (backward compatible event model)
 
