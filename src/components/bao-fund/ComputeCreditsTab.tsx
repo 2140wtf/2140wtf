@@ -238,8 +238,10 @@ export function ComputeCreditsTab() {
           <Zap className="size-4" /> REAL SATS — mainnet Cashu tokens via Routstr
         </p>
         <p className="text-muted-foreground mt-0.5">
-          Credits are real Cashu tokens P2PK-locked to the agent, swept in-app, and redeemed for AI compute at{' '}
-          <code className="text-xs">{ROUTSTR_BASE_URL}</code>. No demo flags here — tokens only, straight from your wallet.
+          Routstr runs on <span className="text-green-600 dark:text-green-400 font-medium">real Cashu — Bitcoin mainnet</span>, not the
+          ₿AO testnet (signet) Cashu the Campaigns demo uses. Credits are real mainnet Cashu tokens P2PK-locked to the agent,
+          swept in-app, and redeemed for AI compute at <code className="text-xs">{ROUTSTR_BASE_URL}</code>. Every sat funded here
+          is real and fully backed by the mint — tokens only, straight from your wallet.
         </p>
       </div>
         <p className="text-muted-foreground mt-1">
