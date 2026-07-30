@@ -28,6 +28,8 @@ import {
   useBarkdArkAddress,
   useBarkdBalance,
   useBarkdBoardAll,
+  useBarkdBoardFee,
+  useBarkdCachedAddress,
   useBarkdGenerateInvoice,
   useBarkdLightningSendFee,
   useBarkdMovements,
@@ -36,6 +38,7 @@ import {
   useBarkdRefresh,
   useBarkdSend,
 } from '@/hooks/useBarkdWallet';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useToast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
 import { writeClipboardText } from '@/lib/clipboard';
@@ -51,19 +54,29 @@ function parseSatsInput(raw: string): number | undefined {
   return Number.isSafeInteger(n) && n > 0 ? n : undefined;
 }
 
-/** BOLT11 invoices carry their own amount; Ark/LNURL/lightning addresses don't. */
+/** BOLT11 invoices and BOLT12 offers can carry their own amount; Ark/LNURL/lightning addresses can't. */
+function stripLightningPrefix(destination: string): string {
+  return destination.trim().replace(/^lightning:/i, '');
+}
+
 function destinationNeedsAmount(destination: string): boolean {
-  const d = destination.trim().toLowerCase();
+  const d = stripLightningPrefix(destination).toLowerCase();
   if (!d) return false;
-  return !(d.startsWith('lnbc') || d.startsWith('lntb') || d.startsWith('lnbcrt'));
+  return !(
+    d.startsWith('lnbc') ||
+    d.startsWith('lntb') ||
+    d.startsWith('lnbcrt') ||
+    d.startsWith('lno1')
+  );
 }
 
 function isLightningDestination(destination: string): boolean {
-  const d = destination.trim().toLowerCase();
+  const d = stripLightningPrefix(destination).toLowerCase();
   return (
     d.startsWith('lnbc') ||
     d.startsWith('lntb') ||
     d.startsWith('lnbcrt') ||
+    d.startsWith('lno1') ||
     d.startsWith('lnurl') ||
     d.includes('@')
   );
@@ -237,7 +250,7 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
           )}
           {connection.sessionError && (
             <p className="text-xs text-destructive">
-              Saved session no longer works ({connection.sessionError.message}) — reconnect below.
+              Your saved session expired — reconnect below.
             </p>
           )}
           <Button
@@ -256,7 +269,8 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
           <p className="text-xs text-muted-foreground leading-relaxed">
             Set <span className="font-mono">ALLOWED_ORIGINS</span> on the bark-web API to include
             this app’s origin. If UI auth is enabled, cross-site cookies may be blocked — prefer
-            running it on a private network with auth handled by your gateway.
+            running it on a private network behind a TLS-terminating gateway (Caddy, Tailscale
+            Serve).
           </p>
         </CardContent>
       </Card>
@@ -336,8 +350,13 @@ function MovementRow({ movement }: { movement: Movement }) {
 
 interface ReceivePanelProps {
   serverUrl: string;
+  connected: boolean;
   arkAddress: ReturnType<typeof useBarkdArkAddress>;
+  cachedArkAddress: string | undefined;
   onchainAddress: ReturnType<typeof useBarkdOnchainAddress>;
+  cachedOnchainAddress: string | undefined;
+  onOpenOnchainTab: () => void;
+  onFreshArkAddress: () => void;
   invoice: ReturnType<typeof useBarkdGenerateInvoice>;
   invoiceAmount: string;
   setInvoiceAmount: (v: string) => void;
@@ -347,22 +366,42 @@ interface ReceivePanelProps {
 
 function ReceivePanel({
   serverUrl,
+  connected,
   arkAddress,
+  cachedArkAddress,
   onchainAddress,
+  cachedOnchainAddress,
+  onOpenOnchainTab,
+  onFreshArkAddress,
   invoice,
   invoiceAmount,
   setInvoiceAmount,
   invoiceDescription,
   setInvoiceDescription,
 }: ReceivePanelProps) {
-  const onchainBalance = useBarkdOnchainBalance(serverUrl, true);
+  const onchainBalance = useBarkdOnchainBalance(serverUrl, connected);
   const boardAll = useBarkdBoardAll(serverUrl);
 
   const invoiceAmountSat = parseSatsInput(invoiceAmount);
-  const confirmedOnchain = onchainBalance.data?.confirmedSat ?? 0;
+  const spendableOnchain = onchainBalance.data?.trustedSpendableSat ?? 0;
+  const incomingOnchain = onchainBalance.data?.untrustedPendingSat ?? 0;
+  const boardFee = useBarkdBoardFee(serverUrl, spendableOnchain > 0 ? spendableOnchain : undefined);
+
+  // New funds confirming after a successful (or failed) board make the
+  // button actionable again.
+  useEffect(() => {
+    if (boardAll.isSuccess || boardAll.isError) boardAll.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spendableOnchain]);
 
   return (
-    <Tabs defaultValue="ark" className="w-full">
+    <Tabs
+      defaultValue="ark"
+      className="w-full"
+      onValueChange={(v) => {
+        if (v === 'onchain') onOpenOnchainTab();
+      }}
+    >
       <TabsList className="mb-4">
         <TabsTrigger value="ark">Ark</TabsTrigger>
         <TabsTrigger value="lightning">Lightning</TabsTrigger>
@@ -371,22 +410,22 @@ function ReceivePanel({
 
       <TabsContent value="ark">
         <AddressCard
-          value={arkAddress.data}
-          isLoading={arkAddress.isPending}
-          error={arkAddress.error}
+          value={cachedArkAddress}
+          isLoading={arkAddress.isPending && !cachedArkAddress}
+          error={cachedArkAddress ? null : arkAddress.error}
           onRetry={() => arkAddress.mutate()}
           copyLabel="Ark address"
           hint="Share this Ark address to receive off-chain payments from another Ark wallet."
         />
-        {arkAddress.data && (
+        {cachedArkAddress && (
           <Button
             variant="ghost"
             size="sm"
             className="w-full text-muted-foreground"
             disabled={arkAddress.isPending}
-            onClick={() => arkAddress.mutate()}
+            onClick={onFreshArkAddress}
           >
-            Generate a fresh address
+            {arkAddress.isPending ? 'Generating…' : 'Generate a fresh address'}
           </Button>
         )}
       </TabsContent>
@@ -434,12 +473,13 @@ function ReceivePanel({
             <Button
               className="w-full"
               disabled={invoiceAmountSat === undefined || invoice.isPending}
-              onClick={() =>
+              onClick={() => {
+                if (invoiceAmountSat === undefined) return;
                 invoice.mutate({
-                  amountSat: invoiceAmountSat!,
+                  amountSat: invoiceAmountSat,
                   description: invoiceDescription || undefined,
-                })
-              }
+                });
+              }}
             >
               {invoice.isPending ? (
                 <>
@@ -455,37 +495,54 @@ function ReceivePanel({
 
       <TabsContent value="onchain">
         <AddressCard
-          value={onchainAddress.data}
-          isLoading={onchainAddress.isPending}
-          error={onchainAddress.error}
+          value={cachedOnchainAddress}
+          isLoading={onchainAddress.isPending && !cachedOnchainAddress}
+          error={cachedOnchainAddress ? null : onchainAddress.error}
           onRetry={() => onchainAddress.mutate()}
           copyLabel="on-chain address"
           hint="On-chain funds land in your wallet’s on-chain balance. Once confirmed, board them into Ark below to spend them off-chain."
         />
-        {onchainBalance.data !== undefined && confirmedOnchain > 0 && (
+        {onchainBalance.data !== undefined && (incomingOnchain > 0 || spendableOnchain > 0) && (
           <div className="space-y-2 pb-2">
-            <p className="text-xs text-muted-foreground text-center tabular-nums">
-              On-chain balance: {formatSats(confirmedOnchain)} sats
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={boardAll.isPending || boardAll.isSuccess}
-              onClick={() => boardAll.mutate()}
-            >
-              {boardAll.isPending ? (
-                <>
-                  <RefreshCw className="size-4 mr-2 animate-spin" /> Boarding…
-                </>
-              ) : boardAll.isSuccess ? (
-                'Boarding started — funds appear after confirmation'
-              ) : (
-                'Board into Ark'
-              )}
-            </Button>
-            {boardAll.isError && (
-              <p className="text-xs text-destructive text-center">{boardAll.error.message}</p>
+            {incomingOnchain > 0 && (
+              <p className="text-xs text-muted-foreground text-center tabular-nums">
+                {formatSats(incomingOnchain)} sats incoming — awaiting confirmation
+              </p>
+            )}
+            {spendableOnchain > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground text-center tabular-nums">
+                  On-chain balance: {formatSats(spendableOnchain)} sats
+                </p>
+                {boardFee.data && (
+                  <p className="text-xs text-muted-foreground text-center tabular-nums">
+                    Boarding fee ≈ {formatSats(boardFee.data.feeSat)} sats
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={boardAll.isPending}
+                  onClick={() => boardAll.mutate()}
+                >
+                  {boardAll.isPending ? (
+                    <>
+                      <RefreshCw className="size-4 mr-2 animate-spin" /> Boarding…
+                    </>
+                  ) : (
+                    'Board into Ark'
+                  )}
+                </Button>
+                {boardAll.isSuccess && (
+                  <p className="text-xs text-green-600 dark:text-green-400 text-center">
+                    Boarding started — funds appear in your Ark balance after confirmation.
+                  </p>
+                )}
+                {boardAll.isError && (
+                  <p className="text-xs text-destructive text-center">{boardAll.error.message}</p>
+                )}
+              </>
             )}
           </div>
         )}
@@ -516,9 +573,11 @@ function SendPanel({
   const needsAmount = destinationNeedsAmount(destination);
   const missingAmount = needsAmount && amountSat === undefined;
 
+  // Debounce so typing an amount doesn't fire one fee request per keystroke.
+  const debouncedAmountSat = useDebounce(amountSat, 400);
   const fee = useBarkdLightningSendFee(
     serverUrl,
-    isLightningDestination(destination) ? amountSat : undefined,
+    isLightningDestination(destination) ? debouncedAmountSat : undefined,
   );
 
   const editDestination = (v: string) => {
@@ -611,11 +670,14 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   const balance = useBarkdBalance(serverUrl, connection.connected);
   const movements = useBarkdMovements(serverUrl, connection.connected);
   const refresh = useBarkdRefresh(serverUrl);
+  const { toast } = useToast();
 
   // Receive/send state is lifted here so it survives Radix unmounting the
   // inner Receive/Send/Activity panels on tab switches.
   const arkAddress = useBarkdArkAddress(serverUrl);
   const onchainAddress = useBarkdOnchainAddress(serverUrl);
+  const cachedArkAddress = useBarkdCachedAddress(serverUrl, 'ark');
+  const cachedOnchainAddress = useBarkdCachedAddress(serverUrl, 'onchain');
   const invoice = useBarkdGenerateInvoice(serverUrl);
   const send = useBarkdSend(serverUrl);
   const [invoiceAmount, setInvoiceAmount] = useState('');
@@ -623,27 +685,46 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   const [destination, setDestination] = useState('');
   const [sendAmount, setSendAmount] = useState('');
 
-  // Address generation is a mutation (each call derives a fresh HD address),
-  // so fire it exactly once per connected session and keep showing the result.
-  const requestedAddresses = useRef(false);
+  // Address generation derives a fresh HD address per call, so only fire when
+  // there is no cached address yet. The cache (written by the mutations'
+  // onSuccess) survives unmounts, so switching wallet tabs doesn't burn
+  // keychain indexes or silently rotate the QR the user may have shared.
+  const arkAddressCached = cachedArkAddress.data;
   useEffect(() => {
-    if (requestedAddresses.current) return;
-    requestedAddresses.current = true;
-    arkAddress.mutate();
-    onchainAddress.mutate();
+    if (!arkAddressCached && !arkAddress.isPending && !arkAddress.isError) {
+      arkAddress.mutate();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [arkAddressCached]);
 
-  const pendingEntries: Array<[string, number]> = (
-    [
-      [PENDING_LABELS.pendingInRoundSat, balance.data?.pendingInRoundSat ?? 0],
-      [PENDING_LABELS.pendingBoardSat, balance.data?.pendingBoardSat ?? 0],
-      [PENDING_LABELS.claimableLightningReceiveSat, balance.data?.claimableLightningReceiveSat ?? 0],
-      [PENDING_LABELS.pendingLightningSendSat, balance.data?.pendingLightningSendSat ?? 0],
-      // null means "exit subsystem unavailable" (unknown, not zero) — hide it.
-      [PENDING_LABELS.pendingExitSat, balance.data?.pendingExitSat ?? 0],
-    ] as Array<[string, number]>
-  ).filter(([, v]) => v > 0);
+  // The on-chain address derives lazily on first visit of the on-chain tab —
+  // no reason to burn an index for users who only use Ark/Lightning.
+  const onchainAddressCached = cachedOnchainAddress.data;
+  const ensureOnchainAddress = () => {
+    if (!onchainAddressCached && !onchainAddress.isPending && !onchainAddress.isError) {
+      onchainAddress.mutate();
+    }
+  };
+
+  const freshArkAddress = () => {
+    arkAddress.mutate(undefined, {
+      onSuccess: () =>
+        toast({
+          title: 'New address generated',
+          description: 'Addresses you shared earlier still work.',
+        }),
+    });
+  };
+
+  const pendingCandidates: Array<[string, number]> = [
+    [PENDING_LABELS.pendingInRoundSat, balance.data?.pendingInRoundSat ?? 0],
+    [PENDING_LABELS.pendingBoardSat, balance.data?.pendingBoardSat ?? 0],
+    [PENDING_LABELS.claimableLightningReceiveSat, balance.data?.claimableLightningReceiveSat ?? 0],
+    [PENDING_LABELS.pendingLightningSendSat, balance.data?.pendingLightningSendSat ?? 0],
+    // null means "exit subsystem unavailable" (unknown, not zero) — hide it.
+    [PENDING_LABELS.pendingExitSat, balance.data?.pendingExitSat ?? 0],
+  ];
+  const pendingEntries = pendingCandidates.filter(([, v]) => v > 0);
 
   return (
     <div className="space-y-4">
@@ -722,8 +803,13 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
         <TabsContent value="receive">
           <ReceivePanel
             serverUrl={serverUrl}
+            connected={connection.connected}
             arkAddress={arkAddress}
+            cachedArkAddress={cachedArkAddress.data}
             onchainAddress={onchainAddress}
+            cachedOnchainAddress={cachedOnchainAddress.data}
+            onOpenOnchainTab={ensureOnchainAddress}
+            onFreshArkAddress={freshArkAddress}
             invoice={invoice}
             invoiceAmount={invoiceAmount}
             setInvoiceAmount={setInvoiceAmount}
@@ -753,7 +839,7 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
           ) : movements.isError ? (
             <Card className="border-dashed mt-4">
               <CardContent className="py-10 px-8 text-center space-y-3">
-                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                <p className="text-sm text-destructive max-w-xs mx-auto">
                   {movements.error.message}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => movements.refetch()}>
