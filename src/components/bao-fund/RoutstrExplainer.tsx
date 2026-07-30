@@ -1,5 +1,7 @@
 import { Route, Search, ShieldCheck, Trophy } from 'lucide-react';
 
+import { openUrl } from '@/lib/downloadFile';
+
 const PILLARS = [
   {
     icon: Search,
@@ -36,16 +38,16 @@ export function RoutstrExplainer() {
       <div>
         <h2 className="text-sm font-semibold">How Routstr works</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
+          Paid in <span className="text-green-600 dark:text-green-400 font-medium">real Bitcoin mainnet Cashu</span> — never ₿AO testnet sats.
           Bitcoiners get the best price — and the best experience. Routstr nodes compete for your sats, so the
           market does the negotiating.{' '}
-          <a
-            href="https://routstr.com/routstrd"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2 hover:text-foreground"
+          <button
+            type="button"
+            onClick={() => openUrl('https://routstr.com/routstrd')}
+            className="underline underline-offset-2 hover:text-foreground cursor-pointer"
           >
             routstr.com/routstrd
-          </a>
+          </button>
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
