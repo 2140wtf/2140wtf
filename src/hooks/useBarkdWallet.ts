@@ -191,6 +191,24 @@ export function useBarkdSend(serverUrl: string) {
 }
 
 /**
+ * Register all spendable VTXOs for refresh in the next Ark round (funds are
+ * locked until the round confirms; an Ark server fee applies). barkd does
+ * NOT refresh on its own — this is the maintenance action wallets need when
+ * VTXOs approach expiry, e.g. after being offline for a long time.
+ */
+export function useBarkdRefreshAll(serverUrl: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => withFriendlyBarkdErrors(getBarkdApis(serverUrl).wallet.refreshAll()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['barkd', 'balance', serverUrl] });
+      queryClient.invalidateQueries({ queryKey: ['barkd', 'movements', serverUrl] });
+    },
+    onError: (error) => revalidateSessionOnAuthError(queryClient, error),
+  });
+}
+
+/**
  * Force the daemon to sync, then refresh wallet DATA queries. The session
  * query is deliberately left alone — it has its own staleness lifecycle, and
  * invalidating it would kick the user to the connect form (unmounting all
