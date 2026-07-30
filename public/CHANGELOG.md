@@ -4,6 +4,7 @@
 
 ### Added
 - ₿AO wallet shows every custodial rail — the rail grid gains the missing L1 tile (all 7 bao.markets rails now render), the total gets a per-rail breakdown line underneath, and when a device has no Cashu but the account holds sats on other rails a hint points at swapping to Cashu on bao.markets (the rail pets and battles spend from)
+- "My trades" on the ₿AO Markets page — a collapsible section above the grid lists your open positions (market, outcome, size, entry vs current price, unrealized PnL) fetched from the bao.markets API with your signer, each row deep-linking into the market detail; wallet tabs now show per-rail API balances (Lightning, Spark, Ark — placeholders replaced)
 - Lightning wallet tab on the Wallet page — the connected NWC wallet (Rizful, Alby, Coinos) shows its live balance Amethyst-style, refreshed every 60s, with a connect prompt when no wallet is linked
 - Create prediction markets nostr-natively — the markets page gets a Create market dialog that publishes kind-38000 definitions straight to the ₿AO relay (category default `bao-fund`), so markets appear for every relay-first client without a bao.markets API session
 - Market cards match the bao.markets look — amber category tag, serif title, description, YES/NO split probability bar, Details / Buy Yes / Buy No action row (Buy buttons open the trade dialog with that side preselected), duration + end-date meta
