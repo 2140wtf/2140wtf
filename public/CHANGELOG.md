@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Pets logged-out page now explains the agent-body option: your AI agent can have a body — combine agent and pet into one, and ask your agent what body it would like (ported from bao_fund)
+
 ### Added
 - 2-of-3 multisig battle escrow — the non-custodial ₿AO escrow primitive (ported from bao_fund), with real-sats pet battles as its first consumer. Stakes lock to THREE keys (both players + the escrow operator) and need ANY TWO signatures to move: the operator can never take the funds (it only co-signs the winner's claim), disputes resolve with the operator plus one honest player, and an abandoned battle self-heals — after the 24h locktime each player reclaims their exact stake with their own key, no operator needed (one-click "Reclaim my stake" once unlocked, plus an automatic stale-deposit refund sweep on the battle page). Battle setup shows a "How ₿AO escrow protects your sats" explainer with the honest trust limits.
 - Ark wallet tab — the Wallet page's Ark placeholder is now real: connect to a self-hosted barkd daemon (balance with pending breakdown, receive via Ark address / BOLT11 / on-chain, unified send, movement history; UI password in NIP-44-encrypted secure storage), or use Ark-over-NWC with the existing wallet plumbing — keys and VTXOs always stay on your own daemon
