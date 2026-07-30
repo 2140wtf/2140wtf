@@ -159,9 +159,21 @@ interface ListEnvelope<T> {
 }
 
 export async function fetchFundraisers(status?: string): Promise<BaoFundraiser[]> {
-  const q = status ? `?status=${encodeURIComponent(status)}` : '';
-  const res = await apiFetch<ListEnvelope<BaoFundraiser[]>>(`/v1/fundraisers${q}`);
-  return res.data;
+  // Follow the pagination envelope: the default page is small, and silently
+  // reading only page 1 hides campaigns once the list outgrows it — including
+  // the one just created (the relay-first create poll matches on this list).
+  const out: BaoFundraiser[] = [];
+  let offset = 0;
+  const limit = 100;
+  for (let page = 0; page < 20; page++) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (status) params.set('status', status);
+    const res = await apiFetch<ListEnvelope<BaoFundraiser[]>>(`/v1/fundraisers?${params}`);
+    out.push(...res.data);
+    if (!res.pagination?.has_more || res.data.length === 0) break;
+    offset += res.data.length;
+  }
+  return out;
 }
 
 export async function fetchFundraiser(id: string): Promise<{ fundraiser: BaoFundraiser; milestones: BaoMilestone[] }> {
