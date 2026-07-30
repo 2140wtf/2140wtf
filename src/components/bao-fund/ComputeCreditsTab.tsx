@@ -284,13 +284,20 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const publish = useNostrPublish();
+  const [shots, setShots] = useState<1 | 2>(1);
   const [amount, setAmount] = useState('1000');
+  const [amount2, setAmount2] = useState('');
   const [purpose, setPurpose] = useState('');
 
   const requestMutation = useMutation({
     mutationFn: () =>
       publish.mutateAsync({
-        ...buildComputeCreditRequest({ amountSats: parseInt(amount, 10) || 0, purpose }),
+        ...buildComputeCreditRequest({
+          amountSats: parseInt(amount, 10) || 0,
+          purpose,
+          shots,
+          amount2Sats: shots === 2 ? parseInt(amount2, 10) || 0 : undefined,
+        }),
       }),
     onSuccess: () => {
       toast({ title: 'Compute-credit request published' });
@@ -316,7 +323,10 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
     onError: (e) => toast({ title: 'Confirm failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
-  const valid = (parseInt(amount, 10) || 0) > 0 && purpose.trim().length > 0;
+  const valid =
+    (parseInt(amount, 10) || 0) > 0 &&
+    purpose.trim().length > 0 &&
+    (shots === 1 || (parseInt(amount2, 10) || 0) > 0);
 
   return (
     <Card>
@@ -330,9 +340,41 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="cc-amount">Amount (sats)</Label>
+          <Label>Funding shape</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant={shots === 1 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShots(1)}
+            >
+              Single shot
+            </Button>
+            <Button
+              type="button"
+              variant={shots === 2 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShots(2)}
+            >
+              Double shot
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {shots === 1
+              ? 'One payout, judged by the donor.'
+              : 'Two tranches — the donor funds each shot separately when satisfied.'}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cc-amount">{shots === 2 ? 'Tranche 1 (sats)' : 'Amount (sats)'}</Label>
           <Input id="cc-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
         </div>
+        {shots === 2 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="cc-amount2">Tranche 2 (sats)</Label>
+            <Input id="cc-amount2" value={amount2} onChange={(e) => setAmount2(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="2140" />
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="cc-purpose">What will you build with it?</Label>
           <Textarea id="cc-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} placeholder="e.g. Run inference for my oracle dashboard milestone" />
@@ -400,6 +442,17 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
   const isOwn = !!user && user.pubkey === request.pubkey;
   const hasWallet = allMints.length > 0;
 
+  // Double-shot requests fund tranche by tranche; single-shot ignores this.
+  const isDoubleShot = request.shots === 2 && !!request.amount2Sats;
+  const [fundShot, setFundShot] = useState<1 | 2>(1);
+  const fundAmount = fundShot === 2 ? (request.amount2Sats ?? 0) : request.amountSats;
+  const fundedForShot = (shot: 1 | 2) =>
+    claims.filter((c) => (c.shot ?? 1) === shot).reduce((sum, c) => sum + c.amountSats, 0);
+  const shotCovered = (shot: 1 | 2) => {
+    const target = shot === 2 ? (request.amount2Sats ?? 0) : request.amountSats;
+    return target > 0 && fundedForShot(shot) >= target;
+  };
+
   // The minted funding token is the ONLY copy of the send proofs (the wallet
   // persists just the change) — if this component unmounts after a DM failure
   // (tab switch, navigation, crash) the sats are gone with the wallet already
@@ -434,7 +487,8 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       await publish.mutateAsync(buildComputeCreditFulfillment({
         requestId: request.id,
         requesterPubkey: request.pubkey,
-        amountSats: request.amountSats,
+        amountSats: fundAmount,
+        shot: fundShot === 2 ? 2 : undefined,
       }));
     },
     onSuccess: () => {
@@ -477,7 +531,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       // 2. Balance check at the chosen mint — a raw "Insufficient balance: 0"
       //    from deep in the wallet tells the funder nothing.
       const mintBalance = balances[target.mintUrl] ?? 0;
-      if (mintBalance < request.amountSats) {
+      if (mintBalance < fundAmount) {
         const short = target.mintUrl.replace(/^https?:\/\//, '');
         throw new Error(`Not enough balance at ${short} (${mintBalance} sats). Fund that mint first.`);
       }
@@ -485,7 +539,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       // 3. Mint a real Cashu token, P2PK-locked unless bearer was opted in.
       const memo = `₿AO compute credits: ${request.purpose.slice(0, 80)}`;
       const cashuToken = await sendToken(
-        request.amountSats,
+        fundAmount,
         memo,
         target.lockPubkey ?? undefined,
         target.mintUrl,
@@ -504,7 +558,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       try {
         await sendMessage({
           recipientPubkey: request.pubkey,
-          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(request.amountSats)} sats).\n\n${redeemHint}\n\n${cashuToken}`,
+          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(fundAmount)} sats${isDoubleShot ? `, tranche ${fundShot}/2` : ''}).\n\n${redeemHint}\n\n${cashuToken}`,
         });
         setDmState('sent');
       } catch {
@@ -526,7 +580,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       }
     },
     onSuccess: () => {
-      toast({ title: 'Credits sent', description: `${formatSats(request.amountSats)} sats sent to the agent.` });
+      toast({ title: 'Credits sent', description: `${formatSats(fundAmount)} sats sent to the agent.` });
     },
     onError: (e) => {
       // Only reachable before a token exists (resolution/balance/sendToken
@@ -546,7 +600,14 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
           <div className="min-w-0">
             <div className="text-sm">
               <RequestAuthor pubkey={request.pubkey} /> requests{' '}
-              <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
+              {isDoubleShot ? (
+                <span className="font-semibold tabular-nums">
+                  {formatSats(request.amountSats)} + {formatSats(request.amount2Sats!)} sats
+                  <span className="ml-1.5 text-[10px] font-normal text-primary">2 shots</span>
+                </span>
+              ) : (
+                <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">{request.purpose}</p>
             <div className="mt-1.5">
@@ -619,14 +680,36 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                 {isOwn ? 'This is your own request.' : hasWallet ? 'Real sats from your Cashu wallet, P2PK-locked to the agent.' : 'Add a Cashu mint in Wallet to fund requests.'}
               </p>
               {!isOwn && user && (
-                <Button
-                  size="sm" className="gap-1.5 shrink-0"
-                  disabled={!hasWallet || fulfillMutation.isPending}
-                  onClick={() => fulfillMutation.mutate()}
-                >
-                  {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                  Send {formatSats(request.amountSats)} sats
-                </Button>
+                isDoubleShot ? (
+                  <div className="flex gap-1.5 shrink-0">
+                    {[1, 2].map((shot) => {
+                      const amount = shot === 2 ? request.amount2Sats! : request.amountSats;
+                      const covered = shotCovered(shot as 1 | 2);
+                      return (
+                        <Button
+                          key={shot}
+                          size="sm"
+                          variant={fundShot === shot ? 'default' : 'outline'}
+                          className="gap-1"
+                          disabled={!hasWallet || fulfillMutation.isPending || covered}
+                          onClick={() => { setFundShot(shot as 1 | 2); fulfillMutation.mutate(); }}
+                        >
+                          {covered ? <CheckCircle2 className="size-3.5" /> : fulfillMutation.isPending && fundShot === shot ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                          {covered ? `Shot ${shot} funded` : `Shot ${shot} · ${formatSats(amount)}`}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Button
+                    size="sm" className="gap-1.5 shrink-0"
+                    disabled={!hasWallet || fulfillMutation.isPending}
+                    onClick={() => fulfillMutation.mutate()}
+                  >
+                    {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                    Send {formatSats(request.amountSats)} sats
+                  </Button>
+                )
               )}
             </div>
             {!isOwn && user && hasWallet && (

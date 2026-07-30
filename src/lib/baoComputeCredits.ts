@@ -35,6 +35,10 @@ export interface ComputeCreditRequest {
   amountSats: number;
   purpose: string;
   createdAt: number;
+  /** 1 = single shot (one payout), 2 = double shot (two tranches). Absent = 1. */
+  shots?: 1 | 2;
+  /** Tranche-2 amount for double-shot requests (amountSats is tranche 1). */
+  amount2Sats?: number;
 }
 
 export interface ComputeCreditFulfillment {
@@ -44,17 +48,29 @@ export interface ComputeCreditFulfillment {
   requesterPubkey: string;
   amountSats: number;
   createdAt: number;
+  /** Which tranche this claim funds (1 or 2). Absent = 1. */
+  shot?: number;
 }
 
 /** Unsigned event template for a compute-credit request (for useNostrPublish). */
-export function buildComputeCreditRequest(input: { amountSats: number; purpose: string }) {
+export function buildComputeCreditRequest(input: {
+  amountSats: number;
+  purpose: string;
+  /** 2 = double shot: two donor-judged tranches (amountSats = tranche 1). */
+  shots?: 1 | 2;
+  amount2Sats?: number;
+}) {
+  const tags = [
+    ['t', BAO_COMPUTE_CREDIT_TAG],
+    ['amount', String(Math.floor(input.amountSats))],
+  ];
+  if (input.shots === 2 && input.amount2Sats && input.amount2Sats > 0) {
+    tags.push(['shots', '2'], ['amount2', String(Math.floor(input.amount2Sats))]);
+  }
   return {
     kind: BAO_COMPUTE_CREDIT_REQUEST_KIND,
     content: input.purpose.trim(),
-    tags: [
-      ['t', BAO_COMPUTE_CREDIT_TAG],
-      ['amount', String(Math.floor(input.amountSats))],
-    ],
+    tags,
   };
 }
 
@@ -63,15 +79,19 @@ export function buildComputeCreditFulfillment(input: {
   requestId: string;
   requesterPubkey: string;
   amountSats: number;
+  /** Tranche being funded (double-shot requests). Absent = 1. */
+  shot?: number;
 }) {
+  const tags = [
+    ['e', input.requestId],
+    ['p', input.requesterPubkey],
+    ['amount', String(Math.floor(input.amountSats))],
+  ];
+  if (input.shot === 2) tags.push(['shot', '2']);
   return {
     kind: BAO_COMPUTE_CREDIT_FULFILLMENT_KIND,
     content: '',
-    tags: [
-      ['e', input.requestId],
-      ['p', input.requesterPubkey],
-      ['amount', String(Math.floor(input.amountSats))],
-    ],
+    tags,
   };
 }
 
@@ -83,12 +103,17 @@ export function parseComputeCreditRequest(event: NostrEvent): ComputeCreditReque
   const amountSats = Number(amountTag?.[1]);
   if (!Number.isFinite(amountSats) || amountSats <= 0) return null;
 
+  const shots = event.tags.find((t) => t[0] === 'shots')?.[1] === '2' ? 2 as const : undefined;
+  const amount2Raw = Number(event.tags.find((t) => t[0] === 'amount2')?.[1]);
+  const amount2Sats = shots === 2 && Number.isFinite(amount2Raw) && amount2Raw > 0 ? Math.floor(amount2Raw) : undefined;
+
   return {
     id: event.id,
     pubkey: event.pubkey,
     amountSats: Math.floor(amountSats),
     purpose: event.content.trim(),
     createdAt: event.created_at,
+    ...(shots === 2 && amount2Sats ? { shots, amount2Sats } : {}),
   };
 }
 
@@ -109,6 +134,7 @@ export function parseComputeCreditFulfillment(event: NostrEvent): ComputeCreditF
     requesterPubkey,
     amountSats: Number.isFinite(amountSats) ? Math.floor(amountSats) : 0,
     createdAt: event.created_at,
+    ...(event.tags.find((t) => t[0] === 'shot')?.[1] === '2' ? { shot: 2 } : {}),
   };
 }
 
