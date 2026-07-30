@@ -729,6 +729,42 @@ describe('useCashuWallet hunt regressions: sendToken offline no-swap path', () =
     expect(result.current.error).toBe('');
   });
 
+  /** Mimic the REAL cashu-ts swap path: fresh send outputs, unselected inputs passed through in keep. */
+  function mockSwapSend(wallet: CashuWallet) {
+    vi.spyOn(wallet, 'send').mockImplementation((async (_amount: number, proofs: Array<{ id: string; amount: number; secret: string; C: string }>) => ({
+      send: [{ id: 'ks', amount: 21, secret: 'fresh-locked-secret', C: 'C-new' }],
+      // cashu-ts swap() returns { keep: [...freshChange, ...unselectedInputs] } —
+      // the unselected input proofs come back verbatim, still unspent.
+      keep: proofs.filter((p) => p.amount !== 21),
+    })) as never);
+  }
+
+  it('accepts unselected input proofs passed through in keep on a swap-path locked send', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    mockSwapSend(wallet);
+
+    // Regression (hunt round 8 blocker): the old check compared keep proofs
+    // against the ENTIRE input store and threw "Mint returned unspent input
+    // proofs as outputs" AFTER the mint had committed — every locked send
+    // from a wallet holding leftover proofs deterministically failed, leaving
+    // the spent input in the store and the locked send proofs stranded.
+    const token = await act(async () => result.current.sendToken(21, 'memo', validPubkey));
+    expect(token).not.toBeNull();
+    expect(token).toContain('cashu');
+    expect(result.current.error).toBe('');
+    // The unselected input (79 sats) is the change and must be in the store.
+    await waitFor(() => expect(result.current.balances[mintUrl]).toBe(79));
+  });
+
   it('still rejects input proofs returned as outputs when a P2PK lock was requested', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     await setupWallet(seedPhrase);
@@ -742,8 +778,10 @@ describe('useCashuWallet hunt regressions: sendToken offline no-swap path', () =
     if (!wallet) throw new Error('Wallet not initialized');
     mockOfflineSend(wallet);
 
-    // A locked send can NEVER legitimately return the (unlocked) inputs —
-    // the offline exception must not apply when sendOpts.pubkey is set.
+    // A locked send can NEVER legitimately return an (unlocked) input proof
+    // among the SEND outputs — swap send outputs are constructed client-side
+    // with fresh secrets. (Keep-side passthrough of unselected inputs IS
+    // legitimate and is covered by the swap-shape test above.)
     const token = await act(async () => result.current.sendToken(21, 'memo', validPubkey));
     expect(token).toBeNull();
     await waitFor(() => expect(result.current.error).toContain('unspent input proofs'));
