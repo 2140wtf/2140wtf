@@ -62,6 +62,7 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- The relay list in the ₿AO creation dialog now scrolls when it outgrows the dialog — the tail relays and the add form were unreachable with the full feed relay set expanded (ported from bao_fund)
 - Cashu mint URLs with exactly four hostname labels (e.g. a mint on `pay.mint.example.com`) were misclassified as private IP addresses, so tokens from those mints were silently undecodable (ported from bao_fund)
 - Re-encoding a received Cashu token double-encoded P2PK witnesses — a latent bug that would have made escrow release tokens unreceivable (ported from bao_fund)
 - Yellow-on-yellow warning boxes are gone app-wide — every amber-tinted box with amber text (trade module demo notice, ₿AO Fund warnings, zap alerts, member/battle badges, poll/map/pets chips) now uses near-black text on light theme (light theme = dark font, per the new MEMORY.md design rule)
@@ -84,6 +85,7 @@
 - Mobile menu no longer pops the on-screen keyboard over half the drawer — the search box isn't auto-focused on open anymore; tap it to type
 - Cashu wallet signer rejections are translated into actionable text — a NIP-46 bunker answering “<profile>: denied” now explains that the signer's connection profile needs NIP-44 encrypt/decrypt permission instead of showing the raw string
 - ₿AO signet sats not syncing between bao.markets and 2140.wtf on the same login — the ₿AO wallet now restores the NIP-60 wallet config published by the other app (works with NIP-07 signers, no nsec needed), recovers proofs authored by that wallet key, and folds mint-URL aliases so balances match across both apps
+- PWA install button was invisible on Android because it only rendered after Chrome fired `beforeinstallprompt`; it now shows for all mobile browsers and falls back to browser-menu instructions when the native prompt isn't available
 
 ## [0.26.0] - 2026-07-28
 
