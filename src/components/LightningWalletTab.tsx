@@ -13,7 +13,7 @@ function formatSats(n: number): string {
 
 /**
  * Lightning wallet tab — the connected NWC wallet (Rizful, Alby, Coinos, …)
- * with its live balance, Amethyst-style. Connect wallets in Wallet settings;
+ * with its live balance. Connect wallets in Wallet settings;
  * the active connection's balance shows here, refreshed every 60s.
  */
 export function LightningWalletTab() {
@@ -30,7 +30,7 @@ export function LightningWalletTab() {
           <WalletMinimal className="size-8 mx-auto text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
             No Lightning wallet connected. Connect a NWC wallet (Rizful, Alby, Coinos) and its
-            balance shows up here — same as the wallet section in Amethyst.
+            balance shows up here.
           </p>
           <Button asChild size="sm">
             <Link to="/settings/wallet">Connect a wallet</Link>

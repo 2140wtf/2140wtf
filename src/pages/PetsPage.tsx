@@ -370,8 +370,13 @@ function PetsAdoptionFlowPortal({
   onComplete: () => void;
 }) {
   return createPortal(
+    // pointer-events-auto is load-bearing: modal Radix dialogs set
+    // pointer-events:none on <body> (react-remove-scroll), and this portal
+    // mounts outside the dialog content — without re-enabling them here, the
+    // ceremony's dialog-advance clicks and naming input are dead and clicks
+    // fall through to the dialog overlay beneath.
     <div
-      className="fixed inset-0 z-[300]"
+      className="fixed inset-0 z-[300] pointer-events-auto"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
@@ -887,7 +892,18 @@ function PetsContent() {
         }
       }}
     >
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent
+        className="max-w-lg max-h-[90vh] overflow-y-auto p-0"
+        // The hatching ceremony runs in a portal *outside* this dialog's
+        // content (PetsAdoptionFlowPortal → document.body). Radix treats real
+        // pointer/ESC interactions with it as "outside" the dialog and would
+        // dismiss it — unmounting the ceremony mid-publish and silently
+        // killing the adoption (nothing is published, no error is shown).
+        // While the ceremony owns the screen, only its own exits may end it.
+        onPointerDownOutside={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+        onInteractOutside={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+        onEscapeKeyDown={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+      >
         {adoptionStep === 'category' ? (
           <BreedCategoryPicker
             compact
@@ -2737,7 +2753,15 @@ function PetsDashboard({
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-0">
+        <DialogContent
+          className="max-w-lg max-h-[90vh] overflow-y-auto p-0"
+          // See PetsContent's adoptionFlowDialog for why: the ceremony portal
+          // lives outside this dialog, and Radix outside-dismissal would
+          // unmount it mid-publish, silently killing the adoption.
+          onPointerDownOutside={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+          onInteractOutside={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+          onEscapeKeyDown={(e) => adoptionStep === 'onboarding' && e.preventDefault()}
+        >
           {adoptionStep === 'category' ? (
             <BreedCategoryPicker
               compact
