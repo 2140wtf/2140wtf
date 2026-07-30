@@ -104,4 +104,69 @@ describe('useZapPaymentListener', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(onPaid).not.toHaveBeenCalled();
   });
+
+  it('re-arms for a NEW invoice after a payment was detected (second QR zap is detected)', async () => {
+    // Regression: paidRef was a permanent boolean latch — after one detected
+    // payment every later QR zap in the same mounted dialog was ignored.
+    const onPaid = vi.fn();
+    const target = makeTarget(1);
+    const receipt1 = makeReceipt([
+      ['p', 'target-pubkey'],
+      ['bolt11', invoice],
+    ]);
+    mocks.reqMock.mockImplementation(async function* () {
+      yield ['EVENT', '', receipt1] as ['EVENT', string, NostrEvent];
+    });
+
+    const { rerender } = renderHook(
+      ({ inv }: { inv: string }) =>
+        useZapPaymentListener(inv, target, ['wss://relay.example.com'], onPaid),
+      { initialProps: { inv: invoice } },
+    );
+
+    await waitFor(() => expect(onPaid).toHaveBeenCalledTimes(1));
+
+    // A second zap with a new invoice must subscribe again and detect payment.
+    const invoice2 = 'lnbc555n1psecondinvoice';
+    const receipt2 = makeReceipt([
+      ['p', 'target-pubkey'],
+      ['bolt11', invoice2],
+    ]);
+    mocks.reqMock.mockClear();
+    mocks.reqMock.mockImplementation(async function* () {
+      yield ['EVENT', '', receipt2] as ['EVENT', string, NostrEvent];
+    });
+
+    rerender({ inv: invoice2 });
+
+    await waitFor(() => expect(mocks.reqMock).toHaveBeenCalled());
+    await waitFor(() => expect(onPaid).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not resubscribe for the SAME already-paid invoice', async () => {
+    const onPaid = vi.fn();
+    const target = makeTarget(1);
+    const receipt = makeReceipt([
+      ['p', 'target-pubkey'],
+      ['bolt11', invoice],
+    ]);
+    mocks.reqMock.mockImplementation(async function* () {
+      yield ['EVENT', '', receipt] as ['EVENT', string, NostrEvent];
+    });
+
+    const { rerender } = renderHook(
+      ({ inv }: { inv: string }) =>
+        useZapPaymentListener(inv, target, ['wss://relay.example.com'], onPaid),
+      { initialProps: { inv: invoice } },
+    );
+
+    await waitFor(() => expect(onPaid).toHaveBeenCalledTimes(1));
+
+    mocks.reqMock.mockClear();
+    rerender({ inv: invoice });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mocks.reqMock).not.toHaveBeenCalled();
+    expect(onPaid).toHaveBeenCalledTimes(1);
+  });
 });

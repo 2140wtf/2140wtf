@@ -1,7 +1,24 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEncodedToken } from '@cashu/cashu-ts';
+import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 
-import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey, savePendingEscrowClaim, loadPendingEscrowClaims, clearPendingEscrowClaim, type PendingEscrowClaim } from './cashuEscrow';
+import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey, checkEscrowDepositSpentState, savePendingEscrowClaim, loadPendingEscrowClaims, clearPendingEscrowClaim, type PendingEscrowClaim } from './cashuEscrow';
+
+const mocks = vi.hoisted(() => ({
+  checkProofsStates: vi.fn(),
+}));
+
+vi.mock('@cashu/cashu-ts', async (importActual) => {
+  const actual = await importActual<typeof import('@cashu/cashu-ts')>();
+  class MockCashuMint {
+    constructor(public mintUrl: string) {}
+  }
+  class MockCashuWallet {
+    constructor(public mint: unknown) {}
+    checkProofsStates = mocks.checkProofsStates;
+  }
+  return { ...actual, CashuMint: MockCashuMint, CashuWallet: MockCashuWallet };
+});
 
 const mintUrl = 'https://mint.example.com';
 const escrowPubkey = 'a'.repeat(64);
@@ -111,6 +128,52 @@ describe('isTokenLockedToPubkey', () => {
     ]);
     expect(isTokenLockedToPubkey(token, 'not-a-key')).toBe(false);
   });
+
+  describe('real NUT-11 secret format (hunt regression)', () => {
+    // cashu-ts createP2PKsecret emits ["P2PK", {nonce, data, tags}] — the
+    // second element is an OBJECT, and every locked token this app creates
+    // uses this form.
+    const nut11Secret = (data: string, tags: string[][] = []) =>
+      JSON.stringify(['P2PK', { nonce: 'f'.repeat(64), data, tags }]);
+
+    it('returns true for real NUT-11 object secrets locked to the pubkey', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 10, secret: nut11Secret('02' + escrowPubkey), C: 'C1' },
+        { id: 'ks', amount: 5, secret: nut11Secret(escrowPubkey), C: 'C2' },
+      ]);
+      expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(true);
+    });
+
+    it('returns false for real NUT-11 secrets locked to a different pubkey', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 10, secret: nut11Secret('02' + otherPubkey), C: 'C1' },
+      ]);
+      expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(false);
+    });
+
+    it('rejects NUT-11 secrets carrying tags unless they are allowed', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 10, secret: nut11Secret('02' + escrowPubkey, [['locktime', '9999999999']]), C: 'C1' },
+      ]);
+      expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(false);
+      expect(isTokenLockedToPubkey(token, escrowPubkey, { allowedTags: ['locktime'] })).toBe(true);
+    });
+
+    it('rejects NUT-11 secrets whose data field is not a string', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 10, secret: JSON.stringify(['P2PK', { nonce: 'x', data: 42, tags: [] }]), C: 'C1' },
+      ]);
+      expect(isTokenLockedToPubkey(token, escrowPubkey)).toBe(false);
+    });
+
+    it('extracts lock pubkeys from the real NUT-11 format', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 10, secret: nut11Secret('02' + escrowPubkey), C: 'C1' },
+        { id: 'ks', amount: 5, secret: 'plain-secret', C: 'C2' },
+      ]);
+      expect(extractTokenLockPubkeys(token)).toEqual([('02' + escrowPubkey).toLowerCase()]);
+    });
+  });
 });
 
 describe('extractTokenLockPubkeys', () => {
@@ -218,6 +281,94 @@ describe('validateEscrowDeposit', () => {
       expect(validateEscrowDeposit(token, 21, escrowPubkey).valid).toBe(true);
       expect(validateEscrowDeposit(token, 21, escrowPubkey, []).valid).toBe(true);
     });
+  });
+
+  describe('NUT-11 locktime/refund tags (hunt regression)', () => {
+    const nut11 = (tags: string[][]) =>
+      JSON.stringify(['P2PK', { nonce: 'f'.repeat(64), data: '02' + escrowPubkey, tags }]);
+    const farFuture = String(Math.floor(Date.now() / 1000) + 3600);
+    const tooSoon = String(Math.floor(Date.now() / 1000) + 60);
+
+    it('accepts a real NUT-11 locked deposit of the expected amount', () => {
+      const token = makeToken([{ id: 'ks', amount: 21, secret: nut11([]), C: 'C1' }]);
+      expect(validateEscrowDeposit(token, 21, escrowPubkey)).toEqual({ valid: true, amount: 21 });
+    });
+
+    it('accepts a deposit with a far-future locktime + refund tag', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 21, secret: nut11([['locktime', farFuture], ['refund', otherPubkey]]), C: 'C1' },
+      ]);
+      expect(validateEscrowDeposit(token, 21, escrowPubkey).valid).toBe(true);
+    });
+
+    it('rejects a deposit whose refund locktime expires too soon', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 21, secret: nut11([['locktime', tooSoon], ['refund', otherPubkey]]), C: 'C1' },
+      ]);
+      const result = validateEscrowDeposit(token, 21, escrowPubkey);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('locktime');
+    });
+
+    it('rejects a deposit carrying tags beyond locktime/refund', () => {
+      const token = makeToken([
+        { id: 'ks', amount: 21, secret: nut11([['n_sigs', '2']]), C: 'C1' },
+      ]);
+      const result = validateEscrowDeposit(token, 21, escrowPubkey);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('Token is not locked to the escrow pubkey');
+    });
+  });
+});
+
+describe('checkEscrowDepositSpentState (hunt regression)', () => {
+  const proofs = [
+    { id: 'ks', amount: 21, secret: JSON.stringify(['P2PK', { nonce: 'f'.repeat(64), data: '02' + escrowPubkey, tags: [] }]), C: 'C1' },
+  ];
+  const yFor = (secret: string) => hashToCurve(new TextEncoder().encode(secret)).toHex(true);
+
+  beforeEach(() => {
+    mocks.checkProofsStates.mockReset();
+  });
+
+  it('returns null when every proof is UNSPENT at its mint', async () => {
+    mocks.checkProofsStates.mockImplementation(async (ps: Array<{ secret: string }>) =>
+      ps.map((p) => ({ Y: yFor(p.secret), state: 'UNSPENT' })),
+    );
+    await expect(checkEscrowDepositSpentState(makeToken(proofs))).resolves.toBeNull();
+  });
+
+  it('rejects when a proof is already SPENT (re-used deposit)', async () => {
+    mocks.checkProofsStates.mockImplementation(async (ps: Array<{ secret: string }>) =>
+      ps.map((p) => ({ Y: yFor(p.secret), state: 'SPENT' })),
+    );
+    const reason = await checkEscrowDepositSpentState(makeToken(proofs));
+    expect(reason).toContain('already spent');
+  });
+
+  it('rejects when a proof is PENDING', async () => {
+    mocks.checkProofsStates.mockImplementation(async (ps: Array<{ secret: string }>) =>
+      ps.map((p) => ({ Y: yFor(p.secret), state: 'PENDING' })),
+    );
+    const reason = await checkEscrowDepositSpentState(makeToken(proofs));
+    expect(reason).toContain('pending');
+  });
+
+  it('rejects when the mint cannot be reached (unverifiable stake)', async () => {
+    mocks.checkProofsStates.mockRejectedValue(new Error('network down'));
+    const reason = await checkEscrowDepositSpentState(makeToken(proofs));
+    expect(reason).toContain('Could not verify');
+  });
+
+  it('rejects when the mint response does not cover every proof', async () => {
+    mocks.checkProofsStates.mockResolvedValue([]);
+    const reason = await checkEscrowDepositSpentState(makeToken(proofs));
+    expect(reason).toContain('malformed');
+  });
+
+  it('rejects an undecodable token', async () => {
+    const reason = await checkEscrowDepositSpentState('not-a-token');
+    expect(reason).toBe('Token is empty or invalid');
   });
 });
 

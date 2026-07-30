@@ -13,6 +13,15 @@ import {
   loadPendingNutzaps,
   removePendingNutzap,
   pendingNutzapCooldownRemaining,
+  writePendingReceive,
+  loadPendingReceive,
+  clearPendingReceive,
+  CrossTabLock,
+  loadMintCounter,
+  saveMintCounter,
+  writePendingMint,
+  loadPendingMint,
+  clearPendingMint,
 } from './storage';
 
 describe('addTransaction', () => {
@@ -163,5 +172,119 @@ describe('pending Nutzap journal', () => {
     const entry = { ...baseEntry, lastAttemptAt: now - 30_000 };
     expect(pendingNutzapCooldownRemaining(entry, now)).toBeGreaterThan(0);
     expect(pendingNutzapCooldownRemaining({ ...baseEntry, lastAttemptAt: now - 120_000 }, now)).toBe(0);
+  });
+});
+
+describe('writePendingReceive attempts counter', () => {
+  let encKey: CryptoKey;
+
+  beforeEach(async () => {
+    const phrase = generateMnemonic(wordlist);
+    encKey = await deriveEncryptionKey(phrase);
+    localStorage.clear();
+  });
+
+  it('preserves the stored attempts counter when no explicit value is passed', async () => {
+    await writePendingReceive('cashuAtoken', 'hash-a', ['https://mint.example.com'], 10, encKey);
+    await writePendingReceive('cashuAtoken', 'hash-a', ['https://mint.example.com'], 10, encKey, undefined, 3);
+    // A later status update that does not pass attempts must NOT reset the
+    // counter to 0 — otherwise the reconciler's max-attempts eviction never
+    // trips and failed tokens are retried forever.
+    await writePendingReceive('cashuAtoken', 'hash-a', ['https://mint.example.com'], 10, encKey, ['https://mint.example.com']);
+    const entry = await loadPendingReceive('hash-a', encKey);
+    expect(entry).not.toBeNull();
+    expect(entry!.attempts).toBe(3);
+  });
+
+  it('starts at 0 for a fresh entry and applies explicit increments', async () => {
+    await writePendingReceive('cashuAtoken', 'hash-b', ['https://mint.example.com'], 10, encKey);
+    expect((await loadPendingReceive('hash-b', encKey))!.attempts).toBe(0);
+    await writePendingReceive('cashuAtoken', 'hash-b', ['https://mint.example.com'], 10, encKey, undefined, 1);
+    expect((await loadPendingReceive('hash-b', encKey))!.attempts).toBe(1);
+    clearPendingReceive('hash-b');
+    expect(await loadPendingReceive('hash-b', encKey)).toBeNull();
+  });
+});
+
+describe('CrossTabLock.assertOwnership', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('throws when the lock is not held', async () => {
+    const lock = new CrossTabLock('freedomid_test_lock_a');
+    await expect(lock.assertOwnership()).rejects.toThrow('not held');
+  });
+
+  it('resolves while held and throws again after release', async () => {
+    const lock = new CrossTabLock('freedomid_test_lock_b');
+    await lock.acquire();
+    await expect(lock.assertOwnership()).resolves.toBeUndefined();
+    lock.release();
+    await expect(lock.assertOwnership()).rejects.toThrow('not held');
+  });
+
+  /** Overwrite the IDB lease record as if another tab took the lock while
+   *  this tab was suspended past the lease expiry. */
+  async function stealLease(key: string): Promise<void> {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('FreedomIDLocks', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('locks', 'readwrite');
+      tx.objectStore('locks').put({ name: key, token: 'other-tab-token', expires: Date.now() + 60_000 });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }
+
+  it('throws and invalidates when the lease was stolen while held (tab suspension)', async () => {
+    const lock = new CrossTabLock('freedomid_test_lock_c');
+    await lock.acquire();
+    await expect(lock.assertOwnership()).resolves.toBeUndefined();
+
+    await stealLease('freedomid_test_lock_c');
+
+    await expect(lock.assertOwnership()).rejects.toThrow('lost while held');
+    // Ownership state was invalidated — a later assert fails as 'not held',
+    // so a stale writer can never commit over the other tab's state.
+    await expect(lock.assertOwnership()).rejects.toThrow('not held');
+  });
+
+  it('re-entrant acquire after a lease theft fails loudly instead of running two writers', async () => {
+    const lock = new CrossTabLock('freedomid_test_lock_d');
+    await lock.acquire();
+
+    await stealLease('freedomid_test_lock_d');
+
+    await expect(lock.acquire()).rejects.toThrow('lost while held');
+  });
+});
+
+describe('deterministic mint counter and pending-mint journal', () => {
+  let encKey: CryptoKey;
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(async () => {
+    const phrase = generateMnemonic(wordlist);
+    encKey = await deriveEncryptionKey(phrase);
+    localStorage.clear();
+  });
+
+  it('defaults the counter to 0 and round-trips saved values', () => {
+    expect(loadMintCounter(mintUrl)).toBe(0);
+    saveMintCounter(mintUrl, 42);
+    expect(loadMintCounter(mintUrl)).toBe(42);
+  });
+
+  it('round-trips and clears the pending-mint journal', async () => {
+    await writePendingMint(mintUrl, { quoteId: 'q1', counterStart: 7, amount: 21, timestamp: Date.now() }, encKey);
+    const entry = await loadPendingMint(mintUrl, encKey);
+    expect(entry).toMatchObject({ quoteId: 'q1', counterStart: 7, amount: 21 });
+    clearPendingMint(mintUrl);
+    expect(await loadPendingMint(mintUrl, encKey)).toBeNull();
   });
 });

@@ -23,7 +23,7 @@ import {
   type BattleMode,
 } from '../lib/battleMessages';
 import { subscribeBattleMessages } from '../lib/battleNetwork';
-import { normalizeEscrowPubkey } from '../lib/cashuEscrow';
+import { checkEscrowDepositSpentState, normalizeEscrowPubkey } from '../lib/cashuEscrow';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { PlayerInput } from '../types/battle.types';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -202,18 +202,28 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
   }, []);
 
   const publishSync = useCallback(
-    async (payload: BattleMessagePayload) => {
+    async (
+      payload: BattleMessagePayload,
+      // Callers that publish in the same synchronous run as a setState (e.g.
+      // acceptInvite) must pass the route explicitly: stateRef is only
+      // refreshed at render time, so it still holds the PRE-transition state
+      // (battleId/opponentPubkey null) and the guard below would silently
+      // drop the event.
+      route?: { battleId: string; opponentPubkey: string },
+    ) => {
       const current = stateRef.current;
-      if (!user?.signer.nip44 || !current.opponentPubkey || !current.battleId) return undefined;
+      const battleId = route?.battleId ?? current.battleId;
+      const opponentPubkey = route?.opponentPubkey ?? current.opponentPubkey;
+      if (!user?.signer.nip44 || !opponentPubkey || !battleId) return undefined;
 
       try {
-        const content = await encryptBattleMessage(user.signer, current.opponentPubkey, payload);
+        const content = await encryptBattleMessage(user.signer, opponentPubkey, payload);
         const event = await publishEvent({
           kind: BATTLE_SYNC_KIND,
           content,
           tags: [
-            ['p', current.opponentPubkey],
-            ['e', current.battleId],
+            ['p', opponentPubkey],
+            ['e', battleId],
             ['t', 'battle-sync'],
           ],
         });
@@ -288,6 +298,14 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
                 return;
               }
+              // Static validation (amount/lock/mint) cannot tell a fresh stake
+              // from a re-sent deposit whose proofs were already redeemed —
+              // ask the mint before trusting the opponent's stake.
+              const spentReason = await checkEscrowDepositSpentState(deposit.token);
+              if (spentReason) {
+                console.warn('[useRemoteBattle] escrow deposit failed spent-state check:', spentReason);
+                return;
+              }
               // The sync channel only carries messages from the opponent — in
               // the host role that is always the guest. Derive the slot from
               // OUR role instead of trusting the payload's claimed
@@ -313,6 +331,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount);
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
+                return;
+              }
+              // Same spent-state check as the host branch above.
+              const spentReason = await checkEscrowDepositSpentState(deposit.token);
+              if (spentReason) {
+                console.warn('[useRemoteBattle] escrow deposit failed spent-state check:', spentReason);
                 return;
               }
               // Guest role: the opponent on this channel is always the host
@@ -497,14 +521,17 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           guestEscrowPubkey: normalizedGuestEscrowPubkey,
         };
         // Send both a formal NIP-17 DM and an ephemeral sync accept so the host
-        // sees it immediately even if DM relays are slow.
+        // sees it immediately even if DM relays are slow. The sync publish gets
+        // the route explicitly — stateRef still holds the pre-accept 'idle'
+        // state (battleId/opponentPubkey null) until the next render, so
+        // relying on it would silently drop the accept.
         await Promise.all([
           sendMessage({
             recipientPubkey: invite.inviterPubkey,
             content: JSON.stringify(payload),
             subject: BATTLE_INVITE_SUBJECT,
           }),
-          publishSync(payload),
+          publishSync(payload, { battleId: invite.battleId, opponentPubkey: invite.inviterPubkey }),
         ]);
         startSyncListener(invite.battleId, invite.inviterPubkey, 'guest');
       } catch (err) {
@@ -556,7 +583,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           content: JSON.stringify(payload),
           subject: BATTLE_INVITE_SUBJECT,
         }),
-        publishSync(payload),
+        publishSync(payload, { battleId: current.battleId, opponentPubkey: current.opponentPubkey }),
       ]);
       setState((prev) => ({ ...prev, phase: 'cancelled' }));
     } catch (err) {
@@ -647,6 +674,15 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
 
   const sendFinished = useCallback(
     async (winner: 0 | 1 | null) => {
+      // TRUST MODEL (tracked as task #21, the planned 2-of-3 escrow primitive):
+      // the battle outcome is attested solely by this host-signed
+      // battle-finished event — the guest never countersigns or even
+      // acknowledges the result. The host also runs the authoritative game
+      // simulation (the guest only applies host snapshots), so a patched host
+      // client controls both the outcome and the only 'proof' the escrow
+      // operator sees at /release, and could award itself both real-sats
+      // stakes. The operator is a trusted service that socially polices this
+      // until the multisig escrow primitive replaces host-only attestation.
       const current = stateRef.current;
       if (current.role !== 'host' || !current.battleId) return undefined;
       const payload: BattleFinishedPayload = {

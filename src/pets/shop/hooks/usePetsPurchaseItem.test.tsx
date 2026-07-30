@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { usePetsPurchaseItem, splitSatsPayment, splitFiatPayment, PET_FIAT_RESERVE_SATS } from './usePetsPurchaseItem';
+import { usePetsPurchaseItem, splitSatsPayment, splitFiatPayment, estimateCashuSendFee, PET_FIAT_RESERVE_SATS } from './usePetsPurchaseItem';
 import { parseNostrPetProfileEvent, KIND_NOSTR_PET_PROFILE } from '@/pets/core/lib/pets';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
 
@@ -481,5 +481,63 @@ describe('usePetsPurchaseItem hunt regressions (rounds 2-3)', () => {
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 2, currency: 'sats' });
     await waitFor(() => expect(result.current.error?.message).toContain('did not complete'));
     expect(sendNutzap).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reject an affordable purchase with an inflated fee reserve', async () => {
+    // Regression: estimateCashuSendFee multiplied the sat AMOUNT by
+    // input_fee_ppk, but ppk is a per-input-proof fee. A 500-sat purchase on
+    // a ppk=1000 mint demanded a ~501-sat reserve and was refused even
+    // though the real fee for a handful of proofs is under 10 sats.
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'sent', eventId: 'nutzap-event-id' });
+    const externalWallet = {
+      totalBalance: 512,
+      loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 512 },
+      wallet: { keysetId: 'ks1', keysets: [{ id: 'ks1', input_fee_ppk: 1_000 }] },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'cashu'),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 20, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(sendNutzap).toHaveBeenCalledWith(500, TREASURY_NPUB, 'https://mock.mint', {
+      memo: 'Pets shop: Apple',
+    });
+  });
+});
+
+describe('estimateCashuSendFee (input_fee_ppk is per-proof, not per-sat)', () => {
+  function walletWithPpk(ppk: number) {
+    return {
+      keysetId: 'ks1',
+      keysets: [{ id: 'ks1', input_fee_ppk: ppk }],
+    } as never;
+  }
+
+  it('scales with the estimated input-proof count, not the amount', () => {
+    // Regression: the old formula gave ~501 sats for a 5,000-sat send at
+    // ppk=100; the real fee for a few input proofs is ~1 sat.
+    const fee = estimateCashuSendFee(5_000, walletWithPpk(100));
+    expect(fee).toBeGreaterThanOrEqual(1);
+    expect(fee).toBeLessThanOrEqual(10);
+  });
+
+  it('stays in the single digits even at 1 sat per proof, and zero-fee mints keep the 1-sat buffer', () => {
+    expect(estimateCashuSendFee(5_000, walletWithPpk(1_000))).toBeLessThanOrEqual(10);
+    expect(estimateCashuSendFee(5_000, walletWithPpk(0))).toBe(1);
+  });
+
+  it('grows with the proof count needed to represent the amount', () => {
+    // 2^20 needs one proof; 2^20 - 1 needs twenty.
+    const oneProof = estimateCashuSendFee(1_048_576, walletWithPpk(1_000));
+    const twentyProofs = estimateCashuSendFee(1_048_575, walletWithPpk(1_000));
+    expect(twentyProofs).toBeGreaterThan(oneProof);
   });
 });

@@ -390,7 +390,8 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
 
 // ── Contribute dialog ────────────────────────────────────────────────────────
 
-function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
+// Exported for regression tests (idempotency key + stale instructions races).
+export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   fundraiser: BaoFundraiser | null;
   onOpenChange: (open: boolean) => void;
   onContributed: () => void;
@@ -400,30 +401,46 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const [amount, setAmount] = useState('1000');
   const [rail, setRail] = useState<BaoRail>('lightning');
   const [instructions, setInstructions] = useState<Record<string, unknown> | null>(null);
-  // Stable idempotency key per dialog session: a retry after a network
-  // timeout (or an accidental double submit) replays server-side instead of
-  // recording the contribution twice. Regenerated when the dialog closes.
-  const idemKeyRef = useRef<string | null>(null);
+  // Stable idempotency key per campaign: a retry after a network timeout (or
+  // an accidental double submit) replays server-side instead of recording the
+  // contribution twice. Rotated only after a COMPLETED contribution — never
+  // on dialog close, because the natural retry flow after an ambiguous
+  // failure is close → reopen → Contribute again, and minting a fresh key
+  // there would double-record the contribution.
+  const idemKeyRef = useRef<{ fundraiserId: string; key: string } | null>(null);
 
-  // The dialog stays mounted when the user switches between fundraisers —
-  // drop the previous fundraiser's payment instructions and idempotency key
-  // or they'd be shown/reused for the wrong fundraiser.
+  // The dialog stays mounted across opens/closes and campaign switches.
+  // Track which campaign is currently open and which one the in-flight
+  // mutation targeted, so a response landing after the user closed the dialog
+  // (or opened a different campaign) can't paint its payment instructions
+  // under the wrong title.
+  const openFundraiserIdRef = useRef<string | null>(null);
+  openFundraiserIdRef.current = fundraiser?.id ?? null;
+  const mutationTargetIdRef = useRef<string | null>(null);
+
+  // Reset the instructions panel when the dialog is reopened, so a previous
+  // session's instructions never leak into a new one.
   const fundraiserId = fundraiser?.id ?? null;
   useEffect(() => {
     setInstructions(null);
-    idemKeyRef.current = null;
   }, [fundraiserId]);
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!idemKeyRef.current) idemKeyRef.current = crypto.randomUUID();
+      if (!idemKeyRef.current || idemKeyRef.current.fundraiserId !== fundraiser!.id) {
+        idemKeyRef.current = { fundraiserId: fundraiser!.id, key: crypto.randomUUID() };
+      }
+      mutationTargetIdRef.current = fundraiser!.id;
       return contributeToFundraiser(user!.signer, fundraiser!.id, {
         amount_sats: parseInt(amount, 10) || 0,
         rail,
-        idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current}`,
+        idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current.key}`,
       });
     },
     onSuccess: (data) => {
+      // Server confirmed the contribution — rotate the key so the NEXT
+      // intentional contribution isn't mistaken for a retry of this one.
+      idemKeyRef.current = null;
       if (data.replayed) {
         // Replay responses omit payment_instructions — setting them would
         // blank the dialog back to the funding form after a success toast.
@@ -431,7 +448,11 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         onContributed();
         return;
       }
-      setInstructions(data.payment_instructions as Record<string, unknown>);
+      // Only show the instructions while the dialog is still open on the
+      // campaign this request was for.
+      if (openFundraiserIdRef.current !== null && openFundraiserIdRef.current === mutationTargetIdRef.current) {
+        setInstructions(data.payment_instructions as Record<string, unknown>);
+      }
       toast({ title: 'Contribution recorded (DEMO)' });
       onContributed();
     },
@@ -439,7 +460,7 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   });
 
   const close = (open: boolean) => {
-    if (!open) { setInstructions(null); setAmount('1000'); idemKeyRef.current = null; }
+    if (!open) { setInstructions(null); setAmount('1000'); }
     onOpenChange(open);
   };
 
@@ -458,8 +479,11 @@ function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
 
         {instructions ? (
           <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-xs space-y-1">
-              <p className="font-semibold text-amber-600 dark:text-amber-400">Demo payment instructions ({String(instructions.kind)})</p>
+            <div className="rounded-md border-2 border-amber-500/70 bg-amber-500/10 p-3 text-xs space-y-1">
+              <p className="font-semibold text-amber-600 dark:text-amber-400">⚠️ DO NOT PAY — demo payment instructions ({String(instructions.kind)})</p>
+              <p className="text-muted-foreground">
+                This is what the settlement rail WILL return once it leaves demo. Real sats sent to it now are lost.
+              </p>
               {Object.entries(instructions).map(([k, v]) => (
                 <p key={k} className="break-all"><span className="text-muted-foreground">{k}:</span> {String(v)}</p>
               ))}

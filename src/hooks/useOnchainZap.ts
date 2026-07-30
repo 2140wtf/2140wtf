@@ -63,6 +63,10 @@ interface OnchainZapResult {
   /** Payment rail used, so the success handler can tell an intentional
    *  silent-payment omission from a failed receipt publish. */
   mode: 'onchain' | 'sp';
+  /** Whether the user had zap-receipt publishing enabled, so the success
+   *  handler can tell an intentional omission (receipts disabled in the
+   *  user's publish preferences) from a failed receipt publish. */
+  zapsEnabled: boolean;
 }
 
 /**
@@ -257,12 +261,12 @@ export function useOnchainZap(
       // Silent-payment sends publish no Nostr event — doing so would defeat
       // the unlinkability the rail provides.
       if (useSilentPayment) {
-        return { txid, amountSats, fee, mode: 'sp' };
+        return { txid, amountSats, fee, mode: 'sp', zapsEnabled };
       }
 
       // Publish kind 8333 event when zap receipts are enabled. When disabled
-      // the Bitcoin send still stands and the success handler warns about the
-      // missing receipt, matching the batch/campaign/send flows.
+      // the omission is intentional — the success handler only warns about a
+      // missing receipt when publishing was enabled and still failed.
       let event: NostrEvent | undefined;
       if (zapsEnabled) {
         setProgress('publishing');
@@ -298,7 +302,7 @@ export function useOnchainZap(
         }
       }
 
-      return { txid, amountSats, fee, event, mode: 'onchain' };
+      return { txid, amountSats, fee, event, mode: 'onchain', zapsEnabled };
     },
     onSuccess: (result) => {
       notificationSuccess();
@@ -320,7 +324,10 @@ export function useOnchainZap(
           description: `Broadcast txid ${result.txid.slice(0, 12)}… (fee ${result.fee.toLocaleString()} sats)`,
         });
       }
-      if (result.mode === 'onchain' && !result.event) {
+      // A missing receipt is only an error when the user had zap-receipt
+      // publishing enabled — when they disabled it in their publish
+      // preferences the omission is intentional, matching the campaign flow.
+      if (result.mode === 'onchain' && result.zapsEnabled && !result.event) {
         toast({
           title: 'Zap receipt not published',
           description: 'Bitcoin was sent, but the Nostr zap receipt could not be published.',
