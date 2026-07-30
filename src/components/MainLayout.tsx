@@ -53,6 +53,8 @@ function MainLayoutInner() {
     setLeftCollapsed(autoCollapseLeft);
   }, [autoCollapseLeft]);
 
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+
   // ₿AO chat (Concord V2) rides auth-gated kind-1059 streams: authenticate
   // the connection as every live community's derived stream keys so its
   // planes are readable. Lives in the layout so it never unmounts on navigation.
@@ -128,7 +130,11 @@ function MainLayoutInner() {
                 )}
               </div>
               {/* Right sidebar — render page-provided sidebar, or the widget sidebar */}
-              {rightSidebar !== undefined ? rightSidebar : <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}><WidgetSidebar /></Suspense>}
+              {rightSidebar !== undefined ? rightSidebar : (
+                <Suspense fallback={<div className="w-1/4 max-w-[300px] shrink-0 hidden lg:block" />}>
+                  <WidgetSidebar collapsed={rightCollapsed} onToggleCollapse={() => setRightCollapsed((v) => !v)} />
+                </Suspense>
+              )}
             </Suspense>
           </ChunkErrorBoundary>
         </ErrorBoundary>

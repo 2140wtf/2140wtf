@@ -15,7 +15,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus } from 'lucide-react';
+import { Plus, PanelRightClose, PanelRightOpen } from 'lucide-react';
 
 import { WidgetCard } from '@/components/WidgetCard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -157,7 +157,12 @@ const SortableWidget = memo(function SortableWidget({ config, definition, onRemo
 
 const EMPTY_WIDGETS: WidgetConfig[] = [];
 
-export function WidgetSidebar() {
+interface WidgetSidebarProps {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+export function WidgetSidebar({ collapsed = false, onToggleCollapse }: WidgetSidebarProps) {
   const { config, updateConfig } = useAppContext();
   const { user } = useCurrentUser();
   const { updateSettings } = useEncryptedSettings();
@@ -216,8 +221,36 @@ export function WidgetSidebar() {
     });
   }, [updateWidgets]);
 
+  if (collapsed) {
+    return (
+      <aside className="w-[52px] shrink-0 hidden lg:flex flex-col items-center sticky top-0 h-screen pt-2 transition-all">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+          aria-label="Expand right panel"
+          title="Expand right panel"
+        >
+          <PanelRightOpen className="size-4" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-1/4 max-w-[300px] shrink-0 hidden lg:flex flex-col sticky top-0 h-screen overflow-y-auto pt-2 pb-3 px-2">
+      {/* Collapse toggle — mirrors the left sidebar's, pinned to the top-right corner */}
+      <div className="flex justify-end px-1 pb-1">
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+          aria-label="Collapse right panel"
+          title="Collapse right panel"
+        >
+          <PanelRightClose className="size-4" />
+        </button>
+      </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2 flex-1">
