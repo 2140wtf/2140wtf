@@ -48,8 +48,9 @@ export interface BarkdApis {
 }
 
 function isLoopback(hostname: string): boolean {
-  // The whole 127.0.0.0/8 range is potentially trustworthy per the spec.
-  return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.startsWith('127.') || hostname === '[::1]';
+  // Must match the loopback hosts in the CSP connect-src (index.html) —
+  // anything broader passes validation but gets CSP-blocked at fetch time.
+  return hostname === 'localhost' || hostname === '127.0.0.1';
 }
 
 /**
@@ -98,7 +99,7 @@ async function apiFetch<T>(
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    if (response.status === 401) throw new Error(INVALID_PASSWORD_MESSAGE);
+    if (response.status === 401) throw codedError(INVALID_PASSWORD_MESSAGE, BARKD_ERROR_CODES.invalidPassword);
     if (response.status === 429) throw new Error('Too many attempts — the server rate-limited you. Wait a bit and retry.');
     throw new Error(body?.error ? `Server error: ${body.error}` : `Server returned ${response.status}.`);
   }
@@ -110,6 +111,26 @@ export const SESSION_EXPIRED_MESSAGE = 'Session expired — reconnect to the ser
 
 /** Message thrown by apiFetch on a 401 from /api/login. */
 export const INVALID_PASSWORD_MESSAGE = 'Invalid password.';
+
+/**
+ * Machine codes attached to the Errors above — hooks match on these rather
+ * than the prose, so copy edits can't silently break auth logic.
+ */
+export const BARKD_ERROR_CODES = {
+  sessionExpired: 'BARKD_SESSION_EXPIRED',
+  invalidPassword: 'BARKD_INVALID_PASSWORD',
+} as const;
+
+type BarkdErrorCode = (typeof BARKD_ERROR_CODES)[keyof typeof BARKD_ERROR_CODES];
+
+/** True when `error` is one of our coded barkd auth errors. */
+export function isBarkdError(error: unknown, code: BarkdErrorCode): boolean {
+  return error instanceof Error && (error as Error & { code?: string }).code === code;
+}
+
+function codedError(message: string, code: BarkdErrorCode): Error {
+  return Object.assign(new Error(message), { code });
+}
 
 /**
  * Map an error thrown by the generated `@secondts/barkd` client to a
@@ -126,7 +147,7 @@ export async function friendlyBarkdError(error: unknown): Promise<Error> {
       .then(() => error.response.clone().json())
       .catch(() => null)) as { error?: string; message?: string } | null;
     const detail = body?.error ?? body?.message;
-    if (status === 401) return new Error(SESSION_EXPIRED_MESSAGE);
+    if (status === 401) return codedError(SESSION_EXPIRED_MESSAGE, BARKD_ERROR_CODES.sessionExpired);
     if (status === 429) return new Error('Too many attempts — the server rate-limited you. Wait a bit and retry.');
     if (status === 400) return new Error(detail ? `The server rejected it: ${detail}` : 'The server rejected the request.');
     return new Error(detail ? `Server error: ${detail}` : `Server returned ${status}.`);

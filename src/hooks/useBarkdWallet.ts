@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Balance, Movement, OnchainBalance, SendRequest } from '@secondts/barkd';
 
-import { getBarkdApis, SESSION_EXPIRED_MESSAGE, withFriendlyBarkdErrors } from '@/lib/barkd';
+import { BARKD_ERROR_CODES, getBarkdApis, isBarkdError, withFriendlyBarkdErrors } from '@/lib/barkd';
 
 /**
  * Data hooks for a connected barkd server. All of them are keyed by server URL
@@ -16,15 +16,28 @@ import { getBarkdApis, SESSION_EXPIRED_MESSAGE, withFriendlyBarkdErrors } from '
  * instead of leaving a "reconnect" instruction on screen with nowhere to go.
  */
 function revalidateSessionOnAuthError(queryClient: QueryClient, error: unknown) {
-  if (error instanceof Error && error.message === SESSION_EXPIRED_MESSAGE) {
+  if (isBarkdError(error, BARKD_ERROR_CODES.sessionExpired)) {
     queryClient.invalidateQueries({ queryKey: ['barkd', 'session'] });
   }
 }
 
+/** queryFn wrapper: friendly errors + session revalidation on a 401. */
+function barkdQuery<T>(queryClient: QueryClient, fn: () => Promise<T>): () => Promise<T> {
+  return async () => {
+    try {
+      return await withFriendlyBarkdErrors(fn());
+    } catch (error) {
+      revalidateSessionOnAuthError(queryClient, error);
+      throw error;
+    }
+  };
+}
+
 export function useBarkdBalance(serverUrl: string, enabled: boolean) {
+  const queryClient = useQueryClient();
   return useQuery<Balance>({
     queryKey: ['barkd', 'balance', serverUrl],
-    queryFn: () => withFriendlyBarkdErrors(getBarkdApis(serverUrl).wallet.balance()),
+    queryFn: barkdQuery(queryClient, () => getBarkdApis(serverUrl).wallet.balance()),
     enabled,
     refetchInterval: 15_000,
   });
@@ -32,18 +45,20 @@ export function useBarkdBalance(serverUrl: string, enabled: boolean) {
 
 /** Movement history, returned by the server newest-first. */
 export function useBarkdMovements(serverUrl: string, enabled: boolean) {
+  const queryClient = useQueryClient();
   return useQuery<Movement[]>({
     queryKey: ['barkd', 'movements', serverUrl],
-    queryFn: () => withFriendlyBarkdErrors(getBarkdApis(serverUrl).history.list({})),
+    queryFn: barkdQuery(queryClient, () => getBarkdApis(serverUrl).history.list({})),
     enabled,
     refetchInterval: 30_000,
   });
 }
 
 export function useBarkdOnchainBalance(serverUrl: string, enabled: boolean) {
+  const queryClient = useQueryClient();
   return useQuery<OnchainBalance>({
     queryKey: ['barkd', 'onchain-balance', serverUrl],
-    queryFn: () => withFriendlyBarkdErrors(getBarkdApis(serverUrl).onchain.onchainBalance()),
+    queryFn: barkdQuery(queryClient, () => getBarkdApis(serverUrl).onchain.onchainBalance()),
     enabled,
     refetchInterval: 30_000,
   });
@@ -113,7 +128,7 @@ export function useBarkdBoardAll(serverUrl: string) {
   });
 }
 
-/** Estimated total fee (on-chain funding tx + Ark board fee) for boarding. */
+/** Estimated Ark protocol fee for boarding (an on-chain tx fee also applies). */
 export function useBarkdBoardFee(serverUrl: string, amountSat: number | undefined) {
   return useQuery({
     queryKey: ['barkd', 'board-fee', serverUrl, amountSat],

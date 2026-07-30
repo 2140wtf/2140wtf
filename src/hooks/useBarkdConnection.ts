@@ -9,7 +9,8 @@ import {
   fetchBarkdAuthStatus,
   fetchBarkdConfig,
   getBarkdApis,
-  INVALID_PASSWORD_MESSAGE,
+  isBarkdError,
+  BARKD_ERROR_CODES,
   loginBarkd,
   logoutBarkd,
   normalizeBarkdUrl,
@@ -62,15 +63,18 @@ export function useBarkdConnection() {
       // Verify the session actually works against barkd before persisting.
       await withFriendlyBarkdErrors(getBarkdApis(baseUrl).wallet.balance());
 
-      // Save the password whenever the server has UI auth on — even if this
-      // handshake didn't need it (still-valid cookie) — because the user
-      // typed it intending it to be remembered. Never store one otherwise.
-      return { baseUrl, config, password: auth.authRequired ? pw || null : null };
+      // Save a typed password whenever the server has UI auth on — even if
+      // this handshake didn't need it (still-valid cookie) — because the
+      // user typed it intending it to be remembered. An empty field means
+      // "keep the stored one": never auto-clear on connect (disconnect
+      // clears explicitly). Never store anything when auth is off.
+      const password = auth.authRequired && pw ? pw : undefined;
+      return { baseUrl, config, password };
     },
     onSuccess: ({ baseUrl, config, password: pw }) => {
       failedLogins.current.delete(baseUrl);
       setServerUrl(baseUrl);
-      setPassword(pw);
+      if (pw !== undefined) setPassword(pw);
       setServerConfig(config);
       // Seed the session query so the UI flips to connected immediately
       // instead of re-probing (and flashing a skeleton) first.
@@ -114,7 +118,7 @@ export function useBarkdConnection() {
         } catch (error) {
           // Only a real auth rejection disables auto-relogin — transient
           // network failures must not poison the flag.
-          if (error instanceof Error && error.message === INVALID_PASSWORD_MESSAGE) {
+          if (isBarkdError(error, BARKD_ERROR_CODES.invalidPassword)) {
             failedLogins.current.add(serverUrl);
           }
           throw error;
