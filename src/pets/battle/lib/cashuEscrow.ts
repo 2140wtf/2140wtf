@@ -10,7 +10,7 @@
 import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 
-import { deriveNutzapKey, decodeCashuToken } from '@/lib/cashu/cashu';
+import { deriveNutzapKey, decodeCashuToken, normalizeMintUrl as sharedNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { bytesToHex } from '@noble/curves/utils.js';
 
 export interface EscrowKeyPair {
@@ -52,9 +52,15 @@ export function normalizeEscrowPubkey(pubkey: string | null | undefined): string
   return null;
 }
 
-/** Lowercase + strip trailing slashes so mint URLs compare equal across forms. */
+/**
+ * Normalize mint URLs for comparison: lowercase the ORIGIN only. Mint paths
+ * are case-sensitive — the old whole-URL lowercase turned the default
+ * Minibits mint's `/Bitcoin` path into `/bitcoin`, whose endpoints 404, so
+ * every NUT-07 spent-state check against it failed and real-sats deposits
+ * were rejected as "unverifiable" after the wallet was already debited.
+ */
 function normalizeMintUrl(url: string): string {
-  return url.toLowerCase().replace(/\/+$/, '');
+  return sharedNormalizeMintUrl(url) ?? url.trim().replace(/\/+$/, '');
 }
 
 interface ParseP2PKOptions {
@@ -407,7 +413,15 @@ export interface PendingEscrowClaim {
   guestPubkey: string;
   hostDepositToken: string;
   guestDepositToken: string;
-  finishedEvent: Record<string, unknown>;
+  /**
+   * The host-signed battle-finished event — the operator's outcome proof.
+   * ABSENT on a deferred claim: the guest's onFinish fires from the final
+   * battle-state snapshot, which can arrive a few messages BEFORE the signed
+   * event, and the game never refires onFinish. A deferred claim is hydrated
+   * (and fired) the moment the signed event lands — never POST an empty `{}`
+   * to the operator, it would be rejected and burn an attempt.
+   */
+  finishedEvent?: Record<string, unknown>;
   prizeAmount: number;
   createdAt: number;
   attempts: number;
@@ -454,7 +468,13 @@ export function loadPendingEscrowClaims(): PendingEscrowClaim[] {
           guestPubkey: typeof parsed.guestPubkey === 'string' ? parsed.guestPubkey : '',
           hostDepositToken: parsed.hostDepositToken,
           guestDepositToken: parsed.guestDepositToken,
-          finishedEvent: (parsed.finishedEvent ?? {}) as Record<string, unknown>,
+          finishedEvent:
+            parsed.finishedEvent &&
+            typeof parsed.finishedEvent === 'object' &&
+            !Array.isArray(parsed.finishedEvent) &&
+            Object.keys(parsed.finishedEvent).length > 0
+              ? (parsed.finishedEvent as Record<string, unknown>)
+              : undefined,
           prizeAmount: typeof parsed.prizeAmount === 'number' ? parsed.prizeAmount : 0,
           createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
           attempts: typeof parsed.attempts === 'number' ? parsed.attempts : 0,

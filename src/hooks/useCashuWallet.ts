@@ -131,6 +131,13 @@ export interface CashuWalletActions {
   calculateAllBalances: () => Promise<void>;
   receiveToken: (tokenStr: string, privkey?: string) => Promise<number>;
   sendToken: (amount: number, memo?: string, recipientPubkey?: string, mintUrlOverride?: string) => Promise<string | null>;
+  /**
+   * True when the most recent sendToken failure may have committed at the
+   * mint (timeout, dropped response, or post-commit validation). Callers
+   * with an automatic retry MUST check this first: retrying after an
+   * ambiguous failure can double-spend from the remaining proofs.
+   */
+  wasLastSendAmbiguous: () => boolean;
   sendLockedToken: (amount: number, recipientPubkey: string, memo?: string, mintUrlOverride?: string) => Promise<string | null>;
   /**
    * Send a 2-of-3 multisig escrow-locked token (the ₿AO escrow primitive):
@@ -329,6 +336,14 @@ export function useCashuWallet(
    *  cross-mint concurrency for never clobbering the store. */
   const walletOpsMutexRef = useRef<Promise<void> | null>(null);
   const processedTokenHashesRef = useRef<Set<string>>(new Set());
+  /**
+   * Set by sendToken's failure path: true when the failed send MAY have
+   * committed at the mint (timeout, dropped response, or a post-commit
+   * validation throw). A blind retry would then double-spend from other
+   * proofs — callers with an automatic retry (compute-credits redeem) must
+   * check this before re-sending.
+   */
+  const lastSendAmbiguousRef = useRef(false);
   const nutzapKeyPairRef = useRef<{ privkey: Uint8Array; pubkey: string } | null>(null);
   const reconcileProofRecoveryRef = useRef<() => Promise<void>>(async () => {});
   const mintUrlRef = useRef(mintUrl);
@@ -2239,6 +2254,7 @@ export function useCashuWallet(
   };
 
   const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string, mintUrlOverride?: string, escrowLock?: MultisigEscrowLockRequest): Promise<string | null> => {
+    lastSendAmbiguousRef.current = false;
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
@@ -2268,6 +2284,9 @@ export function useCashuWallet(
       return null;
     }
     const release = await acquireMutex(walletOpsMutexRef);
+    // Tracks whether the mint swap/send request may have been sent, so the
+    // catch can classify ambiguous failures (see lastSendAmbiguousRef).
+    let swapAttempted = false;
     try {
       setLoading(true);
       setError('');
@@ -2316,6 +2335,12 @@ export function useCashuWallet(
         // buildMultisigEscrowLock throws on any invalid key/locktime — before
         // the mint is called and the wallet is debited.
         const multisigP2pk = escrowLock ? buildMultisigEscrowLock(escrowLock) : null;
+        // From here on the request may reach the mint: a failure past this
+        // point without an HTTP status (timeout, dropped connection, or a
+        // post-commit validation throw below) is AMBIGUOUS — the mint may
+        // have spent the inputs. Failures before it (local proof selection
+        // inside cashu-ts, lock validation above) never touched the mint.
+        swapAttempted = true;
         const sendResult = await withTimeout(
           multisigP2pk
             ? targetWallet.swap(amount, proofs, { proofsWeHave: proofs, p2pk: multisigP2pk })
@@ -2445,6 +2470,19 @@ export function useCashuWallet(
       return token;
     } catch (err: any) {
       devLog.error('Send error:', err);
+      // Classify the failure for callers with an automatic retry. RETRY-SAFE
+      // (definitive): the mint explicitly rejected — cashu-ts HttpResponseError/
+      // MintOperationError carries a numeric status — or the failure never
+      // reached the mint (pre-swap validation, local "not enough funds"
+      // selection inside cashu-ts). AMBIGUOUS: anything else past the swap
+      // call — a timeout or dropped connection (the mint may have committed
+      // after we stopped waiting) and every post-commit validation throw
+      // above (the inputs ARE spent; the send proofs sit in the recovery
+      // journal). A blind retry after an ambiguous failure double-spends
+      // from the remaining proofs and burns the first attempt's sats.
+      const httpStatus = typeof err?.status === 'number' ? err.status : null;
+      const localSelection = typeof err?.message === 'string' && /not enough (funds|balance)/i.test(err.message);
+      lastSendAmbiguousRef.current = swapAttempted && httpStatus === null && !localSelection;
       // A timeout is ambiguous: the mint may have processed the swap after we
       // stopped waiting, in which case the inputs ARE spent and the send/change
       // proofs only existed in the dropped response. Say so explicitly instead
@@ -4189,6 +4227,8 @@ export function useCashuWallet(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet]);
 
+  const wasLastSendAmbiguous = useCallback(() => lastSendAmbiguousRef.current, []);
+
   return {
     wallet,
     mintUrl,
@@ -4213,6 +4253,7 @@ export function useCashuWallet(
     calculateAllBalances,
     receiveToken,
     sendToken,
+    wasLastSendAmbiguous,
     sendLockedToken,
     sendMultisigLockedToken,
     receiveLockedToken,
