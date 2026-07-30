@@ -29,7 +29,7 @@
          arbitrary embedding. See docs/project-history/security/.security-audit-final-report.md risk #4.
          Changing this to a specific allowlist requires verifying every
          embeddable origin used by the app. -->
-    <meta http-equiv="content-security-policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self' https:; base-uri 'self'; manifest-src 'self'; form-action 'none'; upgrade-insecure-requests; connect-src 'self' blob: https: wss:; img-src 'self' data: blob: https:; media-src 'self' blob: https:">
+    <meta http-equiv="content-security-policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self' https:; base-uri 'self'; manifest-src 'self'; form-action 'none'; upgrade-insecure-requests; connect-src 'self' blob: https: wss: http://localhost:* http://127.0.0.1:*; img-src 'self' data: blob: https:; media-src 'self' blob: https:">
     <link rel="icon" type="image/jpeg" href="/logo.jpg">
     <link rel="apple-touch-icon" href="/logo.jpg">
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
