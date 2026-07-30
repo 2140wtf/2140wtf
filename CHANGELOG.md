@@ -47,6 +47,8 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Adopting a third (or later) pet silently died at "Hatch this egg": the hatching ceremony runs in a portal outside the adoption dialog, and Radix treated real clicks on it as outside-interactions — dismissing the dialog, unmounting the ceremony mid-publish, and aborting the egg event before it ever reached a relay. The adoption dialogs now refuse outside/ESC dismissal while the ceremony owns the screen
+- Hatching-ceremony clicks dead outside the egg: the modal dialog's scroll lock sets `pointer-events:none` on `<body>`, and the ceremony portal (mounted outside the dialog) inherited it — the birth-dialog tap-to-continue and the naming input never received clicks (clicks fell through to the dialog overlay and killed the flow). The portal now re-enables pointer events for the whole ceremony surface
 - ₿AO Markets data is now honest end-to-end: charts render only real API candle/volume data (no fabricated sparklines, zero-volume markets show 'No trade history yet'), and SMJ parimutuel markets show live pool odds from /smj/:id instead of the stale 50/50 default — relay defs stay anonymous definitions, the API is the source of truth for odds and history
 
 - Notification unread counter no longer resurrects on every restart — the read cursor also persists locally per account (the synced write needs a NIP-44 signature that could silently fail), and all readers use max(synced, local)
