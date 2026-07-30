@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { openUrl } from '@/lib/downloadFile';
 import {
   BAO_RAILS,
   BAO_RAIL_LABELS,
@@ -239,16 +240,18 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           </DialogDescription>
         </DialogHeader>
 
-        {/* Unmissable demo warning: the sats are real Cashu tokens, but they
-            are signet demo sats — nothing here settles real bitcoin. */}
+        {/* Unmissable demo warning: the Cashu mint is real software, but it
+            issues ₿AO testnet (signet) sats — nothing here touches mainnet. */}
         <div className="rounded-lg border-2 border-amber-500/60 bg-amber-500/10 px-4 py-3 space-y-1.5">
           <p className="flex items-center gap-2 text-sm font-bold text-amber-800 dark:text-amber-400">
             <AlertTriangle className="size-4 shrink-0" />
-            DEMO — no real bitcoin moves
+            DEMO — ₿AO testnet, not Bitcoin mainnet
           </p>
           <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-300/90">
-            The tokens are real Cashu, but only <span className="font-semibold">signet demo sats</span> — contributions are recorded, never settled.
-            Donors must not send real payments. Resolution is crowd-voted and gameable, so treat every outcome as a drill.
+            Cashu here runs on a real mint, but that mint issues <span className="font-semibold">₿AO testnet (signet) sats</span> — not Bitcoin mainnet sats.
+            Do not fund campaigns with real mainnet Cashu. Claim test sats from the{' '}
+            <button type="button" onClick={() => openUrl('https://bao.markets')} className="font-semibold underline cursor-pointer">bao.markets faucet</button>{' '}
+            instead. Resolution is crowd-voted and gameable, so treat every outcome as a drill.
           </p>
           <p className="text-xs leading-relaxed text-muted-foreground">
             ₿AO Markets moves to mainnet on real Bitcoin rails soon — the demo stays as the practice ground.
