@@ -71,12 +71,27 @@ export interface RoutstrBalance {
  * Redeem a Cashu token into a fresh Routstr API key.
  * Returns the `sk_…` key — whoever holds it can spend the balance, so it is
  * shown once and never sent over Nostr.
+ *
+ * The response shape is validated: Routstr redeems the token server-side
+ * BEFORE responding, so a malformed 200 (proxy rewrite, renamed fields, an
+ * empty body) must NOT be treated as success — the proofs are spent and the
+ * `sk_` key would be silently lost. Throwing routes the caller into its
+ * recovery path (receive-back + mint spent-check) instead.
  */
 export async function routstrCreateBalanceFromCashu(cashuToken: string): Promise<{ apiKey: string; balance: number }> {
-  const res = await routstrFetch<{ api_key: string; balance: number }>(
+  const res = await routstrFetch<{ api_key?: unknown; balance?: unknown }>(
     'GET',
     `/v1/balance/create?initial_balance_token=${encodeURIComponent(cashuToken)}`,
   );
+  if (
+    !res ||
+    typeof res.api_key !== 'string' ||
+    res.api_key.length === 0 ||
+    typeof res.balance !== 'number' ||
+    !Number.isFinite(res.balance)
+  ) {
+    throw new RoutstrError('Routstr returned a malformed response after the redeem — the token may have been redeemed but the API key was not delivered.');
+  }
   return { apiKey: res.api_key, balance: res.balance };
 }
 

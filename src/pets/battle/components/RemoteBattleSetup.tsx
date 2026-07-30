@@ -133,7 +133,10 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
 
   const [isDepositing, setIsDepositing] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
-  const depositAttemptedRef = useRef(false);
+  // Tracks WHICH battle (by battleId) the auto-deposit was attempted for — a
+  // plain boolean would stay true forever, so a re-invite from this same
+  // mounted component would silently skip the deposit and hang the escrow.
+  const depositAttemptedForRef = useRef<string | null>(null);
   // Retains the minted deposit token until it is DELIVERED. The wallet is
   // debited at mint time, so losing this string on a publish failure would
   // strand real sats locked to the escrow operator. Mirrored to localStorage
@@ -183,7 +186,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   useEffect(() => {
     if (remote.escrow.mode !== 'real-sats') return;
     if (remote.phase !== 'accepted' && remote.phase !== 'inviting') return;
-    if (depositAttemptedRef.current || isDepositing) return;
+    if (depositAttemptedForRef.current === remote.battleId || isDepositing) return;
     if (!petsWallet || !operatorPubkey) return;
     if (remote.role === 'host' && !remote.escrow.guestEscrowPubkey) return;
     if (remote.role === 'guest' && !remote.escrow.hostEscrowPubkey) return;
@@ -195,7 +198,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
     const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
     if (petsWallet.totalBalance < amount) return;
 
-    depositAttemptedRef.current = true;
+    depositAttemptedForRef.current = remote.battleId;
     void attemptDeposit();
   }, [
     remote.escrow.mode,

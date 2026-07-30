@@ -15,12 +15,17 @@ export function useZapPaymentListener(
   relayUrls: string[],
   onPaid: () => void,
 ): void {
-  const paidRef = useRef(false);
+  // The invoice that was already detected as paid — NOT a bare boolean. The
+  // dialog this hook lives in stays mounted between zaps and resets its
+  // invoice state on each open, so a boolean latch would suppress detection
+  // of every later QR zap for the lifetime of the component. Tracking the
+  // paid invoice re-arms the listener as soon as a new invoice is shown.
+  const paidInvoiceRef = useRef<string | null>(null);
   const onPaidRef = useRef(onPaid);
   onPaidRef.current = onPaid;
 
   useEffect(() => {
-    if (!invoice || !target || paidRef.current) return;
+    if (!invoice || !target || paidInvoiceRef.current === invoice) return;
 
     const abortController = new AbortController();
     const since = Math.floor(Date.now() / 1000) - 60;
@@ -31,7 +36,7 @@ export function useZapPaymentListener(
     };
 
     const listeners = relayUrls.map(async (url) => {
-      if (paidRef.current || abortController.signal.aborted) return;
+      if (paidInvoiceRef.current === invoice || abortController.signal.aborted) return;
       const relay = new NRelay1(url);
       try {
         // NIP-57 receipts only carry an `e` tag when the zap targeted an
@@ -44,11 +49,11 @@ export function useZapPaymentListener(
           { kinds: [9735], '#p': [target.pubkey], since },
         ];
         for await (const msg of relay.req(filters, { signal: abortController.signal })) {
-          if (paidRef.current || abortController.signal.aborted) break;
+          if (paidInvoiceRef.current === invoice || abortController.signal.aborted) break;
           if (msg[0] !== 'EVENT') continue;
           const event = msg[2];
           if (matchesInvoice(event)) {
-            paidRef.current = true;
+            paidInvoiceRef.current = invoice;
             onPaidRef.current();
             break;
           }

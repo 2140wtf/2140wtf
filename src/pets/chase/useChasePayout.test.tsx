@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   publishEvent: vi.fn(),
   updateNostrPetProfile: vi.fn(),
   toast: vi.fn(),
+  claimBaoSignetFaucet: vi.fn(),
+  decodeCashuToken: vi.fn(),
+  config: {} as Record<string, unknown>,
 }));
 
 vi.mock('@/hooks/useCurrentUser', () => ({
@@ -22,7 +25,7 @@ vi.mock('@nostrify/react', () => ({
 }));
 
 vi.mock('@/hooks/useAppContext', () => ({
-  useAppContext: () => ({ config: {} }),
+  useAppContext: () => ({ config: mocks.config }),
 }));
 
 vi.mock('@/pets/core/hooks/usePetsNostrPublish', () => ({
@@ -39,6 +42,16 @@ vi.mock('@/pets/core/lib/profile-sats', () => ({
 
 vi.mock('@/pets/core/lib/missions', () => ({
   serializeProfileContent: (prev: unknown) => JSON.stringify(prev ?? {}),
+}));
+
+vi.mock('@/lib/cashu/baoFaucet', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/cashu/baoFaucet')>()),
+  claimBaoSignetFaucet: mocks.claimBaoSignetFaucet,
+}));
+
+vi.mock('@/lib/cashu/cashu', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/cashu/cashu')>()),
+  decodeCashuToken: mocks.decodeCashuToken,
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -178,5 +191,61 @@ describe('useChasePayout fiat settle (hunt regression [17])', () => {
     // Second companion publish restores the original pet fiat balance.
     const rollback = mocks.publishEvent.mock.calls[1]?.[0] as { tags: string[][] };
     expect(rollback.tags.find((t) => t[0] === 'fiat_balance')?.[1]).toBe(String(petFiat));
+  });
+});
+
+describe('useChasePayout sats claim (faucet exhaustion edge)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.config.baoSignetFaucetUrl = 'https://faucet.test';
+    mocks.updateNostrPetProfile.mockImplementation(
+      async (_nostr: unknown, _publish: unknown, _pubkey: string, cb: (fresh: unknown, prevTags: string[][], prevContent: unknown) => Promise<CapturedUpdate>) => {
+        const freshProfile = { coins: 0, sats: 0, event: { tags: [['d', 'profile-d']], content: '{}' } };
+        const update = await cb(freshProfile, freshProfile.event.tags, {});
+        return {
+          event: { kind: 11125, tags: update.tags, content: '{}' },
+          meta: update.meta,
+          profile: { coins: 0, sats: 0 },
+        };
+      },
+    );
+  });
+
+  it('redeems the token when the claim exactly exhausts the 24h budget', async () => {
+    // Regression: the exhausted check (remaining24h <= 0) ran BEFORE the
+    // token check, so a claim that exactly used up the daily allowance —
+    // valid token + remaining24h: 0 — was thrown away even though the
+    // faucet had already debited the budget, and it could never re-claim.
+    const receiveToken = vi.fn().mockResolvedValue(undefined);
+    mocks.claimBaoSignetFaucet.mockResolvedValue({ token: 'cashuA-exhausting-claim', remaining24h: 0 });
+    mocks.decodeCashuToken.mockReturnValue([{ amount: 10_000 }]);
+
+    const { result } = renderHook(
+      () => useChasePayout(vi.fn(), { receiveToken } as never),
+      { wrapper },
+    );
+    result.current.mutate({ satsWon: 10_000, coinsCollected: 0, mode: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(receiveToken).toHaveBeenCalledWith('cashuA-exhausting-claim');
+    // The award is what the token actually carried — remaining24h is the
+    // post-claim allowance and must not clamp it to zero.
+    expect(result.current.data?.claimedSats).toBe(10_000);
+    expect(result.current.data?.amountAwarded).toBe(10_000);
+  });
+
+  it('still reports exhaustion when the faucet issues no token', async () => {
+    const receiveToken = vi.fn();
+    mocks.claimBaoSignetFaucet.mockResolvedValue({ remaining24h: 0 });
+
+    const { result } = renderHook(
+      () => useChasePayout(vi.fn(), { receiveToken } as never),
+      { wrapper },
+    );
+    result.current.mutate({ satsWon: 10_000, coinsCollected: 0, mode: 'sats' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toContain('24h limit reached');
+    expect(receiveToken).not.toHaveBeenCalled();
   });
 });

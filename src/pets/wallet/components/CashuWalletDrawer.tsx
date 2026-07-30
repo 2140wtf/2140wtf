@@ -7,6 +7,8 @@ import { useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Check,
+  Copy,
   RefreshCw,
   Wallet as WalletIcon,
 } from 'lucide-react';
@@ -26,6 +28,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
@@ -49,10 +53,18 @@ export function CashuWalletDrawer({
   showMintSelector = true,
 }: CashuWalletDrawerProps) {
   const { toast } = useToast();
+  const { user } = useCurrentUser();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
-  const [generatedToken, setGeneratedToken] = useState('');
+  // The generated send token is persisted in localStorage (scoped by user +
+  // mint) because sendToken debits the wallet and clears its send-recovery
+  // journal after encoding — a useState-only copy is destroyed when the
+  // drawer closes, burning the sats. It stays here until the user dismisses
+  // it.
+  const sendOutboxKey = `bao_cashu_drawer_send_${user?.pubkey ?? 'anon'}_${wallet.mintUrl ?? 'default'}`;
+  const [generatedToken, setGeneratedToken] = useLocalStorage<string>(sendOutboxKey, '');
+  const [copiedToken, setCopiedToken] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceQuote, setInvoiceQuote] = useState<MintQuoteResponse | null>(null);
 
@@ -70,6 +82,17 @@ export function CashuWalletDrawer({
     }
     const token = await wallet.sendToken(amount, sendMemo.trim());
     if (token) setGeneratedToken(token);
+  };
+
+  const copyGeneratedToken = async () => {
+    if (!generatedToken) return;
+    try {
+      await navigator.clipboard.writeText(generatedToken);
+      setCopiedToken(true);
+      setTimeout(() => setCopiedToken(false), 2000);
+    } catch {
+      toast({ variant: 'destructive', title: 'Copy failed', description: 'Clipboard is not available — select and copy the token manually.' });
+    }
   };
 
   const handleCreateInvoice = async () => {
@@ -207,7 +230,20 @@ export function CashuWalletDrawer({
                 {generatedToken && (
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Cashu token</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-500">
+                      This token IS the money — your wallet is already debited. It is stored in
+                      this browser until you dismiss it; copy it before moving on.
+                    </p>
                     <div className="rounded-lg border bg-muted p-3 font-mono text-xs break-all">{generatedToken}</div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => void copyGeneratedToken()}>
+                        {copiedToken ? <Check className="size-3.5 mr-1.5" /> : <Copy className="size-3.5 mr-1.5" />}
+                        {copiedToken ? 'Copied' : 'Copy token'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setGeneratedToken('')}>
+                        Dismiss
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
