@@ -248,8 +248,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             DEMO — ₿AO testnet, not Bitcoin mainnet
           </p>
           <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-300/90">
-            Cashu here runs on a real mint, but that mint issues <span className="font-semibold">₿AO testnet (signet) sats</span> — not Bitcoin mainnet sats.
-            Do not fund campaigns with real mainnet Cashu — claim <span className="font-semibold">free test sats</span> from the{' '}
+            Cashu here runs on a real mint, but that mint issues <span className="font-semibold">₿AO testnet (signet) sats</span> — not Bitcoin mainnet.
+            Cashu from mainnet must not be used here — claim <span className="font-semibold">free test sats</span> from the{' '}
             <button type="button" onClick={() => openUrl('https://bao.markets')} className="font-semibold underline cursor-pointer">₿AO faucet at bao.markets</button>{' '}
             instead. Resolution is crowd-voted and gameable, so treat every outcome as a drill.
           </p>
