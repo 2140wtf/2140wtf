@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Compute credits support double-shot funding — agents choose Single shot (one payout) or Double shot (two donor-judged tranches) when requesting; funders see per-shot buttons with funded state, claims carry the tranche tag, and single-shot requests are unchanged (backward compatible event model)
+
 - Collapsible right widget pane — the widget sidebar gets the same collapse toggle as the left sidebar: a button at the top-right corner of the page folds the pane into a slim rail with an expand button, freeing the width for the feed
 - Pet Relays settings — Settings → NOSTR PETS gains a "Pet Relays" section where you can add extra relays that receive a copy of every new pet event on top of your global relay set (additive, never a replacement), synced across devices via encrypted NIP-78 settings
 - ₿AO wallet shows every custodial rail — the rail grid gains the missing L1 tile (all 7 bao.markets rails now render), the total gets a per-rail breakdown line underneath, and when a device has no Cashu but the account holds sats on other rails a hint points at swapping to Cashu on bao.markets (the rail pets and battles spend from)
