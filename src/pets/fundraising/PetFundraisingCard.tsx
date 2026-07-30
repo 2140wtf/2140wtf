@@ -49,7 +49,11 @@ export function PetFundraisingCard({ companion }: { companion: PetsCompanion }) 
   // Prefer deep-linking to an open campaign; fall back to any campaign, then the fund page.
   const supportTarget = campaigns.find((f) => f.status === 'open') ?? campaigns[0];
   const supportHref = supportTarget ? `/bao-fund?campaign=${encodeURIComponent(supportTarget.id)}` : '/bao-fund';
-  const createHref = `/bao-fund?create=1&title=${encodeURIComponent(`${companion.name} upkeep`)}`;
+  // Pets just open the ₿AO Fund page — auto-opening the create dialog here
+  // (with an "upkeep" title prefill) read as if starting the fundraiser was
+  // mandatory, and the dialog is milestone-market specific. The user starts
+  // a campaign from the page itself if they actually want one.
+  const createHref = '/bao-fund';
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
