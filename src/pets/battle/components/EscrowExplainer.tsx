@@ -43,8 +43,15 @@ export function EscrowExplainer({ className }: { className?: string }) {
             {REFUND_HOURS} hours — no operator, no opponent needed.
           </li>
           <li>
-            <span className="font-medium text-foreground">Disputes need the operator + one honest player.</span>{' '}
-            The operator signs only against a cryptographically signed outcome it can verify.
+            <span className="font-medium text-foreground">The result is attested by BOTH players.</span>{' '}
+            When the battle ends, each app sends the operator an encrypted outcome vote signed by its
+            owner's escrow key. The operator co-signs <em>only when both votes agree</em> — no one can
+            award themselves the pot with a self-declared result.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Disagreement means refunds, not theft.</span>{' '}
+            If the two votes conflict (or one never arrives), the operator signs nothing and each player
+            reclaims their exact own stake after {REFUND_HOURS} hours. Cheating gains nothing.
           </li>
         </ul>
         <p className="border-t border-border pt-2">

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEncodedToken } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 
-import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey, checkEscrowDepositSpentState, savePendingEscrowClaim, loadPendingEscrowClaims, clearPendingEscrowClaim, type PendingEscrowClaim } from './cashuEscrow';
+import { verifyEvent, getPublicKey } from 'nostr-tools/pure';
+
+import { isTokenLockedToPubkey, getTokenAmount, validateEscrowDeposit, extractTokenLockPubkeys, normalizeEscrowPubkey, checkEscrowDepositSpentState, savePendingEscrowClaim, loadPendingEscrowClaims, clearPendingEscrowClaim, buildBattleResultAttestation, type PendingEscrowClaim } from './cashuEscrow';
+import { BATTLE_ATTESTATION_BINDING_KIND, BATTLE_ATTESTATION_TAG } from './battleMessages';
 
 const mocks = vi.hoisted(() => ({
   checkProofsStates: vi.fn(),
@@ -372,6 +375,41 @@ describe('checkEscrowDepositSpentState (hunt regression)', () => {
   });
 });
 
+describe('buildBattleResultAttestation', () => {
+  const escrowPrivkey = '11'.repeat(32);
+  const nostrPubkey = 'd'.repeat(64);
+
+  it('binds the nostr signer to their escrow key with a verifiable signature', () => {
+    const att = buildBattleResultAttestation({
+      battleId: 'battle-1',
+      winner: 0,
+      nostrPubkey,
+      escrowPrivkey,
+    });
+    expect(att.type).toBe('battle-result-attestation');
+    expect(att.battleId).toBe('battle-1');
+    expect(att.winner).toBe(0);
+
+    // The binding event is signed by the ESCROW key (not the nostr key) and
+    // names the nostr pubkey + outcome — a sockpuppet nostr key cannot forge
+    // it without the opponent's escrow private key.
+    const binding = att.escrowBinding;
+    expect(binding.kind).toBe(BATTLE_ATTESTATION_BINDING_KIND);
+    expect(binding.pubkey).toBe(getPublicKey(Uint8Array.from(Buffer.from(escrowPrivkey, 'hex'))));
+    expect(binding.tags).toContainEqual(['e', 'battle-1']);
+    expect(binding.tags).toContainEqual(['t', BATTLE_ATTESTATION_TAG]);
+    expect(JSON.parse(binding.content)).toEqual({ battleId: 'battle-1', winner: 0, nostrPubkey });
+    expect(verifyEvent(binding as Parameters<typeof verifyEvent>[0])).toBe(true);
+  });
+
+  it('encodes guest wins and draws distinctly', () => {
+    const guest = buildBattleResultAttestation({ battleId: 'b', winner: 1, nostrPubkey, escrowPrivkey });
+    const draw = buildBattleResultAttestation({ battleId: 'b', winner: null, nostrPubkey, escrowPrivkey });
+    expect(JSON.parse(guest.escrowBinding.content).winner).toBe(1);
+    expect(JSON.parse(draw.escrowBinding.content).winner).toBeNull();
+  });
+});
+
 describe('pending escrow claim journal (hunt regression [18])', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -379,12 +417,15 @@ describe('pending escrow claim journal (hunt regression [18])', () => {
 
   const claim: PendingEscrowClaim = {
     battleId: 'battle-1',
+    localRole: 'host',
+    opponentNostrPubkey: otherPubkey,
     winnerPubkey: escrowPubkey,
     hostPubkey: escrowPubkey,
     guestPubkey: otherPubkey,
     hostDepositToken: 'cashuAhost',
     guestDepositToken: 'cashuAguest',
-    finishedEvent: { id: 'ev', kind: 1 },
+    ownAttestation: { id: 'ev-own', kind: 21124 },
+    opponentAttestation: { id: 'ev-opponent', kind: 21124 },
     prizeAmount: 21,
     createdAt: 1721000000000,
     attempts: 0,
@@ -411,6 +452,32 @@ describe('pending escrow claim journal (hunt regression [18])', () => {
     const loaded = loadPendingEscrowClaims();
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.battleId).toBe('battle-2');
+  });
+
+  it('migrates legacy finishedEvent entries into deferred attestation claims', () => {
+    // Journals written before mutual attestation carry a host-signed
+    // finishedEvent the operator no longer accepts. They load as deferred
+    // claims (host role, no attestations) so hydration re-attests and the
+    // locked stakes are never stranded by the upgrade.
+    localStorage.setItem('bao_battle_claim_legacy-1', JSON.stringify({
+      battleId: 'legacy-1',
+      winnerPubkey: escrowPubkey,
+      hostPubkey: escrowPubkey,
+      guestPubkey: otherPubkey,
+      hostDepositToken: 'cashuAhost',
+      guestDepositToken: 'cashuAguest',
+      finishedEvent: { id: 'ev', kind: 21124 },
+      prizeAmount: 21,
+      createdAt: 1721000000000,
+      attempts: 0,
+    }));
+    const legacy = loadPendingEscrowClaims().find((c) => c.battleId === 'legacy-1');
+    expect(legacy).toBeDefined();
+    expect(legacy?.localRole).toBe('host');
+    expect(legacy?.opponentNostrPubkey).toBe('');
+    expect(legacy?.ownAttestation).toBeUndefined();
+    expect(legacy?.opponentAttestation).toBeUndefined();
+    expect(legacy).not.toHaveProperty('finishedEvent');
   });
 
   it('skips malformed entries instead of throwing', () => {

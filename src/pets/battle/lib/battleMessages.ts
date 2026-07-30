@@ -5,6 +5,47 @@ import type { PetsCompanion } from '@/pets/core/lib/pets';
 /** Ephemeral kind for in-match battle synchronization. */
 export const BATTLE_SYNC_KIND = 21124;
 
+/**
+ * Kind of the small binding event INSIDE a result attestation — signed by the
+ * attester's battle-escrow key (not their Nostr key) to prove the Nostr
+ * signer controls the escrow key named in their deposit lock.
+ */
+export const BATTLE_ATTESTATION_BINDING_KIND = 21125;
+
+/**
+ * Sync `t` tag marking result attestations (vs ordinary 'battle-sync'
+ * messages). Lets the winner's relay query find exactly the opponent's
+ * attestation without decrypting every sync message of the battle.
+ */
+export const BATTLE_ATTESTATION_TAG = 'battle-attestation';
+
+/**
+ * Mutual outcome attestation (encrypted TO THE ESCROW OPERATOR, not the
+ * opponent). At battle end BOTH players publish one: the escrow operator
+ * decrypts the pair and only co-signs the prize release when both agree on
+ * the winner — a patched host can no longer award itself the pot with a
+ * self-signed battle-finished event. The `escrowBinding` event is signed by
+ * the attester's escrow key and names their Nostr pubkey + the outcome, so a
+ * sockpuppet Nostr key can't forge the opponent's vote (it would need the
+ * opponent's escrow private key, which the deposit locks anchor).
+ */
+export interface BattleResultAttestationPayload {
+  type: 'battle-result-attestation';
+  battleId: string;
+  /** 0 = host, 1 = guest, null = draw (draws never release — refund path). */
+  winner: 0 | 1 | null;
+  /** Full Nostr event signed by the attester's escrow private key. */
+  escrowBinding: {
+    id: string;
+    pubkey: string;
+    kind: number;
+    created_at: number;
+    tags: string[][];
+    content: string;
+    sig: string;
+  };
+}
+
 /** NIP-17 subject tag used for battle invitations and lifecycle messages. */
 export const BATTLE_INVITE_SUBJECT = 'battle-invite';
 
