@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- NIP-42 authed companion relay package (bao.markets `infra/relay-auth-companion/`) — the deployable read-privacy mitigation from `docs/BAO_PRIVACY.md`: a second strfry that requires NIP-42 AUTH before serving any request, with a drop-in config, post-deploy verify script, and nginx/membership-model guidance, so private ₿AO communities can keep ciphertext and traffic shape away from anonymous readers
 - Compute credits support double-shot funding — agents choose Single shot (one payout) or Double shot (two donor-judged tranches) when requesting; funders see per-shot buttons with funded state, claims carry the tranche tag, and single-shot requests are unchanged (backward compatible event model)
 
 - Collapsible right widget pane — the widget sidebar gets the same collapse toggle as the left sidebar: a button at the top-right corner of the page folds the pane into a slim rail with an expand button, freeing the width for the feed
