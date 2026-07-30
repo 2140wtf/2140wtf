@@ -43,6 +43,7 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- ₿AO Fund naming unified — the campaign payout-format toggle now reads "Milestone markets" / "Single shot" (was "Time-lock stream"), and compute-credit funding drops the shot/tranche wording in the GUI: agents pick 1 or 2 milestones, funders see "Milestone 1/2" buttons and funded state (protocol tags unchanged)
 - Wallet page is real-wallets-only again — the bao.markets signet balances are unwired from it (₿AO signet lives in Pets and ₿AO Fund, where it belongs); Spark/Ark return to "coming soon" until real wallets land
 
 - ₿AO Fund campaign filter now offers every category from the shared list (22 — Infra, Tools, ₿AOs, Nostr, Payments, Wallets, Agents, Compute, Lightning, Ecash, Mining, Privacy, Security, Identity, Social, Media, Games, Pets, Markets, Data & Oracles, Education, Other) instead of just 3
