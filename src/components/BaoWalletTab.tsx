@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Bitcoin,
   Check,
   Coins,
   Copy,
@@ -34,7 +35,7 @@ import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
-import { totalBaoApiBalance } from '@/lib/baoWalletApi';
+import { totalBaoApiBalance, type BaoWalletBalances } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
@@ -53,7 +54,8 @@ type WalletRailId =
   | 'liquid'
   | 'spark'
   | 'ark'
-  | 'fedimint';
+  | 'fedimint'
+  | 'l1';
 
 interface WalletRailConfig {
   id: WalletRailId;
@@ -78,11 +80,30 @@ const WALLET_RAILS: WalletRailConfig[] = [
     icon: '',
     isReal: false,
   },
+  {
+    id: 'l1',
+    label: 'L1',
+    color: '#F7931A',
+    bg: '#FFF7ED',
+    icon: '',
+    isReal: false,
+  },
 ];
 
 const RAIL_BY_ID: Record<WalletRailId, WalletRailConfig> = Object.fromEntries(
   WALLET_RAILS.map((rail) => [rail.id, rail]),
 ) as Record<WalletRailId, WalletRailConfig>;
+
+/** Display labels for each rail in the bao.markets API balance response. */
+const API_RAIL_LABELS: Record<keyof BaoWalletBalances, string> = {
+  lightning: 'Lightning',
+  ecash: 'Fedimint',
+  cashu: 'Cashu',
+  spark: 'Spark',
+  l1: 'L1',
+  liquid: 'Liquid',
+  ark: 'Ark',
+};
 
 export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps) {
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
@@ -138,12 +159,28 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         return api?.ark ?? 0;
       case 'fedimint':
         return api?.ecash ?? 0;
+      case 'l1':
+        return api?.l1 ?? 0;
       default:
         return 0;
     }
   };
 
   const apiTotal = apiBalances.data ? totalBaoApiBalance(apiBalances.data) : null;
+
+  // Per-rail breakdown of the custodial total, so every sat in "held on
+  // bao.markets" is accounted for (the total sums all 7 API rails).
+  const apiBreakdown = apiBalances.data
+    ? (Object.entries(API_RAIL_LABELS) as [keyof BaoWalletBalances, string][])
+        .map(([key, label]) => ({ label, sats: apiBalances.data[key] }))
+        .filter((rail) => rail.sats > 0)
+    : [];
+
+  // Swap guidance: local self-custody Cashu is what pets/battles spend. When
+  // it's empty but the user holds sats on bao.markets rails, point them at the
+  // swap instead of leaving them at a dead "0".
+  const showSwapHint =
+    cashuWallet.totalBalance === 0 && apiTotal !== null && apiTotal > 0;
 
   const selectedConfig = RAIL_BY_ID[selectedRail];
 
@@ -175,6 +212,11 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
                 <p className='text-sm mt-2'>
                   <span className='tabular-nums font-medium'>{apiTotal.toLocaleString()}</span>{' '}
                   <span className='text-muted-foreground'>sats held on bao.markets across all rails</span>
+                </p>
+              )}
+              {apiBreakdown.length > 0 && (
+                <p className='text-xs text-muted-foreground mt-1 tabular-nums'>
+                  {apiBreakdown.map((rail) => `${rail.label} ${rail.sats.toLocaleString()}`).join(' · ')}
                 </p>
               )}
               {apiBalances.isError && (
@@ -219,6 +261,27 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         ))}
       </div>
 
+      {showSwapHint && (
+        <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
+          No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
+          <span className='font-medium text-foreground'>{(apiTotal ?? 0).toLocaleString()} sats</span>{' '}
+          on bao.markets
+          {apiBreakdown.length > 0 && (
+            <> ({apiBreakdown.map((rail) => rail.label).join(', ')})</>
+          )}
+          : swap them to Cashu on{' '}
+          <a
+            href='https://bao.markets'
+            target='_blank'
+            rel='noreferrer'
+            className='text-primary underline underline-offset-2'
+          >
+            bao.markets
+          </a>{' '}
+          to use them here.
+        </p>
+      )}
+
       <Card>
         <CardHeader className='pb-2'>
           <CardTitle className='flex items-center gap-2 text-base font-medium'>
@@ -232,7 +295,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
             <LightningPanel wallet={cashuWallet} walletStatus={walletStatus} nwc={nwc} />
           )}
           {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} />}
-          {['liquid', 'spark', 'ark', 'fedimint'].includes(selectedRail) && (
+          {['liquid', 'spark', 'ark', 'fedimint', 'l1'].includes(selectedRail) && (
             <DemoPlaceholderPanel rail={selectedConfig} balance={getRailBalance(selectedRail)} />
           )}
         </CardContent>
@@ -248,6 +311,7 @@ const RAIL_ICONS: Record<WalletRailId, React.ComponentType<{ className?: string;
   spark: Sparkles,
   ark: Ship,
   fedimint: Landmark,
+  l1: Bitcoin,
 };
 
 function RailIcon({ rail, className }: { rail: WalletRailConfig; className?: string }) {
