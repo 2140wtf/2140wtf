@@ -17,7 +17,9 @@ export type BattleMessageType =
   | 'battle-input'
   | 'battle-finished'
   | 'battle-escrow-deposit'
-  | 'battle-escrow-ready';
+  | 'battle-escrow-ready'
+  | 'battle-deposit-ack'
+  | 'battle-deposit-reject';
 
 export type BattleMode = 'demo-sats' | 'btc-sats' | 'real-sats';
 
@@ -34,6 +36,13 @@ export interface BattleInvitePayload {
   mode: BattleMode;
   /** Host's Cashu P2PK pubkey used for escrow negotiation. */
   hostEscrowPubkey?: string;
+  /**
+   * The mint the host will deposit from (real-sats only). The escrow operator
+   * rejects mixed-mint releases, so the guest must stake from the SAME mint —
+   * advertising it up front lets the guest refuse invites it cannot match
+   * instead of stranding both stakes.
+   */
+  hostDepositMint?: string;
 }
 
 export interface BattleAcceptPayload {
@@ -88,6 +97,25 @@ export interface BattleEscrowReadyPayload {
   battleId: string;
 }
 
+/**
+ * End-to-end confirmation that the opponent RECEIVED and recorded our escrow
+ * deposit. A relay ack only proves one relay accepted the ephemeral sync
+ * event — without this, a lost deposit message leaves the depositor's stake
+ * locked to the operator with no retained token and no way to distinguish
+ * "opponent hasn't deposited" from "my deposit never arrived".
+ */
+export interface BattleDepositAckPayload {
+  type: 'battle-deposit-ack';
+  battleId: string;
+}
+
+/** Sent when a deposit fails validation so the depositor learns WHY. */
+export interface BattleDepositRejectPayload {
+  type: 'battle-deposit-reject';
+  battleId: string;
+  reason: string;
+}
+
 export type BattleMessagePayload =
   | BattleInvitePayload
   | BattleAcceptPayload
@@ -97,7 +125,9 @@ export type BattleMessagePayload =
   | BattleInputPayload
   | BattleFinishedPayload
   | BattleEscrowDepositPayload
-  | BattleEscrowReadyPayload;
+  | BattleEscrowReadyPayload
+  | BattleDepositAckPayload
+  | BattleDepositRejectPayload;
 
 /**
  * Minimal serializable state snapshot sent by the host each tick.

@@ -36,7 +36,7 @@ import {
   routstrTopupWithCashu,
 } from '@/lib/routstr';
 import { NUTZAP_INFO_KIND, parseNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
-import { checkTokenProofsSpent, decodeCashuToken, MAX_MINT_FEE_PPM } from '@/lib/cashu/cashu';
+import { checkTokenProofsSpent, decodeCashuToken, safeNormalizeMintUrl, MAX_MINT_FEE_PPM } from '@/lib/cashu/cashu';
 import { extractTokenLockPubkeys, getTokenAmount } from '@/pets/battle/lib/cashuEscrow';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { nip19 } from 'nostr-tools';
@@ -170,20 +170,30 @@ export function ComputeCreditsTab() {
     refetchInterval: 30_000,
   });
 
+  const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
+
   const fulfillmentsQuery = useQuery({
-    queryKey: ['bao-compute-credit-fulfillments'],
+    // Scoped by #e to the requests we actually display. Kind 4972 is
+    // deliberately permissionless (anyone can publish one), so a GLOBAL
+    // `{kinds:[4972], limit:500}` window is floodable: an attacker mints 500
+    // junk fulfillments with random e-tags, the relay returns newest-first,
+    // and every legitimate claim/confirmation falls out of the window —
+    // silently disabling the double-funding warning (hunt round 8 blocker).
+    // Relay-side #e filtering makes junk events irrelevant: they can never
+    // reference a displayed request, so they never consume the limit.
+    queryKey: ['bao-compute-credit-fulfillments', requests.map((r) => r.id).join(',')],
     queryFn: async ({ signal }) => {
-      const since = Math.floor(Date.now() / 1000) - 30 * 24 * 3600;
+      const ids = requests.map((r) => r.id);
+      if (ids.length === 0) return [];
       const events = await nostr.query(
-        [{ kinds: [BAO_COMPUTE_CREDIT_FULFILLMENT_KIND], since, limit: 500 }],
+        [{ kinds: [BAO_COMPUTE_CREDIT_FULFILLMENT_KIND], '#e': ids, limit: 500 }],
         { signal },
       );
       return events.map(parseComputeCreditFulfillment).filter((f) => f !== null);
     },
+    enabled: requests.length > 0,
     refetchInterval: 30_000,
   });
-
-  const requests = useMemo(() => requestsQuery.data ?? [], [requestsQuery.data]);
 
   const { fulfilledByRequest, claimsByRequest } = useMemo(() => {
     // A kind-4972 event proves NOTHING about payment — anyone can publish one
@@ -756,7 +766,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   const { toast } = useToast();
   const publish = useNostrPublish();
   const queryClient = useQueryClient();
-  const { sendToken, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
+  const { allMints, addCustomMint, sendToken, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
   const [token, setToken] = useState('');
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [redeemedSats, setRedeemedSats] = useState(0);
@@ -806,6 +816,23 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
       // token in the wallet's pending-receive journal for automatic retries.
       const returned = await receiveToken(unlocked);
       if (returned > 0) {
+        // receiveToken's success path only stores proofs under mints already
+        // in allMints — a token from an unconfigured mint credits sats the UI
+        // (balances, Wallet tab) never shows. This is the user's own money
+        // coming back from a failed redeem (not an untrusted pasted token),
+        // so adopt the mint instead of leaving the sats invisible.
+        const known = new Set(allMints.map((m) => safeNormalizeMintUrl(m.url)));
+        const missing = [
+          ...new Set(
+            (decodeCashuToken(unlocked) ?? [])
+              .map((e) => safeNormalizeMintUrl(e.mintUrl))
+              .filter((u) => u && !known.has(u)),
+          ),
+        ];
+        for (const u of missing) addCustomMint(u, u);
+        if (missing.length > 0) {
+          throw new Error(`Routstr redeem failed (${msg}). The sats were returned to your Cashu wallet at ${missing.join(', ')} (added to your mints so you can see and spend them) — retry when Routstr is back.`);
+        }
         throw new Error(`Routstr redeem failed (${msg}). The sats were returned to your Cashu wallet — retry when Routstr is back.`);
       }
       // The receive-back failed too. Routstr creates the balance server-side
