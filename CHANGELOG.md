@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- 2-of-3 multisig battle escrow — the non-custodial ₿AO escrow primitive (ported from bao_fund), with real-sats pet battles as its first consumer. Stakes lock to THREE keys (both players + the escrow operator) and need ANY TWO signatures to move: the operator can never take the funds (it only co-signs the winner's claim), disputes resolve with the operator plus one honest player, and an abandoned battle self-heals — after the 24h locktime each player reclaims their exact stake with their own key, no operator needed (one-click "Reclaim my stake" once unlocked, plus an automatic stale-deposit refund sweep on the battle page). Battle setup shows a "How ₿AO escrow protects your sats" explainer with the honest trust limits.
 - Ark wallet tab — the Wallet page's Ark placeholder is now real: connect to a self-hosted barkd daemon (balance with pending breakdown, receive via Ark address / BOLT11 / on-chain, unified send, movement history; UI password in NIP-44-encrypted secure storage), or use Ark-over-NWC with the existing wallet plumbing — keys and VTXOs always stay on your own daemon
 - Android signing certificate fingerprint on the /about footer — the SHA-256 of the release signing key is published with click-to-copy so a sideloaded APK can be verified (`apksigner verify --print-certs app.apk`); every update is signed with the same key, so a mismatch means the app didn't come from us
 - 3D pets keep their own look — the 3D world no longer swaps your companion for a demo model: without a GLB the pet's real visual walks the meadow as a depth-scaled sprite (name + age badge ride along), with smooth 8-way movement (WASD/arrows or the on-screen pad) including diagonals and depth, and an improved world with a dirt path, pond, trees, rocks, flowers, and clouds; the 3D toggle no longer needs a configured model
@@ -61,6 +62,8 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Cashu mint URLs with exactly four hostname labels (e.g. a mint on `pay.mint.example.com`) were misclassified as private IP addresses, so tokens from those mints were silently undecodable (ported from bao_fund)
+- Re-encoding a received Cashu token double-encoded P2PK witnesses — a latent bug that would have made escrow release tokens unreceivable (ported from bao_fund)
 - Yellow-on-yellow warning boxes are gone app-wide — every amber-tinted box with amber text (trade module demo notice, ₿AO Fund warnings, zap alerts, member/battle badges, poll/map/pets chips) now uses near-black text on light theme (light theme = dark font, per the new MEMORY.md design rule)
 
 - Adopting a third (or later) pet silently died at "Hatch this egg": the hatching ceremony runs in a portal outside the adoption dialog, and Radix treated real clicks on it as outside-interactions — dismissing the dialog, unmounting the ceremony mid-publish, and aborting the egg event before it ever reached a relay. The adoption dialogs now refuse outside/ESC dismissal while the ceremony owns the screen

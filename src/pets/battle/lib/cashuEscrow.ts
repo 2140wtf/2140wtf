@@ -477,3 +477,57 @@ export function clearPendingEscrowClaim(battleId: string): void {
     // Ignore — a stale entry only causes a harmless extra retry.
   }
 }
+
+/**
+ * Pending escrow-DEPOSIT journal (localStorage).
+ *
+ * Written the moment a multisig deposit token is minted — the wallet is
+ * already debited at that point, so the token string is the only handle on
+ * the locked stake. It is RETAINED after delivery until the stake resolves
+ * (winner's claim spends it / depositor reclaims via the post-locktime
+ * refund). PetsBattlePage sweeps stale journals from abandoned battles:
+ * proofs already spent → drop the entry; locktime passed + still unspent →
+ * reclaim with the depositor's own refund key.
+ */
+const PENDING_DEPOSIT_PREFIX = 'bao_battle_deposit_';
+
+export interface PendingBattleDeposit {
+  battleId: string;
+  token: string;
+}
+
+export function pendingBattleDepositKey(battleId: string): string {
+  return `${PENDING_DEPOSIT_PREFIX}${battleId}`;
+}
+
+export function savePendingBattleDeposit(battleId: string, token: string): void {
+  try {
+    localStorage.setItem(pendingBattleDepositKey(battleId), token);
+  } catch {
+    // Best-effort — a full localStorage must not break the battle flow.
+  }
+}
+
+export function loadPendingBattleDeposits(): PendingBattleDeposit[] {
+  const deposits: PendingBattleDeposit[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(PENDING_DEPOSIT_PREFIX)) continue;
+      const token = localStorage.getItem(key);
+      if (!token) continue;
+      deposits.push({ battleId: key.slice(PENDING_DEPOSIT_PREFIX.length), token });
+    }
+  } catch {
+    // storage blocked
+  }
+  return deposits;
+}
+
+export function clearPendingBattleDeposit(battleId: string): void {
+  try {
+    localStorage.removeItem(pendingBattleDepositKey(battleId));
+  } catch {
+    // Ignore — a stale entry only causes a harmless extra sweep.
+  }
+}
