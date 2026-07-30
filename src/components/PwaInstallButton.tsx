@@ -31,7 +31,7 @@ interface PwaInstallButtonProps {
  * app is already installed or running inside the native (Capacitor) shell.
  */
 export function PwaInstallButton({ className, variant = 'drawer', onAction }: PwaInstallButtonProps) {
-  const { canInstall, isIos, promptInstall } = usePwaInstall();
+  const { canInstall, isIos, isAndroid, promptInstall } = usePwaInstall();
   const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   if (Capacitor.isNativePlatform() || !canInstall) return null;
@@ -76,6 +76,12 @@ export function PwaInstallButton({ className, variant = 'drawer', onAction }: Pw
               </li>
               <li>Scroll down and tap <span className="font-medium text-foreground">Add to Home Screen</span>.</li>
               <li>Tap <span className="font-medium text-foreground">Add</span> — done, the app is on your home screen.</li>
+            </ol>
+          ) : isAndroid ? (
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+              <li>Tap Chrome's menu (⋮) in the top-right.</li>
+              <li>Choose <span className="font-medium text-foreground">Add to Home screen</span> or <span className="font-medium text-foreground">Install app</span>.</li>
+              <li>Tap <span className="font-medium text-foreground">Add</span> — done.</li>
             </ol>
           ) : (
             <p className="text-sm text-muted-foreground">

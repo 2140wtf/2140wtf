@@ -84,6 +84,7 @@
 - Mobile menu no longer pops the on-screen keyboard over half the drawer — the search box isn't auto-focused on open anymore; tap it to type
 - Cashu wallet signer rejections are translated into actionable text — a NIP-46 bunker answering “<profile>: denied” now explains that the signer's connection profile needs NIP-44 encrypt/decrypt permission instead of showing the raw string
 - ₿AO signet sats not syncing between bao.markets and 2140.wtf on the same login — the ₿AO wallet now restores the NIP-60 wallet config published by the other app (works with NIP-07 signers, no nsec needed), recovers proofs authored by that wallet key, and folds mint-URL aliases so balances match across both apps
+- PWA install button was invisible on Android because it only rendered after Chrome fired `beforeinstallprompt`; it now shows for all mobile browsers and falls back to browser-menu instructions when the native prompt isn't available
 
 ## [0.26.0] - 2026-07-28
 
