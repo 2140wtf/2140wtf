@@ -62,6 +62,7 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- The relay list in the ₿AO creation dialog now scrolls when it outgrows the dialog — the tail relays and the add form were unreachable with the full feed relay set expanded (ported from bao_fund)
 - Cashu mint URLs with exactly four hostname labels (e.g. a mint on `pay.mint.example.com`) were misclassified as private IP addresses, so tokens from those mints were silently undecodable (ported from bao_fund)
 - Re-encoding a received Cashu token double-encoded P2PK witnesses — a latent bug that would have made escrow release tokens unreceivable (ported from bao_fund)
 - Yellow-on-yellow warning boxes are gone app-wide — every amber-tinted box with amber text (trade module demo notice, ₿AO Fund warnings, zap alerts, member/battle badges, poll/map/pets chips) now uses near-black text on light theme (light theme = dark font, per the new MEMORY.md design rule)
