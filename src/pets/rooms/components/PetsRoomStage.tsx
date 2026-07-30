@@ -105,12 +105,13 @@ export function PetsRoomStage({
   interactionProps,
   stageRef,
 }: PetsRoomStageProps) {
-  // 3D rendering gate: only for adult pets when the user has enabled 3D and a
-  // valid Blossom-hosted GLB asset is resolved.
+  // 3D rendering gate: for adult pets when the user has enabled 3D. A GLB
+  // asset is NOT required — without one the 3D world renders the pet's own
+  // 2D visual as a billboard sprite so the companion always stays itself.
   const pets3dEnabled = usePets3DEnabled();
   const asset3d = usePets3DAsset(companion);
   const roomAsset3d = usePets3DRoomAsset(companion);
-  const show3D = pets3dEnabled && !isEgg && companion.stage === 'adult' && asset3d !== undefined;
+  const show3D = pets3dEnabled && !isEgg && companion.stage === 'adult';
 
   // Body-bottom inset: how much of the visual box is empty below the body
   const bodyBottomInset = getPetsBodyBottomInset(companion.stage, companion.adultType ?? undefined);
@@ -159,8 +160,8 @@ export function PetsRoomStage({
   return (
     <div ref={stageRef} data-pets-stage={companion.stage} className="absolute inset-0 pointer-events-none">
       {/* Full-room 3D world — rendered behind the 2D pet wrapper so labels and
-          the life badge still float on top. Only active for adult pets with a
-          resolved 3D asset and 3D mode enabled. */}
+          the life badge still float on top. For adult pets with 3D mode on;
+          without a GLB the pet's own visual is billboarded inside the world. */}
       {show3D && (
         <div className="absolute inset-0 z-0 pointer-events-auto">
           <ErrorBoundary
@@ -197,6 +198,42 @@ export function PetsRoomStage({
             >
               <Pets3DVisual
                 asset={asset3d}
+                sprite={
+                  <div className="relative size-full">
+                    {/* Name + age badge ride with the sprite — the static 2D
+                        anchor decorations are hidden while 3D is active. */}
+                    <span
+                      className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-bold drop-shadow-sm"
+                      style={{ color: companion.visualTraits.baseColor }}
+                    >
+                      {companion.name}
+                    </span>
+                    {petLife && (
+                      <div
+                        className="absolute -top-6 right-0 pointer-events-auto cursor-help"
+                        onMouseEnter={handleLifeBadgeHover}
+                      >
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/70 backdrop-blur-sm border border-border/20 shadow-sm">
+                          <span className="text-[10px] leading-none text-amber-500 font-bold">₿</span>
+                          <span className="text-[10px] sm:text-xs leading-none font-semibold text-foreground/80 whitespace-nowrap">
+                            {petLife.ageLabel}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <PetsStageVisual
+                      companion={companion}
+                      size="lg"
+                      animated={!isSleeping}
+                      reaction={petsReaction}
+                      recipe={hasDevOverride ? undefined : statusRecipe}
+                      recipeLabel={hasDevOverride ? undefined : statusRecipeLabel}
+                      emotion={effectiveEmotion}
+                      facing={facing}
+                      className="!size-full"
+                    />
+                  </div>
+                }
                 roomAsset={roomAsset3d}
                 isSleeping={isSleeping}
                 className="!size-full"
@@ -221,7 +258,9 @@ export function PetsRoomStage({
         {/* Ground shadow — radial-gradient ellipse at the ground line, behind the Pets.
             Breathes in sync with the bob: contracts when Pets is up, expands when down.
             Centered at 50% of anchor (= room center) via left + translateX(-50%).
-            Uses aspect-ratio for height so it doesn't depend on anchor's auto height. */}
+            Uses aspect-ratio for height so it doesn't depend on anchor's auto height.
+            Hidden in 3D mode — the 3D world provides its own shadows. */}
+        {!show3D && (
         <div
           className="absolute z-0 pointer-events-none"
           aria-hidden
@@ -238,6 +277,7 @@ export function PetsRoomStage({
             ),
           }}
         />
+        )}
         {/* Body alignment wrapper: block fills anchor width, shifted up vertically.
             Children's % widths resolve against this (= room width). */}
         <div
@@ -251,8 +291,9 @@ export function PetsRoomStage({
               animation: `pets-bob ${bobDuration} ease-in-out infinite`,
             } : undefined}
           >
-            {/* Pets name — floating label above the visual, bobs but does not sway */}
-            {!isEgg && (
+            {/* Pets name — floating label above the visual, bobs but does not sway.
+                Hidden in 3D mode, where the name rides with the sprite instead. */}
+            {!isEgg && !show3D && (
               <div
                 className="absolute bottom-full left-1/2 mb-1 pointer-events-none"
                 style={{ transform: 'translateX(-50%)' }}
@@ -268,8 +309,9 @@ export function PetsRoomStage({
             {/* Visual wrapper — same width as the pet, anchors the life badge to
                 the top-right corner of the pet visual (not the whole room). */}
             <div className="relative" style={{ width: isEgg ? '34%' : '30%' }}>
-              {/* Life badge — floats above the top-right corner of the pet visual. */}
-              {petLife && (
+              {/* Life badge — floats above the top-right corner of the pet visual.
+                  Hidden in 3D mode, where the badge rides with the sprite instead. */}
+              {petLife && !show3D && (
                 <div
                   className="absolute -top-7 right-0 z-20 pointer-events-auto cursor-help"
                   onMouseEnter={handleLifeBadgeHover}
