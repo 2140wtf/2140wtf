@@ -1624,7 +1624,7 @@ export function ComposeBox({
                       <button
                         type="button"
                         onClick={() => { setCwEnabled((v) => !v); setTrayOpen(false); expand(); }}
-                        className={cn('flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors', cwEnabled ? 'text-amber-500 bg-amber-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60')}
+                        className={cn('flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors', cwEnabled ? 'text-amber-950 dark:text-amber-200 bg-amber-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60')}
                       >
                         <AlertTriangle className="size-4" /><span className="font-medium">Spoiler</span>
                       </button>

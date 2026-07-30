@@ -73,8 +73,8 @@ export function ZapPill({
           className={cn(
             "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm leading-none transition-colors",
             tally.mine
-              ? "border-amber-500 bg-amber-500/20 text-amber-500"
-              : "border-amber-500/40 bg-amber-500/10 text-amber-500 hover:border-amber-500/70 hover:bg-amber-500/20",
+              ? "border-amber-500 bg-amber-500/20 text-amber-950 dark:text-amber-200"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200 hover:border-amber-500/70 hover:bg-amber-500/20",
           )}
         >
           {/* Match the reaction pill's leading glyph EXACTLY: a 20px (h-5 w-5)
