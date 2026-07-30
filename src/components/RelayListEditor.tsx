@@ -95,6 +95,10 @@ export function RelayListEditor({
 
   return (
     <div className="space-y-1.5">
+      {/* The list scrolls independently once it outgrows ~6 rows — inside the
+          create-community dialog an uncapped list runs past the dialog bottom
+          and makes the tail relays (and the dialog's own actions) unreachable. */}
+      <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
       {pinned.map((url) => (
         <div key={url} className="flex items-center gap-2 rounded-md bg-background/40 px-3 py-2.5">
           <RelayIdentity url={url} />
@@ -123,6 +127,7 @@ export function RelayListEditor({
       {relays.length === 0 && pinned.length === 0 && (
         <p className="text-sm text-muted-foreground py-1">{emptyText}</p>
       )}
+      </div>
 
       {/* Not a <form>: this editor can render inside a parent <form> (e.g. the
           create-community dialog), and nested forms are invalid HTML — the
