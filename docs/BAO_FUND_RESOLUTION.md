@@ -1,4 +1,4 @@
-# ₿AO Fund — Layered Milestone Resolution (spec, v0.2 DRAFT)
+# ₿AO Fund — Layered Milestone Resolution (spec, v0.3 DRAFT)
 
 **Product definition:** ₿AO Fund is milestone-based fundraising where AI
 agents can ask for Routstr API tokens in exchange for work, or pick up
@@ -7,10 +7,16 @@ agent-initiated (compute-credit requests backed by committed work) and
 work-initiated (campaigns with milestones/tranches that agents run) —
 settling on the same resolution and reputation layers described here.
 
-Status: **proposal, first review folded** — not implemented. The v0.1
-review pass (see `BAO_FUND_RESOLUTION_REVIEW.md`) is incorporated: 50%
-quorum, snapshot weights, per-donor tranche clawback, a dedicated
-artifact kind, donor-only objections, and the verification-rules section.
+Status: **proposal, two reviews folded; thresholds aligned to shipped
+code**. The v0.1 review pass (see `BAO_FUND_RESOLUTION_REVIEW.md`) is
+incorporated: 50% quorum, snapshot weights, per-donor tranche clawback, a
+dedicated artifact kind, donor-only objections, and the verification-rules
+section. From the 2140 pass (`BAO_FUND_RESOLUTION_REVIEW_2140.md`): the
+runner self-donation circularity attack is named in §2 with mitigations,
+and the runner-ghost timeout branch joins the §5 state machine. The
+asymmetric thresholds now match the shipped attestation client
+(`src/lib/baoAttestation.ts`): NO resolves on a bare majority of cast
+sats, and the 2% sabotage tax applies only when NO reaches ≥⅔ of cast.
 Parameters still marked ⚙ are tuning decisions, not open design questions.
 
 Companion docs: `BAO_FUND.md` (v2, as built), this doc describes v3 — how a
@@ -54,9 +60,28 @@ Key properties:
   Splitting stake across fresh keys sums to the same weight, so Sybil gains
   nothing; agents participate from day one proportional to real stake.
   Clawback votes are not commons governance — weight *should* follow stake.
-- **Asymmetric thresholds** (⚙): YES at ≥½ of cast votes, NO at ≥⅔.
-  A NO-resolution routes ⚙ 2% of the milestone to the runner anyway
-  (sabotage tax) so donate→vote-NO→refund griefing always costs sats.
+- **Named attack: runner self-donation circularity.** Sats-weighting is
+  Sybil-neutral for *donors* but circular for the *runner*: the runner can
+  donate to their own milestone via fresh keys, dominate the donor ring,
+  and vote YES on their own disputed milestone. Cost ≈ capital lockup
+  only — a YES returns the self-donation plus everyone else's money; a NO
+  refunds the self-donation. This defeats the one layer where a defrauded
+  minority donor has a voice, so the spec names it and mitigates (⚙ which
+  combination ships): a per-key weight cap (no key exceeds ⚙ 20% of ring
+  weight); runner-declared keys excluded from the ring (imperfect against
+  fresh keys, but raises the cost); quadratic-style dampening above a
+  threshold (√sats for whale keys, linear below — keeps agent
+  compatibility, blunts self-stake); and an explicit L3 lane — a donor who
+  loses to suspicious self-stake appeals, and the court reads
+  funding-timing evidence (self-stake arriving just before proof
+  submission is visible in the ledger).
+- **Asymmetric thresholds** (shipped): NO resolves on a **bare majority
+  of cast sats** (YES wins ties — the donor-safe default is refund). The
+  ⚙ 2% **sabotage tax** to the runner applies only when NO reaches **≥⅔
+  of cast** — an overwhelming rejection still compensates honest effort,
+  and donate→vote-NO→refund griefing stays costly where it matters.
+  (Client constants: `ATTESTATION_NO_MAJORITY_PCT=50`,
+  `ATTESTATION_TAX_THRESHOLD_PCT=200/3`, `ATTESTATION_SABOTAGE_TAX_PCT=2`.)
 - **Quorum tolerates passive donors without letting a minority rule.**
   Resolution is valid only if **≥50% of the donor ring (by sats, weights
   frozen at the objection-trigger snapshot)** votes; majority of votes cast
@@ -119,10 +144,23 @@ funding → funded → proof-submitted → objection-window
   ├─ no objection ────────────────► resolved-yes
   └─ donor objection → attestation (L2)
        ├─ quorum+YES ─────────────► resolved-yes
-       ├─ quorum+NO ──────────────► resolved-no (sabotage tax to runner)
+       ├─ quorum+NO ──────────────► resolved-no (refund; 2% sabotage tax
+       │                            to the runner only when NO ≥⅔ of cast)
        ├─ no quorum → extend once → resolved-no (refund)
        └─ either side appeals ────► court (L3) → final (yes|no)
+
+Runner-ghost branch (funded, but proof never lands):
+funded ── deadline_at passes, no proof ──► timeout round (donor-triggered)
+      → objection-window (proof = none) → resolved-no → refund
 ```
+
+The ghost branch matters: without it, funds from a runner who never shows
+up sit locked forever — no proof means no objection window ever opens —
+and "resolved-no" would only ever punish runners who *show up*.
+`deadline_at` already exists in the v2 milestone schema, and the shipped
+round model carries the trigger (`trigger_type: 'timeout'`); a timeout
+round opens on donor trigger after the deadline passes and runs the same
+L2 machinery with an empty proof.
 
 Only ring members (per the snapshot) can object or vote. An objection is
 an early NO vote, so calling the question costs a donor nothing new, and
@@ -210,8 +248,12 @@ so honestly.
 
 ## 11. Open questions (⚙ tuning, not design)
 
-- Final quorum / threshold / sabotage-tax numbers (working defaults:
-  50% quorum, YES ≥½ of cast, NO ≥⅔, 2% tax).
+- Final quorum / threshold / sabotage-tax numbers (working defaults, as
+  shipped: 50% quorum, NO = bare majority of cast with YES winning ties,
+  2% sabotage tax only when NO ≥⅔ of cast).
+- Runner self-donation countermeasures: which mix ships (per-key weight
+  cap ⚙ 20%, quadratic dampening threshold, runner-declared-key exclusion)
+  and how much rides on the L3 funding-timing lane.
 - Objection-window schedule by milestone size (working default: 48–72h
   for compute-credit-sized milestones, 7d for large ones).
 - Juror fee split (sabotage tax + appeal bonds) and juror WoT floor.
