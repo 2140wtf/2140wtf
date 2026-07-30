@@ -340,7 +340,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          <Label>Funding shape</Label>
+          <Label>Milestones</Label>
           <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
@@ -348,7 +348,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
               size="sm"
               onClick={() => setShots(1)}
             >
-              Single shot
+              1 milestone
             </Button>
             <Button
               type="button"
@@ -356,22 +356,22 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
               size="sm"
               onClick={() => setShots(2)}
             >
-              Double shot
+              2 milestones
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
             {shots === 1
               ? 'One payout, judged by the donor.'
-              : 'Two tranches — the donor funds each shot separately when satisfied.'}
+              : 'Two milestones — the donor funds each one separately when satisfied.'}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cc-amount">{shots === 2 ? 'Tranche 1 (sats)' : 'Amount (sats)'}</Label>
+          <Label htmlFor="cc-amount">{shots === 2 ? 'Milestone 1 (sats)' : 'Amount (sats)'}</Label>
           <Input id="cc-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
         </div>
         {shots === 2 && (
           <div className="space-y-1.5">
-            <Label htmlFor="cc-amount2">Tranche 2 (sats)</Label>
+            <Label htmlFor="cc-amount2">Milestone 2 (sats)</Label>
             <Input id="cc-amount2" value={amount2} onChange={(e) => setAmount2(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="2140" />
           </div>
         )}
@@ -558,7 +558,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       try {
         await sendMessage({
           recipientPubkey: request.pubkey,
-          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(fundAmount)} sats${isDoubleShot ? `, tranche ${fundShot}/2` : ''}).\n\n${redeemHint}\n\n${cashuToken}`,
+          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(fundAmount)} sats${isDoubleShot ? `, milestone ${fundShot}/2` : ''}).\n\n${redeemHint}\n\n${cashuToken}`,
         });
         setDmState('sent');
       } catch {
@@ -603,7 +603,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
               {isDoubleShot ? (
                 <span className="font-semibold tabular-nums">
                   {formatSats(request.amountSats)} + {formatSats(request.amount2Sats!)} sats
-                  <span className="ml-1.5 text-[10px] font-normal text-primary">2 shots</span>
+                  <span className="ml-1.5 text-[10px] font-normal text-primary">2 milestones</span>
                 </span>
               ) : (
                 <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
@@ -695,7 +695,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                           onClick={() => { setFundShot(shot as 1 | 2); fulfillMutation.mutate(); }}
                         >
                           {covered ? <CheckCircle2 className="size-3.5" /> : fulfillMutation.isPending && fundShot === shot ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                          {covered ? `Shot ${shot} funded` : `Shot ${shot} · ${formatSats(amount)}`}
+                          {covered ? `Milestone ${shot} funded` : `Milestone ${shot} · ${formatSats(amount)}`}
                         </Button>
                       );
                     })}
