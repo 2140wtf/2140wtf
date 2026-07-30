@@ -40,6 +40,24 @@ if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   }
 }
 
+// Capture Chrome's install prompt as early as possible. It can fire before
+// React mounts, and if we miss it the install button falls back to instructions.
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+declare global {
+  interface Window {
+    __deferredInstallPrompt?: BeforeInstallPromptEvent;
+  }
+}
+if (!Capacitor.isNativePlatform()) {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    window.__deferredInstallPrompt = event as BeforeInstallPromptEvent;
+  });
+}
+
 if (Capacitor.isNativePlatform()) {
   // Hide the iOS keyboard accessory bar (prev/next/done toolbar above the keyboard).
   // Only runs on iOS — setAccessoryBarVisible is unimplemented on Android.
