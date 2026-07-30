@@ -158,14 +158,23 @@ export function ComputeCreditsTab() {
     queryKey: ['bao-compute-credit-requests'],
     queryFn: async ({ signal }) => {
       const since = Math.floor(Date.now() / 1000) - 30 * 24 * 3600;
+      // limit 1000 (most relays cap lower): with a small limit a griefer can
+      // flood junk requests and push legitimate ones out of the relay's
+      // newest-first window entirely. Still only a mitigation — a determined
+      // flood needs relay-side rate limits.
       const events = await nostr.query(
-        [{ kinds: [BAO_COMPUTE_CREDIT_REQUEST_KIND], '#t': [BAO_COMPUTE_CREDIT_TAG], since, limit: 200 }],
+        [{ kinds: [BAO_COMPUTE_CREDIT_REQUEST_KIND], '#t': [BAO_COMPUTE_CREDIT_TAG], since, limit: 1000 }],
         { signal },
       );
+      // Clamp future-dated created_at for sorting: relays accept events
+      // timestamped ahead of now, and without the clamp a griefer can pin
+      // their request to the top of the list by dating it next year.
+      const nowSec = Math.floor(Date.now() / 1000);
+      const sortKey = (r: ComputeCreditRequest) => Math.min(r.createdAt, nowSec);
       return events
         .map(parseComputeCreditRequest)
         .filter((r): r is ComputeCreditRequest => r !== null)
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .sort((a, b) => sortKey(b) - sortKey(a));
     },
     refetchInterval: 30_000,
   });
@@ -921,6 +930,14 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
         // sends them chasing a balance that doesn't exist.
         throw new Error(
           `Routstr redeem failed (${msg}), and the mint confirms the token is already spent. Either Routstr created a balance but its response never reached you (keep this token and contact Routstr support to recover the API key), or your own wallet received it and the proofs are in its recovery journal — restart the app or check the Wallet tab to reconcile. The sats are NOT in your spendable balance.`,
+        );
+      }
+      if (spent === null) {
+        // The mint couldn't be asked — don't claim either way. The token may
+        // be unspent (safe to retry) or already spent by Routstr's
+        // server-side credit (retrying burns nothing but tells you "spent").
+        throw new Error(
+          `Routstr redeem failed (${msg}), and the mint could not be reached to check whether the token was spent. Keep the token above as a backup. Routstr credits the key BEFORE responding, so first refresh the balance / try the key — if the credit landed, the token's proofs are spent and retrying is harmless but useless.`,
         );
       }
       // The proofs were NOT spent. The journal claim must be honest:
