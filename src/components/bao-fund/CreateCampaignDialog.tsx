@@ -237,7 +237,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
               className="justify-start"
             >
               <ToggleGroupItem value="milestones" className="text-xs">Milestone markets</ToggleGroupItem>
-              <ToggleGroupItem value="stream" className="text-xs">Time-lock stream</ToggleGroupItem>
+              <ToggleGroupItem value="stream" className="text-xs">Single shot</ToggleGroupItem>
             </ToggleGroup>
           </div>
 

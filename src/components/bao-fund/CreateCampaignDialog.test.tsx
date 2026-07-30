@@ -60,9 +60,9 @@ describe('CreateCampaignDialog — stream goal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add milestone/ }));
     fireEvent.change(screen.getAllByPlaceholderText('sats')[1], { target: { value: '2000' } });
 
-    // …then switch to the time-lock stream: the Goal input shows only the
+    // …then switch to the single shot: the Goal input shows only the
     // first draft's amount, so that is what the campaign must be created with.
-    fireEvent.click(screen.getByText('Time-lock stream'));
+    fireEvent.click(screen.getByText('Single shot'));
     expect((screen.getByLabelText('Goal (sats)') as HTMLInputElement).value).toBe('1000');
     expect(screen.getByRole('button', { name: 'Create raise — 1,000 sats goal' })).toBeInTheDocument();
 
