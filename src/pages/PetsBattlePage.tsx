@@ -152,6 +152,10 @@ export default function PetsBattlePage() {
       if (!config.petsBattleEscrowServiceUrl || !petsWallet || !escrowKeypair) {
         throw new Error('Escrow claim prerequisites are not ready.');
       }
+      // Deferred claim: the host-signed finished event hasn't arrived yet.
+      // Sending `{}` would give the operator no verifiable outcome proof —
+      // the release would be rejected and the attempt counter burned.
+      if (!claim.finishedEvent) return 'pending';
       let releaseToken = claim.releaseToken;
       if (!releaseToken) {
         const release = await requestEscrowRelease({
@@ -193,7 +197,12 @@ export default function PetsBattlePage() {
     if (claimRetryRanRef.current) return;
     if (!petsWallet || !escrowKeypair || !localEscrowPubkey || !config.petsBattleEscrowServiceUrl) return;
     const claims = loadPendingEscrowClaims().filter(
-      (c) => normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey && c.attempts < PENDING_CLAIM_MAX_ATTEMPTS,
+      (c) =>
+        normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey &&
+        c.attempts < PENDING_CLAIM_MAX_ATTEMPTS &&
+        // Deferred claims (guest still waiting for the host-signed result) are
+        // hydrated by the hostFinishedEvent effect below, not retried blind.
+        c.finishedEvent,
     );
     if (claims.length === 0) return;
     claimRetryRanRef.current = true;
@@ -216,6 +225,62 @@ export default function PetsBattlePage() {
       }
     })();
   }, [petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
+
+  // Guest race fix: the guest's onFinish fires from the final battle-state
+  // snapshot, which can arrive a few messages BEFORE the host's signed
+  // finished event — and the game never refires onFinish, so a claim that
+  // failed there would never be attempted again. onFinish therefore journals
+  // a DEFERRED claim (no finishedEvent); this effect hydrates and executes it
+  // the moment the signed event lands. Hydrating the journal first keeps it
+  // idempotent: a re-render mid-attempt finds the event already attached.
+  useEffect(() => {
+    if (remoteRole !== 'guest') return;
+    const event = remote.hostFinishedEvent;
+    if (!event) return;
+    if (!petsWallet || !escrowKeypair || !localEscrowPubkey || !config.petsBattleEscrowServiceUrl) return;
+    const battleId = remote.battleId ?? '';
+    const deferred = loadPendingEscrowClaims().find(
+      (c) =>
+        c.battleId === battleId &&
+        !c.finishedEvent &&
+        normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey,
+    );
+    if (!deferred) return;
+    const claim: PendingEscrowClaim = {
+      ...deferred,
+      finishedEvent: {
+        id: event.id,
+        pubkey: event.pubkey,
+        kind: event.kind,
+        created_at: event.created_at,
+        tags: event.tags,
+        content: event.content,
+        sig: event.sig,
+      },
+    };
+    savePendingEscrowClaim(claim);
+    void (async () => {
+      try {
+        const outcome = await claimEscrowPrize(claim);
+        if (outcome === 'claimed') {
+          toast({ title: 'Battle prize claimed!', description: `You received ${(claim.prizeAmount * 2).toLocaleString()} real sats.` });
+        } else {
+          savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
+        }
+      } catch (err) {
+        console.warn('[PetsBattlePage] deferred escrow claim failed:', err);
+        // Re-read the journal — claimEscrowPrize may have stored a
+        // releaseToken before the wallet receive failed.
+        const journaled = loadPendingEscrowClaims().find((c) => c.battleId === claim.battleId) ?? claim;
+        savePendingEscrowClaim({ ...journaled, attempts: journaled.attempts + 1 });
+        toast({
+          title: 'Prize claim saved — will retry',
+          description: 'The escrow release failed, but your claim is journaled locally and retried automatically when you return to this page.',
+          variant: 'destructive',
+        });
+      }
+    })();
+  }, [remoteRole, remote.hostFinishedEvent, remote.battleId, petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
 
   // Sweep stale escrow-DEPOSIT journals from abandoned battles. Each journaled
   // token is the only handle on a stake the wallet was already debited for.
@@ -288,19 +353,6 @@ export default function PetsBattlePage() {
           }
           const hostPubkey = remoteRole === 'host' ? localEscrowPubkey : (remote.escrow.hostEscrowPubkey ?? '');
           const guestPubkey = remoteRole === 'guest' ? localEscrowPubkey : (remote.escrow.guestEscrowPubkey ?? '');
-          // The escrow operator verifies the signed battle-finished event as
-          // the outcome proof. Journaling a claim without it (host publish
-          // failed, or the guest never received it) would poison every retry
-          // with the same unverifiable `{}` — fail loudly instead of locking
-          // in a permanently rejected claim.
-          if (!finishedEvent) {
-            toast({
-              title: 'Battle result proof missing',
-              description: 'The signed battle-finished event could not be published or received, so the escrow release would be rejected. No claim was journaled — reconnect and replay the battle.',
-              variant: 'destructive',
-            });
-            return;
-          }
           // Journal everything the release needs BEFORE the first attempt: the
           // deposit tokens live only in React state, so a failed request (or
           // closing the page, or Rematch/Exit wiping the battle state) would
@@ -313,19 +365,45 @@ export default function PetsBattlePage() {
             guestPubkey,
             hostDepositToken: remote.escrow.hostDepositToken ?? '',
             guestDepositToken: remote.escrow.guestDepositToken ?? '',
-            finishedEvent: {
-              id: finishedEvent.id,
-              pubkey: finishedEvent.pubkey,
-              kind: finishedEvent.kind,
-              created_at: finishedEvent.created_at,
-              tags: finishedEvent.tags,
-              content: finishedEvent.content,
-              sig: finishedEvent.sig,
-            },
+            finishedEvent: finishedEvent
+              ? {
+                  id: finishedEvent.id,
+                  pubkey: finishedEvent.pubkey,
+                  kind: finishedEvent.kind,
+                  created_at: finishedEvent.created_at,
+                  tags: finishedEvent.tags,
+                  content: finishedEvent.content,
+                  sig: finishedEvent.sig,
+                }
+              : undefined,
             prizeAmount: matchOptions.prizeAmount,
             createdAt: Date.now(),
             attempts: 0,
           };
+          if (!finishedEvent) {
+            if (remoteRole === 'guest') {
+              // The guest's onFinish fires from the final battle-state
+              // snapshot — the host's signed finished event typically lands a
+              // few messages LATER, and the game never refires onFinish.
+              // Journal a deferred claim; the hostFinishedEvent effect above
+              // hydrates and fires it the moment the proof arrives.
+              savePendingEscrowClaim(claim);
+              toast({
+                title: 'Prize claim saved — awaiting result',
+                description: "The host's signed battle result hasn't arrived yet. Your claim is journaled locally and fires automatically the moment it does.",
+              });
+            } else {
+              // Host: the signed event doesn't exist (our own publish failed),
+              // so there is no proof to wait for. Journaling would poison
+              // every retry with the same unverifiable claim — fail loudly.
+              toast({
+                title: 'Battle result proof missing',
+                description: 'The signed battle-finished event could not be published, so the escrow release would be rejected. No claim was journaled — reconnect and replay the battle.',
+                variant: 'destructive',
+              });
+            }
+            return;
+          }
           savePendingEscrowClaim(claim);
           try {
             const outcome = await claimEscrowPrize(claim);

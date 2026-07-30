@@ -554,6 +554,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         setError('Real-sats battles require a valid escrow pubkey.');
         return;
       }
+      // Self-battles are nonsense (sendInvite guards this too, but the invite
+      // itself is attacker-controlled DM content).
+      if (invite.inviterPubkey === user.pubkey) {
+        setError('This battle request came from your own key.');
+        return;
+      }
       // Stake sanity: the invite's prizeAmount is attacker-controlled and the
       // accepted match auto-deposits it. Reject non-positive, fractional or
       // absurd stakes before the wallet is ever touched.
@@ -563,6 +569,18 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           setError('This battle request has an invalid stake amount.');
           return;
         }
+      }
+      // Round duration is attacker-controlled too: an absurd value (e.g. an
+      // hour) stretches the battle past the escrow deposit's refund locktime,
+      // letting a losing host reclaim their stake via the refund path and
+      // break the operator's release. Battles are short — cap hard.
+      if (
+        !Number.isInteger(invite.roundDurationSeconds) ||
+        invite.roundDurationSeconds < 10 ||
+        invite.roundDurationSeconds > 600
+      ) {
+        setError('This battle request has an invalid round duration.');
+        return;
       }
 
       // Store/send x-only forms on both sides: the guest's own derived key is

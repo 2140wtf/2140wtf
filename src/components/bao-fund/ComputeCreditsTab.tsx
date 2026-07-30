@@ -329,11 +329,19 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
         amountSats: request.amountSats,
       })),
     onSuccess: () => {
+      setConfirmArmedId(null);
       toast({ title: 'Receipt confirmed', description: 'Your request is now marked as funded.' });
       onPublished();
     },
     onError: (e) => toast({ title: 'Confirm failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
+
+  // Two-step confirm: a claim event is only a funder SAYING they sent sats —
+  // anyone can publish one (a griefer can blanket every open request with
+  // fake claims hoping for a reflex click), and a crafted token can carry a
+  // refund locktime that lets the "funder" reclaim it after you confirm. The
+  // agent must explicitly attest they actually redeemed the sats first.
+  const [confirmArmedId, setConfirmArmedId] = useState<string | null>(null);
 
   const valid =
     (parseInt(amount, 10) || 0) > 0 &&
@@ -414,15 +422,40 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
                       <CheckCircle2 className="size-3" /> funded {formatSats(got)}
                     </Badge>
                   ) : claims.length > 0 ? (
-                    <Button
-                      size="sm" variant="outline"
-                      className="shrink-0 gap-1 h-6 text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
-                      disabled={confirmMutation.isPending}
-                      onClick={() => confirmMutation.mutate(r)}
-                    >
-                      {confirmMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
-                      {claims.length} claim{claims.length === 1 ? '' : 's'} — confirm received
-                    </Button>
+                    confirmArmedId === r.id ? (
+                      <div className="flex flex-col gap-1 shrink-0 max-w-[60%]">
+                        <p className="text-[10px] text-amber-950 dark:text-amber-200 leading-tight">
+                          A claim is only someone SAYING they paid. Confirm ONLY after you swept + redeemed the token at Routstr (Redeem card). If the token wouldn't redeem, do NOT confirm — the sender may be able to reclaim it.
+                        </p>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm" variant="outline"
+                            className="shrink-0 gap-1 h-6 text-[11px] text-green-600 dark:text-green-400 border-green-500/40"
+                            disabled={confirmMutation.isPending}
+                            onClick={() => confirmMutation.mutate(r)}
+                          >
+                            {confirmMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
+                            I redeemed the sats — mark funded
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="shrink-0 h-6 text-[11px]"
+                            onClick={() => setConfirmArmedId(null)}
+                          >
+                            Not yet
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm" variant="outline"
+                        className="shrink-0 gap-1 h-6 text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
+                        onClick={() => setConfirmArmedId(r.id)}
+                      >
+                        <CheckCircle2 className="size-3" />
+                        {claims.length} claim{claims.length === 1 ? '' : 's'} — confirm received
+                      </Button>
+                    )
                   ) : (
                     <Badge variant="outline" className="shrink-0">open · {timeAgo(r.createdAt)}</Badge>
                   )}
@@ -472,24 +505,51 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
   // discards it (agent confirmed receipt). Scoped by funder pubkey so account
   // B on a shared browser never sees or destroys account A's copy.
   const outboxKey = creditOutboxStorageKey(user?.pubkey, request.id);
+  // The key the current token state belongs to. Without this guard, an
+  // account switch/logout fires the write effect with the OLD account's
+  // token under the NEW key (or the shared logged-out key), leaking a bearer
+  // token to whoever uses this browser next.
+  const [outboxLoadedKey, setOutboxLoadedKey] = useState<string | null>(null);
   useEffect(() => {
+    // Reset FIRST — state from the previous key must never render or persist
+    // under the new one.
+    setToken(null);
+    setLockMode(null);
+    setDmState('idle');
     try {
+      if (!user) {
+        // Never restore (or keep) a token for an anonymous viewer: a legacy
+        // logged-out entry would be a bearer token anyone on this browser
+        // could copy. The funder's own pubkey-scoped copy is untouched and
+        // restores when they log back in.
+        localStorage.removeItem(outboxKey);
+        setOutboxLoadedKey(outboxKey);
+        return;
+      }
+      // Purge a legacy logged-out duplicate of this request's token, if one
+      // exists from before the write path was account-gated.
+      localStorage.removeItem(creditOutboxStorageKey(undefined, request.id));
       const raw = localStorage.getItem(outboxKey);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as { token?: unknown; lockMode?: CreditLockMode; dmState?: string };
-      if (saved && typeof saved.token === 'string' && saved.token) {
-        setToken(saved.token);
-        setLockMode(saved.lockMode ?? null);
-        setDmState(saved.dmState === 'sent' ? 'sent' : 'failed');
+      if (raw) {
+        const saved = JSON.parse(raw) as { token?: unknown; lockMode?: CreditLockMode; dmState?: string };
+        if (saved && typeof saved.token === 'string' && saved.token) {
+          setToken(saved.token);
+          setLockMode(saved.lockMode ?? null);
+          setDmState(saved.dmState === 'sent' ? 'sent' : 'failed');
+        }
       }
     } catch { /* corrupted entry — ignore */ }
-  }, [outboxKey]);
+    setOutboxLoadedKey(outboxKey);
+  }, [outboxKey, user, request.id]);
   useEffect(() => {
+    // Only persist state that belongs to the current key, and never write a
+    // token while logged out (it would land on the shared logged-out key).
+    if (!user || outboxLoadedKey !== outboxKey) return;
     try {
       if (token) localStorage.setItem(outboxKey, JSON.stringify({ token, lockMode, dmState }));
       else localStorage.removeItem(outboxKey);
     } catch { /* storage full/blocked — the on-screen copy still works */ }
-  }, [token, lockMode, dmState, outboxKey]);
+  }, [token, lockMode, dmState, outboxKey, outboxLoadedKey, user]);
 
   // Shared cache with RedeemCard — which mints Routstr accepts for redeem.
   const routstrInfoQuery = useQuery({ queryKey: ['routstr-info'], queryFn: routstrGetInfo, staleTime: 5 * 60_000, retry: 1 });
@@ -635,7 +695,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
           </p>
         )}
 
-        {token ? (
+        {token && user ? (
           <div className="space-y-2">
             <div className="rounded-md border border-green-500/50 bg-green-500/10 p-3 space-y-1.5">
               <p className="text-xs font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5">
@@ -768,7 +828,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   const { toast } = useToast();
   const publish = useNostrPublish();
   const queryClient = useQueryClient();
-  const { allMints, addCustomMint, sendToken, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
+  const { allMints, addCustomMint, sendToken, wasLastSendAmbiguous, receiveToken, receiveLockedToken, sweepWalletLockedToken, getWalletP2pkPubkey } = useCashuWalletContext();
   const [token, setToken] = useState('');
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [redeemedSats, setRedeemedSats] = useState(0);
@@ -792,7 +852,13 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   const resendUnlocked = async (amount: number, mint?: string): Promise<string> => {
     const memo = 'Routstr compute redeem';
     let t = await sendToken(amount, memo, undefined, mint);
-    if (!t) {
+    if (!t && !wasLastSendAmbiguous()) {
+      // Retry ONLY when the first attempt provably never reached the mint
+      // (local proof selection / explicit mint rejection) — the fee shave
+      // this retry exists for. After an AMBIGUOUS failure (timeout, dropped
+      // response, post-commit validation) attempt 1 may have committed:
+      // retrying would double-spend from the remaining proofs and burn the
+      // first attempt's sats at the mint.
       // The reserve must cover the mint's per-proof input fee, which the
       // wallet tolerates up to MAX_MINT_FEE_PPM (5%) — a 0.1% shave still
       // failed on high-fee mints or with many small proofs.
@@ -800,6 +866,10 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
       if (amount - reserve > 0) t = await sendToken(amount - reserve, memo, undefined, mint);
     }
     if (!t) {
+      if (wasLastSendAmbiguous()) {
+        // Do NOT claim the sats are safe — the mint may have committed.
+        throw new Error(`Swept ${formatSats(amount)} sats to your wallet, but the Routstr token send was not confirmed by the mint — it may or may not have completed. Do NOT retry yet: check your Wallet tab balance; if it dropped, the recovery journal reconciles automatically. (Re-pasting the original token won't work — it's already swept.)`);
+      }
       // The original token is already marked processed by the sweep, so
       // "retry the redeem" can never work — name the path that does.
       throw new Error(`Swept ${formatSats(amount)} sats to your wallet but couldn't prepare the Routstr token — your sats are safe in your wallet. Send yourself a fresh token from the Wallet tab and redeem that instead (re-pasting the original token won't work — it's already swept).`);
@@ -995,7 +1065,16 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
       toast({ title: 'Key topped up', description: `Balance is now ${formatSats(res.balance)} msats.` });
       queryClient.invalidateQueries({ queryKey: ['routstr-balance', apiKey] });
     },
-    onError: (e) => toast({ title: 'Top-up failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+    onError: (e) => toast({
+      title: 'Top-up failed',
+      // Routstr credits the key server-side BEFORE responding (same behavior
+      // as the create-balance redeem path) — a dropped response means the
+      // top-up may have LANDED and the token's proofs are spent. Say so, or
+      // the user retries and reads the mint's "proofs already spent" as the
+      // node eating their money.
+      description: `${e instanceof Error ? e.message : String(e)} — Routstr credits the key before responding, so a lost response can mean the top-up DID land. Refresh the balance before retrying this token.`,
+      variant: 'destructive',
+    }),
   });
 
   const acceptedMints = infoQuery.data?.mints ?? [];

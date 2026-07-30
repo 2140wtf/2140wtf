@@ -26,7 +26,7 @@
 //     custody, not mint custody.
 //   - Nobody can be rugged by abandonment: the refund path self-heals.
 
-import { decodeCashuToken, type DecodedTokenEntry } from './cashu';
+import { decodeCashuToken, normalizeMintUrl, type DecodedTokenEntry } from './cashu';
 
 /** NUT-11 lock options accepted by cashu-ts `wallet.swap(amount, proofs, { p2pk })`. */
 export interface MultisigP2pkOptions {
@@ -225,9 +225,13 @@ function decodeTokenEntries(tokenStr: string): DecodedTokenEntry[] | null {
   return entries && entries.length > 0 ? entries : null;
 }
 
-/** Lowercase + strip trailing slashes so mint URLs compare equal across forms. */
+/**
+ * Normalize mint URLs for comparison via the shared helper — origin is
+ * lowercased but the PATH keeps its case, because mint paths are
+ * case-sensitive (the default Minibits mint's `/Bitcoin` 404s as `/bitcoin`).
+ */
 function normalizeMintUrlLite(url: string): string {
-  return url.toLowerCase().replace(/\/+$/, '');
+  return normalizeMintUrl(url) ?? url.trim().replace(/\/+$/, '');
 }
 
 export interface MultisigDepositExpectation {
