@@ -16,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
+import { ArkWalletTab } from '@/components/ArkWalletTab';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { LightningWalletTab } from '@/components/LightningWalletTab';
 import { ComingSoonTab } from '@/components/ComingSoonTab';
@@ -178,7 +179,7 @@ export function WalletPage() {
             </TabsContent>
 
             <TabsContent value="ark">
-              <ComingSoonTab title="Ark" description="Ark layer-2 wallet support is coming soon." />
+              <ArkWalletTab />
             </TabsContent>
           </Tabs>
         </div>
