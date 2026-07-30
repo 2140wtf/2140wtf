@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
+import { useRemoteBattle } from '../hooks/useRemoteBattle';
 import { createRivalCompanion } from '../lib/rival';
 import { DEFAULT_PRIZE_SATS } from '../lib/constants';
 import { RemoteBattleSetup } from './RemoteBattleSetup';
@@ -29,6 +30,22 @@ export function BattleSetup({ ownerPubkey, onStart, allowBtcSats = true, classNa
   const { companions, isLoading } = usePetssCollection();
   const [mode, setMode] = useState<'local' | 'remote'>('local');
   const { profile } = useNostrPetProfile();
+  const remote = useRemoteBattle();
+
+  // Route into the remote view while a real-sats remote battle is mid-escrow.
+  // The escrow deposit is ONLY created by RemoteBattleSetup's auto-deposit
+  // effect, and invites are accepted from the BattleInvitePending overlay
+  // (rendered over this 'local' screen) — so a guest who accepts there never
+  // mounts RemoteBattleSetup, never deposits, and strands the host's real
+  // stake with the escrow operator. During 'inviting'/'accepted' the remote
+  // view renders status cards (no Back button), so this cannot fight the
+  // user's own navigation; demo-sats battles need no deposit and are left
+  // alone.
+  useEffect(() => {
+    if (remote.escrow.mode !== 'real-sats') return;
+    if (remote.phase !== 'inviting' && remote.phase !== 'accepted') return;
+    setMode('remote');
+  }, [remote.escrow.mode, remote.phase]);
 
   const eligiblePets = useMemo(
     () => companions.filter((pet) => pet.stage === 'baby' || pet.stage === 'adult'),

@@ -18,12 +18,15 @@ import {
   type BattleInputPayload,
   type BattleFinishedPayload,
   type BattleEscrowDepositPayload,
+  type BattleDepositAckPayload,
+  type BattleDepositRejectPayload,
   type BattleMessagePayload,
   type RemoteBattleStateSnapshot,
   type BattleMode,
 } from '../lib/battleMessages';
 import { subscribeBattleMessages } from '../lib/battleNetwork';
 import { checkEscrowDepositSpentState, normalizeEscrowPubkey } from '../lib/cashuEscrow';
+import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { PlayerInput } from '../types/battle.types';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
@@ -54,6 +57,20 @@ export interface BattleEscrowState {
   guestEscrowPubkey?: string;
   hostDepositToken?: string;
   guestDepositToken?: string;
+  /**
+   * The mint BOTH players stake from (real-sats). Chosen by the host and
+   * advertised in the invite — the escrow operator rejects mixed-mint
+   * releases, so deposits from any other mint are refused.
+   */
+  agreedMint?: string;
+  /**
+   * The opponent confirmed (battle-deposit-ack) that they received and
+   * recorded OUR deposit. A relay ack alone proves nothing about end-to-end
+   * delivery of the ephemeral sync event.
+   */
+  myDepositAcked?: boolean;
+  /** Why the opponent rejected our deposit (battle-deposit-reject). */
+  depositRejectReason?: string;
   phase: 'none' | 'awaiting_pubkeys' | 'locking' | 'awaiting_deposits' | 'ready';
 }
 
@@ -79,8 +96,13 @@ export interface RemoteBattleState {
 }
 
 export interface UseRemoteBattleOptions {
-  /** Validate an incoming escrow deposit token. Return an error message if invalid. */
-  validateEscrowDeposit?: (token: string, playerIndex: 0 | 1, amount: number) => string | null;
+  /**
+   * Validate an incoming escrow deposit token. Return an error message if
+   * invalid. `expectedMint` is the battle's agreed mint when one was
+   * negotiated — the deposit must come from exactly that mint, not merely
+   * one the receiver also uses.
+   */
+  validateEscrowDeposit?: (token: string, playerIndex: 0 | 1, amount: number, expectedMint?: string) => string | null;
 }
 
 export interface UseRemoteBattleReturn extends RemoteBattleState {
@@ -89,6 +111,7 @@ export interface UseRemoteBattleReturn extends RemoteBattleState {
     localPet: PetsCompanion,
     matchOptions: RemoteBattleMatchOptions,
     hostEscrowPubkey?: string,
+    hostDepositMint?: string,
   ) => Promise<void>;
   acceptInvite: (invite: BattleInvitePayload, localPet: PetsCompanion, guestEscrowPubkey?: string) => Promise<void>;
   declineInvite: (invite: BattleInvitePayload) => Promise<void>;
@@ -186,7 +209,15 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
       const nextEscrow = { ...prev.escrow, ...update };
       const ready =
         nextEscrow.mode === 'demo-sats' ||
-        (!!nextEscrow.hostDepositToken && !!nextEscrow.guestDepositToken);
+        (!!nextEscrow.hostDepositToken &&
+          !!nextEscrow.guestDepositToken &&
+          // The winner needs BOTH deposit tokens to claim from the operator,
+          // and each side records its OWN deposit locally at publish time —
+          // a relay ack proves nothing about end-to-end delivery. The host in
+          // particular must not start the fight until the guest has confirmed
+          // (battle-deposit-ack) it received the host's deposit, or a guest
+          // win would be unclaimable and both stakes stranded.
+          (prev.role !== 'host' || !!nextEscrow.myDepositAcked));
       return {
         ...prev,
         escrow: {
@@ -293,9 +324,15 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
             } else if (payload.type === 'battle-escrow-deposit') {
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
-              const error = validateEscrowDeposit?.(deposit.token, 1, expectedAmount);
+              const agreedMint = stateRef.current.escrow.agreedMint;
+              const error = validateEscrowDeposit?.(deposit.token, 1, expectedAmount, agreedMint);
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
+                // Tell the depositor WHY their stake was refused — a silent
+                // drop leaves them waiting on escrow forever with real sats
+                // already locked to the operator.
+                const reject: BattleDepositRejectPayload = { type: 'battle-deposit-reject', battleId, reason: error };
+                void publishSync(reject, { battleId, opponentPubkey });
                 return;
               }
               // Static validation (amount/lock/mint) cannot tell a fresh stake
@@ -304,6 +341,8 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               const spentReason = await checkEscrowDepositSpentState(deposit.token);
               if (spentReason) {
                 console.warn('[useRemoteBattle] escrow deposit failed spent-state check:', spentReason);
+                const reject: BattleDepositRejectPayload = { type: 'battle-deposit-reject', battleId, reason: spentReason };
+                void publishSync(reject, { battleId, opponentPubkey });
                 return;
               }
               // The sync channel only carries messages from the opponent — in
@@ -312,6 +351,16 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               // playerIndex, which a malicious peer could use to overwrite
               // our own deposit slot with their (invalid) token.
               updateEscrow({ guestDepositToken: deposit.token });
+              // End-to-end receipt confirmation: the depositor keeps its
+              // journaled deposit token (and retransmits) until this arrives.
+              const ack: BattleDepositAckPayload = { type: 'battle-deposit-ack', battleId };
+              void publishSync(ack, { battleId, opponentPubkey });
+            } else if (payload.type === 'battle-deposit-ack') {
+              updateEscrow({ myDepositAcked: true });
+            } else if (payload.type === 'battle-deposit-reject') {
+              const reason = (payload as BattleDepositRejectPayload).reason;
+              console.warn('[useRemoteBattle] opponent rejected our escrow deposit:', reason);
+              updateEscrow({ depositRejectReason: reason });
             }
           } else {
             if (payload.type === 'battle-state') {
@@ -328,26 +377,39 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
             } else if (payload.type === 'battle-escrow-deposit') {
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
-              const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount);
+              const agreedMint = stateRef.current.escrow.agreedMint;
+              const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount, agreedMint);
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
+                const reject: BattleDepositRejectPayload = { type: 'battle-deposit-reject', battleId, reason: error };
+                void publishSync(reject, { battleId, opponentPubkey });
                 return;
               }
               // Same spent-state check as the host branch above.
               const spentReason = await checkEscrowDepositSpentState(deposit.token);
               if (spentReason) {
                 console.warn('[useRemoteBattle] escrow deposit failed spent-state check:', spentReason);
+                const reject: BattleDepositRejectPayload = { type: 'battle-deposit-reject', battleId, reason: spentReason };
+                void publishSync(reject, { battleId, opponentPubkey });
                 return;
               }
               // Guest role: the opponent on this channel is always the host
               // (see the host-branch comment above).
               updateEscrow({ hostDepositToken: deposit.token });
+              const ack: BattleDepositAckPayload = { type: 'battle-deposit-ack', battleId };
+              void publishSync(ack, { battleId, opponentPubkey });
+            } else if (payload.type === 'battle-deposit-ack') {
+              updateEscrow({ myDepositAcked: true });
+            } else if (payload.type === 'battle-deposit-reject') {
+              const reason = (payload as BattleDepositRejectPayload).reason;
+              console.warn('[useRemoteBattle] opponent rejected our escrow deposit:', reason);
+              updateEscrow({ depositRejectReason: reason });
             }
           }
         },
       });
     },
-    [nostr, stopSync, user?.signer, startFight, validateEscrowDeposit, updateEscrow],
+    [nostr, stopSync, user?.signer, startFight, validateEscrowDeposit, updateEscrow, publishSync],
   );
 
   const sendInvite = useCallback(
@@ -356,6 +418,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
       localPet: PetsCompanion,
       matchOptions: RemoteBattleMatchOptions,
       hostEscrowPubkey?: string,
+      hostDepositMint?: string,
     ) => {
       if (!user) {
         setError('You must be logged in to challenge someone.');
@@ -376,6 +439,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
       // Store/send the x-only form so both sides and the escrow operator
       // compare the same representation (derived keys are 66-char compressed).
       const normalizedHostEscrowPubkey = normalizeEscrowPubkey(hostEscrowPubkey) ?? hostEscrowPubkey;
+      // The host leads mint coordination: both deposits must come from this
+      // mint or the escrow operator's release fails on a mixed-mint pair.
+      const agreedMint =
+        matchOptions.mode === 'real-sats' && hostDepositMint
+          ? safeNormalizeMintUrl(hostDepositMint) || undefined
+          : undefined;
 
       const battleId = generateUUID();
       const sentAt = nowMs();
@@ -396,6 +465,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           mode: matchOptions.mode,
           phase: matchOptions.mode === 'real-sats' ? 'awaiting_pubkeys' : 'none',
           hostEscrowPubkey: normalizedHostEscrowPubkey,
+          agreedMint,
         },
       });
 
@@ -410,6 +480,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           sentAt,
           mode: matchOptions.mode,
           hostEscrowPubkey: normalizedHostEscrowPubkey,
+          hostDepositMint: agreedMint,
         };
 
         // Start listening for the guest's accept/decline/cancel on the sync
@@ -509,6 +580,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
           phase: invite.mode === 'real-sats' ? 'locking' : 'none',
           hostEscrowPubkey: normalizedHostEscrowPubkey,
           guestEscrowPubkey: normalizedGuestEscrowPubkey,
+          // Lock to the host's advertised deposit mint — the operator rejects
+          // mixed-mint releases, so matching it is the only way either stake
+          // can ever be paid out.
+          agreedMint: invite.mode === 'real-sats' && invite.hostDepositMint
+            ? safeNormalizeMintUrl(invite.hostDepositMint) || undefined
+            : undefined,
         },
       });
 

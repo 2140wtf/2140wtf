@@ -1473,18 +1473,15 @@ export function useCashuWallet(
       const restored = await restoreNip60Wallet(walletSigner, sync.signer, sync.query);
       if (!restored.config) return false;
 
-      // Only merge remote proofs when local store is empty; local state is authoritative.
-      const hasAnyProofs = await (async () => {
-        for (const m of allMintsRef.current) {
-          const normalized = safeNormalizeMintUrl(m.url);
-          const local = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-          if (local.length > 0) return true;
-        }
-        return false;
-      })();
-
+      // Merge remote proofs PER MINT, never gated on the global store state.
+      // Local state stays authoritative: the merge is a union of local proofs
+      // with remote proofs the mint reports UNSPENT (deduped by secret), so
+      // nothing local is ever removed or contradicted. The old global gate
+      // ("merge only when the ENTIRE local store is empty") silently skipped
+      // every mint once any single mint held one local proof — a mint whose
+      // balance existed only on the relay was never restored on this device.
       const seed = bip39SeedRef.current;
-      if (!hasAnyProofs && seed) {
+      if (seed) {
         await storageRef.current.withProofLock(async () => {
           for (const [mint, remoteProofs] of Object.entries(restored.proofsByMint)) {
             const normalized = normalizeMintUrl(mint);
@@ -2336,21 +2333,28 @@ export function useCashuWallet(
         if (actualFee < 0 || actualFee > maxFee) {
           throw new Error('Mint returned invalid proofs: fee exceeds reported fee');
         }
-        // Reject if the mint tried to return unspent input proofs as outputs.
-        // Exception: cashu-ts takes an OFFLINE no-swap path when the exact
-        // amount is selectable and no pubkey/output options are set — it
-        // returns the input proofs unchanged as {send, keep} without calling
-        // the mint. That is a legitimate bearer send (ecash changes hands by
-        // handing over the proofs themselves), so accept it; the keep proofs
-        // are simply the unselected inputs.
+        // Reject only if a SEND proof bears an input secret outside the
+        // offline no-swap path. cashu-ts takes the offline path when the
+        // exact amount is selectable and no pubkey/output options are set —
+        // it returns the input proofs unchanged as {send, keep} without
+        // calling the mint. That is a legitimate bearer send (ecash changes
+        // hands by handing over the proofs themselves), so accept it.
+        // In the SWAP path (any locked send, or a non-exact bearer send) all
+        // outputs are constructed client-side from mint signatures over
+        // client-generated blinded messages — the mint CANNOT choose output
+        // secrets — and cashu-ts passes the UNSELECTED input proofs through
+        // verbatim in keep (swap(): { keep: [...freshChange, ...unselected] }).
+        // An input secret among the keep proofs is therefore normal and the
+        // proof is still unspent; rejecting it here threw on every legitimate
+        // swap send AFTER the mint had already committed the spend.
         const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
         const isOfflineNoSwap = !sendOpts.pubkey && sendProofs.length > 0
           && sendProofs.every((p) => inputSecrets.has(String(p.secret)))
           && keepProofs.every((p) => inputSecrets.has(String(p.secret)));
         if (!isOfflineNoSwap) {
-          for (const p of [...sendProofs, ...keepProofs]) {
+          for (const p of sendProofs) {
             if (inputSecrets.has(String(p.secret))) {
-              throw new Error('Mint returned unspent input proofs as outputs');
+              throw new Error('Mint returned unspent input proofs as send outputs');
             }
           }
         }
@@ -2842,21 +2846,15 @@ export function useCashuWallet(
         // Kept in the dedicated melt-input slot so no later wallet op can overwrite it
         // while the quote is unresolved.
         await storageRef.current.writeMeltInputRecovery(normalizedMint, selectedProofs, encKeyRef.current!);
-        let meltResult: Awaited<ReturnType<typeof wallet.meltProofs>>;
-        try {
-          meltResult = await withTimeout(
-            wallet.meltProofs(quote, selectedProofs),
-            60000,
-            'Melt proofs',
-          );
-        } catch (meltErr) {
-          // The melt's outcome is UNKNOWN (timeout, lost response, mint error):
-          // the mint may have spent the inputs. Record a pending melt tx so the
-          // pending-melt poll resolves the quote and the reconcile guard keeps
-          // protecting the input journal — without the tx, reconcile treats the
-          // journal as an orphaned recovery and can destroy or wrongly merge it.
-          // The poll resolves every case: UNPAID → inputs restored, journal
-          // cleared; PAID → journaled (spent) inputs removed from the store.
+        // Record a pending melt tx so the pending-melt poll resolves the quote
+        // and the reconcile guard keeps protecting the input journal — without
+        // the tx, reconcile treats the journal as an orphaned recovery and the
+        // single-slot guard refuses every later melt from this mint. Needed on
+        // ANY failure after meltProofs was called (melt error OR post-commit
+        // validation throw): the outcome is unknown either way. The poll
+        // resolves every case: UNPAID → inputs restored, journal cleared;
+        // PAID → journaled (spent) inputs removed from the store.
+        const recordPendingMeltTx = async () => {
           try {
             await storageRef.current.withTxLock(async () => {
               await storageRef.current.addTransaction({
@@ -2870,41 +2868,63 @@ export function useCashuWallet(
               }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
             });
           } catch (txErr) {
-            devLog.error('Failed to record pending melt tx after melt error:', txErr);
+            devLog.error('Failed to record pending melt tx:', txErr);
           }
+        };
+        let meltResult: Awaited<ReturnType<typeof wallet.meltProofs>>;
+        try {
+          meltResult = await withTimeout(
+            wallet.meltProofs(quote, selectedProofs),
+            60000,
+            'Melt proofs',
+          );
+        } catch (meltErr) {
+          // The melt's outcome is UNKNOWN (timeout, lost response, mint error):
+          // the mint may have spent the inputs.
+          await recordPendingMeltTx();
           throw meltErr;
         }
-        if (!meltResult || !Array.isArray(meltResult.change)) {
-          throw new Error('Mint returned invalid melt response');
-        }
-        const changeAmount = sumProofAmounts(meltResult.change);
-        if (changeAmount > inputAmount - quoteAmount) {
-          throw new Error('Mint returned invalid change: exceeds available amount');
-        }
-        if (changeAmount < inputAmount - quoteAmount - feeReserve) {
-          throw new Error('Mint returned invalid change: missing required amount');
-        }
-        const actualFee = inputAmount - changeAmount - quoteAmount;
-        if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
-          throw new Error('Mint returned invalid melt fee');
-        }
-
-        const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
-        // Verify the mint did not return malformed or duplicate change proofs.
-        const activeKeysetIds = new Set(wallet.keysets.filter((k) => k.active).map((k) => k.id));
-        const localSecrets = new Set([...selectedProofs, ...unselectedProofs].map((p) => String(p?.secret)));
-        const validation = validateReceivedProofs(changeProofs, {
-          activeKeysetIds,
-          localSecrets,
-          getKeyset: (id) => wallet.keys.get(id),
-          requireDleq: true,
-        });
-        if (!validation.valid) {
-          throw new Error(`Invalid change proofs: ${validation.reason}`);
-        }
-        // Persist change for crash recovery immediately after the mint returns it.
-        if (changeProofs.length > 0) {
-          await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+        // Post-commit validation. Integrity FIRST: DLEQ-validated change is
+        // real money, journaled immediately so a later economic-check throw
+        // cannot strand it. Economics SECOND. Any throw here records the
+        // pending tx — the outcome is as unknown as after a melt error, and
+        // skipping the tx bricked all future melts from this mint (hunt r8).
+        let changeProofs: any[];
+        try {
+          if (!meltResult || !Array.isArray(meltResult.change)) {
+            throw new Error('Mint returned invalid melt response');
+          }
+          changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
+          // Verify the mint did not return malformed or duplicate change proofs.
+          const activeKeysetIds = new Set(wallet.keysets.filter((k) => k.active).map((k) => k.id));
+          const localSecrets = new Set([...selectedProofs, ...unselectedProofs].map((p) => String(p?.secret)));
+          const validation = validateReceivedProofs(changeProofs, {
+            activeKeysetIds,
+            localSecrets,
+            getKeyset: (id) => wallet.keys.get(id),
+            requireDleq: true,
+          });
+          if (!validation.valid) {
+            throw new Error(`Invalid change proofs: ${validation.reason}`);
+          }
+          // Persist change for crash recovery immediately after validation.
+          if (changeProofs.length > 0) {
+            await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+          }
+          const changeAmount = sumProofAmounts(meltResult.change);
+          if (changeAmount > inputAmount - quoteAmount) {
+            throw new Error('Mint returned invalid change: exceeds available amount');
+          }
+          if (changeAmount < inputAmount - quoteAmount - feeReserve) {
+            throw new Error('Mint returned invalid change: missing required amount');
+          }
+          const actualFee = inputAmount - changeAmount - quoteAmount;
+          if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
+            throw new Error('Mint returned invalid melt fee');
+          }
+        } catch (postMeltErr) {
+          await recordPendingMeltTx();
+          throw postMeltErr;
         }
         // Verify this tab still holds the cross-tab lock before committing any
         // post-melt store writes below.
@@ -3185,18 +3205,11 @@ export function useCashuWallet(
         }
 
         await storageRef.current.writeMeltInputRecovery(normalizedMint, selectedProofs, encKeyRef.current!);
-        let meltResult: Awaited<ReturnType<typeof wallet.meltProofsBolt12>>;
-        try {
-          meltResult = await withTimeout(
-            wallet.meltProofsBolt12(quote, selectedProofs),
-            60000,
-            'BOLT12 melt proofs',
-          );
-        } catch (meltErr) {
-          // Outcome UNKNOWN (timeout, lost response, mint error) — record a
-          // pending BOLT12 melt tx so the poll resolves the quote (via the
-          // bolt12 endpoint) and the input journal stays protected. See the
-          // BOLT11 path for the full rationale.
+        // Same unknown-outcome contract as the BOLT11 path: ANY failure after
+        // meltProofsBolt12 was called (melt error OR post-commit validation
+        // throw) must record a pending tx, or the quote never resolves and
+        // the single-slot input journal bricks future melts from this mint.
+        const recordPendingMeltTx = async () => {
           try {
             await storageRef.current.withTxLock(async () => {
               await storageRef.current.addTransaction({
@@ -3211,39 +3224,57 @@ export function useCashuWallet(
               }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
             });
           } catch (txErr) {
-            devLog.error('Failed to record pending BOLT12 melt tx after melt error:', txErr);
+            devLog.error('Failed to record pending BOLT12 melt tx:', txErr);
           }
+        };
+        let meltResult: Awaited<ReturnType<typeof wallet.meltProofsBolt12>>;
+        try {
+          meltResult = await withTimeout(
+            wallet.meltProofsBolt12(quote, selectedProofs),
+            60000,
+            'BOLT12 melt proofs',
+          );
+        } catch (meltErr) {
+          // Outcome UNKNOWN (timeout, lost response, mint error).
+          await recordPendingMeltTx();
           throw meltErr;
         }
-        if (!meltResult || !Array.isArray(meltResult.change)) {
-          throw new Error('Mint returned invalid BOLT12 melt response');
-        }
-        const changeAmount = sumProofAmounts(meltResult.change);
-        if (changeAmount > inputAmount - quoteAmount) {
-          throw new Error('Mint returned invalid change: exceeds available amount');
-        }
-        if (changeAmount < inputAmount - quoteAmount - feeReserve) {
-          throw new Error('Mint returned invalid change: missing required amount');
-        }
-        const actualFee = inputAmount - changeAmount - quoteAmount;
-        if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
-          throw new Error('Mint returned invalid BOLT12 melt fee');
-        }
-
-        const changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
-        const activeKeysetIds = new Set(wallet.keysets.filter((k) => k.active).map((k) => k.id));
-        const localSecrets = new Set([...selectedProofs, ...unselectedProofs].map((p) => String(p?.secret)));
-        const validation = validateReceivedProofs(changeProofs, {
-          activeKeysetIds,
-          localSecrets,
-          getKeyset: (id) => wallet.keys.get(id),
-          requireDleq: true,
-        });
-        if (!validation.valid) {
-          throw new Error(`Invalid change proofs: ${validation.reason}`);
-        }
-        if (changeProofs.length > 0) {
-          await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+        // Post-commit validation: integrity first (DLEQ-valid change journaled
+        // immediately), economics second; any throw records the pending tx.
+        let changeProofs: any[];
+        try {
+          if (!meltResult || !Array.isArray(meltResult.change)) {
+            throw new Error('Mint returned invalid BOLT12 melt response');
+          }
+          changeProofs = sanitizeProofs(dedupeProofs(meltResult.change));
+          const activeKeysetIds = new Set(wallet.keysets.filter((k) => k.active).map((k) => k.id));
+          const localSecrets = new Set([...selectedProofs, ...unselectedProofs].map((p) => String(p?.secret)));
+          const validation = validateReceivedProofs(changeProofs, {
+            activeKeysetIds,
+            localSecrets,
+            getKeyset: (id) => wallet.keys.get(id),
+            requireDleq: true,
+          });
+          if (!validation.valid) {
+            throw new Error(`Invalid change proofs: ${validation.reason}`);
+          }
+          if (changeProofs.length > 0) {
+            await storageRef.current.writeMeltChangeRecovery(normalizedMint, changeProofs, encKeyRef.current!);
+          }
+          const changeAmount = sumProofAmounts(meltResult.change);
+          if (changeAmount > inputAmount - quoteAmount) {
+            throw new Error('Mint returned invalid change: exceeds available amount');
+          }
+          if (changeAmount < inputAmount - quoteAmount - feeReserve) {
+            throw new Error('Mint returned invalid change: missing required amount');
+          }
+          const actualFee = inputAmount - changeAmount - quoteAmount;
+          if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
+            throw new Error('Mint returned invalid BOLT12 melt fee');
+          }
+        } catch (postMeltErr) {
+          await recordPendingMeltTx();
+          throw postMeltErr;
         }
         // Verify this tab still holds the cross-tab lock before committing any
         // post-melt store writes below.
@@ -3594,6 +3625,13 @@ export function useCashuWallet(
     }
 
     const releaseNutzapMutex = await acquireMutex(walletOpsMutexRef);
+    // Set the moment the mint has committed the swap and the recipient-locked
+    // send proofs are journaled. The NutzapSendResult contract documents
+    // 'failed' as "nothing was committed — safe to retry": a validation throw
+    // AFTER this point must never surface as 'failed', or the caller retries,
+    // double-pays, and the first (already-paid) locked proofs sit stranded in
+    // the send-recovery journal forever.
+    let postCommitSendProofs: any[] | null = null;
     try {
       if (mountedRef.current) setLoading(true);
       if (mountedRef.current) setError('');
@@ -3648,6 +3686,9 @@ export function useCashuWallet(
         if (sendProofs.length > 0) {
           await storageRef.current.writeSendRecovery(normalizedMint, sendProofs, encKey);
         }
+        // From here on the mint has committed: any throw below must surface
+        // as 'pending' (see the catch), never as a retry-safe 'failed'.
+        postCommitSendProofs = sendProofs;
         if (sumProofAmounts(sendProofs) !== amount) {
           throw new Error('Mint returned send proofs with incorrect total amount');
         }
@@ -3659,10 +3700,18 @@ export function useCashuWallet(
         if (actualFee < 0 || actualFee > maxNutzapFee) {
           throw new Error('Mint returned invalid proofs: fee exceeds reported fee');
         }
+        // Locked sends always take the cashu-ts swap path: send outputs are
+        // constructed client-side with fresh secrets (the mint cannot choose
+        // them), and the UNSELECTED input proofs are passed through verbatim
+        // in keep (swap(): { keep: [...freshChange, ...unselected] }). An
+        // input secret among the keep proofs is normal and still unspent —
+        // only a send proof bearing an input secret indicates a broken
+        // mint/library response. Checking keep here threw on every Nutzap
+        // from a wallet holding more proofs than the swap selected.
         const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
-        for (const p of [...sendProofs, ...keepProofs]) {
+        for (const p of sendProofs) {
           if (inputSecrets.has(String(p.secret))) {
-            throw new Error('Mint returned unspent input proofs as outputs');
+            throw new Error('Mint returned unspent input proofs as send outputs');
           }
         }
 
@@ -3787,6 +3836,35 @@ export function useCashuWallet(
       return { status: 'sent', eventId: event.id };
     } catch (err: any) {
       devLog.error('Nutzap send failed:', err);
+      // (cast: assigned inside the withProofLock closure, invisible to CFA)
+      const committed = postCommitSendProofs as any[] | null;
+      if (committed && committed.length > 0) {
+        // The mint already committed the swap: the sender's sats are spent and
+        // the recipient-locked proofs are journaled. 'failed' would tell the
+        // caller "nothing was committed — safe to retry" and a retry would
+        // double-pay. Save a pending entry so the SAME locked proofs get
+        // published by the retry loop instead, and report 'pending'.
+        const pendingEntry: PendingNutzapEntry = {
+          id: `post-commit-${Date.now()}`,
+          sendProofs: committed,
+          recipientPubkey: recipientIdentityPubkey,
+          mintUrl: normalizedMint,
+          amount,
+          memo: opts?.memo,
+          zappedEvent: opts?.zappedEvent,
+          timestamp: Date.now(),
+          attempts: 0,
+          recipientRelays: recipientInfo.relays,
+        };
+        try {
+          await storageRef.current.savePendingNutzap(pendingEntry, encKey, legacyEncKeyRef.current ?? undefined);
+          storageRef.current.clearSendRecovery(normalizedMint);
+        } catch (saveErr) {
+          devLog.error('Failed to save pending Nutzap after post-commit validation failure:', saveErr);
+        }
+        if (mountedRef.current) setError('Nutzap paid but hit a post-payment error — saved for retry');
+        return { status: 'pending' };
+      }
       if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
       return { status: 'failed' };
     } finally {
