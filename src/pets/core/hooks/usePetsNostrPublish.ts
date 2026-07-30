@@ -11,7 +11,9 @@ import { getEffectiveRelays } from '@/lib/appRelays';
  *
  * Pet events are published to the user's effective relay set (app defaults + any
  * configured user relays) so pet state, profiles, and interactions are stored
- * across the same relays as the rest of the user's data.
+ * across the same relays as the rest of the user's data. Relays added under
+ * Settings → Pets → Pet Relays (`config.petsRelays`) receive an extra copy on
+ * top of that set.
  *
  * Publishing is gated by the user's Privacy & Publishing preference for pets.
  */
@@ -22,10 +24,13 @@ export function usePetsNostrPublish() {
   const [isPending, setIsPending] = useState(false);
   const { config } = useAppContext();
 
-  const relayUrls = useMemo(
-    () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays.map((r) => r.url),
-    [config.relayMetadata, config.useAppRelays, config.useUserRelays],
-  );
+  const relayUrls = useMemo(() => {
+    const global = getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays)
+      .relays.map((r) => r.url);
+    const seen = new Set(global.map((u) => u.toLowerCase().replace(/\/+$/, '')));
+    const extra = (config.petsRelays ?? []).filter((u) => !seen.has(u.toLowerCase().replace(/\/+$/, '')));
+    return [...global, ...extra];
+  }, [config.relayMetadata, config.useAppRelays, config.useUserRelays, config.petsRelays]);
 
   const guard = useCallback(() => {
     if (!petsEnabled) {
