@@ -434,8 +434,7 @@ function ReceivePanel({
           isLoading={arkAddress.isPending && !cachedArkAddress}
           error={cachedArkAddress ? null : arkAddress.error}
           onRetry={() => arkAddress.mutate()}
-          copyLabel="Ark address"
-          hint="Share this Ark address to receive off-chain payments from another Ark wallet."
+          copyLabel="Ark address"          hint="Share this Ark address to receive off-chain payments from another Ark wallet."
         />
         {cachedArkAddress && (
           <Button
@@ -458,7 +457,7 @@ function ReceivePanel({
               isLoading={false}
               error={null}
               onRetry={() => invoice.reset()}
-              copyLabel="invoice"
+              copyLabel="Invoice"
               hint="This BOLT11 invoice settles into your Ark balance as soon as it is paid."
             />
             <Button variant="outline" size="sm" className="w-full" onClick={() => invoice.reset()}>
@@ -519,7 +518,7 @@ function ReceivePanel({
           isLoading={onchainAddress.isPending && !cachedOnchainAddress}
           error={cachedOnchainAddress ? null : onchainAddress.error}
           onRetry={() => onchainAddress.mutate()}
-          copyLabel="on-chain address"
+          copyLabel="On-chain address"
           hint="On-chain funds land in your wallet’s on-chain balance. Once confirmed, board them into Ark below to spend them off-chain."
         />
         {onchainBalance.data !== undefined && (incomingOnchain > 0 || spendableOnchain > 0) && (
@@ -625,7 +624,7 @@ function SendPanel({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="send-amount">
-          Amount (sats){needsAmount ? '' : ' — optional for BOLT11'}
+          Amount (sats){destination.trim() && !needsAmount ? ' — optional for invoices/offers' : ''}
         </Label>
         <Input
           id="send-amount"
