@@ -48,7 +48,8 @@ export interface BarkdApis {
 }
 
 function isLoopback(hostname: string): boolean {
-  return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '[::1]';
+  // The whole 127.0.0.0/8 range is potentially trustworthy per the spec.
+  return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.startsWith('127.') || hostname === '[::1]';
 }
 
 /**
@@ -97,12 +98,18 @@ async function apiFetch<T>(
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    if (response.status === 401) throw new Error('Invalid password.');
+    if (response.status === 401) throw new Error(INVALID_PASSWORD_MESSAGE);
     if (response.status === 429) throw new Error('Too many attempts — the server rate-limited you. Wait a bit and retry.');
     throw new Error(body?.error ? `Server error: ${body.error}` : `Server returned ${response.status}.`);
   }
   return (await response.json()) as T;
 }
+
+/** Message used for 401s from barkd calls — matched by hooks to trigger re-auth. */
+export const SESSION_EXPIRED_MESSAGE = 'Session expired — reconnect to the server.';
+
+/** Message thrown by apiFetch on a 401 from /api/login. */
+export const INVALID_PASSWORD_MESSAGE = 'Invalid password.';
 
 /**
  * Map an error thrown by the generated `@secondts/barkd` client to a
@@ -113,11 +120,13 @@ async function apiFetch<T>(
 export async function friendlyBarkdError(error: unknown): Promise<Error> {
   if (error instanceof ResponseError) {
     const { status } = error.response;
-    const body = (await error.response.clone().json().catch(() => null)) as
-      | { error?: string; message?: string }
-      | null;
+    // clone() throws synchronously if the body was already consumed — keep the
+    // whole read inside the catch so a consumed body degrades to no detail.
+    const body = (await Promise.resolve()
+      .then(() => error.response.clone().json())
+      .catch(() => null)) as { error?: string; message?: string } | null;
     const detail = body?.error ?? body?.message;
-    if (status === 401) return new Error('Session expired — reconnect to the server.');
+    if (status === 401) return new Error(SESSION_EXPIRED_MESSAGE);
     if (status === 429) return new Error('Too many attempts — the server rate-limited you. Wait a bit and retry.');
     if (status === 400) return new Error(detail ? `The server rejected it: ${detail}` : 'The server rejected the request.');
     return new Error(detail ? `Server error: ${detail}` : `Server returned ${status}.`);
