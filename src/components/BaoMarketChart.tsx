@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useBaoMarketPriceHistory, type PriceHistoryRange } from '@/hooks/useBaoMarketPriceHistory';
+import { useBaoSmjHistory } from '@/hooks/useBaoSmjHistory';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { hslStringToHex } from '@/lib/colorUtils';
@@ -191,6 +192,21 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
   const [range, setRange] = useState<PriceHistoryRange>('ALL');
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const { data: history = {}, isLoading, error } = useBaoMarketPriceHistory(market, range);
+  // SMJ pools have no CLOB candles — build the REAL parimutuel odds curve
+  // from the public bet feed instead (odds = pool share at each bet).
+  const { data: smjHistory = {} } = useBaoSmjHistory(
+    market.poolModel === 'smj' ? market.marketId : undefined,
+    market.outcomes.map((o) => o.label),
+  );
+  const effectiveHistory = useMemo(() => {
+    if (market.poolModel !== 'smj') return history;
+    const merged: typeof history = {};
+    for (const outcome of market.outcomes) {
+      merged[outcome.label] =
+        smjHistory[outcome.label.toLowerCase()] ?? history[outcome.label];
+    }
+    return merged;
+  }, [history, smjHistory, market]);
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -203,7 +219,7 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
 
     return market.outcomes.map((outcome, idx) => {
       const color = getOutcomeColor(outcome, idx);
-      const points = history[outcome.label];
+      const points = effectiveHistory[outcome.label];
       const normalizedLabel = outcome.label.trim().toUpperCase();
       const isNo = isBinary && normalizedLabel === 'NO';
 
@@ -222,7 +238,7 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
         isNo ? yesValues : undefined,
       );
     });
-  }, [history, market, range]);
+  }, [effectiveHistory, market, range]);
 
   const activeOutcome = useMemo(() => {
     if (selectedOutcome) {

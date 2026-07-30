@@ -122,3 +122,24 @@ export async function fetchBaoPositions(signer: BaoApiSigner): Promise<BaoPositi
   }
   return json?.data?.positions ?? [];
 }
+
+/** One SMJ (parimutuel) bet from GET /v1/smj/positions (same shape as BaoPosition + pool_model). */
+export interface BaoSmjPosition extends BaoPosition {
+  pool_model: 'smj';
+}
+
+/** Fetch the caller's SMJ bets from the bao.markets API (NIP-98 signed). Empty when the route isn't deployed yet. */
+export async function fetchBaoSmjPositions(signer: BaoApiSigner): Promise<BaoSmjPosition[]> {
+  const url = `${baoApiBase()}/v1/smj/positions`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: { positions?: BaoSmjPosition[] }; error?: { message?: string } };
+  if (!res.ok) {
+    // Older API deployments don't have this route yet — treat as no SMJ positions.
+    if (res.status === 404) return [];
+    throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return json?.data?.positions ?? [];
+}

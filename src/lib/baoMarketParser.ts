@@ -22,6 +22,8 @@ export interface BaoMarket {
   createdAt: number;
   /** Pool model when the API reports it ('smj' parimutuel / 'amm'); drives live-odds fetching. */
   poolModel?: 'smj' | 'amm';
+  /** Payment rails the market accepts (API-sourced; htclc/spark/liquid/cashu/l1/ecash). */
+  paymentRails?: string[];
   outcomes: BaoMarketOutcome[];
   creatorPubkey: string;
   /** Winning outcome id when the API reports the market as resolved (API-sourced only). */
