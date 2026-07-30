@@ -32,6 +32,7 @@ import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { useBaoSmjOdds, withSmjOdds } from "@/hooks/useBaoSmjOdds";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
 import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
+import { MyTradesSection } from "@/components/MyTradesSection";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
 import { mergeApiAndRelayMarkets, type RelayMergedMarket } from "@/lib/baoRelayMarkets";
@@ -375,10 +376,24 @@ export function PredictionMarketsPage(): React.JSX.Element {
       </PageHeader>
 
       <div className="px-4 py-4 max-w-6xl mx-auto space-y-4">
+        <MyTradesSection
+          onOpenMarket={(market, position) => {
+            if (market) {
+              setSelectedMarket(market);
+              setInitialOutcome(position?.outcome_id ?? null);
+            } else if (position) {
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('market', position.market_id);
+                return next;
+              }, { replace: true });
+            }
+          }}
+        />
+
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />            <Input
               type="search"
               placeholder="Search markets…"
               value={search}
