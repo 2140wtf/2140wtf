@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Pet Relays settings — Settings → NOSTR PETS gains a "Pet Relays" section where you can add extra relays that receive a copy of every new pet event on top of your global relay set (additive, never a replacement), synced across devices via encrypted NIP-78 settings
 - ₿AO wallet shows every custodial rail — the rail grid gains the missing L1 tile (all 7 bao.markets rails now render), the total gets a per-rail breakdown line underneath, and when a device has no Cashu but the account holds sats on other rails a hint points at swapping to Cashu on bao.markets (the rail pets and battles spend from)
 - "My trades" on the ₿AO Markets page — a collapsible section above the grid lists your open positions (market, outcome, size, entry vs current price, unrealized PnL) fetched from the bao.markets API with your signer, each row deep-linking into the market detail; wallet tabs now show per-rail API balances (Lightning, Spark, Ark — placeholders replaced)
 - Lightning wallet tab on the Wallet page — the connected NWC wallet (Rizful, Alby, Coinos) shows its live balance Amethyst-style, refreshed every 60s, with a connect prompt when no wallet is linked

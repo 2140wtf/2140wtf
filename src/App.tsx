@@ -87,6 +87,7 @@ const hardcodedConfig: AppConfig = {
   useUserRelays: true,
   marketplaceRelays: [],
   groupChatRelays: [],
+  petsRelays: [],
   appRelays: [...APP_RELAYS],
   lastChannelByServer: {},
   mutedCommunities: [],
