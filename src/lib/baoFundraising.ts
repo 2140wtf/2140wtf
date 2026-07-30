@@ -169,6 +169,31 @@ export async function fetchFundraiser(id: string): Promise<{ fundraiser: BaoFund
   return res.data;
 }
 
+/** Server-side campaign-creation quota state (2/hour, 5/day; admins exempt). */
+export interface BaoFundraiserQuota {
+  is_admin: boolean;
+  used_hour: number;
+  used_day: number;
+  limit_hour: number;
+  limit_day: number;
+  allowed: boolean;
+  retry_after_sec: number;
+}
+
+/**
+ * Pre-check the anti-spam quota before publishing a create intent the bridge
+ * would silently drop. Returns null when the endpoint isn't deployed yet —
+ * callers must treat null as "unknown, proceed" (the server still enforces).
+ */
+export async function fetchFundraiserQuota(pubkey: string): Promise<BaoFundraiserQuota | null> {
+  try {
+    const res = await apiFetch<{ data: BaoFundraiserQuota }>(`/v1/fundraisers/quota?pubkey=${pubkey}`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchContributions(id: string): Promise<BaoContribution[]> {
   const res = await apiFetch<{ data: BaoContribution[] }>(`/v1/fundraisers/${encodeURIComponent(id)}/contributions`);
   return res.data;
