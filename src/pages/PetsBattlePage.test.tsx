@@ -198,15 +198,42 @@ describe('PetsBattlePage escrow claim journaling (hunt regressions)', () => {
     );
   });
 
-  it('refuses to journal a claim when the guest never received the host finished event', async () => {
+  it('guest winner journals a deferred claim and fires it when the host finished event arrives', async () => {
+    // Regression (hunt P20): the guest's onFinish fires from the final
+    // battle-state snapshot, which can arrive BEFORE the host-signed finished
+    // event — and the game never refires onFinish. The claim must be journaled
+    // deferred and hydrated the moment the signed event lands, not dropped.
     arrangeRemote({ role: 'guest', hostFinishedEvent: null });
 
-    await renderAndFinish(1);
+    const { rerender } = render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.onFinishRef.current).toBeTruthy());
+    await act(async () => {
+      await mocks.onFinishRef.current!(1);
+    });
 
     expect(mocks.requestEscrowRelease).not.toHaveBeenCalled();
-    expect(loadPendingEscrowClaims()).toHaveLength(0);
+    const deferred = loadPendingEscrowClaims();
+    expect(deferred).toHaveLength(1);
+    expect(deferred[0].battleId).toBe('battle-1');
+    expect(deferred[0].finishedEvent).toBeUndefined();
     expect(mocks.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Battle result proof missing', variant: 'destructive' }),
+      expect.objectContaining({ title: 'Prize claim saved — awaiting result' }),
+    );
+
+    // The signed event lands a moment later → the claim hydrates and fires.
+    mocks.remote.hostFinishedEvent = FINISHED_EVENT;
+    rerender(<PetsBattlePage />);
+
+    await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1));
+    expect(mocks.requestEscrowRelease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        battleId: 'battle-1',
+        finishedEvent: expect.objectContaining({ id: FINISHED_EVENT.id, sig: FINISHED_EVENT.sig }),
+      }),
+    );
+    await waitFor(() => expect(loadPendingEscrowClaims()).toHaveLength(0));
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Battle prize claimed!' }),
     );
   });
 

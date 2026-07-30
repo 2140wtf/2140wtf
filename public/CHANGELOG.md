@@ -62,6 +62,14 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Battle guest who won a real-sats match could lose the prize entirely: the finish handler fired before the host's signed result arrived, journaled nothing, and never re-fired — the claim is now journaled immediately and fires automatically the moment the signed result lands (ported from bao_fund)
+- Battle invites are now bound to the verified DM sender (a throwaway key can no longer spoof a trusted contact's invite), self-battles are rejected, and absurd round durations that could stretch a battle past the escrow refund locktime are refused (ported from bao_fund)
+- Compute-credits funding-token outbox no longer leaks the previous account's token to the next user of a shared browser (account switch/logout resets and never writes the shared logged-out key, and the copy is hidden while logged out) (ported from bao_fund)
+- Compute-credits Routstr redeem no longer auto-retries a token send after an ambiguous failure (timeout/dropped response), which could double-spend and burn the first attempt's sats — and no longer falsely claims "your sats are safe" in that case (ported from bao_fund)
+- Mint URL comparisons no longer lowercase the path (the default Minibits mint's `/Bitcoin` path 404s as `/bitcoin`, which had made its tokens fail spent-state checks) (ported from bao_fund)
+- Compute-credit "confirm received" is now a deliberate two-step action: a funder's claim is only a claim (anyone can publish one), and the agent must attest they actually redeemed the sats before the request closes — defeats mass fake-claim griefing and refundable-token tricks (ported from bao_fund)
+- Battle faucet payout no longer discards a valid token when the claim exactly exhausts the 24h budget, and no longer credits the profile when the wallet receive returned 0 (ported from bao_fund)
+- Routstr top-up failure toast now warns that the credit may have landed server-side before the response was lost — check the balance before retrying the same token (ported from bao_fund)
 - The relay list in the ₿AO creation dialog now scrolls when it outgrows the dialog — the tail relays and the add form were unreachable with the full feed relay set expanded (ported from bao_fund)
 - Cashu mint URLs with exactly four hostname labels (e.g. a mint on `pay.mint.example.com`) were misclassified as private IP addresses, so tokens from those mints were silently undecodable (ported from bao_fund)
 - Re-encoding a received Cashu token double-encoded P2PK witnesses — a latent bug that would have made escrow release tokens unreceivable (ported from bao_fund)
