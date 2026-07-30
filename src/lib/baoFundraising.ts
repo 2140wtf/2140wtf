@@ -197,6 +197,12 @@ export interface CreateFundraiserInput {
   /** Stream format: vesting window in unix seconds (required iff format='stream'). */
   stream_start_at?: number;
   stream_end_at?: number;
+  /**
+   * Relay-first fallback provenance: the kind-38003 intent id published before
+   * the REST fallback fired. The API stores it on the campaign so the bridge
+   * skips the intent when it eventually backfills — no duplicate campaign.
+   */
+  nostr_event_id?: string;
 }
 
 export interface CreateFundraiserResult {
@@ -268,6 +274,7 @@ export async function createFundraiserRelayFirst(
   input: CreateFundraiserInput,
   opts: RelayCreateOptions,
 ): Promise<{ result: CreateFundraiserResult; via: 'relay' | 'rest' }> {
+  let intentId: string | undefined;
   try {
     const intent = await opts.publish({
       kind: BAO_FUNDRAISER_CREATE_KIND,
@@ -275,12 +282,15 @@ export async function createFundraiserRelayFirst(
       tags: [['d', `frc-${crypto.randomUUID()}`], ['n', baoNetwork()], ['alt', '₿AO Fund campaign create intent']],
       relay: baoRelayUrl(),
     });
+    intentId = intent.id;
     const found = await pollForRelayCreatedFundraiser(intent.id, opts);
     if (found) return { result: found, via: 'relay' };
   } catch {
     // Relay path unavailable — fall through to the REST route.
   }
-  return { result: await createFundraiser(signer, input), via: 'rest' };
+  // REST fallback: carry the intent id so the bridge skips it when it
+  // eventually backfills — otherwise the campaign is created twice.
+  return { result: await createFundraiser(signer, intentId ? { ...input, nostr_event_id: intentId } : input), via: 'rest' };
 }
 
 /** Poll the list API until the bridge-ingested campaign (by intent id) appears. */
