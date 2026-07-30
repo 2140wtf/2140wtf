@@ -85,3 +85,40 @@ export function totalBaoApiBalance(balances: BaoWalletBalances): number {
     balances.ark
   );
 }
+
+// ─── Positions (my trades) ───────────────────────────────────────────────────
+
+export interface BaoPosition {
+  market_id: string;
+  market_title?: string;
+  outcome_id: string;
+  /** Position size in sats. */
+  size: number;
+  /** Average entry price (0..1). */
+  avg_price: number;
+  /** Current outcome price (0..1), when the API has it. */
+  current_price?: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  updated_at: number;
+}
+
+interface PositionsEnvelope {
+  data?: {
+    positions?: BaoPosition[];
+  };
+}
+
+/** Fetch the caller's open positions from the bao.markets API (NIP-98 signed). */
+export async function fetchBaoPositions(signer: BaoApiSigner): Promise<BaoPosition[]> {
+  const url = `${baoApiBase()}/v1/positions`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+  });
+  const json = (await res.json().catch(() => ({}))) as PositionsEnvelope & { error?: { message?: string } };
+  if (!res.ok) {
+    throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
+  }
+  return json?.data?.positions ?? [];
+}
