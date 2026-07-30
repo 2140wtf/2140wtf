@@ -7,14 +7,24 @@ import PetsBattlePage from './PetsBattlePage';
 import { loadPendingEscrowClaims } from '@/pets/battle/lib/cashuEscrow';
 
 const LOCAL_ESCROW_PUBKEY = 'aa'.repeat(32);
-const FINISHED_EVENT = {
-  id: 'ff'.repeat(32),
-  pubkey: 'bb'.repeat(32),
+const OPPONENT_NOSTR_PUBKEY = '77'.repeat(32);
+const OWN_ATTESTATION = {
+  id: '11'.repeat(32),
+  pubkey: 'dd'.repeat(32),
   kind: 21124,
   created_at: 1_700_000_000,
-  tags: [['e', 'battle-1']],
-  content: 'encrypted',
-  sig: 'cc'.repeat(64),
+  tags: [['e', 'battle-1'], ['t', 'battle-attestation']],
+  content: 'enc-own',
+  sig: 'ee'.repeat(64),
+};
+const OPPONENT_ATTESTATION = {
+  id: '22'.repeat(32),
+  pubkey: OPPONENT_NOSTR_PUBKEY,
+  kind: 21124,
+  created_at: 1_700_000_001,
+  tags: [['e', 'battle-1'], ['t', 'battle-attestation']],
+  content: 'enc-opponent',
+  sig: 'ff'.repeat(64),
 };
 
 const mocks = vi.hoisted(() => ({
@@ -22,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   requestEscrowRelease: vi.fn(),
   receiveLockedToken: vi.fn(),
   sendFinished: vi.fn(),
+  sendAttestation: vi.fn(),
+  nostr: { query: vi.fn() },
   startMatch: vi.fn(),
   resetMatch: vi.fn(),
   applyHostSnapshot: vi.fn(),
@@ -58,6 +70,11 @@ vi.mock('@/hooks/useAppContext', () => ({
     },
   }),
 }));
+
+vi.mock('@nostrify/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@nostrify/react')>();
+  return { ...actual, useNostr: () => ({ nostr: mocks.nostr }) };
+});
 
 vi.mock('@/hooks/useNostrPublish', () => ({
   useNostrPublish: () => ({ mutateAsync: mocks.publishEvent }),
@@ -138,8 +155,10 @@ function arrangeRemote(overrides: Record<string, unknown> = {}) {
     },
     hostFinishedEvent: null,
     hostSnapshot: null,
+    opponentPubkey: OPPONENT_NOSTR_PUBKEY,
     guestInputRef: { current: null },
     sendFinished: mocks.sendFinished,
+    sendAttestation: mocks.sendAttestation,
     sendHostSnapshot: vi.fn(),
     sendGuestInput: vi.fn(),
     reset: vi.fn(),
@@ -147,88 +166,125 @@ function arrangeRemote(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function renderAndFinish(winner: 0 | 1) {
-  render(<PetsBattlePage />, { wrapper });
-  await waitFor(() => expect(mocks.onFinishRef.current).toBeTruthy());
-  await act(async () => {
-    await mocks.onFinishRef.current!(winner);
-  });
-}
-
-describe('PetsBattlePage escrow claim journaling (hunt regressions)', () => {
+describe('PetsBattlePage escrow claim journaling (mutual attestation)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.onFinishRef.current = null;
     mocks.requestEscrowRelease.mockResolvedValue({ token: 'release-token' });
     mocks.receiveLockedToken.mockResolvedValue(200);
-    mocks.sendFinished.mockResolvedValue(FINISHED_EVENT);
+    mocks.sendFinished.mockResolvedValue({ id: 'finished' });
+    mocks.sendAttestation.mockResolvedValue(OWN_ATTESTATION);
+    mocks.nostr.query.mockResolvedValue([OPPONENT_ATTESTATION]);
   });
 
+  async function renderFinishAndUnmount(winner: 0 | 1) {
+    const { unmount } = render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.onFinishRef.current).toBeTruthy());
+    await act(async () => {
+      await mocks.onFinishRef.current!(winner);
+    });
+    unmount();
+  }
+
   it('keeps the journaled releaseToken when the wallet receive fails after a successful /release', async () => {
-    // Regression: the onFinish catch used to re-save the stale pre-release
-    // claim object, clobbering the releaseToken the operator had already
-    // delivered — forcing a second /release the operator refuses.
+    // Regression: the catch used to re-save the stale pre-release claim object,
+    // clobbering the releaseToken the operator had already delivered — forcing
+    // a second /release the operator refuses.
     arrangeRemote();
     mocks.receiveLockedToken.mockResolvedValue(0);
 
-    await renderAndFinish(0);
+    await renderFinishAndUnmount(0);
 
-    expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1);
-    const claims = loadPendingEscrowClaims();
-    expect(claims).toHaveLength(1);
-    expect(claims[0].battleId).toBe('battle-1');
-    expect(claims[0].releaseToken).toBe('release-token');
-    expect(claims[0].attempts).toBe(1);
-  });
-
-  it('refuses to journal a claim when the host battle-finished publish failed', async () => {
-    // Regression: a silent publishSync failure left finishedEvent undefined,
-    // and the claim was journaled with finishedEvent: {} — an unverifiable
-    // proof every retry would replay identically until attempts exhausted.
-    arrangeRemote();
-    mocks.sendFinished.mockResolvedValue(undefined);
-
-    await renderAndFinish(0);
-
+    // The claim defers until the opponent's attestation is found.
     expect(mocks.requestEscrowRelease).not.toHaveBeenCalled();
-    expect(loadPendingEscrowClaims()).toHaveLength(0);
-    expect(mocks.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Battle result proof missing', variant: 'destructive' }),
-    );
-  });
+    expect(loadPendingEscrowClaims()[0]?.ownAttestation?.id).toBe(OWN_ATTESTATION.id);
 
-  it('guest winner journals a deferred claim and fires it when the host finished event arrives', async () => {
-    // Regression (hunt P20): the guest's onFinish fires from the final
-    // battle-state snapshot, which can arrive BEFORE the host-signed finished
-    // event — and the game never refires onFinish. The claim must be journaled
-    // deferred and hydrated the moment the signed event lands, not dropped.
-    arrangeRemote({ role: 'guest', hostFinishedEvent: null });
-
-    const { rerender } = render(<PetsBattlePage />, { wrapper });
-    await waitFor(() => expect(mocks.onFinishRef.current).toBeTruthy());
-    await act(async () => {
-      await mocks.onFinishRef.current!(1);
-    });
-
-    expect(mocks.requestEscrowRelease).not.toHaveBeenCalled();
-    const deferred = loadPendingEscrowClaims();
-    expect(deferred).toHaveLength(1);
-    expect(deferred[0].battleId).toBe('battle-1');
-    expect(deferred[0].finishedEvent).toBeUndefined();
-    expect(mocks.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Prize claim saved — awaiting result' }),
-    );
-
-    // The signed event lands a moment later → the claim hydrates and fires.
-    mocks.remote.hostFinishedEvent = FINISHED_EVENT;
-    rerender(<PetsBattlePage />);
-
+    // Remount → hydration finds the opponent's attestation and fires.
+    render(<PetsBattlePage />, { wrapper });
     await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1));
     expect(mocks.requestEscrowRelease).toHaveBeenCalledWith(
       expect.objectContaining({
         battleId: 'battle-1',
-        finishedEvent: expect.objectContaining({ id: FINISHED_EVENT.id, sig: FINISHED_EVENT.sig }),
+        hostAttestation: expect.objectContaining({ id: OWN_ATTESTATION.id }),
+        guestAttestation: expect.objectContaining({ id: OPPONENT_ATTESTATION.id }),
+      }),
+    );
+
+    await waitFor(() => expect(loadPendingEscrowClaims()[0]?.releaseToken).toBe('release-token'));
+    const claims = loadPendingEscrowClaims();
+    expect(claims).toHaveLength(1);
+    expect(claims[0].battleId).toBe('battle-1');
+    // attempts: 1 (deferred at finish) + 1 (receive failure during hydration)
+    expect(claims[0].attempts).toBe(2);
+  });
+
+  it('re-publishes a missing own attestation during hydration instead of dropping the claim', async () => {
+    // The attestation publish can race a closed tab; the journaled route lets
+    // hydration re-publish it later instead of stranding both locked stakes.
+    arrangeRemote();
+    mocks.sendAttestation.mockResolvedValueOnce(undefined);
+    mocks.nostr.query.mockResolvedValue([]);
+
+    await renderFinishAndUnmount(0);
+
+    expect(mocks.requestEscrowRelease).not.toHaveBeenCalled();
+    const deferred = loadPendingEscrowClaims();
+    expect(deferred).toHaveLength(1);
+    expect(deferred[0].ownAttestation).toBeUndefined();
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Prize claim saved — awaiting opponent confirmation' }),
+    );
+
+    mocks.nostr.query.mockResolvedValue([OPPONENT_ATTESTATION]);
+    render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1));
+    // (Re-renders re-fire the hydration effect in this mock environment, so an
+    // extra idempotent republish is fine — what matters is the journaled route
+    // was used for the republish.)
+    expect(mocks.sendAttestation).toHaveBeenNthCalledWith(
+      2,
+      0,
+      '11'.repeat(32),
+      'ee'.repeat(32),
+      { battleId: 'battle-1', opponentPubkey: OPPONENT_NOSTR_PUBKEY },
+    );
+    await waitFor(() => expect(loadPendingEscrowClaims()).toHaveLength(0));
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Battle prize claimed!' }),
+    );
+  });
+
+  it('guest winner journals a deferred claim and fires it once the host attestation is found', async () => {
+    // The guest's onFinish fires from the final battle-state snapshot, which
+    // can arrive BEFORE the host's attestation — the claim must be journaled
+    // deferred and hydrated the moment the host's attestation is found.
+    arrangeRemote({ role: 'guest' });
+    mocks.nostr.query.mockResolvedValue([]);
+
+    await renderFinishAndUnmount(1);
+
+    expect(mocks.sendFinished).not.toHaveBeenCalled(); // only the host announces UI-finished
+    expect(mocks.sendAttestation).toHaveBeenCalledWith(1, '11'.repeat(32), 'ee'.repeat(32));
+    expect(mocks.requestEscrowRelease).not.toHaveBeenCalled();
+    const deferred = loadPendingEscrowClaims();
+    expect(deferred).toHaveLength(1);
+    expect(deferred[0].localRole).toBe('guest');
+    expect(deferred[0].ownAttestation?.id).toBe(OWN_ATTESTATION.id);
+    expect(deferred[0].opponentAttestation).toBeUndefined();
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Prize claim saved — awaiting opponent confirmation' }),
+    );
+
+    // The host's attestation lands → hydration maps it to hostAttestation and fires.
+    mocks.nostr.query.mockResolvedValue([OPPONENT_ATTESTATION]);
+    render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1));
+    expect(mocks.requestEscrowRelease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        battleId: 'battle-1',
+        hostAttestation: expect.objectContaining({ id: OPPONENT_ATTESTATION.id }),
+        guestAttestation: expect.objectContaining({ id: OWN_ATTESTATION.id }),
       }),
     );
     await waitFor(() => expect(loadPendingEscrowClaims()).toHaveLength(0));
@@ -237,21 +293,32 @@ describe('PetsBattlePage escrow claim journaling (hunt regressions)', () => {
     );
   });
 
-  it('guest winner forwards the host-signed finished event and clears the journal on success', async () => {
-    arrangeRemote({ role: 'guest', hostFinishedEvent: FINISHED_EVENT });
+  it('discards a conflicting opponent attestation when the operator rejects a disagreement', async () => {
+    // A losing opponent may publish several conflicting attestations
+    // (griefing). On a disagreement rejection the claimer discards THAT event,
+    // remembers it as tried, and hydration picks another from the same author.
+    arrangeRemote();
+    mocks.requestEscrowRelease.mockRejectedValueOnce(new Error('Attestations disagree on the winner'));
 
-    await renderAndFinish(1);
+    await renderFinishAndUnmount(0);
+    render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(1));
 
-    expect(mocks.sendFinished).not.toHaveBeenCalled();
-    expect(mocks.requestEscrowRelease).toHaveBeenCalledWith(
+    await waitFor(() => {
+      const claims = loadPendingEscrowClaims();
+      expect(claims[0]?.opponentAttestation).toBeUndefined();
+      expect(claims[0]?.triedAttestationIds).toContain(OPPONENT_ATTESTATION.id);
+    });
+
+    const honest = { ...OPPONENT_ATTESTATION, id: '33'.repeat(32) };
+    mocks.nostr.query.mockResolvedValue([OPPONENT_ATTESTATION, honest]);
+    render(<PetsBattlePage />, { wrapper });
+    await waitFor(() => expect(mocks.requestEscrowRelease).toHaveBeenCalledTimes(2));
+    expect(mocks.requestEscrowRelease).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        battleId: 'battle-1',
-        finishedEvent: expect.objectContaining({ id: FINISHED_EVENT.id, sig: FINISHED_EVENT.sig }),
+        guestAttestation: expect.objectContaining({ id: honest.id }),
       }),
     );
-    expect(loadPendingEscrowClaims()).toHaveLength(0);
-    expect(mocks.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Battle prize claimed!' }),
-    );
+    await waitFor(() => expect(loadPendingEscrowClaims()).toHaveLength(0));
   });
 });

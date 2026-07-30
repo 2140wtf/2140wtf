@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { generateUUID } from '@/lib/uuid';
 import { isNostrId } from '@/lib/nostrId';
 import {
+  BATTLE_ATTESTATION_TAG,
   BATTLE_INVITE_SUBJECT,
   BATTLE_SYNC_KIND,
   encryptBattleMessage,
@@ -25,7 +26,7 @@ import {
   type BattleMode,
 } from '../lib/battleMessages';
 import { subscribeBattleMessages } from '../lib/battleNetwork';
-import { checkEscrowDepositSpentState, normalizeEscrowPubkey } from '../lib/cashuEscrow';
+import { buildBattleResultAttestation, checkEscrowDepositSpentState, normalizeEscrowPubkey } from '../lib/cashuEscrow';
 import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { PlayerInput } from '../types/battle.types';
@@ -127,6 +128,20 @@ export interface UseRemoteBattleReturn extends RemoteBattleState {
   sendHostSnapshot: (snapshot: RemoteBattleStateSnapshot) => void;
   sendGuestInput: (input: PlayerInput) => void;
   sendFinished: (winner: 0 | 1 | null) => void;
+  /**
+   * Publish this player's result attestation (NIP-44-encrypted TO THE ESCROW
+   * OPERATOR, tagged `battle-attestation`). Both players publish one at battle
+   * end; the operator co-signs the release only when the pair agrees on the
+   * winner. Returns the raw published event (the winner journals it for the
+   * release request), or undefined when prerequisites are missing/the publish
+   * failed. Idempotent per battle via the caller's own guard.
+   */
+  sendAttestation: (
+    winner: 0 | 1 | null,
+    escrowPrivkey: string,
+    operatorPubkey: string,
+    route?: { battleId: string; opponentPubkey: string },
+  ) => Promise<NostrEvent | undefined>;
   reset: () => void;
   /** Mutable ref to the latest guest input (for the host battle loop). */
   guestInputRef: React.MutableRefObject<PlayerInput>;
@@ -779,17 +794,58 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
     [publishSync],
   );
 
+  const sendAttestation = useCallback(
+    async (
+      winner: 0 | 1 | null,
+      escrowPrivkey: string,
+      operatorPubkey: string,
+      route?: { battleId: string; opponentPubkey: string },
+    ): Promise<NostrEvent | undefined> => {
+      const current = stateRef.current;
+      const battleId = route?.battleId ?? current.battleId;
+      const opponentPubkey = route?.opponentPubkey ?? current.opponentPubkey;
+      if (!user?.signer.nip44 || !battleId || !opponentPubkey) return undefined;
+      const operatorXOnly = normalizeEscrowPubkey(operatorPubkey);
+      if (!operatorXOnly) return undefined;
+
+      try {
+        const payload = buildBattleResultAttestation({
+          battleId,
+          winner,
+          nostrPubkey: user.pubkey,
+          escrowPrivkey,
+        });
+        // Encrypted TO THE OPERATOR — the opponent never reads it; the p-tag
+        // only tells their client (and the relay query) it exists.
+        const content = await user.signer.nip44.encrypt(operatorXOnly, JSON.stringify(payload));
+        const event = await publishEvent({
+          kind: BATTLE_SYNC_KIND,
+          content,
+          tags: [
+            ['p', opponentPubkey],
+            ['e', battleId],
+            ['t', BATTLE_ATTESTATION_TAG],
+          ],
+        });
+        return event;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Attestation publish failed';
+        console.error('[useRemoteBattle] sendAttestation error:', message);
+        return undefined;
+      }
+    },
+    [publishEvent, user],
+  );
+
   const sendFinished = useCallback(
     async (winner: 0 | 1 | null) => {
-      // TRUST MODEL (tracked as task #21, the planned 2-of-3 escrow primitive):
-      // the battle outcome is attested solely by this host-signed
-      // battle-finished event — the guest never countersigns or even
-      // acknowledges the result. The host also runs the authoritative game
-      // simulation (the guest only applies host snapshots), so a patched host
-      // client controls both the outcome and the only 'proof' the escrow
-      // operator sees at /release, and could award itself both real-sats
-      // stakes. The operator is a trusted service that socially polices this
-      // until the multisig escrow primitive replaces host-only attestation.
+      // TRUST MODEL: the battle-finished event remains host-signed (the host
+      // runs the authoritative simulation), but it is no longer the escrow's
+      // outcome proof — BOTH players now publish a `battle-attestation`
+      // (sendAttestation) and the operator co-signs only when the two agree.
+      // A patched host client that lies about the winner gets a disagreement,
+      // not a release: both stakes then sit until the 24h refund locktime and
+      // each player reclaims their own deposit. Cheating gains nothing.
       const current = stateRef.current;
       if (current.role !== 'host' || !current.battleId) return undefined;
       const payload: BattleFinishedPayload = {
@@ -857,9 +913,10 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
       sendHostSnapshot,
       sendGuestInput,
       sendFinished,
+      sendAttestation,
       reset,
       guestInputRef,
     }),
-    [state, sendInvite, acceptInvite, declineInvite, cancelInvite, sendEscrowDeposit, startFight, sendHostSnapshot, sendGuestInput, sendFinished, reset, guestInputRef],
+    [state, sendInvite, acceptInvite, declineInvite, cancelInvite, sendEscrowDeposit, startFight, sendHostSnapshot, sendGuestInput, sendFinished, sendAttestation, reset, guestInputRef],
   );
 }
