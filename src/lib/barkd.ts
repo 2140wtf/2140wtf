@@ -1,4 +1,14 @@
-import { Configuration, WalletApi, OnchainApi, LightningApi } from '@secondts/barkd';
+import {
+  Configuration,
+  FetchError,
+  ResponseError,
+  WalletApi,
+  OnchainApi,
+  LightningApi,
+  HistoryApi,
+  BoardsApi,
+  FeesApi,
+} from '@secondts/barkd';
 
 /**
  * Client helpers for talking to a remote bark-web API
@@ -32,9 +42,21 @@ export interface BarkdApis {
   wallet: WalletApi;
   onchain: OnchainApi;
   lightning: LightningApi;
+  history: HistoryApi;
+  boards: BoardsApi;
+  fees: FeesApi;
 }
 
-/** Normalize a user-entered server URL: trim, require http(s), strip trailing slashes. */
+function isLoopback(hostname: string): boolean {
+  return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+/**
+ * Normalize a user-entered server URL: trim, require http(s), strip trailing
+ * slashes. Plain http is only allowed for loopback — browsers (and the native
+ * WebViews) refuse every other cleartext URL from a secure context, so
+ * accepting them would just produce confusing connection failures.
+ */
 export function normalizeBarkdUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) throw new Error('Enter the URL of your bark-web server.');
@@ -45,29 +67,22 @@ export function normalizeBarkdUrl(raw: string): string {
   } catch {
     throw new Error('That doesn’t look like a valid URL.');
   }
+  if (url.protocol === 'http:' && !isLoopback(url.hostname)) {
+    throw new Error(
+      'Plain http only works for localhost. Put the server behind TLS (Tailscale Serve, Caddy) and use its https URL.',
+    );
+  }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('Only http(s) URLs are supported.');
   }
   return url.origin + (url.pathname === '/' ? '' : url.pathname.replace(/\/+$/, ''));
 }
 
-/** True for URLs browsers will refuse from an https page (plain http, non-local). */
-export function isInsecureRemoteUrl(baseUrl: string): boolean {
-  const url = new URL(baseUrl);
-  if (url.protocol === 'https:') return false;
-  const host = url.hostname;
-  return !(
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '[::1]' ||
-    host.endsWith('.local') ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-  );
-}
-
-async function apiFetch<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+async function apiFetch<T>(
+  baseUrl: string,
+  path: string,
+  init?: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> },
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -87,6 +102,39 @@ async function apiFetch<T>(baseUrl: string, path: string, init?: RequestInit): P
     throw new Error(body?.error ? `Server error: ${body.error}` : `Server returned ${response.status}.`);
   }
   return (await response.json()) as T;
+}
+
+/**
+ * Map an error thrown by the generated `@secondts/barkd` client to a
+ * human-readable message. The generated client's own messages are gibberish
+ * ("Response returned an error code"), so hooks should wrap their calls with
+ * {@link withFriendlyBarkdErrors} instead of letting them reach the UI raw.
+ */
+export async function friendlyBarkdError(error: unknown): Promise<Error> {
+  if (error instanceof ResponseError) {
+    const { status } = error.response;
+    const body = (await error.response.clone().json().catch(() => null)) as
+      | { error?: string; message?: string }
+      | null;
+    const detail = body?.error ?? body?.message;
+    if (status === 401) return new Error('Session expired — reconnect to the server.');
+    if (status === 429) return new Error('Too many attempts — the server rate-limited you. Wait a bit and retry.');
+    if (status === 400) return new Error(detail ? `The server rejected it: ${detail}` : 'The server rejected the request.');
+    return new Error(detail ? `Server error: ${detail}` : `Server returned ${status}.`);
+  }
+  if (error instanceof FetchError) {
+    return new Error('Could not reach your barkd server. Check that bark-web is still running.');
+  }
+  return error instanceof Error ? error : new Error('Something went wrong.');
+}
+
+/** Await `promise`, converting generated-client errors into readable ones. */
+export async function withFriendlyBarkdErrors<T>(promise: Promise<T>): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    throw await friendlyBarkdError(error);
+  }
 }
 
 export function fetchBarkdConfig(baseUrl: string): Promise<BarkdServerConfig> {
@@ -130,7 +178,14 @@ export function getBarkdApis(baseUrl: string): BarkdApis {
     wallet: new WalletApi(configuration),
     onchain: new OnchainApi(configuration),
     lightning: new LightningApi(configuration),
+    history: new HistoryApi(configuration),
+    boards: new BoardsApi(configuration),
+    fees: new FeesApi(configuration),
   };
   apisCache.set(baseUrl, apis);
   return apis;
+}
+
+export function dropBarkdApis(baseUrl: string): void {
+  apisCache.delete(baseUrl);
 }

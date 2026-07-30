@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -22,26 +22,91 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SatsPresetPills } from '@/components/SatsPresetPills';
 import { useBarkdConnection } from '@/hooks/useBarkdConnection';
 import {
   useBarkdArkAddress,
   useBarkdBalance,
+  useBarkdBoardAll,
   useBarkdGenerateInvoice,
+  useBarkdLightningSendFee,
   useBarkdMovements,
   useBarkdOnchainAddress,
+  useBarkdOnchainBalance,
+  useBarkdRefresh,
   useBarkdSend,
 } from '@/hooks/useBarkdWallet';
 import { useToast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
-import { isInsecureRemoteUrl } from '@/lib/barkd';
+import { writeClipboardText } from '@/lib/clipboard';
 
 function formatSats(n: number): string {
   return n.toLocaleString();
 }
 
+/** Parse a sats amount input: undefined when empty or not a positive integer. */
+function parseSatsInput(raw: string): number | undefined {
+  if (!raw.trim()) return undefined;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : undefined;
+}
+
+/** BOLT11 invoices carry their own amount; Ark/LNURL/lightning addresses don't. */
+function destinationNeedsAmount(destination: string): boolean {
+  const d = destination.trim().toLowerCase();
+  if (!d) return false;
+  return !(d.startsWith('lnbc') || d.startsWith('lntb') || d.startsWith('lnbcrt'));
+}
+
+function isLightningDestination(destination: string): boolean {
+  const d = destination.trim().toLowerCase();
+  return (
+    d.startsWith('lnbc') ||
+    d.startsWith('lntb') ||
+    d.startsWith('lnbcrt') ||
+    d.startsWith('lnurl') ||
+    d.includes('@')
+  );
+}
+
+/** Human labels for the pending buckets in the barkd Balance type. */
+const PENDING_LABELS = {
+  pendingInRoundSat: 'settling in an Ark round',
+  pendingBoardSat: 'confirming on-chain',
+  claimableLightningReceiveSat: 'incoming Lightning',
+  pendingLightningSendSat: 'Lightning send in flight',
+  pendingExitSat: 'exiting on-chain',
+} as const;
+
+/** Human labels for barkd movement subsystem identifiers. */
+const SUBSYSTEM_LABELS: Record<string, string> = {
+  arkoor: 'Ark payment',
+  board: 'On-chain deposit',
+  offboard: 'Ark withdrawal',
+  exit: 'Unilateral exit',
+  round: 'Ark round',
+  refresh: 'VTXO refresh',
+  lightning: 'Lightning',
+  lnreceive: 'Lightning receive',
+  lnsend: 'Lightning send',
+};
+
+function prettifySubsystem(name: string): string {
+  const key = name.toLowerCase().replace(/[^a-z]/g, '');
+  if (SUBSYSTEM_LABELS[key]) return SUBSYSTEM_LABELS[key];
+  const words = name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
+}
+
 function CopyButton({ value, label }: { value: string; label: string }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const timeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(timeout.current), []);
 
   return (
     <Button
@@ -49,14 +114,19 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       size="sm"
       className="gap-1.5"
       onClick={async () => {
-        await navigator.clipboard.writeText(value);
-        setCopied(true);
-        toast({ title: `${label} copied` });
-        setTimeout(() => setCopied(false), 2000);
+        try {
+          await writeClipboardText(value);
+          setCopied(true);
+          toast({ title: `${label} copied` });
+          clearTimeout(timeout.current);
+          timeout.current = setTimeout(() => setCopied(false), 2000);
+        } catch {
+          toast({ title: 'Copy failed', description: 'Copy it manually instead.', variant: 'destructive' });
+        }
       }}
     >
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? 'Copied' : `Copy ${label}`}
     </Button>
   );
 }
@@ -64,30 +134,45 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 function AddressCard({
   value,
   isLoading,
+  error,
+  onRetry,
   copyLabel,
   hint,
 }: {
   value: string | undefined;
   isLoading: boolean;
+  error: Error | null;
+  onRetry: () => void;
   copyLabel: string;
   hint: string;
 }) {
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <p className="text-xs text-destructive max-w-xs">{error.message}</p>
+        <Button variant="outline" size="sm" onClick={onRetry}>
+          <RefreshCw className="size-3.5 mr-1.5" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
   if (isLoading || !value) {
     return (
       <div className="flex flex-col items-center gap-3 py-4">
-        <Skeleton className="size-[200px] rounded-lg" />
+        <Skeleton className="size-[200px] rounded-xl" />
         <Skeleton className="h-4 w-48" />
       </div>
     );
   }
   return (
     <div className="flex flex-col items-center gap-3 py-4">
-      <div className="p-3 bg-white rounded-lg">
+      <div className="rounded-xl bg-white p-4 shadow-sm">
         <QRCodeSVG value={value} size={200} level="M" />
       </div>
       <p className="text-xs text-muted-foreground break-all text-center px-2 font-mono">{value}</p>
       <CopyButton value={value} label={copyLabel} />
-      <p className="text-[11px] text-muted-foreground/80 text-center max-w-xs">{hint}</p>
+      <p className="text-xs text-muted-foreground text-center max-w-xs">{hint}</p>
     </div>
   );
 }
@@ -96,14 +181,6 @@ function AddressCard({
 function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkdConnection> }) {
   const [url, setUrl] = useState(connection.serverUrl ?? '');
   const [password, setPassword] = useState('');
-
-  const insecure = (() => {
-    try {
-      return url.trim() ? isInsecureRemoteUrl(new URL(/^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`).origin) : false;
-    } catch {
-      return false;
-    }
-  })();
 
   return (
     <div className="space-y-4">
@@ -124,8 +201,9 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
             >
               bark-web
             </button>{' '}
-            on your node or VPS (docker, Umbrel, or Start9) and enter its API URL. Your Ark wallet
-            and keys stay on that server — this app only holds a session.
+            on your node or VPS (docker, Umbrel, or Start9), give it an https URL (Tailscale Serve
+            or Caddy works well), and enter that URL here. Your Ark wallet and keys stay on that
+            server — this app only holds a session.
           </p>
           <div className="space-y-1.5">
             <Label htmlFor="barkd-url">Server URL</Label>
@@ -147,19 +225,19 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {password && !connection.canSavePassword && (
+              <p className="text-xs text-muted-foreground">
+                Your signer can’t encrypt data (NIP-44), so the password won’t be saved between
+                sessions.
+              </p>
+            )}
           </div>
-          {insecure && (
-            <p className="text-xs text-amber-600 dark:text-amber-500">
-              Plain-http remote URLs are blocked by browsers. Put the server behind TLS (e.g.
-              Tailscale Serve or Caddy), or use the native app.
-            </p>
-          )}
           {connection.connect.isError && (
             <p className="text-xs text-destructive">{connection.connect.error.message}</p>
           )}
           {connection.sessionError && (
             <p className="text-xs text-destructive">
-              Saved session no longer works — reconnect below.
+              Saved session no longer works ({connection.sessionError.message}) — reconnect below.
             </p>
           )}
           <Button
@@ -175,7 +253,7 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
               'Connect'
             )}
           </Button>
-          <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Set <span className="font-mono">ALLOWED_ORIGINS</span> on the bark-web API to include
             this app’s origin. If UI auth is enabled, cross-site cookies may be blocked — prefer
             running it on a private network with auth handled by your gateway.
@@ -222,14 +300,16 @@ function ArkConnectView({ connection }: { connection: ReturnType<typeof useBarkd
 }
 
 function MovementRow({ movement }: { movement: Movement }) {
-  const amount = movement.effectiveBalanceSat || movement.intendedBalanceSat;
+  const amount = movement.effectiveBalanceSat;
   const received = amount >= 0;
 
   return (
     <div className="flex items-center gap-3 py-2.5">
       <div
         className={`p-1.5 rounded-full shrink-0 ${
-          received ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'
+          received
+            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+            : 'bg-red-500/10 text-red-600 dark:text-red-400'
         }`}
       >
         {received ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
@@ -240,7 +320,8 @@ function MovementRow({ movement }: { movement: Movement }) {
           {formatSats(Math.abs(amount))} sats
         </p>
         <p className="text-xs text-muted-foreground truncate">
-          {movement.subsystem.name} · {new Date(movement.time.createdAt).toLocaleString()}
+          {prettifySubsystem(movement.subsystem.name)} ·{' '}
+          {new Date(movement.time.createdAt).toLocaleString()}
         </p>
       </div>
       <Badge
@@ -253,16 +334,36 @@ function MovementRow({ movement }: { movement: Movement }) {
   );
 }
 
-function ReceivePanel({ serverUrl }: { serverUrl: string }) {
-  const arkAddress = useBarkdArkAddress(serverUrl, true);
-  const onchainAddress = useBarkdOnchainAddress(serverUrl, true);
-  const generateInvoice = useBarkdGenerateInvoice(serverUrl);
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
+interface ReceivePanelProps {
+  serverUrl: string;
+  arkAddress: ReturnType<typeof useBarkdArkAddress>;
+  onchainAddress: ReturnType<typeof useBarkdOnchainAddress>;
+  invoice: ReturnType<typeof useBarkdGenerateInvoice>;
+  invoiceAmount: string;
+  setInvoiceAmount: (v: string) => void;
+  invoiceDescription: string;
+  setInvoiceDescription: (v: string) => void;
+}
+
+function ReceivePanel({
+  serverUrl,
+  arkAddress,
+  onchainAddress,
+  invoice,
+  invoiceAmount,
+  setInvoiceAmount,
+  invoiceDescription,
+  setInvoiceDescription,
+}: ReceivePanelProps) {
+  const onchainBalance = useBarkdOnchainBalance(serverUrl, true);
+  const boardAll = useBarkdBoardAll(serverUrl);
+
+  const invoiceAmountSat = parseSatsInput(invoiceAmount);
+  const confirmedOnchain = onchainBalance.data?.confirmedSat ?? 0;
 
   return (
     <Tabs defaultValue="ark" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="mb-4">
         <TabsTrigger value="ark">Ark</TabsTrigger>
         <TabsTrigger value="lightning">Lightning</TabsTrigger>
         <TabsTrigger value="onchain">On-chain</TabsTrigger>
@@ -272,21 +373,36 @@ function ReceivePanel({ serverUrl }: { serverUrl: string }) {
         <AddressCard
           value={arkAddress.data}
           isLoading={arkAddress.isPending}
+          error={arkAddress.error}
+          onRetry={() => arkAddress.mutate()}
           copyLabel="Ark address"
           hint="Share this Ark address to receive off-chain payments from another Ark wallet."
         />
+        {arkAddress.data && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground"
+            disabled={arkAddress.isPending}
+            onClick={() => arkAddress.mutate()}
+          >
+            Generate a fresh address
+          </Button>
+        )}
       </TabsContent>
 
       <TabsContent value="lightning">
-        {generateInvoice.data ? (
+        {invoice.data ? (
           <div className="space-y-3">
             <AddressCard
-              value={generateInvoice.data}
+              value={invoice.data}
               isLoading={false}
-              copyLabel="Invoice"
+              error={null}
+              onRetry={() => invoice.reset()}
+              copyLabel="invoice"
               hint="This BOLT11 invoice settles into your Ark balance as soon as it is paid."
             />
-            <Button variant="outline" size="sm" className="w-full" onClick={() => generateInvoice.reset()}>
+            <Button variant="outline" size="sm" className="w-full" onClick={() => invoice.reset()}>
               New invoice
             </Button>
           </div>
@@ -298,31 +414,34 @@ function ReceivePanel({ serverUrl }: { serverUrl: string }) {
                 id="invoice-amount"
                 type="number"
                 min={1}
+                step={1}
                 placeholder="1000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={invoiceAmount}
+                onChange={(e) => setInvoiceAmount(e.target.value)}
               />
+              <SatsPresetPills value={invoiceAmount} onSelect={(s) => setInvoiceAmount(String(s))} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="invoice-description">Description (optional)</Label>
               <Input
                 id="invoice-description"
                 placeholder="What's it for?"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={invoiceDescription}
+                onChange={(e) => setInvoiceDescription(e.target.value)}
               />
             </div>
-            {generateInvoice.isError && (
-              <p className="text-xs text-destructive">{generateInvoice.error.message}</p>
-            )}
+            {invoice.isError && <p className="text-xs text-destructive">{invoice.error.message}</p>}
             <Button
               className="w-full"
-              disabled={!Number(amount) || Number(amount) <= 0 || generateInvoice.isPending}
+              disabled={invoiceAmountSat === undefined || invoice.isPending}
               onClick={() =>
-                generateInvoice.mutate({ amountSat: Number(amount), description: description || undefined })
+                invoice.mutate({
+                  amountSat: invoiceAmountSat!,
+                  description: invoiceDescription || undefined,
+                })
               }
             >
-              {generateInvoice.isPending ? (
+              {invoice.isPending ? (
                 <>
                   <RefreshCw className="size-4 mr-2 animate-spin" /> Generating…
                 </>
@@ -338,20 +457,78 @@ function ReceivePanel({ serverUrl }: { serverUrl: string }) {
         <AddressCard
           value={onchainAddress.data}
           isLoading={onchainAddress.isPending}
-          copyLabel="On-chain address"
-          hint="On-chain funds sent here are boarded into your Ark wallet after confirmation."
+          error={onchainAddress.error}
+          onRetry={() => onchainAddress.mutate()}
+          copyLabel="on-chain address"
+          hint="On-chain funds land in your wallet’s on-chain balance. Once confirmed, board them into Ark below to spend them off-chain."
         />
+        {onchainBalance.data !== undefined && confirmedOnchain > 0 && (
+          <div className="space-y-2 pb-2">
+            <p className="text-xs text-muted-foreground text-center tabular-nums">
+              On-chain balance: {formatSats(confirmedOnchain)} sats
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={boardAll.isPending || boardAll.isSuccess}
+              onClick={() => boardAll.mutate()}
+            >
+              {boardAll.isPending ? (
+                <>
+                  <RefreshCw className="size-4 mr-2 animate-spin" /> Boarding…
+                </>
+              ) : boardAll.isSuccess ? (
+                'Boarding started — funds appear after confirmation'
+              ) : (
+                'Board into Ark'
+              )}
+            </Button>
+            {boardAll.isError && (
+              <p className="text-xs text-destructive text-center">{boardAll.error.message}</p>
+            )}
+          </div>
+        )}
       </TabsContent>
     </Tabs>
   );
 }
 
-function SendPanel({ serverUrl }: { serverUrl: string }) {
-  const send = useBarkdSend(serverUrl);
-  const [destination, setDestination] = useState('');
-  const [amount, setAmount] = useState('');
+interface SendPanelProps {
+  serverUrl: string;
+  send: ReturnType<typeof useBarkdSend>;
+  destination: string;
+  setDestination: (v: string) => void;
+  sendAmount: string;
+  setSendAmount: (v: string) => void;
+}
 
-  const amountSat = Number(amount) || undefined;
+function SendPanel({
+  serverUrl,
+  send,
+  destination,
+  setDestination,
+  sendAmount,
+  setSendAmount,
+}: SendPanelProps) {
+  const amountSat = parseSatsInput(sendAmount);
+  const amountInvalid = !!sendAmount.trim() && amountSat === undefined;
+  const needsAmount = destinationNeedsAmount(destination);
+  const missingAmount = needsAmount && amountSat === undefined;
+
+  const fee = useBarkdLightningSendFee(
+    serverUrl,
+    isLightningDestination(destination) ? amountSat : undefined,
+  );
+
+  const editDestination = (v: string) => {
+    setDestination(v);
+    if (send.isSuccess || send.isError) send.reset();
+  };
+  const editAmount = (v: string) => {
+    setSendAmount(v);
+    if (send.isSuccess || send.isError) send.reset();
+  };
 
   return (
     <div className="space-y-3 py-4">
@@ -361,33 +538,58 @@ function SendPanel({ serverUrl }: { serverUrl: string }) {
           id="send-destination"
           placeholder="Ark address, BOLT11 invoice, LNURL, or lightning address"
           value={destination}
-          onChange={(e) => setDestination(e.target.value)}
+          onChange={(e) => editDestination(e.target.value)}
           autoCapitalize="off"
           autoCorrect="off"
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="send-amount">Amount (sats) — optional for BOLT11</Label>
+        <Label htmlFor="send-amount">
+          Amount (sats){needsAmount ? '' : ' — optional for BOLT11'}
+        </Label>
         <Input
           id="send-amount"
           type="number"
           min={1}
+          step={1}
           placeholder="1000"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          value={sendAmount}
+          onChange={(e) => editAmount(e.target.value)}
         />
+        <SatsPresetPills value={sendAmount} onSelect={(s) => editAmount(String(s))} />
+        {amountInvalid && (
+          <p className="text-xs text-destructive">Enter a whole number of sats.</p>
+        )}
+        {!amountInvalid && missingAmount && destination.trim() && (
+          <p className="text-xs text-muted-foreground">
+            This destination type needs an amount.
+          </p>
+        )}
+        {fee.data && amountSat !== undefined && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            Fee estimate: {formatSats(fee.data.feeSat)} sats — total spend ≈{' '}
+            {formatSats(fee.data.grossAmountSat)} sats.
+          </p>
+        )}
       </div>
       {send.isError && <p className="text-xs text-destructive">{send.error.message}</p>}
       {send.isSuccess && (
-        <p className="text-xs text-green-600">{send.data.message || 'Payment sent.'}</p>
+        <p className="text-xs text-green-600 dark:text-green-400">
+          {send.data.message || 'Payment sent.'}
+        </p>
       )}
       <Button
         className="w-full"
-        disabled={!destination.trim() || send.isPending}
+        disabled={!destination.trim() || missingAmount || amountInvalid || send.isPending}
         onClick={() =>
           send.mutate(
             { destination: destination.trim(), amountSat },
-            { onSuccess: () => setDestination('') },
+            {
+              onSuccess: () => {
+                setDestination('');
+                setSendAmount('');
+              },
+            },
           )
         }
       >
@@ -408,14 +610,40 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   const serverUrl = connection.serverUrl!;
   const balance = useBarkdBalance(serverUrl, connection.connected);
   const movements = useBarkdMovements(serverUrl, connection.connected);
+  const refresh = useBarkdRefresh(serverUrl);
 
-  const pending: Array<[string, number | null | undefined]> = [
-    ['in round', balance.data?.pendingInRoundSat],
-    ['boarding', balance.data?.pendingBoardSat],
-    ['claimable Lightning', balance.data?.claimableLightningReceiveSat],
-    ['in Lightning send', balance.data?.pendingLightningSendSat],
-    ['in exit', balance.data?.pendingExitSat],
-  ];
+  // Receive/send state is lifted here so it survives Radix unmounting the
+  // inner Receive/Send/Activity panels on tab switches.
+  const arkAddress = useBarkdArkAddress(serverUrl);
+  const onchainAddress = useBarkdOnchainAddress(serverUrl);
+  const invoice = useBarkdGenerateInvoice(serverUrl);
+  const send = useBarkdSend(serverUrl);
+  const [invoiceAmount, setInvoiceAmount] = useState('');
+  const [invoiceDescription, setInvoiceDescription] = useState('');
+  const [destination, setDestination] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
+
+  // Address generation is a mutation (each call derives a fresh HD address),
+  // so fire it exactly once per connected session and keep showing the result.
+  const requestedAddresses = useRef(false);
+  useEffect(() => {
+    if (requestedAddresses.current) return;
+    requestedAddresses.current = true;
+    arkAddress.mutate();
+    onchainAddress.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pendingEntries: Array<[string, number]> = (
+    [
+      [PENDING_LABELS.pendingInRoundSat, balance.data?.pendingInRoundSat ?? 0],
+      [PENDING_LABELS.pendingBoardSat, balance.data?.pendingBoardSat ?? 0],
+      [PENDING_LABELS.claimableLightningReceiveSat, balance.data?.claimableLightningReceiveSat ?? 0],
+      [PENDING_LABELS.pendingLightningSendSat, balance.data?.pendingLightningSendSat ?? 0],
+      // null means "exit subsystem unavailable" (unknown, not zero) — hide it.
+      [PENDING_LABELS.pendingExitSat, balance.data?.pendingExitSat ?? 0],
+    ] as Array<[string, number]>
+  ).filter(([, v]) => v > 0);
 
   return (
     <div className="space-y-4">
@@ -436,7 +664,8 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                onClick={() => balance.refetch()}
+                aria-label="Refresh"
+                onClick={() => refresh()}
               >
                 <RefreshCw className={`size-4 ${balance.isFetching ? 'animate-spin' : ''}`} />
               </Button>
@@ -446,6 +675,7 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
                 className="size-7 text-muted-foreground hover:text-destructive"
                 onClick={connection.disconnect}
                 title="Disconnect"
+                aria-label="Disconnect"
               >
                 <LogOut className="size-4" />
               </Button>
@@ -453,23 +683,32 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tabular-nums">
-              {balance.data ? formatSats(balance.data.spendableSat) : '…'}
-            </span>
-            <span className="text-muted-foreground">sats</span>
-          </div>
-          {pending.some(([, v]) => (v ?? 0) > 0) && (
-            <p className="text-xs text-muted-foreground mt-1.5 tabular-nums">
-              {pending
-                .filter(([, v]) => (v ?? 0) > 0)
-                .map(([label, v]) => `${formatSats(v!)} ${label}`)
-                .join(' · ')}
-            </p>
+          {balance.isError ? (
+            <div className="space-y-2">
+              <p className="text-xs text-destructive">{balance.error.message}</p>
+              <Button variant="outline" size="sm" onClick={() => balance.refetch()}>
+                <RefreshCw className="size-3.5 mr-1.5" />
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-bold tabular-nums">
+                  {balance.data ? formatSats(balance.data.spendableSat) : '…'}
+                </span>
+                <span className="text-muted-foreground">sats</span>
+              </div>
+              {pendingEntries.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1.5 tabular-nums">
+                  {pendingEntries.map(([label, v]) => `${formatSats(v)} ${label}`).join(' · ')}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                Wallet hosted on your barkd server ({new URL(serverUrl).host}), refreshed every 15s.
+              </p>
+            </>
           )}
-          <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            Wallet hosted on your barkd server ({new URL(serverUrl).host}), refreshed every 15s.
-          </p>
         </CardContent>
       </Card>
 
@@ -481,11 +720,27 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
         </TabsList>
 
         <TabsContent value="receive">
-          <ReceivePanel serverUrl={serverUrl} />
+          <ReceivePanel
+            serverUrl={serverUrl}
+            arkAddress={arkAddress}
+            onchainAddress={onchainAddress}
+            invoice={invoice}
+            invoiceAmount={invoiceAmount}
+            setInvoiceAmount={setInvoiceAmount}
+            invoiceDescription={invoiceDescription}
+            setInvoiceDescription={setInvoiceDescription}
+          />
         </TabsContent>
 
         <TabsContent value="send">
-          <SendPanel serverUrl={serverUrl} />
+          <SendPanel
+            serverUrl={serverUrl}
+            send={send}
+            destination={destination}
+            setDestination={setDestination}
+            sendAmount={sendAmount}
+            setSendAmount={setSendAmount}
+          />
         </TabsContent>
 
         <TabsContent value="activity">
@@ -495,6 +750,18 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
+          ) : movements.isError ? (
+            <Card className="border-dashed mt-4">
+              <CardContent className="py-10 px-8 text-center space-y-3">
+                <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                  {movements.error.message}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => movements.refetch()}>
+                  <RefreshCw className="size-3.5 mr-1.5" />
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
           ) : !movements.data?.length ? (
             <Card className="border-dashed mt-4">
               <CardContent className="py-10 px-8 text-center">
