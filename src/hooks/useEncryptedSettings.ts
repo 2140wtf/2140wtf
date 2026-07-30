@@ -73,6 +73,8 @@ export interface EncryptedSettings {
   marketplaceRelays?: string[];
   /** User-added relays used for private group chat messages and welcome events. */
   groupChatRelays?: string[];
+  /** Extra user-added relays pet events are also published to (additive to the global set). */
+  petsRelays?: string[];
   /** Feed and sidebar content settings */
   feedSettings?: FeedSettings;
   /** Advanced content filters */
