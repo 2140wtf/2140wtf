@@ -17,6 +17,16 @@ import type { Movement } from '@secondts/barkd';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +46,7 @@ import {
   useBarkdOnchainAddress,
   useBarkdOnchainBalance,
   useBarkdRefresh,
+  useBarkdRefreshAll,
   useBarkdSend,
 } from '@/hooks/useBarkdWallet';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -81,6 +92,13 @@ function isLightningDestination(destination: string): boolean {
     d.startsWith('lnurl') ||
     d.includes('@')
   );
+}
+
+/** Truncate a long destination for display: keep both ends. */
+function truncateMiddle(value: string, max = 40): string {
+  if (value.length <= max) return value;
+  const half = Math.floor((max - 1) / 2);
+  return `${value.slice(0, half)}…${value.slice(-half)}`;
 }
 
 /** Human labels for the pending buckets in the barkd Balance type. */
@@ -625,6 +643,26 @@ function SendPanel({
     if (send.isSuccess || send.isError) send.reset();
   };
 
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const canSend = !!destination.trim() && !missingAmount && !amountInvalid && !send.isPending;
+  const invoiceHasAmount = isBolt11 && invoiceAmountSat !== null;
+
+  const confirmSend = () => {
+    send.mutate(
+      // An amount-bearing invoice settles its own amount — submit no amountSat
+      // so the request matches what the dialog confirmed.
+      { destination: strippedDestination, amountSat: invoiceHasAmount ? undefined : amountSat },
+      {
+        onSuccess: () => {
+          setConfirmOpen(false);
+          setDestination('');
+          setSendAmount('');
+        },
+        onError: () => setConfirmOpen(false),
+      },
+    );
+  };
+
   return (
     <div className="space-y-3 py-4">
       <div className="space-y-1.5">
@@ -650,8 +688,11 @@ function SendPanel({
           placeholder="1000"
           value={sendAmount}
           onChange={(e) => editAmount(e.target.value)}
+          disabled={invoiceHasAmount}
         />
-        <SatsPresetPills value={sendAmount} onSelect={(s) => editAmount(String(s))} />
+        {!invoiceHasAmount && (
+          <SatsPresetPills value={sendAmount} onSelect={(s) => editAmount(String(s))} />
+        )}
         {isBolt11 && invoiceAmountSat !== null && (
           <p className="text-xs text-muted-foreground tabular-nums">
             This invoice requests {formatSats(effectiveAmountSat ?? 0)} sats.
@@ -659,7 +700,7 @@ function SendPanel({
         )}
         {isBolt11 && invoiceAmountSat === null && amountSat === undefined && (
           <p className="text-xs text-muted-foreground">
-            This invoice has no amount — enter one below.
+            This invoice has no amount — enter one.
           </p>
         )}
         {amountInvalid && (
@@ -683,29 +724,59 @@ function SendPanel({
           {send.data.message || 'Payment sent.'}
         </p>
       )}
-      <Button
-        className="w-full"
-        disabled={!destination.trim() || missingAmount || amountInvalid || send.isPending}
-        onClick={() =>
-          send.mutate(
-            { destination: strippedDestination, amountSat },
-            {
-              onSuccess: () => {
-                setDestination('');
-                setSendAmount('');
-              },
-            },
-          )
-        }
-      >
-        {send.isPending ? (
-          <>
-            <RefreshCw className="size-4 mr-2 animate-spin" /> Sending…
-          </>
-        ) : (
-          'Send'
-        )}
+      <Button className="w-full" disabled={!canSend} onClick={() => setConfirmOpen(true)}>
+        Review send
       </Button>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm payment</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">To</p>
+                  <p className="text-sm font-mono break-all">
+                    {truncateMiddle(strippedDestination, 60)}
+                  </p>
+                  <CopyButton value={strippedDestination} label="destination" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Amount</p>
+                  <p className="text-sm font-semibold tabular-nums">
+                    {effectiveAmountSat !== undefined
+                      ? `${formatSats(effectiveAmountSat)} sats`
+                      : 'Set by the invoice/offer'}
+                    {isBolt11 && invoiceAmountSat !== null && amountSat !== undefined && (
+                      <span className="font-normal text-muted-foreground"> (invoice amount)</span>
+                    )}
+                  </p>
+                </div>
+                {fee.data &&
+                  debouncedAmountSat === effectiveAmountSat &&
+                  effectiveAmountSat !== undefined && (
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      Fee ≈ {formatSats(fee.data.feeSat)} sats — total spend ≈{' '}
+                      {formatSats(fee.data.grossAmountSat)} sats
+                    </p>
+                  )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={send.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={send.isPending} onClick={(e) => { e.preventDefault(); confirmSend(); }}>
+              {send.isPending ? (
+                <>
+                  <RefreshCw className="size-4 mr-2 animate-spin" /> Sending…
+                </>
+              ) : (
+                'Confirm send'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -727,6 +798,8 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   const invoice = useBarkdGenerateInvoice(serverUrl);
   const send = useBarkdSend(serverUrl);
   const boardAll = useBarkdBoardAll(serverUrl);
+  const refreshAll = useBarkdRefreshAll(serverUrl);
+  const [refreshAllOpen, setRefreshAllOpen] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [destination, setDestination] = useState('');
@@ -851,6 +924,72 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
           )}
         </CardContent>
       </Card>
+
+      <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => setRefreshAllOpen(true)}
+        >
+          Refresh VTXOs
+        </Button>
+      </div>
+
+      <AlertDialog open={refreshAllOpen} onOpenChange={setRefreshAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refresh VTXOs?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left">
+                <p>
+                  This registers your <span className="font-semibold">entire spendable balance</span>{' '}
+                  for refresh in the next Ark round, giving all VTXOs a fresh expiry. Funds are
+                  locked until the round confirms on-chain, and an Ark server fee applies.
+                </p>
+                <p className="text-muted-foreground">
+                  barkd does not refresh on its own — do this when your VTXOs approach expiry, for
+                  example after the wallet has been offline for a long time.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={refreshAll.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={refreshAll.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                refreshAll.mutate(undefined, {
+                  onSuccess: () => {
+                    setRefreshAllOpen(false);
+                    toast({
+                      title: 'VTXO refresh started',
+                      description: 'It completes in the next Ark round.',
+                    });
+                  },
+                  onError: (error) => {
+                    setRefreshAllOpen(false);
+                    toast({
+                      title: 'Refresh failed',
+                      description: error.message,
+                      variant: 'destructive',
+                    });
+                  },
+                });
+              }}
+            >
+              {refreshAll.isPending ? (
+                <>
+                  <RefreshCw className="size-4 mr-2 animate-spin" /> Refreshing…
+                </>
+              ) : (
+                'Refresh'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Tabs defaultValue="receive" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
