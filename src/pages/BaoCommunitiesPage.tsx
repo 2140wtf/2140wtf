@@ -12,16 +12,27 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChromeDialogContent, Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCommunityActions2, useCreateRelayCandidates2 } from "@/concord-v2/hooks/useCommunityActions2";
+import { useCommunityActions2, useCreateRelayCandidates2, FEED_RELAY_CANDIDATES } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCommunity2, useLiveCommunities2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useConcord2Unread } from "@/concord-v2/hooks/useConcord2Unread";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
 import type { CommunityListEntry } from "@/concord-v2/lib/communityList";
+import { MAX_COMMUNITY_RELAYS } from "@/concord-v2/lib/types";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useMutes } from "@/hooks/useMutes";
 import { toast } from "@/hooks/useToast";
+import { normalizeRelayUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+
+/** Hostname for a relay URL (for compact suggestion chips). */
+function relayHostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url.replace(/^wss?:\/\//, "");
+  }
+}
 
 /**
  * One community row: decrypted icon + name (the fold's metadata wins over the
@@ -103,14 +114,22 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
 
   // Advanced: which relays the community is minted on. `null` = untouched (the
-  // create path picks its own default — app relays ∪ the write-enabled feed
-  // relay defaults ∪ CORD stock ∪ the creator's DM relays); once the user
-  // edits, `relays` holds the explicit set. The candidate query (gated on the
-  // menu being open) resolves the same default for pre-selection.
+  // create path picks its own default — app relays ∪ the curated-feed relay
+  // candidates ∪ CORD stock ∪ the creator's DM relays); once the user edits,
+  // `relays` holds the explicit set. The candidate query (gated on the menu
+  // being open) resolves the same default for pre-selection.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [relays, setRelays] = useState<string[] | null>(null);
   const { data: candidates } = useCreateRelayCandidates2(advancedOpen);
-  const effectiveRelays = relays ?? candidates ?? [];
+  const effectiveRelays = useMemo(() => relays ?? candidates ?? [], [relays, candidates]);
+
+  // Feed relays not yet in the set, offered as one-tap additions.
+  const feedSuggestions = useMemo(() => {
+    const chosen = new Set(effectiveRelays.map((u) => normalizeRelayUrl(u) ?? u));
+    return FEED_RELAY_CANDIDATES.filter((u) => !chosen.has(normalizeRelayUrl(u) ?? u));
+  }, [effectiveRelays]);
+
+  const addRelay = (url: string) => setRelays([...effectiveRelays, url]);
 
   const handleCreate = async () => {
     const trimmed = name.trim();
@@ -205,7 +224,8 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <p className="mb-2 mt-3 text-xs text-muted-foreground">
                   Where this community lives. Members read and write here, so pick
                   relays that accept your writes. An auth-only or DM-only relay can
-                  reject the genesis and strand the create.
+                  reject the genesis and strand the create. A community lives on up
+                  to {MAX_COMMUNITY_RELAYS} relays — only the first {MAX_COMMUNITY_RELAYS} picks are used.
                 </p>
                 <p className="mb-2 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">Privacy tip:</span>{" "}
@@ -224,6 +244,26 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   onReset={candidates ? () => setRelays(candidates) : undefined}
                   emptyText="Add at least one relay to host this community."
                 />
+                {feedSuggestions.length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-xs text-muted-foreground">Add from the feed relays:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {feedSuggestions.map((url) => (
+                        <Button
+                          key={url}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs font-mono"
+                          onClick={() => addRelay(url)}
+                        >
+                          <Plus className="size-3 mr-1" />
+                          {relayHostOf(url)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CollapsibleContent>
             </Collapsible>
           </form>
