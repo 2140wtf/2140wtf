@@ -132,7 +132,10 @@ async function fetchLinkPreview(
   const native = await tryNativeOEmbed(url, signal);
   if (native) return native;
 
-  // Fall back to the generic link preview proxy.
+  // Fall back to the generic link preview proxy. No template configured means
+  // no proxy — without this guard templateUrl('') yields '' and fetch('') hits
+  // the page URL itself (a spurious same-origin request per feed link).
+  if (!linkPreviewTemplate) return null;
   const endpoint = templateUrl({ template: linkPreviewTemplate, url });
   return tryFetchOEmbed(endpoint, signal);
 }
