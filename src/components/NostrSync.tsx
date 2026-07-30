@@ -399,6 +399,15 @@ export function NostrSync() {
         changed = true;
       }
 
+      if (
+        encryptedSettings.petsRelays &&
+        JSON.stringify(encryptedSettings.petsRelays) !==
+          JSON.stringify(current.petsRelays ?? [])
+      ) {
+        updates.petsRelays = encryptedSettings.petsRelays;
+        changed = true;
+      }
+
       if (encryptedSettings.feedSettings) {
         const currentFeed = current.feedSettings;
         const remoteFeed = encryptedSettings.feedSettings;

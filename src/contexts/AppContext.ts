@@ -234,6 +234,13 @@ export interface AppConfig {
   /** User-added relays used for private group chat messages and welcome events. When empty, group chat falls back to the effective global relay set. */
   groupChatRelays?: string[];
   /**
+   * Extra user-added relays that pet events are published to IN ADDITION to the
+   * effective global relay set. Unlike `groupChatRelays` this is additive, not
+   * a replacement — pets always stay on the global set so other clients keep
+   * working.
+   */
+  petsRelays?: string[];
+  /**
    * ₿AO chat (Concord V2) app relays for generic community-plane traffic
    * (membership lists, invite delivery fallbacks). Seeded from
    * `VITE_APP_RELAYS` (see `lib/platform.ts`); user-editable. Group-scoped
