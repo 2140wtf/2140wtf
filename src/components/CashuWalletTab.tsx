@@ -38,6 +38,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/useToast';
 import { Link } from 'react-router-dom';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
 import type { MintQuoteResponse } from '@cashu/cashu-ts';
@@ -45,6 +47,7 @@ import type { MintQuoteResponse } from '@cashu/cashu-ts';
 export function CashuWalletTab() {
   const { toast } = useToast();
   const wallet = useCashuWalletContext();
+  const { user } = useCurrentUser();
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
@@ -53,7 +56,13 @@ export function CashuWalletTab() {
 
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
-  const [generatedToken, setGeneratedToken] = useState('');
+  // The generated send token is persisted in localStorage (scoped by user +
+  // mint) because sendToken debits the wallet and clears its send-recovery
+  // journal after encoding — a useState-only copy is destroyed when this tab
+  // unmounts (tab switch / navigation), burning the sats. It stays here
+  // until the user dismisses it.
+  const sendOutboxKey = `bao_cashu_wallet_send_${user?.pubkey ?? 'anon'}_${wallet.mintUrl ?? 'default'}`;
+  const [generatedToken, setGeneratedToken] = useLocalStorage<string>(sendOutboxKey, '');
   const [sendInvoice, setSendInvoice] = useState('');
 
   const [mintName, setMintName] = useState('');
@@ -437,17 +446,26 @@ export function CashuWalletTab() {
                       <div className='rounded-xl bg-white p-4 shadow-sm'>
                         <QRCodeSVG value={generatedToken} size={200} level='M' />
                       </div>
+                      <p className='text-xs text-amber-600 dark:text-amber-500 text-center max-w-xs'>
+                        This token IS the money — your wallet is already debited. It is stored in
+                        this browser until you dismiss it; copy it before leaving this page.
+                      </p>
                       <p className='text-xs text-muted-foreground text-center break-all max-w-xs'>
                         {generatedToken}
                       </p>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => copyToClipboard(generatedToken, setCopiedToken)}
-                      >
-                        {copiedToken ? <Check className='size-3.5 mr-1.5' /> : <Copy className='size-3.5 mr-1.5' />}
-                        {copiedToken ? 'Copied' : 'Copy token'}
-                      </Button>
+                      <div className='flex gap-2'>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() => copyToClipboard(generatedToken, setCopiedToken)}
+                        >
+                          {copiedToken ? <Check className='size-3.5 mr-1.5' /> : <Copy className='size-3.5 mr-1.5' />}
+                          {copiedToken ? 'Copied' : 'Copy token'}
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => setGeneratedToken('')}>
+                          Dismiss
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </TabsContent>
