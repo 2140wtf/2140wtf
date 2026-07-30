@@ -25,6 +25,7 @@ import { adjustSeedForAdultType } from '@/pets/core/lib/pets';
 import { ADULT_FORMS, type AdultForm } from '@/pets/adult-pets/types/adult.types';
 import type { PetsCompanion, PetsStage } from '@/pets/core/lib/pets';
 import { PetsSpeciesCreator } from '@/pets/creator/components/PetsSpeciesCreator';
+import { PetsRelaySettings } from '@/components/pets/PetsRelaySettings';
 
 const STAGES: { id: PetsStage; label: string; icon: typeof Egg }[] = [
   { id: 'egg', label: 'Egg', icon: Egg },
@@ -259,6 +260,22 @@ export function PetsSettingsPage() {
             <PetsSpeciesCreator baseCompanion={previewCompanion ?? baseCompanion} />
           </div>
         )}
+
+        <div className="flex items-center gap-3 px-2 py-5">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/40 to-primary/60" />
+          <Sparkles className="size-3 text-primary/50" />
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent via-primary/40 to-primary/60" />
+        </div>
+
+        <div className="space-y-4 rounded-xl border p-4">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold">Pet Relays</h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Mirror your pets onto extra relays you own.
+            </p>
+          </div>
+          <PetsRelaySettings />
+        </div>
       </div>
     </main>
   );
