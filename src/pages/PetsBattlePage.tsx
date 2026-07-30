@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 
-import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostr } from '@nostrify/react';
 import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
@@ -45,6 +45,7 @@ import {
   PENDING_CLAIM_MAX_ATTEMPTS,
   type PendingEscrowClaim,
 } from '@/pets/battle/lib/cashuEscrow';
+import { BATTLE_ATTESTATION_TAG, BATTLE_SYNC_KIND } from '@/pets/battle/lib/battleMessages';
 import { getMultisigDepositLocktime } from '@/lib/cashu/escrowMultisig';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
@@ -53,6 +54,7 @@ export default function PetsBattlePage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
   const { updateProfileEvent } = useNostrPetProfile();
+  const { nostr } = useNostr();
 
   const { wallet: petsWallet, isBao } = usePetsWallet();
   const { config } = useAppContext();
@@ -95,7 +97,7 @@ export default function PetsBattlePage() {
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
 
-  const { role: remoteRole, sendFinished: sendRemoteFinished } = remote;
+  const { role: remoteRole, sendFinished: sendRemoteFinished, sendAttestation } = remote;
 
   const isTouch = useIsTouchDevice();
   const isLandscape = useIsLandscape();
@@ -146,28 +148,59 @@ export default function PetsBattlePage() {
    * so a receive failure must not trigger a second /release call), then receive
    * the P2PK-locked prize token into the wallet. On success the journal entry
    * is cleared. Throws on failure; the caller keeps the journal for a retry.
+   *
+   * Guarded against concurrent execution: the hydration effect's intermediate
+   * journal saves re-render the page, which re-fires the retry effect while
+   * the first claim is still awaiting the operator — an in-flight battle
+   * returns 'busy' so the operator never sees two /release posts for it.
    */
+  const claimInflightRef = useRef(new Set<string>());
   const claimEscrowPrize = useCallback(
-    async (claim: PendingEscrowClaim): Promise<'claimed' | 'pending'> => {
+    async (claim: PendingEscrowClaim): Promise<'claimed' | 'pending' | 'busy'> => {
       if (!config.petsBattleEscrowServiceUrl || !petsWallet || !escrowKeypair) {
         throw new Error('Escrow claim prerequisites are not ready.');
       }
-      // Deferred claim: the host-signed finished event hasn't arrived yet.
-      // Sending `{}` would give the operator no verifiable outcome proof —
-      // the release would be rejected and the attempt counter burned.
-      if (!claim.finishedEvent) return 'pending';
+      if (claimInflightRef.current.has(claim.battleId)) return 'busy';
+      claimInflightRef.current.add(claim.battleId);
+      try {
+      // Deferred claim: both players' result attestations are required — the
+      // operator releases only when they agree. Posting without them would be
+      // rejected and burn an attempt.
+      if (!claim.ownAttestation || !claim.opponentAttestation) return 'pending';
       let releaseToken = claim.releaseToken;
       if (!releaseToken) {
-        const release = await requestEscrowRelease({
-          serviceUrl: config.petsBattleEscrowServiceUrl,
-          battleId: claim.battleId,
-          winnerPubkey: claim.winnerPubkey,
-          hostPubkey: claim.hostPubkey,
-          guestPubkey: claim.guestPubkey,
-          hostDepositToken: claim.hostDepositToken,
-          guestDepositToken: claim.guestDepositToken,
-          finishedEvent: claim.finishedEvent,
-        });
+        const hostAttestation = claim.localRole === 'host' ? claim.ownAttestation : claim.opponentAttestation;
+        const guestAttestation = claim.localRole === 'guest' ? claim.ownAttestation : claim.opponentAttestation;
+        let release;
+        try {
+          release = await requestEscrowRelease({
+            serviceUrl: config.petsBattleEscrowServiceUrl,
+            battleId: claim.battleId,
+            winnerPubkey: claim.winnerPubkey,
+            hostPubkey: claim.hostPubkey,
+            guestPubkey: claim.guestPubkey,
+            hostDepositToken: claim.hostDepositToken,
+            guestDepositToken: claim.guestDepositToken,
+            hostAttestation,
+            guestAttestation,
+          });
+        } catch (err) {
+          // The opponent may have published several conflicting attestations
+          // (griefing): on a disagreement rejection, discard THIS one and let
+          // the hydration effect try another event from the relay set.
+          if (err instanceof Error && /disagree/i.test(err.message)) {
+            const triedId = typeof claim.opponentAttestation.id === 'string' ? claim.opponentAttestation.id : null;
+            savePendingEscrowClaim({
+              ...claim,
+              opponentAttestation: undefined,
+              triedAttestationIds: triedId
+                ? [...(claim.triedAttestationIds ?? []), triedId]
+                : claim.triedAttestationIds,
+            });
+            return 'pending';
+          }
+          throw err;
+        }
         releaseToken = release?.token;
         if (releaseToken) {
           // Journal the release token BEFORE the receive — losing this string
@@ -185,6 +218,9 @@ export default function PetsBattlePage() {
       }
       clearPendingEscrowClaim(claim.battleId);
       return 'claimed';
+      } finally {
+        claimInflightRef.current.delete(claim.battleId);
+      }
     },
     [config.petsBattleEscrowServiceUrl, petsWallet, escrowKeypair],
   );
@@ -200,9 +236,9 @@ export default function PetsBattlePage() {
       (c) =>
         normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey &&
         c.attempts < PENDING_CLAIM_MAX_ATTEMPTS &&
-        // Deferred claims (guest still waiting for the host-signed result) are
-        // hydrated by the hostFinishedEvent effect below, not retried blind.
-        c.finishedEvent,
+        // Deferred claims (still waiting for an attestation) are hydrated by
+        // the attestation effect below, not retried blind.
+        c.ownAttestation && c.opponentAttestation,
     );
     if (claims.length === 0) return;
     claimRetryRanRef.current = true;
@@ -215,9 +251,10 @@ export default function PetsBattlePage() {
               title: 'Battle prize claimed!',
               description: `Recovered ${claim.prizeAmount * 2 > 0 ? `${(claim.prizeAmount * 2).toLocaleString()} ` : ''}real sats from a previous battle.`,
             });
-          } else {
+          } else if (outcome === 'pending') {
             savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
           }
+          // 'busy': a concurrent execution owns this battle's journal — leave it.
         } catch (err) {
           console.warn('[PetsBattlePage] escrow claim retry failed:', err);
           savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
@@ -226,61 +263,99 @@ export default function PetsBattlePage() {
     })();
   }, [petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
 
-  // Guest race fix: the guest's onFinish fires from the final battle-state
-  // snapshot, which can arrive a few messages BEFORE the host's signed
-  // finished event — and the game never refires onFinish, so a claim that
-  // failed there would never be attempted again. onFinish therefore journals
-  // a DEFERRED claim (no finishedEvent); this effect hydrates and executes it
-  // the moment the signed event lands. Hydrating the journal first keeps it
-  // idempotent: a re-render mid-attempt finds the event already attached.
+  // Attestation hydration: a claim can only fire once BOTH players' result
+  // attestations are journaled (the operator releases only when they agree).
+  // The opponent's attestation is published by their app at battle end and
+  // found here via relay query; our own is re-published when missing (e.g.
+  // the first publish raced a closed tab). Runs on mount and polls while any
+  // deferred claim exists — the opponent's attestation typically lands within
+  // seconds of the finish. Hydrating the journal before executing keeps every
+  // step idempotent across re-renders and reloads.
   useEffect(() => {
-    if (remoteRole !== 'guest') return;
-    const event = remote.hostFinishedEvent;
-    if (!event) return;
-    if (!petsWallet || !escrowKeypair || !localEscrowPubkey || !config.petsBattleEscrowServiceUrl) return;
-    const battleId = remote.battleId ?? '';
-    const deferred = loadPendingEscrowClaims().find(
-      (c) =>
-        c.battleId === battleId &&
-        !c.finishedEvent &&
-        normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey,
-    );
-    if (!deferred) return;
-    const claim: PendingEscrowClaim = {
-      ...deferred,
-      finishedEvent: {
-        id: event.id,
-        pubkey: event.pubkey,
-        kind: event.kind,
-        created_at: event.created_at,
-        tags: event.tags,
-        content: event.content,
-        sig: event.sig,
-      },
-    };
-    savePendingEscrowClaim(claim);
-    void (async () => {
-      try {
-        const outcome = await claimEscrowPrize(claim);
-        if (outcome === 'claimed') {
-          toast({ title: 'Battle prize claimed!', description: `You received ${(claim.prizeAmount * 2).toLocaleString()} real sats.` });
-        } else {
-          savePendingEscrowClaim({ ...claim, attempts: claim.attempts + 1 });
+    if (!petsWallet || !escrowKeypair || !localEscrowPubkey) return;
+    if (!config.petsBattleEscrowServiceUrl || !config.petsBattleEscrowPubkey) return;
+    let cancelled = false;
+
+    const hydrate = async () => {
+      const deferred = loadPendingEscrowClaims().filter(
+        (c) =>
+          normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey &&
+          c.attempts < PENDING_CLAIM_MAX_ATTEMPTS &&
+          (!c.ownAttestation || !c.opponentAttestation),
+      );
+      for (const claim of deferred) {
+        if (cancelled) return;
+        try {
+          let own = claim.ownAttestation;
+          if (!own) {
+            // The claim only exists when the local player won: host = 0, guest = 1.
+            const ev = await sendAttestation(
+              claim.localRole === 'host' ? 0 : 1,
+              escrowKeypair.privkey,
+              config.petsBattleEscrowPubkey!,
+              claim.opponentNostrPubkey
+                ? { battleId: claim.battleId, opponentPubkey: claim.opponentNostrPubkey }
+                : undefined,
+            );
+            if (ev) {
+              own = { id: ev.id, pubkey: ev.pubkey, kind: ev.kind, created_at: ev.created_at, tags: ev.tags, content: ev.content, sig: ev.sig };
+            }
+          }
+
+          let opponent = claim.opponentAttestation;
+          if (!opponent && claim.opponentNostrPubkey) {
+            const events = await nostr.query([{
+              kinds: [BATTLE_SYNC_KIND],
+              '#e': [claim.battleId],
+              '#t': [BATTLE_ATTESTATION_TAG],
+              authors: [claim.opponentNostrPubkey],
+              limit: 10,
+            }]);
+            const tried = new Set(claim.triedAttestationIds ?? []);
+            const found = events.find((ev) => !tried.has(ev.id));
+            if (found) {
+              opponent = { id: found.id, pubkey: found.pubkey, kind: found.kind, created_at: found.created_at, tags: found.tags, content: found.content, sig: found.sig };
+            }
+          }
+
+          if (!own || !opponent) {
+            if (own !== claim.ownAttestation) savePendingEscrowClaim({ ...claim, ownAttestation: own });
+            continue;
+          }
+
+          const hydrated: PendingEscrowClaim = { ...claim, ownAttestation: own, opponentAttestation: opponent };
+          savePendingEscrowClaim(hydrated);
+          const outcome = await claimEscrowPrize(hydrated);
+          // No `cancelled` check here: a stale run that COMPLETED the claim
+          // must still report it — the prize is already in the wallet and the
+          // toaster is global (unmounting mid-claim must not eat the toast).
+          if (outcome === 'claimed') {
+            toast({ title: 'Battle prize claimed!', description: `You received ${(hydrated.prizeAmount * 2).toLocaleString()} real sats.` });
+          } else if (outcome === 'pending') {
+            const journaled = loadPendingEscrowClaims().find((c) => c.battleId === hydrated.battleId) ?? hydrated;
+            savePendingEscrowClaim({ ...journaled, attempts: journaled.attempts + 1 });
+          }
+          // 'busy': a concurrent execution owns this battle's journal — leave it.
+        } catch (err) {
+          console.warn('[PetsBattlePage] attestation hydration failed:', err);
+          const journaled = loadPendingEscrowClaims().find((c) => c.battleId === claim.battleId) ?? claim;
+          savePendingEscrowClaim({ ...journaled, attempts: journaled.attempts + 1 });
         }
-      } catch (err) {
-        console.warn('[PetsBattlePage] deferred escrow claim failed:', err);
-        // Re-read the journal — claimEscrowPrize may have stored a
-        // releaseToken before the wallet receive failed.
-        const journaled = loadPendingEscrowClaims().find((c) => c.battleId === claim.battleId) ?? claim;
-        savePendingEscrowClaim({ ...journaled, attempts: journaled.attempts + 1 });
-        toast({
-          title: 'Prize claim saved — will retry',
-          description: 'The escrow release failed, but your claim is journaled locally and retried automatically when you return to this page.',
-          variant: 'destructive',
-        });
       }
-    })();
-  }, [remoteRole, remote.hostFinishedEvent, remote.battleId, petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
+    };
+
+    void hydrate();
+    const interval = setInterval(() => {
+      const stillDeferred = loadPendingEscrowClaims().some(
+        (c) =>
+          normalizeEscrowPubkey(c.winnerPubkey) === localEscrowPubkey &&
+          c.attempts < PENDING_CLAIM_MAX_ATTEMPTS &&
+          (!c.ownAttestation || !c.opponentAttestation),
+      );
+      if (stillDeferred) void hydrate();
+    }, 8_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [sendAttestation, nostr, petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, config.petsBattleEscrowPubkey, claimEscrowPrize, toast]);
 
   // Sweep stale escrow-DEPOSIT journals from abandoned battles. Each journaled
   // token is the only handle on a stake the wallet was already debited for.
@@ -328,15 +403,24 @@ export default function PetsBattlePage() {
     onFinishRef.current = async (winner) => {
       if (winner === null || payout.isPending) return;
 
-      // In remote matches the authoritative host announces the result. The
-      // guest forwards the host-signed finished event it received over the
-      // sync channel — sending `{}` would give the escrow operator no
-      // verifiable outcome proof and the release request would fail.
-      let finishedEvent: NostrEvent | undefined;
+      // In remote matches the authoritative host announces the result to the
+      // guest (UI sync). The escrow no longer relies on that event: BOTH
+      // players publish a result attestation encrypted to the operator, and
+      // the operator co-signs only when the two agree.
       if (remoteRole === 'host') {
-        finishedEvent = await sendRemoteFinished(winner) ?? undefined;
-      } else if (remoteRole === 'guest') {
-        finishedEvent = remote.hostFinishedEvent ?? undefined;
+        await sendRemoteFinished(winner);
+      }
+
+      // Publish OUR attestation the moment the outcome is known locally — for
+      // the guest this fires from the final battle-state snapshot, which can
+      // arrive before the host's battle-finished event; either way the
+      // attestation must be on the relays before the winner can claim.
+      let ownAttestation: Record<string, unknown> | undefined;
+      if (matchMode === 'real-sats' && escrowKeypair && config.petsBattleEscrowPubkey && remote.battleId) {
+        const att = await sendAttestation(winner, escrowKeypair.privkey, config.petsBattleEscrowPubkey);
+        if (att) {
+          ownAttestation = { id: att.id, pubkey: att.pubkey, kind: att.kind, created_at: att.created_at, tags: att.tags, content: att.content, sig: att.sig };
+        }
       }
 
       // Only the local player gets a prize when they win. Host is P1 (index 0),
@@ -357,53 +441,23 @@ export default function PetsBattlePage() {
           // deposit tokens live only in React state, so a failed request (or
           // closing the page, or Rematch/Exit wiping the battle state) would
           // otherwise strand both locked stakes with the operator forever.
-          // Journaled claims are retried automatically on this page.
+          // The claim stays DEFERRED until the opponent's attestation is found
+          // on the relays (hydration effect above) — the operator releases
+          // only when both players attest the same winner.
           const claim: PendingEscrowClaim = {
             battleId: remote.battleId ?? '',
+            localRole: remoteRole === 'guest' ? 'guest' : 'host',
+            opponentNostrPubkey: remote.opponentPubkey ?? '',
             winnerPubkey: localEscrowPubkey,
             hostPubkey,
             guestPubkey,
             hostDepositToken: remote.escrow.hostDepositToken ?? '',
             guestDepositToken: remote.escrow.guestDepositToken ?? '',
-            finishedEvent: finishedEvent
-              ? {
-                  id: finishedEvent.id,
-                  pubkey: finishedEvent.pubkey,
-                  kind: finishedEvent.kind,
-                  created_at: finishedEvent.created_at,
-                  tags: finishedEvent.tags,
-                  content: finishedEvent.content,
-                  sig: finishedEvent.sig,
-                }
-              : undefined,
+            ownAttestation,
             prizeAmount: matchOptions.prizeAmount,
             createdAt: Date.now(),
             attempts: 0,
           };
-          if (!finishedEvent) {
-            if (remoteRole === 'guest') {
-              // The guest's onFinish fires from the final battle-state
-              // snapshot — the host's signed finished event typically lands a
-              // few messages LATER, and the game never refires onFinish.
-              // Journal a deferred claim; the hostFinishedEvent effect above
-              // hydrates and fires it the moment the proof arrives.
-              savePendingEscrowClaim(claim);
-              toast({
-                title: 'Prize claim saved — awaiting result',
-                description: "The host's signed battle result hasn't arrived yet. Your claim is journaled locally and fires automatically the moment it does.",
-              });
-            } else {
-              // Host: the signed event doesn't exist (our own publish failed),
-              // so there is no proof to wait for. Journaling would poison
-              // every retry with the same unverifiable claim — fail loudly.
-              toast({
-                title: 'Battle result proof missing',
-                description: 'The signed battle-finished event could not be published, so the escrow release would be rejected. No claim was journaled — reconnect and replay the battle.',
-                variant: 'destructive',
-              });
-            }
-            return;
-          }
           savePendingEscrowClaim(claim);
           try {
             const outcome = await claimEscrowPrize(claim);
@@ -411,7 +465,10 @@ export default function PetsBattlePage() {
               toast({ title: 'Battle prize claimed!', description: `You received ${(matchOptions.prizeAmount * 2).toLocaleString()} real sats.` });
             } else {
               savePendingEscrowClaim({ ...claim, attempts: 1 });
-              toast({ title: 'Escrow release pending', description: 'The operator will release your prize shortly — your claim is saved locally and retried automatically.', variant: 'default' });
+              toast({
+                title: 'Prize claim saved — awaiting opponent confirmation',
+                description: "The escrow releases automatically the moment your opponent's matching result confirmation is found. Your claim is journaled locally and fires on its own.",
+              });
             }
           } catch (claimErr) {
             // Re-read the journal before re-saving: claimEscrowPrize may have
@@ -473,7 +530,9 @@ export default function PetsBattlePage() {
     toast,
     remoteRole,
     sendRemoteFinished,
+    sendAttestation,
     remote.hostFinishedEvent,
+    remote.opponentPubkey,
     escrowKeypair,
     localEscrowPubkey,
     claimEscrowPrize,

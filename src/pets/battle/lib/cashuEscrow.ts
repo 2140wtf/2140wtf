@@ -2,16 +2,25 @@
 //
 // Helpers for real-sats pet battle escrow using Cashu P2PK tokens.
 //
-// Both players lock their stake to a configured operator escrow pubkey before
-// the battle starts. The operator (a trusted service) observes the signed
-// battle-finished event and releases the combined stakes to the winner as a
-// new Cashu token.
+// Both players lock their stake 2-of-3 multisig (both players + operator)
+// before the battle starts. At battle end BOTH players publish a result
+// attestation encrypted to the operator; the operator co-signs the release
+// only when the two attestations agree on the winner, and the winner's own
+// key provides the second signature. No human intervention anywhere: agree →
+// instant release; disagree (or a missing attestation) → after the 24h
+// locktime each player reclaims their own stake with their own key.
 
 import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
+import { finalizeEvent } from 'nostr-tools';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
 import { deriveNutzapKey, decodeCashuToken, normalizeMintUrl as sharedNormalizeMintUrl } from '@/lib/cashu/cashu';
-import { bytesToHex } from '@noble/curves/utils.js';
+import {
+  BATTLE_ATTESTATION_BINDING_KIND,
+  BATTLE_ATTESTATION_TAG,
+  type BattleResultAttestationPayload,
+} from './battleMessages';
 
 export interface EscrowKeyPair {
   privkey: string;
@@ -344,6 +353,42 @@ export async function checkEscrowDepositSpentState(tokenStr: string): Promise<st
  * Cashu token paid to the winner. When no service URL is configured this
  * returns null and the winner must request release out-of-band.
  */
+/**
+ * Build this player's outcome attestation for a finished battle. The payload
+ * is later NIP-44-encrypted TO THE ESCROW OPERATOR and published as a
+ * BATTLE_SYNC_KIND event tagged `battle-attestation`; the operator only
+ * co-signs the release when BOTH players' attestations agree on the winner.
+ *
+ * The embedded binding event is signed by the attester's ESCROW private key
+ * and names their Nostr pubkey + the outcome. That is what stops a sockpuppet
+ * Nostr key from forging the opponent's vote: the deposit locks anchor the
+ * two legitimate escrow pubkeys, and forging the binding needs the opponent's
+ * escrow private key.
+ */
+export function buildBattleResultAttestation(args: {
+  battleId: string;
+  winner: 0 | 1 | null;
+  nostrPubkey: string;
+  escrowPrivkey: string;
+}): BattleResultAttestationPayload {
+  const { battleId, winner, nostrPubkey, escrowPrivkey } = args;
+  const binding = finalizeEvent(
+    {
+      kind: BATTLE_ATTESTATION_BINDING_KIND,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['e', battleId], ['t', BATTLE_ATTESTATION_TAG]],
+      content: JSON.stringify({ battleId, winner, nostrPubkey }),
+    },
+    hexToBytes(escrowPrivkey),
+  );
+  return {
+    type: 'battle-result-attestation',
+    battleId,
+    winner,
+    escrowBinding: binding,
+  };
+}
+
 export async function requestEscrowRelease(args: {
   serviceUrl: string;
   battleId: string;
@@ -352,7 +397,10 @@ export async function requestEscrowRelease(args: {
   guestPubkey: string;
   hostDepositToken: string;
   guestDepositToken: string;
-  finishedEvent: Record<string, unknown>;
+  /** Both players' attestations (encrypted to the operator) — the operator
+   * releases only when they agree on the winner. */
+  hostAttestation: Record<string, unknown>;
+  guestAttestation: Record<string, unknown>;
 }): Promise<{ token: string } | null> {
   const {
     serviceUrl,
@@ -360,7 +408,8 @@ export async function requestEscrowRelease(args: {
     winnerPubkey,
     hostPubkey,
     guestPubkey,
-    finishedEvent,
+    hostAttestation,
+    guestAttestation,
     hostDepositToken,
     guestDepositToken,
   } = args;
@@ -378,7 +427,8 @@ export async function requestEscrowRelease(args: {
       guestEscrowPubkey: guestPubkey,
       hostDepositToken,
       guestDepositToken,
-      finishedEvent,
+      hostAttestation,
+      guestAttestation,
     }),
   });
 
@@ -413,15 +463,25 @@ export interface PendingEscrowClaim {
   guestPubkey: string;
   hostDepositToken: string;
   guestDepositToken: string;
+  /** Which side of the battle the LOCAL (claiming) player was. */
+  localRole: 'host' | 'guest';
+  /** The opponent's Nostr pubkey — needed to query their attestation. */
+  opponentNostrPubkey: string;
   /**
-   * The host-signed battle-finished event — the operator's outcome proof.
-   * ABSENT on a deferred claim: the guest's onFinish fires from the final
-   * battle-state snapshot, which can arrive a few messages BEFORE the signed
-   * event, and the game never refires onFinish. A deferred claim is hydrated
-   * (and fired) the moment the signed event lands — never POST an empty `{}`
-   * to the operator, it would be rejected and burn an attempt.
+   * This player's own result attestation (encrypted to the operator).
+   * ABSENT on a deferred claim: the local publish may have failed or not
+   * fired yet — the hydration effect re-publishes it before executing.
    */
-  finishedEvent?: Record<string, unknown>;
+  ownAttestation?: Record<string, unknown>;
+  /**
+   * The opponent's result attestation. ABSENT until it appears on the
+   * relays — the claim only fires once BOTH attestations are in hand, since
+   * the operator releases only when both players agree on the winner.
+   */
+  opponentAttestation?: Record<string, unknown>;
+  /** Opponent attestation event ids the operator already rejected (a griefer
+   * can publish several conflicting ones) — hydration skips these. */
+  triedAttestationIds?: string[];
   prizeAmount: number;
   createdAt: number;
   attempts: number;
@@ -461,6 +521,10 @@ export function loadPendingEscrowClaims(): PendingEscrowClaim[] {
         ) {
           continue;
         }
+        const attestation = (v: unknown): Record<string, unknown> | undefined =>
+          v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length > 0
+            ? (v as Record<string, unknown>)
+            : undefined;
         claims.push({
           battleId: parsed.battleId,
           winnerPubkey: parsed.winnerPubkey,
@@ -468,13 +532,14 @@ export function loadPendingEscrowClaims(): PendingEscrowClaim[] {
           guestPubkey: typeof parsed.guestPubkey === 'string' ? parsed.guestPubkey : '',
           hostDepositToken: parsed.hostDepositToken,
           guestDepositToken: parsed.guestDepositToken,
-          finishedEvent:
-            parsed.finishedEvent &&
-            typeof parsed.finishedEvent === 'object' &&
-            !Array.isArray(parsed.finishedEvent) &&
-            Object.keys(parsed.finishedEvent).length > 0
-              ? (parsed.finishedEvent as Record<string, unknown>)
-              : undefined,
+          localRole: parsed.localRole === 'guest' ? 'guest' : 'host',
+          opponentNostrPubkey:
+            typeof parsed.opponentNostrPubkey === 'string' ? parsed.opponentNostrPubkey : '',
+          ownAttestation: attestation(parsed.ownAttestation),
+          opponentAttestation: attestation(parsed.opponentAttestation),
+          triedAttestationIds: Array.isArray(parsed.triedAttestationIds)
+            ? parsed.triedAttestationIds.filter((v): v is string => typeof v === 'string')
+            : undefined,
           prizeAmount: typeof parsed.prizeAmount === 'number' ? parsed.prizeAmount : 0,
           createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : 0,
           attempts: typeof parsed.attempts === 'number' ? parsed.attempts : 0,
