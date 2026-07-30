@@ -48,7 +48,14 @@ export function usePwaInstall() {
   }, []);
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const canInstall = !installed && (deferred !== null || isIos);
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isMobile = isIos || isAndroid;
+  // Show the install entry point on any mobile browser. Chrome/Edge only fire
+  // `beforeinstallprompt` when the site passes all installability checks; on
+  // Android browsers that haven't fired it yet (or never will, e.g. in-app
+  // browsers) we still want users to see the option and get instructions for
+  // the browser menu's "Add to Home screen" path.
+  const canInstall = !installed && (deferred !== null || isMobile);
 
   const promptInstall = useCallback(async (): Promise<'accepted' | 'dismissed' | 'instructions'> => {
     if (deferred) {
@@ -60,5 +67,5 @@ export function usePwaInstall() {
     return 'instructions';
   }, [deferred]);
 
-  return { canInstall, installed, isIos, promptInstall };
+  return { canInstall, installed, isIos, isAndroid, isMobile, promptInstall };
 }
