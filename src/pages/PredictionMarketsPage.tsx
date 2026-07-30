@@ -67,6 +67,38 @@ function titleCaseCategory(name: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Rail id → chip label/color (bao.markets card chips). */
+const RAIL_CHIPS: Record<string, { label: string; className: string }> = {
+  htlc: { label: '⚡', className: 'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200' },
+  spark: { label: 'SPARK', className: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-900 dark:text-yellow-200' },
+  cashu: { label: 'CASHU', className: 'border-green-500/40 bg-green-500/10 text-green-950 dark:text-green-200' },
+  liquid: { label: 'LIQUID', className: 'border-sky-500/40 bg-sky-500/10 text-sky-950 dark:text-sky-200' },
+  l1: { label: '₿', className: 'border-orange-500/40 bg-orange-500/10 text-orange-950 dark:text-orange-200' },
+  onchain: { label: '₿', className: 'border-orange-500/40 bg-orange-500/10 text-orange-950 dark:text-orange-200' },
+  ecash: { label: 'FEDIMINT', className: 'border-violet-500/40 bg-violet-500/10 text-violet-950 dark:text-violet-200' },
+  fedimint: { label: 'FEDIMINT', className: 'border-violet-500/40 bg-violet-500/10 text-violet-950 dark:text-violet-200' },
+};
+
+function RailChips({ rails }: { rails?: string[] }) {
+  if (!rails || rails.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {rails.map((rail) => {
+        const chip = RAIL_CHIPS[rail.toLowerCase()];
+        if (!chip) return null;
+        return (
+          <span
+            key={rail}
+            className={cn('rounded border px-1.5 py-0.5 text-[9px] font-bold tracking-wide', chip.className)}
+          >
+            {chip.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 const MarketCard = memo(function MarketCard({
   market,
   onSelect,
@@ -148,6 +180,9 @@ const MarketCard = memo(function MarketCard({
             </div>
           )}
         </div>
+
+        {/* Payment rails (bao.markets chips) */}
+        <RailChips rails={market.paymentRails} />
 
         {/* Actions — Details / Buy Yes / Buy No (bao.markets row) */}
         <div className="grid grid-cols-3 gap-2 pt-1">
