@@ -21,7 +21,9 @@ import { useRemoteBattle } from '../hooks/useRemoteBattle';
 import { genUserName } from '@/lib/genUserName';
 import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { DEFAULT_PRIZE_SATS, DEFAULT_ROUND_DURATION_SECONDS } from '../lib/constants';
-import { deriveBattleEscrowKeypair } from '../lib/cashuEscrow';
+import { deriveBattleEscrowKeypair, pendingBattleDepositKey, savePendingBattleDeposit, clearPendingBattleDeposit } from '../lib/cashuEscrow';
+import { getMultisigDepositLocktime, MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
+import { EscrowExplainer } from './EscrowExplainer';
 import type { BattleMode } from '../lib/battleMessages';
 
 export interface RemoteBattleSetupProps {
@@ -155,40 +157,63 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   // strand real sats locked to the escrow operator. Mirrored to localStorage
   // so a page refresh mid-flight doesn't lose it either.
   const pendingDepositTokenRef = useRef<string | null>(null);
-  const depositStorageKey = remote.battleId ? `bao_battle_deposit_${remote.battleId}` : null;
+  const depositStorageKey = remote.battleId ? pendingBattleDepositKey(remote.battleId) : null;
 
   // Restore an undelivered deposit token after a refresh.
   useEffect(() => {
     if (!depositStorageKey) return;
     try {
       const saved = localStorage.getItem(depositStorageKey);
-      if (saved) pendingDepositTokenRef.current = saved;
+      if (saved) {
+        pendingDepositTokenRef.current = saved;
+        setDepositTokenForReclaim(saved);
+      }
     } catch { /* storage blocked — in-memory ref still works */ }
   }, [depositStorageKey]);
 
   const attemptDeposit = useCallback(async () => {
     if (!petsWallet || !operatorPubkey) return;
+    const hostKey = remote.escrow.hostEscrowPubkey;
+    const guestKey = remote.escrow.guestEscrowPubkey;
+    if (!hostKey || !guestKey) {
+      setDepositError('Escrow keys were not exchanged yet — wait a moment and retry.');
+      return;
+    }
+    if (!escrowKeypair) {
+      setDepositError('Your battle escrow key is not available — cannot lock the stake.');
+      return;
+    }
     setIsDepositing(true);
     setDepositError(null);
     try {
       const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
       let token = pendingDepositTokenRef.current;
       if (!token) {
+        // 2-of-3 multisig escrow (₿AO escrow primitive): the stake locks to
+        // {host, guest, operator} and needs ANY TWO signatures to move. The
+        // operator can never take the funds alone; if the battle is abandoned
+        // our own refund key reclaims the stake after the 24h locktime.
         // Stake from the agreed mint when one was negotiated — the operator
         // rejects mixed-mint releases, so any other mint strands both stakes.
-        token = await petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`, remote.escrow.agreedMint);
+        token = await petsWallet.sendMultisigLockedToken(amount, {
+          partyAPubkey: hostKey,
+          partyBPubkey: guestKey,
+          operatorPubkey,
+          refundPubkey: escrowKeypair.pubkey,
+          locktime: Math.floor(Date.now() / 1000) + MULTISIG_REFUND_PERIOD_SECONDS,
+        }, `Battle escrow ${remote.battleId ?? ''}`, remote.escrow.agreedMint);
         if (!token) throw new Error(petsWallet.error ?? 'Wallet did not return a deposit token.');
         pendingDepositTokenRef.current = token;
-        if (depositStorageKey) {
-          try { localStorage.setItem(depositStorageKey, token); } catch { /* best-effort */ }
-        }
+        setDepositTokenForReclaim(token);
+        if (remote.battleId) savePendingBattleDeposit(remote.battleId, token);
       }
       const delivered = await remote.sendEscrowDeposit(token);
       if (!delivered) throw new Error('Failed to deliver the escrow deposit — your sats are safe in the deposit token; retry to deliver it.');
       // Do NOT clear the journaled token here: a relay ack only proves one
       // relay accepted the ephemeral sync event, not that the opponent
-      // received it. The effect below clears the journal once the opponent
-      // acks the deposit (or the fight starts, which implies delivery).
+      // received it. The journal is kept until the stake resolves — released
+      // to the winner, or reclaimed via the refund path — so an abandoned
+      // battle can never strand real sats.
     } catch (err) {
       console.error('[RemoteBattleSetup] escrow deposit failed:', err);
       setDepositError(err instanceof Error ? err.message : 'Escrow deposit failed.');
@@ -196,22 +221,58 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       setIsDepositing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.escrow.agreedMint, remote.sendEscrowDeposit, depositStorageKey]);
+  }, [petsWallet, operatorPubkey, escrowKeypair, remote.matchOptions?.prizeAmount, remote.battleId, remote.escrow.hostEscrowPubkey, remote.escrow.guestEscrowPubkey, remote.escrow.agreedMint, remote.sendEscrowDeposit, depositStorageKey]);
 
-  // Clear the journaled deposit token only once delivery is proven: the
-  // opponent acked it (battle-deposit-ack), or the fight started — which on
-  // either role is impossible without the opponent having recorded our
-  // deposit (host-side readiness requires the guest's ack; guest-side, the
-  // host can only have started after recording the guest's deposit).
+  // The journaled deposit token is RETAINED after delivery: it is the only
+  // handle on the locked stake, and the post-locktime refund path needs it.
+  // It is cleared only when the stake resolves — the prize claim spends it
+  // (winner), the release spends it (loser), or the refund reclaim below
+  // sweeps it back (abandoned battle). PetsBattlePage additionally sweeps
+  // stale journals whose proofs are spent or whose locktime has passed.
   const myDepositAcked = !!remote.escrow.myDepositAcked;
-  const depositSettled = myDepositAcked || remote.phase === 'fighting' || remote.phase === 'finished';
+  const [depositTokenForReclaim, setDepositTokenForReclaim] = useState<string | null>(null);
+  const depositLocktime = useMemo(
+    () => (depositTokenForReclaim ? getMultisigDepositLocktime(depositTokenForReclaim) : null),
+    [depositTokenForReclaim],
+  );
+  // Tick every 30s so the refund UI flips when the locktime passes.
+  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
-    if (!depositSettled) return;
-    pendingDepositTokenRef.current = null;
-    if (depositStorageKey) {
-      try { localStorage.removeItem(depositStorageKey); } catch { /* best-effort */ }
+    const timer = setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const refundUnlocked = depositLocktime !== null && nowSeconds >= depositLocktime;
+  const canReclaim =
+    remote.escrow.mode === 'real-sats' &&
+    (remote.phase === 'inviting' || remote.phase === 'accepted' || remote.phase === 'cancelled') &&
+    !!depositTokenForReclaim &&
+    refundUnlocked;
+
+  const [isReclaiming, setIsReclaiming] = useState(false);
+  const attemptReclaim = useCallback(async () => {
+    if (!petsWallet || !escrowKeypair) return;
+    const token = depositTokenForReclaim ?? pendingDepositTokenRef.current;
+    if (!token) return;
+    setIsReclaiming(true);
+    setDepositError(null);
+    try {
+      // Post-locktime the mint honors the refund key (our own escrow key)
+      // with a single signature — no operator, no opponent needed.
+      const received = await petsWallet.receiveLockedToken(token, escrowKeypair.privkey);
+      if (received > 0) {
+        pendingDepositTokenRef.current = null;
+        setDepositTokenForReclaim(null);
+        if (remote.battleId) clearPendingBattleDeposit(remote.battleId);
+        // Tell the opponent the escrow is unwound so they stop waiting (their
+        // own stake refunds the same way).
+        void remote.cancelInvite();
+      } else {
+        setDepositError(petsWallet.error || 'Reclaim failed — the stake may already have been released, or the mint is unreachable. Your deposit token is kept locally for another try.');
+      }
+    } finally {
+      setIsReclaiming(false);
     }
-  }, [depositSettled, depositStorageKey]);
+  }, [petsWallet, escrowKeypair, depositTokenForReclaim, remote]);
 
   // End-to-end delivery: re-publish the deposit until the opponent acks.
   // The sync event is ephemeral, so a receiver that was mid-reconnect (or on
@@ -283,6 +344,31 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
     attemptDeposit,
   ]);
 
+  // Refund safety block: while a journaled deposit exists, show when the
+  // refund unlocks — and once the locktime passes, a one-click reclaim that
+  // sweeps the stake back with our own refund key (no operator, no opponent).
+  const refundBlock = remote.escrow.mode === 'real-sats' && depositTokenForReclaim ? (
+    canReclaim ? (
+      <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+        <p className="text-xs text-muted-foreground">
+          This battle never started. Your {requiredDepositSats.toLocaleString()}-sat stake is unlocked for refund — reclaim it to your wallet.
+        </p>
+        <Button
+          size="sm" variant="outline" className="gap-1.5"
+          disabled={isReclaiming}
+          onClick={() => void attemptReclaim()}
+        >
+          {isReclaiming ? <Loader2 className="size-3.5 animate-spin" /> : <Lock className="size-3.5" />}
+          Reclaim my stake
+        </Button>
+      </div>
+    ) : depositLocktime ? (
+      <p className="text-xs text-muted-foreground">
+        Stake locked in 2-of-3 escrow. If this battle never finishes, your stake is refundable after {new Date(depositLocktime * 1000).toLocaleString()} — no operator needed.
+      </p>
+    ) : null
+  ) : null;
+
   if (remote.phase === 'inviting') {
     return (
       <Card className={className}>
@@ -299,6 +385,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
               </p>
             )}
           </div>
+          {refundBlock}
           <Button variant="outline" onClick={remote.cancelInvite}>
             Cancel
           </Button>
@@ -366,6 +453,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                   </Button>
                 </div>
               )}
+              {refundBlock}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Starting the battle…</p>
@@ -485,6 +573,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
               <p className="text-muted-foreground">
                 Both players lock {DEFAULT_PRIZE_SATS.toLocaleString()} real sats in escrow before the battle. The winner claims both stakes.
               </p>
+              <EscrowExplainer />
               {!hasStakeBalance && (
                 <p className="text-amber-600 dark:text-amber-400">
                   Your wallet balance ({walletBalanceSats.toLocaleString()} sats) is below the stake — top up your Cashu wallet to send a real-sats battle request.
@@ -497,6 +586,8 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
             </p>
           )}
         </div>
+
+        {refundBlock}
 
         <Button
           size="lg"
