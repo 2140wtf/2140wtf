@@ -4081,7 +4081,7 @@ function ActivityTabContent({ companion, projectedStats, socialOpen, onToggleSoc
                         'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium',
                         priority === 'critical' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
                         priority === 'high' && 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                        priority === 'normal' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                        priority === 'normal' && 'bg-yellow-100 text-yellow-900 dark:bg-yellow-900/30 dark:text-yellow-200',
                         priority === 'low' && 'bg-muted text-muted-foreground',
                       )}
                     >

@@ -724,7 +724,7 @@ function ZapPollContent({ event }: { event: NostrEvent }) {
 
       {/* Badges */}
       <div className="flex flex-wrap items-center gap-2 mt-2">
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-950 dark:text-amber-200 bg-amber-500/10 px-2 py-0.5 rounded-full">
           <Zap className="size-3" />
           Zap poll
         </span>

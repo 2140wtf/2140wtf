@@ -435,7 +435,7 @@ export function CalendarEventDetailPage({ event }: { event: NostrEvent }) {
             <div className="space-y-2.5">
               {([
                 ['Going', rsvps.accepted, 'border-green-500/50 bg-green-500/5 text-green-600'],
-                ['Maybe', rsvps.tentative, 'border-amber-500/50 bg-amber-500/5 text-amber-600'],
+                ['Maybe', rsvps.tentative, 'border-amber-500/50 bg-amber-500/5 text-amber-950 dark:text-amber-200'],
                 ["Can't Go", rsvps.declined, 'border-muted-foreground/30 bg-muted/30 text-muted-foreground'],
               ] as const).map(([label, pks, cls]) => pks.length > 0 && (
                 <div key={label} className="flex items-center gap-3">

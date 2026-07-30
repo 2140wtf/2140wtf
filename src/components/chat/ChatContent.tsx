@@ -1289,7 +1289,7 @@ function LightningInvoice({ invoice }: { invoice: string }) {
     <span className="inline-flex items-center gap-1 max-w-full my-1">
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 min-w-0 px-2.5 py-1 touch:px-3.5 touch:py-2 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 text-xs hover:bg-amber-500/20 transition-colors"
+        className="inline-flex items-center gap-1.5 min-w-0 px-2.5 py-1 touch:px-3.5 touch:py-2 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200 text-xs hover:bg-amber-500/20 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           writeClipboardText(invoice).then(() => {
