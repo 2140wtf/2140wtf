@@ -20,6 +20,8 @@ export interface BaoMarket {
   type: "binary" | "categorical" | "scalar";
   endTime: number;
   createdAt: number;
+  /** Pool model when the API reports it ('smj' parimutuel / 'amm'); drives live-odds fetching. */
+  poolModel?: 'smj' | 'amm';
   outcomes: BaoMarketOutcome[];
   creatorPubkey: string;
   /** Winning outcome id when the API reports the market as resolved (API-sourced only). */

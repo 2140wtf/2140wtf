@@ -29,6 +29,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
 import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
+import { useBaoSmjOdds, withSmjOdds } from "@/hooks/useBaoSmjOdds";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
 import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
 import { cn } from "@/lib/utils";
@@ -218,10 +219,23 @@ export function PredictionMarketsPage(): React.JSX.Element {
   );
   const { data: apiCategories = [] } = useBaoMarketCategories();
 
+  // Live SMJ (parimutuel) odds from the API: the relay defs are anonymous
+  // and the markets API's outcome.price is a stale default for SMJ pools —
+  // the /smj/:id endpoint carries the real pool distribution.
+  const smjIds = useMemo(
+    () => mergedMarkets.filter((m) => m.poolModel === 'smj').map((m) => m.marketId),
+    [mergedMarkets],
+  );
+  const smjOdds = useBaoSmjOdds(smjIds);
+  const marketsWithOdds = useMemo(
+    () => mergedMarkets.map((m) => withSmjOdds(m, smjOdds)),
+    [mergedMarkets, smjOdds],
+  );
+
   const now = Math.floor(Date.now() / 1000);
 
   const activeMarkets = useMemo(() => {
-    return mergedMarkets.filter((m) => {
+    return marketsWithOdds.filter((m) => {
       if (m.state === 'ended') return false;
       // ₿AO Fund milestone markets live on the ₿AO Fund page, not here.
       if (m.category === 'fundraiser') return false;
@@ -231,7 +245,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
       }
       return true;
     });
-  }, [mergedMarkets, showResolved, now]);
+  }, [marketsWithOdds, showResolved, now]);
 
   // Category picker: the API catalog (with live counts), falling back to the
   // categories present in the loaded markets when the catalog is unavailable.
@@ -293,10 +307,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
   }, [activeMarkets, search, sort, category]);
 
   useEffect(() => {
-    if (!selectedMarketId || mergedMarkets.length === 0) return;
-    const market = mergedMarkets.find((m) => m.marketId === selectedMarketId);
+    if (!selectedMarketId || marketsWithOdds.length === 0) return;
+    const market = marketsWithOdds.find((m) => m.marketId === selectedMarketId);
     if (market) setSelectedMarket(market);
-  }, [selectedMarketId, mergedMarkets]);
+  }, [selectedMarketId, marketsWithOdds]);
 
   const gridItems = useMemo(() => {
     if (isLoading) {
