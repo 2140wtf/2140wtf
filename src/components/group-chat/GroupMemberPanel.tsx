@@ -143,7 +143,7 @@ export function GroupMemberPanel({
                     {member.role === 'admin' && (
                       <Badge
                         variant="secondary"
-                        className="px-1 py-0 h-4 text-[9px] gap-0.5 bg-amber-500/10 text-amber-600 hover:bg-amber-500/10"
+                        className="px-1 py-0 h-4 text-[9px] gap-0.5 bg-amber-500/10 text-amber-950 dark:text-amber-200 hover:bg-amber-500/10"
                       >
                         <Crown className="size-2.5" />
                         Admin

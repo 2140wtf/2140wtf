@@ -405,7 +405,7 @@ function ZapRow({ zap }: { zap: UnifiedZap }) {
       </div>
 
       {/* Zap amount badge — identical for Lightning + on-chain zaps by design. */}
-      <div className="flex items-center gap-1 shrink-0 bg-amber-500/10 text-amber-500 rounded-full px-2.5 py-1">
+      <div className="flex items-center gap-1 shrink-0 bg-amber-500/10 text-amber-950 dark:text-amber-200 rounded-full px-2.5 py-1">
         <Zap className="size-3.5 fill-amber-500" />
         <span className="text-xs font-bold tabular-nums">{formatMoney(zap.amountSats, { layout: 'compact' })}</span>
       </div>

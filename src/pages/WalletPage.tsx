@@ -18,7 +18,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { LightningWalletTab } from '@/components/LightningWalletTab';
-import { BaoRailBalanceCard } from '@/components/BaoRailBalanceCard';
+import { ComingSoonTab } from '@/components/ComingSoonTab';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
@@ -170,18 +170,15 @@ export function WalletPage() {
             </TabsContent>
 
             <TabsContent value="lightning">
-              <div className="space-y-6">
-                <LightningWalletTab />
-                <BaoRailBalanceCard rail="lightning" />
-              </div>
+              <LightningWalletTab />
             </TabsContent>
 
             <TabsContent value="spark">
-              <BaoRailBalanceCard rail="spark" />
+              <ComingSoonTab title="Spark" description="Lightning-native Spark wallet integration is coming soon." />
             </TabsContent>
 
             <TabsContent value="ark">
-              <BaoRailBalanceCard rail="ark" />
+              <ComingSoonTab title="Ark" description="Ark layer-2 wallet support is coming soon." />
             </TabsContent>
           </Tabs>
         </div>
