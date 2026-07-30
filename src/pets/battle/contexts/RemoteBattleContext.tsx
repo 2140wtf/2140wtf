@@ -38,12 +38,18 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
   const { allMints } = useCashuWalletContext();
 
   const validateDeposit = useCallback(
-    (token: string, _playerIndex: 0 | 1, amount: number) => {
+    (token: string, _playerIndex: 0 | 1, amount: number, expectedMint?: string) => {
       const escrowPubkey = config.petsBattleEscrowPubkey;
       if (!escrowPubkey) return 'Battle escrow is not configured.';
-      // The escrow operator rejects mixed-mint releases, so the counterparty's
-      // deposit must come from a mint this wallet also uses.
-      const result = validateEscrowDeposit(token, amount, escrowPubkey, allMints.map((m) => m.url));
+      // The escrow operator rejects mixed-mint releases. When the battle
+      // negotiated an agreed mint (advertised in the invite), the deposit must
+      // come from EXACTLY that mint — checking against this wallet's own mint
+      // list instead would both silently drop a deposit the sender was already
+      // debited for (mint unknown here) and accept a mixed-mint pair the
+      // operator can never release (both wallets happen to list both mints).
+      // Legacy invites without an agreed mint fall back to the local list.
+      const allowedMints = expectedMint ? [expectedMint] : allMints.map((m) => m.url);
+      const result = validateEscrowDeposit(token, amount, escrowPubkey, allowedMints);
       return result.valid ? null : (result.reason ?? 'Invalid escrow deposit.');
     },
     [config.petsBattleEscrowPubkey, allMints],

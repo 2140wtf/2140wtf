@@ -19,6 +19,7 @@ import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
 import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
 import { useRemoteBattle } from '../hooks/useRemoteBattle';
 import { genUserName } from '@/lib/genUserName';
+import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { DEFAULT_PRIZE_SATS, DEFAULT_ROUND_DURATION_SECONDS } from '../lib/constants';
 import { deriveBattleEscrowKeypair } from '../lib/cashuEscrow';
 import type { BattleMode } from '../lib/battleMessages';
@@ -107,7 +108,19 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
   // stake: the auto-deposit effect below skips deposits it cannot afford, and
   // without surfacing that, both players wait on escrow forever.
   const requiredDepositSats = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
-  const walletBalanceSats = petsWallet?.totalBalance ?? 0;
+  // The deposit is drawn from ONE mint: the battle's agreed mint (advertised
+  // by the host — the operator rejects mixed-mint releases), else the wallet's
+  // active mint. Check THAT mint's balance, not the cross-mint total, or a
+  // healthy total over empty deposit-mint strands both players on escrow.
+  const depositMint = remote.escrow.agreedMint ?? petsWallet?.mintUrl ?? null;
+  const normalizedDepositMint = depositMint ? safeNormalizeMintUrl(depositMint) : null;
+  const depositMintBalanceKnown =
+    !!normalizedDepositMint &&
+    !!petsWallet &&
+    Object.prototype.hasOwnProperty.call(petsWallet.balances, normalizedDepositMint);
+  const walletBalanceSats = depositMintBalanceKnown
+    ? petsWallet!.balances[normalizedDepositMint!]
+    : (petsWallet?.totalBalance ?? 0);
   const hasStakeBalance = walletBalanceSats >= requiredDepositSats;
   const myDepositToken = remote.role === 'host'
     ? remote.escrow.hostDepositToken
@@ -128,7 +141,7 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       prizeAmount: DEFAULT_PRIZE_SATS,
       roundDurationSeconds: DEFAULT_ROUND_DURATION_SECONDS,
       mode: battleMode,
-    }, escrowKeypair?.pubkey);
+    }, escrowKeypair?.pubkey, battleMode === 'real-sats' ? petsWallet?.mintUrl : undefined);
   };
 
   const [isDepositing, setIsDepositing] = useState(false);
@@ -161,7 +174,9 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
       let token = pendingDepositTokenRef.current;
       if (!token) {
-        token = await petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`);
+        // Stake from the agreed mint when one was negotiated — the operator
+        // rejects mixed-mint releases, so any other mint strands both stakes.
+        token = await petsWallet.sendLockedToken(amount, operatorPubkey, `Battle escrow ${remote.battleId ?? ''}`, remote.escrow.agreedMint);
         if (!token) throw new Error(petsWallet.error ?? 'Wallet did not return a deposit token.');
         pendingDepositTokenRef.current = token;
         if (depositStorageKey) {
@@ -170,10 +185,10 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       }
       const delivered = await remote.sendEscrowDeposit(token);
       if (!delivered) throw new Error('Failed to deliver the escrow deposit — your sats are safe in the deposit token; retry to deliver it.');
-      pendingDepositTokenRef.current = null;
-      if (depositStorageKey) {
-        try { localStorage.removeItem(depositStorageKey); } catch { /* best-effort */ }
-      }
+      // Do NOT clear the journaled token here: a relay ack only proves one
+      // relay accepted the ephemeral sync event, not that the opponent
+      // received it. The effect below clears the journal once the opponent
+      // acks the deposit (or the fight starts, which implies delivery).
     } catch (err) {
       console.error('[RemoteBattleSetup] escrow deposit failed:', err);
       setDepositError(err instanceof Error ? err.message : 'Escrow deposit failed.');
@@ -181,7 +196,59 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       setIsDepositing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.sendEscrowDeposit, depositStorageKey]);
+  }, [petsWallet, operatorPubkey, remote.matchOptions?.prizeAmount, remote.battleId, remote.escrow.agreedMint, remote.sendEscrowDeposit, depositStorageKey]);
+
+  // Clear the journaled deposit token only once delivery is proven: the
+  // opponent acked it (battle-deposit-ack), or the fight started — which on
+  // either role is impossible without the opponent having recorded our
+  // deposit (host-side readiness requires the guest's ack; guest-side, the
+  // host can only have started after recording the guest's deposit).
+  const myDepositAcked = !!remote.escrow.myDepositAcked;
+  const depositSettled = myDepositAcked || remote.phase === 'fighting' || remote.phase === 'finished';
+  useEffect(() => {
+    if (!depositSettled) return;
+    pendingDepositTokenRef.current = null;
+    if (depositStorageKey) {
+      try { localStorage.removeItem(depositStorageKey); } catch { /* best-effort */ }
+    }
+  }, [depositSettled, depositStorageKey]);
+
+  // End-to-end delivery: re-publish the deposit until the opponent acks.
+  // The sync event is ephemeral, so a receiver that was mid-reconnect (or on
+  // disjoint relays) never sees a one-shot publish — without retransmission
+  // the stake sits locked to the operator while both sides wait on escrow.
+  // Stops on ack, on a rejection (a deterministic refusal won't heal by
+  // spamming), or after a minute, leaving the journaled token for manual
+  // retry.
+  const depositRejection = remote.escrow.depositRejectReason;
+  const sendEscrowDeposit = remote.sendEscrowDeposit;
+  useEffect(() => {
+    if (remote.escrow.mode !== 'real-sats') return;
+    if (remote.phase !== 'accepted' && remote.phase !== 'inviting') return;
+    if (!myDepositToken || myDepositAcked || depositRejection) return;
+    if (!pendingDepositTokenRef.current) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      const token = pendingDepositTokenRef.current;
+      if (!token || attempts > 12) {
+        clearInterval(timer);
+        if (token) {
+          setDepositError('Deposit sent but the opponent has not confirmed receipt — your sats remain locked in the deposit token, kept locally for retry. Make sure the opponent is online, then retry the deposit.');
+        }
+        return;
+      }
+      void sendEscrowDeposit(token);
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [
+    remote.escrow.mode,
+    remote.phase,
+    myDepositToken,
+    myDepositAcked,
+    depositRejection,
+    sendEscrowDeposit,
+  ]);
 
   useEffect(() => {
     if (remote.escrow.mode !== 'real-sats') return;
@@ -195,8 +262,8 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
       : remote.escrow.guestDepositToken;
     if (myDeposit) return;
 
-    const amount = remote.matchOptions?.prizeAmount ?? DEFAULT_PRIZE_SATS;
-    if (petsWallet.totalBalance < amount) return;
+    // Per-mint check: the deposit draws from the agreed/active mint only.
+    if (!hasStakeBalance) return;
 
     depositAttemptedForRef.current = remote.battleId;
     void attemptDeposit();
@@ -208,11 +275,11 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
     remote.escrow.hostEscrowPubkey,
     remote.escrow.hostDepositToken,
     remote.escrow.guestDepositToken,
-    remote.matchOptions?.prizeAmount,
     remote.battleId,
     petsWallet,
     operatorPubkey,
     isDepositing,
+    hasStakeBalance,
     attemptDeposit,
   ]);
 
@@ -256,7 +323,24 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                     ? 'Locking your stake in escrow…'
                     : 'Waiting for escrow deposits…'}
               </div>
-              {!escrowReady && !depositError && !insufficientForDeposit && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {remote.escrow.agreedMint && (
+                <p className="text-xs text-muted-foreground">
+                  Stakes lock from mint: {remote.escrow.agreedMint.replace(/^https?:\/\//, '')}
+                </p>
+              )}
+              {!escrowReady && !depositError && !insufficientForDeposit && !depositRejection && <Loader2 className="mx-auto size-5 animate-spin text-primary" />}
+              {depositRejection && !escrowReady && (
+                <div className="space-y-2 rounded-md border border-destructive/50 bg-destructive/10 p-3">
+                  <p className="text-xs text-destructive">
+                    The opponent rejected your escrow deposit: {depositRejection}. Your sats remain locked in the deposit token, kept locally — cancel this battle and start a fresh one to retry.
+                  </p>
+                  {remote.role === 'host' && (
+                    <Button size="sm" variant="outline" onClick={() => void remote.cancelInvite()}>
+                      Cancel battle
+                    </Button>
+                  )}
+                </div>
+              )}
               {insufficientForDeposit && !escrowReady && (
                 <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
                   <p className="text-xs text-amber-600 dark:text-amber-400">

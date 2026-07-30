@@ -18,6 +18,7 @@ import { useBattleInvites } from '../hooks/useBattleInvites';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/genUserName';
+import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { DEFAULT_PRIZE_SATS } from '../lib/constants';
 import { deriveBattleEscrowKeypair } from '../lib/cashuEscrow';
@@ -44,10 +45,20 @@ export function BattleInvitePending() {
   // The stake is set by the CHALLENGER — never display a hardcoded default:
   // accepting auto-locks this exact amount from the wallet in escrow.
   const stakeSats = pendingInvite?.prizeAmount ?? DEFAULT_PRIZE_SATS;
+  // Mint coordination: the escrow operator rejects mixed-mint releases, so
+  // the guest must stake from the SAME mint the host advertised. A guest
+  // whose wallet lacks that mint (or the balance at it) must REFUSE here —
+  // accepting would lock the guest's stake from the wrong mint and strand
+  // both players' sats with the operator.
+  const agreedMint = pendingInvite?.hostDepositMint ? safeNormalizeMintUrl(pendingInvite.hostDepositMint) : '';
+  const hasAgreedMint = !!agreedMint && !!petsWallet?.allMints.some((m) => safeNormalizeMintUrl(m.url) === agreedMint);
+  const agreedMintBalance = hasAgreedMint ? (petsWallet!.balances[agreedMint] ?? 0) : 0;
   // Never let a player accept a stake they cannot lock: accepting debits the
   // wallet immediately, and a guest who cannot deposit leaves the host
   // waiting on escrow forever.
-  const hasStakeBalance = (petsWallet?.totalBalance ?? 0) >= stakeSats;
+  const hasStakeBalance = agreedMint
+    ? hasAgreedMint && agreedMintBalance >= stakeSats
+    : (petsWallet?.totalBalance ?? 0) >= stakeSats;
   const canAcceptRealSats = isRealSatsInvite && isCashu && seedAvailable && escrowConfigured && !!escrowKeypair && hasStakeBalance;
   const isNonDefaultStake = isRealSatsInvite && stakeSats !== DEFAULT_PRIZE_SATS;
   const [stakeAcknowledged, setStakeAcknowledged] = useState(false);
@@ -101,12 +112,27 @@ export function BattleInvitePending() {
                 Accepting locks {stakeSats.toLocaleString()} real sats from your wallet in escrow. The winner claims both stakes.
               </p>
             )}
+            {isRealSatsInvite && agreedMint && (
+              <p className="text-muted-foreground">
+                Stakes lock from mint: {agreedMint.replace(/^https?:\/\//, '')}
+              </p>
+            )}
             {isNonDefaultStake && (
               <p className="text-amber-600 dark:text-amber-400">
                 This challenger set a non-standard stake of {stakeSats.toLocaleString()} sats (the default is {DEFAULT_PRIZE_SATS.toLocaleString()}). Only accept if you agreed to this amount.
               </p>
             )}
-            {isRealSatsInvite && !canAcceptRealSats && !hasStakeBalance && isCashu && (
+            {isRealSatsInvite && agreedMint && !hasAgreedMint && isCashu && (
+              <p className="text-destructive">
+                The challenger stakes from mint {agreedMint.replace(/^https?:\/\//, '')}, which your wallet doesn't use — the escrow operator can only pay out matching-mint stakes. Add this mint in the Wallet tab first.
+              </p>
+            )}
+            {isRealSatsInvite && agreedMint && hasAgreedMint && agreedMintBalance < stakeSats && isCashu && (
+              <p className="text-destructive">
+                Insufficient balance at the battle mint — accepting locks {stakeSats.toLocaleString()} sats from {agreedMint.replace(/^https?:\/\//, '')} but you have {agreedMintBalance.toLocaleString()} there. Top up that mint first.
+              </p>
+            )}
+            {isRealSatsInvite && !agreedMint && !canAcceptRealSats && !hasStakeBalance && isCashu && (
               <p className="text-destructive">
                 Insufficient balance — accepting locks {stakeSats.toLocaleString()} sats but your wallet has {(petsWallet?.totalBalance ?? 0).toLocaleString()}. Top up your Cashu wallet first.
               </p>
