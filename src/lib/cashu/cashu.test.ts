@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { getEncodedToken } from '@cashu/cashu-ts';
+import { getEncodedToken, getDecodedToken } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 
-import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl, checkTokenProofsSpent } from './cashu';
+import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl, checkTokenProofsSpent, normalizeProofWitnessForEncode } from './cashu';
 
 describe('isFeeWithinMaxPpm', () => {
   it('allows zero fees', () => {
@@ -34,6 +34,19 @@ describe('isFeeWithinMaxPpm', () => {
 describe('isAllowedMintUrl', () => {
   it('allows HTTPS mint URLs', () => {
     expect(isAllowedMintUrl('https://mint.example.com')).toBe(true);
+  });
+
+  it('allows four-label hostnames (regression: parsed as 0.0.0.0 and rejected)', () => {
+    // ipv4ToInt's parseInt('&xff') fallback collapsed non-numeric labels to 0,
+    // so any 4-label hostname looked like 0.0.0.0 (a "private" IP) and every
+    // token from such a mint was silently undecodable.
+    expect(isAllowedMintUrl('https://other.mint.example.com')).toBe(true);
+    expect(isAllowedMintUrl('https://a.b.c.example.com')).toBe(true);
+    // …while real private IPv4s stay rejected, incl. edge octets.
+    expect(isAllowedMintUrl('https://10.0.0.255')).toBe(false);
+    expect(isAllowedMintUrl('https://172.16.0.1')).toBe(false);
+    expect(isAllowedMintUrl('https://169.254.0.1')).toBe(false);
+    expect(isAllowedMintUrl('https://0.0.0.0')).toBe(false);
   });
 
   it('rejects HTTP mint URLs', () => {
@@ -68,7 +81,75 @@ describe('isAllowedMintUrl', () => {
   });
 });
 
+describe('normalizeProofWitnessForEncode', () => {
+  const baseProof = {
+    id: '00ad268c6d1f09e6',
+    amount: 8,
+    secret: '["P2PK",{"nonce":"abc","data":"02' + '11'.repeat(32) + '","tags":[]}]',
+    C: '02' + '22'.repeat(32),
+  };
+
+  function decodedWitnessString(token: string): unknown {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dec = getDecodedToken(token) as any;
+    const proof = dec.token ? dec.token[0].proofs[0] : dec.proofs[0];
+    return proof.witness;
+  }
+
+  it('round-trips an operator-signed witness through decode → normalize → re-encode', () => {
+    // The escrow operator returns proofs whose witness is an OBJECT
+    // (signP2PKProofs output). Encoding that is lossless...
+    const signed = getEncodedToken({
+      mint: 'https://mint.example.com',
+      proofs: [{ ...baseProof, witness: { signatures: ['deadbeef'.repeat(8)] } }],
+      unit: 'sat',
+    });
+    // ...but DECODING yields the witness as a JSON string, and re-encoding
+    // that string directly double-encodes it (the mint then sees a string,
+    // not { signatures }, and every P2PK check fails — this broke the
+    // multisig escrow release receive).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const decoded = (getDecodedToken(signed) as any).proofs ?? (getDecodedToken(signed) as any).token[0].proofs;
+    expect(typeof decoded[0].witness).toBe('string');
+
+    const reencoded = getEncodedToken({
+      mint: 'https://mint.example.com',
+      proofs: decoded.map(normalizeProofWitnessForEncode),
+      unit: 'sat',
+    });
+    const finalWitness = decodedWitnessString(reencoded);
+    expect(typeof finalWitness).toBe('string');
+    const parsed = JSON.parse(finalWitness as string);
+    expect(parsed).toEqual({ signatures: ['deadbeef'.repeat(8)] });
+  });
+
+  it('demonstrates the double-encode it prevents (raw re-encode corrupts the witness)', () => {
+    const signed = getEncodedToken({
+      mint: 'https://mint.example.com',
+      proofs: [{ ...baseProof, witness: { signatures: ['cafe'] } }],
+      unit: 'sat',
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const decoded = (getDecodedToken(signed) as any).proofs ?? (getDecodedToken(signed) as any).token[0].proofs;
+    const corrupted = getEncodedToken({ mint: 'https://mint.example.com', proofs: decoded, unit: 'sat' });
+    const witness = decodedWitnessString(corrupted);
+    // Without normalization the decoded witness is a JSON string CONTAINING a
+    // JSON string — JSON.parse yields a string, not the witness object.
+    expect(typeof JSON.parse(witness as string)).toBe('string');
+  });
+
+  it('leaves object witnesses and witness-less proofs untouched', () => {
+    const obj = { ...baseProof, witness: { signatures: ['x'] } };
+    expect(normalizeProofWitnessForEncode(obj)).toBe(obj);
+    const bare = { ...baseProof };
+    expect(normalizeProofWitnessForEncode(bare)).toBe(bare);
+    const junk = { ...baseProof, witness: 'not json{' };
+    expect(normalizeProofWitnessForEncode(junk)).toBe(junk);
+  });
+});
+
 describe('deriveNutzapKey', () => {
+
   it('derives a deterministic compressed pubkey from a seed phrase', () => {
     const phrase = generateMnemonic(wordlist);
     const a = deriveNutzapKey(phrase);

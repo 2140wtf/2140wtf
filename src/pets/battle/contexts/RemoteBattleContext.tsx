@@ -13,7 +13,7 @@ import {
   useRemoteBattleState,
   type UseRemoteBattleReturn,
 } from '../hooks/useRemoteBattleState';
-import { validateEscrowDeposit } from '../lib/cashuEscrow';
+import { validateMultisigEscrowDeposit, OPERATOR_SIGN_MIN_LOCKTIME_MARGIN_SECONDS } from '@/lib/cashu/escrowMultisig';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 
@@ -38,9 +38,15 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
   const { allMints } = useCashuWalletContext();
 
   const validateDeposit = useCallback(
-    (token: string, _playerIndex: 0 | 1, amount: number, expectedMint?: string) => {
-      const escrowPubkey = config.petsBattleEscrowPubkey;
-      if (!escrowPubkey) return 'Battle escrow is not configured.';
+    (
+      token: string,
+      playerIndex: 0 | 1,
+      amount: number,
+      expectedMint?: string,
+      lockContext?: { hostEscrowPubkey?: string; guestEscrowPubkey?: string },
+    ) => {
+      const operatorPubkey = config.petsBattleEscrowPubkey;
+      if (!operatorPubkey) return 'Battle escrow is not configured.';
       // The escrow operator rejects mixed-mint releases. When the battle
       // negotiated an agreed mint (advertised in the invite), the deposit must
       // come from EXACTLY that mint — checking against this wallet's own mint
@@ -49,7 +55,26 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
       // operator can never release (both wallets happen to list both mints).
       // Legacy invites without an agreed mint fall back to the local list.
       const allowedMints = expectedMint ? [expectedMint] : allMints.map((m) => m.url);
-      const result = validateEscrowDeposit(token, amount, escrowPubkey, allowedMints);
+      const hostKey = lockContext?.hostEscrowPubkey;
+      const guestKey = lockContext?.guestEscrowPubkey;
+      if (!hostKey || !guestKey) {
+        return 'Battle escrow keys were not exchanged — cancel and re-invite.';
+      }
+      // 2-of-3 multisig escrow (₿AO escrow primitive): the deposit must lock
+      // to {host, guest, operator} with n_sigs=2, the DEPOSITOR's key as sole
+      // refund signer, and a locktime far enough out that the operator can
+      // still co-sign (it refuses inside its sign-margin). Pre-#21 single-key
+      // custodial deposits are rejected: real-sats battles ship together, so a
+      // legacy deposit means the opponent's app is stale.
+      const result = validateMultisigEscrowDeposit(token, {
+        expectedAmount: amount,
+        partyAPubkey: hostKey,
+        partyBPubkey: guestKey,
+        operatorPubkey,
+        depositorPubkey: playerIndex === 0 ? hostKey : guestKey,
+        minLocktime: Math.floor(Date.now() / 1000) + OPERATOR_SIGN_MIN_LOCKTIME_MARGIN_SECONDS,
+        allowedMints,
+      });
       return result.valid ? null : (result.reason ?? 'Invalid escrow deposit.');
     },
     [config.petsBattleEscrowPubkey, allMints],
