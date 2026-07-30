@@ -53,6 +53,7 @@ export interface ApiMarket {
   resolution?: string | null;
   pool_model?: string;
   smj?: boolean;
+  payment_rails?: string[];
 }
 
 export interface ApiMarketsResponse {
@@ -88,6 +89,7 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
     endTime: api.end_date,
     createdAt: api.created_at,
     poolModel: api.smj || api.pool_model === 'smj' ? 'smj' : api.pool_model === 'amm' ? 'amm' : undefined,
+    paymentRails: Array.isArray(api.payment_rails) ? api.payment_rails : undefined,
     outcomes: api.outcomes.map((o) => ({
       id: o.id,
       label: o.label,

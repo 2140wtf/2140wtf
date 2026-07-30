@@ -71,6 +71,7 @@ export function MyTradesSection({ onOpenMarket }: MyTradesSectionProps) {
 
 function PositionRow({ position, onOpen }: { position: BaoPosition; onOpen: () => void }) {
   const pnl = position.unrealized_pnl;
+  const isSmj = (position as { pool_model?: string }).pool_model === 'smj';
   const pnlPositive = pnl >= 0;
   const entryPct = Math.round(position.avg_price * 100);
   const currentPct = position.current_price !== undefined ? Math.round(position.current_price * 100) : undefined;
@@ -86,6 +87,7 @@ function PositionRow({ position, onOpen }: { position: BaoPosition; onOpen: () =
           {position.market_title ?? position.market_id}
         </p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
+          {isSmj && <span className="font-medium text-primary">SMJ pool · </span>}
           {position.outcome_id} · {formatSats(position.size)} sats @ {entryPct}%
           {currentPct !== undefined && ` → ${currentPct}%`}
         </p>
