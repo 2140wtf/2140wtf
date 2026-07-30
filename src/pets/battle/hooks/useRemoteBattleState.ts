@@ -102,7 +102,13 @@ export interface UseRemoteBattleOptions {
    * negotiated — the deposit must come from exactly that mint, not merely
    * one the receiver also uses.
    */
-  validateEscrowDeposit?: (token: string, playerIndex: 0 | 1, amount: number, expectedMint?: string) => string | null;
+  validateEscrowDeposit?: (
+    token: string,
+    playerIndex: 0 | 1,
+    amount: number,
+    expectedMint?: string,
+    lockContext?: { hostEscrowPubkey?: string; guestEscrowPubkey?: string },
+  ) => string | null;
 }
 
 export interface UseRemoteBattleReturn extends RemoteBattleState {
@@ -325,7 +331,10 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
               const agreedMint = stateRef.current.escrow.agreedMint;
-              const error = validateEscrowDeposit?.(deposit.token, 1, expectedAmount, agreedMint);
+              const error = validateEscrowDeposit?.(deposit.token, 1, expectedAmount, agreedMint, {
+                hostEscrowPubkey: stateRef.current.escrow.hostEscrowPubkey,
+                guestEscrowPubkey: stateRef.current.escrow.guestEscrowPubkey,
+              });
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
                 // Tell the depositor WHY their stake was refused — a silent
@@ -378,7 +387,10 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
               const deposit = payload as BattleEscrowDepositPayload;
               const expectedAmount = stateRef.current.matchOptions?.prizeAmount ?? 0;
               const agreedMint = stateRef.current.escrow.agreedMint;
-              const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount, agreedMint);
+              const error = validateEscrowDeposit?.(deposit.token, 0, expectedAmount, agreedMint, {
+                hostEscrowPubkey: stateRef.current.escrow.hostEscrowPubkey,
+                guestEscrowPubkey: stateRef.current.escrow.guestEscrowPubkey,
+              });
               if (error) {
                 console.warn('[useRemoteBattle] invalid escrow deposit:', error);
                 const reject: BattleDepositRejectPayload = { type: 'battle-deposit-reject', battleId, reason: error };

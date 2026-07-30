@@ -22,6 +22,7 @@ import {
   isAllowedMintUrl,
   normalizeMintUrl,
   safeNormalizeMintUrl,
+  normalizeProofWitnessForEncode,
   MAX_PROOF_FIELD_LENGTH,
   MAX_MINT_FEE_PPM,
   isFeeWithinMaxPpm,
@@ -39,6 +40,7 @@ import {
 import { useAppContext } from '@/hooks/useAppContext';
 import { devLog } from '@/lib/cashu/devLog';
 import { deriveNutzapKey } from '@/lib/cashu/cashu';
+import { buildMultisigEscrowLock, type MultisigEscrowLockRequest } from '@/lib/cashu/escrowMultisig';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   createNip60Signer,
@@ -130,6 +132,13 @@ export interface CashuWalletActions {
   receiveToken: (tokenStr: string, privkey?: string) => Promise<number>;
   sendToken: (amount: number, memo?: string, recipientPubkey?: string, mintUrlOverride?: string) => Promise<string | null>;
   sendLockedToken: (amount: number, recipientPubkey: string, memo?: string, mintUrlOverride?: string) => Promise<string | null>;
+  /**
+   * Send a 2-of-3 multisig escrow-locked token (the ₿AO escrow primitive):
+   * locked to {partyA, partyB, operator} with n_sigs=2, a refund locktime, and
+   * the depositor's own key as refund signer. The lock is validated BEFORE the
+   * wallet is debited.
+   */
+  sendMultisigLockedToken: (amount: number, lock: MultisigEscrowLockRequest, memo?: string, mintUrlOverride?: string) => Promise<string | null>;
   receiveLockedToken: (tokenStr: string, privkey: string) => Promise<number>;
   /** Sweep a token locked to THIS wallet's NIP-60 P2PK key (kind-10019 pubkey). Returns sats received (0 on failure). */
   sweepWalletLockedToken: (tokenStr: string) => Promise<number>;
@@ -2036,7 +2045,10 @@ export function useCashuWallet(
         if (succeededMintUrls.has(normalized)) continue;
         let entryToken: string;
         try {
-          entryToken = getEncodedToken({ mint: normalized, proofs: entry.proofs, unit: 'sat' });
+          // Re-encoding decoded proofs: witnesses arrive as JSON strings and
+          // MUST be parsed back to objects or the serializer double-encodes
+          // them and the mint rejects the operator's escrow signature.
+          entryToken = getEncodedToken({ mint: normalized, proofs: entry.proofs.map(normalizeProofWitnessForEncode), unit: 'sat' });
         } catch (encodeErr) {
           errors.push('Invalid token entry');
           devLog.error('Failed to encode token entry:', encodeErr);
@@ -2226,13 +2238,17 @@ export function useCashuWallet(
     return null;
   };
 
-  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string, mintUrlOverride?: string): Promise<string | null> => {
+  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string, mintUrlOverride?: string, escrowLock?: MultisigEscrowLockRequest): Promise<string | null> => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
     if (err) { setError(err); return null; }
     if (typeof memo !== 'string') { setError('Memo must be a string'); return null; }
     if (memo.length > 500) { setError('Memo too long (max 500 chars)'); return null; }
+    if (escrowLock && recipientPubkey) {
+      setError('Cannot combine a single-recipient lock with a multisig escrow lock');
+      return null;
+    }
     if (!bip39Seed || !encKey) {
       setError('Wallet not initialized');
       return null;
@@ -2289,8 +2305,21 @@ export function useCashuWallet(
           sendOpts.pubkey = lockKey;
           sendOpts.includeDleq = true;
         }
+        // Structured (multisig) escrow locks MUST go through wallet.swap, not
+        // wallet.send: send() only forces the mint-swap path for a narrow set
+        // of options and IGNORES `p2pk` entirely — passing it there with
+        // exact-match proofs takes the offline path and silently hands back a
+        // BEARER token while the UI claims "locked". swap() always hits the
+        // mint, always builds outputs through the p2pk branch, and does its
+        // own input selection (unselected inputs come back in `keep`, which
+        // the F1 check below already tolerates).
+        // buildMultisigEscrowLock throws on any invalid key/locktime — before
+        // the mint is called and the wallet is debited.
+        const multisigP2pk = escrowLock ? buildMultisigEscrowLock(escrowLock) : null;
         const sendResult = await withTimeout(
-          targetWallet.send(amount, proofs, sendOpts),
+          multisigP2pk
+            ? targetWallet.swap(amount, proofs, { proofsWeHave: proofs, p2pk: multisigP2pk })
+            : targetWallet.send(amount, proofs, sendOpts),
           60000,
           'Send',
           () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -2460,6 +2489,18 @@ export function useCashuWallet(
       return null;
     }
     return sendToken(amount, memo, recipientPubkey, mintUrlOverride);
+  }, [sendToken]);
+
+  const sendMultisigLockedToken = useCallback(async (amount: number, lock: MultisigEscrowLockRequest, memo = '', mintUrlOverride?: string): Promise<string | null> => {
+    // Validate the lock eagerly so a misconfigured escrow fails BEFORE the
+    // wallet is debited (sendToken re-validates inside the proof lock too).
+    try {
+      buildMultisigEscrowLock(lock);
+    } catch (e: any) {
+      setError(`Invalid escrow lock: ${e?.message ?? e}`);
+      return null;
+    }
+    return sendToken(amount, memo, undefined, mintUrlOverride, lock);
   }, [sendToken]);
 
   const receiveLockedToken = useCallback(async (tokenStr: string, privkey: string): Promise<number> => {
@@ -3432,7 +3473,7 @@ export function useCashuWallet(
 
       await storageRef.current.withProofLock(async () => {
         const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-        const tokenStr = getEncodedToken({ mint: normalized, proofs: parsed.proofs as unknown[], unit: 'sat' });
+        const tokenStr = getEncodedToken({ mint: normalized, proofs: (parsed.proofs as Array<{ witness?: unknown }>).map(normalizeProofWitnessForEncode), unit: 'sat' });
         const nutzapInputProofs = sanitizeProofs(parsed.proofs);
         const nutzapInputAmount = sumProofAmounts(nutzapInputProofs);
         let maxNutzapReceiveFee = 0;
@@ -4173,6 +4214,7 @@ export function useCashuWallet(
     receiveToken,
     sendToken,
     sendLockedToken,
+    sendMultisigLockedToken,
     receiveLockedToken,
     sweepWalletLockedToken,
     getWalletP2pkPubkey,
