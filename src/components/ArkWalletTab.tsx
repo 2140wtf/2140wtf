@@ -355,6 +355,7 @@ interface ReceivePanelProps {
   cachedArkAddress: string | undefined;
   onchainAddress: ReturnType<typeof useBarkdOnchainAddress>;
   cachedOnchainAddress: string | undefined;
+  boardAll: ReturnType<typeof useBarkdBoardAll>;
   onOpenOnchainTab: () => void;
   onFreshArkAddress: () => void;
   invoice: ReturnType<typeof useBarkdGenerateInvoice>;
@@ -371,6 +372,7 @@ function ReceivePanel({
   cachedArkAddress,
   onchainAddress,
   cachedOnchainAddress,
+  boardAll,
   onOpenOnchainTab,
   onFreshArkAddress,
   invoice,
@@ -380,17 +382,35 @@ function ReceivePanel({
   setInvoiceDescription,
 }: ReceivePanelProps) {
   const onchainBalance = useBarkdOnchainBalance(serverUrl, connected);
-  const boardAll = useBarkdBoardAll(serverUrl);
 
   const invoiceAmountSat = parseSatsInput(invoiceAmount);
   const spendableOnchain = onchainBalance.data?.trustedSpendableSat ?? 0;
   const incomingOnchain = onchainBalance.data?.untrustedPendingSat ?? 0;
   const boardFee = useBarkdBoardFee(serverUrl, spendableOnchain > 0 ? spendableOnchain : undefined);
 
-  // New funds confirming after a successful (or failed) board make the
-  // button actionable again.
+  // Terminal board state is reset on mount — after a remount the inline
+  // success/error line would misattribute whatever balance shows up next to
+  // the old board. (In-flight boards still surface via the balance card's
+  // "confirming on-chain" pending line.)
   useEffect(() => {
     if (boardAll.isSuccess || boardAll.isError) boardAll.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // New funds confirming (an *increase*) make the button actionable again —
+  // the decrease a successful board causes must not clear the success state.
+  // null-seeded so the first data load after a cold-cache remount doesn't
+  // count as an increase.
+  const prevSpendable = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      prevSpendable.current !== null &&
+      spendableOnchain > prevSpendable.current &&
+      (boardAll.isSuccess || boardAll.isError)
+    ) {
+      boardAll.reset();
+    }
+    prevSpendable.current = spendableOnchain;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spendableOnchain]);
 
@@ -516,7 +536,8 @@ function ReceivePanel({
                 </p>
                 {boardFee.data && (
                   <p className="text-xs text-muted-foreground text-center tabular-nums">
-                    Boarding fee ≈ {formatSats(boardFee.data.feeSat)} sats
+                    Ark board fee ≈ {formatSats(boardFee.data.feeSat)} sats — an on-chain
+                    transaction fee also applies
                   </p>
                 )}
                 <Button
@@ -534,17 +555,17 @@ function ReceivePanel({
                     'Board into Ark'
                   )}
                 </Button>
-                {boardAll.isSuccess && (
-                  <p className="text-xs text-green-600 dark:text-green-400 text-center">
-                    Boarding started — funds appear in your Ark balance after confirmation.
-                  </p>
-                )}
-                {boardAll.isError && (
-                  <p className="text-xs text-destructive text-center">{boardAll.error.message}</p>
-                )}
               </>
             )}
           </div>
+        )}
+        {boardAll.isSuccess && (
+          <p className="text-xs text-green-600 dark:text-green-400 text-center pb-2">
+            Boarding started — funds appear in your Ark balance after confirmation.
+          </p>
+        )}
+        {boardAll.isError && (
+          <p className="text-xs text-destructive text-center pb-2">{boardAll.error.message}</p>
         )}
       </TabsContent>
     </Tabs>
@@ -595,7 +616,7 @@ function SendPanel({
         <Label htmlFor="send-destination">Destination</Label>
         <Input
           id="send-destination"
-          placeholder="Ark address, BOLT11 invoice, LNURL, or lightning address"
+          placeholder="Ark address, BOLT11 invoice, BOLT12 offer, LNURL, or lightning address"
           value={destination}
           onChange={(e) => editDestination(e.target.value)}
           autoCapitalize="off"
@@ -624,7 +645,7 @@ function SendPanel({
             This destination type needs an amount.
           </p>
         )}
-        {fee.data && amountSat !== undefined && (
+        {fee.data && debouncedAmountSat === amountSat && amountSat !== undefined && (
           <p className="text-xs text-muted-foreground tabular-nums">
             Fee estimate: {formatSats(fee.data.feeSat)} sats — total spend ≈{' '}
             {formatSats(fee.data.grossAmountSat)} sats.
@@ -642,7 +663,7 @@ function SendPanel({
         disabled={!destination.trim() || missingAmount || amountInvalid || send.isPending}
         onClick={() =>
           send.mutate(
-            { destination: destination.trim(), amountSat },
+            { destination: stripLightningPrefix(destination), amountSat },
             {
               onSuccess: () => {
                 setDestination('');
@@ -680,6 +701,7 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   const cachedOnchainAddress = useBarkdCachedAddress(serverUrl, 'onchain');
   const invoice = useBarkdGenerateInvoice(serverUrl);
   const send = useBarkdSend(serverUrl);
+  const boardAll = useBarkdBoardAll(serverUrl);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [invoiceDescription, setInvoiceDescription] = useState('');
   const [destination, setDestination] = useState('');
@@ -688,20 +710,26 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
   // Address generation derives a fresh HD address per call, so only fire when
   // there is no cached address yet. The cache (written by the mutations'
   // onSuccess) survives unmounts, so switching wallet tabs doesn't burn
-  // keychain indexes or silently rotate the QR the user may have shared.
+  // keychain indexes or silently rotate the QR the user may have shared. The
+  // ref latch absorbs StrictMode's double-effect in dev.
   const arkAddressCached = cachedArkAddress.data;
+  const arkAddressRequested = useRef(false);
   useEffect(() => {
-    if (!arkAddressCached && !arkAddress.isPending && !arkAddress.isError) {
+    if (!arkAddressCached && !arkAddressRequested.current && !arkAddress.isError) {
+      arkAddressRequested.current = true;
       arkAddress.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arkAddressCached]);
 
   // The on-chain address derives lazily on first visit of the on-chain tab —
-  // no reason to burn an index for users who only use Ark/Lightning.
+  // no reason to burn an index for users who only use Ark/Lightning. The ref
+  // latch covers a remount while a previous derivation is still in flight.
   const onchainAddressCached = cachedOnchainAddress.data;
+  const onchainAddressRequested = useRef(false);
   const ensureOnchainAddress = () => {
-    if (!onchainAddressCached && !onchainAddress.isPending && !onchainAddress.isError) {
+    if (!onchainAddressCached && !onchainAddressRequested.current && !onchainAddress.isError) {
+      onchainAddressRequested.current = true;
       onchainAddress.mutate();
     }
   };
@@ -712,6 +740,12 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
         toast({
           title: 'New address generated',
           description: 'Addresses you shared earlier still work.',
+        }),
+      onError: (error) =>
+        toast({
+          title: 'Couldn’t generate an address',
+          description: error.message,
+          variant: 'destructive',
         }),
     });
   };
@@ -808,6 +842,7 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
             cachedArkAddress={cachedArkAddress.data}
             onchainAddress={onchainAddress}
             cachedOnchainAddress={cachedOnchainAddress.data}
+            boardAll={boardAll}
             onOpenOnchainTab={ensureOnchainAddress}
             onFreshArkAddress={freshArkAddress}
             invoice={invoice}
@@ -839,7 +874,7 @@ function ArkConnectedView({ connection }: { connection: ReturnType<typeof useBar
           ) : movements.isError ? (
             <Card className="border-dashed mt-4">
               <CardContent className="py-10 px-8 text-center space-y-3">
-                <p className="text-sm text-destructive max-w-xs mx-auto">
+                <p className="text-xs text-destructive max-w-xs mx-auto">
                   {movements.error.message}
                 </p>
                 <Button variant="outline" size="sm" onClick={() => movements.refetch()}>
