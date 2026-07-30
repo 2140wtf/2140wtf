@@ -45,6 +45,8 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- ₿AO Markets data is now honest end-to-end: charts render only real API candle/volume data (no fabricated sparklines, zero-volume markets show 'No trade history yet'), and SMJ parimutuel markets show live pool odds from /smj/:id instead of the stale 50/50 default — relay defs stay anonymous definitions, the API is the source of truth for odds and history
+
 - Notification unread counter no longer resurrects on every restart — the read cursor also persists locally per account (the synced write needs a NIP-44 signature that could silently fail), and all readers use max(synced, local)
 - Remote-signer sessions no longer die on every mobile app restart — the login blob was encrypted with a key stored inside the blob itself, so cold starts forced a full re-login; bunker/extension logins now persist and Amber sessions survive closing the app (nsec blobs stay encrypted at rest)
 - Signer prompt storms — the NIP-46 handshake now requests `sign_event:<kind>` for every kind the app publishes (~70), so approving once at connect covers posts, pets, wallet, and ₿AO actions instead of prompting per kind
