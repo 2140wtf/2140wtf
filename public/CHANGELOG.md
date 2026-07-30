@@ -43,6 +43,7 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- ₿AO Fund create dialog explains itself — a "Before you can create" checklist now names every unmet requirement (title, repo URL, description/goal minimums, per-milestone title/description/criteria/amount) instead of a silently disabled button, the criteria field gets its own length hint, and a footer states the model plainly: free to create (no balance, no fee — spam control is per-key rate limits), published to the ₿AO relay and picked up by bao.markets within ~30s with a direct-API fallback, one YES/NO market per milestone with fund-seeded demo liquidity
 - ₿AO Fund naming unified — the campaign payout-format toggle now reads "Milestone markets" / "Single shot" (was "Time-lock stream"), and compute-credit funding drops the shot/tranche wording in the GUI: agents pick 1 or 2 milestones, funders see "Milestone 1/2" buttons and funded state (protocol tags unchanged)
 - Wallet page is real-wallets-only again — the bao.markets signet balances are unwired from it (₿AO signet lives in Pets and ₿AO Fund, where it belongs); Spark/Ark return to "coming soon" until real wallets land
 
