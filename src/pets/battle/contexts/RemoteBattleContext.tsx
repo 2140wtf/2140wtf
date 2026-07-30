@@ -96,6 +96,12 @@ export function RemoteBattleProvider({ children }: { children: React.ReactNode }
         try {
           const payload = JSON.parse(message.content) as BattleMessagePayload;
           if (payload.type !== 'battle-invite') continue;
+          // Bind the invite to the AUTHENTICATED DM sender: message.sender is
+          // cryptographically verified by NIP-17 unseal, but inviterPubkey is
+          // attacker-controlled JSON — without this check a throwaway key can
+          // spoof a trusted contact's invite and trick the victim's client
+          // into auto-locking a real-sats escrow deposit to a stranger.
+          if (payload.inviterPubkey !== message.sender) continue;
           const elapsed = Date.now() - payload.sentAt;
           if (elapsed <= INVITE_TIMEOUT_MS) return payload;
         } catch {

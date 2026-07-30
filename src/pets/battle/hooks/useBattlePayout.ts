@@ -85,21 +85,35 @@ export function useBattlePayout(
               throw new Error('₿AO daily claim amount is too small or exhausted.');
             }
             const result = await claimBaoSignetFaucet(faucetUrl, { npub, amount: requestAmount });
+            // A claim that exactly exhausts the 24h budget returns a valid
+            // token AND remaining24h: 0 — the token must still be redeemed.
+            // Only treat "exhausted" as an error when the faucet issued NO
+            // token; throwing with a token in hand would discard a claim the
+            // faucet already debited, and it can never be re-claimed.
             if (!result?.token) {
-              throw new Error(result?.message ?? '₿AO faucet did not return a token.');
-            }
-            if (isBaoFaucetDailyExhausted(result)) {
-              throw new Error(result.message ?? '₿AO 24h limit reached. Try again later.');
+              throw new Error(result?.message ?? (result && isBaoFaucetDailyExhausted(result)
+                ? '₿AO 24h limit reached. Try again later.'
+                : '₿AO faucet did not return a token.'));
             }
 
-            await externalWallet.receiveToken(result.token.trim());
+            // receiveToken never throws (returns 0 on failure) and journals
+            // the token for automatic background retries — but a 0 means the
+            // sats have NOT arrived, so the profile must not be credited with
+            // the token's face value.
+            const received = await externalWallet.receiveToken(result.token.trim());
+            if (received <= 0) {
+              throw new Error('The faucet issued your token, but the wallet could not redeem it yet — it is journaled and retries automatically in the background. Do not claim again.');
+            }
 
-            // Credit the actual token amount, capping to the faucet's 24h report.
+            // Credit the actual token amount, capping only to the per-claim
+            // ceiling: remaining24h is the allowance AFTER this claim, so it
+            // is 0 exactly when the claim exhausted the budget — clamping by
+            // it would zero out sats that actually arrived.
             const decoded = decodeCashuToken(result.token.trim());
             const depositedSats = decoded?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
-            const claimedSats = clampBaoFaucetAmount(depositedSats, result.remaining24h);
+            const claimedSats = clampBaoFaucetAmount(depositedSats);
             if (claimedSats <= 0) {
-              throw new Error(result.message ?? '₿AO 24h limit reached. Try again later.');
+              throw new Error('₿AO faucet returned an empty token.');
             }
 
             const tags = updateNostrPetProfileTags(freshProfile?.event.tags ?? prevTags, {
