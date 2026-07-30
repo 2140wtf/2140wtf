@@ -84,19 +84,34 @@ function clearPaidPending(pubkey: string, itemId: string): void {
   }
 }
 
+/** Number of 1-bits in n — the minimum count of power-of-two proofs that can represent it. */
+function proofPopcount(n: number): number {
+  let count = 0;
+  let v = Math.floor(n);
+  while (v > 0) {
+    count += v & 1;
+    v = v >>> 1;
+  }
+  return count;
+}
+
 /**
  * Estimate the Cashu mint fee for sending a given amount of sats from the
- * active keyset. The real fee depends on the actual proofs selected, so this
- * returns a conservative reserve based on the active keyset's input_fee_ppk.
- * A small buffer is added so the UI does not advertise an item as affordable
- * when the wallet would fail due to rounding or a minimal fee.
+ * active keyset. Per NUT-02 the active keyset's input_fee_ppk is charged PER
+ * INPUT PROOF, not per sat — the real fee depends on how many proofs the
+ * wallet selects (typically a handful), never on the amount. The input count
+ * is estimated from the minimum number of power-of-two proofs that can
+ * represent the amount (its popcount) plus a small margin for suboptimal
+ * proof selection. A 1-sat buffer is added so the UI does not advertise an
+ * item as affordable when the wallet would fail due to rounding.
  */
 export function estimateCashuSendFee(amount: number, wallet: CashuWallet | null): number {
   if (!wallet || amount <= 0) return 0;
   try {
     const activeKeyset = wallet.keysets.find((k: MintKeyset) => k.id === wallet.keysetId);
     const ppk = activeKeyset?.input_fee_ppk ?? 0;
-    return Math.max(1, Math.ceil((amount * ppk) / 1000) + 1);
+    const estimatedInputs = proofPopcount(amount) + 2;
+    return Math.max(1, Math.ceil((estimatedInputs * ppk) / 1000) + 1);
   } catch {
     // If keysets are unavailable, reserve 1% as a safe fallback.
     return Math.max(1, Math.ceil(amount * 0.01));

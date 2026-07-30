@@ -269,6 +269,7 @@ export async function writePendingReceive(
   amount: number,
   key: CryptoKey,
   succeededMintUrls?: string[],
+  attempts?: number,
   namespace?: string,
 ): Promise<void> {
   const existing = await loadPendingReceive(tokenHash, key, undefined, namespace);
@@ -279,7 +280,10 @@ export async function writePendingReceive(
     amount,
     status: 'pending',
     timestamp: Date.now(),
-    attempts: existing?.attempts ?? 0,
+    // An explicit attempts value wins (the reconciler increments it); without
+    // one, preserve the stored counter instead of silently resetting it to 0 —
+    // otherwise the max-attempts eviction never trips.
+    attempts: attempts ?? existing?.attempts ?? 0,
     succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
   };
   const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
@@ -453,17 +457,23 @@ async function idbAcquire(name: string, token: string, leaseMs: number): Promise
   }
 }
 
-async function idbExtend(name: string, token: string, leaseMs: number): Promise<void> {
+/** Renew our own lease record. Returns false when the record is gone or owned
+ *  by another tab — i.e. the lock was lost. Transient IDB failures return true
+ *  (tolerated, like the extend timer does) so a flaky read cannot falsely
+ *  invalidate a live holder. */
+async function idbExtend(name: string, token: string, leaseMs: number): Promise<boolean> {
   try {
     const db = await openLockDB();
     const tx = db.transaction(LOCK_STORE, 'readwrite');
     const store = tx.objectStore(LOCK_STORE);
     const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
-    if (current?.token === token) {
-      current.expires = Date.now() + leaseMs;
-      await idbRequest(store.put(current));
-    }
-  } catch { /* ignore */ }
+    if (current?.token !== token) return false;
+    current.expires = Date.now() + leaseMs;
+    await idbRequest(store.put(current));
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 async function idbRelease(name: string, token: string): Promise<void> {
@@ -493,6 +503,36 @@ export class CrossTabLock {
 
   constructor(private key: string) {}
 
+  /** Forget local ownership state after the lease was lost (or invalidated).
+   *  Any later re-entrant acquire or assertOwnership will fail loudly instead
+   *  of letting a stale writer proceed. */
+  private invalidate(): void {
+    if (this.extendTimer) {
+      clearInterval(this.extendTimer);
+      this.extendTimer = null;
+    }
+    this.owner = null;
+    this.depth = 0;
+    this.useIdb = false;
+  }
+
+  /**
+   * Re-validate (and renew) our lease NOW, e.g. right before committing a
+   * write that followed a long network await. If this tab was suspended past
+   * the lease expiry, another tab may have taken the lock while our in-memory
+   * owner/depth still claim it — throws in that case so the caller never
+   * commits a stale read-modify-write over the other tab's state.
+   */
+  async assertOwnership(): Promise<void> {
+    if (this.depth <= 0 || !this.owner) {
+      throw new Error('Wallet lock is not held by this tab');
+    }
+    if (!(await this.refreshOwnLease())) {
+      this.invalidate();
+      throw new Error('Wallet lock was lost while held — another tab may have taken it');
+    }
+  }
+
   async acquire(): Promise<void> {
     if (this.depth > 0 && this.owner) {
       // Verify we still hold the lease before re-entering. If this tab was
@@ -500,13 +540,7 @@ export class CrossTabLock {
       // while our in-memory owner/depth still claim it — proceeding then
       // would run two writers concurrently and corrupt the proof store.
       if (!(await this.refreshOwnLease())) {
-        if (this.extendTimer) {
-          clearInterval(this.extendTimer);
-          this.extendTimer = null;
-        }
-        this.owner = null;
-        this.depth = 0;
-        this.useIdb = false;
+        this.invalidate();
         throw new Error('Wallet lock was lost while held — another tab may have taken it');
       }
       this.depth++;
@@ -525,7 +559,14 @@ export class CrossTabLock {
             this.depth = 1;
             this.useIdb = true;
             this.extendTimer = setInterval(() => {
-              if (this.owner) idbExtend(this.key, this.owner, LOCK_LEASE_MS);
+              const owner = this.owner;
+              if (!owner) return;
+              void idbExtend(this.key, owner, LOCK_LEASE_MS).then((stillOwner) => {
+                // The lease was taken by another tab (e.g. this tab was
+                // suspended past expiry) — fail fast instead of letting stale
+                // writes proceed under a lock we no longer hold.
+                if (!stillOwner && this.owner === owner) this.invalidate();
+              });
             }, LOCK_LEASE_MS / 2);
             return;
           }
@@ -582,13 +623,18 @@ export class CrossTabLock {
             this.depth = 1;
             this.useIdb = false;
             this.extendTimer = setInterval(() => {
+              const owner = this.owner;
+              if (!owner) return;
               const rec = readLock(this.key);
-              if (rec?.owner === this.owner) {
+              if (rec?.owner === owner) {
                 try {
-                  writeLock(this.key, { owner: this.owner, expires: Date.now() + LOCK_LEASE_MS });
+                  writeLock(this.key, { owner, expires: Date.now() + LOCK_LEASE_MS });
                 } catch (e) {
                   if (isQuotaError(e)) resetCanWriteLocalStorageCache();
                 }
+              } else {
+                // Another tab owns the lease now — fail fast (see above).
+                this.invalidate();
               }
             }, LOCK_LEASE_MS / 2);
             return;
@@ -700,6 +746,90 @@ export async function withTxLock<T>(fn: () => Promise<T>, namespace?: string): P
   } finally {
     lock.release();
   }
+}
+
+/** Re-validate that THIS tab still holds the proof lock (see
+ *  CrossTabLock.assertOwnership). Call after a long network await inside
+ *  withProofLock, before committing the proof-store write. */
+export async function assertProofLockOwnership(namespace?: string): Promise<void> {
+  await getProofLock(namespace).assertOwnership();
+}
+
+/* ── Deterministic mint-output counter (NUT-09/NUT-13 recovery) ──
+   mintFromQuote derives its blinded outputs deterministically from the wallet
+   seed plus a persisted per-mint counter, so a lost mint response can be
+   recovered via the mint's /v1/restore endpoint instead of re-minting (which
+   NUT-04 forbids once the quote is ISSUED). The counter is not secret. */
+
+const mintCounterKey = (mint: string, namespace?: string) =>
+  `${resolvePrefix(namespace)}mint_counter_${stringToBase64(mint)}`;
+
+export function loadMintCounter(mintUrl: string, namespace?: string): number {
+  try {
+    const raw = localStorage.getItem(mintCounterKey(mintUrl, namespace));
+    const n = raw ? Number(raw) : NaN;
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveMintCounter(mintUrl: string, counter: number, namespace?: string): void {
+  if (!Number.isInteger(counter) || counter < 0) return;
+  try {
+    localStorage.setItem(mintCounterKey(mintUrl, namespace), String(counter));
+  } catch { /* best effort — the pending-mint journal still bounds reuse */ }
+}
+
+/* ── Pending mint journal (lost mintProofs response recovery) ── */
+
+const PENDING_MINT_CONTEXT = 'freedomid:pending-mint';
+
+export interface PendingMintEntry {
+  quoteId: string;
+  /** Deterministic counter at which the mint outputs were derived. */
+  counterStart: number;
+  amount: number;
+  timestamp: number;
+}
+
+const pendingMintKey = (mint: string, namespace?: string) =>
+  `${resolvePrefix(namespace)}pending_mint_${stringToBase64(mint)}`;
+
+export async function writePendingMint(mintUrl: string, entry: PendingMintEntry, key: CryptoKey, namespace?: string): Promise<void> {
+  try {
+    const encrypted = await encryptData(JSON.stringify(entry), key, PENDING_MINT_CONTEXT);
+    localStorage.setItem(pendingMintKey(mintUrl, namespace), encrypted);
+  } catch (e) {
+    devLog.warn('Failed to write pending mint journal:', e);
+  }
+}
+
+export async function loadPendingMint(mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<PendingMintEntry | null> {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(pendingMintKey(mintUrl, namespace)); } catch { return null; }
+  if (!raw) return null;
+  try {
+    const decrypted = await decryptData(raw, key, legacyKey, PENDING_MINT_CONTEXT);
+    if (!decrypted) return null;
+    const parsed = JSON.parse(decrypted) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as Record<string, unknown>).quoteId === 'string' &&
+      typeof (parsed as Record<string, unknown>).counterStart === 'number' &&
+      typeof (parsed as Record<string, unknown>).amount === 'number'
+    ) {
+      return parsed as PendingMintEntry;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingMint(mintUrl: string, namespace?: string): void {
+  try { localStorage.removeItem(pendingMintKey(mintUrl, namespace)); } catch { /* noop */ }
 }
 
 export interface Transaction {
@@ -1474,6 +1604,12 @@ export function createCashuStorage(namespace?: string) {
     resetCanWriteLocalStorageCache: () => resetCanWriteLocalStorageCache(),
     withProofLock: <T>(fn: () => Promise<T>) => withProofLock(fn, namespace),
     withTxLock: <T>(fn: () => Promise<T>) => withTxLock(fn, namespace),
+    assertProofLockOwnership: () => assertProofLockOwnership(namespace),
+    loadMintCounter: (mintUrl: string) => loadMintCounter(mintUrl, namespace),
+    saveMintCounter: (mintUrl: string, counter: number) => saveMintCounter(mintUrl, counter, namespace),
+    writePendingMint: (mintUrl: string, entry: PendingMintEntry, key: CryptoKey) => writePendingMint(mintUrl, entry, key, namespace),
+    loadPendingMint: (mintUrl: string, key: CryptoKey, legacyKey?: CryptoKey) => loadPendingMint(mintUrl, key, legacyKey, namespace),
+    clearPendingMint: (mintUrl: string) => clearPendingMint(mintUrl, namespace),
     loadItem: <T>(key: string, fallback: T) => loadItem<T>(key, fallback, namespace),
     setItem: (key: string, value: unknown) => setItem(key, value, namespace),
     migrateMintMetadata: (encKey: CryptoKey, legacyKey?: CryptoKey) => migrateMintMetadata(encKey, legacyKey, namespace),
@@ -1522,7 +1658,7 @@ export function createCashuStorage(namespace?: string) {
     // Pending receive helpers
     loadPendingReceive: (tokenHash: string, key: CryptoKey, legacyKey?: CryptoKey) => loadPendingReceive(tokenHash, key, legacyKey, namespace),
     clearPendingReceive: (tokenHash: string) => clearPendingReceive(tokenHash, namespace),
-    writePendingReceive: (tokenStr: string, tokenHash: string, mintUrls: string[], amount: number, key: CryptoKey, succeededMintUrls?: string[]) => writePendingReceive(tokenStr, tokenHash, mintUrls, amount, key, succeededMintUrls, namespace),
+    writePendingReceive: (tokenStr: string, tokenHash: string, mintUrls: string[], amount: number, key: CryptoKey, succeededMintUrls?: string[], attempts?: number) => writePendingReceive(tokenStr, tokenHash, mintUrls, amount, key, succeededMintUrls, attempts, namespace),
     wipeAllAppData: () => wipeAllAppData(),
   };
 }

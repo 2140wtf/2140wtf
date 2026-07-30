@@ -242,6 +242,19 @@ export default function PetsBattlePage() {
           }
           const hostPubkey = remoteRole === 'host' ? localEscrowPubkey : (remote.escrow.hostEscrowPubkey ?? '');
           const guestPubkey = remoteRole === 'guest' ? localEscrowPubkey : (remote.escrow.guestEscrowPubkey ?? '');
+          // The escrow operator verifies the signed battle-finished event as
+          // the outcome proof. Journaling a claim without it (host publish
+          // failed, or the guest never received it) would poison every retry
+          // with the same unverifiable `{}` — fail loudly instead of locking
+          // in a permanently rejected claim.
+          if (!finishedEvent) {
+            toast({
+              title: 'Battle result proof missing',
+              description: 'The signed battle-finished event could not be published or received, so the escrow release would be rejected. No claim was journaled — reconnect and replay the battle.',
+              variant: 'destructive',
+            });
+            return;
+          }
           // Journal everything the release needs BEFORE the first attempt: the
           // deposit tokens live only in React state, so a failed request (or
           // closing the page, or Rematch/Exit wiping the battle state) would
@@ -254,7 +267,7 @@ export default function PetsBattlePage() {
             guestPubkey,
             hostDepositToken: remote.escrow.hostDepositToken ?? '',
             guestDepositToken: remote.escrow.guestDepositToken ?? '',
-            finishedEvent: finishedEvent ? {
+            finishedEvent: {
               id: finishedEvent.id,
               pubkey: finishedEvent.pubkey,
               kind: finishedEvent.kind,
@@ -262,7 +275,7 @@ export default function PetsBattlePage() {
               tags: finishedEvent.tags,
               content: finishedEvent.content,
               sig: finishedEvent.sig,
-            } : {},
+            },
             prizeAmount: matchOptions.prizeAmount,
             createdAt: Date.now(),
             attempts: 0,
@@ -277,7 +290,13 @@ export default function PetsBattlePage() {
               toast({ title: 'Escrow release pending', description: 'The operator will release your prize shortly — your claim is saved locally and retried automatically.', variant: 'default' });
             }
           } catch (claimErr) {
-            savePendingEscrowClaim({ ...claim, attempts: 1 });
+            // Re-read the journal before re-saving: claimEscrowPrize may have
+            // journaled the operator's releaseToken before the wallet receive
+            // failed. Re-saving the stale pre-release `claim` would clobber
+            // the token and force a second /release the operator refuses.
+            const journaled =
+              loadPendingEscrowClaims().find((c) => c.battleId === claim.battleId) ?? claim;
+            savePendingEscrowClaim({ ...journaled, attempts: journaled.attempts + 1 });
             const reason = claimErr instanceof Error ? claimErr.message : String(claimErr);
             toast({
               title: 'Prize claim saved — will retry',

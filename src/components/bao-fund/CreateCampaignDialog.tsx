@@ -123,9 +123,15 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     setStreamDays('30');
   };
 
+  // In stream format the visible "Goal (sats)" field edits milestones[0] only,
+  // so the goal sent to the API must be milestones[0] too — summing all
+  // milestone drafts would create the campaign with a goal the owner never saw
+  // (e.g. drafts left over from milestone-markets mode before switching).
   const goal = useMemo(
-    () => milestones.reduce((s, m) => s + (parseInt(m.amount, 10) || 0), 0),
-    [milestones],
+    () => format === 'stream'
+      ? parseInt(milestones[0]?.amount ?? '', 10) || 0
+      : milestones.reduce((s, m) => s + (parseInt(m.amount, 10) || 0), 0),
+    [format, milestones],
   );
 
   const mutation = useMutation({
