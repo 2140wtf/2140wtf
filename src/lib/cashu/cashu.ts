@@ -557,7 +557,12 @@ export interface DecodedTokenEntry {
 function ipv4ToInt(ip: string): number {
   const parts = ip.split('.');
   if (parts.length !== 4) return NaN;
-  return parts.reduce((acc, part) => (acc << 8) + (parseInt(part, 10) & 0xff), 0) >>> 0;
+  // Strict numeric check: parseInt('other', 10) & 0xff collapses to 0, so a
+  // 4-LABEL HOSTNAME ('other.mint.example.com') would parse as 0.0.0.0 and be
+  // misclassified as a private IP — rejecting every token from any mint whose
+  // host happens to have exactly four dot-separated labels.
+  if (!parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)) return NaN;
+  return parts.reduce((acc, part) => (acc << 8) + Number(part), 0) >>> 0;
 }
 
 function isPrivateIPv4(ip: string): boolean {
@@ -649,6 +654,32 @@ export function normalizeMintUrl(url: string): string | null {
 
 export function safeNormalizeMintUrl(url: string): string {
   return normalizeMintUrl(url) ?? url.trim();
+}
+
+/**
+ * Prepare a decoded proof for RE-encoding with cashu-ts getEncodedToken.
+ *
+ * getDecodedToken yields a proof's witness as a JSON STRING, but the token
+ * serializer only handles the OBJECT form correctly — given a string it
+ * JSON-encodes it again, producing a double-encoded witness the mint cannot
+ * parse (every P2PK signature check then fails). This burned the multisig
+ * escrow release flow: the operator returns deposit proofs carrying its
+ * witness signature, and receiveToken re-encodes entries per mint before
+ * calling wallet.receive. Parse string witnesses back to objects; anything
+ * unparseable is left untouched.
+ */
+export function normalizeProofWitnessForEncode<T extends object>(proof: T): T {
+  const witness = (proof as { witness?: unknown }).witness;
+  if (typeof witness !== 'string') return proof;
+  try {
+    const parsed: unknown = JSON.parse(witness);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return { ...proof, witness: parsed };
+    }
+  } catch {
+    // keep the original — an unparseable witness fails at the mint either way
+  }
+  return proof;
 }
 
 function isValidProof(p: unknown): p is { id: string; amount: number; secret: string; C: string } {

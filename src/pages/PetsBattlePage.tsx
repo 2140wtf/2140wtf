@@ -39,9 +39,13 @@ import {
   savePendingEscrowClaim,
   loadPendingEscrowClaims,
   clearPendingEscrowClaim,
+  checkEscrowDepositSpentState,
+  loadPendingBattleDeposits,
+  clearPendingBattleDeposit,
   PENDING_CLAIM_MAX_ATTEMPTS,
   type PendingEscrowClaim,
 } from '@/pets/battle/lib/cashuEscrow';
+import { getMultisigDepositLocktime } from '@/lib/cashu/escrowMultisig';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
 
@@ -212,6 +216,48 @@ export default function PetsBattlePage() {
       }
     })();
   }, [petsWallet, escrowKeypair, localEscrowPubkey, config.petsBattleEscrowServiceUrl, claimEscrowPrize, toast]);
+
+  // Sweep stale escrow-DEPOSIT journals from abandoned battles. Each journaled
+  // token is the only handle on a stake the wallet was already debited for.
+  // Post-locktime the depositor's own refund key alone reclaims it (2-of-3
+  // multisig: no operator, no opponent). Already-spent proofs mean the stake
+  // resolved elsewhere (release/claim) → drop the entry. Unverifiable → keep
+  // the journal for the next visit rather than risk abandoning real sats.
+  const depositSweepRanRef = useRef(false);
+  useEffect(() => {
+    if (depositSweepRanRef.current) return;
+    if (!petsWallet || !escrowKeypair) return;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const stale = loadPendingBattleDeposits().filter((d) => {
+      const locktime = getMultisigDepositLocktime(d.token);
+      // Non-multisig (legacy) or locktime still in the future → not ours to sweep.
+      return locktime !== null && locktime <= nowSeconds;
+    });
+    if (stale.length === 0) return;
+    depositSweepRanRef.current = true;
+    void (async () => {
+      for (const deposit of stale) {
+        try {
+          const spentState = await checkEscrowDepositSpentState(deposit.token);
+          if (spentState?.includes('already spent')) {
+            clearPendingBattleDeposit(deposit.battleId);
+            continue;
+          }
+          if (spentState !== null) continue; // unverifiable/pending — retry next visit
+          const received = await petsWallet.receiveLockedToken(deposit.token, escrowKeypair.privkey);
+          if (received > 0) {
+            clearPendingBattleDeposit(deposit.battleId);
+            toast({
+              title: 'Battle stake refunded',
+              description: `Reclaimed ${received.toLocaleString()} sats from an abandoned battle.`,
+            });
+          }
+        } catch (err) {
+          console.warn('[PetsBattlePage] stale deposit reclaim failed:', err);
+        }
+      }
+    })();
+  }, [petsWallet, escrowKeypair, toast]);
 
   useEffect(() => {
     onFinishRef.current = async (winner) => {

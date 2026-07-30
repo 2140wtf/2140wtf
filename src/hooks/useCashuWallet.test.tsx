@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   sendTracker: { active: 0, max: 0 },
   sendCallCount: 0,
+  swapCallCount: 0,
   meltCallCount: 0,
   mintProofsCallCount: 0,
   createMockWallet: (opts: { sendDelay?: number } = {}) => ({
@@ -44,6 +45,14 @@ const mocks = vi.hoisted(() => ({
       send: (Array.isArray(_proofs) ? _proofs : []).filter((p) => (p as { amount: number }).amount >= amountToSend),
       keep: (Array.isArray(_proofs) ? _proofs : []).filter((p) => (p as { amount: number }).amount < amountToSend),
     })),
+    swap: vi.fn().mockImplementation(async (amount: number, proofs: unknown[]) => {
+      const callId = ++mocks.swapCallCount;
+      const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
+      return {
+        send: [{ id: 'ks', amount, secret: `swap-send-secret-${callId}`, C: `C-swap-send-${callId}` }],
+        keep: inputSum > amount ? [{ id: 'ks', amount: inputSum - amount, secret: `swap-keep-secret-${callId}`, C: `C-swap-keep-${callId}` }] : [],
+      };
+    }),
     receive: vi.fn().mockResolvedValue([]),
     getFeesForProofs: vi.fn().mockImplementation((proofs: unknown[]) => (Array.isArray(proofs) ? proofs.length : 0)),
     checkProofsStates: vi.fn().mockResolvedValue([]),
@@ -785,6 +794,105 @@ describe('useCashuWallet hunt regressions: sendToken offline no-swap path', () =
     const token = await act(async () => result.current.sendToken(21, 'memo', validPubkey));
     expect(token).toBeNull();
     await waitFor(() => expect(result.current.error).toContain('unspent input proofs'));
+  });
+});
+
+describe('useCashuWallet: multisig escrow sends (2-of-3 P2PK, ₿AO escrow)', () => {
+  const mintUrl = 'https://mint.example.com';
+  const PARTY_A = 'aa'.repeat(32);
+  const PARTY_B = 'bb'.repeat(32);
+  const OPERATOR = '11'.repeat(32);
+  const STRANGER = '44'.repeat(32);
+  const locktime = Math.floor(Date.now() / 1000) + 24 * 3600;
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+    return { encKey };
+  }
+
+  const validLock = () => ({
+    partyAPubkey: PARTY_A,
+    partyBPubkey: PARTY_B,
+    operatorPubkey: OPERATOR,
+    refundPubkey: PARTY_A,
+    locktime,
+  });
+
+  it('routes escrow sends through wallet.swap with the 2-of-3 p2pk lock — NEVER wallet.send', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+
+    // cashu-ts send() IGNORES the p2pk option on its offline path — an escrow
+    // send routed through send() could silently produce a BEARER token while
+    // the UI claims "locked". This test pins the swap() routing.
+    const sendSpy = vi.spyOn(wallet, 'send');
+    const swapSpy = vi.spyOn(wallet, 'swap');
+
+    const token = await act(async () => result.current.sendMultisigLockedToken(21, validLock(), 'Battle escrow b1'));
+    expect(token).not.toBeNull();
+    expect(token).toContain('cashu');
+    expect(result.current.error).toBe('');
+
+    expect(swapSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).not.toHaveBeenCalled();
+
+    const [, , swapOpts] = swapSpy.mock.calls[0] as unknown as [number, unknown[], { p2pk: { pubkey: string[]; requiredSignatures: number; locktime: number; refundKeys: string[] } }];
+    expect(swapOpts.p2pk.pubkey).toEqual([OPERATOR, PARTY_A, PARTY_B].sort().map((k) => '02' + k));
+    expect(swapOpts.p2pk.requiredSignatures).toBe(2);
+    expect(swapOpts.p2pk.locktime).toBe(locktime);
+    expect(swapOpts.p2pk.refundKeys).toEqual(['02' + PARTY_A]);
+
+    // Change (79 sats) lands back in the store.
+    await waitFor(() => expect(result.current.balances[mintUrl]).toBe(79));
+  });
+
+  it('rejects an invalid lock before any mint call (wallet never debited)', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    const sendSpy = vi.spyOn(wallet, 'send');
+    const swapSpy = vi.spyOn(wallet, 'swap');
+
+    const token = await act(async () =>
+      result.current.sendMultisigLockedToken(21, { ...validLock(), refundPubkey: STRANGER }, 'bad'),
+    );
+    expect(token).toBeNull();
+    expect(result.current.error).toContain('Invalid escrow lock');
+    expect(swapSpy).not.toHaveBeenCalled();
+    expect(sendSpy).not.toHaveBeenCalled();
+    // Balance untouched.
+    expect(result.current.balances[mintUrl]).toBe(100);
   });
 });
 
