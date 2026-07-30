@@ -1,10 +1,13 @@
 import { queryPetsRelay } from '@/pets/core/lib/pets-relay';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { useAppContext } from '@/hooks/useAppContext';
+import { getEffectiveRelays } from '@/lib/appRelays';
 import {
   KIND_PETS_STATE,
   PETS_ECOSYSTEM_NAMESPACE,
@@ -15,6 +18,12 @@ import {
 
 /** Maximum number of d-tags per query chunk to avoid relay issues */
 const CHUNK_SIZE = 20;
+
+/**
+ * Event ids already re-broadcast this session (repatriation pass).
+ * Module-scoped so every collection consumer shares the dedupe.
+ */
+const repatriatedEventIds = new Set<string>();
 
 /**
  * Split an array into chunks of a given size.
@@ -162,6 +171,38 @@ export function usePetssCollection(dList?: string[] | undefined) {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
   
+  // ─── Repatriation pass ─────────────────────────────────────────────────────
+  // Pet events published while a relay was (temporarily) in the effective set
+  // can end up stranded on relays the current build no longer reads — e.g.
+  // events written to the BAO test relay from a dev build are invisible to
+  // production builds, which exclude it. The profile's has[] then lists pets
+  // the collection can never see ("one pet shows up, can't switch"). Any
+  // client that CAN read them (dev builds, other apps) heals this by
+  // re-broadcasting the user's own already-signed events to its pool: relays
+  // that already have an event dedupe it by id, relays missing it store it.
+  // Gated by the pets publish preference; once per session per event id.
+  const { isEnabled } = usePublishPreferences();
+  const petsPublishEnabled = isEnabled('pets');
+  const fetchedCompanions = query.data?.companions;
+  const { config } = useAppContext();
+
+  useEffect(() => {
+    if (!petsPublishEnabled || !user?.pubkey || !fetchedCompanions) return;
+    const relayUrls = getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays)
+      .relays.map((r) => r.url);
+    if (relayUrls.length === 0) return;
+    for (const companion of fetchedCompanions) {
+      const event = companion.event;
+      if (!event || repatriatedEventIds.has(event.id)) continue;
+      repatriatedEventIds.add(event.id);
+      nostr.group(relayUrls).event(event, { signal: AbortSignal.timeout(10_000) }).catch((err) => {
+        // Allow a later fetch to retry.
+        repatriatedEventIds.delete(event.id);
+        console.warn('[usePetssCollection] repatriation publish failed:', err);
+      });
+    }
+  }, [fetchedCompanions, petsPublishEnabled, user?.pubkey, nostr, config.relayMetadata, config.useAppRelays, config.useUserRelays]);
+
   // Helper to invalidate and refetch after publishing.
   // NOTE: In most mutation paths this is no longer needed — the read-modify-write
   // pattern (fetch fresh → mutate → optimistic update) keeps the cache correct.
