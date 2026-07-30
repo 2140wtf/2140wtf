@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Ark wallet tab — the Wallet page's Ark placeholder is now real: connect to a self-hosted barkd daemon (balance with pending breakdown, receive via Ark address / BOLT11 / on-chain, unified send, movement history; UI password in NIP-44-encrypted secure storage), or use Ark-over-NWC with the existing wallet plumbing — keys and VTXOs always stay on your own daemon
 - Android signing certificate fingerprint on the /about footer — the SHA-256 of the release signing key is published with click-to-copy so a sideloaded APK can be verified (`apksigner verify --print-certs app.apk`); every update is signed with the same key, so a mismatch means the app didn't come from us
 - 3D pets keep their own look — the 3D world no longer swaps your companion for a demo model: without a GLB the pet's real visual walks the meadow as a depth-scaled sprite (name + age badge ride along), with smooth 8-way movement (WASD/arrows or the on-screen pad) including diagonals and depth, and an improved world with a dirt path, pond, trees, rocks, flowers, and clouds; the 3D toggle no longer needs a configured model
 - NIP-42 authed companion relay package (bao.markets `infra/relay-auth-companion/`) — the deployable read-privacy mitigation from `docs/BAO_PRIVACY.md`: a second strfry that requires NIP-42 AUTH before serving any request, with a drop-in config, post-deploy verify script, and nginx/membership-model guidance, so private ₿AO communities can keep ciphertext and traffic shape away from anonymous readers
