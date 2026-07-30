@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Chrome/Edge `beforeinstallprompt` event (not in standard TS DOM types). */
 interface BeforeInstallPromptEvent extends Event {
@@ -29,15 +29,25 @@ function detectInstalled(): boolean {
 export function usePwaInstall() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(detectInstalled);
+  const initializedFromGlobal = useRef(false);
 
   useEffect(() => {
+    // If the prompt fired before React mounted, main.tsx stashed it here.
+    if (!initializedFromGlobal.current && window.__deferredInstallPrompt) {
+      initializedFromGlobal.current = true;
+      setDeferred(window.__deferredInstallPrompt);
+    }
+
     const onBeforeInstall = (event: Event) => {
       event.preventDefault();
-      setDeferred(event as BeforeInstallPromptEvent);
+      const e = event as BeforeInstallPromptEvent;
+      window.__deferredInstallPrompt = e;
+      setDeferred(e);
     };
     const onInstalled = () => {
       setInstalled(true);
       setDeferred(null);
+      window.__deferredInstallPrompt = undefined;
     };
     window.addEventListener('beforeinstallprompt', onBeforeInstall);
     window.addEventListener('appinstalled', onInstalled);
@@ -61,7 +71,9 @@ export function usePwaInstall() {
     if (deferred) {
       await deferred.prompt();
       const choice = await deferred.userChoice;
-      if (choice.outcome === 'accepted') setDeferred(null);
+      // The deferred event is single-use regardless of outcome.
+      setDeferred(null);
+      window.__deferredInstallPrompt = undefined;
       return choice.outcome;
     }
     return 'instructions';
