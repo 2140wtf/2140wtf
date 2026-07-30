@@ -51,6 +51,8 @@ export interface ApiMarket {
   nostr_event_id?: string;
   creator_pubkey: string;
   resolution?: string | null;
+  pool_model?: string;
+  smj?: boolean;
 }
 
 export interface ApiMarketsResponse {
@@ -85,6 +87,7 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
         : 'binary',
     endTime: api.end_date,
     createdAt: api.created_at,
+    poolModel: api.smj || api.pool_model === 'smj' ? 'smj' : api.pool_model === 'amm' ? 'amm' : undefined,
     outcomes: api.outcomes.map((o) => ({
       id: o.id,
       label: o.label,
