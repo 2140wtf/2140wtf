@@ -1,19 +1,30 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarDays, Loader2, Palette } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, Copy, Loader2, Palette } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 
 import { CalendarEventContent } from '@/components/CalendarEventContent';
 import { ClassifiedListingContent } from '@/components/ClassifiedListingContent';
 import { PwaInstallButton } from '@/components/PwaInstallButton';
+import { useToast } from '@/hooks/useToast';
 import { dedupeNip99Listings, isArtListing, NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
 
 /** The canonical 2140.wtf Nostr account. */
 const TWO140_NPUB = 'npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j';
+
+/**
+ * SHA-256 fingerprint of the Android release signing certificate
+ * (`android/app/2140wtf.keystore`). Published so anyone sideloading the APK
+ * can verify authenticity: `apksigner verify --print-certs app.apk` must
+ * match. Every update is signed with this same key — a mismatch means the
+ * APK did not come from us. Never changes; if the key is ever rotated the
+ * old app can no longer be updated.
+ */
+const ANDROID_CERT_SHA256 = 'A1:42:32:26:8A:54:33:56:E2:23:A4:F9:AE:3B:17:1D:CE:35:1F:DD:3C:AC:FC:71:58:B7:0B:57:09:A3:28:68';
 
 const TWO140_PUBKEY = (() => {
   try {
@@ -248,7 +259,51 @@ export function LandingPage() {
             <Link to="/settings/network" className="hover:text-[var(--2140-fg)]">Relays</Link>
           </div>
         </div>
+        <AndroidCertBlock />
       </footer>
+    </div>
+  );
+}
+
+/**
+ * Published Android signing-certificate fingerprint — the authenticity anchor
+ * for sideloaded APKs (same practice as Signal/F-Droid download pages).
+ * Click to copy; compare against `apksigner verify --print-certs` output.
+ */
+function AndroidCertBlock() {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(ANDROID_CERT_SHA256);
+    setCopied(true);
+    toast({ title: 'Certificate fingerprint copied' });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mx-auto mt-8 max-w-[1100px] border-t border-[var(--2140-border)] pt-6">
+      <p className="mb-2 font-[family-name:var(--font-mono)] text-[0.7rem] uppercase tracking-[0.08em]">
+        Android app — signing certificate (SHA-256)
+      </p>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="group block w-full break-all text-left font-[family-name:var(--font-mono)] text-xs text-[var(--2140-fg)]/80 transition-colors hover:text-[var(--2140-fg)]"
+        title="Click to copy"
+      >
+        <span className="break-all">{ANDROID_CERT_SHA256}</span>
+        {copied ? (
+          <Check className="ml-1.5 inline-block size-3.5 text-green-500" />
+        ) : (
+          <Copy className="ml-1.5 inline-block size-3.5 opacity-40 transition-opacity group-hover:opacity-80" />
+        )}
+      </button>
+      <p className="mt-2 text-xs leading-relaxed">
+        Every 2140.wtf Android release is signed with this key. Verify a sideloaded APK with{' '}
+        <code className="font-[family-name:var(--font-mono)]">apksigner verify --print-certs app.apk</code>{' '}
+        — if the fingerprint doesn't match, the app didn't come from us.
+      </p>
     </div>
   );
 }
