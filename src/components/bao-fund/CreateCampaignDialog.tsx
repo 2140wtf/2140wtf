@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
   BAO_RAIL_LABELS,
   isBaoRailLive,
   createFundraiserRelayFirst,
+  fetchFundraiserQuota,
   type BaoFundraiserFormat,
   type BaoRail,
   type CreateFundraiserInput,
@@ -101,6 +102,18 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const [format, setFormat] = useState<BaoFundraiserFormat>('milestones');
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([emptyMilestone()]);
   const [streamDays, setStreamDays] = useState('30');
+
+  // Anti-spam quota pre-check (2/hour, 5/day per key): ask the API before the
+  // user publishes a create intent the bridge would silently drop. null =
+  // endpoint not deployed yet → proceed (the server still enforces).
+  const { data: quota } = useQuery({
+    queryKey: ['bao-fundraiser-quota', user?.pubkey],
+    queryFn: () => fetchFundraiserQuota(user!.pubkey),
+    enabled: open && !!user,
+    staleTime: 30_000,
+  });
+  const quotaBlocked = quota?.allowed === false;
+  const quotaRetryMin = quota ? Math.max(1, Math.ceil(quota.retry_after_sec / 60)) : 0;
 
   // Deep-link prefill: the dialog stays mounted, so initialTitle must be
   // re-applied whenever it changes (the useState initializer only runs at
@@ -453,7 +466,18 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             </div>
           )}
 
-          {missing.length > 0 && (title.trim().length > 0 || description.trim().length > 0) && (
+          {quotaBlocked && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-0.5">
+              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Anti-spam limit reached</p>
+              <p className="text-[11px] text-amber-950 dark:text-amber-200">
+                Campaign creation is limited to {quota?.limit_hour}/hour and {quota?.limit_day}/day per key
+                {quota ? ` (you: ${quota.used_hour} this hour, ${quota.used_day} today)` : ''}.
+                Try again in ~{quotaRetryMin} minute{quotaRetryMin === 1 ? '' : 's'} — nothing was published.
+              </p>
+            </div>
+          )}
+
+          {missing.length > 0 && !quotaBlocked && (title.trim().length > 0 || description.trim().length > 0) && (
             <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-1">
               <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Before you can create:</p>
               <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-950 dark:text-amber-200">
@@ -463,7 +487,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             </div>
           )}
 
-          <Button className="w-full" disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
+          <Button className="w-full" disabled={!valid || quotaBlocked || mutation.isPending} onClick={() => mutation.mutate()}>
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Create raise — ${formatSats(goal)} sats goal`}
           </Button>
 
