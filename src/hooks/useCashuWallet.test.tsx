@@ -10,7 +10,7 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
-import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery } from '@/lib/cashu/storage';
+import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint } from '@/lib/cashu/storage';
 import { createNip60Signer, buildTokenEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -71,6 +71,7 @@ const mocks = vi.hoisted(() => ({
     }),
     keysets: [{ active: true, id: 'ks' }],
     keys: new Map(),
+    restore: vi.fn().mockResolvedValue({ proofs: [] }),
   }),
 }));
 
@@ -844,6 +845,47 @@ describe('useCashuWallet hunt regressions: dedicated melt-input recovery slot', 
     // …and the melt-input journal is cleared.
     expect(await loadMeltInputRecovery(mintUrl, encKey)).toBeNull();
   });
+
+  it('keeps mint-reported PENDING melt inputs journaled instead of merging them (strict-UNSPENT restore)', async () => {
+    // The restore must be strictly UNSPENT-only: proofs the mint reports
+    // PENDING are locked by an in-flight melt (quote expiry does not cancel a
+    // dispatched payment) and must stay journaled until the quote settles —
+    // merging them would poison later sends with melt-locked proofs.
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    vi.spyOn(wallet, 'meltProofs').mockResolvedValue({
+      quote: { quote: 'melt-quote-id', state: 'UNPAID' },
+      change: [{ id: 'ks', amount: 79, secret: 'change-secret-u', C: 'C-change-u' }],
+    } as never);
+    // The mint still reports the melt input PENDING even though the quote we
+    // just created came back UNPAID (a prior attempt locked the proof).
+    const encoder = new TextEncoder();
+    vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((p) => ({
+        Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+        state: 'PENDING',
+      })) as never,
+    );
+
+    const payResult = await act(async () => result.current.payInvoice('lnbc210n1pw'));
+    expect(payResult.success).toBe(false);
+
+    // The PENDING-locked input does NOT return to the spendable store…
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b']);
+    // …and stays journaled so the poll/reconcile can still resolve it.
+    const journal = await loadMeltInputRecovery(mintUrl, encKey);
+    expect(journal).not.toBeNull();
+    expect(journal!.proofs).toEqual([expect.objectContaining({ secret: 'secret-c', amount: 100 })]);
+  });
 });
 
 describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
@@ -1145,4 +1187,532 @@ describe('useCashuWallet hunt regressions: foreign-locked proof filter in send-r
     // Journal cleared after the spendable subset was restored.
     expect(await loadSendRecovery(mintUrl, encKey)).toBeNull();
   });
+
+  it('does NOT merge object-form NUT-11 locked proofs (data field) into the store', async () => {
+    // Real NUT-11 secrets use the object form: ["P2PK", { nonce, data, tags }].
+    // The old parser read parsed[1] as a bare string, got null, and treated
+    // the proof as bearer — merging someone else's locked money into the store.
+    const objectLockedProof = {
+      id: 'ks',
+      amount: 50,
+      secret: JSON.stringify(['P2PK', { nonce: 'abcd', data: foreignPubkey, tags: [] }]),
+      C: 'C-foreign-obj',
+    };
+    // Positive control: the bearer proof landing in the store proves the
+    // startup reconcile ran to completion — the locked proof's absence is
+    // then a real assertion, not a vacuous pass on an untouched store.
+    const bearerProof = { id: 'ks', amount: 10, secret: 'bearer-secret-obj', C: 'C-bearer-obj' };
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await writeSendRecovery(mintUrl, [objectLockedProof, bearerProof], encKey);
+
+    const encoder = new TextEncoder();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.checkProofsStates = vi.fn().mockImplementation(async (proofs: Array<{ secret: string }>) =>
+        proofs.map((p) => ({
+          Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+          state: 'UNSPENT',
+        })),
+      );
+      return w;
+    });
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await waitFor(async () => {
+      const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+      expect(stored.map((p) => p.secret)).toEqual(['bearer-secret-obj']);
+    });
+    // Only the bearer proof was merged; the object-form locked proof was not.
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ amount: number }>;
+    expect(stored.some((p) => p.amount === 50)).toBe(false);
+  });
+});
+
+// ── Deep-hunt regression tests (round 4-5 confirmed findings) ───────────────
+
+describe('useCashuWallet hunt regressions: pending-melt single-slot guard', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.meltCallCount = 0;
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' },
+        { id: 'ks', amount: 200, secret: 'secret-d', C: 'C-d' },
+      ],
+      encKey,
+    );
+    return { encKey };
+  }
+
+  it('refuses a second payment from the same mint while a previous melt is still resolving', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    // First melt stays PENDING — its input proofs sit in the single-slot
+    // melt-input journal, tied to a pending melt tx.
+    vi.spyOn(wallet, 'meltProofs').mockImplementation((async (_q: unknown, proofs: unknown[]) => {
+      mocks.meltCallCount++;
+      const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
+      return {
+        quote: { quote: 'melt-quote-id', state: 'PENDING' },
+        change: inputSum > 22 ? [{ id: 'ks', amount: inputSum - 22, secret: 'change-secret-p', C: 'C-change-p' }] : [],
+      };
+    }) as never);
+
+    const first = await act(async () => result.current.payInvoice('lnbc210n1pw'));
+    expect(first.success).toBe(true);
+    expect(first.pending).toBe(true);
+    expect(mocks.meltCallCount).toBe(1);
+
+    // A second melt from the same mint would OVERWRITE the first melt's input
+    // journal (single slot per mint), stranding those input proofs. It must be
+    // refused before wallet.meltProofs is ever called.
+    const second = await act(async () => result.current.payInvoice('lnbc420n1pw'));
+    expect(second.success).toBe(false);
+    expect(mocks.meltCallCount).toBe(1);
+    await waitFor(() => expect(result.current.error).toContain('still resolving'));
+  });
+
+  it('refuses a second BOLT12 payment from the same mint while a previous melt is still resolving', async () => {
+    // Same single-slot guard as the payInvoice twin — payBolt12 shares the
+    // per-mint melt-input journal, so the guard must fire there too.
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    vi.spyOn(wallet, 'createMeltQuoteBolt12').mockResolvedValue({
+      quote: 'bolt12-quote-id',
+      amount: 21,
+      fee_reserve: 1,
+      state: 'UNPAID',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    } as never);
+    vi.spyOn(wallet, 'meltProofsBolt12').mockImplementation((async (_q: unknown, proofs: unknown[]) => {
+      mocks.meltCallCount++;
+      const inputSum = (proofs as Array<{ amount: number }>).reduce((sum, p) => sum + (p?.amount ?? 0), 0);
+      // Quote is 21 sats; actual fee 0 (within the 1-sat reserve).
+      const changeAmt = inputSum - 21;
+      return {
+        quote: { quote: 'bolt12-quote-id', state: 'PENDING' },
+        change: changeAmt > 0 ? [{ id: 'ks', amount: changeAmt, secret: 'change-secret-b12p', C: 'C-change-b12p' }] : [],
+      };
+    }) as never);
+    // Keep a stray poll (10s interval) from resolving the quote mid-test.
+    vi.spyOn(wallet, 'checkMeltQuoteBolt12').mockResolvedValue({ quote: 'bolt12-quote-id', state: 'PENDING' } as never);
+
+    const first = await act(async () => result.current.payBolt12('lno1qqqqqqqqqqqqqqqqqqqq', 21));
+    expect(first.success).toBe(true);
+    expect(first.pending).toBe(true);
+    expect(mocks.meltCallCount).toBe(1);
+
+    const second = await act(async () => result.current.payBolt12('lno1qqqqqqqqqqqqqqqqqqqq', 21));
+    expect(second.success).toBe(false);
+    expect(mocks.meltCallCount).toBe(1);
+    await waitFor(() => expect(result.current.error).toContain('still resolving'));
+  });
+});
+
+describe('useCashuWallet hunt regressions: mint quote recovery (deterministic outputs)', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.mintProofsCallCount = 0;
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupWallet(seedPhrase: string) {
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(mintUrl, [{ id: 'ks', amount: 100, secret: 'secret-a', C: 'C-a' }], encKey);
+    return { encKey };
+  }
+
+  function mockUnspentStates(wallet: CashuWallet) {
+    const encoder = new TextEncoder();
+    vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((p) => ({
+        Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+        state: 'UNSPENT',
+      })) as never,
+    );
+  }
+
+  it('mints with a deterministic counter, journals the pending mint, and advances the counter', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    mockUnspentStates(wallet);
+    const mintSpy = vi.spyOn(wallet, 'mintProofs');
+
+    await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
+    expect(result.current.error).toBe('');
+
+    // Deterministic counter outputs make a lost mint response recoverable via
+    // NUT-09 restore (random secrets never could be).
+    expect(mintSpy).toHaveBeenCalledWith(21, 'mint-quote-id', expect.objectContaining({ counter: 0 }));
+    // Counter advanced past the consumed outputs; pending-mint journal cleared.
+    expect(loadMintCounter(mintUrl)).toBe(1);
+    expect(await loadPendingMint(mintUrl, await deriveEncryptionKey(seedPhrase))).toBeNull();
+  });
+
+  it('recovers an ISSUED quote via NUT-09 restore instead of re-minting', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+    mockUnspentStates(wallet);
+    // The mint already issued this quote's outputs (our response was lost):
+    // re-minting would be rejected, so the wallet must recover via restore.
+    vi.spyOn(wallet, 'checkMintQuote').mockResolvedValue({ quote: 'mint-quote-id', state: 'ISSUED' } as never);
+    const mintSpy = vi.spyOn(wallet, 'mintProofs');
+    const restoreSpy = vi.spyOn(wallet, 'restore').mockResolvedValue({
+      proofs: [{ id: 'ks', amount: 21, secret: 'restored-secret-1', C: 'C-restored-1' }],
+    } as never);
+
+    await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
+    expect(result.current.error).toBe('');
+
+    expect(mintSpy).not.toHaveBeenCalled();
+    expect(restoreSpy).toHaveBeenCalledTimes(1);
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret).sort()).toEqual(['restored-secret-1', 'secret-a']);
+  });
+});
+
+describe('useCashuWallet hunt regressions: poll keeps PENDING melts past expiry', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('does NOT expire a melt tx whose quote is still PENDING at the mint', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 10, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' },
+      ],
+      encKey,
+    );
+    // Pending melt tx already past its wall-clock expiry + the input journal.
+    // Quote expiry does not cancel a dispatched payment — a PENDING quote can
+    // still settle, so the poll must not treat expiry as final.
+    await addTransaction(
+      {
+        type: 'melt',
+        amount: 21,
+        memo: 'Lightning payment (pending)',
+        mintUrl,
+        status: 'pending',
+        quoteId: 'melt-quote-id',
+        expiresAt: Date.now() - 60_000,
+      },
+      encKey,
+    );
+    await writeMeltInputRecovery(mintUrl, [{ id: 'ks', amount: 100, secret: 'secret-c', C: 'C-c' }], encKey);
+
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    });
+    try {
+      const { result } = renderHook(
+        () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.wallet).not.toBeNull());
+      const wallet = result.current.wallet;
+      if (!wallet) throw new Error('Wallet not initialized');
+
+      vi.spyOn(wallet, 'checkMeltQuote').mockResolvedValue({
+        quote: 'melt-quote-id',
+        state: 'PENDING',
+        expiry: Math.floor(Date.now() / 1000) - 60,
+      } as never);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+
+      // Previously the poll marked the tx 'expired' and restored the inputs —
+      // if the payment then settled, those inputs were spent at the mint and
+      // the wallet would try to double-spend them.
+      const txs = await loadTransactions(encKey);
+      expect(txs.find((t) => t.quoteId === 'melt-quote-id')?.status).toBe('pending');
+      const journal = await loadMeltInputRecovery(mintUrl, encKey);
+      expect(journal).not.toBeNull();
+      expect(journal!.proofs).toEqual([expect.objectContaining({ secret: 'secret-c' })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 15000);
+});
+
+describe('useCashuWallet hunt regressions: removeCustomMint pending-receive cleanup', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('clears pending-receive entries that reference the removed mint', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const emptyMint = 'https://empty.example.com';
+    // A pending-receive retry entry for the soon-to-be-removed mint: without
+    // cleanup the background reconciler would resurrect an orphaned store for
+    // a mint the user already dropped.
+    await writePendingReceive('cashuAtest-token', 'pendinghash1', [emptyMint], 10, encKey);
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    // Let the mount reconciler run finish (it increments attempts once) so it
+    // cannot resurrect the entry after the removal clears it.
+    await waitFor(async () => {
+      expect((await loadPendingReceive('pendinghash1', encKey))?.attempts).toBe(1);
+    });
+
+    act(() => { result.current.addCustomMint('Empty', emptyMint); });
+    await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(true));
+    // The add triggers a second reconciler run — wait for its increment too.
+    await waitFor(async () => {
+      expect((await loadPendingReceive('pendinghash1', encKey))?.attempts).toBe(2);
+    });
+    // Settle any trailing receive attempt before removing.
+    await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+
+    act(() => { result.current.removeCustomMint(emptyMint); });
+    await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(false));
+
+    expect(await loadPendingReceive('pendinghash1', encKey)).toBeNull();
+    // A reconciler run triggered by the removal itself re-reads storage and
+    // must NOT re-create the entry.
+    await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+    expect(await loadPendingReceive('pendinghash1', encKey)).toBeNull();
+  });
+});
+
+describe('useCashuWallet hunt regressions: foreign-mint receive after swap', () => {
+  const mintUrl = 'https://mint.example.com';
+  const foreignMint = 'https://foreign.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('completes a receive from a mint outside the configured list', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    // The token's mint is foreign, so the receive uses a freshly created
+    // wallet instance (not result.current.wallet) — mock the constructor so
+    // every instance returns committed post-swap outputs + UNSPENT states.
+    const encoder = new TextEncoder();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.receive = vi.fn().mockResolvedValue([
+        { id: 'ks', amount: 10, secret: 'foreign-recv-1', C: 'C-f1' },
+      ]);
+      w.getFeesForProofs = vi.fn().mockReturnValue(0);
+      w.checkProofsStates = vi.fn().mockImplementation(async (proofs: Array<{ secret: string }>) =>
+        proofs.map((p) => ({
+          Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+          state: 'UNSPENT',
+        })),
+      );
+      return w;
+    });
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const token = getEncodedToken({
+      mint: foreignMint,
+      proofs: [{ id: 'ks', amount: 10, secret: 'foreign-input-1', C: 'C-fin' }],
+      unit: 'sat',
+    });
+    // Previously the post-swap state check re-derived the wallet WITHOUT the
+    // foreign allowance and threw 'Mint URL is not allowed' AFTER the mint had
+    // already spent the token's inputs — every receive from a foreign mint
+    // failed post-swap.
+    const received = await act(async () => result.current.receiveToken(token));
+    expect(received).toBe(10);
+    expect(result.current.error).toBe('');
+
+    const stored = (await getProofsForMint(foreignMint, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret)).toEqual(['foreign-recv-1']);
+  });
+});
+
+describe('useCashuWallet hunt regressions: timeout recovery deferred until the request settles', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('keeps the crash journal while a timed-out send is still in flight, reconciles after it settles', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    });
+    try {
+      const { result } = renderHook(
+        () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+        { wrapper },
+      );
+      await waitFor(() => expect(result.current.wallet).not.toBeNull());
+      const wallet = result.current.wallet;
+      if (!wallet) throw new Error('Wallet not initialized');
+
+      // The mint response is manually released — it arrives AFTER the 60s send
+      // timeout but can still commit at the mint, so reconciling the crash
+      // journal before it arrives is not authoritative.
+      let releaseSend: (() => void) | null = null;
+      vi.spyOn(wallet, 'send').mockImplementation((() => new Promise((resolve) => {
+        releaseSend = () => resolve({
+          send: [{ id: 'ks', amount: 21, secret: 'send-secret-late', C: 'C-send-late' }],
+          keep: [{ id: 'ks', amount: 79, secret: 'keep-secret-late', C: 'C-keep-late' }],
+        });
+      })) as never);
+      const encoder = new TextEncoder();
+      vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) =>
+        (proofs as Array<{ secret: string }>).map((p) => ({
+          Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+          state: 'UNSPENT',
+        })) as never,
+      );
+
+      // Under fake timers each storage/IDB/webcrypto hop needs both a timer
+      // advance and a real event-loop turn — pump both until the condition
+      // holds (bounded so a regression fails instead of hanging).
+      const pump = async (cond: () => Promise<boolean>, maxSeconds = 130) => {
+        for (let i = 0; i < maxSeconds; i++) {
+          await vi.advanceTimersByTimeAsync(1000);
+          await new Promise((r) => setImmediate(r));
+          if (await cond()) return true;
+        }
+        return false;
+      };
+
+      // Let startup effects (reconcile etc.) finish before the send competes
+      // for the ops mutex — under fake timers they need real event-loop turns.
+      await act(async () => {
+        for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+      });
+
+      let sendResult: string | null | undefined;
+      const sendPromise = result.current.sendToken(21);
+      void sendPromise.then((v) => { sendResult = v; });
+
+      // The send reaches the mint and the crash journal is written.
+      await act(async () => {
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) !== null, 90);
+      });
+      expect(await loadProofRecovery(mintUrl, encKey)).not.toBeNull();
+      expect(releaseSend).not.toBeNull();
+
+      // Past the 60s timeout the op rejects…
+      await act(async () => {
+        await pump(async () => sendResult !== undefined, 100);
+      });
+      expect(sendResult).toBeNull();
+
+      // …but the send is STILL in flight at the mint, so the recovery journal
+      // must survive — firing the reconcile now could clear it while the mint
+      // is still processing the swap.
+      expect(await loadProofRecovery(mintUrl, encKey)).not.toBeNull();
+
+      // The late response settles; only then may the deferred reconcile run
+      // (UNSPENT per the mock → inputs merged back, journal cleared).
+      releaseSend!();
+      await act(async () => {
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) === null, 60);
+      });
+      expect(await loadProofRecovery(mintUrl, encKey)).toBeNull();
+      const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+      expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 20000);
 });

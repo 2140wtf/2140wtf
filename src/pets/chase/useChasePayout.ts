@@ -82,12 +82,18 @@ export function useChasePayout(
           throw new Error('BAO faucet request failed.');
         }
 
-        if (isBaoFaucetDailyExhausted(result)) {
-          throw new Error(result.message ?? 'BAO 24h limit reached. Try again later.');
-        }
-
+        // A claim that exactly exhausts the 24h budget returns a valid token
+        // AND remaining24h: 0 — the token must still be redeemed. Only treat
+        // "exhausted" as an error when the faucet issued NO token; throwing
+        // here with a token in hand would discard a claim the faucet already
+        // debited, and it can never be re-claimed.
         if (!result.token) {
-          throw new Error(result.message ?? 'BAO faucet did not return a token.');
+          throw new Error(
+            result.message ??
+              (isBaoFaucetDailyExhausted(result)
+                ? 'BAO 24h limit reached. Try again later.'
+                : 'BAO faucet did not return a token.'),
+          );
         }
 
         // The faucet has already counted this claim against the daily limit.
@@ -111,7 +117,10 @@ export function useChasePayout(
         if (depositedSats <= 0) {
           throw new Error('BAO faucet returned an empty token.');
         }
-        const claimedSats = clampBaoFaucetAmount(depositedSats, result.remaining24h);
+        // Clamp only to the per-claim ceiling: remaining24h is the allowance
+        // AFTER this claim, so it is 0 exactly when the claim exhausted the
+        // budget — clamping by it would zero out sats that actually arrived.
+        const claimedSats = clampBaoFaucetAmount(depositedSats);
 
         // Record the real-sats claim on the profile, but do not touch the demo
         // `sats` tag. This keeps the two economies separate.
