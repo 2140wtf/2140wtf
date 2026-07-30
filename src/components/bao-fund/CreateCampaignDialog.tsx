@@ -198,6 +198,34 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
       m.criteria.trim().length >= CRITERIA_MIN &&
       (parseInt(m.amount, 10) || 0) > 0));
 
+  /**
+   * Human-readable list of everything still blocking creation. The Create
+   * button is disabled until this is empty — without showing the reasons the
+   * disabled state reads as "blocked from posting" with no way to know why.
+   */
+  const missing = useMemo(() => {
+    const out: string[] = [];
+    if (!title.trim()) out.push('Add a project title');
+    if (!isValidRepoUrl(repoUrl.trim())) out.push('Add the repository URL (https://…)');
+    if (description.trim().length < PROJECT_DESCRIPTION_MIN) {
+      out.push(`Description needs ${PROJECT_DESCRIPTION_MIN}+ characters (now ${description.trim().length})`);
+    }
+    if (goal < 1000) out.push('Goal must be at least 1,000 sats');
+    if (format !== 'stream') {
+      milestones.forEach((m, i) => {
+        if (!m.title.trim()) out.push(`Milestone ${i + 1}: add a title`);
+        if (m.description.trim().length < MILESTONE_DESCRIPTION_MIN) {
+          out.push(`Milestone ${i + 1}: description needs ${MILESTONE_DESCRIPTION_MIN}+ characters`);
+        }
+        if (m.criteria.trim().length < CRITERIA_MIN) {
+          out.push(`Milestone ${i + 1}: delivery criteria need ${CRITERIA_MIN}+ characters`);
+        }
+        if ((parseInt(m.amount, 10) || 0) <= 0) out.push(`Milestone ${i + 1}: add an amount`);
+      });
+    }
+    return out;
+  }, [title, repoUrl, description, goal, format, milestones]);
+
   const patchMilestone = (i: number, patch: Partial<MilestoneDraft>) =>
     setMilestones((ms) => ms.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
@@ -291,7 +319,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Creating a campaign is free — no sats needed. Only the rails with live settlement are selectable for now.
+                Only the rails with live settlement are selectable for now.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -389,6 +417,11 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                     placeholder="Delivery criteria — becomes the market question"
                     className="text-xs"
                   />
+                  {m.criteria.trim().length > 0 && m.criteria.trim().length < CRITERIA_MIN && (
+                    <p className="text-[11px] text-amber-500">
+                      {CRITERIA_MIN - m.criteria.trim().length} more characters needed — the criteria becomes the public market question.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <Input
                       value={m.deadlineDays}
@@ -417,9 +450,29 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             </div>
           )}
 
+          {missing.length > 0 && (title.trim().length > 0 || description.trim().length > 0) && (
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-1">
+              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Before you can create:</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-950 dark:text-amber-200">
+                {missing.slice(0, 5).map((item) => <li key={item}>{item}</li>)}
+                {missing.length > 5 && <li>…and {missing.length - 5} more</li>}
+              </ul>
+            </div>
+          )}
+
           <Button className="w-full" disabled={!valid || mutation.isPending} onClick={() => mutation.mutate()}>
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Create raise — ${formatSats(goal)} sats goal`}
           </Button>
+
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">Free to create — no balance, no fee.</span>{' '}
+            Spam control is a per-key rate limit (2 campaigns/hour, 5/day), not sats.
+            The campaign publishes straight to the ₿AO relay, where bao.markets picks it up
+            (usually under 30 seconds — if the bridge is offline it goes directly to the API instead).
+            {format === 'stream'
+              ? ' A single-shot campaign has no markets; funds vest linearly over the window.'
+              : ' Every milestone spawns a YES/NO prediction market on bao.markets with demo liquidity seeded by the fund.'}
+          </p>
         </div>
       </DialogContent>
     </Dialog>
