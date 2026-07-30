@@ -9,6 +9,7 @@ import {
   fetchBarkdAuthStatus,
   fetchBarkdConfig,
   getBarkdApis,
+  INVALID_PASSWORD_MESSAGE,
   loginBarkd,
   logoutBarkd,
   normalizeBarkdUrl,
@@ -53,17 +54,18 @@ export function useBarkdConnection() {
       // Probe the API and log in if the server requires it.
       const config = await fetchBarkdConfig(baseUrl);
       const auth = await fetchBarkdAuthStatus(baseUrl);
-      let loggedIn = false;
       if (auth.authRequired && !auth.authed) {
         if (!pw) throw new Error('This server requires its UI password.');
         await loginBarkd(baseUrl, pw);
-        loggedIn = true;
       }
 
       // Verify the session actually works against barkd before persisting.
       await withFriendlyBarkdErrors(getBarkdApis(baseUrl).wallet.balance());
 
-      return { baseUrl, config, password: loggedIn ? pw : null };
+      // Save the password whenever the server has UI auth on — even if this
+      // handshake didn't need it (still-valid cookie) — because the user
+      // typed it intending it to be remembered. Never store one otherwise.
+      return { baseUrl, config, password: auth.authRequired ? pw || null : null };
     },
     onSuccess: ({ baseUrl, config, password: pw }) => {
       failedLogins.current.delete(baseUrl);
@@ -73,11 +75,14 @@ export function useBarkdConnection() {
       // Seed the session query so the UI flips to connected immediately
       // instead of re-probing (and flashing a skeleton) first.
       queryClient.setQueryData(['barkd', 'session', baseUrl], config);
-      // Drop the mutation (and the plaintext password in its variables) from
-      // the cache — the password now lives in encrypted storage only.
+      // Return the mutation to idle so the plaintext password in its variables
+      // stops being referenced by live observers (the cache entry itself is
+      // GC'd a few minutes later; the password now lives in encrypted storage).
       connect.reset();
     },
   });
+
+  const { reset: resetConnect } = connect;
 
   const disconnect = useCallback(async () => {
     if (serverUrl) {
@@ -88,8 +93,8 @@ export function useBarkdConnection() {
     setPassword(null);
     setServerConfig(null);
     queryClient.removeQueries({ queryKey: ['barkd'] });
-    connect.reset();
-  }, [serverUrl, setServerUrl, setPassword, queryClient, connect]);
+    resetConnect();
+  }, [serverUrl, setServerUrl, setPassword, queryClient, resetConnect]);
 
   // Live session check while a server is configured — if the cookie expired
   // or the server went away, the tab falls back to the connect form. Gated on
@@ -107,7 +112,11 @@ export function useBarkdConnection() {
         try {
           await loginBarkd(serverUrl, password);
         } catch (error) {
-          failedLogins.current.add(serverUrl);
+          // Only a real auth rejection disables auto-relogin — transient
+          // network failures must not poison the flag.
+          if (error instanceof Error && error.message === INVALID_PASSWORD_MESSAGE) {
+            failedLogins.current.add(serverUrl);
+          }
           throw error;
         }
       }
