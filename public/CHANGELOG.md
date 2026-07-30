@@ -36,6 +36,8 @@
 - ₿AO wallet drawer explains that ₿AO demo sats held in other wallets (e.g. bao.markets) can be deposited into the ₿AO testnet coins rail by receiving the Cashu token
 
 ### Changed
+- Wallet page is real-wallets-only again — the bao.markets signet balances are unwired from it (₿AO signet lives in Pets and ₿AO Fund, where it belongs); Spark/Ark return to "coming soon" until real wallets land
+
 - ₿AO Fund campaign filter now offers every category from the shared list (22 — Infra, Tools, ₿AOs, Nostr, Payments, Wallets, Agents, Compute, Lightning, Ecash, Mining, Privacy, Security, Identity, Social, Media, Games, Pets, Markets, Data & Oracles, Education, Other) instead of just 3
 - Compute-credits agent gate is now a hard stop for humans — the one-click "run the check" pass is gone (agents clear the proof-of-work via tooling; only the 2140 operator npub sees a dev bypass)
 
@@ -47,6 +49,8 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Yellow-on-yellow warning boxes are gone app-wide — every amber-tinted box with amber text (trade module demo notice, ₿AO Fund warnings, zap alerts, member/battle badges, poll/map/pets chips) now uses near-black text on light theme (light theme = dark font, per the new MEMORY.md design rule)
+
 - Adopting a third (or later) pet silently died at "Hatch this egg": the hatching ceremony runs in a portal outside the adoption dialog, and Radix treated real clicks on it as outside-interactions — dismissing the dialog, unmounting the ceremony mid-publish, and aborting the egg event before it ever reached a relay. The adoption dialogs now refuse outside/ESC dismissal while the ceremony owns the screen
 - Hatching-ceremony clicks dead outside the egg: the modal dialog's scroll lock sets `pointer-events:none` on `<body>`, and the ceremony portal (mounted outside the dialog) inherited it — the birth-dialog tap-to-continue and the naming input never received clicks (clicks fell through to the dialog overlay and killed the flow). The portal now re-enables pointer events for the whole ceremony surface
 - ₿AO Markets data is now honest end-to-end: charts render only real API candle/volume data (no fabricated sparklines, zero-volume markets show 'No trade history yet'), and SMJ parimutuel markets show live pool odds from /smj/:id instead of the stale 50/50 default — relay defs stay anonymous definitions, the API is the source of truth for odds and history

@@ -346,7 +346,7 @@ function MemberRow({
       {isOwner ? (
         <span
           title="Owner"
-          className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-500"
+          className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-950 dark:text-amber-200"
         >
           <Crown className="size-3" aria-hidden />
           Owner

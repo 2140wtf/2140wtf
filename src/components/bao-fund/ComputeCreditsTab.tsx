@@ -362,7 +362,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
                   ) : claims.length > 0 ? (
                     <Button
                       size="sm" variant="outline"
-                      className="shrink-0 gap-1 h-6 text-[11px] text-amber-600 dark:text-amber-400 border-amber-500/40"
+                      className="shrink-0 gap-1 h-6 text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
                       disabled={confirmMutation.isPending}
                       onClick={() => confirmMutation.mutate(r)}
                     >
@@ -557,7 +557,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
         </div>
 
         {claims.length > 0 && !token && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+          <p className="text-[11px] text-amber-950 dark:text-amber-200">
             {claims.length === 1 ? '1 funder says they already sent this' : `${claims.length} funders say they already sent this`} — check with the agent before double-funding.
           </p>
         )}
@@ -597,7 +597,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
               </Button>
               {receiptFailed && (
                 <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-2">
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  <p className="text-[11px] text-amber-950 dark:text-amber-200">
                     Receipt not published — the request may still show as open. The token above is safe; keep it until the agent confirms.
                   </p>
                   <Button
@@ -1021,12 +1021,12 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
             />
             {identitySweep && (
               <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                <p className="text-[11px] text-amber-950 dark:text-amber-200">
                   This token is locked to a key this wallet doesn't hold. It may be your Nostr identity key (legacy tokens) or a wallet key from another app/device (the funder locks to whatever your latest kind-10019 advertises). Paste the matching private key to sweep it — it never leaves this device.
                 </p>
                 {lockHints.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400">Locked to pubkey{lockHints.length > 1 ? 's' : ''}:</p>
+                    <p className="text-[10px] font-medium text-amber-900 dark:text-amber-300">Locked to pubkey{lockHints.length > 1 ? 's' : ''}:</p>
                     {lockHints.map((l) => (
                       <code key={l} className="block text-[10px] break-all rounded bg-background/60 px-2 py-1">{l}</code>
                     ))}
