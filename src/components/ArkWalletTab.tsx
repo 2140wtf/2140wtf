@@ -42,6 +42,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useToast } from '@/hooks/useToast';
 import { openUrl } from '@/lib/downloadFile';
 import { writeClipboardText } from '@/lib/clipboard';
+import { parseBolt11Amount } from '@/lib/bolt11';
 
 function formatSats(n: number): string {
   return n.toLocaleString();
@@ -590,11 +591,26 @@ function SendPanel({
 }: SendPanelProps) {
   const amountSat = parseSatsInput(sendAmount);
   const amountInvalid = !!sendAmount.trim() && amountSat === undefined;
-  const needsAmount = destinationNeedsAmount(destination);
+
+  // BOLT11 invoices: decode the requested amount so the user always sees a
+  // number before sending. Amountless invoices need a typed amount.
+  const strippedDestination = stripLightningPrefix(destination);
+  const isBolt11 = /^(lnbc|lntb|lnbcrt)/.test(strippedDestination.toLowerCase());
+  const invoiceAmountSat = isBolt11 ? parseBolt11Amount(strippedDestination) : null;
+
+  const needsAmount = destinationNeedsAmount(destination) || (isBolt11 && invoiceAmountSat === null);
   const missingAmount = needsAmount && amountSat === undefined;
 
+  // The effective amount the payment will settle for — the invoice's own
+  // amount when it carries one, otherwise the typed amount. (Nano/pico-BTC
+  // invoices can decode to fractional sats — round for the fee estimate.)
+  const effectiveAmountSat =
+    invoiceAmountSat !== null && invoiceAmountSat !== undefined
+      ? Math.round(invoiceAmountSat)
+      : amountSat;
+
   // Debounce so typing an amount doesn't fire one fee request per keystroke.
-  const debouncedAmountSat = useDebounce(amountSat, 400);
+  const debouncedAmountSat = useDebounce(effectiveAmountSat, 400);
   const fee = useBarkdLightningSendFee(
     serverUrl,
     isLightningDestination(destination) ? debouncedAmountSat : undefined,
@@ -636,15 +652,25 @@ function SendPanel({
           onChange={(e) => editAmount(e.target.value)}
         />
         <SatsPresetPills value={sendAmount} onSelect={(s) => editAmount(String(s))} />
+        {isBolt11 && invoiceAmountSat !== null && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            This invoice requests {formatSats(effectiveAmountSat ?? 0)} sats.
+          </p>
+        )}
+        {isBolt11 && invoiceAmountSat === null && amountSat === undefined && (
+          <p className="text-xs text-muted-foreground">
+            This invoice has no amount — enter one below.
+          </p>
+        )}
         {amountInvalid && (
           <p className="text-xs text-destructive">Enter a whole number of sats.</p>
         )}
-        {!amountInvalid && missingAmount && destination.trim() && (
+        {!amountInvalid && missingAmount && destination.trim() && !isBolt11 && (
           <p className="text-xs text-muted-foreground">
             This destination type needs an amount.
           </p>
         )}
-        {fee.data && debouncedAmountSat === amountSat && amountSat !== undefined && (
+        {fee.data && debouncedAmountSat === effectiveAmountSat && effectiveAmountSat !== undefined && (
           <p className="text-xs text-muted-foreground tabular-nums">
             Fee estimate: {formatSats(fee.data.feeSat)} sats — total spend ≈{' '}
             {formatSats(fee.data.grossAmountSat)} sats.
@@ -662,7 +688,7 @@ function SendPanel({
         disabled={!destination.trim() || missingAmount || amountInvalid || send.isPending}
         onClick={() =>
           send.mutate(
-            { destination: stripLightningPrefix(destination), amountSat },
+            { destination: strippedDestination, amountSat },
             {
               onSuccess: () => {
                 setDestination('');
