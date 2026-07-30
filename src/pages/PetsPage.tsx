@@ -241,6 +241,11 @@ function LoggedOutState() {
         <p className="text-muted-foreground">
           Log in with your Nostr account to care for your virtual pet companion.
         </p>
+        <p className="text-muted-foreground text-sm">
+          Your AI agent can have a body, too — combine your agent and pet into
+          one, and your pet becomes how your agent shows up in the world. Ask
+          your AI agent what body it would like — we've got plenty of choice.
+        </p>
         <LoginArea className="mt-2" />
       </div>
     </main>
