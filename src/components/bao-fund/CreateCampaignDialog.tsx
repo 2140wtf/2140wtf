@@ -214,11 +214,11 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
         {/* Unmissable demo warning: the sats are real Cashu tokens, but they
             are signet demo sats — nothing here settles real bitcoin. */}
         <div className="rounded-lg border-2 border-amber-500/60 bg-amber-500/10 px-4 py-3 space-y-1.5">
-          <p className="flex items-center gap-2 text-sm font-bold text-amber-600 dark:text-amber-400">
+          <p className="flex items-center gap-2 text-sm font-bold text-amber-800 dark:text-amber-400">
             <AlertTriangle className="size-4 shrink-0" />
             DEMO — no real bitcoin moves
           </p>
-          <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-300/90">
+          <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-300/90">
             The tokens are real Cashu, but only <span className="font-semibold">signet demo sats</span> — contributions are recorded, never settled.
             Donors must not send real payments. Resolution is crowd-voted and gameable, so treat every outcome as a drill.
           </p>

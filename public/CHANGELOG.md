@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- ₿AO wallet shows every custodial rail — the rail grid gains the missing L1 tile (all 7 bao.markets rails now render), the total gets a per-rail breakdown line underneath, and when a device has no Cashu but the account holds sats on other rails a hint points at swapping to Cashu on bao.markets (the rail pets and battles spend from)
 - Lightning wallet tab on the Wallet page — the connected NWC wallet (Rizful, Alby, Coinos) shows its live balance Amethyst-style, refreshed every 60s, with a connect prompt when no wallet is linked
 - Create prediction markets nostr-natively — the markets page gets a Create market dialog that publishes kind-38000 definitions straight to the ₿AO relay (category default `bao-fund`), so markets appear for every relay-first client without a bao.markets API session
 - Market cards match the bao.markets look — amber category tag, serif title, description, YES/NO split probability bar, Details / Buy Yes / Buy No action row (Buy buttons open the trade dialog with that side preselected), duration + end-date meta
@@ -45,6 +46,8 @@
 - Pets balances collapse to two rails: "Starter currency (fiat)" — one fiat rail in two pots (pet-bound balance spends first, down to a small reserve, then account coins) — and "₿AO testnet coins" (signet); the separate "2140 fiat" / demo-points rows are gone
 
 ### Fixed
+- Adopting a third (or later) pet silently died at "Hatch this egg": the hatching ceremony runs in a portal outside the adoption dialog, and Radix treated real clicks on it as outside-interactions — dismissing the dialog, unmounting the ceremony mid-publish, and aborting the egg event before it ever reached a relay. The adoption dialogs now refuse outside/ESC dismissal while the ceremony owns the screen
+- Hatching-ceremony clicks dead outside the egg: the modal dialog's scroll lock sets `pointer-events:none` on `<body>`, and the ceremony portal (mounted outside the dialog) inherited it — the birth-dialog tap-to-continue and the naming input never received clicks (clicks fell through to the dialog overlay and killed the flow). The portal now re-enables pointer events for the whole ceremony surface
 - ₿AO Markets data is now honest end-to-end: charts render only real API candle/volume data (no fabricated sparklines, zero-volume markets show 'No trade history yet'), and SMJ parimutuel markets show live pool odds from /smj/:id instead of the stale 50/50 default — relay defs stay anonymous definitions, the API is the source of truth for odds and history
 
 - Notification unread counter no longer resurrects on every restart — the read cursor also persists locally per account (the synced write needs a NIP-44 signature that could silently fail), and all readers use max(synced, local)
