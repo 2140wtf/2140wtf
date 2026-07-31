@@ -11,7 +11,7 @@ const OPPONENT_NOSTR_PUBKEY = '77'.repeat(32);
 const OWN_ATTESTATION = {
   id: '11'.repeat(32),
   pubkey: 'dd'.repeat(32),
-  kind: 21124,
+  kind: 11124,
   created_at: 1_700_000_000,
   tags: [['e', 'battle-1'], ['t', 'battle-attestation']],
   content: 'enc-own',
@@ -20,7 +20,7 @@ const OWN_ATTESTATION = {
 const OPPONENT_ATTESTATION = {
   id: '22'.repeat(32),
   pubkey: OPPONENT_NOSTR_PUBKEY,
-  kind: 21124,
+  kind: 11124,
   created_at: 1_700_000_001,
   tags: [['e', 'battle-1'], ['t', 'battle-attestation']],
   content: 'enc-opponent',
@@ -33,7 +33,10 @@ const mocks = vi.hoisted(() => ({
   receiveLockedToken: vi.fn(),
   sendFinished: vi.fn(),
   sendAttestation: vi.fn(),
-  nostr: { query: vi.fn() },
+  nostr: {
+    query: vi.fn(),
+    relay: vi.fn(() => ({ query: vi.fn(async () => []), event: vi.fn(async () => ({})) })),
+  },
   startMatch: vi.fn(),
   resetMatch: vi.fn(),
   applyHostSnapshot: vi.fn(),

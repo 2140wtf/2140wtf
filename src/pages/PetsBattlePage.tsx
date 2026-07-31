@@ -45,7 +45,7 @@ import {
   PENDING_CLAIM_MAX_ATTEMPTS,
   type PendingEscrowClaim,
 } from '@/pets/battle/lib/cashuEscrow';
-import { BATTLE_ATTESTATION_TAG, BATTLE_SYNC_KIND } from '@/pets/battle/lib/battleMessages';
+import { BATTLE_ATTESTATION_KIND, BATTLE_ATTESTATION_RELAY, BATTLE_ATTESTATION_TAG } from '@/pets/battle/lib/battleMessages';
 import { getMultisigDepositLocktime } from '@/lib/cashu/escrowMultisig';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
 import type { BattleMatchOptions } from '@/pets/battle';
@@ -304,13 +304,21 @@ export default function PetsBattlePage() {
 
           let opponent = claim.opponentAttestation;
           if (!opponent && claim.opponentNostrPubkey) {
-            const events = await nostr.query([{
-              kinds: [BATTLE_SYNC_KIND],
+            // Query the pool AND the ₿AO rendezvous relay explicitly: the
+            // opponent pins their attestation there regardless of relay
+            // settings, so this is the guaranteed shared bulletin board.
+            const filter = {
+              kinds: [BATTLE_ATTESTATION_KIND],
               '#e': [claim.battleId],
               '#t': [BATTLE_ATTESTATION_TAG],
               authors: [claim.opponentNostrPubkey],
               limit: 10,
-            }]);
+            };
+            const [poolEvents, baoEvents] = await Promise.all([
+              nostr.query([filter]),
+              nostr.relay(BATTLE_ATTESTATION_RELAY).query([filter]).catch(() => []),
+            ]);
+            const events = [...poolEvents, ...baoEvents];
             const tried = new Set(claim.triedAttestationIds ?? []);
             const found = events.find((ev) => !tried.has(ev.id));
             if (found) {
