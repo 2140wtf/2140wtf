@@ -370,6 +370,15 @@ export async function publishAgentProfile(sk: Uint8Array, name: string, relays: 
 export const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 30 * 60 * 1000);
 
 /**
+ * Wait this long before DECLARING a claim held, then re-resolve. A claim that
+ * appears to win on a PARTIAL view — a rival's earlier-ms claim still in
+ * flight — flips to held=false on this confirmation pass instead of letting
+ * both racers believe they won (read-your-writes is not read-their-writes).
+ * BAO_CLAIM_SETTLE_MS overrides for live tests.
+ */
+export const CLAIM_SETTLE_MS = Number(process.env.BAO_CLAIM_SETTLE_MS ?? 1500);
+
+/**
  * Fail-closed (mosaico daemon-design: "an unavailable control channel fails
  * closed"). An empty claim history means one of two very different things —
  * "no claims yet" or "the relays are down and we can't see the claims". Only
@@ -440,13 +449,20 @@ export async function orchVerbPost(
     });
 
     // Re-resolve and report the outcome honestly.
-    const after = await orchStates(state, orchId);
-    const now = after.get(taskId);
-    if (!now) return { ...sent, held: null, epoch }; // our claim isn't visible yet
-    // We hold it only if the resolved winner is US at OUR epoch. Anything
-    // else — another claimant's tie-break win, or a same-author claim at a
-    // different epoch — is a loss the caller must NOT act on.
-    return { ...sent, held: now.claimant === myPubkey && now.epoch === epoch, epoch };
+    const holdsUs = (s: { claimant: string; epoch: number } | undefined) => !!s && s.claimant === myPubkey && s.epoch === epoch;
+    let now = (await orchStates(state, orchId)).get(taskId);
+    if (holdsUs(now) || !now) {
+      // Winning (or not yet visible) on the FIRST view proves nothing — a
+      // rival's claim may still be propagating. Settle, then confirm.
+      await new Promise((r) => setTimeout(r, CLAIM_SETTLE_MS));
+      now = (await orchStates(state, orchId)).get(taskId);
+    }
+    if (!now) return { ...sent, held: null, epoch }; // our claim never landed
+    // We hold it only if the CONFIRMED winner is US at OUR epoch. Anything
+    // else — a tie-break loss that flipped in during the settle window, or a
+    // same-author claim at a different epoch — is a loss the caller must NOT
+    // act on.
+    return { ...sent, held: holdsUs(now), epoch };
   }
 
   // PROGRESS/DONE/BLOCKED: executor-side fence — refuse when someone else
