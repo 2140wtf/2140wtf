@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { generateSecretKey, getPublicKey } from 'nostr-tools';
+import { NSecSigner } from '@nostrify/nostrify';
 
 import { GroupChatService } from './groupChatService';
 import { createWelcomeEvent, wrapWelcomeEvent } from './nip104Protocol';
@@ -9,11 +10,11 @@ const DEFAULT_RELAYS = ['wss://relay.test'];
 function createUser() {
   const sk = generateSecretKey();
   const pk = getPublicKey(sk).toLowerCase();
-  return { privkey: sk, pubkey: pk };
+  return { privkey: sk, pubkey: pk, signer: new NSecSigner(sk) };
 }
 
 function createService(user: ReturnType<typeof createUser>, relays: string[] = DEFAULT_RELAYS) {
-  return new GroupChatService(user.pubkey, user.privkey, relays);
+  return new GroupChatService(user.pubkey, user.signer, relays);
 }
 
 describe('GroupChatService adversarial simulator', () => {
@@ -214,7 +215,7 @@ describe('GroupChatService adversarial simulator', () => {
         relays: DEFAULT_RELAYS,
       }),
     });
-    const fakeWelcome = createWelcomeEvent(attacker.privkey, payload, 'placeholder', DEFAULT_RELAYS, 2);
+    const fakeWelcome = await createWelcomeEvent(attacker.pubkey, attacker.signer, payload, 'placeholder', DEFAULT_RELAYS, 2);
     const fakeWrap = await wrapWelcomeEvent(fakeWelcome, attacker.pubkey);
 
     const join = await memberService.joinFromWelcome(fakeWrap);
