@@ -489,7 +489,7 @@ async function orchShow(name: string, orchId: string, json: boolean): Promise<vo
   }
   console.log(`\norch "${orchId}" — ${states.size} task(s):`);
   for (const s of states.values()) {
-    const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
+    const status = s.done ? "DONE" : s.released ? "HANDED OFF (reclaimable)" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
     console.log(
       `  ${s.taskId}: ${status} — ${nip19.npubEncode(s.claimant).slice(0, 16)}… (epoch ${s.epoch}, claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`,
     );

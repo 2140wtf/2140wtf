@@ -208,10 +208,47 @@ describe("resolveClaims — fencing epochs (mosaico generation check)", () => {
   });
 });
 
+describe("resolveClaims — HANDOFF transfer", () => {
+  const TTL = 60_000;
+  const handoff = (id: string, author: string, ms: number, taskId = "t1"): ClaimInput => ({
+    id, author, ms, msg: parseTaskMessage(`HANDOFF ${taskId} @bob take it`, T)!,
+  });
+
+  it("the handoff receiver CAN claim a live claim the claimant handed off", () => {
+    const s = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), handoff("hh", "alice", 2000), claim("bb", "bob", 3000, "t1", "k", 2)],
+      { ttlMs: TTL, nowMs: 4000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("bob"); // alice's live claim must not block the transfer
+    expect(s.get("t1")!.epoch).toBe(2);
+  });
+
+  it("only the claimant's HANDOFF releases — a bystander's does not", () => {
+    const s = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), handoff("hh", "mallory", 2000), claim("bb", "bob", 3000, "t1", "k", 2)],
+      { ttlMs: TTL, nowMs: 4000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("alice"); // still hers; bob's claim lost
+  });
+
+  it("a released claim shows released, and a fresh claim resets it", () => {
+    const released = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), handoff("hh", "alice", 2000)],
+      { ttlMs: TTL, nowMs: 3000 },
+    );
+    expect(released.get("t1")!.released).toBe(true);
+    const reclaimed = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), handoff("hh", "alice", 2000), claim("bb", "bob", 3000, "t1", "k", 2)],
+      { ttlMs: TTL, nowMs: 4000 },
+    );
+    expect(reclaimed.get("t1")!.released).toBe(false);
+  });
+});
+
 describe("mayPostVerb — the executor-side fence", () => {
   const held = (claimant: string, over: Partial<ClaimState> = {}): ClaimState => ({
     taskId: "t1", claimant, claimId: "aa", claimMs: 1000, lastProgressMs: 1000,
-    epoch: 1, done: false, blocked: false, stale: false, ...over,
+    epoch: 1, done: false, blocked: false, released: false, stale: false, ...over,
   });
 
   it("CLAIM is always allowed to attempt (the fence arbitrates at resolve)", () => {
@@ -236,8 +273,10 @@ describe("mayPostVerb — the executor-side fence", () => {
     expect(mayPostVerb(undefined, "alice", "DONE")).toBe(true);
   });
 
-  it("HANDOFF/ACK carry no claim semantics", () => {
-    expect(mayPostVerb(held("bob"), "alice", "HANDOFF")).toBe(true);
+  it("HANDOFF is claimant-only (only the claimant can release); ACK is free", () => {
+    expect(mayPostVerb(held("alice"), "alice", "HANDOFF")).toBe(true);
+    expect(mayPostVerb(held("bob"), "alice", "HANDOFF")).toBe(false);
+    expect(mayPostVerb(undefined, "alice", "HANDOFF")).toBe(true); // noise, resolver ignores
     expect(mayPostVerb(held("bob"), "alice", "ACK")).toBe(true);
   });
 
