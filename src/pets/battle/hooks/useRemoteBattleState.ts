@@ -6,6 +6,8 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { generateUUID } from '@/lib/uuid';
 import { isNostrId } from '@/lib/nostrId';
 import {
+  BATTLE_ATTESTATION_KIND,
+  BATTLE_ATTESTATION_RELAY,
   BATTLE_ATTESTATION_TAG,
   BATTLE_INVITE_SUBJECT,
   BATTLE_SYNC_KIND,
@@ -818,8 +820,12 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         // Encrypted TO THE OPERATOR — the opponent never reads it; the p-tag
         // only tells their client (and the relay query) it exists.
         const content = await user.signer.nip44.encrypt(operatorXOnly, JSON.stringify(payload));
+        // Published as a REGULAR kind (BATTLE_ATTESTATION_KIND), not the
+        // ephemeral sync kind: relays store regular kinds, so the winner's
+        // hydration can retrieve this attestation long after it was sent
+        // (ephemeral 21124 events are pushed to live subscribers only).
         const event = await publishEvent({
-          kind: BATTLE_SYNC_KIND,
+          kind: BATTLE_ATTESTATION_KIND,
           content,
           tags: [
             ['p', opponentPubkey],
@@ -827,6 +833,16 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
             ['t', BATTLE_ATTESTATION_TAG],
           ],
         });
+        // Pin to the ₿AO rendezvous relay regardless of the user's relay
+        // settings — the pool publish above may not reach it (app relays can
+        // be disabled), and the opponent's hydration queries it explicitly.
+        // Best-effort: a relay-side rejection (policy, downtime) must not
+        // fail the attestation — the pool + inbox paths still carry it.
+        try {
+          await nostr.relay(BATTLE_ATTESTATION_RELAY).event(event, { signal: AbortSignal.timeout(5000) });
+        } catch (pinErr) {
+          console.warn('[useRemoteBattle] attestation pin to ₿AO relay failed (continuing):', pinErr);
+        }
         return event;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Attestation publish failed';
@@ -834,7 +850,7 @@ export function useRemoteBattleState(options: UseRemoteBattleOptions = {}): UseR
         return undefined;
       }
     },
-    [publishEvent, user],
+    [nostr, publishEvent, user],
   );
 
   const sendFinished = useCallback(
