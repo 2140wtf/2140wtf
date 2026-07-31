@@ -1,4 +1,5 @@
 import type { NostrMetadata } from '@nostrify/nostrify';
+import { nip19 } from 'nostr-tools';
 
 /**
  * Get a display name for a user.
@@ -11,4 +12,17 @@ export function getDisplayName(
   _pubkey?: string,
 ): string {
   return metadata?.name || metadata?.display_name || 'Anonymous';
+}
+
+/**
+ * A distinguishable fallback for a nameless pubkey, derived from the npub
+ * ("anon-j4gslmfz"). Chat surfaces use this instead of "Anonymous" so a busy
+ * room of nameless members still reads as distinct people. Stable per key.
+ */
+export function getKeyedFallbackName(pubkey: string): string {
+  try {
+    return `anon-${nip19.npubEncode(pubkey).slice(5, 13)}`;
+  } catch {
+    return 'Anonymous';
+  }
 }

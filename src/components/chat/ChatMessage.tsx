@@ -34,6 +34,7 @@ import { useResolvedMediaSrc } from "@/hooks/useResolvedMediaSrc";
 import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
 import { getComposerCollisionPadding, useComposerBoundsRef } from "@/contexts/ComposerBoundsContext";
 import { getAvatarShape } from "@/lib/avatarShape";
+import { getKeyedFallbackName } from "@/lib/getDisplayName";
 import { writeClipboardText } from "@/lib/clipboard";
 import { KIND_GROUP_CHAT } from "@/lib/nip29";
 import { requestCommand } from "@/hooks/useCommandBus";
@@ -413,7 +414,9 @@ const ChatMessageInner = memo(function ChatMessageInner({
   const composerBoundsRef = useComposerBoundsRef();
   const author = useAuthor(identityOverride ? undefined : event.pubkey);
   const scopedName = useScopedDisplayName(identityOverride ? undefined : event.pubkey, author.data?.metadata);
-  const displayName = identityOverride?.name ?? scopedName;
+  // Chat shows a key-derived fallback instead of "Anonymous": a busy room of
+  // nameless members must still read as distinct people (who said what).
+  const displayName = identityOverride?.name ?? (scopedName === "Anonymous" ? getKeyedFallbackName(event.pubkey) : scopedName);
   // Agent pet bodies: when this author is a ₿AO chat agent whose pet declares
   // it (['agent', pubkey] on the pet's kind 31124), the header shows the pet.
   // One shared relay scan backs every row (see useAgentBodyPets); mesh peers

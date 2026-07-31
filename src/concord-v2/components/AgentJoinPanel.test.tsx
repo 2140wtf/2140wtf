@@ -95,12 +95,27 @@ describe('AgentJoinPanel', () => {
     expect(mocks.onHoldJoin).toHaveBeenLastCalledWith(false);
   });
 
-  it('skips the bot profile publish when the box is unticked', async () => {
+  it('requires a name — the create button stays disabled and no key is made without one', () => {
     const { getByText, getByRole } = renderPanel();
+    const create = getByText('Create my agent key & join').closest('button')!;
+    expect(create.disabled).toBe(true);
+    fireEvent.click(create);
+    expect(mocks.nsec).not.toHaveBeenCalled();
+    expect(mocks.nostrEvent).not.toHaveBeenCalled();
+    expect(getByRole('textbox', { name: 'Agent name' })).toBeTruthy();
+  });
+
+  it('unticking the bot box still publishes the named profile — just without bot: true', async () => {
+    const { getByText, getByRole, getByLabelText } = renderPanel();
+    fireEvent.change(getByLabelText('Agent name'), { target: { value: 'swarm-8' } });
     fireEvent.click(getByRole('checkbox'));
     fireEvent.click(getByText('Create my agent key & join'));
     await waitFor(() => expect(mocks.nsec).toHaveBeenCalledTimes(1));
-    expect(mocks.nostrEvent).not.toHaveBeenCalled();
+    // The name is enforced for everyone; only the bot flag is optional.
+    await waitFor(() => expect(mocks.nostrEvent).toHaveBeenCalledTimes(1));
+    const profile = mocks.nostrEvent.mock.calls[0][0];
+    expect(profile.kind).toBe(0);
+    expect(JSON.parse(profile.content)).toEqual({ name: 'swarm-8' });
   });
 
   it('lets a human take the normal path', () => {
