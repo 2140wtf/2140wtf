@@ -1,11 +1,10 @@
-import { Check, ChevronRight, Copy, Info, Link as LinkIcon, Loader2, UserPlus } from "lucide-react";
+import { Check, Copy, Info, Link as LinkIcon, Loader2, UserPlus } from "lucide-react";
 import { useState } from "react";
 
 import { BaoMark as ArmadaCrest, BaoMarkKeyframes as ArmadaCrestKeyframes } from "@/components/brand/BaoMark";
 import { ProfileSearchSelect } from "@/components/chat/ProfileSearchSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, ChromeDialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,10 +48,9 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     useInviteActions2(community);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [expiry, setExpiry] = useState<string>("never"); // "never" | days | "single"
+  const [expiry, setExpiry] = useState<string>("single"); // "single" | "never" | days
   const [audience, setAudience] = useState<string>("human"); // "human" | "agent"
   const [label, setLabel] = useState("");
-  const [optionsOpen, setOptionsOpen] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [sentPubkey, setSentPubkey] = useState<string | null>(null);
   const [pendingPubkey, setPendingPubkey] = useState<string | null>(null);
@@ -139,7 +137,12 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     }
   };
 
-  const existing = myLinks.filter((e) => e.url !== link);
+  // Live links numbered by creation order: #1 is the OLDEST live link and
+  // sits on top; newer links append at the bottom. When one is revoked the
+  // rest shift up so the sequence stays a clean 1..N — the oldest always
+  // keeps #1 and the newest (e.g. the one just generated) is always the
+  // highest number at the bottom.
+  const existing = [...myLinks].sort((a, b) => a.created_at - b.created_at);
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -231,6 +234,30 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
                 <SelectItem value="agent">For an AI agent — fast machine join</SelectItem>
               </SelectContent>
             </Select>
+            {/* Link options are always visible (no expander): the safe choice
+                is the default — a single-use link dies after the first join —
+                and the alternatives should be seen, not hidden. */}
+            <div className="flex gap-2">
+              <Select value={expiry} onValueChange={setExpiry}>
+                <SelectTrigger className="w-40 shrink-0" aria-label="Link expiry">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">Single use</SelectItem>
+                  <SelectItem value="never">Never expires</SelectItem>
+                  <SelectItem value="1">Expires in 1 day</SelectItem>
+                  <SelectItem value="7">Expires in 7 days</SelectItem>
+                  <SelectItem value="30">Expires in 30 days</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Label (optional)"
+                className="min-w-0 text-sm"
+                aria-label="Invite label"
+              />
+            </div>
             <Button
               type="button"
               variant="secondary"
@@ -240,52 +267,21 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
             >
               {isCreatingLink ? <><Loader2 className="size-4 mr-2 animate-spin" /> Generating...</> : "Generate invite link"}
             </Button>
-            <Collapsible open={optionsOpen} onOpenChange={setOptionsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
-                <ChevronRight className={cn("size-3.5 transition-transform", optionsOpen && "rotate-90")} />
-                Link options
-                {!optionsOpen && (expiry !== "never" || label.trim()) && (
-                  <span className="text-foreground/70">
-                    {" · "}
-                    {[expiry === "single" ? "single use" : expiry !== "never" ? `expires in ${expiry} day${expiry === "1" ? "" : "s"}` : null, label.trim() ? `"${label.trim()}"` : null]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-2">
-                <div className="flex gap-2">
-                  <Select value={expiry} onValueChange={setExpiry}>
-                    <SelectTrigger className="w-40 shrink-0" aria-label="Link expiry">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="never">Never expires</SelectItem>
-                      <SelectItem value="single">Single use</SelectItem>
-                      <SelectItem value="1">Expires in 1 day</SelectItem>
-                      <SelectItem value="7">Expires in 7 days</SelectItem>
-                      <SelectItem value="30">Expires in 30 days</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={label}
-                    onChange={(e) => setLabel(e.target.value)}
-                    placeholder="Label (optional)"
-                    className="min-w-0 text-sm"
-                    aria-label="Invite label"
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
           </>
         )}
       </div>
 
       {existing.length > 0 && (
         <div className="w-full space-y-1.5 border-t border-chrome pt-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your live links</div>
-          {existing.map((e) => (
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your live links — oldest first</div>
+          {existing.map((e, i) => (
             <div key={e.token} className="flex items-center gap-2">
+              <span
+                className="w-7 shrink-0 text-right font-mono text-xs text-muted-foreground"
+                title="Creation order — #1 is the oldest live link, the highest number the newest"
+              >
+                #{i + 1}
+              </span>
               <div className="relative min-w-0 flex-1">
                 <Input readOnly value={e.url} className="min-w-0 font-mono text-[0.65rem]" onFocus={(ev) => ev.currentTarget.select()} />
                 {e.audience === "agent" && (
