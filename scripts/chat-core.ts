@@ -9,7 +9,7 @@
  * JSON-RPC on stdout; a stray stdout write corrupts the protocol stream.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -95,9 +95,56 @@ export function loadState(name: string): State {
   return state;
 }
 
+/**
+ * Atomic write: crash mid-write must never leave a truncated state file —
+ * it holds the hex private key, and losing it orphans the identity (mosaico
+ * daemon-design, adopted as-is). tmp + rename is atomic on POSIX same-dir.
+ */
 export function saveState(name: string, state: State): void {
   mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(statePath(name), JSON.stringify(state, null, 2), { mode: 0o600 });
+  const path = statePath(name);
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+  renameSync(tmp, path); // keeps the 0o600 inode; atomic on POSIX same-dir
+}
+
+/**
+ * Advisory lockfile around state read-modify-write ops (invite, sweep):
+ * two concurrent CLI processes would otherwise each read the old file and
+ * lose the other's write — the mosaico multi-writer lesson at file level.
+ * Locks whose holder died are reclaimed after 30s by mtime.
+ */
+export async function withStateLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const lock = `${statePath(name)}.lock`;
+  const deadline = Date.now() + 10_000;
+  mkdirSync(STATE_DIR, { recursive: true });
+  for (;;) {
+    try {
+      const fd = openSync(lock, "wx");
+      closeSync(fd);
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 30_000) unlinkSync(lock); // stale holder
+      } catch {
+        /* raced a concurrent reclaim */
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`State for "${name}" is locked by another process — retry shortly.`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      unlinkSync(lock);
+    } catch {
+      /* already reclaimed */
+    }
+  }
 }
 
 export function communityOf(c: SavedCommunity, privateChannels: State["private_channels"]): CommunityV2 {
