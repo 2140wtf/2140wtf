@@ -11,8 +11,8 @@ import {
 
 const T = [["t", ORCH_TASK_TAG]];
 
-function claim(id: string, author: string, ms: number, taskId = "t1", key?: string): ClaimInput {
-  const content = `CLAIM ${taskId}${key ? ` key=${key}` : ""}`;
+function claim(id: string, author: string, ms: number, taskId = "t1", key?: string, epoch?: number): ClaimInput {
+  const content = `CLAIM ${taskId}${key ? ` key=${key}` : ""}${epoch !== undefined ? ` epoch=${epoch}` : ""}`;
   return { id, author, ms, msg: parseTaskMessage(content, T)! };
 }
 
@@ -33,6 +33,13 @@ describe("parseTaskMessage", () => {
     expect(parseTaskMessage("DONE t9", T)?.rest).toBe("");
   });
 
+  it("extracts the fencing epoch from CLAIM (and only CLAIM)", () => {
+    expect(parseTaskMessage("CLAIM t3 key=abc epoch=2 taking over", T)).toMatchObject({ epoch: 2, idemKey: "abc" });
+    expect(parseTaskMessage("CLAIM t3 epoch=1", T)).toMatchObject({ epoch: 1 });
+    expect(parseTaskMessage("CLAIM t3 key=abc", T)?.epoch).toBeUndefined(); // legacy
+    expect(parseTaskMessage("PROGRESS t3 epoch=9 red herring", T)?.epoch).toBeUndefined();
+  });
+
   it("requires the orch-task tag — untagged lookalikes are chat", () => {
     expect(parseTaskMessage("CLAIM t3 key=abc", [["t", "other"]])).toBeNull();
     expect(parseTaskMessage("CLAIM t3", [])).toBeNull();
@@ -50,6 +57,12 @@ describe("deriveClaimKey", () => {
     expect(deriveClaimKey("o1", "t1")).not.toBe(deriveClaimKey("o1", "t2"));
     expect(deriveClaimKey("o1", "t1")).not.toBe(deriveClaimKey("o2", "t1"));
     expect(deriveClaimKey("o1", "t1")).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("is salted by the fencing epoch (retry idempotent, re-claim fresh)", () => {
+    expect(deriveClaimKey("o1", "t1", 2)).toBe(deriveClaimKey("o1", "t1", 2));
+    expect(deriveClaimKey("o1", "t1", 1)).not.toBe(deriveClaimKey("o1", "t1", 2));
+    expect(deriveClaimKey("o1", "t1")).toBe(deriveClaimKey("o1", "t1", 1)); // default epoch
   });
 });
 
@@ -121,6 +134,78 @@ describe("resolveClaims — the ONE tie-break", () => {
   });
 });
 
+describe("resolveClaims — fencing epochs (mosaico generation check)", () => {
+  const TTL = 60_000;
+
+  it("first epoch-bearing claim starts at epoch 1", () => {
+    const s = resolveClaims([claim("aa", "alice", 1000, "t1", "k", 1)], { ttlMs: TTL, nowMs: 2000 });
+    expect(s.get("t1")!.epoch).toBe(1);
+    expect(s.get("t1")!.claimant).toBe("alice");
+  });
+
+  it("a correct-epoch CLAIM reclaims a stale claim", () => {
+    const s = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), claim("bb", "bob", 200_000, "t1", "k", 2)],
+      { ttlMs: TTL, nowMs: 300_000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("bob");
+    expect(s.get("t1")!.epoch).toBe(2);
+  });
+
+  it("a stale-view CLAIM (wrong epoch) is IGNORED — never half-honored", () => {
+    const s = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), claim("bb", "bob", 200_000, "t1", "k", 3)],
+      { ttlMs: TTL, nowMs: 300_000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("alice"); // bob's epoch=3 never landed
+    expect(s.get("t1")!.epoch).toBe(1);
+    expect(s.get("t1")!.stale).toBe(true); // still reclaimable — at epoch 2
+  });
+
+  it("concurrent reclaimers at the same epoch: tie-break picks one, loser is visible", () => {
+    const s = resolveClaims(
+      [
+        claim("aa", "alice", 1000, "t1", "k", 1),
+        claim("zz", "bob", 200_000, "t1", "k", 2), // loses: higher id at same ms
+        claim("yy", "carol", 200_000, "t1", "k", 2),
+      ],
+      { ttlMs: TTL, nowMs: 300_000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("carol"); // lowest id at the winning ms
+    expect(s.get("t1")!.epoch).toBe(2);
+    // Bob re-resolving sees claimant≠bob at epoch 2 → held=false, no double-work.
+  });
+
+  it("epoch bumps on every change of hands, including past DONE", () => {
+    const s = resolveClaims(
+      [
+        claim("aa", "alice", 1000, "t1", "k", 1),
+        done("dd", "alice", 2000),
+        claim("bb", "bob", 3000, "t1", "k", 2),
+        claim("cc", "carol", 300_000, "t1", "k", 3), // bob's claim went stale
+      ],
+      { ttlMs: TTL, nowMs: 400_000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("carol");
+    expect(s.get("t1")!.epoch).toBe(3);
+    expect(s.get("t1")!.done).toBe(false); // re-claim resets terminal markers
+  });
+
+  it("a wrong-epoch CLAIM on a never-claimed task is ignored", () => {
+    const s = resolveClaims([claim("aa", "alice", 1000, "t1", "k", 2)], { ttlMs: TTL, nowMs: 2000 });
+    expect(s.has("t1")).toBe(false);
+  });
+
+  it("legacy epoch-less CLAIMs still claim and bump the epoch (mixed fleet)", () => {
+    const s = resolveClaims(
+      [claim("aa", "alice", 1000, "t1", "k", 1), claim("bb", "bob", 200_000)], // bob is a legacy binary
+      { ttlMs: TTL, nowMs: 300_000 },
+    );
+    expect(s.get("t1")!.claimant).toBe("bob");
+    expect(s.get("t1")!.epoch).toBe(2);
+  });
+});
+
 describe("mentionsMe", () => {
   const base = { myPubkey: "ab".repeat(32), myNpub: "npub1xyz", myNames: ["baofund-agent"] };
 
@@ -133,5 +218,14 @@ describe("mentionsMe", () => {
     expect(mentionsMe({ ...base, tags: [], content: "cc npub1xyz what do you think" })).toBe(true);
     expect(mentionsMe({ ...base, tags: [], content: "@baofund-agent ping" })).toBe(true);
     expect(mentionsMe({ ...base, tags: [], content: "unrelated" })).toBe(false);
+  });
+
+  it("never routes a mention across identities (mosaico demux rule)", () => {
+    const alice = { myPubkey: "aa".repeat(32), myNpub: "npub1alice", myNames: ["alice"] };
+    // Every mention form for bob must be invisible to alice.
+    expect(mentionsMe({ ...alice, tags: [["p", "bb".repeat(32)]], content: "hi" })).toBe(false);
+    expect(mentionsMe({ ...alice, tags: [], content: "hey npub1bob look" })).toBe(false);
+    expect(mentionsMe({ ...alice, tags: [], content: "@bob ping" })).toBe(false);
+    expect(mentionsMe({ ...alice, tags: [], content: "bob: ping" })).toBe(false);
   });
 });

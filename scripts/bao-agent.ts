@@ -71,6 +71,7 @@ import { KIND_INVITE_BUNDLE, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 import {
   CLAIM_TTL_MS,
+  PROTOCOL_VERSION,
   channelMessages,
   closePool,
   communityOf,
@@ -166,6 +167,7 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
     private_channels: [],
     invites: [],
     registry_version: 0,
+    protocol_version: PROTOCOL_VERSION,
   };
   saveState(name, state);
   console.log(`\nOwner identity "${name}": ${nip19.npubEncode(pubkey)}`);
@@ -300,6 +302,7 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
     private_channels: bundle.channels,
     invites: [],
     registry_version: 0,
+    protocol_version: PROTOCOL_VERSION,
   };
   saveState(name, state);
   console.log(`\nJoined "${bundle.name}" as "${name}": ${nip19.npubEncode(pubkey)}`);
@@ -433,7 +436,20 @@ async function waitMode(
 
 async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: string, orchId: string): Promise<void> {
   const state = loadState(name);
-  const { deduped } = await orchVerbPost(state, verb, taskId, text, orchId);
+  const { rumorId, deduped, held, epoch } = await orchVerbPost(state, verb, taskId, text, orchId);
+  if (verb === "CLAIM") {
+    // Fencing: the claim is only a claim while we hold it at our epoch. A loss
+    // is exit 2 (Buzz-style no-result) so calling scripts don't double-work.
+    if (held === true) console.log(`  ✓ CLAIM ${taskId} held at epoch ${epoch} (rumor ${rumorId.slice(0, 12)}…${deduped ? ", deduped retry" : ""})`);
+    else if (held === null) {
+      console.log(`  ? CLAIM ${taskId} published at epoch ${epoch} but not visible yet — re-check: orch show --orch ${orchId}`);
+      process.exitCode = 2;
+    } else {
+      console.log(`  ✗ CLAIM ${taskId} NOT held — another claimant won (epoch ${epoch}). Do NOT work this task.`);
+      process.exitCode = 2;
+    }
+    return;
+  }
   if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
 }
 
@@ -464,7 +480,7 @@ async function orchShow(name: string, orchId: string, json: boolean): Promise<vo
   for (const s of states.values()) {
     const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
     console.log(
-      `  ${s.taskId}: ${status} — ${nip19.npubEncode(s.claimant).slice(0, 16)}… (claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`,
+      `  ${s.taskId}: ${status} — ${nip19.npubEncode(s.claimant).slice(0, 16)}… (epoch ${s.epoch}, claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`,
     );
   }
 }
