@@ -223,6 +223,43 @@ describe("bundle refresh after a Refounding (CORD-05 §2)", () => {
   });
 });
 
+describe("invite audience (agent links)", () => {
+  it("round-trips the audience field through the encrypted bundle", () => {
+    const { bundle } = makeBundle();
+    const link = mintLinkSigner();
+    const token = mintToken();
+    const event = buildBundleEvent({ ...bundle, audience: "agent" }, token, link.sk);
+    const parsed = parseBundleEvent(event, link.pk, token, Date.now());
+    expect(parsed.audience).toBe("agent");
+  });
+
+  it("is absent for a plain (human) link", () => {
+    const { bundle } = makeBundle();
+    const link = mintLinkSigner();
+    const token = mintToken();
+    const event = buildBundleEvent(bundle, token, link.sk);
+    const parsed = parseBundleEvent(event, link.pk, token, Date.now());
+    expect(parsed.audience).toBeUndefined();
+  });
+
+  it("survives a bundle refresh (rekey re-post keeps the per-link audience)", () => {
+    const { bundle } = makeBundle();
+    const linkA = mintLinkSigner();
+    const linkB = mintLinkSigner();
+    const tokenA = mintToken();
+    const tokenB = mintToken();
+    const fresh: InviteBundle = { ...bundle, community_root: bytesToHex(random32()), root_epoch: 1 };
+    const events = buildRefreshedBundleEvents(fresh, [
+      { token: bytesToHex(tokenA), signer_sk: bytesToHex(linkA.sk), audience: "agent" },
+      { token: bytesToHex(tokenB), signer_sk: bytesToHex(linkB.sk) },
+    ]);
+    const a = parseBundleEvent(events[0], linkA.pk, tokenA, Date.now());
+    const b = parseBundleEvent(events[1], linkB.pk, tokenB, Date.now());
+    expect(a.audience).toBe("agent");
+    expect(b.audience).toBeUndefined();
+  });
+});
+
 describe("invite list merge (CORD-05 §4)", () => {
   it("entries are immutable, tombstones union and win terminally", () => {
     const entry = {

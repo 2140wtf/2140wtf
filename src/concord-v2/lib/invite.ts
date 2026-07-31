@@ -59,6 +59,13 @@ export interface InviteBundle {
   /** Optional attribution, echoed in the joiner's Guestbook Join. */
   creator_npub?: string;
   label?: string;
+  /**
+   * Optional audience: `"agent"` marks the link as minted FOR an AI agent —
+   * the invite page renders the machine-first fast path (one-click key
+   * creation, machine-readable join instructions, agent-gate PoW ground in
+   * the page) instead of the human sign-up detour. Absent = human.
+   */
+  audience?: "agent";
   [k: string]: unknown;
 }
 
@@ -111,7 +118,7 @@ export function validateBundle(bundle: InviteBundle): InviteBundle {
  */
 export function buildRefreshedBundleEvents(
   bundle: InviteBundle,
-  entries: Array<{ token: string; signer_sk: string; expires_at?: number; label?: string; max_uses?: number }>,
+  entries: Array<{ token: string; signer_sk: string; expires_at?: number; label?: string; max_uses?: number; audience?: "agent" }>,
 ): NostrEvent[] {
   const events: NostrEvent[] = [];
   for (const entry of entries) {
@@ -121,6 +128,7 @@ export function buildRefreshedBundleEvents(
         ...(entry.expires_at ? { expires_at: entry.expires_at * 1000 } : {}),
         ...(entry.label ? { label: entry.label } : {}),
         ...(entry.max_uses ? { max_uses: entry.max_uses } : {}),
+        ...(entry.audience ? { audience: entry.audience } : {}),
       };
       events.push(buildBundleEvent(perLink, hexToBytes(entry.token), hexToBytes(entry.signer_sk)));
     } catch {
@@ -464,6 +472,8 @@ export interface InviteListEntry {
   expires_at?: number;
   /** Use cap minted into the bundle (1 = single-use); drives the auto-sweep. */
   max_uses?: number;
+  /** Audience minted into the bundle ("agent" = machine-first invite page). */
+  audience?: "agent";
   [k: string]: unknown;
 }
 
