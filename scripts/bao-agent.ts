@@ -443,9 +443,9 @@ async function waitMode(
 async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: string, orchId: string): Promise<void> {
   const state = loadState(name);
   const { rumorId, deduped, held, epoch } = await orchVerbPost(state, verb, taskId, text, orchId);
+  // Fencing: the claim is only a claim while we hold it at our epoch. A loss
+  // or refusal is exit 2 (Buzz-style no-result) so calling scripts stop.
   if (verb === "CLAIM") {
-    // Fencing: the claim is only a claim while we hold it at our epoch. A loss
-    // is exit 2 (Buzz-style no-result) so calling scripts don't double-work.
     if (held === true) console.log(`  ✓ CLAIM ${taskId} held at epoch ${epoch} (rumor ${rumorId.slice(0, 12)}…${deduped ? ", deduped retry" : ""})`);
     else if (held === null) {
       console.log(`  ? CLAIM ${taskId} published at epoch ${epoch} but not visible yet — re-check: orch show --orch ${orchId}`);
@@ -454,6 +454,11 @@ async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: stri
       console.log(`  ✗ CLAIM ${taskId} NOT held — another claimant won (epoch ${epoch}). Do NOT work this task.`);
       process.exitCode = 2;
     }
+    return;
+  }
+  if (held === false) {
+    console.log(`  ✗ ${verb} ${taskId} refused — task held by another claimant (epoch ${epoch}). Do NOT work this task.`);
+    process.exitCode = 2;
     return;
   }
   if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
