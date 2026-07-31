@@ -408,7 +408,7 @@ export async function releaseMilestone(
   signer: BaoApiSigner,
   fundraiserId: string,
   milestoneId: string,
-  opts?: { payout_reference?: string; proof_event_id?: string },
+  opts?: { payout_reference?: string; proof_event_id?: string; idempotency_key?: string },
 ): Promise<ReleaseMilestoneResult> {
   const res = await apiFetch<{ data: ReleaseMilestoneResult }>(
     `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/release`,
@@ -470,10 +470,44 @@ function normalizeVerificationModel(m: WireVerificationModel): VerificationModel
   };
 }
 
-/** List the curated AI judge models donors can vote for at contribution time. */
-export async function fetchVerificationModels(): Promise<VerificationModel[]> {
+export interface VerificationModelsResult {
+  /** Server default judge model (used when no donor preference is recorded). */
+  defaultModel: string;
+  models: VerificationModel[];
+}
+
+/**
+ * List the curated AI judge models donors can vote for at contribution time.
+ * Keeps the server's `default_model` — pickers must initialize to it (it can
+ * differ from the registry fallback when the server config moves on).
+ */
+export async function fetchVerificationModels(): Promise<VerificationModelsResult> {
   const res = await apiFetch<{ data: { default_model?: string; models: WireVerificationModel[] } }>('/v1/verification/models');
-  return res.data.models.map(normalizeVerificationModel);
+  return {
+    defaultModel: res.data.default_model ?? DEFAULT_VERIFICATION_MODEL,
+    models: res.data.models.map(normalizeVerificationModel),
+  };
+}
+
+/**
+ * Whole-percent campaign funding progress for progress bars. Guards against
+ * NaN (goal 0 / missing / non-finite) and negative values from bad API rows.
+ */
+export function fundingProgressPct(raised: number, goal: number): number {
+  return Number.isFinite(goal) && goal > 0
+    ? Math.max(0, Math.min(100, Math.round(((raised || 0) / goal) * 100)))
+    : 0;
+}
+
+/**
+ * Pick the latest verification attempt WITHOUT trusting server ordering:
+ * sorts by attempt number, then by creation time.
+ */
+export function latestVerification(list: BaoMilestoneVerification[]): BaoMilestoneVerification | null {
+  if (list.length === 0) return null;
+  return [...list]
+    .sort((a, b) => a.attempt - b.attempt || Date.parse(a.created_at) - Date.parse(b.created_at))
+    .at(-1) ?? null;
 }
 
 export type BaoVerificationVerdict = 'pass' | 'review' | 'fail';
