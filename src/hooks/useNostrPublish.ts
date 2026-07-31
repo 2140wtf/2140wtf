@@ -153,10 +153,11 @@ export function useNostrPublish(): UseMutationResult<NostrEvent, Error, EventTem
         }
 
         // NIP-65: For reply events (kind 1 and 1111), pet-battle sync messages
-        // (kind 21124), and encrypted protocol gift wraps (kind 1059), also send
-        // to the inbox (read) relays of tagged users so they receive the event.
+        // (kind 21124), battle result attestations (kind 11124), and encrypted
+        // protocol gift wraps (kind 1059), also send to the inbox (read) relays
+        // of tagged users so they receive the event.
         // This is fire-and-forget — it must not block the publish flow.
-        if (event.kind === 1 || event.kind === 1111 || event.kind === 21124 || event.kind === 1059) {
+        if (event.kind === 1 || event.kind === 1111 || event.kind === 21124 || event.kind === 11124 || event.kind === 1059) {
           const taggedPubkeys = event.tags
             .filter(([name]) => name === 'p' || name === 'P')
             .map(([, pubkey]) => pubkey)
