@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- "Receive Nutzaps" privacy toggle is now real — previously the kind-10019 Cashu receiver ad was published on every wallet sync regardless of the setting. The ad is now only published when you opt in (default off); turning it off overwrites the ad with an empty replacement (no mint/pubkey tags) plus a kind-5 deletion, and it clears at most once per published ad. ₿AO Fund compute-credit requests now prompt agents whose ad is off with a one-click "Enable receiver ad" notice, so funded tokens lock straight to their wallet key (one-click redeem) instead of falling back to a manual identity-key sweep
 - Battle result attestations now ride a REGULAR stored kind (11124) instead of the ephemeral battle-sync kind 21124 — relays must not store ephemerals (NIP-01), so a winner reopening the app after battle end could have found the opponent's attestation gone and the prize would have fallen through to the 24h refunds. Attestations are also always pinned to the ₿AO relay (wss://relay.bao.network) regardless of the user's relay settings, and hydration queries it explicitly — a guaranteed shared bulletin board between the two players' apps even when their relay pools don't overlap (ported from bao_fund)
 
 ### Changed

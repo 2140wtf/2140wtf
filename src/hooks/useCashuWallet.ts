@@ -38,6 +38,7 @@ import {
   type StoredMint,
 } from '@/lib/cashu/storage';
 import { useAppContext } from '@/hooks/useAppContext';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { devLog } from '@/lib/cashu/devLog';
 import { deriveNutzapKey } from '@/lib/cashu/cashu';
 import { buildMultisigEscrowLock, type MultisigEscrowLockRequest } from '@/lib/cashu/escrowMultisig';
@@ -71,6 +72,7 @@ import {
   TOKEN_KIND,
   NUTZAP_INFO_KIND,
   NUTZAP_KIND,
+  DELETE_KIND,
   type Nip60SyncApi,
   type Nip60WalletConfig,
 } from '@/lib/cashu/cashuNip60';
@@ -231,6 +233,13 @@ async function publishEventToRelayUrls(event: NostrEvent, urls: string[]): Promi
   return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
 }
 
+/**
+ * Sentinel stored as the last-Nutzap-info hash after the public receiver ad
+ * (kind:10019) has been hidden, so the clear pass runs once and re-enabling
+ * the ad republishes it (the real hash no longer matches).
+ */
+const NUTZAP_INFO_CLEARED = 'cleared';
+
 export interface UseCashuWalletOptions {
   backupCashuState?: (payload: CashuBackupPayload) => Promise<string | null>;
   restoreCashuState?: () => Promise<CashuBackupPayload | null>;
@@ -253,6 +262,12 @@ export function useCashuWallet(
   options?: UseCashuWalletOptions,
 ): CashuWalletState & CashuWalletActions {
   const { config } = useAppContext();
+  // "Receive Nutzaps" publish preference (default OFF): gates whether the
+  // public kind:10019 receiver ad is published. Ref mirror for use inside
+  // callbacks that must not re-subscribe.
+  const { isEnabled: isPublishFeatureEnabled } = usePublishPreferences();
+  const nutzapsAdEnabled = isPublishFeatureEnabled('nutzaps');
+  const nutzapsAdEnabledRef = useRef(nutzapsAdEnabled);
   const defaultMintsInput = options?.defaultMints;
   const defaultMintsKey = JSON.stringify(defaultMintsInput);
   const defaultMints = useMemo(
@@ -902,7 +917,12 @@ export function useCashuWallet(
             }
             await syncNip60WalletConfig();
             await syncAllNip60Tokens();
-            await publishNip60NutzapInfo();
+            if (nutzapsAdEnabledRef.current) {
+              await publishNip60NutzapInfo();
+            } else {
+              // Ad opted out — hide any ad published before the gate existed.
+              await clearNip60NutzapInfo();
+            }
             allMintsRef.current = priorAllMints;
           } catch (e) {
             devLog.error('NIP-60 init sync failed:', e);
@@ -1107,10 +1127,29 @@ export function useCashuWallet(
     if (!encKeyRef.current || !nip60SyncRef.current || !nip60WalletKeyRef.current || !seedPhraseRef.current) return;
     (async () => {
       await syncNip60WalletConfig();
-      await publishNip60NutzapInfo();
+      if (nutzapsAdEnabledRef.current) {
+        await publishNip60NutzapInfo();
+      } else {
+        await clearNip60NutzapInfo();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allMints, options?.nip60Sync]);
+
+  // Publish or hide the public Nutzap receiver ad (kind:10019) when the
+  // "Receive Nutzaps" publish preference flips (Settings → Privacy, or the
+  // ₿AO Fund compute-credits prompt).
+  useEffect(() => {
+    nutzapsAdEnabledRef.current = nutzapsAdEnabled;
+    if (!encKeyRef.current || !nip60SyncRef.current || !nip60WalletKeyRef.current || !seedPhraseRef.current) return;
+    if (isBaoNamespaceRef.current) return; // BAO demo wallets never publish kind:10019
+    if (nutzapsAdEnabled) {
+      publishNip60NutzapInfo().catch((e) => devLog.error('Nutzap info publish failed:', e));
+    } else {
+      clearNip60NutzapInfo().catch((e) => devLog.error('Nutzap info clear failed:', e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nutzapsAdEnabled]);
 
   // Re-init wallet when mint or seed changes
   useEffect(() => {
@@ -1428,6 +1467,9 @@ export function useCashuWallet(
   }, [getClientTag, options?.publishWalletConfig]);
 
   const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
+    // Gated by the "Receive Nutzaps" publish preference (default OFF) — the
+    // public receiver ad only goes out when the user opts in.
+    if (!nutzapsAdEnabledRef.current) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const key = nip60WalletKeyRef.current;
@@ -1445,6 +1487,51 @@ export function useCashuWallet(
       if (id) await saveLastNutzapInfoHash(hash, encKey);
     } catch (e) {
       devLog.error('NIP-60 Nutzap info publish failed:', e);
+    }
+  }, [getClientTag]);
+
+  /**
+   * Hide the public Nutzap receiver ad when the "Receive Nutzaps" publish
+   * preference is off. Overwrites kind:10019 with an empty replacement (relay
+   * tags only — no mint or P2PK pubkey tags, so parsers treat it as "no ad"
+   * and senders fall back to identity lock), then sends a kind:5 addressable
+   * deletion for relays/clients that honor those. Runs at most once per
+   * published ad thanks to the NUTZAP_INFO_CLEARED sentinel.
+   */
+  const clearNip60NutzapInfo = useCallback(async (): Promise<void> => {
+    const sync = nip60SyncRef.current;
+    const encKey = encKeyRef.current;
+    const key = nip60WalletKeyRef.current;
+    if (!sync || !encKey || !key) return;
+
+    try {
+      // Only clear when an ad was actually published — users who never had
+      // one shouldn't get a pointless event pair.
+      const lastHash = await loadLastNutzapInfoHash(encKey);
+      if (!lastHash || lastHash === NUTZAP_INFO_CLEARED) return;
+
+      const cleared = await sync.signer.signEvent({
+        kind: NUTZAP_INFO_KIND,
+        content: '',
+        tags: [...sync.relays.map((r): [string, string] => ['relay', r]), getClientTag()],
+        created_at: Math.floor(Date.now() / 1000),
+      });
+      if (!cleared) return;
+      await sync.publish(cleared);
+
+      // The event author is the identity key (what the a-tag addresses).
+      const deletion = await sync.signer.signEvent({
+        kind: DELETE_KIND,
+        content: 'nutzap info hidden',
+        tags: [['a', `${NUTZAP_INFO_KIND}:${cleared.pubkey}`], getClientTag()],
+        created_at: Math.floor(Date.now() / 1000),
+      });
+      if (!deletion) return;
+      await sync.publish(deletion);
+
+      await saveLastNutzapInfoHash(NUTZAP_INFO_CLEARED, encKey);
+    } catch (e) {
+      devLog.error('NIP-60 Nutzap info clear failed:', e);
     }
   }, [getClientTag]);
 
