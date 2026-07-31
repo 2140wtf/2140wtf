@@ -341,6 +341,27 @@ export async function waitForInterrupt(
   });
 }
 
+/**
+ * Publish a kind-0 profile announcing this identity's name. Names are
+ * enforced room-wide (the web join path refuses nameless keys; chat renders
+ * them anon-<npub8>) — so join/create publish the identity name up front.
+ * bot:true marks the key as an agent per the orchestration conventions.
+ */
+export async function publishAgentProfile(sk: Uint8Array, name: string, relays: string[]): Promise<void> {
+  const { finalizeEvent } = await import("nostr-tools/pure");
+  const event = finalizeEvent(
+    {
+      kind: 0,
+      content: JSON.stringify({ name, bot: true }),
+      tags: [],
+      created_at: Math.floor(Date.now() / 1000),
+    },
+    sk,
+  );
+  await publishAll(relays, event, "kind-0 profile (name)");
+}
+
+
 // ── Orchestration (task claims over chat) ────────────────────────────────────
 
 /** A claim with no PROGRESS from its claimant for this long is reclaimable. */

@@ -9848,13 +9848,26 @@ var SimplePool = class extends AbstractSimplePool {
 *   manifest is coordination metadata, not community content).
 * - Task lifecycle: chat messages (sealed rumors inside a ₿AO — inner kind 9)
 *   tagged `["t", "orch-task"]` whose content starts with a verb:
-*     CLAIM <taskId> key=<idempotencyKey>
+*     CLAIM <taskId> key=<idempotencyKey> epoch=<fencingEpoch>
 *     PROGRESS <taskId> <one line>
 *     HANDOFF <taskId> @<agent> <state summary>   (receiver must ACK)
 *     ACK <taskId>
 *     DONE <taskId> <artifact refs>
 *     BLOCKED <taskId> <reason> <need>
 *   Machines parse the tags + first word; the rest stays human-readable.
+*
+* Fencing (mosaico daemon-design, adapted): every CLAIM carries a fencing
+* epoch — the claimant's view of how many times the task has changed hands,
+* plus one. A CLAIM whose epoch doesn't match current-epoch + 1 is a
+* stale-view claim and is IGNORED (never half-succeed on a stale read): the
+* loser re-resolves and retries at the right epoch. Two agents reclaiming the
+* same stale claim publish the same epoch; the tie-break picks one, and the
+* other detects the loss by re-resolving (`held` in chat-core) instead of
+* double-working. Legacy CLAIMs without `epoch=` still claim (mixed fleet),
+* and also bump the epoch. PROGRESS/DONE/BLOCKED stay claimant-scoped WITHOUT
+* an epoch: resolution folds in ms order, so a zombie's late verb lands while
+* someone else holds the claim and is ignored — same-author cross-epoch
+* confusion can't survive the fold.
 */
 const ORCH_TASK_TAG = "orch-task";
 const VERBS = [
@@ -9878,19 +9891,23 @@ function parseTaskMessage(content, tags) {
 	if (!VERBS.includes(verb)) return null;
 	const rest = (m[3] ?? "").trim();
 	const keyMatch = rest.match(/(?:^|\s)key=(\S+)/);
+	const epochMatch = rest.match(/(?:^|\s)epoch=(\d+)(?:\s|$)/);
 	return {
 		verb,
 		taskId: m[2],
 		rest,
-		...verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {}
+		...verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {},
+		...verb === "CLAIM" && epochMatch ? { epoch: Number(epochMatch[1]) } : {}
 	};
 }
 /**
 * Deterministic idempotency key for a claim: a retrying agent re-publishes
-* the SAME claim event instead of racing itself (§14).
+* the SAME claim event instead of racing itself (§14). The epoch salts the
+* key, so a re-claim after a stale takeover is a NEW key (not deduped against
+* the earlier claim) while a retry of the same epoch's claim stays idempotent.
 */
-function deriveClaimKey(orchId, taskId) {
-	return bytesToHex$1(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}`))).slice(0, 32);
+function deriveClaimKey(orchId, taskId, epoch = 1) {
+	return bytesToHex$1(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}:${epoch}`))).slice(0, 32);
 }
 /**
 * Resolve who owns each task right now. THE shared tie-break (§14):
@@ -9899,6 +9916,12 @@ function deriveClaimKey(orchId, taskId) {
 * but the next valid CLAIM takes the task (stale claims never win over a
 * fresh one). DONE/BLOCKED are terminal-state markers from the claimant only
 * (nobody can mark someone else's task done).
+*
+* Fencing: an epoch-bearing CLAIM is valid ONLY if its epoch is exactly
+* current-epoch + 1 (or 1 for a never-claimed task) — a mismatched CLAIM was
+* issued from a stale view and is ignored outright, so two concurrent
+* reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
+* the check but still bump the epoch.
 */
 function resolveClaims(messages, opts) {
 	const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -9906,19 +9929,23 @@ function resolveClaims(messages, opts) {
 	for (const { id, author, ms, msg } of sorted) {
 		const cur = states.get(msg.taskId);
 		switch (msg.verb) {
-			case "CLAIM":
+			case "CLAIM": {
 				if (cur && !cur.stale && !cur.done) break;
+				const nextEpoch = (cur?.epoch ?? 0) + 1;
+				if (msg.epoch !== void 0 && msg.epoch !== nextEpoch) break;
 				states.set(msg.taskId, {
 					taskId: msg.taskId,
 					claimant: author,
 					claimId: id,
 					claimMs: ms,
 					lastProgressMs: ms,
+					epoch: nextEpoch,
 					done: false,
 					blocked: false,
 					stale: opts.nowMs - ms > opts.ttlMs
 				});
 				break;
+			}
 			case "PROGRESS":
 				if (cur && cur.claimant === author && !cur.done) {
 					cur.lastProgressMs = ms;
@@ -9980,7 +10007,9 @@ function statePath(name) {
 function loadState(name) {
 	const path = statePath(name);
 	if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
-	return JSON.parse(readFileSync(path, "utf8"));
+	const state = JSON.parse(readFileSync(path, "utf8"));
+	if ((state.protocol_version ?? 1) > 1) throw new Error(`Identity "${name}" was written by protocol v${state.protocol_version} but this binary speaks v1 — re-fetch bao-agent.mjs (never half-run a stale binary).`);
+	return state;
 }
 function saveState(name, state) {
 	mkdirSync(STATE_DIR, { recursive: true });
@@ -10124,6 +10153,12 @@ async function channelMessages(state) {
 * ["d", key] tag on the rumor, and a retry first scans our own history — if
 * the key already landed, we report deduped instead of double-posting
 * (AGENT_CHAT_ORCHESTRATION.md §14: machines retry, humans shouldn't see it).
+*
+* Deliberately NOT a durable outbox (mosaico's submit_intents): both
+* front-ends are interactive request/response, so a crash before publish
+* surfaces to the operator and a crash after publish is healed by the d-tag
+* retry. Revisit if agents start unattended loops or money-adjacent verbs —
+* at that point intents must survive the process.
 */
 async function sendChannelMessage(state, text, opts = {}) {
 	const { pubkey, signer, community, channel, group } = await channelContext(state);
@@ -10212,26 +10247,74 @@ async function waitForInterrupt(identityName, state, opts) {
 		} });
 	});
 }
+/**
+* Publish a kind-0 profile announcing this identity's name. Names are
+* enforced room-wide (the web join path refuses nameless keys; chat renders
+* them anon-<npub8>) — so join/create publish the identity name up front.
+* bot:true marks the key as an agent per the orchestration conventions.
+*/
+async function publishAgentProfile(sk, name, relays) {
+	const { finalizeEvent } = await Promise.resolve().then(() => (init_pure(), pure_exports));
+	await publishAll(relays, finalizeEvent({
+		kind: 0,
+		content: JSON.stringify({
+			name,
+			bot: true
+		}),
+		tags: [],
+		created_at: Math.floor(Date.now() / 1e3)
+	}, sk), "kind-0 profile (name)");
+}
 /** A claim with no PROGRESS from its claimant for this long is reclaimable. */
 const CLAIM_TTL_MS = 1800 * 1e3;
+/**
+* Fail-closed (mosaico daemon-design: "an unavailable control channel fails
+* closed"). An empty claim history means one of two very different things —
+* "no claims yet" or "the relays are down and we can't see the claims". Only
+* the first may resolve to an empty map; the second must throw, or an agent
+* would read silence as claimable and double-work a live claim.
+*/
+function assertRelayReachable(relays) {
+	const status = getPool().listConnectionStatus();
+	if (relays.filter((r) => status.get(r) === true).length === 0) throw new Error(`cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`);
+}
 async function orchVerbPost(state, verb, taskId, text, orchId) {
-	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
-	let content = `${verb} ${taskId}`;
-	let idemKey;
 	if (verb === "CLAIM") {
-		const key = deriveClaimKey(orchId, taskId);
-		content += ` key=${key}`;
-		idemKey = key;
+		const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+		const cur = (await orchStates(state, orchId)).get(taskId);
+		if (cur && !cur.stale && !cur.done) return {
+			rumorId: cur.claimant === myPubkey ? cur.claimId : "",
+			deduped: false,
+			held: cur.claimant === myPubkey,
+			epoch: cur.epoch
+		};
+		const epoch = (cur?.epoch ?? 0) + 1;
+		const key = deriveClaimKey(orchId, taskId, epoch);
+		let content = `CLAIM ${taskId} key=${key} epoch=${epoch}`;
+		if (text) content += ` ${text}`;
+		const sent = await sendChannelMessage(state, content, {
+			idemKey: key,
+			extraTags: [["t", ORCH_TASK_TAG], ["o", orchId]]
+		});
+		const now = (await orchStates(state, orchId)).get(taskId);
+		if (!now) return {
+			...sent,
+			held: null,
+			epoch
+		};
+		return {
+			...sent,
+			held: now.claimant === myPubkey && now.epoch === epoch,
+			epoch
+		};
 	}
-	if (text) content += ` ${text}`;
-	return sendChannelMessage(state, content, {
-		idemKey,
-		extraTags
-	});
+	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
+	return sendChannelMessage(state, `${verb} ${taskId}${text ? ` ${text}` : ""}`, { extraTags });
 }
 async function orchStates(state, orchId) {
 	const inputs = [];
-	for (const m of await channelMessages(state)) {
+	const messages = await channelMessages(state);
+	for (const m of messages) {
 		const msg = parseTaskMessage(m.content, m.tags);
 		if (!msg) continue;
 		const oTags = m.tags.filter((t) => t[0] === "o").map((t) => t[1]);
@@ -10243,6 +10326,7 @@ async function orchStates(state, orchId) {
 			msg
 		});
 	}
+	if (messages.length === 0) assertRelayReachable(state.community.relays);
 	return resolveClaims(inputs, {
 		ttlMs: CLAIM_TTL_MS,
 		nowMs: Date.now()
@@ -10327,8 +10411,10 @@ async function create(name, communityName, agentOnly) {
 		},
 		private_channels: [],
 		invites: [],
-		registry_version: 0
+		registry_version: 0,
+		protocol_version: 1
 	});
+	await publishAgentProfile(sk, name, community.relays);
 	console.log(`\nOwner identity "${name}": ${npubEncode(pubkey)}`);
 	console.log(`State: ${statePath(name)}\n`);
 	await invite(name);
@@ -10433,8 +10519,10 @@ async function joinBao(name, inviteUrl) {
 		},
 		private_channels: bundle.channels,
 		invites: [],
-		registry_version: 0
+		registry_version: 0,
+		protocol_version: 1
 	});
+	await publishAgentProfile(sk, name, community.relays);
 	console.log(`\nJoined "${bundle.name}" as "${name}": ${npubEncode(pubkey)}`);
 	console.log(`State: ${statePath(name)}`);
 }
@@ -10539,7 +10627,18 @@ async function waitMode(name, opts) {
 	}
 }
 async function orchVerb(name, verb, taskId, text, orchId) {
-	const { deduped } = await orchVerbPost(loadState(name), verb, taskId, text, orchId);
+	const { rumorId, deduped, held, epoch } = await orchVerbPost(loadState(name), verb, taskId, text, orchId);
+	if (verb === "CLAIM") {
+		if (held === true) console.log(`  ✓ CLAIM ${taskId} held at epoch ${epoch} (rumor ${rumorId.slice(0, 12)}…${deduped ? ", deduped retry" : ""})`);
+		else if (held === null) {
+			console.log(`  ? CLAIM ${taskId} published at epoch ${epoch} but not visible yet — re-check: orch show --orch ${orchId}`);
+			process.exitCode = 2;
+		} else {
+			console.log(`  ✗ CLAIM ${taskId} NOT held — another claimant won (epoch ${epoch}). Do NOT work this task.`);
+			process.exitCode = 2;
+		}
+		return;
+	}
 	if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
 }
 async function orchShow(name, orchId, json) {
@@ -10563,7 +10662,7 @@ async function orchShow(name, orchId, json) {
 	console.log(`\norch "${orchId}" — ${states.size} task(s):`);
 	for (const s of states.values()) {
 		const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
-		console.log(`  ${s.taskId}: ${status} — ${npubEncode(s.claimant).slice(0, 16)}… (claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`);
+		console.log(`  ${s.taskId}: ${status} — ${npubEncode(s.claimant).slice(0, 16)}… (epoch ${s.epoch}, claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`);
 	}
 }
 function argValue(args, flag) {
