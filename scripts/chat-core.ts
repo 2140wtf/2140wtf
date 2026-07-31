@@ -24,6 +24,7 @@ import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type Str
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import {
   deriveClaimKey,
+  mayPostVerb,
   mentionsMe,
   parseTaskMessage,
   resolveClaims,
@@ -446,6 +447,16 @@ export async function orchVerbPost(
     // else — another claimant's tie-break win, or a same-author claim at a
     // different epoch — is a loss the caller must NOT act on.
     return { ...sent, held: now.claimant === myPubkey && now.epoch === epoch, epoch };
+  }
+
+  // PROGRESS/DONE/BLOCKED: executor-side fence — refuse when someone else
+  // holds the task, so a zombie learns it lost instead of believing its DONE
+  // landed (the resolver would ignore the verb; the agent would not know).
+  const myPubkey = getPublicKey(hexToBytes(state.sk));
+  const before = await orchStates(state, orchId);
+  const cur = before.get(taskId);
+  if (!mayPostVerb(cur, myPubkey, verb)) {
+    return { rumorId: "", deduped: false, held: false, epoch: cur?.epoch };
   }
 
   const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
