@@ -29,6 +29,8 @@ export interface BaoFundraiser {
   /** v2: payout format. Missing on legacy rows → treat as 'milestones'. */
   format?: BaoFundraiserFormat;
   category?: string | null;
+  /** Free-form discovery tags (e.g. "mining, app doing xyz"). Category is fixed to 'bao-fund' at creation. */
+  subcategory?: string | null;
   /** v2 stream fields (unix seconds) */
   stream_start_at?: number | string | null;
   stream_end_at?: number | string | null;
@@ -230,6 +232,8 @@ export interface CreateFundraiserInput {
   settlement_rail: BaoRail;
   format?: BaoFundraiserFormat;
   category?: string;
+  /** Free-form discovery tags (max 128 chars). Category is fixed to 'bao-fund' server-side. */
+  subcategory?: string | null;
   milestones?: CreateMilestoneInput[];
   /** Stream format: vesting window in unix seconds (required iff format='stream'). */
   stream_start_at?: number;
@@ -368,7 +372,7 @@ export interface ContributeResult {
 export async function contributeToFundraiser(
   signer: BaoApiSigner,
   id: string,
-  input: { amount_sats: number; rail: BaoRail; reference?: string; idempotencyKey?: string },
+  input: { amount_sats: number; rail: BaoRail; reference?: string; idempotencyKey?: string; preferredModel?: string },
 ): Promise<ContributeResult> {
   const res = await apiFetch<{ data: ContributeResult }>(`/v1/fundraisers/${encodeURIComponent(id)}/contribute`, {
     method: 'POST',
@@ -376,6 +380,8 @@ export async function contributeToFundraiser(
       amount_sats: input.amount_sats,
       rail: input.rail,
       reference: input.reference,
+      // Donor's AI judge-model vote (sats-weighted; counts for donations ≥ 1,000 sats).
+      ...(input.preferredModel ? { preferred_model: input.preferredModel } : {}),
       // The caller should pass a STABLE key per checkout intent so a retry
       // after a network timeout dedupes server-side (the API returns
       // `replayed: true` for repeats). A per-call Date.now() key — the old
@@ -387,17 +393,165 @@ export async function contributeToFundraiser(
   return res.data;
 }
 
+export interface ReleaseMilestoneResult {
+  milestone: BaoMilestone;
+  fundraiser: BaoFundraiser;
+  /** Gross milestone amount in sats (before the AI verification fee). */
+  milestone_amount_sats?: number;
+  /** AI verification fee deducted from this release, in msats. */
+  verification_fee_msats?: number;
+  /** Net amount the project receives, in sats. */
+  released_sats?: number;
+}
+
 export async function releaseMilestone(
   signer: BaoApiSigner,
   fundraiserId: string,
   milestoneId: string,
   opts?: { payout_reference?: string; proof_event_id?: string },
-): Promise<{ milestone: BaoMilestone; fundraiser: BaoFundraiser }> {
-  const res = await apiFetch<{ data: { milestone: BaoMilestone; fundraiser: BaoFundraiser } }>(
+): Promise<ReleaseMilestoneResult> {
+  const res = await apiFetch<{ data: ReleaseMilestoneResult }>(
     `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/release`,
     { method: 'POST', body: opts ?? {}, signer },
   );
   return res.data;
+}
+
+// ─── AI milestone verification (Orbiter) ─────────────────────────────────────
+
+/** Default AI judge model (used when no donor preference is recorded). */
+export const DEFAULT_VERIFICATION_MODEL = 'moonshotai/kimi-k3';
+
+/** Curated judge model from GET /v1/verification/models. */
+export interface VerificationModel {
+  /** Routstr/OpenRouter model id. */
+  id: string;
+  /** Human-readable display name. */
+  name: string;
+  /** Provider prefix (e.g. 'moonshotai'). */
+  provider: string;
+  /** Input price in msats per 1M tokens. */
+  input_msats_per_1m: number;
+  /** Output price in msats per 1M tokens. */
+  output_msats_per_1m: number;
+  /** Whether the model accepts image input. */
+  vision: boolean;
+  /** Rough quality tier, for display only. */
+  tier: string;
+}
+
+/**
+ * Wire shape of the models endpoint. The API serializes the registry with
+ * camelCase keys (`label`, `inputMsatsPer1M`); accept both that and the
+ * snake_case shape so an older/newer deployment never renders a blank picker.
+ */
+interface WireVerificationModel {
+  id: string;
+  name?: string;
+  label?: string;
+  provider?: string;
+  input_msats_per_1m?: number;
+  inputMsatsPer1M?: number;
+  output_msats_per_1m?: number;
+  outputMsatsPer1M?: number;
+  vision: boolean;
+  tier: string;
+}
+
+function normalizeVerificationModel(m: WireVerificationModel): VerificationModel {
+  return {
+    id: m.id,
+    name: m.name ?? m.label ?? m.id,
+    provider: m.provider ?? m.id.split('/')[0] ?? '',
+    input_msats_per_1m: m.input_msats_per_1m ?? m.inputMsatsPer1M ?? 0,
+    output_msats_per_1m: m.output_msats_per_1m ?? m.outputMsatsPer1M ?? 0,
+    vision: m.vision,
+    tier: m.tier,
+  };
+}
+
+/** List the curated AI judge models donors can vote for at contribution time. */
+export async function fetchVerificationModels(): Promise<VerificationModel[]> {
+  const res = await apiFetch<{ data: { default_model?: string; models: WireVerificationModel[] } }>('/v1/verification/models');
+  return res.data.models.map(normalizeVerificationModel);
+}
+
+export type BaoVerificationVerdict = 'pass' | 'review' | 'fail';
+
+/** One recorded AI scoring attempt for a milestone. */
+export interface BaoMilestoneVerification {
+  id: number;
+  milestone_id: string;
+  fundraiser_id: string;
+  attempt: number;
+  model: string;
+  score: number;
+  verdict: BaoVerificationVerdict;
+  fee_msats: number;
+  inference_msats: number;
+  operator_msats: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_msats: number;
+  evidence_hash: string;
+  rules_hash: string;
+  receipt_hash: string | null;
+  nostr_event_id: string | null;
+  job_id: number | null;
+  created_at: string;
+}
+
+export interface ScoreMilestoneResult {
+  job_id: number;
+  estimated_fee_msats: number;
+  /** Effective judge model the job will be scored with (donor-vote snapshot or default). */
+  model: string;
+}
+
+/**
+ * Submit milestone evidence and enqueue AI scoring (owner/admin). The API
+ * returns 202 + job id; the worker publishes a public, signed kind-38037
+ * score event and the fee is deducted from the milestone payout.
+ */
+export async function scoreMilestone(
+  signer: BaoApiSigner,
+  fundraiserId: string,
+  milestoneId: string,
+  evidence: string,
+): Promise<ScoreMilestoneResult> {
+  const res = await apiFetch<{ data: ScoreMilestoneResult & { demo?: boolean } }>(
+    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/score`,
+    { method: 'POST', body: { evidence }, signer },
+  );
+  return res.data;
+}
+
+export interface BaoVerificationStats {
+  total_fees_msats: number;
+  verification_balance_sats: number;
+  verification_debt_sats: number;
+  verifications: BaoMilestoneVerification[];
+}
+
+/** Verification stats for a campaign: fee totals, balance/debt, and scoring history. */
+export async function fetchVerificationStats(fundraiserId: string): Promise<BaoVerificationStats> {
+  const res = await apiFetch<{ data: BaoVerificationStats }>(
+    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/verification`,
+  );
+  return res.data;
+}
+
+/** Demo top-up of the campaign's AI-verification balance (owner/admin, DEMO). */
+export async function topUpVerificationBalance(
+  signer: BaoApiSigner,
+  fundraiserId: string,
+  amountSats: number,
+): Promise<BaoFundraiser> {
+  const res = await apiFetch<{ data: { demo?: boolean; fundraiser: BaoFundraiser } }>(
+    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/verification/topup`,
+    { method: 'POST', body: { amount_sats: amountSats }, signer },
+  );
+  return res.data.fundraiser;
 }
 
 export interface ClaimStreamResult {

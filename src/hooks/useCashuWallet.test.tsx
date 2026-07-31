@@ -88,6 +88,17 @@ vi.mock('@/hooks/useAppContext', () => ({
   useAppContext: () => ({ config: { appName: 'Test', clientName: 'Test' } }),
 }));
 
+// The hook reads the nutzaps publish preference; the real hook chain pulls in
+// useNostr (NostrProvider), which this suite doesn't mount.
+vi.mock('@/hooks/usePublishPreferences', () => ({
+  usePublishPreferences: () => ({
+    prefs: {},
+    isEnabled: () => true,
+    setEnabled: vi.fn(),
+    isLoading: false,
+  }),
+}));
+
 vi.mock('@/lib/cashu/cashu', async () => {
   const actual = await vi.importActual<typeof import('@/lib/cashu/cashu')>('@/lib/cashu/cashu');
   return {

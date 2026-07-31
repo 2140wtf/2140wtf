@@ -23,7 +23,6 @@ import {
   type BaoRail,
   type CreateFundraiserInput,
 } from '@/lib/baoFundraising';
-import { BAO_CATEGORIES } from '@/lib/baoCategories';
 
 function formatSats(n: number): string {
   return Number(n).toLocaleString();
@@ -98,7 +97,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const [repoUrl, setRepoUrl] = useState('');
   const [runnerType, setRunnerType] = useState<'agent' | 'human' | 'agent_human'>('agent_human');
   const [rail, setRail] = useState<BaoRail>('lightning');
-  const [category, setCategory] = useState('tools');
+  const [subcategory, setSubcategory] = useState('');
   const [format, setFormat] = useState<BaoFundraiserFormat>('milestones');
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([emptyMilestone()]);
   const [streamDays, setStreamDays] = useState('30');
@@ -129,10 +128,10 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     setDescription('');
     setRepoUrl('');
     setMilestones([emptyMilestone()]);
-    // Also reset the options — leaving rail/category/format behind silently
+    // Also reset the options — leaving rail/subcategory/format behind silently
     // creates the next campaign with the previous one's stream format or rail.
     setRail('lightning');
-    setCategory('tools');
+    setSubcategory('');
     setFormat('milestones');
     setStreamDays('30');
   };
@@ -160,7 +159,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           goal_sats: goal,
           settlement_rail: rail,
           format: 'stream',
-          category,
+          category: 'bao-fund',
+          subcategory: subcategory.trim() || null,
           stream_start_at: now,
           stream_end_at: now + (parseInt(streamDays, 10) || 30) * DAY,
         }
@@ -171,7 +171,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           goal_sats: goal,
           settlement_rail: rail,
           format: 'milestones',
-          category,
+          category: 'bao-fund',
+          subcategory: subcategory.trim() || null,
           milestones: milestones.map((m) => ({
             title: m.title.trim(),
             description: m.description.trim(),
@@ -340,12 +341,11 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             </div>
             <div className="space-y-1.5">
               <Label>Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {BAO_CATEGORIES.map((c) => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {/* Fixed server-side to 'bao-fund' — discovery happens via the
+                  free-form subcategory/tags field below. */}
+              <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                Bao fund
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Rail</Label>
@@ -360,6 +360,17 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="fr-subcategory">Subcategory / tags</Label>
+            <Input
+              id="fr-subcategory"
+              value={subcategory}
+              onChange={(e) => setSubcategory(e.target.value.slice(0, 128))}
+              placeholder="e.g. mining, app doing xyz — helps others find this project"
+              maxLength={128}
+            />
           </div>
 
           {format === 'stream' ? (
@@ -499,6 +510,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             {format === 'stream'
               ? ' A single-shot campaign has no markets; funds vest linearly over the window.'
               : ' Every milestone spawns a YES/NO prediction market on bao.markets with demo liquidity seeded by the fund.'}
+          </p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Each AI verification costs ~500 sats (min), deducted from the milestone payout.
           </p>
         </div>
       </DialogContent>

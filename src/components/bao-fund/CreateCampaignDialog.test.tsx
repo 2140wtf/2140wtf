@@ -76,6 +76,30 @@ describe('CreateCampaignDialog — stream goal', () => {
     const input = mocks.createMock.mock.calls[0][1] as CreateFundraiserInput;
     expect(input.format).toBe('stream');
     expect(input.goal_sats).toBe(1000);
+    // Category is fixed server-side; the dialog no longer offers a picker.
+    expect(input.category).toBe('bao-fund');
+    expect(input.subcategory).toBeNull();
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-id'));
+  });
+
+  it('fixes the category to bao-fund and sends the trimmed subcategory tags', async () => {
+    renderDialog();
+
+    fireEvent.change(screen.getByLabelText('Project title'), { target: { value: 'Tagged campaign' } });
+    fireEvent.change(screen.getByLabelText(/Repository/), { target: { value: 'https://github.com/x/y' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'x'.repeat(130) } });
+    fireEvent.change(screen.getByLabelText('Subcategory / tags'), { target: { value: '  mining, app doing xyz  ' } });
+
+    fireEvent.change(screen.getAllByPlaceholderText('sats')[0], { target: { value: '5000' } });
+    fireEvent.change(screen.getByPlaceholderText(`Milestone 1`), { target: { value: 'Ship it' } });
+    fireEvent.change(screen.getByPlaceholderText(/What will be delivered/), { target: { value: 'd'.repeat(60) } });
+    fireEvent.change(screen.getByPlaceholderText(/Delivery criteria/), { target: { value: 'c'.repeat(25) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create raise — 5,000 sats goal' }));
+    await waitFor(() => expect(mocks.createMock).toHaveBeenCalledTimes(1));
+
+    const input = mocks.createMock.mock.calls[0][1] as CreateFundraiserInput;
+    expect(input.category).toBe('bao-fund');
+    expect(input.subcategory).toBe('mining, app doing xyz');
   });
 });
