@@ -83,3 +83,6 @@ services/escrow-operator/dist/
 
 # Grant proposal experiment (local only, not for public repo)
 grant-proposal-experiment/
+
+# Encrypted signing-key backups — never commit, keep outside the repo
+*.gpg
