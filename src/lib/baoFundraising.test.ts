@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BAO_FUNDRAISER_CREATE_KIND,
+  contributeToFundraiser,
   createFundraiserRelayFirst,
+  fetchVerificationModels,
+  fetchVerificationStats,
+  releaseMilestone,
+  scoreMilestone,
+  topUpVerificationBalance,
   type BaoFundraiser,
   type CreateFundraiserInput,
 } from './baoFundraising';
@@ -152,5 +158,182 @@ describe('createFundraiserRelayFirst', () => {
     expect(result.fundraiser.id).toBe('fr_rest2');
     const lastCall = fetchMock.mock.calls.at(-1)!;
     expect(lastCall[1]?.method).toBe('POST');
+  });
+});
+
+describe('fetchVerificationModels', () => {
+  it('normalizes the camelCase registry wire format', async () => {
+    stubFetch({
+      body: {
+        data: {
+          default_model: 'moonshotai/kimi-k3',
+          models: [
+            { id: 'moonshotai/kimi-k3', label: 'Kimi K3', inputMsatsPer1M: 3_000_000, outputMsatsPer1M: 15_000_000, vision: true, tier: 'flagship' },
+            { id: 'openai/gpt-5.6-sol', label: 'GPT 5.6 Sol', inputMsatsPer1M: 2_000_000, outputMsatsPer1M: 8_000_000, vision: false, tier: 'strong' },
+          ],
+        },
+      },
+    });
+
+    const models = await fetchVerificationModels();
+
+    expect(models).toHaveLength(2);
+    expect(models[0]).toEqual({
+      id: 'moonshotai/kimi-k3',
+      name: 'Kimi K3',
+      provider: 'moonshotai',
+      input_msats_per_1m: 3_000_000,
+      output_msats_per_1m: 15_000_000,
+      vision: true,
+      tier: 'flagship',
+    });
+    expect(models[1].vision).toBe(false);
+  });
+
+  it('accepts the snake_case shape too', async () => {
+    stubFetch({
+      body: {
+        data: {
+          models: [
+            { id: 'qwen/qwen3.7-max', name: 'Qwen 3.7 Max', provider: 'qwen', input_msats_per_1m: 1, output_msats_per_1m: 2, vision: true, tier: 'efficient' },
+          ],
+        },
+      },
+    });
+
+    const models = await fetchVerificationModels();
+    expect(models[0]).toMatchObject({ id: 'qwen/qwen3.7-max', name: 'Qwen 3.7 Max', provider: 'qwen', input_msats_per_1m: 1 });
+  });
+});
+
+describe('contributeToFundraiser preferred_model', () => {
+  it('sends preferred_model when a judge model is selected', async () => {
+    const fetchMock = stubFetch({
+      body: { data: { payment_instructions: { kind: 'demo' }, fundraiser: fundraiser({}), milestones: [] } },
+    });
+
+    await contributeToFundraiser(signer, 'fr_1', {
+      amount_sats: 2_000,
+      rail: 'cashu',
+      idempotencyKey: 'k1',
+      preferredModel: 'anthropic/claude-fable-5',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/v1/fundraisers/fr_1/contribute');
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      amount_sats: 2_000,
+      rail: 'cashu',
+      preferred_model: 'anthropic/claude-fable-5',
+    });
+  });
+
+  it('omits preferred_model when no judge model is selected', async () => {
+    const fetchMock = stubFetch({
+      body: { data: { payment_instructions: { kind: 'demo' }, fundraiser: fundraiser({}), milestones: [] } },
+    });
+
+    await contributeToFundraiser(signer, 'fr_1', { amount_sats: 500, rail: 'lightning', idempotencyKey: 'k2' });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty('preferred_model');
+  });
+});
+
+describe('scoreMilestone', () => {
+  it('posts the evidence and returns the enqueued job', async () => {
+    const fetchMock = stubFetch({
+      body: { data: { demo: true, job_id: 42, estimated_fee_msats: 500_000, model: 'moonshotai/kimi-k3' } },
+    });
+
+    const result = await scoreMilestone(signer, 'fr_1', 'm_1', 'see commit abc123');
+
+    expect(result).toEqual({ job_id: 42, estimated_fee_msats: 500_000, model: 'moonshotai/kimi-k3', demo: true });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/v1/fundraisers/fr_1/milestones/m_1/score');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ evidence: 'see commit abc123' });
+    expect(init?.headers).toMatchObject({ Authorization: expect.stringMatching(/^Nostr /) });
+  });
+});
+
+describe('fetchVerificationStats', () => {
+  it('returns fee totals, balance, and attempt history', async () => {
+    const verification = {
+      id: 1,
+      milestone_id: 'm_1',
+      fundraiser_id: 'fr_1',
+      attempt: 1,
+      model: 'moonshotai/kimi-k3',
+      score: 87,
+      verdict: 'pass',
+      fee_msats: 500_000,
+      inference_msats: 320_000,
+      operator_msats: 200_000,
+      input_tokens: 4200,
+      output_tokens: 350,
+      cost_msats: 320_000,
+      evidence_hash: 'sha256:abc',
+      rules_hash: 'sha256:def',
+      receipt_hash: null,
+      nostr_event_id: null,
+      job_id: 42,
+      created_at: new Date().toISOString(),
+    };
+    stubFetch({
+      body: {
+        data: {
+          total_fees_msats: 500_000,
+          verification_balance_sats: 1_000,
+          verification_debt_sats: 0,
+          verifications: [verification],
+        },
+      },
+    });
+
+    const stats = await fetchVerificationStats('fr_1');
+
+    expect(stats.total_fees_msats).toBe(500_000);
+    expect(stats.verification_balance_sats).toBe(1_000);
+    expect(stats.verifications).toHaveLength(1);
+    expect(stats.verifications[0]).toMatchObject({ milestone_id: 'm_1', score: 87, verdict: 'pass' });
+  });
+});
+
+describe('topUpVerificationBalance', () => {
+  it('posts the amount and returns the updated fundraiser', async () => {
+    const fetchMock = stubFetch({
+      body: { data: { demo: true, fundraiser: fundraiser({ id: 'fr_1' }) } },
+    });
+
+    const updated = await topUpVerificationBalance(signer, 'fr_1', 5_000);
+
+    expect(updated.id).toBe('fr_1');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/v1/fundraisers/fr_1/verification/topup');
+    expect(JSON.parse(String(init?.body))).toEqual({ amount_sats: 5_000 });
+  });
+});
+
+describe('releaseMilestone', () => {
+  it('returns the itemized fee breakdown', async () => {
+    stubFetch({
+      body: {
+        data: {
+          demo: true,
+          milestone: { id: 'm_1', status: 'released' },
+          fundraiser: fundraiser({ id: 'fr_1' }),
+          milestone_amount_sats: 10_000,
+          verification_fee_msats: 500_000,
+          released_sats: 9_500,
+        },
+      },
+    });
+
+    const result = await releaseMilestone(signer, 'fr_1', 'm_1');
+
+    expect(result.milestone.status).toBe('released');
+    expect(result.verification_fee_msats).toBe(500_000);
+    expect(result.released_sats).toBe(9_500);
   });
 });

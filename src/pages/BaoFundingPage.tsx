@@ -12,13 +12,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
@@ -29,11 +32,16 @@ import {
   baoApiBase,
   claimStream,
   contributeToFundraiser,
+  DEFAULT_VERIFICATION_MODEL,
   fetchFundraiser,
   fetchFundraisers,
+  fetchVerificationModels,
+  fetchVerificationStats,
   isBaoRailLive,
   releaseMilestone,
+  scoreMilestone,
   type BaoFundraiser,
+  type BaoMilestone,
   type BaoRail,
 } from '@/lib/baoFundraising';
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
@@ -43,6 +51,11 @@ import { cn } from '@/lib/utils';
 
 function formatSats(n: number): string {
   return Number(n).toLocaleString();
+}
+
+/** Short display name from a model id (`moonshotai/kimi-k3` → `kimi-k3`). */
+function shortModelName(modelId: string): string {
+  return modelId.split('/').pop() ?? modelId;
 }
 
 function RunnerBadge({ type }: { type: BaoFundraiser['runner_type'] }) {
@@ -75,6 +88,7 @@ export function BaoFundingPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
+  const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchParams] = useSearchParams();
 
@@ -103,7 +117,10 @@ export function BaoFundingPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['bao-fundraisers'] });
-    if (selectedId) queryClient.invalidateQueries({ queryKey: ['bao-fundraiser', selectedId] });
+    if (selectedId) {
+      queryClient.invalidateQueries({ queryKey: ['bao-fundraiser', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['bao-verification', selectedId] });
+    }
   };
 
   const releaseMutation = useMutation({
@@ -131,6 +148,12 @@ export function BaoFundingPage() {
     : allFundraisers.filter((f) => (f.category === 'daos' ? 'baos' : (f.category ?? 'tools')) === categoryFilter);
   const detail = detailQuery.data;
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
+
+  // Itemized fee breakdown of the most recent release, shown under the
+  // milestone it belongs to (the API returns it on the release response).
+  const releaseInfo = releaseMutation.data && releaseMutation.variables
+    ? { milestoneId: releaseMutation.variables.milestoneId, ...releaseMutation.data }
+    : null;
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -235,6 +258,8 @@ export function BaoFundingPage() {
                   onContribute={() => setContributeTarget(f)}
                   onRelease={(milestoneId) => releaseMutation.mutate({ fundraiserId: f.id, milestoneId })}
                   releasePending={releaseMutation.isPending}
+                  releaseInfo={releaseInfo}
+                  onScore={(milestone, model) => detail && setScoreTarget({ fundraiser: detail.fundraiser, milestone, model })}
                   onClaim={() => claimMutation.mutate(f.id)}
                   claimPending={claimMutation.isPending}
                 />
@@ -260,23 +285,31 @@ export function BaoFundingPage() {
         onOpenChange={(open) => !open && setContributeTarget(null)}
         onContributed={() => invalidate()}
       />
+      <ScoreMilestoneDialog
+        target={scoreTarget}
+        onOpenChange={(open) => !open && setScoreTarget(null)}
+        onScored={() => invalidate()}
+      />
     </div>
   );
 }
 
 // ── Campaign card ────────────────────────────────────────────────────────────
 
-function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading, isOwner, isLoggedIn, onContribute, onRelease, releasePending, onClaim, claimPending }: {
+function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading, isOwner, isLoggedIn, onContribute, onRelease, releasePending, releaseInfo, onScore, onClaim, claimPending }: {
   fundraiser: BaoFundraiser;
   expanded: boolean;
   onToggle: () => void;
-  detail?: { fundraiser: BaoFundraiser; milestones: import('@/lib/baoFundraising').BaoMilestone[] };
+  detail?: { fundraiser: BaoFundraiser; milestones: BaoMilestone[] };
   detailLoading: boolean;
   isOwner: boolean;
   isLoggedIn: boolean;
   onContribute: () => void;
   onRelease: (milestoneId: string) => void;
   releasePending: boolean;
+  /** Fee breakdown of the just-released milestone, if any. */
+  releaseInfo: { milestoneId: string; milestone_amount_sats?: number; verification_fee_msats?: number; released_sats?: number } | null;
+  onScore: (milestone: BaoMilestone, model: string) => void;
   onClaim: () => void;
   claimPending: boolean;
 }) {
@@ -285,6 +318,26 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   const displayName = metadata?.name ?? genUserName(f.owner_pubkey);
   const pct = Math.min(100, Math.round((Number(f.raised_sats) / Number(f.goal_sats)) * 100));
   const format = f.format ?? 'milestones';
+
+  // AI verification stats (scores, fees, balance) — public endpoint. Tolerate
+  // failure: older API deployments don't have it, and the market widget is
+  // still fully usable without scores.
+  const verificationQuery = useQuery({
+    queryKey: ['bao-verification', f.id],
+    queryFn: () => fetchVerificationStats(f.id),
+    enabled: expanded,
+    retry: false,
+    refetchInterval: 15_000,
+  });
+  const verifications = verificationQuery.data?.verifications ?? [];
+  // Verifications arrive ordered (created_at ASC, attempt ASC) — last is latest.
+  const latestVerificationFor = (milestoneId: string) => {
+    const list = verifications.filter((v) => v.milestone_id === milestoneId);
+    return list.length > 0 ? list[list.length - 1] : null;
+  };
+  // Effective judge model: the model of the latest score if one exists,
+  // otherwise the registry default (Kimi K3).
+  const judgeModelId = verifications.length > 0 ? verifications[verifications.length - 1].model : null;
 
   return (
     <Card
@@ -344,30 +397,65 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                 />
               ) : (
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Milestones — each one a market</h3>
-                  {detail.milestones.map((m) => (
-                    <div key={m.id} className="space-y-1.5">
-                      <MilestoneMarketWidget milestone={m} />
-                      <AttestationPanel fundraiser={detail.fundraiser} milestone={m} isOwner={isOwner} />
-                      {m.status === 'unlocked' && isOwner && (m.market_resolution === 'yes' || !m.market_id) && (
-                        <div className="flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={releasePending}
-                            onClick={() => onRelease(m.id)}
-                          >
-                            {releasePending ? <Loader2 className="size-3.5 animate-spin" /> : `Release ${formatSats(Number(m.amount_sats))} sats`}
-                          </Button>
-                        </div>
-                      )}
-                      {m.status === 'unlocked' && m.market_id && m.market_resolution !== 'yes' && (
-                        <p className="text-[11px] text-muted-foreground text-right">
-                          Funded — waiting for the market to resolve YES.
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold">Milestones — each one a market</h3>
+                    <span className="text-[11px] text-muted-foreground">
+                      {judgeModelId
+                        ? `Judge: ${shortModelName(judgeModelId)} (latest score)`
+                        : 'Judge: Kimi K3 (default)'}
+                    </span>
+                  </div>
+                  {detail.milestones.map((m) => {
+                    const verification = latestVerificationFor(m.id);
+                    return (
+                      <div key={m.id} className="space-y-1.5">
+                        <MilestoneMarketWidget milestone={m} fundraiser={detail.fundraiser} verification={verification} />
+                        <AttestationPanel fundraiser={detail.fundraiser} milestone={m} isOwner={isOwner} />
+                        {releaseInfo && releaseInfo.milestoneId === m.id && releaseInfo.released_sats !== undefined && (
+                          <div className="rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-xs space-y-0.5">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Milestone amount</span>
+                              <span className="tabular-nums">{formatSats(releaseInfo.milestone_amount_sats ?? Number(m.amount_sats))} sats</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">AI verification fee</span>
+                              <span className="tabular-nums">−{formatSats(Math.ceil((releaseInfo.verification_fee_msats ?? 0) / 1000))} sats</span>
+                            </div>
+                            <div className="flex justify-between font-medium">
+                              <span>You receive</span>
+                              <span className="tabular-nums">{formatSats(releaseInfo.released_sats)} sats</span>
+                            </div>
+                          </div>
+                        )}
+                        {m.status === 'unlocked' && isOwner && (
+                          <div className="flex justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onScore(m, judgeModelId ?? DEFAULT_VERIFICATION_MODEL)}
+                            >
+                              Score milestone
+                            </Button>
+                            {(m.market_resolution === 'yes' || !m.market_id) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={releasePending}
+                                onClick={() => onRelease(m.id)}
+                              >
+                                {releasePending ? <Loader2 className="size-3.5 animate-spin" /> : `Release ${formatSats(Number(m.amount_sats))} sats`}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        {m.status === 'unlocked' && m.market_id && m.market_resolution !== 'yes' && (
+                          <p className="text-[11px] text-muted-foreground text-right">
+                            Funded — waiting for the market to resolve YES.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -388,6 +476,83 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   );
 }
 
+// ── Score milestone dialog ──────────────────────────────────────────────────
+
+/**
+ * Owner confirmation for submitting milestone evidence to the AI verifier.
+ * The API enqueues a scoring job (202) and the worker publishes a public,
+ * signed score event; the fee is deducted from the milestone payout.
+ */
+function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
+  target: { fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null;
+  onOpenChange: (open: boolean) => void;
+  onScored: () => void;
+}) {
+  const { user } = useCurrentUser();
+  const { toast } = useToast();
+  const [evidence, setEvidence] = useState('');
+
+  // Reset the evidence draft whenever a different milestone is targeted.
+  const targetId = target?.milestone.id ?? null;
+  useEffect(() => {
+    setEvidence('');
+  }, [targetId]);
+
+  const mutation = useMutation({
+    mutationFn: () => scoreMilestone(user!.signer, target!.fundraiser.id, target!.milestone.id, evidence.trim()),
+    onSuccess: (data) => {
+      toast({
+        title: 'AI scoring queued (DEMO)',
+        description: `Job #${data.job_id} — est. fee ${formatSats(Math.ceil(data.estimated_fee_msats / 1000))} sats, judged by ${shortModelName(data.model)}.`,
+      });
+      onOpenChange(false);
+      onScored();
+    },
+    onError: (e) => toast({ title: 'Scoring failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+  });
+
+  const close = (open: boolean) => {
+    if (!open) setEvidence('');
+    onOpenChange(open);
+  };
+
+  return (
+    <Dialog open={!!target} onOpenChange={close}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Score milestone{target ? `: ${target.milestone.title}` : ''}</DialogTitle>
+          <DialogDescription>
+            Judge: {target ? shortModelName(target.model) : ''} · estimated cost ~500 sats (min), deducted from the payout.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            This publishes a public, signed score event. Fee is deducted from the payout.
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="score-evidence">Evidence</Label>
+            <Textarea
+              id="score-evidence"
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              rows={6}
+              placeholder="Links, commit hashes, screenshots descriptions — what proves the deliverable matches the criteria?"
+            />
+          </div>
+          <Button
+            className="w-full"
+            disabled={!evidence.trim() || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Submit for AI scoring (demo)'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Contribute dialog ────────────────────────────────────────────────────────
 
 // Exported for regression tests (idempotency key + stale instructions races).
@@ -400,6 +565,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const { toast } = useToast();
   const [amount, setAmount] = useState('1000');
   const [rail, setRail] = useState<BaoRail>('lightning');
+  const [judgeModel, setJudgeModel] = useState<string>(DEFAULT_VERIFICATION_MODEL);
   const [instructions, setInstructions] = useState<Record<string, unknown> | null>(null);
   // Stable idempotency key per campaign: a retry after a network timeout (or
   // an accidental double submit) replays server-side instead of recording the
@@ -425,6 +591,18 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
     setInstructions(null);
   }, [fundraiserId]);
 
+  // Curated AI judge models for the Advanced picker. Failure-tolerant: fall
+  // back to the registry default so the dialog still works on an older API.
+  const modelsQuery = useQuery({
+    queryKey: ['bao-verification-models'],
+    queryFn: fetchVerificationModels,
+    enabled: !!fundraiser,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const models = modelsQuery.data ?? [];
+  const selectedModel = models.find((m) => m.id === judgeModel);
+
   const mutation = useMutation({
     mutationFn: () => {
       if (!idemKeyRef.current || idemKeyRef.current.fundraiserId !== fundraiser!.id) {
@@ -435,6 +613,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         amount_sats: parseInt(amount, 10) || 0,
         rail,
         idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current.key}`,
+        preferredModel: judgeModel || undefined,
       });
     },
     onSuccess: (data) => {
@@ -525,6 +704,33 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                 {' '}(Wallet → Claim) — signet coins, no real value.
               </p>
             </div>
+
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                <ChevronDown className="size-3.5" /> Advanced
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-1.5">
+                <Label>Judge model (optional)</Label>
+                <Select value={judgeModel} onValueChange={setJudgeModel}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {models.length === 0 ? (
+                      <SelectItem value={DEFAULT_VERIFICATION_MODEL}>Recommended: Kimi K3</SelectItem>
+                    ) : (
+                      models.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.id === DEFAULT_VERIFICATION_MODEL ? `Recommended: ${m.name}` : `${m.name} (${m.provider})`}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {selectedModel && `${selectedModel.tier} tier${selectedModel.vision ? ' · vision support' : ''} · `}
+                  ~500–2,000 sats per verification. Preferences count for donations ≥ 1,000 sats.
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
 
             <Button
               className="w-full"
