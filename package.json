@@ -17,7 +17,9 @@
     "ci": "npm ci && npm run test",
     "cap:sync": "npx cap sync && node scripts/patch-cap-config.mjs",
     "keygen": "keytool -genkey -v -keystore android/app/my-upload-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload",
-    "icons": "python3 scripts/generate-icons.py"
+    "icons": "python3 scripts/generate-icons.py",
+    "mcp": "rolldown -c scripts/rolldown.bao-chat-mcp.config.mjs && node .tmp/bao-chat-mcp.mjs",
+    "mcp:bundle": "rolldown -c scripts/rolldown.bao-chat-mcp.standalone.config.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -178,6 +180,7 @@
     "@eslint/js": "^9.9.0",
     "@html-eslint/eslint-plugin": "^0.41.0",
     "@html-eslint/parser": "^0.41.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@playwright/test": "^1.59.0",
     "@tailwindcss/typography": "^0.5.15",
     "@testing-library/dom": "^10.4.1",
