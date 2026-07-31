@@ -1,18 +1,17 @@
-import { Bot, ChevronDown, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
+import { Bot, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 
 import { JoinButton } from "@/components/auth/JoinButton";
 import { PageHeader } from "@/components/PageHeader";
-import { RelayListEditor } from "@/components/RelayListEditor";
+import { RelayIdentity } from "@/components/RelayListEditor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChromeDialogContent, Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCommunityActions2, useCreateRelayCandidates2, FEED_RELAY_CANDIDATES } from "@/concord-v2/hooks/useCommunityActions2";
+import { useCommunityActions2, useCreateRelayCandidates2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCommunity2, useLiveCommunities2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useConcord2Unread } from "@/concord-v2/hooks/useConcord2Unread";
@@ -24,15 +23,6 @@ import { useMutes } from "@/hooks/useMutes";
 import { toast } from "@/hooks/useToast";
 import { normalizeRelayUrl } from "@/lib/platform";
 import { cn } from "@/lib/utils";
-
-/** Hostname for a relay URL (for compact suggestion chips). */
-function relayHostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url.replace(/^wss?:\/\//, "");
-  }
-}
 
 /**
  * One community row: decrypted icon + name (the fold's metadata wins over the
@@ -113,35 +103,54 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const { create } = useCommunityActions2();
   const navigate = useNavigate();
 
-  // Advanced: which relays the community is minted on. `null` = untouched (the
-  // create path picks its own default — app relays ∪ the curated-feed relay
-  // candidates ∪ CORD stock ∪ the creator's DM relays); once the user edits,
-  // `relays` holds the explicit set. The candidate query (gated on the menu
-  // being open) resolves the same default for pre-selection.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [relays, setRelays] = useState<string[] | null>(null);
-  const { data: candidates } = useCreateRelayCandidates2(advancedOpen);
-  const effectiveRelays = useMemo(() => relays ?? candidates ?? [], [relays, candidates]);
+  // Relay picks are EXPLICIT and start EMPTY: nothing is pre-ticked, and the
+  // Create button stays disabled until at least one relay is chosen. Choosing
+  // is the user's confirmation that they've seen the reach-vs-privacy
+  // tradeoff explained above the list — a pre-selected "everything" default
+  // let a privacy-sensitive creator mint a community onto the full feed relay
+  // set without ever looking at this section.
+  const [picked, setPicked] = useState<string[]>([]);
+  const { data: candidates } = useCreateRelayCandidates2(open);
+  // Rows = candidates ∪ picked — a custom-added relay is simply a picked
+  // relay the candidates don't know about, so unticking it drops it from the
+  // list again.
+  const relayRows = useMemo(() => {
+    const rows: string[] = [];
+    for (const url of [...(candidates ?? []), ...picked]) {
+      if (!rows.includes(url)) rows.push(url);
+    }
+    return rows;
+  }, [candidates, picked]);
 
-  // Feed relays not yet in the set, offered as one-tap additions.
-  const feedSuggestions = useMemo(() => {
-    const chosen = new Set(effectiveRelays.map((u) => normalizeRelayUrl(u) ?? u));
-    return FEED_RELAY_CANDIDATES.filter((u) => !chosen.has(normalizeRelayUrl(u) ?? u));
-  }, [effectiveRelays]);
+  const toggleRelay = (url: string, on: boolean) =>
+    setPicked((cur) => (on ? (cur.includes(url) ? cur : [...cur, url]) : cur.filter((u) => u !== url)));
 
-  const addRelay = (url: string) => setRelays([...effectiveRelays, url]);
+  const [newRelayUrl, setNewRelayUrl] = useState("");
+  const addCustomRelay = () => {
+    const normalized = normalizeRelayUrl(newRelayUrl);
+    if (!normalized) {
+      toast({ title: "Invalid relay URL", description: "Enter a ws:// or wss:// URL.", variant: "destructive" });
+      return;
+    }
+    if (picked.includes(normalized)) {
+      toast({ title: "Already picked", description: normalized });
+      return;
+    }
+    setPicked([...picked, normalized]);
+    setNewRelayUrl("");
+  };
 
   const handleCreate = async () => {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || picked.length === 0) return;
     setBusy(true);
     try {
-      const { communityId, name: createdName } = await create({ name: trimmed, relays: relays ?? undefined, agentOnly });
+      const { communityId, name: createdName } = await create({ name: trimmed, relays: picked, agentOnly });
       toast({ title: "Community created", description: createdName });
       onOpenChange(false);
       setName("");
       setAgentOnly(false);
-      setRelays(null);
+      setPicked([]);
       navigate(`/bao/c/${encodeURIComponent(communityId)}`);
     } catch (e) {
       toast({
@@ -156,7 +165,14 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <ChromeDialogContent title="New encrypted community">
+      {/* The whole dialog scrolls (max height + overflow) with generous bottom
+          padding: the candidate relay list can be long, and without this the
+          tail of the module was unreachable unless the browser went
+          fullscreen. */}
+      <ChromeDialogContent
+        title="New encrypted community"
+        contentClassName="max-h-[85dvh] overflow-y-auto overscroll-contain pb-24"
+      >
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Lock className="size-5 text-primary" />
@@ -200,72 +216,101 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </span>
               </span>
             </label>
-            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                  Cancel
+
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Where this community lives. Members read and write here, so pick
+                relays that accept your writes. An auth-only or DM-only relay can
+                reject the genesis and strand the create. A community lives on up
+                to {MAX_COMMUNITY_RELAYS} relays — only the first {MAX_COMMUNITY_RELAYS} picks are used.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Privacy tip:</span>{" "}
+                messages, member list, and community metadata stay sealed — relays
+                only ever hold ciphertext. What every relay you add CAN see is
+                traffic shape (timing and volume) and direct-invite handoffs
+                (a direct invite p-tags the invitee once; anonymous link joins
+                don't). For most communities the everyday app relays are a fine
+                home; only a super privacy-focused group benefits from trimming
+                down to a single relay you control, ideally with NIP-42 read
+                auth — and preferring invite links over direct invites. Nothing
+                is pre-ticked: your pick below doubles as confirming you've read
+                this.
+              </p>
+
+              <div className="space-y-1.5 pt-1">
+                {relayRows.map((url) => (
+                  <label
+                    key={url}
+                    className="flex cursor-pointer items-center gap-3 rounded-md bg-background/40 px-3 py-2.5"
+                  >
+                    <Checkbox
+                      checked={picked.includes(url)}
+                      onCheckedChange={(v) => toggleRelay(url, v === true)}
+                      disabled={busy}
+                      aria-label={`Use relay ${url}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <RelayIdentity url={url} />
+                    </div>
+                  </label>
+                ))}
+                {relayRows.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-1">Loading relay suggestions…</p>
+                )}
+              </div>
+
+              {/* Not a <form>: nested forms are invalid HTML — the browser drops
+                  the inner one and "Add" would submit the parent. */}
+              <div className="flex gap-2 pt-1">
+                <Input
+                  value={newRelayUrl}
+                  onChange={(e) => setNewRelayUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomRelay();
+                    }
+                  }}
+                  placeholder="wss://relay.example.com"
+                  aria-label="Add relay"
+                  autoComplete="off"
+                  className="text-base md:text-sm bg-background/40 border-transparent"
+                />
+                <Button type="button" disabled={!newRelayUrl.trim()} className="clip-corner-lg shrink-0" onClick={addCustomRelay}>
+                  <Plus className="size-4 mr-1.5" /> Add
                 </Button>
-                <Button type="submit" disabled={busy || !name.trim() || effectiveRelays.length === 0}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-                </Button>
-                <CollapsibleTrigger asChild>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-xs text-muted-foreground">
+                  {picked.length === 0
+                    ? "Pick at least one relay to enable Create."
+                    : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked${picked.length > MAX_COMMUNITY_RELAYS ? ` — only the first ${MAX_COMMUNITY_RELAYS} are used` : ""}`}
+                </p>
+                {candidates && candidates.length > 0 && (
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    aria-label="Choose relays"
+                    size="sm"
+                    className="text-muted-foreground -mr-2"
                     disabled={busy}
+                    onClick={() => setPicked((cur) => [...new Set([...cur, ...candidates])])}
                   >
-                    <ChevronDown className={cn("size-5 transition-transform", advancedOpen && "rotate-180")} />
+                    Select all
                   </Button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-                <p className="mb-2 mt-3 text-xs text-muted-foreground">
-                  Where this community lives. Members read and write here, so pick
-                  relays that accept your writes. An auth-only or DM-only relay can
-                  reject the genesis and strand the create. A community lives on up
-                  to {MAX_COMMUNITY_RELAYS} relays — only the first {MAX_COMMUNITY_RELAYS} picks are used.
-                </p>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Privacy tip:</span>{" "}
-                  messages, member list, and community metadata stay sealed — relays
-                  only ever hold ciphertext. What every relay you add CAN see is
-                  traffic shape (timing and volume) and direct-invite handoffs
-                  (a direct invite p-tags the invitee once; anonymous link joins
-                  don't). For a privacy-focused community use a single relay you
-                  control, ideally with NIP-42 read auth — and prefer invite
-                  links over direct invites. The pre-selected set is the app's
-                  full feed relay list: great for reach, loud for privacy.
-                </p>
-                <RelayListEditor
-                  relays={effectiveRelays}
-                  onChange={setRelays}
-                  onReset={candidates ? () => setRelays(candidates) : undefined}
-                  emptyText="Add at least one relay to host this community."
-                />
-                {feedSuggestions.length > 0 && (
-                  <div className="mt-3">
-                    <p className="mb-1.5 text-xs text-muted-foreground">Add from the feed relays:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {feedSuggestions.map((url) => (
-                        <Button
-                          key={url}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs font-mono"
-                          onClick={() => addRelay(url)}
-                        >
-                          <Plus className="size-3 mr-1" />
-                          {relayHostOf(url)}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
                 )}
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+              </Button>
+            </div>
           </form>
         </div>
       </ChromeDialogContent>
