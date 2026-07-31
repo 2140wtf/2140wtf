@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
-import { useInviteActions2, useMyLinkEpochs2 } from "@/concord-v2/hooks/useInvites2";
+import { useInviteActions2, useMyLinkEpochs2, useMyLinkUsage2 } from "@/concord-v2/hooks/useInvites2";
 import { parseInviteLink, type InviteListEntry } from "@/concord-v2/lib/invite";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { useAuthor } from "@/hooks/useAuthor";
@@ -42,6 +42,9 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
   const { data: folded } = useControlFold2(community);
   const { myLinks, revokeLink, isRevoking, isPublic, revokeWouldPrivatize } = useInviteActions2(community);
   const { data: linkEpochs } = useMyLinkEpochs2(community);
+  // Per-link join status ("was it ever used?") — matched client-side from the
+  // sealed Guestbook's token commitments; only the creator can make this map.
+  const { usage: linkUsage } = useMyLinkUsage2(community);
   const [copied, setCopied] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   // The link whose raw details we're inspecting (null = dialog closed). Live
@@ -166,6 +169,7 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
               // while loading or if it couldn't be fetched — treat as up to date.
               const servedEpoch = linkEpochs?.[e.token];
               const behind = servedEpoch !== undefined && servedEpoch < epoch;
+              const used = linkUsage.get(e.token);
               return (
               <li key={e.token} className="space-y-1 rounded-md bg-foreground/5 px-3 py-2">
                 <div className="flex items-center gap-2">
@@ -230,6 +234,14 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
                   </span>
                   {e.label && <span>Label: {e.label}</span>}
                   <span>Created {new Date(e.created_at * 1000).toLocaleDateString()}</span>
+                  <span
+                    className={used ? "text-success" : undefined}
+                    title="Joins that spent this link, matched from the sealed Guestbook — visible only to you, the link's creator"
+                  >
+                    {used
+                      ? `Used ${used.count > 1 ? `×${used.count} ` : ""}· first ${new Date(used.firstUsedMs).toLocaleDateString()}`
+                      : "Not used yet"}
+                  </span>
                   {e.expires_at ? (
                     <span className={e.expires_at * 1000 < Date.now() ? "text-destructive" : undefined}>
                       {e.expires_at * 1000 < Date.now() ? "Expired " : "Expires "}
