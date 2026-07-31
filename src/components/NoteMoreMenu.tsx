@@ -44,6 +44,7 @@ import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { ReportDialog } from '@/components/ReportDialog';
 import { AddToListDialog } from '@/components/AddToListDialog';
 import { useNostr } from '@nostrify/react';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { usePinnedNotes } from '@/hooks/usePinnedNotes';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -91,9 +92,24 @@ function MenuItem({ icon, label, onClick, destructive }: MenuItemProps) {
   );
 }
 
-/** Encode the NIP-19 identifier for an event — naddr for replaceable/addressable, nevent otherwise. */
-function encodeEventNip19(event: NostrEvent): string {
-  return encodeEventAddress(event);
+/**
+ * Encode the NIP-19 identifier for an event — naddr for replaceable/addressable,
+ * nevent otherwise. `relayHints` embeds the relays the event was seen on, so a
+ * shared link resolves even when the recipient's relays (and the author's
+ * outbox relays) don't hold the event.
+ */
+function encodeEventNip19(event: NostrEvent, relayHints?: string[]): string {
+  return encodeEventAddress(event, relayHints);
+}
+
+/**
+ * Up to 3 app relays to embed as NIP-19 relay hints in links that leave the
+ * app — the pool this client read the event from is the best hint we have for
+ * where a recipient can fetch it.
+ */
+function useShareRelayHints(): string[] {
+  const { config } = useAppContext();
+  return config.appRelays.slice(0, 3);
 }
 
 interface EventJsonDialogProps {
@@ -199,7 +215,8 @@ export function NoteMoreMenu({ event, open, onOpenChange }: NoteMoreMenuProps) {
 
   const { mutate: deleteEvent, isPending: isDeleting } = useDeleteEvent();
 
-  const nip19Id = encodeEventNip19(event);
+  const relayHints = useShareRelayHints();
+  const nip19Id = encodeEventNip19(event, relayHints);
   const mentionContent = `nostr:${nip19.npubEncode(event.pubkey)} `;
 
   const handleDelete = () => {
@@ -331,6 +348,7 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
   const { addMute, removeMute, isMuted } = useMuteList();
   const userMuted = isMuted('pubkey', event.pubkey);
   const { addToSidebar, removeFromSidebar, orderedItems } = useFeedSettings();
+  const relayHints = useShareRelayHints();
 
   const nip19Id = encodeEventNip19(event);
   const nostrUri = `nostr:${nip19Id}`;
@@ -350,7 +368,10 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
   };
 
   const handleCopyLink = () => {
-    const url = `${shareOrigin}/${nip19Id}`;
+    // Hints go only into the LEAVING-the-app URL: the sidebar URI above stays
+    // hint-free (it's persisted in settings), but a copied link must resolve
+    // for someone whose relays never saw the event.
+    const url = `${shareOrigin}/${encodeEventNip19(event, relayHints)}`;
     navigator.clipboard.writeText(url);
     toast({ title: 'Link copied to clipboard' });
     close();
