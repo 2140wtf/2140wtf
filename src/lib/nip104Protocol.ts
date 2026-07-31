@@ -88,6 +88,20 @@ export const KIND_GIFT_WRAP = 1059;
 export const MLS_PROTOCOL_VERSION = '1.0';
 export const DEFAULT_CIPHERSUITE = '0x0001';
 
+/**
+ * Minimal signer surface required by the group chat protocol.
+ * Structurally compatible with Nostrify's `NostrSigner` (and therefore
+ * `NUser['signer']`), so nsec, browser extension (NIP-07), and bunker
+ * (NIP-46) signers can all be used — as long as they support NIP-44.
+ */
+export interface GroupChatSigner {
+  signEvent(event: Omit<NostrEvent, 'id' | 'pubkey' | 'sig'>): Promise<NostrEvent>;
+  nip44?: {
+    encrypt(pubkey: string, plaintext: string): Promise<string>;
+    decrypt(pubkey: string, ciphertext: string): Promise<string>;
+  };
+}
+
 export interface NostrGroupData {
   nostrGroupId: string;
   name: string;
@@ -173,15 +187,16 @@ export function createKeyPackageEvent(
   return finalizeEvent(template, generateSecretKey()) as unknown as NostrEvent;
 }
 
-export function createWelcomeEvent(
-  senderPrivkey: Uint8Array,
+export async function createWelcomeEvent(
+  senderPubkey: string,
+  signer: GroupChatSigner,
   welcomeData: string,
   keyPackageEventId: string,
   groupRelays: string[],
   epoch: number,
-): NostrEvent {
+): Promise<NostrEvent> {
   const template: UnsignedEvent = {
-    pubkey: getPublicKey(senderPrivkey),
+    pubkey: senderPubkey,
     created_at: Math.floor(Date.now() / 1000),
     kind: KIND_WELCOME,
     tags: [
@@ -191,7 +206,7 @@ export function createWelcomeEvent(
     ],
     content: welcomeData,
   };
-  return finalizeEvent(template, senderPrivkey) as unknown as NostrEvent;
+  return signer.signEvent(template);
 }
 
 export async function wrapWelcomeEvent(
@@ -223,9 +238,10 @@ export async function wrapWelcomeEvent(
 
 export async function unwrapWelcomeEvent(
   giftWrapEvent: NostrEvent,
-  recipientPrivkey: Uint8Array,
+  signer: GroupChatSigner,
 ): Promise<NostrEvent | null> {
   if (giftWrapEvent.kind !== KIND_GIFT_WRAP) return null;
+  if (!signer.nip44) return null;
 
   let sigValid = false;
   try {
@@ -239,8 +255,7 @@ export async function unwrapWelcomeEvent(
   }
 
   try {
-    const conversationKey = nip44.getConversationKey(recipientPrivkey, giftWrapEvent.pubkey);
-    const decryptedJson = nip44.decrypt(giftWrapEvent.content, conversationKey);
+    const decryptedJson = await signer.nip44.decrypt(giftWrapEvent.pubkey, giftWrapEvent.content);
     const innerEvent = JSON.parse(decryptedJson) as unknown;
 
     if (typeof innerEvent !== 'object' || innerEvent === null) return null;
@@ -273,13 +288,13 @@ export async function unwrapWelcomeEvent(
   }
 }
 
-export function createApplicationMessage(
+export async function createApplicationMessage(
   senderPubkey: string,
-  senderPrivkey: Uint8Array,
+  signer: GroupChatSigner,
   content: string,
   groupId: string,
   epoch: number,
-): string {
+): Promise<string> {
   const rumor: UnsignedEvent = {
     kind: 9,
     content,
@@ -290,7 +305,7 @@ export function createApplicationMessage(
     created_at: Math.floor(Date.now() / 1000),
     pubkey: senderPubkey,
   };
-  const event = finalizeEvent(rumor, senderPrivkey);
+  const event = await signer.signEvent(rumor);
   return JSON.stringify(event);
 }
 
