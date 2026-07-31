@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -37,12 +37,15 @@ import {
   fetchFundraisers,
   fetchVerificationModels,
   fetchVerificationStats,
+  fundingProgressPct,
   isBaoRailLive,
+  latestVerification,
   releaseMilestone,
   scoreMilestone,
   type BaoFundraiser,
   type BaoMilestone,
   type BaoRail,
+  type ReleaseMilestoneResult,
 } from '@/lib/baoFundraising';
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
@@ -91,6 +94,20 @@ export function BaoFundingPage() {
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchParams] = useSearchParams();
+  // Itemized fee breakdown of the most recent release, built in onSuccess so
+  // fresh response data can never pair with stale variables (or vice versa).
+  // Keyed by fundraiserId so it only renders under the campaign it came from.
+  const [releaseInfo, setReleaseInfo] = useState<
+    { fundraiserId: string; milestoneId: string } & ReleaseMilestoneResult | null
+  >(null);
+  // Confirmation target for the irreversible payout action.
+  const [releaseConfirm, setReleaseConfirm] = useState<{ fundraiserId: string; milestone: BaoMilestone } | null>(null);
+  // Synchronous double-submit guard: mutation.isPending only flips after a
+  // render, so two clicks in the same frame would both fire without this.
+  const releaseInFlightRef = useRef<Set<string>>(new Set());
+  // Stable idempotency key per milestone: a retry after an ambiguous network
+  // failure replays server-side instead of paying out twice. Rotated on success.
+  const releaseKeysRef = useRef<Map<string, string>>(new Map());
 
   // Deep links (e.g. from a pet's upkeep card):
   //   /bao-fund?campaign=<id>      → preselect/expand that campaign
@@ -124,14 +141,37 @@ export function BaoFundingPage() {
   };
 
   const releaseMutation = useMutation({
-    mutationFn: ({ fundraiserId, milestoneId }: { fundraiserId: string; milestoneId: string }) =>
-      releaseMilestone(user!.signer, fundraiserId, milestoneId),
-    onSuccess: () => {
+    mutationFn: ({ fundraiserId, milestoneId }: { fundraiserId: string; milestoneId: string }) => {
+      const key = `${fundraiserId}:${milestoneId}`;
+      let idempotencyKey = releaseKeysRef.current.get(key);
+      if (!idempotencyKey) {
+        idempotencyKey = `2140:release:${key}:${crypto.randomUUID()}`;
+        releaseKeysRef.current.set(key, idempotencyKey);
+      }
+      return releaseMilestone(user!.signer, fundraiserId, milestoneId, { idempotency_key: idempotencyKey });
+    },
+    onMutate: () => setReleaseInfo(null),
+    onSuccess: (data, variables) => {
+      releaseKeysRef.current.delete(`${variables.fundraiserId}:${variables.milestoneId}`);
+      setReleaseInfo({ fundraiserId: variables.fundraiserId, milestoneId: variables.milestoneId, ...data });
       toast({ title: 'Milestone released (DEMO)' });
       invalidate();
     },
-    onError: (e) => toast({ title: 'Release failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
+    onError: (e) => {
+      setReleaseInfo(null);
+      toast({ title: 'Release failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    },
+    onSettled: (_data, _error, variables) => {
+      releaseInFlightRef.current.delete(`${variables.fundraiserId}:${variables.milestoneId}`);
+    },
   });
+
+  const requestRelease = (fundraiserId: string, milestoneId: string) => {
+    const key = `${fundraiserId}:${milestoneId}`;
+    if (releaseInFlightRef.current.has(key)) return;
+    releaseInFlightRef.current.add(key);
+    releaseMutation.mutate({ fundraiserId, milestoneId });
+  };
 
   const claimMutation = useMutation({
     mutationFn: (fundraiserId: string) => claimStream(user!.signer, fundraiserId),
@@ -148,12 +188,6 @@ export function BaoFundingPage() {
     : allFundraisers.filter((f) => (f.category === 'daos' ? 'baos' : (f.category ?? 'tools')) === categoryFilter);
   const detail = detailQuery.data;
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
-
-  // Itemized fee breakdown of the most recent release, shown under the
-  // milestone it belongs to (the API returns it on the release response).
-  const releaseInfo = releaseMutation.data && releaseMutation.variables
-    ? { milestoneId: releaseMutation.variables.milestoneId, ...releaseMutation.data }
-    : null;
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -256,9 +290,9 @@ export function BaoFundingPage() {
                   isOwner={selectedId === f.id && isOwner}
                   isLoggedIn={!!user}
                   onContribute={() => setContributeTarget(f)}
-                  onRelease={(milestoneId) => releaseMutation.mutate({ fundraiserId: f.id, milestoneId })}
+                  onRelease={(milestone) => setReleaseConfirm({ fundraiserId: f.id, milestone })}
                   releasePending={releaseMutation.isPending}
-                  releaseInfo={releaseInfo}
+                  releaseInfo={releaseInfo && releaseInfo.fundraiserId === f.id ? releaseInfo : null}
                   onScore={(milestone, model) => detail && setScoreTarget({ fundraiser: detail.fundraiser, milestone, model })}
                   onClaim={() => claimMutation.mutate(f.id)}
                   claimPending={claimMutation.isPending}
@@ -290,6 +324,33 @@ export function BaoFundingPage() {
         onOpenChange={(open) => !open && setScoreTarget(null)}
         onScored={() => invalidate()}
       />
+      <Dialog open={!!releaseConfirm} onOpenChange={(open) => !open && !releaseMutation.isPending && setReleaseConfirm(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Release milestone payout?</DialogTitle>
+            <DialogDescription>
+              {releaseConfirm
+                ? `This pays out ${formatSats(Number(releaseConfirm.milestone.amount_sats))} sats for “${releaseConfirm.milestone.title}” (minus the AI verification fee). This cannot be undone.`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={releaseMutation.isPending} onClick={() => setReleaseConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={releaseMutation.isPending}
+              onClick={() => {
+                if (!releaseConfirm) return;
+                requestRelease(releaseConfirm.fundraiserId, releaseConfirm.milestone.id);
+                setReleaseConfirm(null);
+              }}
+            >
+              {releaseMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Release payout (demo)'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -305,7 +366,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   isOwner: boolean;
   isLoggedIn: boolean;
   onContribute: () => void;
-  onRelease: (milestoneId: string) => void;
+  onRelease: (milestone: BaoMilestone) => void;
   releasePending: boolean;
   /** Fee breakdown of the just-released milestone, if any. */
   releaseInfo: { milestoneId: string; milestone_amount_sats?: number; verification_fee_msats?: number; released_sats?: number } | null;
@@ -316,8 +377,9 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   const author = useAuthor(f.owner_pubkey);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name ?? genUserName(f.owner_pubkey);
-  const pct = Math.min(100, Math.round((Number(f.raised_sats) / Number(f.goal_sats)) * 100));
+  const pct = fundingProgressPct(Number(f.raised_sats), Number(f.goal_sats));
   const format = f.format ?? 'milestones';
+  const contentId = `campaign-${f.id}-details`;
 
   // AI verification stats (scores, fees, balance) — public endpoint. Tolerate
   // failure: older API deployments don't have it, and the market widget is
@@ -330,20 +392,24 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
     refetchInterval: 15_000,
   });
   const verifications = verificationQuery.data?.verifications ?? [];
-  // Verifications arrive ordered (created_at ASC, attempt ASC) — last is latest.
-  const latestVerificationFor = (milestoneId: string) => {
-    const list = verifications.filter((v) => v.milestone_id === milestoneId);
-    return list.length > 0 ? list[list.length - 1] : null;
-  };
-  // Effective judge model: the model of the latest score if one exists,
-  // otherwise the registry default (Kimi K3).
-  const judgeModelId = verifications.length > 0 ? verifications[verifications.length - 1].model : null;
+  // Never trust server ordering — sort by attempt, then creation time.
+  const latestVerificationFor = (milestoneId: string) =>
+    latestVerification(verifications.filter((v) => v.milestone_id === milestoneId));
+  // The last score's model, for display only: the server scores with the
+  // sats-weighted donor-vote snapshot, so this does NOT predict the next judge.
+  const judgeModelId = latestVerification(verifications)?.model ?? null;
 
   return (
-    <Card
-      className={cn('cursor-pointer transition-colors hover:border-primary/50', expanded && 'border-primary')}
-      onClick={onToggle}
-    >
+    <Card className={cn('transition-colors', expanded && 'border-primary')}>
+      {/* The expand/collapse control is a real button (keyboard-focusable,
+          announced as expandable) styled to keep the card-header visuals. */}
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={onToggle}
+        className="block w-full text-left rounded-t-xl cursor-pointer transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -377,9 +443,10 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
           {expanded ? (<>Show less <ChevronUp className="size-3.5" /></>) : (<>Read more <ChevronDown className="size-3.5" /></>)}
         </div>
       </CardHeader>
+      </button>
 
       {expanded && (
-        <CardContent className="pt-0 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <CardContent id={contentId} className="pt-0 space-y-4">
           {f.description && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{f.description}</p>}
 
           <Separator />
@@ -401,8 +468,8 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                     <h3 className="text-sm font-semibold">Milestones — each one a market</h3>
                     <span className="text-[11px] text-muted-foreground">
                       {judgeModelId
-                        ? `Judge: ${shortModelName(judgeModelId)} (latest score)`
-                        : 'Judge: Kimi K3 (default)'}
+                        ? `Last scored by ${shortModelName(judgeModelId)} · next judge decided by donor votes`
+                        : 'Judge: decided by donor votes (default Kimi K3)'}
                     </span>
                   </div>
                   {detail.milestones.map((m) => {
@@ -412,20 +479,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                         <MilestoneMarketWidget milestone={m} fundraiser={detail.fundraiser} verification={verification} />
                         <AttestationPanel fundraiser={detail.fundraiser} milestone={m} isOwner={isOwner} />
                         {releaseInfo && releaseInfo.milestoneId === m.id && releaseInfo.released_sats !== undefined && (
-                          <div className="rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-xs space-y-0.5">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Milestone amount</span>
-                              <span className="tabular-nums">{formatSats(releaseInfo.milestone_amount_sats ?? Number(m.amount_sats))} sats</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">AI verification fee</span>
-                              <span className="tabular-nums">−{formatSats(Math.ceil((releaseInfo.verification_fee_msats ?? 0) / 1000))} sats</span>
-                            </div>
-                            <div className="flex justify-between font-medium">
-                              <span>You receive</span>
-                              <span className="tabular-nums">{formatSats(releaseInfo.released_sats)} sats</span>
-                            </div>
-                          </div>
+                          <ReleaseBreakdown info={{ ...releaseInfo, released_sats: releaseInfo.released_sats }} milestoneAmountSats={Number(m.amount_sats)} />
                         )}
                         {m.status === 'unlocked' && isOwner && (
                           <div className="flex justify-end gap-1.5">
@@ -441,7 +495,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                                 size="sm"
                                 variant="outline"
                                 disabled={releasePending}
-                                onClick={() => onRelease(m.id)}
+                                onClick={() => onRelease(m)}
                               >
                                 {releasePending ? <Loader2 className="size-3.5 animate-spin" /> : `Release ${formatSats(Number(m.amount_sats))} sats`}
                               </Button>
@@ -473,6 +527,42 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
         </CardContent>
       )}
     </Card>
+  );
+}
+
+// ── Release fee breakdown ──────────────────────────────────────────────────
+
+/**
+ * Itemized fee breakdown shown after a release. The displayed fee is DERIVED
+ * from the authoritative server numbers (amount − released) so the three rows
+ * always reconcile — never from a separately-rounded msats field.
+ * Exported for regression tests.
+ */
+export function ReleaseBreakdown({ info, milestoneAmountSats }: {
+  info: { milestone_amount_sats?: number; verification_fee_msats?: number; released_sats: number };
+  milestoneAmountSats: number;
+}) {
+  const milestoneAmount = info.milestone_amount_sats ?? milestoneAmountSats;
+  const feeSats = Math.max(0, milestoneAmount - info.released_sats);
+  return (
+    <div className="rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-xs space-y-0.5">
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Milestone amount</span>
+        <span className="tabular-nums">{formatSats(milestoneAmount)} sats</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">AI verification fee</span>
+        {info.verification_fee_msats !== undefined ? (
+          <span className="tabular-nums">−{formatSats(feeSats)} sats</span>
+        ) : (
+          <span className="text-muted-foreground text-right">deducted per AI verification (see scoring history)</span>
+        )}
+      </div>
+      <div className="flex justify-between font-medium">
+        <span>You receive</span>
+        <span className="tabular-nums">{formatSats(info.released_sats)} sats</span>
+      </div>
+    </div>
   );
 }
 
@@ -522,7 +612,7 @@ function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
         <DialogHeader>
           <DialogTitle>Score milestone{target ? `: ${target.milestone.title}` : ''}</DialogTitle>
           <DialogDescription>
-            Judge: {target ? shortModelName(target.model) : ''} · estimated cost ~500 sats (min), deducted from the payout.
+            Judge: {target ? shortModelName(target.model) : ''} · estimated cost ~500–2,000 sats depending on the judge model, deducted from the payout.
           </DialogDescription>
         </DialogHeader>
 
@@ -600,8 +690,19 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
     staleTime: 5 * 60_000,
     retry: 1,
   });
-  const models = modelsQuery.data ?? [];
+  const models = useMemo(() => modelsQuery.data?.models ?? [], [modelsQuery.data]);
+  const serverDefaultModel = modelsQuery.data?.defaultModel ?? DEFAULT_VERIFICATION_MODEL;
   const selectedModel = models.find((m) => m.id === judgeModel);
+
+  // Initialize to the SERVER's default judge model (it can differ from the
+  // registry fallback), and reset whenever the selection isn't in the list —
+  // e.g. the registry dropped a model between opens.
+  useEffect(() => {
+    if (models.length === 0) return;
+    if (!models.some((m) => m.id === judgeModel)) {
+      setJudgeModel(models.some((m) => m.id === serverDefaultModel) ? serverDefaultModel : models[0].id);
+    }
+  }, [models, judgeModel, serverDefaultModel]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -643,7 +744,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
     onOpenChange(open);
   };
 
-  const remaining = fundraiser ? Number(fundraiser.goal_sats) - Number(fundraiser.raised_sats) : 0;
+  const remaining = fundraiser ? Math.max(0, Number(fundraiser.goal_sats) - Number(fundraiser.raised_sats)) : 0;
 
   return (
     <Dialog open={!!fundraiser} onOpenChange={close}>
@@ -652,7 +753,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
           <DialogTitle>Fund: {fundraiser?.title}</DialogTitle>
           <DialogDescription>
             DEMO — the contribution is recorded by the API but no real payment is made.
-            {fundraiser && ` ${formatSats(remaining)} sats to goal.`}
+            {fundraiser && (remaining > 0 ? ` ${formatSats(remaining)} sats to goal.` : ' Goal reached — further contributions are disabled.')}
           </DialogDescription>
         </DialogHeader>
 
@@ -719,7 +820,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                     ) : (
                       models.map((m) => (
                         <SelectItem key={m.id} value={m.id}>
-                          {m.id === DEFAULT_VERIFICATION_MODEL ? `Recommended: ${m.name}` : `${m.name} (${m.provider})`}
+                          {m.id === serverDefaultModel ? `Recommended: ${m.name}` : `${m.name} (${m.provider})`}
                         </SelectItem>
                       ))
                     )}
@@ -732,6 +833,11 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
               </CollapsibleContent>
             </Collapsible>
 
+            {remaining === 0 ? (
+              <p className="rounded-md border border-green-500/40 bg-green-500/5 px-3 py-2 text-center text-xs text-green-600 dark:text-green-400">
+                Goal reached — this campaign is fully funded.
+              </p>
+            ) : (
             <Button
               className="w-full"
               disabled={!(parseInt(amount, 10) > 0) || mutation.isPending}
@@ -739,6 +845,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
             >
               {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Contribute ${formatSats(parseInt(amount, 10) || 0)} sats (demo)`}
             </Button>
+            )}
           </div>
         )}
       </DialogContent>

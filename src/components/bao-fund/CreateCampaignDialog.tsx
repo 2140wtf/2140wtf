@@ -37,6 +37,10 @@ const FEE_OPTIONS = [
 
 const DAY = 86_400;
 
+/** Milestone delivery window bounds, per the ₿AO Fund spec. */
+const DEADLINE_DAYS_MIN = 7;
+const DEADLINE_DAYS_MAX = 50;
+
 interface MilestoneDraft {
   title: string;
   description: string;
@@ -207,11 +211,14 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     isValidRepoUrl(repoUrl.trim()) &&
     description.trim().length >= PROJECT_DESCRIPTION_MIN &&
     goal >= 1000 &&
+    (format !== 'stream' || (parseInt(streamDays, 10) || 0) >= 1) &&
     (format === 'stream' || milestones.every((m) =>
       m.title.trim() &&
       m.description.trim().length >= MILESTONE_DESCRIPTION_MIN &&
       m.criteria.trim().length >= CRITERIA_MIN &&
-      (parseInt(m.amount, 10) || 0) > 0));
+      (parseInt(m.amount, 10) || 0) > 0 &&
+      (parseInt(m.deadlineDays, 10) || 0) >= DEADLINE_DAYS_MIN &&
+      (parseInt(m.deadlineDays, 10) || 0) <= DEADLINE_DAYS_MAX));
 
   /**
    * Human-readable list of everything still blocking creation. The Create
@@ -226,7 +233,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
       out.push(`Description needs ${PROJECT_DESCRIPTION_MIN}+ characters (now ${description.trim().length})`);
     }
     if (goal < 1000) out.push('Goal must be at least 1,000 sats');
-    if (format !== 'stream') {
+    if (format === 'stream') {
+      if ((parseInt(streamDays, 10) || 0) < 1) out.push('Vesting window must be ≥ 1 day');
+    } else {
       milestones.forEach((m, i) => {
         if (!m.title.trim()) out.push(`Milestone ${i + 1}: add a title`);
         if (m.description.trim().length < MILESTONE_DESCRIPTION_MIN) {
@@ -236,16 +245,27 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           out.push(`Milestone ${i + 1}: delivery criteria need ${CRITERIA_MIN}+ characters`);
         }
         if ((parseInt(m.amount, 10) || 0) <= 0) out.push(`Milestone ${i + 1}: add an amount`);
+        const days = parseInt(m.deadlineDays, 10) || 0;
+        if (days < DEADLINE_DAYS_MIN || days > DEADLINE_DAYS_MAX) {
+          out.push(`Milestone ${i + 1}: deadline must be ${DEADLINE_DAYS_MIN}–${DEADLINE_DAYS_MAX} days`);
+        }
       });
     }
     return out;
-  }, [title, repoUrl, description, goal, format, milestones]);
+  }, [title, repoUrl, description, goal, format, milestones, streamDays]);
 
   const patchMilestone = (i: number, patch: Partial<MilestoneDraft>) =>
     setMilestones((ms) => ms.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
+  // Block closing while creation is in flight: the relay-first poll can run
+  // up to 30s, and a dismissible dialog invites a second submit (a duplicate
+  // campaign) when the user thinks the first one didn't go through.
+  const guardedOpenChange = (o: boolean) => {
+    if (!mutation.isPending) onOpenChange(o);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={guardedOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New fundraising campaign</DialogTitle>
@@ -458,10 +478,15 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                     />
                     <span className="text-xs text-muted-foreground">days to deliver (7–50)</span>
                     <div className="flex-1" />
+                    {/* Runner fee in sats next to the selector — a bare % badge
+                        hides what the fee actually costs on this milestone. */}
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      ≈{formatSats(Math.round(((parseInt(m.amount, 10) || 0) * (parseInt(m.feeBps, 10) || 0)) / 10_000))} sats
+                    </span>
                     <Select value={m.feeBps} onValueChange={(v) => patchMilestone(i, { feeBps: v })}>
-                      <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-32 h-7 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {FEE_OPTIONS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label} fee</SelectItem>)}
+                        {FEE_OPTIONS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label} runner fee</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -502,6 +527,12 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Create raise — ${formatSats(goal)} sats goal`}
           </Button>
 
+          {mutation.isPending && (
+            <p className="text-[11px] text-center text-muted-foreground" role="status">
+              Publishing to the ₿AO relay — this can take up to 30 seconds. Please keep this dialog open.
+            </p>
+          )}
+
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Free to create — no balance, no fee.</span>{' '}
             Spam control is a per-key rate limit (2 campaigns/hour, 5/day), not sats.
@@ -512,7 +543,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
               : ' Every milestone spawns a YES/NO prediction market on bao.markets with demo liquidity seeded by the fund.'}
           </p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Each AI verification costs ~500 sats (min), deducted from the milestone payout.
+            Each AI verification costs ~500–2,000 sats depending on the judge model, deducted from the milestone payout
+            (separate from the runner fee selected per milestone).
           </p>
         </div>
       </DialogContent>
