@@ -364,20 +364,27 @@ export async function publishAgentProfile(sk: Uint8Array, name: string, relays: 
 
 // ── Orchestration (task claims over chat) ────────────────────────────────────
 
-/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
-export const CLAIM_TTL_MS = 30 * 60 * 1000;
+/** A claim with no PROGRESS from its claimant for this long is reclaimable.
+ *  BAO_CLAIM_TTL_MS overrides for live tests against a local relay. */
+export const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 30 * 60 * 1000);
 
 /**
  * Fail-closed (mosaico daemon-design: "an unavailable control channel fails
  * closed"). An empty claim history means one of two very different things —
  * "no claims yet" or "the relays are down and we can't see the claims". Only
- * the first may resolve to an empty map; the second must throw, or an agent
- * would read silence as claimable and double-work a live claim.
+ * the first may proceed; the second must throw, or an agent would read
+ * silence as claimable and double-work a live claim.
+ *
+ * Probes ACTIVELY (ensureRelay), not via listConnectionStatus: the status map
+ * is keyed by normalized URL and only reflects past connections, so a passive
+ * read both misses keys and can't run before the first query.
  */
-function assertRelayReachable(relays: string[]): void {
-  const status = getPool().listConnectionStatus();
-  const up = relays.filter((r) => status.get(r) === true);
-  if (up.length === 0) {
+async function assertRelayReachable(relays: string[]): Promise<void> {
+  const probes = await Promise.allSettled(
+    relays.map((r) => getPool().ensureRelay(r, { connectionTimeout: 2500 })),
+  );
+  const up = probes.filter((p) => p.status === "fulfilled").length;
+  if (up === 0) {
     throw new Error(
       `cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`,
     );
@@ -447,6 +454,9 @@ export async function orchVerbPost(
 }
 
 export async function orchStates(state: State, orchId: string): Promise<Map<string, ClaimState>> {
+  // Probe FIRST: with relays down, a member's control fold comes back empty
+  // and would throw a misleading "no channel" error before we ever get here.
+  await assertRelayReachable(state.community.relays);
   const inputs: ClaimInput[] = [];
   const messages = await channelMessages(state);
   for (const m of messages) {
@@ -458,6 +468,5 @@ export async function orchStates(state: State, orchId: string): Promise<Map<stri
     if (oTags.length > 0 && !oTags.includes(orchId)) continue;
     inputs.push({ id: m.id, author: m.author, ms: m.ms, msg });
   }
-  if (messages.length === 0) assertRelayReachable(state.community.relays);
   return resolveClaims(inputs, { ttlMs: CLAIM_TTL_MS, nowMs: Date.now() });
 }

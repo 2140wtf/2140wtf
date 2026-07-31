@@ -92,7 +92,8 @@ import {
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const HOME_RELAYS = ["wss://relay.bao.network"];
+// BAO_RELAYS overrides (comma-separated) for live tests against a local relay.
+const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.bao.network").split(",");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 
 // ── Modes ────────────────────────────────────────────────────────────────────
