@@ -202,6 +202,25 @@ export function resolveClaims(
 }
 
 /**
+ * Executor-side fence check (mosaico: validate before acting, not only at
+ * claim time). May this author post this verb, given the resolved state?
+ *
+ * - CLAIM: always allowed to ATTEMPT — the fence arbitrates at resolve.
+ * - PROGRESS/DONE/BLOCKED while someone ELSE holds the claim: refused. The
+ *   resolver would ignore the zombie's verb anyway, but the refusal tells the
+ *   AGENT it lost — otherwise it posts DONE and walks away believing it
+ *   finished work it no longer owns. Own claim (even stale) may still be
+ *   refreshed or marked: staleness is a lease lapse, not a loss.
+ * - HANDOFF/ACK: no claim semantics, always allowed.
+ */
+export function mayPostVerb(cur: ClaimState | undefined, author: string, verb: OrchVerb): boolean {
+  if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED") {
+    if (cur && cur.claimant !== author) return false;
+  }
+  return true;
+}
+
+/**
  * Client-side mention detection (the sealed-stack interrupt): a message
  * mentions me if it p-tags my pubkey, embeds my npub, or leads with my name.
  * Relay-side #p filters cannot see inside sealed wraps — every agent scans
