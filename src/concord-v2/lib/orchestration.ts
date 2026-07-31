@@ -11,13 +11,26 @@
  *   manifest is coordination metadata, not community content).
  * - Task lifecycle: chat messages (sealed rumors inside a ₿AO — inner kind 9)
  *   tagged `["t", "orch-task"]` whose content starts with a verb:
- *     CLAIM <taskId> key=<idempotencyKey>
+ *     CLAIM <taskId> key=<idempotencyKey> epoch=<fencingEpoch>
  *     PROGRESS <taskId> <one line>
  *     HANDOFF <taskId> @<agent> <state summary>   (receiver must ACK)
  *     ACK <taskId>
  *     DONE <taskId> <artifact refs>
  *     BLOCKED <taskId> <reason> <need>
  *   Machines parse the tags + first word; the rest stays human-readable.
+ *
+ * Fencing (mosaico daemon-design, adapted): every CLAIM carries a fencing
+ * epoch — the claimant's view of how many times the task has changed hands,
+ * plus one. A CLAIM whose epoch doesn't match current-epoch + 1 is a
+ * stale-view claim and is IGNORED (never half-succeed on a stale read): the
+ * loser re-resolves and retries at the right epoch. Two agents reclaiming the
+ * same stale claim publish the same epoch; the tie-break picks one, and the
+ * other detects the loss by re-resolving (`held` in chat-core) instead of
+ * double-working. Legacy CLAIMs without `epoch=` still claim (mixed fleet),
+ * and also bump the epoch. PROGRESS/DONE/BLOCKED stay claimant-scoped WITHOUT
+ * an epoch: resolution folds in ms order, so a zombie's late verb lands while
+ * someone else holds the claim and is ignored — same-author cross-epoch
+ * confusion can't survive the fold.
  */
 
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -36,6 +49,8 @@ export interface TaskMessage {
   rest: string;
   /** CLAIM only: the `key=` idempotency token, if present. */
   idemKey?: string;
+  /** CLAIM only: the `epoch=` fencing token, if present (absent = legacy). */
+  epoch?: number;
 }
 
 const VERBS: readonly OrchVerb[] = ["CLAIM", "PROGRESS", "HANDOFF", "ACK", "DONE", "BLOCKED"];
@@ -53,20 +68,24 @@ export function parseTaskMessage(content: string, tags: string[][]): TaskMessage
   if (!VERBS.includes(verb)) return null;
   const rest = (m[3] ?? "").trim();
   const keyMatch = rest.match(/(?:^|\s)key=(\S+)/);
+  const epochMatch = rest.match(/(?:^|\s)epoch=(\d+)(?:\s|$)/);
   return {
     verb,
     taskId: m[2],
     rest,
     ...(verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {}),
+    ...(verb === "CLAIM" && epochMatch ? { epoch: Number(epochMatch[1]) } : {}),
   };
 }
 
 /**
  * Deterministic idempotency key for a claim: a retrying agent re-publishes
- * the SAME claim event instead of racing itself (§14).
+ * the SAME claim event instead of racing itself (§14). The epoch salts the
+ * key, so a re-claim after a stale takeover is a NEW key (not deduped against
+ * the earlier claim) while a retry of the same epoch's claim stays idempotent.
  */
-export function deriveClaimKey(orchId: string, taskId: string): string {
-  return bytesToHex(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}`))).slice(0, 32);
+export function deriveClaimKey(orchId: string, taskId: string, epoch = 1): string {
+  return bytesToHex(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}:${epoch}`))).slice(0, 32);
 }
 
 export interface ClaimInput {
@@ -85,6 +104,12 @@ export interface ClaimState {
   claimMs: number;
   /** Last PROGRESS ms from the claimant (claimMs if none yet). */
   lastProgressMs: number;
+  /**
+   * Fencing epoch: 1 for the first claim, +1 on every change of hands. An
+   * executor must only act while its CLAIM's epoch is the state's current
+   * epoch AND it is the claimant — that's the mosaico generation check.
+   */
+  epoch: number;
   done: boolean;
   blocked: boolean;
   /** True once the claim sat without PROGRESS past the TTL — reclaimable. */
@@ -98,6 +123,12 @@ export interface ClaimState {
  * but the next valid CLAIM takes the task (stale claims never win over a
  * fresh one). DONE/BLOCKED are terminal-state markers from the claimant only
  * (nobody can mark someone else's task done).
+ *
+ * Fencing: an epoch-bearing CLAIM is valid ONLY if its epoch is exactly
+ * current-epoch + 1 (or 1 for a never-claimed task) — a mismatched CLAIM was
+ * issued from a stale view and is ignored outright, so two concurrent
+ * reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
+ * the check but still bump the epoch.
  */
 export function resolveClaims(
   messages: ClaimInput[],
@@ -112,12 +143,17 @@ export function resolveClaims(
       case "CLAIM": {
         // A fresh claim loses to a live claim, but takes over a stale/done one.
         if (cur && !cur.stale && !cur.done) break;
+        const nextEpoch = (cur?.epoch ?? 0) + 1;
+        // Fencing: an epoch-bearing claim from a stale view is ignored, never
+        // half-honored — its author re-resolves and retries at the right epoch.
+        if (msg.epoch !== undefined && msg.epoch !== nextEpoch) break;
         states.set(msg.taskId, {
           taskId: msg.taskId,
           claimant: author,
           claimId: id,
           claimMs: ms,
           lastProgressMs: ms,
+          epoch: nextEpoch,
           done: false,
           blocked: false,
           stale: opts.nowMs - ms > opts.ttlMs,
