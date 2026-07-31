@@ -44,6 +44,7 @@ import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip17SendMessage } from '@/hooks/useNip17SendMessage';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { useAuthor } from '@/hooks/useAuthor';
 import { RoutstrExplainer } from './RoutstrExplainer';
@@ -305,6 +306,8 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const publish = useNostrPublish();
+  const { isEnabled: isPublishFeatureEnabled, setEnabled: setPublishFeatureEnabled } = usePublishPreferences();
+  const nutzapsAdEnabled = isPublishFeatureEnabled('nutzaps');
   const [shots, setShots] = useState<1 | 2>(1);
   const [amount, setAmount] = useState('1000');
   const [amount2, setAmount2] = useState('');
@@ -368,6 +371,27 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {user && !nutzapsAdEnabled && (
+          <div className="flex items-start gap-2.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+            <Zap className="size-4 shrink-0 mt-0.5 text-amber-500" />
+            <div className="space-y-1.5">
+              <p className="text-xs leading-relaxed">
+                Publish your Cashu receiver ad (kind {NUTZAP_INFO_KIND}) so funded tokens lock straight to your wallet key — one-click redeem. Without it, funders fall back to locking to your Nostr identity and you sweep manually with your signer.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-[11px] border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                onClick={() => {
+                  setPublishFeatureEnabled('nutzaps', true);
+                  toast({ title: 'Nutzap receiver ad enabled', description: 'Your wallet publishes it right away.' });
+                }}
+              >
+                <Zap className="size-3" /> Enable receiver ad
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>Milestones</Label>
           <div className="grid grid-cols-2 gap-2">
