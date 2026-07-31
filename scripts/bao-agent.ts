@@ -6,6 +6,10 @@
  * State lives in ~/.concord-live/<name>.json (OUTSIDE the repo: it holds a
  * private key) so an identity survives reboots and later sessions can re-enter.
  *
+ * Channel operations (idempotent send, history, the mention interrupt, task
+ * claims) live in scripts/chat-core.ts — shared with the MCP server so the
+ * two front-ends can never diverge. This file is community lifecycle + CLI.
+ *
  * Build: node_modules/.bin/rolldown -c scripts/rolldown.bao-agent.config.mjs
  * Run:   node .tmp/bao-agent.mjs <mode> [args]
  *
@@ -15,18 +19,23 @@
  *   join <invite-url> [--as name]        join with a FRESH key, saves member state
  *                                        (grinds the agent_gate PoW + checks
  *                                        single-use spend automatically)
- *   say <text> [--as name]               post to #general
- *   read [--as name]                     print #general timeline + member list
+ *   say <text> [--key K] [--as name]     post to #general (--key = idempotent:
+ *                                        a retry with the same key dedupes)
+ *   read [--json] [--as name]            print #general timeline + member list
+ *   wait [--timeout S] [--all] [--json]  interrupt: first NEW message mentioning
+ *                                        me (default) or any new message (--all).
+ *                                        Exit 0 = message, 2 = timeout.
+ *   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
+ *   orch claim|progress|done|blocked <taskId> [text] [--orch id] [--as name]
  *   whoami [--as name]                   print the identity's npub
+ *
+ * Exit codes: 0 ok · 1 error · 2 timeout/no-result (Buzz-style discipline).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
-import { SimplePool } from "nostr-tools/pool";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import { mintCommunity } from "@/concord-v2/lib/community";
@@ -57,113 +66,32 @@ import {
   parseInviteLink,
   type InviteBundle,
 } from "@/concord-v2/lib/invite";
-import { channelGroupKey } from "@/concord-v2/lib/derive";
-import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type StreamSigner } from "@/concord-v2/lib/stream";
-import { KIND_INVITE_BUNDLE, KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
-import type { CommunityV2 } from "@/concord-v2/lib/types";
-import type { NostrEvent } from "nostr-tools/pure";
+import { openWrap } from "@/concord-v2/lib/stream";
+import { KIND_INVITE_BUNDLE, KIND_WRAP } from "@/concord-v2/lib/kinds";
+import type { OrchVerb } from "@/concord-v2/lib/orchestration";
+import {
+  CLAIM_TTL_MS,
+  channelMessages,
+  closePool,
+  communityOf,
+  listChannels,
+  loadState,
+  orchStates,
+  orchVerbPost,
+  publishAll,
+  queryAll,
+  saveState,
+  sendChannelMessage,
+  signerOf,
+  statePath,
+  waitForInterrupt,
+  type State,
+} from "./chat-core";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
 const HOME_RELAYS = ["wss://relay.bao.network"];
-const STATE_DIR = join(homedir(), ".concord-live");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
-
-// ── State ────────────────────────────────────────────────────────────────────
-
-interface SavedCommunity {
-  id: string; // hex
-  owner: string; // hex pubkey
-  owner_salt: string; // hex
-  community_root: string; // hex
-  root_epoch: number;
-  name: string;
-  relays: string[];
-  general_channel_id?: string; // hex — owner only; members resolve via control fold
-}
-
-interface SavedInvite {
-  token: string; // hex
-  link_sk: string; // hex
-  link_pk: string; // hex
-  url: string;
-  created_at: number;
-  max_uses?: number;
-}
-
-interface State {
-  sk: string; // hex private key — NEVER commit
-  role: "owner" | "member";
-  community: SavedCommunity;
-  private_channels: { id: string; key: string; epoch: number; name: string }[];
-  invites: SavedInvite[];
-  registry_version: number;
-}
-
-function statePath(name: string): string {
-  return join(STATE_DIR, `${name}.json`);
-}
-
-function loadState(name: string): State {
-  const path = statePath(name);
-  if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
-  return JSON.parse(readFileSync(path, "utf8")) as State;
-}
-
-function saveState(name: string, state: State): void {
-  mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(statePath(name), JSON.stringify(state, null, 2), { mode: 0o600 });
-}
-
-function communityOf(c: SavedCommunity, privateChannels: State["private_channels"]): CommunityV2 {
-  const root = hexToBytes(c.community_root);
-  return {
-    id: hexToBytes(c.id),
-    idHex: c.id,
-    owner: c.owner,
-    ownerSalt: hexToBytes(c.owner_salt),
-    root,
-    rootEpoch: BigInt(c.root_epoch),
-    heldRoots: [{ epoch: BigInt(c.root_epoch), key: root }],
-    privateChannels: privateChannels.map((ch) => ({
-      id: hexToBytes(ch.id),
-      key: hexToBytes(ch.key),
-      epoch: BigInt(ch.epoch),
-      name: ch.name,
-    })),
-    relays: c.relays,
-    name: c.name,
-  };
-}
-
-// ── Nostr plumbing ───────────────────────────────────────────────────────────
-
-const pool = new SimplePool();
-
-function signerOf(sk: Uint8Array): StreamSigner {
-  return {
-    signEvent: async (template) => {
-      const { finalizeEvent } = await import("nostr-tools/pure");
-      return finalizeEvent(template, sk);
-    },
-  };
-}
-
-/** Publish to every home relay; throw only if NONE accept. */
-async function publishAll(relays: string[], event: NostrEvent, label: string): Promise<void> {
-  const results = await Promise.allSettled(pool.publish(relays, event));
-  const rejected = results.filter((r) => r.status === "rejected");
-  if (rejected.length === results.length) {
-    const reasons = rejected.map((r) => (r.status === "rejected" ? String(r.reason) : "")).join("; ");
-    throw new Error(`no relay accepted ${label}: ${reasons}`);
-  }
-  const size = JSON.stringify(event).length;
-  console.log(`  ✓ ${label}: kind ${event.kind} ${event.id.slice(0, 12)}… (${size} B) → ${results.length - rejected.length}/${results.length} relays`);
-}
-
-async function queryAll(relays: string[], filter: Record<string, unknown>): Promise<NostrEvent[]> {
-  return pool.querySync(relays, filter as never, { maxWait: 8000 }) as Promise<NostrEvent[]>;
-}
 
 // ── Modes ────────────────────────────────────────────────────────────────────
 
@@ -378,62 +306,20 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   console.log(`State: ${statePath(name)}`);
 }
 
-/** Resolve #general: owner's stored id, else fold the control plane. */
-async function generalChannel(state: State): Promise<{ idHex: string; id: Uint8Array }> {
-  if (state.community.general_channel_id) {
-    return { idHex: state.community.general_channel_id, id: hexToBytes(state.community.general_channel_id) };
+async function say(name: string, text: string, idemKey: string | undefined, json: boolean): Promise<void> {
+  const state = loadState(name);
+  const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey });
+  if (json) {
+    console.log(JSON.stringify({ rumor_id: rumorId, deduped }));
+  } else if (deduped) {
+    console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
   }
-  const community = communityOf(state.community, state.private_channels);
-  const control = currentControlGroup(community);
-  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
-  const folded = foldControlState(openControlWraps(wraps, [control]), community.id, community.owner);
-  for (const def of folded.channels.values()) {
-    if (!def.isPrivate && !def.deleted && def.name === "general") return { idHex: def.channelIdHex, id: hexToBytes(def.channelIdHex) };
-  }
-  for (const def of folded.channels.values()) {
-    if (!def.isPrivate && !def.deleted) return { idHex: def.channelIdHex, id: hexToBytes(def.channelIdHex) };
-  }
-  throw new Error("No public channel found in the control fold.");
 }
 
-async function say(name: string, text: string): Promise<void> {
-  const state = loadState(name);
-  const sk = hexToBytes(state.sk);
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-  const community = communityOf(state.community, state.private_channels);
-  const channel = await generalChannel(state);
-
-  const group = channelGroupKey(community.root, channel.id, 0n);
-  const rumor = buildRumor({ kind: KIND_MESSAGE, content: text, tags: channelBindingTags(channel.idHex, 0n), pubkey, ms: Date.now() });
-  const seal = await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer);
-  const wrap = wrapSeal(seal, group);
-  await publishAll(community.relays, wrap, `message to #general`);
-}
-
-async function read(name: string): Promise<void> {
+async function read(name: string, json: boolean): Promise<void> {
   const state = loadState(name);
   const community = communityOf(state.community, state.private_channels);
-  const channel = await generalChannel(state);  // Timeline.
-  const group = channelGroupKey(community.root, channel.id, 0n);
-  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] });
-  const messages: { ms: number; author: string; content: string }[] = [];
-  for (const wrap of wraps) {
-    try {
-      const opened = openWrap(wrap, group);
-      if (opened.kind !== KIND_MESSAGE) continue;
-      messages.push({ ms: opened.ms, author: opened.author, content: opened.content });
-    } catch {
-      // not ours / malformed — skip
-    }
-  }
-  messages.sort((a, b) => a.ms - b.ms);
-
-  console.log(`\n#general — ${messages.length} message(s):`);
-  for (const m of messages) {
-    const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
-    console.log(`  [${time}] ${nip19.npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
-  }
+  const messages = await channelMessages(state);
 
   // Member list from the guestbook.
   const gb = currentGuestbookGroup(community);
@@ -447,6 +333,37 @@ async function read(name: string): Promise<void> {
       // skip
     }
   }
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          community: community.name,
+          channel: "general",
+          channels: await listChannels(state),
+          messages: messages.map((m) => ({
+            id: m.id,
+            author: m.author,
+            author_npub: nip19.npubEncode(m.author),
+            ms: m.ms,
+            content: m.content,
+            tags: m.tags,
+          })),
+          members: [...members].map(([pk, status]) => ({ pubkey: pk, npub: nip19.npubEncode(pk), status })),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  console.log(`\n#general — ${messages.length} message(s):`);
+  for (const m of messages) {
+    const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
+    console.log(`  [${time}] ${nip19.npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
+  }
+
   console.log(`\nMembers (${[...members.values()].filter((s) => s === "join").length}):`);
   for (const [pk, status] of members) {
     console.log(`  ${nip19.npubEncode(pk)} — ${status}`);
@@ -492,6 +409,66 @@ async function read(name: string): Promise<void> {
   }
 }
 
+async function waitMode(
+  name: string,
+  opts: { timeoutSec: number; mentionsOnly: boolean; json: boolean },
+): Promise<void> {
+  const state = loadState(name);
+  const hit = await waitForInterrupt(name, state, opts);
+  if (!hit) {
+    if (opts.json) console.log(JSON.stringify({ timeout: true }));
+    else console.log("(timeout — no matching message)");
+    process.exitCode = 2;
+    return;
+  }
+  if (opts.json) {
+    console.log(
+      JSON.stringify({ timeout: false, id: hit.id, author: hit.author, author_npub: nip19.npubEncode(hit.author), ms: hit.ms, content: hit.content, tags: hit.tags }),
+    );
+  } else {
+    const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
+    console.log(`[${time}] ${nip19.npubEncode(hit.author).slice(0, 16)}…: ${hit.content}`);
+  }
+}
+
+async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: string, orchId: string): Promise<void> {
+  const state = loadState(name);
+  const { deduped } = await orchVerbPost(state, verb, taskId, text, orchId);
+  if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
+}
+
+async function orchShow(name: string, orchId: string, json: boolean): Promise<void> {
+  const state = loadState(name);
+  const states = await orchStates(state, orchId);
+
+  if (json) {
+    console.log(
+      JSON.stringify(
+        {
+          orch: orchId,
+          ttl_ms: CLAIM_TTL_MS,
+          tasks: [...states.values()].map((s) => ({ ...s, claimant_npub: nip19.npubEncode(s.claimant) })),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  if (states.size === 0) {
+    console.log(`orch "${orchId}": no task messages found`);
+    process.exitCode = 2;
+    return;
+  }
+  console.log(`\norch "${orchId}" — ${states.size} task(s):`);
+  for (const s of states.values()) {
+    const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
+    console.log(
+      `  ${s.taskId}: ${status} — ${nip19.npubEncode(s.claimant).slice(0, 16)}… (claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`,
+    );
+  }
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
 function argValue(args: string[], flag: string): string | undefined {
@@ -499,9 +476,28 @@ function argValue(args: string[], flag: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+/** Flags whose NEXT token is a value (not a positional arg). */
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label"];
+
+/** Positional args: everything that isn't a --flag or a value flag's value. */
+function positionalArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (VALUE_FLAGS.includes(a)) {
+      i++; // skip the flag's value too
+      continue;
+    }
+    if (a.startsWith("--")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
 async function main(): Promise<void> {
   const [mode, ...rest] = process.argv.slice(2);
   const as = argValue(rest, "--as") ?? "owner";
+  const json = rest.includes("--json");
 
   switch (mode) {
     case "create":
@@ -511,27 +507,54 @@ async function main(): Promise<void> {
       await invite(as, argValue(rest, "--label"), rest.includes("--single-use"));
       break;
     case "join": {
-      const url = rest.find((a) => !a.startsWith("--") && a !== as);
+      const url = positionalArgs(rest)[0];
       if (!url) throw new Error("join needs an invite URL");
       await joinBao(as, url);
       break;
     }
     case "say": {
-      const text = rest.filter((a) => !a.startsWith("--") && a !== as).join(" ");
+      const text = positionalArgs(rest).join(" ");
       if (!text) throw new Error("say needs text");
-      await say(as, text);
+      await say(as, text, argValue(rest, "--key"), json);
       break;
     }
     case "read":
-      await read(as);
+      await read(as, json);
       break;
+    case "wait": {
+      const timeoutSec = Number(argValue(rest, "--timeout") ?? "60");
+      if (!Number.isFinite(timeoutSec) || timeoutSec < 1 || timeoutSec > 300) {
+        throw new Error("--timeout must be 1..300 seconds");
+      }
+      await waitMode(as, { timeoutSec, mentionsOnly: !rest.includes("--all"), json });
+      break;
+    }
+    case "orch": {
+      const pos = positionalArgs(rest);
+      const sub = pos[0];
+      const orchId = argValue(rest, "--orch") ?? "cards";
+      if (sub === "show") {
+        await orchShow(as, orchId, json);
+        break;
+      }
+      const verb = (sub ?? "").toUpperCase() as OrchVerb;
+      if (!["CLAIM", "PROGRESS", "DONE", "BLOCKED", "ACK", "HANDOFF"].includes(verb)) {
+        throw new Error("orch needs: show | claim|progress|done|blocked|ack|handoff <taskId> [text]");
+      }
+      const taskId = pos[1];
+      if (!taskId) throw new Error(`orch ${sub} needs a taskId`);
+      await orchVerb(as, verb, taskId, pos.slice(2).join(" "), orchId);
+      break;
+    }
     case "whoami": {
       const state = loadState(as);
       console.log(`${as}: ${nip19.npubEncode(getPublicKey(hexToBytes(state.sk)))} (${state.role} of ${state.community.name})`);
       break;
     }
     default:
-      console.log("modes: create [--agent-only] | invite | join <url> | say <text> | read | whoami   [--as identity]");
+      console.log(
+        "modes: create [--agent-only] | invite | join <url> | say <text> [--key K] | read [--json] | wait [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
+      );
   }
 }
 
@@ -541,7 +564,7 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    pool.close(HOME_RELAYS);
+    closePool(HOME_RELAYS);
     // nostr-tools keeps sockets alive; give CLOSE a beat, then hard-exit.
     setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();
   });

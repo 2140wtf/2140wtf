@@ -1,0 +1,360 @@
+/**
+ * Shared chat-core for Concord V2 (₿AO) agents — consumed by BOTH the
+ * headless CLI (scripts/bao-agent.ts) and the MCP server
+ * (scripts/bao-chat-mcp.ts). One implementation of idempotent send, the
+ * mention interrupt, and claim resolution, so the two front-ends can never
+ * diverge.
+ *
+ * IMPORTANT: everything here logs to STDERR only. The MCP server speaks
+ * JSON-RPC on stdout; a stray stdout write corrupts the protocol stream.
+ */
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+import { getPublicKey } from "nostr-tools/pure";
+import * as nip19 from "nostr-tools/nip19";
+import { SimplePool } from "nostr-tools/pool";
+import { hexToBytes } from "@noble/hashes/utils.js";
+
+import { currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
+import { channelGroupKey, type GroupKey } from "@/concord-v2/lib/derive";
+import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type StreamSigner } from "@/concord-v2/lib/stream";
+import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
+import {
+  deriveClaimKey,
+  mentionsMe,
+  parseTaskMessage,
+  resolveClaims,
+  ORCH_TASK_TAG,
+  type ClaimInput,
+  type ClaimState,
+  type OrchVerb,
+} from "@/concord-v2/lib/orchestration";
+import type { CommunityV2 } from "@/concord-v2/lib/types";
+import type { NostrEvent } from "nostr-tools/pure";
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+export const STATE_DIR = join(homedir(), ".concord-live");
+
+export interface SavedCommunity {
+  id: string; // hex
+  owner: string; // hex pubkey
+  owner_salt: string; // hex
+  community_root: string; // hex
+  root_epoch: number;
+  name: string;
+  relays: string[];
+  general_channel_id?: string; // hex — owner only; members resolve via control fold
+}
+
+export interface SavedInvite {
+  token: string; // hex
+  link_sk: string; // hex
+  link_pk: string; // hex
+  url: string;
+  created_at: number;
+  max_uses?: number;
+}
+
+export interface State {
+  sk: string; // hex private key — NEVER commit
+  role: "owner" | "member";
+  community: SavedCommunity;
+  private_channels: { id: string; key: string; epoch: number; name: string }[];
+  invites: SavedInvite[];
+  registry_version: number;
+}
+
+export function statePath(name: string): string {
+  return join(STATE_DIR, `${name}.json`);
+}
+
+export function loadState(name: string): State {
+  const path = statePath(name);
+  if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
+  return JSON.parse(readFileSync(path, "utf8")) as State;
+}
+
+export function saveState(name: string, state: State): void {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(statePath(name), JSON.stringify(state, null, 2), { mode: 0o600 });
+}
+
+export function communityOf(c: SavedCommunity, privateChannels: State["private_channels"]): CommunityV2 {
+  const root = hexToBytes(c.community_root);
+  return {
+    id: hexToBytes(c.id),
+    idHex: c.id,
+    owner: c.owner,
+    ownerSalt: hexToBytes(c.owner_salt),
+    root,
+    rootEpoch: BigInt(c.root_epoch),
+    heldRoots: [{ epoch: BigInt(c.root_epoch), key: root }],
+    privateChannels: privateChannels.map((ch) => ({
+      id: hexToBytes(ch.id),
+      key: hexToBytes(ch.key),
+      epoch: BigInt(ch.epoch),
+      name: ch.name,
+    })),
+    relays: c.relays,
+    name: c.name,
+  };
+}
+
+// ── Nostr plumbing ───────────────────────────────────────────────────────────
+
+let pool: SimplePool | null = null;
+
+/** One pool per process (the MCP server is long-lived; the CLI closes it on exit). */
+export function getPool(): SimplePool {
+  pool ??= new SimplePool();
+  return pool;
+}
+
+export function closePool(relays: string[]): void {
+  pool?.close(relays);
+}
+
+export function signerOf(sk: Uint8Array): StreamSigner {
+  return {
+    signEvent: async (template) => {
+      const { finalizeEvent } = await import("nostr-tools/pure");
+      return finalizeEvent(template, sk);
+    },
+  };
+}
+
+/** Publish to every home relay; throw only if NONE accept. */
+export async function publishAll(relays: string[], event: NostrEvent, label: string): Promise<void> {
+  const results = await Promise.allSettled(getPool().publish(relays, event));
+  const rejected = results.filter((r) => r.status === "rejected");
+  if (rejected.length === results.length) {
+    const reasons = rejected.map((r) => (r.status === "rejected" ? String(r.reason) : "")).join("; ");
+    throw new Error(`no relay accepted ${label}: ${reasons}`);
+  }
+  const size = JSON.stringify(event).length;
+  console.error(`  ✓ ${label}: kind ${event.kind} ${event.id.slice(0, 12)}… (${size} B) → ${results.length - rejected.length}/${results.length} relays`);
+}
+
+export async function queryAll(relays: string[], filter: Record<string, unknown>): Promise<NostrEvent[]> {
+  return getPool().querySync(relays, filter as never, { maxWait: 8000 }) as Promise<NostrEvent[]>;
+}
+
+// ── Channels ─────────────────────────────────────────────────────────────────
+
+/** Resolve #general: owner's stored id, else fold the control plane. */
+export async function generalChannel(state: State): Promise<{ idHex: string; id: Uint8Array }> {
+  if (state.community.general_channel_id) {
+    return { idHex: state.community.general_channel_id, id: hexToBytes(state.community.general_channel_id) };
+  }
+  const community = communityOf(state.community, state.private_channels);
+  const control = currentControlGroup(community);
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
+  const folded = foldControlState(openControlWraps(wraps, [control]), community.id, community.owner);
+  for (const def of folded.channels.values()) {
+    if (!def.isPrivate && !def.deleted && def.name === "general") return { idHex: def.channelIdHex, id: hexToBytes(def.channelIdHex) };
+  }
+  for (const def of folded.channels.values()) {
+    if (!def.isPrivate && !def.deleted) return { idHex: def.channelIdHex, id: hexToBytes(def.channelIdHex) };
+  }
+  throw new Error("No public channel found in the control fold.");
+}
+
+/** Public channels from the control fold + this identity's private channels. */
+export async function listChannels(
+  state: State,
+): Promise<{ id: string; name: string; private: boolean }[]> {
+  const community = communityOf(state.community, state.private_channels);
+  const control = currentControlGroup(community);
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
+  const folded = foldControlState(openControlWraps(wraps, [control]), community.id, community.owner);
+  const out: { id: string; name: string; private: boolean }[] = [];
+  for (const def of folded.channels.values()) {
+    if (!def.isPrivate && !def.deleted) out.push({ id: def.channelIdHex, name: def.name, private: false });
+  }
+  for (const ch of state.private_channels) out.push({ id: ch.id, name: ch.name, private: true });
+  return out;
+}
+
+export interface ChannelMessage {
+  id: string; // rumor id — the ordering tiebreak
+  author: string;
+  ms: number;
+  content: string;
+  tags: string[][];
+}
+
+/** Everything a channel operation needs, resolved once. */
+export async function channelContext(state: State): Promise<{
+  sk: Uint8Array;
+  pubkey: string;
+  signer: StreamSigner;
+  community: CommunityV2;
+  channel: { idHex: string; id: Uint8Array };
+  group: GroupKey;
+}> {
+  const sk = hexToBytes(state.sk);
+  const pubkey = getPublicKey(sk);
+  const signer = signerOf(sk);
+  const community = communityOf(state.community, state.private_channels);
+  const channel = await generalChannel(state);
+  const group = channelGroupKey(community.root, channel.id, 0n);
+  return { sk, pubkey, signer, community, channel, group };
+}
+
+/** Decrypted #general history (the relay only ever sees ciphertext). */
+export async function channelMessages(state: State): Promise<ChannelMessage[]> {
+  const { community, group } = await channelContext(state);
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] });
+  const messages: ChannelMessage[] = [];
+  for (const wrap of wraps) {
+    try {
+      const opened = openWrap(wrap, group);
+      if (opened.kind !== KIND_MESSAGE) continue;
+      messages.push({ id: opened.rumorId, author: opened.author, ms: opened.ms, content: opened.content, tags: opened.tags });
+    } catch {
+      // not ours / malformed — skip
+    }
+  }
+  messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return messages;
+}
+
+/**
+ * Post to #general. Idempotent when `idemKey` is given: the key rides as a
+ * ["d", key] tag on the rumor, and a retry first scans our own history — if
+ * the key already landed, we report deduped instead of double-posting
+ * (AGENT_CHAT_ORCHESTRATION.md §14: machines retry, humans shouldn't see it).
+ */
+export async function sendChannelMessage(
+  state: State,
+  text: string,
+  opts: { idemKey?: string; extraTags?: string[][] } = {},
+): Promise<{ rumorId: string; deduped: boolean }> {
+  const { pubkey, signer, community, channel, group } = await channelContext(state);
+
+  if (opts.idemKey) {
+    const dupe = (await channelMessages(state)).find(
+      (m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey),
+    );
+    if (dupe) return { rumorId: dupe.id, deduped: true };
+  }
+
+  const tags = [...channelBindingTags(channel.idHex, 0n), ...(opts.extraTags ?? [])];
+  if (opts.idemKey) tags.push(["d", opts.idemKey]);
+  // Mention p-tags: npub1 tokens in the text become real p-tags so the
+  // receiver's mention scan has a trustworthy signal (content is only a hint).
+  for (const match of text.match(/npub1[02-9ac-hj-np-z]{20,}/g) ?? []) {
+    try {
+      const decoded = nip19.decode(match);
+      if (decoded.type === "npub") tags.push(["p", decoded.data]);
+    } catch {
+      // not a valid npub — leave it as plain text
+    }
+  }
+
+  const rumor = buildRumor({ kind: KIND_MESSAGE, content: text, tags, pubkey, ms: Date.now() });
+  const seal = await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer);
+  const wrap = wrapSeal(seal, group);
+  await publishAll(community.relays, wrap, `message to #general`);
+  return { rumorId: rumor.id, deduped: false };
+}
+
+/**
+ * The mention interrupt (AGENT_CHAT_ORCHESTRATION.md §11.3, adapted for the
+ * sealed stack: a relay-side #p filter cannot see inside gift wraps, so we
+ * subscribe the channel's wraps by stream author and scan mentions
+ * post-decrypt). Resolves on the first NEW message mentioning the identity
+ * (default) or any new message. Timeout resolves `null` — a sentinel, never
+ * an error. Long-lived callers (MCP) must NOT close the shared pool here.
+ */
+export async function waitForInterrupt(
+  identityName: string,
+  state: State,
+  opts: { timeoutSec: number; mentionsOnly: boolean },
+): Promise<ChannelMessage | null> {
+  const { pubkey, community, group } = await channelContext(state);
+  const myNpub = nip19.npubEncode(pubkey);
+
+  // Snapshot: history isn't an interrupt — only wraps arriving after we
+  // subscribe count. (Track wrap ids; the rumor ids aren't on the wire.)
+  const seen = new Set<string>();
+  for (const w of await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] })) seen.add(w.id);
+  console.error(
+    `listening on #general of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`,
+  );
+
+  return new Promise<ChannelMessage | null>((resolve) => {
+    let sub: { close(): void } | null = null;
+    const finish = (msg: ChannelMessage | null) => {
+      clearTimeout(timer);
+      sub?.close();
+      resolve(msg);
+    };
+    const timer = setTimeout(() => finish(null), opts.timeoutSec * 1000);
+    sub = getPool().subscribeMany(
+      community.relays,
+      { kinds: [KIND_WRAP], authors: [group.pk], since: Math.floor(Date.now() / 1000) - 30 },
+      {
+        onevent(wrap) {
+          if (seen.has(wrap.id)) return;
+          seen.add(wrap.id);
+          let opened: ReturnType<typeof openWrap>;
+          try {
+            opened = openWrap(wrap, group);
+          } catch {
+            return;
+          }
+          if (opened.kind !== KIND_MESSAGE) return;
+          if (opened.author === pubkey) return; // our own echo is not an interrupt
+          const msg: ChannelMessage = { id: opened.rumorId, author: opened.author, ms: opened.ms, content: opened.content, tags: opened.tags };
+          if (opts.mentionsOnly && !mentionsMe({ tags: msg.tags, content: msg.content, myPubkey: pubkey, myNpub, myNames: [identityName] })) return;
+          finish(msg);
+        },
+      },
+    );
+  });
+}
+
+// ── Orchestration (task claims over chat) ────────────────────────────────────
+
+/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
+export const CLAIM_TTL_MS = 30 * 60 * 1000;
+
+export async function orchVerbPost(
+  state: State,
+  verb: OrchVerb,
+  taskId: string,
+  text: string,
+  orchId: string,
+): Promise<{ rumorId: string; deduped: boolean }> {
+  const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
+  let content = `${verb} ${taskId}`;
+  let idemKey: string | undefined;
+  if (verb === "CLAIM") {
+    // The derived key is BOTH the human-visible `key=` token and the rumor's
+    // d-tag: a retried claim re-publishes the same claim, never a second one.
+    const key = deriveClaimKey(orchId, taskId);
+    content += ` key=${key}`;
+    idemKey = key;
+  }
+  if (text) content += ` ${text}`;
+  return sendChannelMessage(state, content, { idemKey, extraTags });
+}
+
+export async function orchStates(state: State, orchId: string): Promise<Map<string, ClaimState>> {
+  const inputs: ClaimInput[] = [];
+  for (const m of await channelMessages(state)) {
+    const msg = parseTaskMessage(m.content, m.tags);
+    if (!msg) continue;
+    // Untagged task messages count for every orch (back-compat); a message
+    // carrying an ["o", …] tag belongs to that orch only.
+    const oTags = m.tags.filter((t) => t[0] === "o").map((t) => t[1]);
+    if (oTags.length > 0 && !oTags.includes(orchId)) continue;
+    inputs.push({ id: m.id, author: m.author, ms: m.ms, msg });
+  }
+  return resolveClaims(inputs, { ttlMs: CLAIM_TTL_MS, nowMs: Date.now() });
+}
