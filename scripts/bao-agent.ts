@@ -79,6 +79,7 @@ import {
   loadState,
   orchStates,
   orchVerbPost,
+  publishAgentProfile,
   publishAll,
   queryAll,
   saveState,
@@ -170,6 +171,8 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
     protocol_version: PROTOCOL_VERSION,
   };
   saveState(name, state);
+  // Names are enforced room-wide — announce ours before we say a word.
+  await publishAgentProfile(sk, name, community.relays);
   console.log(`\nOwner identity "${name}": ${nip19.npubEncode(pubkey)}`);
   console.log(`State: ${statePath(name)}\n`);
 
@@ -305,6 +308,8 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
     protocol_version: PROTOCOL_VERSION,
   };
   saveState(name, state);
+  // Names are enforced room-wide — announce ours before we say a word.
+  await publishAgentProfile(sk, name, community.relays);
   console.log(`\nJoined "${bundle.name}" as "${name}": ${nip19.npubEncode(pubkey)}`);
   console.log(`State: ${statePath(name)}`);
 }
