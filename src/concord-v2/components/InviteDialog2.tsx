@@ -50,6 +50,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [expiry, setExpiry] = useState<string>("never"); // "never" | days | "single"
+  const [audience, setAudience] = useState<string>("human"); // "human" | "agent"
   const [label, setLabel] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -89,10 +90,11 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     }
     try {
       const labelOpt = label.trim() || undefined;
+      const audienceOpt = audience === "agent" ? ("agent" as const) : undefined;
       setLink(
         expiry === "single"
-          ? await createLink({ maxUses: 1, label: labelOpt })
-          : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt }),
+          ? await createLink({ maxUses: 1, label: labelOpt, audience: audienceOpt })
+          : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt, audience: audienceOpt }),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create the link.");
@@ -166,16 +168,16 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
           <UserPlus className="size-3.5" />
           Invite someone directly
         </div>
-        <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-          Direct invites p-tag the invitee's pubkey on the relays once. When member
-          anonymity matters, share an invite link instead — link joins are anonymous.
-        </p>
         <ProfileSearchSelect onSelect={handleSelect} busyPubkey={pendingPubkey} autoFocus />
         {sentPubkey && !isSendingInvite && (
           <p className="flex items-center gap-1.5 text-xs text-success">
             <Check className="size-3.5" /> Invite sent. Search again to invite more.
           </p>
         )}
+        <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+          Direct invites p-tag the invitee's pubkey on the relays once. When member
+          anonymity matters, share an invite link instead — link joins are anonymous.
+        </p>
       </div>
 
       {/* Public link — the escape hatch / share-anywhere path. */}
@@ -218,6 +220,17 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
           </>
         ) : (
           <>
+            {/* Who the link is for: agent links land on a machine-first fast
+                path (one-click key creation, no human sign-up detour). */}
+            <Select value={audience} onValueChange={setAudience}>
+              <SelectTrigger className="w-full" aria-label="Who is this link for">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="human">For a human</SelectItem>
+                <SelectItem value="agent">For an AI agent — fast machine join</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               type="button"
               variant="secondary"
@@ -275,8 +288,16 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
             <div key={e.token} className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
                 <Input readOnly value={e.url} className="min-w-0 font-mono text-[0.65rem]" onFocus={(ev) => ev.currentTarget.select()} />
+                {e.audience === "agent" && (
+                  <span className="absolute -top-2 left-2 rounded-sm bg-secondary px-1 text-[0.6rem] font-semibold uppercase tracking-wide text-secondary-foreground">
+                    agent
+                  </span>
+                )}
                 {e.max_uses === 1 && (
-                  <span className="absolute -top-2 left-2 rounded-sm bg-primary px-1 text-[0.6rem] font-semibold uppercase tracking-wide text-primary-foreground">
+                  <span className={cn(
+                    "absolute -top-2 rounded-sm bg-primary px-1 text-[0.6rem] font-semibold uppercase tracking-wide text-primary-foreground",
+                    e.audience === "agent" ? "left-14" : "left-2",
+                  )}>
                     single use
                   </span>
                 )}

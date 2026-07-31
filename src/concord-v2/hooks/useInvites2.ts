@@ -213,7 +213,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
   };
 
   /** The §1 CommunityInvite bundle: everything membership is (link + direct alike). */
-  const buildBundle = (opts?: { expiresAtMs?: number; label?: string; maxUses?: number }): InviteBundle => {
+  const buildBundle = (opts?: { expiresAtMs?: number; label?: string; maxUses?: number; audience?: "agent" }): InviteBundle => {
     if (!user) throw new Error("Not ready.");
     const src = bundleSource();
     if (!src) throw new Error("Not ready.");
@@ -236,6 +236,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       ...(opts?.maxUses ? { max_uses: opts.maxUses } : {}),
       creator_npub: user.pubkey,
       ...(opts?.label ? { label: opts.label } : {}),
+      ...(opts?.audience ? { audience: opts.audience } : {}),
     };
   };
 
@@ -276,8 +277,8 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
     invalidateControl2(queryClient, community.idHex);
   };
 
-  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string; maxUses?: number }>({
-    mutationFn: async ({ expiresAtMs, label, maxUses }) => {
+  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string; maxUses?: number; audience?: "agent" }>({
+    mutationFn: async ({ expiresAtMs, label, maxUses, audience }) => {
       if (!user || !community) throw new Error("Not ready.");
       if (!user.signer.nip44) throw new Error("This signer can't mint invite links (NIP-44 unsupported).");
 
@@ -300,7 +301,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const token = mintToken();
       const link = mintLinkSigner();
-      const bundle = buildBundle({ expiresAtMs, label, maxUses });
+      const bundle = buildBundle({ expiresAtMs, label, maxUses, audience });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
       const results = await Promise.allSettled(
@@ -324,6 +325,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
             created_at: Math.floor(Date.now() / 1000),
             ...(expiresAtMs ? { expires_at: Math.floor(expiresAtMs / 1000) } : {}),
             ...(maxUses ? { max_uses: maxUses } : {}),
+            ...(audience ? { audience } : {}),
           },
         ],
         tombstones: [],
