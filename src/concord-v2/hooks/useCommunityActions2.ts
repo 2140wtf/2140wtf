@@ -359,8 +359,8 @@ export function useCommunityActions2() {
     },
   });
 
-  const join = useMutation<{ communityId: string; name: string }, Error, { invite: ParsedInviteLink }>({
-    mutationFn: async ({ invite }) => {
+  const join = useMutation<{ communityId: string; name: string }, Error, { invite: ParsedInviteLink; grindAgentPow?: boolean }>({
+    mutationFn: async ({ invite, grindAgentPow }) => {
       if (!user) throw new Error("Sign in to join an encrypted community.");
       const bundle = await resolveBundle(nostr, invite, bootstrapRelays);
       const unusable = unusableRelaysReason(bundle.relays);
@@ -373,13 +373,21 @@ export function useCommunityActions2() {
       // The commitment every Join from this link will cite (sha256 of the
       // unlock token) — lets the Guestbook tell which link a member used.
       const commitment = inviteCommitment(invite.token);
+      // Set when the community is agent-gated AND the caller opted to grind
+      // (an agent-audience invite): the Guestbook Join then carries the PoW.
+      let grindDifficulty: number | undefined;
       if (community) {
         const folded = await fetchControlFold(nostr, community);
         if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
         const gate = agentGateOf(folded.metadata);
         // The human app path refuses on purpose: the gate's proof-of-work is
-        // the captcha only agents solve. Agent tooling (AGENTS.md) grinds it.
-        if (gate) throw new AgentOnlyCommunityError(gate.difficulty);
+        // the captcha only agents solve. Agent tooling (AGENTS.md) grinds it,
+        // and the agent invite fast path (audience: "agent") passes
+        // grindAgentPow to grind it right in the join page.
+        if (gate) {
+          if (!grindAgentPow) throw new AgentOnlyCommunityError(gate.difficulty);
+          grindDifficulty = gate.difficulty;
+        }
         // A single-use link is spent once the Guestbook shows a Join citing
         // its token commitment. Honest-client enforcement: a modified client
         // skips this, so creators should rotate keys when it truly matters.
@@ -403,7 +411,10 @@ export function useCommunityActions2() {
           const attribution = bundle.creator_npub
             ? { creator: bundle.creator_npub, label: bundle.label, commitment }
             : { creator: "", label: bundle.label, commitment };
-          const rumor = buildJoinRumor(user.pubkey, Date.now(), attribution);
+          const rumor =
+            grindDifficulty !== undefined
+              ? grindJoinRumor(user.pubkey, Date.now(), grindDifficulty, attribution)
+              : buildJoinRumor(user.pubkey, Date.now(), attribution);
           const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
           await Promise.allSettled(
             community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
