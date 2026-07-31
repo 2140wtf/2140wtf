@@ -2976,843 +2976,6 @@ function encodeTLV(tlv) {
 	return concatBytes$2(...entries);
 }
 //#endregion
-//#region node_modules/nostr-tools/lib/esm/pool.js
-init_secp256k1();
-init_utils$1();
-init_sha2();
-var verifiedSymbol = Symbol("verified");
-var isRecord = (obj) => obj instanceof Object;
-function validateEvent(event) {
-	if (!isRecord(event)) return false;
-	if (typeof event.kind !== "number") return false;
-	if (typeof event.content !== "string") return false;
-	if (typeof event.created_at !== "number") return false;
-	if (typeof event.pubkey !== "string") return false;
-	if (!event.pubkey.match(/^[a-f0-9]{64}$/)) return false;
-	if (!Array.isArray(event.tags)) return false;
-	for (let i2 = 0; i2 < event.tags.length; i2++) {
-		let tag = event.tags[i2];
-		if (!Array.isArray(tag)) return false;
-		for (let j = 0; j < tag.length; j++) if (typeof tag[j] !== "string") return false;
-	}
-	return true;
-}
-new TextDecoder("utf-8");
-var utf8Encoder$1 = new TextEncoder();
-function normalizeURL(url) {
-	try {
-		if (url.indexOf("://") === -1) url = "wss://" + url;
-		let p = new URL(url);
-		if (p.protocol === "http:") p.protocol = "ws:";
-		else if (p.protocol === "https:") p.protocol = "wss:";
-		p.pathname = p.pathname.replace(/\/+/g, "/");
-		if (p.pathname.endsWith("/")) p.pathname = p.pathname.slice(0, -1);
-		if (p.port === "80" && p.protocol === "ws:" || p.port === "443" && p.protocol === "wss:") p.port = "";
-		p.searchParams.sort();
-		p.hash = "";
-		return p.toString();
-	} catch (e) {
-		throw new Error(`Invalid URL: ${url}`);
-	}
-}
-var JS = class {
-	generateSecretKey() {
-		return schnorr$1.utils.randomSecretKey();
-	}
-	getPublicKey(secretKey) {
-		return bytesToHex$2(schnorr$1.getPublicKey(secretKey));
-	}
-	finalizeEvent(t, secretKey) {
-		const event = t;
-		event.pubkey = bytesToHex$2(schnorr$1.getPublicKey(secretKey));
-		event.id = getEventHash(event);
-		event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash(event)), secretKey));
-		event[verifiedSymbol] = true;
-		return event;
-	}
-	verifyEvent(event) {
-		if (typeof event[verifiedSymbol] === "boolean") return event[verifiedSymbol];
-		try {
-			const hash = getEventHash(event);
-			if (hash !== event.id) {
-				event[verifiedSymbol] = false;
-				return false;
-			}
-			const valid = schnorr$1.verify(hexToBytes$2(event.sig), hexToBytes$2(hash), hexToBytes$2(event.pubkey));
-			event[verifiedSymbol] = valid;
-			return valid;
-		} catch (err) {
-			event[verifiedSymbol] = false;
-			return false;
-		}
-	}
-};
-function serializeEvent(evt) {
-	if (!validateEvent(evt)) throw new Error("can't serialize event with wrong or missing properties");
-	return JSON.stringify([
-		0,
-		evt.pubkey,
-		evt.created_at,
-		evt.kind,
-		evt.tags,
-		evt.content
-	]);
-}
-function getEventHash(event) {
-	return bytesToHex$2(sha256$1(utf8Encoder$1.encode(serializeEvent(event))));
-}
-var i = new JS();
-i.generateSecretKey;
-i.getPublicKey;
-i.finalizeEvent;
-var verifyEvent = i.verifyEvent;
-var ClientAuth = 22242;
-function matchFilter(filter, event) {
-	if (filter.ids && filter.ids.indexOf(event.id) === -1) return false;
-	if (filter.kinds && filter.kinds.indexOf(event.kind) === -1) return false;
-	if (filter.authors && filter.authors.indexOf(event.pubkey) === -1) return false;
-	for (let f in filter) if (f[0] === "#") {
-		let values = filter[`#${f.slice(1)}`];
-		if (values && !event.tags.find(([t, v]) => t === f.slice(1) && values.indexOf(v) !== -1)) return false;
-	}
-	if (filter.since && event.created_at < filter.since) return false;
-	if (filter.until && event.created_at > filter.until) return false;
-	return true;
-}
-function matchFilters(filters, event) {
-	for (let i2 = 0; i2 < filters.length; i2++) if (matchFilter(filters[i2], event)) return true;
-	return false;
-}
-function getHex64(json, field) {
-	let len = field.length + 3;
-	let idx = json.indexOf(`"${field}":`) + len;
-	let s = json.slice(idx).indexOf(`"`) + idx + 1;
-	return json.slice(s, s + 64);
-}
-function getSubscriptionId(json) {
-	let idx = json.slice(0, 22).indexOf(`"EVENT"`);
-	if (idx === -1) return null;
-	let pstart = json.slice(idx + 7 + 1).indexOf(`"`);
-	if (pstart === -1) return null;
-	let start = idx + 7 + 1 + pstart;
-	let pend = json.slice(start + 1, 80).indexOf(`"`);
-	if (pend === -1) return null;
-	let end = start + 1 + pend;
-	return json.slice(start + 1, end);
-}
-function makeAuthEvent(relayURL, challenge) {
-	return {
-		kind: ClientAuth,
-		created_at: Math.floor(Date.now() / 1e3),
-		tags: [["relay", relayURL], ["challenge", challenge]],
-		content: ""
-	};
-}
-var SendingOnClosedConnection = class extends Error {
-	constructor(message, relay) {
-		super(`Tried to send message '${message} on a closed connection to ${relay}.`);
-		this.name = "SendingOnClosedConnection";
-	}
-};
-var AbstractRelay = class {
-	url;
-	_connected = false;
-	onclose = null;
-	onnotice = (msg) => console.debug(`NOTICE from ${this.url}: ${msg}`);
-	onauth;
-	baseEoseTimeout = 4400;
-	publishTimeout = 4400;
-	pingFrequency = 29e3;
-	pingTimeout = 2e4;
-	resubscribeBackoff = [
-		1e4,
-		1e4,
-		1e4,
-		2e4,
-		2e4,
-		3e4,
-		6e4
-	];
-	openSubs = /* @__PURE__ */ new Map();
-	enablePing;
-	enableReconnect;
-	idleSince = Date.now();
-	ongoingOperations = 0;
-	reconnectTimeoutHandle;
-	pingIntervalHandle;
-	reconnectAttempts = 0;
-	skipReconnection = false;
-	connectionPromise;
-	openCountRequests = /* @__PURE__ */ new Map();
-	openEventPublishes = /* @__PURE__ */ new Map();
-	ws;
-	challenge;
-	authPromise;
-	serial = 0;
-	verifyEvent;
-	_WebSocket;
-	constructor(url, opts) {
-		this.url = normalizeURL(url);
-		this.verifyEvent = opts.verifyEvent;
-		this._WebSocket = opts.websocketImplementation || WebSocket;
-		this.enablePing = opts.enablePing;
-		this.enableReconnect = opts.enableReconnect || false;
-	}
-	static async connect(url, opts) {
-		const relay = new AbstractRelay(url, opts);
-		await relay.connect(opts);
-		return relay;
-	}
-	closeAllSubscriptions(reason) {
-		for (let [_, sub] of this.openSubs) sub.close(reason);
-		this.openSubs.clear();
-		for (let [_, ep] of this.openEventPublishes) ep.reject(new Error(reason));
-		this.openEventPublishes.clear();
-		for (let [_, cr] of this.openCountRequests) cr.reject(new Error(reason));
-		this.openCountRequests.clear();
-	}
-	get connected() {
-		return this._connected;
-	}
-	async reconnect() {
-		const backoff = this.resubscribeBackoff[Math.min(this.reconnectAttempts, this.resubscribeBackoff.length - 1)];
-		this.reconnectAttempts++;
-		this.reconnectTimeoutHandle = setTimeout(async () => {
-			try {
-				await this.connect();
-			} catch (err) {}
-		}, backoff);
-	}
-	handleHardClose(reason) {
-		if (this.pingIntervalHandle) {
-			clearInterval(this.pingIntervalHandle);
-			this.pingIntervalHandle = void 0;
-		}
-		this._connected = false;
-		this.connectionPromise = void 0;
-		this.idleSince = void 0;
-		if (this.enableReconnect && !this.skipReconnection) this.reconnect();
-		else {
-			this.onclose?.();
-			this.closeAllSubscriptions(reason);
-		}
-	}
-	async connect(opts) {
-		let connectionTimeoutHandle;
-		if (this.connectionPromise) return this.connectionPromise;
-		this.challenge = void 0;
-		this.authPromise = void 0;
-		this.skipReconnection = false;
-		this.connectionPromise = new Promise((resolve, reject) => {
-			if (opts?.timeout) connectionTimeoutHandle = setTimeout(() => {
-				reject("connection timed out");
-				this.connectionPromise = void 0;
-				this.skipReconnection = true;
-				this.onclose?.();
-				this.handleHardClose("relay connection timed out");
-			}, opts.timeout);
-			if (opts?.abort) opts.abort.onabort = reject;
-			try {
-				this.ws = new this._WebSocket(this.url);
-			} catch (err) {
-				clearTimeout(connectionTimeoutHandle);
-				reject(err);
-				return;
-			}
-			this.ws.onopen = () => {
-				if (this.reconnectTimeoutHandle) {
-					clearTimeout(this.reconnectTimeoutHandle);
-					this.reconnectTimeoutHandle = void 0;
-				}
-				clearTimeout(connectionTimeoutHandle);
-				this._connected = true;
-				const isReconnection = this.reconnectAttempts > 0;
-				this.reconnectAttempts = 0;
-				for (const sub of this.openSubs.values()) {
-					sub.eosed = false;
-					if (isReconnection) {
-						for (let f = 0; f < sub.filters.length; f++) if (sub.lastEmitted) sub.filters[f].since = sub.lastEmitted + 1;
-					}
-					sub.fire();
-				}
-				if (this.enablePing) this.pingIntervalHandle = setInterval(() => this.pingpong(), this.pingFrequency);
-				resolve();
-			};
-			this.ws.onerror = () => {
-				clearTimeout(connectionTimeoutHandle);
-				reject("connection failed");
-				this.connectionPromise = void 0;
-				this.skipReconnection = true;
-				this.onclose?.();
-				this.handleHardClose("relay connection failed");
-			};
-			this.ws.onclose = (ev) => {
-				clearTimeout(connectionTimeoutHandle);
-				reject(ev.message || "websocket closed");
-				this.handleHardClose("relay connection closed");
-			};
-			this.ws.onmessage = this._onmessage.bind(this);
-		});
-		return this.connectionPromise;
-	}
-	waitForPingPong() {
-		return new Promise((resolve) => {
-			this.ws.once("pong", () => resolve(true));
-			this.ws.ping();
-		});
-	}
-	waitForDummyReq() {
-		return new Promise((resolve, reject) => {
-			if (!this.connectionPromise) return reject(/* @__PURE__ */ new Error(`no connection to ${this.url}, can't ping`));
-			try {
-				const sub = this.subscribe([{
-					ids: ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-					limit: 0
-				}], {
-					label: "<forced-ping>",
-					oneose: () => {
-						resolve(true);
-						sub.close();
-					},
-					onclose() {
-						resolve(true);
-					},
-					eoseTimeout: this.pingTimeout + 1e3
-				});
-			} catch (err) {
-				reject(err);
-			}
-		});
-	}
-	async pingpong() {
-		if (this.ws?.readyState === 1) {
-			if (!await Promise.any([this.ws && this.ws.ping && this.ws.once ? this.waitForPingPong() : this.waitForDummyReq(), new Promise((res) => setTimeout(() => res(false), this.pingTimeout))])) {
-				if (this.ws?.readyState === this._WebSocket.OPEN) this.ws?.close();
-			}
-		}
-	}
-	async send(message) {
-		if (!this.connectionPromise) throw new SendingOnClosedConnection(message, this.url);
-		this.connectionPromise.then(() => {
-			this.ws?.send(message);
-		});
-	}
-	async auth(signAuthEvent) {
-		const challenge = this.challenge;
-		if (!challenge) throw new Error("can't perform auth, no challenge was received");
-		if (this.authPromise) return this.authPromise;
-		this.authPromise = new Promise(async (resolve, reject) => {
-			try {
-				let evt = await signAuthEvent(makeAuthEvent(this.url, challenge));
-				let timeout = setTimeout(() => {
-					let ep = this.openEventPublishes.get(evt.id);
-					if (ep) {
-						ep.reject(/* @__PURE__ */ new Error("auth timed out"));
-						this.openEventPublishes.delete(evt.id);
-					}
-				}, this.publishTimeout);
-				this.openEventPublishes.set(evt.id, {
-					resolve,
-					reject,
-					timeout
-				});
-				this.send("[\"AUTH\"," + JSON.stringify(evt) + "]");
-			} catch (err) {
-				console.warn("subscribe auth function failed:", err);
-			}
-		});
-		return this.authPromise;
-	}
-	async publish(event) {
-		this.idleSince = void 0;
-		this.ongoingOperations++;
-		const ret = new Promise((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				const ep = this.openEventPublishes.get(event.id);
-				if (ep) {
-					ep.reject(/* @__PURE__ */ new Error("publish timed out"));
-					this.openEventPublishes.delete(event.id);
-				}
-			}, this.publishTimeout);
-			this.openEventPublishes.set(event.id, {
-				resolve,
-				reject,
-				timeout
-			});
-		});
-		this.send("[\"EVENT\"," + JSON.stringify(event) + "]");
-		this.ongoingOperations--;
-		if (this.ongoingOperations === 0) this.idleSince = Date.now();
-		return ret;
-	}
-	async count(filters, params) {
-		this.serial++;
-		const id = params?.id || "count:" + this.serial;
-		const ret = new Promise((resolve, reject) => {
-			this.openCountRequests.set(id, {
-				resolve,
-				reject
-			});
-		});
-		this.send("[\"COUNT\",\"" + id + "\"," + JSON.stringify(filters).substring(1));
-		return ret;
-	}
-	subscribe(filters, params) {
-		if (params.label !== "<forced-ping>") {
-			this.idleSince = void 0;
-			this.ongoingOperations++;
-		}
-		const sub = this.prepareSubscription(filters, params);
-		sub.fire();
-		if (params.abort) params.abort.onabort = () => sub.close(String(params.abort.reason || "<aborted>"));
-		return sub;
-	}
-	prepareSubscription(filters, params) {
-		this.serial++;
-		const id = params.id || (params.label ? params.label + ":" : "sub:") + this.serial;
-		const sub = new Subscription(this, id, filters, params);
-		this.openSubs.set(id, sub);
-		return sub;
-	}
-	close() {
-		this.skipReconnection = true;
-		if (this.reconnectTimeoutHandle) {
-			clearTimeout(this.reconnectTimeoutHandle);
-			this.reconnectTimeoutHandle = void 0;
-		}
-		if (this.pingIntervalHandle) {
-			clearInterval(this.pingIntervalHandle);
-			this.pingIntervalHandle = void 0;
-		}
-		this.closeAllSubscriptions("relay connection closed by us");
-		this._connected = false;
-		this.idleSince = void 0;
-		this.onclose?.();
-		if (this.ws?.readyState === this._WebSocket.OPEN) this.ws?.close();
-	}
-	_onmessage(ev) {
-		const json = ev.data;
-		if (!json) return;
-		const subid = getSubscriptionId(json);
-		if (subid) {
-			const so = this.openSubs.get(subid);
-			if (!so) return;
-			const id = getHex64(json, "id");
-			const alreadyHave = so.alreadyHaveEvent?.(id);
-			so.receivedEvent?.(this, id);
-			if (alreadyHave) return;
-		}
-		try {
-			let data = JSON.parse(json);
-			switch (data[0]) {
-				case "EVENT": {
-					const so = this.openSubs.get(data[1]);
-					const event = data[2];
-					if (this.verifyEvent(event) && matchFilters(so.filters, event)) so.onevent(event);
-					else so.oninvalidevent?.(event);
-					if (!so.lastEmitted || so.lastEmitted < event.created_at) so.lastEmitted = event.created_at;
-					return;
-				}
-				case "COUNT": {
-					const id = data[1];
-					const payload = data[2];
-					const cr = this.openCountRequests.get(id);
-					if (cr) {
-						cr.resolve(payload.count);
-						this.openCountRequests.delete(id);
-					}
-					return;
-				}
-				case "EOSE": {
-					const so = this.openSubs.get(data[1]);
-					if (!so) return;
-					so.receivedEose();
-					return;
-				}
-				case "OK": {
-					const id = data[1];
-					const ok = data[2];
-					const reason = data[3];
-					const ep = this.openEventPublishes.get(id);
-					if (ep) {
-						clearTimeout(ep.timeout);
-						if (ok) ep.resolve(reason);
-						else ep.reject(new Error(reason));
-						this.openEventPublishes.delete(id);
-					}
-					return;
-				}
-				case "CLOSED": {
-					const id = data[1];
-					const so = this.openSubs.get(id);
-					if (!so) return;
-					so.closed = true;
-					so.close(data[2]);
-					return;
-				}
-				case "NOTICE":
-					this.onnotice(data[1]);
-					return;
-				case "AUTH":
-					this.challenge = data[1];
-					if (this.onauth) this.auth(this.onauth).catch((err) => {
-						if (!(err instanceof SendingOnClosedConnection)) throw err;
-					});
-					return;
-				default:
-					this.openSubs.get(data[1])?.oncustom?.(data);
-					return;
-			}
-		} catch (err) {
-			try {
-				const [_, __, event] = JSON.parse(json);
-				console.warn(`[nostr] relay ${this.url} error processing message:`, err, event);
-			} catch (_) {
-				console.warn(`[nostr] relay ${this.url} error processing message:`, err);
-			}
-			return;
-		}
-	}
-};
-var Subscription = class {
-	relay;
-	id;
-	lastEmitted;
-	closed = false;
-	eosed = false;
-	filters;
-	alreadyHaveEvent;
-	receivedEvent;
-	onevent;
-	oninvalidevent;
-	oneose;
-	onclose;
-	oncustom;
-	eoseTimeout;
-	eoseTimeoutHandle;
-	constructor(relay, id, filters, params) {
-		if (filters.length === 0) throw new Error("subscription can't be created with zero filters");
-		this.relay = relay;
-		this.filters = filters;
-		this.id = id;
-		this.alreadyHaveEvent = params.alreadyHaveEvent;
-		this.receivedEvent = params.receivedEvent;
-		this.eoseTimeout = params.eoseTimeout || relay.baseEoseTimeout;
-		this.oneose = params.oneose;
-		this.onclose = params.onclose;
-		this.oninvalidevent = params.oninvalidevent;
-		this.onevent = params.onevent || ((event) => {
-			console.warn(`onevent() callback not defined for subscription '${this.id}' in relay ${this.relay.url}. event received:`, event);
-		});
-	}
-	fire() {
-		this.relay.send("[\"REQ\",\"" + this.id + "\"," + JSON.stringify(this.filters).substring(1));
-		this.eoseTimeoutHandle = setTimeout(this.receivedEose.bind(this), this.eoseTimeout);
-	}
-	receivedEose() {
-		if (this.eosed) return;
-		clearTimeout(this.eoseTimeoutHandle);
-		this.eosed = true;
-		this.oneose?.();
-	}
-	close(reason = "closed by caller") {
-		if (!this.closed && this.relay.connected) {
-			try {
-				this.relay.send("[\"CLOSE\"," + JSON.stringify(this.id) + "]");
-			} catch (err) {
-				if (err instanceof SendingOnClosedConnection) {} else throw err;
-			}
-			this.closed = true;
-		}
-		this.relay.openSubs.delete(this.id);
-		this.relay.ongoingOperations--;
-		if (this.relay.ongoingOperations === 0) this.relay.idleSince = Date.now();
-		this.onclose?.(reason);
-	}
-};
-var alwaysTrue = (t) => {
-	t[verifiedSymbol] = true;
-	return true;
-};
-var AbstractSimplePool = class {
-	relays = /* @__PURE__ */ new Map();
-	seenOn = /* @__PURE__ */ new Map();
-	trackRelays = false;
-	verifyEvent;
-	enablePing;
-	enableReconnect;
-	automaticallyAuth;
-	trustedRelayURLs = /* @__PURE__ */ new Set();
-	onRelayConnectionFailure;
-	onRelayConnectionSuccess;
-	allowConnectingToRelay;
-	maxWaitForConnection;
-	_WebSocket;
-	constructor(opts) {
-		this.verifyEvent = opts.verifyEvent;
-		this._WebSocket = opts.websocketImplementation;
-		this.enablePing = opts.enablePing;
-		this.enableReconnect = opts.enableReconnect || false;
-		this.automaticallyAuth = opts.automaticallyAuth;
-		this.onRelayConnectionFailure = opts.onRelayConnectionFailure;
-		this.onRelayConnectionSuccess = opts.onRelayConnectionSuccess;
-		this.allowConnectingToRelay = opts.allowConnectingToRelay;
-		this.maxWaitForConnection = opts.maxWaitForConnection || 3e3;
-	}
-	async ensureRelay(url, params) {
-		url = normalizeURL(url);
-		let relay = this.relays.get(url);
-		if (!relay) {
-			relay = new AbstractRelay(url, {
-				verifyEvent: this.trustedRelayURLs.has(url) ? alwaysTrue : this.verifyEvent,
-				websocketImplementation: this._WebSocket,
-				enablePing: this.enablePing,
-				enableReconnect: this.enableReconnect
-			});
-			relay.onclose = () => {
-				this.relays.delete(url);
-			};
-			this.relays.set(url, relay);
-		}
-		if (this.automaticallyAuth) {
-			const authSignerFn = this.automaticallyAuth(url);
-			if (authSignerFn) relay.onauth = authSignerFn;
-		}
-		try {
-			await relay.connect({
-				timeout: params?.connectionTimeout,
-				abort: params?.abort
-			});
-		} catch (err) {
-			this.relays.delete(url);
-			throw err;
-		}
-		return relay;
-	}
-	close(relays) {
-		relays.map(normalizeURL).forEach((url) => {
-			this.relays.get(url)?.close();
-			this.relays.delete(url);
-		});
-	}
-	subscribe(relays, filter, params) {
-		const request = [];
-		const uniqUrls = [];
-		for (let i2 = 0; i2 < relays.length; i2++) {
-			const url = normalizeURL(relays[i2]);
-			if (!request.find((r) => r.url === url)) {
-				if (uniqUrls.indexOf(url) === -1) {
-					uniqUrls.push(url);
-					request.push({
-						url,
-						filter
-					});
-				}
-			}
-		}
-		return this.subscribeMap(request, params);
-	}
-	subscribeMany(relays, filter, params) {
-		return this.subscribe(relays, filter, params);
-	}
-	subscribeMap(requests, params) {
-		const grouped = /* @__PURE__ */ new Map();
-		for (const req of requests) {
-			const { url, filter } = req;
-			if (!grouped.has(url)) grouped.set(url, []);
-			grouped.get(url).push(filter);
-		}
-		const groupedRequests = Array.from(grouped.entries()).map(([url, filters]) => ({
-			url,
-			filters
-		}));
-		if (this.trackRelays) params.receivedEvent = (relay, id) => {
-			let set = this.seenOn.get(id);
-			if (!set) {
-				set = /* @__PURE__ */ new Set();
-				this.seenOn.set(id, set);
-			}
-			set.add(relay);
-		};
-		const _knownIds = /* @__PURE__ */ new Set();
-		const subs = [];
-		const eosesReceived = [];
-		let handleEose = (i2) => {
-			if (eosesReceived[i2]) return;
-			eosesReceived[i2] = true;
-			if (eosesReceived.filter((a) => a).length === groupedRequests.length) {
-				params.oneose?.();
-				handleEose = () => {};
-			}
-		};
-		const closesReceived = [];
-		let handleClose = (i2, reason) => {
-			if (closesReceived[i2]) return;
-			handleEose(i2);
-			closesReceived[i2] = reason;
-			if (closesReceived.filter((a) => a).length === groupedRequests.length) {
-				params.onclose?.(closesReceived);
-				handleClose = () => {};
-			}
-		};
-		const localAlreadyHaveEventHandler = (id) => {
-			if (params.alreadyHaveEvent?.(id)) return true;
-			const have = _knownIds.has(id);
-			_knownIds.add(id);
-			return have;
-		};
-		const allOpened = Promise.all(groupedRequests.map(async ({ url, filters }, i2) => {
-			if (this.allowConnectingToRelay?.(url, ["read", filters]) === false) {
-				handleClose(i2, "connection skipped by allowConnectingToRelay");
-				return;
-			}
-			let relay;
-			try {
-				relay = await this.ensureRelay(url, {
-					connectionTimeout: this.maxWaitForConnection < (params.maxWait || 0) ? Math.max(params.maxWait * .8, params.maxWait - 1e3) : this.maxWaitForConnection,
-					abort: params.abort
-				});
-			} catch (err) {
-				this.onRelayConnectionFailure?.(url);
-				handleClose(i2, err?.message || String(err));
-				return;
-			}
-			this.onRelayConnectionSuccess?.(url);
-			let subscription = relay.subscribe(filters, {
-				...params,
-				oneose: () => handleEose(i2),
-				onclose: (reason) => {
-					if (reason.startsWith("auth-required: ") && params.onauth) relay.auth(params.onauth).then(() => {
-						relay.subscribe(filters, {
-							...params,
-							oneose: () => handleEose(i2),
-							onclose: (reason2) => {
-								handleClose(i2, reason2);
-							},
-							alreadyHaveEvent: localAlreadyHaveEventHandler,
-							eoseTimeout: params.maxWait,
-							abort: params.abort
-						});
-					}).catch((err) => {
-						handleClose(i2, `auth was required and attempted, but failed with: ${err}`);
-					});
-					else handleClose(i2, reason);
-				},
-				alreadyHaveEvent: localAlreadyHaveEventHandler,
-				eoseTimeout: params.maxWait,
-				abort: params.abort
-			});
-			subs.push(subscription);
-		}));
-		return { async close(reason) {
-			await allOpened;
-			subs.forEach((sub) => {
-				sub.close(reason);
-			});
-		} };
-	}
-	subscribeEose(relays, filter, params) {
-		let subcloser;
-		subcloser = this.subscribe(relays, filter, {
-			...params,
-			oneose() {
-				const reason = "closed automatically on eose";
-				if (subcloser) subcloser.close(reason);
-				else params.onclose?.(relays.map((_) => reason));
-			}
-		});
-		return subcloser;
-	}
-	subscribeManyEose(relays, filter, params) {
-		return this.subscribeEose(relays, filter, params);
-	}
-	async querySync(relays, filter, params) {
-		return new Promise(async (resolve) => {
-			const events = [];
-			this.subscribeEose(relays, filter, {
-				...params,
-				onevent(event) {
-					events.push(event);
-				},
-				onclose(_) {
-					resolve(events);
-				}
-			});
-		});
-	}
-	async get(relays, filter, params) {
-		filter.limit = 1;
-		const events = await this.querySync(relays, filter, params);
-		events.sort((a, b) => b.created_at - a.created_at);
-		return events[0] || null;
-	}
-	publish(relays, event, params) {
-		return relays.map(normalizeURL).map(async (url, i2, arr) => {
-			if (arr.indexOf(url) !== i2) return Promise.reject("duplicate url");
-			if (this.allowConnectingToRelay?.(url, ["write", event]) === false) return Promise.reject("connection skipped by allowConnectingToRelay");
-			let r;
-			try {
-				r = await this.ensureRelay(url, {
-					connectionTimeout: this.maxWaitForConnection < (params?.maxWait || 0) ? Math.max(params.maxWait * .8, params.maxWait - 1e3) : this.maxWaitForConnection,
-					abort: params?.abort
-				});
-			} catch (err) {
-				this.onRelayConnectionFailure?.(url);
-				return String("connection failure: " + String(err));
-			}
-			return r.publish(event).catch(async (err) => {
-				if (err instanceof Error && err.message.startsWith("auth-required: ") && params?.onauth) {
-					await r.auth(params.onauth);
-					return r.publish(event);
-				}
-				throw err;
-			}).then((reason) => {
-				if (this.trackRelays) {
-					let set = this.seenOn.get(event.id);
-					if (!set) {
-						set = /* @__PURE__ */ new Set();
-						this.seenOn.set(event.id, set);
-					}
-					set.add(r);
-				}
-				return reason;
-			});
-		});
-	}
-	listConnectionStatus() {
-		const map = /* @__PURE__ */ new Map();
-		this.relays.forEach((relay, url) => map.set(url, relay.connected));
-		return map;
-	}
-	destroy() {
-		this.relays.forEach((conn) => conn.close());
-		this.relays = /* @__PURE__ */ new Map();
-	}
-	pruneIdleRelays(idleThresholdMs = 1e4) {
-		const prunedUrls = [];
-		for (const [url, relay] of this.relays) if (relay.idleSince && Date.now() - relay.idleSince >= idleThresholdMs) {
-			this.relays.delete(url);
-			prunedUrls.push(url);
-			relay.close();
-		}
-		return prunedUrls;
-	}
-};
-var _WebSocket;
-try {
-	_WebSocket = WebSocket;
-} catch {}
-var SimplePool = class extends AbstractSimplePool {
-	constructor(options) {
-		super({
-			verifyEvent,
-			websocketImplementation: _WebSocket,
-			maxWaitForConnection: 3e3,
-			...options
-		});
-	}
-};
-//#endregion
 //#region node_modules/@noble/hashes/utils.js
 /**
 * Checks if something is Uint8Array. Be careful: nodejs Buffer will return true.
@@ -7974,12 +7137,12 @@ init_hmac();
 init_sha2();
 init_utils$1();
 var utf8Decoder = new TextDecoder("utf-8");
-var utf8Encoder = new TextEncoder();
+var utf8Encoder$1 = new TextEncoder();
 var minPlaintextSize = 1;
 var maxPlaintextSize = 4294967295;
 var extendedPrefixThreshold = 65536;
 function getConversationKey(privkeyA, pubkeyB) {
-	return extract(sha256$1, secp256k1$1.getSharedSecret(privkeyA, hexToBytes$2("02" + pubkeyB)).subarray(1, 33), utf8Encoder.encode("nip44-v2"));
+	return extract(sha256$1, secp256k1$1.getSharedSecret(privkeyA, hexToBytes$2("02" + pubkeyB)).subarray(1, 33), utf8Encoder$1.encode("nip44-v2"));
 }
 function getMessageKeys(conversationKey, nonce) {
 	const keys = expand(sha256$1, conversationKey, nonce, 76);
@@ -8009,7 +7172,7 @@ function writeU32BE(num) {
 	return arr;
 }
 function pad(plaintext) {
-	const unpadded = utf8Encoder.encode(plaintext);
+	const unpadded = utf8Encoder$1.encode(plaintext);
 	const unpaddedLen = unpadded.length;
 	if (unpaddedLen < minPlaintextSize || unpaddedLen > maxPlaintextSize) throw new Error("invalid plaintext size: must be between 1 and 4294967295 bytes");
 	return concatBytes$2(unpaddedLen >= extendedPrefixThreshold ? concatBytes$2(new Uint8Array([0, 0]), writeU32BE(unpaddedLen)) : writeU16BE(unpaddedLen), unpadded, new Uint8Array(calcPaddedLen(unpaddedLen) - unpaddedLen));
@@ -9834,32 +8997,983 @@ function openGuestbookOpened(opened) {
 	return opened;
 }
 //#endregion
-//#region scripts/bao-agent.ts
+//#region node_modules/nostr-tools/lib/esm/pool.js
+init_secp256k1();
+init_utils$1();
+init_sha2();
+var verifiedSymbol = Symbol("verified");
+var isRecord = (obj) => obj instanceof Object;
+function validateEvent(event) {
+	if (!isRecord(event)) return false;
+	if (typeof event.kind !== "number") return false;
+	if (typeof event.content !== "string") return false;
+	if (typeof event.created_at !== "number") return false;
+	if (typeof event.pubkey !== "string") return false;
+	if (!event.pubkey.match(/^[a-f0-9]{64}$/)) return false;
+	if (!Array.isArray(event.tags)) return false;
+	for (let i2 = 0; i2 < event.tags.length; i2++) {
+		let tag = event.tags[i2];
+		if (!Array.isArray(tag)) return false;
+		for (let j = 0; j < tag.length; j++) if (typeof tag[j] !== "string") return false;
+	}
+	return true;
+}
+new TextDecoder("utf-8");
+var utf8Encoder = new TextEncoder();
+function normalizeURL(url) {
+	try {
+		if (url.indexOf("://") === -1) url = "wss://" + url;
+		let p = new URL(url);
+		if (p.protocol === "http:") p.protocol = "ws:";
+		else if (p.protocol === "https:") p.protocol = "wss:";
+		p.pathname = p.pathname.replace(/\/+/g, "/");
+		if (p.pathname.endsWith("/")) p.pathname = p.pathname.slice(0, -1);
+		if (p.port === "80" && p.protocol === "ws:" || p.port === "443" && p.protocol === "wss:") p.port = "";
+		p.searchParams.sort();
+		p.hash = "";
+		return p.toString();
+	} catch (e) {
+		throw new Error(`Invalid URL: ${url}`);
+	}
+}
+var JS = class {
+	generateSecretKey() {
+		return schnorr$1.utils.randomSecretKey();
+	}
+	getPublicKey(secretKey) {
+		return bytesToHex$2(schnorr$1.getPublicKey(secretKey));
+	}
+	finalizeEvent(t, secretKey) {
+		const event = t;
+		event.pubkey = bytesToHex$2(schnorr$1.getPublicKey(secretKey));
+		event.id = getEventHash(event);
+		event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash(event)), secretKey));
+		event[verifiedSymbol] = true;
+		return event;
+	}
+	verifyEvent(event) {
+		if (typeof event[verifiedSymbol] === "boolean") return event[verifiedSymbol];
+		try {
+			const hash = getEventHash(event);
+			if (hash !== event.id) {
+				event[verifiedSymbol] = false;
+				return false;
+			}
+			const valid = schnorr$1.verify(hexToBytes$2(event.sig), hexToBytes$2(hash), hexToBytes$2(event.pubkey));
+			event[verifiedSymbol] = valid;
+			return valid;
+		} catch (err) {
+			event[verifiedSymbol] = false;
+			return false;
+		}
+	}
+};
+function serializeEvent(evt) {
+	if (!validateEvent(evt)) throw new Error("can't serialize event with wrong or missing properties");
+	return JSON.stringify([
+		0,
+		evt.pubkey,
+		evt.created_at,
+		evt.kind,
+		evt.tags,
+		evt.content
+	]);
+}
+function getEventHash(event) {
+	return bytesToHex$2(sha256$1(utf8Encoder.encode(serializeEvent(event))));
+}
+var i = new JS();
+i.generateSecretKey;
+i.getPublicKey;
+i.finalizeEvent;
+var verifyEvent = i.verifyEvent;
+var ClientAuth = 22242;
+function matchFilter(filter, event) {
+	if (filter.ids && filter.ids.indexOf(event.id) === -1) return false;
+	if (filter.kinds && filter.kinds.indexOf(event.kind) === -1) return false;
+	if (filter.authors && filter.authors.indexOf(event.pubkey) === -1) return false;
+	for (let f in filter) if (f[0] === "#") {
+		let values = filter[`#${f.slice(1)}`];
+		if (values && !event.tags.find(([t, v]) => t === f.slice(1) && values.indexOf(v) !== -1)) return false;
+	}
+	if (filter.since && event.created_at < filter.since) return false;
+	if (filter.until && event.created_at > filter.until) return false;
+	return true;
+}
+function matchFilters(filters, event) {
+	for (let i2 = 0; i2 < filters.length; i2++) if (matchFilter(filters[i2], event)) return true;
+	return false;
+}
+function getHex64(json, field) {
+	let len = field.length + 3;
+	let idx = json.indexOf(`"${field}":`) + len;
+	let s = json.slice(idx).indexOf(`"`) + idx + 1;
+	return json.slice(s, s + 64);
+}
+function getSubscriptionId(json) {
+	let idx = json.slice(0, 22).indexOf(`"EVENT"`);
+	if (idx === -1) return null;
+	let pstart = json.slice(idx + 7 + 1).indexOf(`"`);
+	if (pstart === -1) return null;
+	let start = idx + 7 + 1 + pstart;
+	let pend = json.slice(start + 1, 80).indexOf(`"`);
+	if (pend === -1) return null;
+	let end = start + 1 + pend;
+	return json.slice(start + 1, end);
+}
+function makeAuthEvent(relayURL, challenge) {
+	return {
+		kind: ClientAuth,
+		created_at: Math.floor(Date.now() / 1e3),
+		tags: [["relay", relayURL], ["challenge", challenge]],
+		content: ""
+	};
+}
+var SendingOnClosedConnection = class extends Error {
+	constructor(message, relay) {
+		super(`Tried to send message '${message} on a closed connection to ${relay}.`);
+		this.name = "SendingOnClosedConnection";
+	}
+};
+var AbstractRelay = class {
+	url;
+	_connected = false;
+	onclose = null;
+	onnotice = (msg) => console.debug(`NOTICE from ${this.url}: ${msg}`);
+	onauth;
+	baseEoseTimeout = 4400;
+	publishTimeout = 4400;
+	pingFrequency = 29e3;
+	pingTimeout = 2e4;
+	resubscribeBackoff = [
+		1e4,
+		1e4,
+		1e4,
+		2e4,
+		2e4,
+		3e4,
+		6e4
+	];
+	openSubs = /* @__PURE__ */ new Map();
+	enablePing;
+	enableReconnect;
+	idleSince = Date.now();
+	ongoingOperations = 0;
+	reconnectTimeoutHandle;
+	pingIntervalHandle;
+	reconnectAttempts = 0;
+	skipReconnection = false;
+	connectionPromise;
+	openCountRequests = /* @__PURE__ */ new Map();
+	openEventPublishes = /* @__PURE__ */ new Map();
+	ws;
+	challenge;
+	authPromise;
+	serial = 0;
+	verifyEvent;
+	_WebSocket;
+	constructor(url, opts) {
+		this.url = normalizeURL(url);
+		this.verifyEvent = opts.verifyEvent;
+		this._WebSocket = opts.websocketImplementation || WebSocket;
+		this.enablePing = opts.enablePing;
+		this.enableReconnect = opts.enableReconnect || false;
+	}
+	static async connect(url, opts) {
+		const relay = new AbstractRelay(url, opts);
+		await relay.connect(opts);
+		return relay;
+	}
+	closeAllSubscriptions(reason) {
+		for (let [_, sub] of this.openSubs) sub.close(reason);
+		this.openSubs.clear();
+		for (let [_, ep] of this.openEventPublishes) ep.reject(new Error(reason));
+		this.openEventPublishes.clear();
+		for (let [_, cr] of this.openCountRequests) cr.reject(new Error(reason));
+		this.openCountRequests.clear();
+	}
+	get connected() {
+		return this._connected;
+	}
+	async reconnect() {
+		const backoff = this.resubscribeBackoff[Math.min(this.reconnectAttempts, this.resubscribeBackoff.length - 1)];
+		this.reconnectAttempts++;
+		this.reconnectTimeoutHandle = setTimeout(async () => {
+			try {
+				await this.connect();
+			} catch (err) {}
+		}, backoff);
+	}
+	handleHardClose(reason) {
+		if (this.pingIntervalHandle) {
+			clearInterval(this.pingIntervalHandle);
+			this.pingIntervalHandle = void 0;
+		}
+		this._connected = false;
+		this.connectionPromise = void 0;
+		this.idleSince = void 0;
+		if (this.enableReconnect && !this.skipReconnection) this.reconnect();
+		else {
+			this.onclose?.();
+			this.closeAllSubscriptions(reason);
+		}
+	}
+	async connect(opts) {
+		let connectionTimeoutHandle;
+		if (this.connectionPromise) return this.connectionPromise;
+		this.challenge = void 0;
+		this.authPromise = void 0;
+		this.skipReconnection = false;
+		this.connectionPromise = new Promise((resolve, reject) => {
+			if (opts?.timeout) connectionTimeoutHandle = setTimeout(() => {
+				reject("connection timed out");
+				this.connectionPromise = void 0;
+				this.skipReconnection = true;
+				this.onclose?.();
+				this.handleHardClose("relay connection timed out");
+			}, opts.timeout);
+			if (opts?.abort) opts.abort.onabort = reject;
+			try {
+				this.ws = new this._WebSocket(this.url);
+			} catch (err) {
+				clearTimeout(connectionTimeoutHandle);
+				reject(err);
+				return;
+			}
+			this.ws.onopen = () => {
+				if (this.reconnectTimeoutHandle) {
+					clearTimeout(this.reconnectTimeoutHandle);
+					this.reconnectTimeoutHandle = void 0;
+				}
+				clearTimeout(connectionTimeoutHandle);
+				this._connected = true;
+				const isReconnection = this.reconnectAttempts > 0;
+				this.reconnectAttempts = 0;
+				for (const sub of this.openSubs.values()) {
+					sub.eosed = false;
+					if (isReconnection) {
+						for (let f = 0; f < sub.filters.length; f++) if (sub.lastEmitted) sub.filters[f].since = sub.lastEmitted + 1;
+					}
+					sub.fire();
+				}
+				if (this.enablePing) this.pingIntervalHandle = setInterval(() => this.pingpong(), this.pingFrequency);
+				resolve();
+			};
+			this.ws.onerror = () => {
+				clearTimeout(connectionTimeoutHandle);
+				reject("connection failed");
+				this.connectionPromise = void 0;
+				this.skipReconnection = true;
+				this.onclose?.();
+				this.handleHardClose("relay connection failed");
+			};
+			this.ws.onclose = (ev) => {
+				clearTimeout(connectionTimeoutHandle);
+				reject(ev.message || "websocket closed");
+				this.handleHardClose("relay connection closed");
+			};
+			this.ws.onmessage = this._onmessage.bind(this);
+		});
+		return this.connectionPromise;
+	}
+	waitForPingPong() {
+		return new Promise((resolve) => {
+			this.ws.once("pong", () => resolve(true));
+			this.ws.ping();
+		});
+	}
+	waitForDummyReq() {
+		return new Promise((resolve, reject) => {
+			if (!this.connectionPromise) return reject(/* @__PURE__ */ new Error(`no connection to ${this.url}, can't ping`));
+			try {
+				const sub = this.subscribe([{
+					ids: ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+					limit: 0
+				}], {
+					label: "<forced-ping>",
+					oneose: () => {
+						resolve(true);
+						sub.close();
+					},
+					onclose() {
+						resolve(true);
+					},
+					eoseTimeout: this.pingTimeout + 1e3
+				});
+			} catch (err) {
+				reject(err);
+			}
+		});
+	}
+	async pingpong() {
+		if (this.ws?.readyState === 1) {
+			if (!await Promise.any([this.ws && this.ws.ping && this.ws.once ? this.waitForPingPong() : this.waitForDummyReq(), new Promise((res) => setTimeout(() => res(false), this.pingTimeout))])) {
+				if (this.ws?.readyState === this._WebSocket.OPEN) this.ws?.close();
+			}
+		}
+	}
+	async send(message) {
+		if (!this.connectionPromise) throw new SendingOnClosedConnection(message, this.url);
+		this.connectionPromise.then(() => {
+			this.ws?.send(message);
+		});
+	}
+	async auth(signAuthEvent) {
+		const challenge = this.challenge;
+		if (!challenge) throw new Error("can't perform auth, no challenge was received");
+		if (this.authPromise) return this.authPromise;
+		this.authPromise = new Promise(async (resolve, reject) => {
+			try {
+				let evt = await signAuthEvent(makeAuthEvent(this.url, challenge));
+				let timeout = setTimeout(() => {
+					let ep = this.openEventPublishes.get(evt.id);
+					if (ep) {
+						ep.reject(/* @__PURE__ */ new Error("auth timed out"));
+						this.openEventPublishes.delete(evt.id);
+					}
+				}, this.publishTimeout);
+				this.openEventPublishes.set(evt.id, {
+					resolve,
+					reject,
+					timeout
+				});
+				this.send("[\"AUTH\"," + JSON.stringify(evt) + "]");
+			} catch (err) {
+				console.warn("subscribe auth function failed:", err);
+			}
+		});
+		return this.authPromise;
+	}
+	async publish(event) {
+		this.idleSince = void 0;
+		this.ongoingOperations++;
+		const ret = new Promise((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				const ep = this.openEventPublishes.get(event.id);
+				if (ep) {
+					ep.reject(/* @__PURE__ */ new Error("publish timed out"));
+					this.openEventPublishes.delete(event.id);
+				}
+			}, this.publishTimeout);
+			this.openEventPublishes.set(event.id, {
+				resolve,
+				reject,
+				timeout
+			});
+		});
+		this.send("[\"EVENT\"," + JSON.stringify(event) + "]");
+		this.ongoingOperations--;
+		if (this.ongoingOperations === 0) this.idleSince = Date.now();
+		return ret;
+	}
+	async count(filters, params) {
+		this.serial++;
+		const id = params?.id || "count:" + this.serial;
+		const ret = new Promise((resolve, reject) => {
+			this.openCountRequests.set(id, {
+				resolve,
+				reject
+			});
+		});
+		this.send("[\"COUNT\",\"" + id + "\"," + JSON.stringify(filters).substring(1));
+		return ret;
+	}
+	subscribe(filters, params) {
+		if (params.label !== "<forced-ping>") {
+			this.idleSince = void 0;
+			this.ongoingOperations++;
+		}
+		const sub = this.prepareSubscription(filters, params);
+		sub.fire();
+		if (params.abort) params.abort.onabort = () => sub.close(String(params.abort.reason || "<aborted>"));
+		return sub;
+	}
+	prepareSubscription(filters, params) {
+		this.serial++;
+		const id = params.id || (params.label ? params.label + ":" : "sub:") + this.serial;
+		const sub = new Subscription(this, id, filters, params);
+		this.openSubs.set(id, sub);
+		return sub;
+	}
+	close() {
+		this.skipReconnection = true;
+		if (this.reconnectTimeoutHandle) {
+			clearTimeout(this.reconnectTimeoutHandle);
+			this.reconnectTimeoutHandle = void 0;
+		}
+		if (this.pingIntervalHandle) {
+			clearInterval(this.pingIntervalHandle);
+			this.pingIntervalHandle = void 0;
+		}
+		this.closeAllSubscriptions("relay connection closed by us");
+		this._connected = false;
+		this.idleSince = void 0;
+		this.onclose?.();
+		if (this.ws?.readyState === this._WebSocket.OPEN) this.ws?.close();
+	}
+	_onmessage(ev) {
+		const json = ev.data;
+		if (!json) return;
+		const subid = getSubscriptionId(json);
+		if (subid) {
+			const so = this.openSubs.get(subid);
+			if (!so) return;
+			const id = getHex64(json, "id");
+			const alreadyHave = so.alreadyHaveEvent?.(id);
+			so.receivedEvent?.(this, id);
+			if (alreadyHave) return;
+		}
+		try {
+			let data = JSON.parse(json);
+			switch (data[0]) {
+				case "EVENT": {
+					const so = this.openSubs.get(data[1]);
+					const event = data[2];
+					if (this.verifyEvent(event) && matchFilters(so.filters, event)) so.onevent(event);
+					else so.oninvalidevent?.(event);
+					if (!so.lastEmitted || so.lastEmitted < event.created_at) so.lastEmitted = event.created_at;
+					return;
+				}
+				case "COUNT": {
+					const id = data[1];
+					const payload = data[2];
+					const cr = this.openCountRequests.get(id);
+					if (cr) {
+						cr.resolve(payload.count);
+						this.openCountRequests.delete(id);
+					}
+					return;
+				}
+				case "EOSE": {
+					const so = this.openSubs.get(data[1]);
+					if (!so) return;
+					so.receivedEose();
+					return;
+				}
+				case "OK": {
+					const id = data[1];
+					const ok = data[2];
+					const reason = data[3];
+					const ep = this.openEventPublishes.get(id);
+					if (ep) {
+						clearTimeout(ep.timeout);
+						if (ok) ep.resolve(reason);
+						else ep.reject(new Error(reason));
+						this.openEventPublishes.delete(id);
+					}
+					return;
+				}
+				case "CLOSED": {
+					const id = data[1];
+					const so = this.openSubs.get(id);
+					if (!so) return;
+					so.closed = true;
+					so.close(data[2]);
+					return;
+				}
+				case "NOTICE":
+					this.onnotice(data[1]);
+					return;
+				case "AUTH":
+					this.challenge = data[1];
+					if (this.onauth) this.auth(this.onauth).catch((err) => {
+						if (!(err instanceof SendingOnClosedConnection)) throw err;
+					});
+					return;
+				default:
+					this.openSubs.get(data[1])?.oncustom?.(data);
+					return;
+			}
+		} catch (err) {
+			try {
+				const [_, __, event] = JSON.parse(json);
+				console.warn(`[nostr] relay ${this.url} error processing message:`, err, event);
+			} catch (_) {
+				console.warn(`[nostr] relay ${this.url} error processing message:`, err);
+			}
+			return;
+		}
+	}
+};
+var Subscription = class {
+	relay;
+	id;
+	lastEmitted;
+	closed = false;
+	eosed = false;
+	filters;
+	alreadyHaveEvent;
+	receivedEvent;
+	onevent;
+	oninvalidevent;
+	oneose;
+	onclose;
+	oncustom;
+	eoseTimeout;
+	eoseTimeoutHandle;
+	constructor(relay, id, filters, params) {
+		if (filters.length === 0) throw new Error("subscription can't be created with zero filters");
+		this.relay = relay;
+		this.filters = filters;
+		this.id = id;
+		this.alreadyHaveEvent = params.alreadyHaveEvent;
+		this.receivedEvent = params.receivedEvent;
+		this.eoseTimeout = params.eoseTimeout || relay.baseEoseTimeout;
+		this.oneose = params.oneose;
+		this.onclose = params.onclose;
+		this.oninvalidevent = params.oninvalidevent;
+		this.onevent = params.onevent || ((event) => {
+			console.warn(`onevent() callback not defined for subscription '${this.id}' in relay ${this.relay.url}. event received:`, event);
+		});
+	}
+	fire() {
+		this.relay.send("[\"REQ\",\"" + this.id + "\"," + JSON.stringify(this.filters).substring(1));
+		this.eoseTimeoutHandle = setTimeout(this.receivedEose.bind(this), this.eoseTimeout);
+	}
+	receivedEose() {
+		if (this.eosed) return;
+		clearTimeout(this.eoseTimeoutHandle);
+		this.eosed = true;
+		this.oneose?.();
+	}
+	close(reason = "closed by caller") {
+		if (!this.closed && this.relay.connected) {
+			try {
+				this.relay.send("[\"CLOSE\"," + JSON.stringify(this.id) + "]");
+			} catch (err) {
+				if (err instanceof SendingOnClosedConnection) {} else throw err;
+			}
+			this.closed = true;
+		}
+		this.relay.openSubs.delete(this.id);
+		this.relay.ongoingOperations--;
+		if (this.relay.ongoingOperations === 0) this.relay.idleSince = Date.now();
+		this.onclose?.(reason);
+	}
+};
+var alwaysTrue = (t) => {
+	t[verifiedSymbol] = true;
+	return true;
+};
+var AbstractSimplePool = class {
+	relays = /* @__PURE__ */ new Map();
+	seenOn = /* @__PURE__ */ new Map();
+	trackRelays = false;
+	verifyEvent;
+	enablePing;
+	enableReconnect;
+	automaticallyAuth;
+	trustedRelayURLs = /* @__PURE__ */ new Set();
+	onRelayConnectionFailure;
+	onRelayConnectionSuccess;
+	allowConnectingToRelay;
+	maxWaitForConnection;
+	_WebSocket;
+	constructor(opts) {
+		this.verifyEvent = opts.verifyEvent;
+		this._WebSocket = opts.websocketImplementation;
+		this.enablePing = opts.enablePing;
+		this.enableReconnect = opts.enableReconnect || false;
+		this.automaticallyAuth = opts.automaticallyAuth;
+		this.onRelayConnectionFailure = opts.onRelayConnectionFailure;
+		this.onRelayConnectionSuccess = opts.onRelayConnectionSuccess;
+		this.allowConnectingToRelay = opts.allowConnectingToRelay;
+		this.maxWaitForConnection = opts.maxWaitForConnection || 3e3;
+	}
+	async ensureRelay(url, params) {
+		url = normalizeURL(url);
+		let relay = this.relays.get(url);
+		if (!relay) {
+			relay = new AbstractRelay(url, {
+				verifyEvent: this.trustedRelayURLs.has(url) ? alwaysTrue : this.verifyEvent,
+				websocketImplementation: this._WebSocket,
+				enablePing: this.enablePing,
+				enableReconnect: this.enableReconnect
+			});
+			relay.onclose = () => {
+				this.relays.delete(url);
+			};
+			this.relays.set(url, relay);
+		}
+		if (this.automaticallyAuth) {
+			const authSignerFn = this.automaticallyAuth(url);
+			if (authSignerFn) relay.onauth = authSignerFn;
+		}
+		try {
+			await relay.connect({
+				timeout: params?.connectionTimeout,
+				abort: params?.abort
+			});
+		} catch (err) {
+			this.relays.delete(url);
+			throw err;
+		}
+		return relay;
+	}
+	close(relays) {
+		relays.map(normalizeURL).forEach((url) => {
+			this.relays.get(url)?.close();
+			this.relays.delete(url);
+		});
+	}
+	subscribe(relays, filter, params) {
+		const request = [];
+		const uniqUrls = [];
+		for (let i2 = 0; i2 < relays.length; i2++) {
+			const url = normalizeURL(relays[i2]);
+			if (!request.find((r) => r.url === url)) {
+				if (uniqUrls.indexOf(url) === -1) {
+					uniqUrls.push(url);
+					request.push({
+						url,
+						filter
+					});
+				}
+			}
+		}
+		return this.subscribeMap(request, params);
+	}
+	subscribeMany(relays, filter, params) {
+		return this.subscribe(relays, filter, params);
+	}
+	subscribeMap(requests, params) {
+		const grouped = /* @__PURE__ */ new Map();
+		for (const req of requests) {
+			const { url, filter } = req;
+			if (!grouped.has(url)) grouped.set(url, []);
+			grouped.get(url).push(filter);
+		}
+		const groupedRequests = Array.from(grouped.entries()).map(([url, filters]) => ({
+			url,
+			filters
+		}));
+		if (this.trackRelays) params.receivedEvent = (relay, id) => {
+			let set = this.seenOn.get(id);
+			if (!set) {
+				set = /* @__PURE__ */ new Set();
+				this.seenOn.set(id, set);
+			}
+			set.add(relay);
+		};
+		const _knownIds = /* @__PURE__ */ new Set();
+		const subs = [];
+		const eosesReceived = [];
+		let handleEose = (i2) => {
+			if (eosesReceived[i2]) return;
+			eosesReceived[i2] = true;
+			if (eosesReceived.filter((a) => a).length === groupedRequests.length) {
+				params.oneose?.();
+				handleEose = () => {};
+			}
+		};
+		const closesReceived = [];
+		let handleClose = (i2, reason) => {
+			if (closesReceived[i2]) return;
+			handleEose(i2);
+			closesReceived[i2] = reason;
+			if (closesReceived.filter((a) => a).length === groupedRequests.length) {
+				params.onclose?.(closesReceived);
+				handleClose = () => {};
+			}
+		};
+		const localAlreadyHaveEventHandler = (id) => {
+			if (params.alreadyHaveEvent?.(id)) return true;
+			const have = _knownIds.has(id);
+			_knownIds.add(id);
+			return have;
+		};
+		const allOpened = Promise.all(groupedRequests.map(async ({ url, filters }, i2) => {
+			if (this.allowConnectingToRelay?.(url, ["read", filters]) === false) {
+				handleClose(i2, "connection skipped by allowConnectingToRelay");
+				return;
+			}
+			let relay;
+			try {
+				relay = await this.ensureRelay(url, {
+					connectionTimeout: this.maxWaitForConnection < (params.maxWait || 0) ? Math.max(params.maxWait * .8, params.maxWait - 1e3) : this.maxWaitForConnection,
+					abort: params.abort
+				});
+			} catch (err) {
+				this.onRelayConnectionFailure?.(url);
+				handleClose(i2, err?.message || String(err));
+				return;
+			}
+			this.onRelayConnectionSuccess?.(url);
+			let subscription = relay.subscribe(filters, {
+				...params,
+				oneose: () => handleEose(i2),
+				onclose: (reason) => {
+					if (reason.startsWith("auth-required: ") && params.onauth) relay.auth(params.onauth).then(() => {
+						relay.subscribe(filters, {
+							...params,
+							oneose: () => handleEose(i2),
+							onclose: (reason2) => {
+								handleClose(i2, reason2);
+							},
+							alreadyHaveEvent: localAlreadyHaveEventHandler,
+							eoseTimeout: params.maxWait,
+							abort: params.abort
+						});
+					}).catch((err) => {
+						handleClose(i2, `auth was required and attempted, but failed with: ${err}`);
+					});
+					else handleClose(i2, reason);
+				},
+				alreadyHaveEvent: localAlreadyHaveEventHandler,
+				eoseTimeout: params.maxWait,
+				abort: params.abort
+			});
+			subs.push(subscription);
+		}));
+		return { async close(reason) {
+			await allOpened;
+			subs.forEach((sub) => {
+				sub.close(reason);
+			});
+		} };
+	}
+	subscribeEose(relays, filter, params) {
+		let subcloser;
+		subcloser = this.subscribe(relays, filter, {
+			...params,
+			oneose() {
+				const reason = "closed automatically on eose";
+				if (subcloser) subcloser.close(reason);
+				else params.onclose?.(relays.map((_) => reason));
+			}
+		});
+		return subcloser;
+	}
+	subscribeManyEose(relays, filter, params) {
+		return this.subscribeEose(relays, filter, params);
+	}
+	async querySync(relays, filter, params) {
+		return new Promise(async (resolve) => {
+			const events = [];
+			this.subscribeEose(relays, filter, {
+				...params,
+				onevent(event) {
+					events.push(event);
+				},
+				onclose(_) {
+					resolve(events);
+				}
+			});
+		});
+	}
+	async get(relays, filter, params) {
+		filter.limit = 1;
+		const events = await this.querySync(relays, filter, params);
+		events.sort((a, b) => b.created_at - a.created_at);
+		return events[0] || null;
+	}
+	publish(relays, event, params) {
+		return relays.map(normalizeURL).map(async (url, i2, arr) => {
+			if (arr.indexOf(url) !== i2) return Promise.reject("duplicate url");
+			if (this.allowConnectingToRelay?.(url, ["write", event]) === false) return Promise.reject("connection skipped by allowConnectingToRelay");
+			let r;
+			try {
+				r = await this.ensureRelay(url, {
+					connectionTimeout: this.maxWaitForConnection < (params?.maxWait || 0) ? Math.max(params.maxWait * .8, params.maxWait - 1e3) : this.maxWaitForConnection,
+					abort: params?.abort
+				});
+			} catch (err) {
+				this.onRelayConnectionFailure?.(url);
+				return String("connection failure: " + String(err));
+			}
+			return r.publish(event).catch(async (err) => {
+				if (err instanceof Error && err.message.startsWith("auth-required: ") && params?.onauth) {
+					await r.auth(params.onauth);
+					return r.publish(event);
+				}
+				throw err;
+			}).then((reason) => {
+				if (this.trackRelays) {
+					let set = this.seenOn.get(event.id);
+					if (!set) {
+						set = /* @__PURE__ */ new Set();
+						this.seenOn.set(event.id, set);
+					}
+					set.add(r);
+				}
+				return reason;
+			});
+		});
+	}
+	listConnectionStatus() {
+		const map = /* @__PURE__ */ new Map();
+		this.relays.forEach((relay, url) => map.set(url, relay.connected));
+		return map;
+	}
+	destroy() {
+		this.relays.forEach((conn) => conn.close());
+		this.relays = /* @__PURE__ */ new Map();
+	}
+	pruneIdleRelays(idleThresholdMs = 1e4) {
+		const prunedUrls = [];
+		for (const [url, relay] of this.relays) if (relay.idleSince && Date.now() - relay.idleSince >= idleThresholdMs) {
+			this.relays.delete(url);
+			prunedUrls.push(url);
+			relay.close();
+		}
+		return prunedUrls;
+	}
+};
+var _WebSocket;
+try {
+	_WebSocket = WebSocket;
+} catch {}
+var SimplePool = class extends AbstractSimplePool {
+	constructor(options) {
+		super({
+			verifyEvent,
+			websocketImplementation: _WebSocket,
+			maxWaitForConnection: 3e3,
+			...options
+		});
+	}
+};
+//#endregion
+//#region src/concord-v2/lib/orchestration.ts
 /**
-* Headless Concord V2 (₿AO) driver — the agent API entry (see AGENTS.md).
+* Orchestration primitives (AGENT_CHAT_ORCHESTRATION.md §7/§14) — pure
+* functions shared by the headless CLI, the MCP server, and (later) the UI
+* manifest renderer. The claim tie-break MUST live in exactly one place or
+* agents double-work: this is that place.
 *
-* A Claude session (or any agent) can create a ₿AO, mint invite links, join
-* via one, and read/post in #general — no GUI, straight onto the relays.
-* State lives in ~/.concord-live/<name>.json (OUTSIDE the repo: it holds a
-* private key) so an identity survives reboots and later sessions can re-enter.
+* Wire shapes:
+* - Manifest: PUBLIC parameterized-replaceable kind 30078, tags
+*   `["d", "orch-<id>"]`, `["t", "bao-orch"]`, content = JSON
+*   {orch, goal, roles, tasks[]} — public even for sealed communities (the
+*   manifest is coordination metadata, not community content).
+* - Task lifecycle: chat messages (sealed rumors inside a ₿AO — inner kind 9)
+*   tagged `["t", "orch-task"]` whose content starts with a verb:
+*     CLAIM <taskId> key=<idempotencyKey>
+*     PROGRESS <taskId> <one line>
+*     HANDOFF <taskId> @<agent> <state summary>   (receiver must ACK)
+*     ACK <taskId>
+*     DONE <taskId> <artifact refs>
+*     BLOCKED <taskId> <reason> <need>
+*   Machines parse the tags + first word; the rest stays human-readable.
+*/
+const ORCH_TASK_TAG = "orch-task";
+const VERBS = [
+	"CLAIM",
+	"PROGRESS",
+	"HANDOFF",
+	"ACK",
+	"DONE",
+	"BLOCKED"
+];
+/**
+* Parse a chat message into a task-lifecycle message. Requires the
+* `["t", "orch-task"]` tag AND a leading verb — either alone is not enough
+* (a human typing "DONE deal!" in a tagged thread is not a state change).
+*/
+function parseTaskMessage(content, tags) {
+	if (!tags.some((t) => t[0] === "t" && t[1] === "orch-task")) return null;
+	const m = content.match(/^(\w+)\s+(\S+)(?:\s+([\s\S]*))?$/);
+	if (!m) return null;
+	const verb = m[1].toUpperCase();
+	if (!VERBS.includes(verb)) return null;
+	const rest = (m[3] ?? "").trim();
+	const keyMatch = rest.match(/(?:^|\s)key=(\S+)/);
+	return {
+		verb,
+		taskId: m[2],
+		rest,
+		...verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {}
+	};
+}
+/**
+* Deterministic idempotency key for a claim: a retrying agent re-publishes
+* the SAME claim event instead of racing itself (§14).
+*/
+function deriveClaimKey(orchId, taskId) {
+	return bytesToHex$1(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}`))).slice(0, 32);
+}
+/**
+* Resolve who owns each task right now. THE shared tie-break (§14):
+* first valid CLAIM by timestamp, ties broken by lowest message id. A claim
+* with no PROGRESS from its claimant for `ttlMs` is STALE: it stays visible
+* but the next valid CLAIM takes the task (stale claims never win over a
+* fresh one). DONE/BLOCKED are terminal-state markers from the claimant only
+* (nobody can mark someone else's task done).
+*/
+function resolveClaims(messages, opts) {
+	const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	const states = /* @__PURE__ */ new Map();
+	for (const { id, author, ms, msg } of sorted) {
+		const cur = states.get(msg.taskId);
+		switch (msg.verb) {
+			case "CLAIM":
+				if (cur && !cur.stale && !cur.done) break;
+				states.set(msg.taskId, {
+					taskId: msg.taskId,
+					claimant: author,
+					claimId: id,
+					claimMs: ms,
+					lastProgressMs: ms,
+					done: false,
+					blocked: false,
+					stale: opts.nowMs - ms > opts.ttlMs
+				});
+				break;
+			case "PROGRESS":
+				if (cur && cur.claimant === author && !cur.done) {
+					cur.lastProgressMs = ms;
+					cur.stale = false;
+					cur.blocked = false;
+				}
+				break;
+			case "DONE":
+				if (cur && cur.claimant === author) {
+					cur.done = true;
+					cur.blocked = false;
+					cur.lastProgressMs = ms;
+				}
+				break;
+			case "BLOCKED":
+				if (cur && cur.claimant === author && !cur.done) {
+					cur.blocked = true;
+					cur.lastProgressMs = ms;
+				}
+				break;
+			case "HANDOFF": break;
+			case "ACK": break;
+		}
+	}
+	for (const s of states.values()) if (!s.done && opts.nowMs - s.lastProgressMs > opts.ttlMs) s.stale = true;
+	return states;
+}
+/**
+* Client-side mention detection (the sealed-stack interrupt): a message
+* mentions me if it p-tags my pubkey, embeds my npub, or leads with my name.
+* Relay-side #p filters cannot see inside sealed wraps — every agent scans
+* post-decrypt (AGENT_CHAT_ORCHESTRATION.md §11.3, adapted for Concord).
+* Content-based name matching is a HINT only (spoofable) — callers treating
+* mentions as instructions must check the p-tag/npub forms.
+*/
+function mentionsMe(opts) {
+	if (opts.tags.some((t) => t[0] === "p" && t[1] === opts.myPubkey)) return true;
+	if (opts.content.includes(opts.myNpub)) return true;
+	const lower = opts.content.toLowerCase();
+	return opts.myNames.some((n) => n && (lower.includes(`@${n.toLowerCase()}`) || lower.startsWith(`${n.toLowerCase()}:`)));
+}
+//#endregion
+//#region scripts/chat-core.ts
+/**
+* Shared chat-core for Concord V2 (₿AO) agents — consumed by BOTH the
+* headless CLI (scripts/bao-agent.ts) and the MCP server
+* (scripts/bao-chat-mcp.ts). One implementation of idempotent send, the
+* mention interrupt, and claim resolution, so the two front-ends can never
+* diverge.
 *
-* Build: node_modules/.bin/rolldown -c scripts/rolldown.bao-agent.config.mjs
-* Run:   node .tmp/bao-agent.mjs <mode> [args]
-*
-* Modes:
-*   create [--name "…"] [--agent-only]   genesis + first invite, saves owner state
-*   invite [--label L] [--single-use]    mint another invite link (owner state)
-*   join <invite-url> [--as name]        join with a FRESH key, saves member state
-*                                        (grinds the agent_gate PoW + checks
-*                                        single-use spend automatically)
-*   say <text> [--as name]               post to #general
-*   read [--as name]                     print #general timeline + member list
-*   whoami [--as name]                   print the identity's npub
+* IMPORTANT: everything here logs to STDERR only. The MCP server speaks
+* JSON-RPC on stdout; a stray stdout write corrupts the protocol stream.
 */
 init_pure();
-const HOME_RELAYS = ["wss://relay.bao.network"];
 const STATE_DIR = join(homedir(), ".concord-live");
-const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 function statePath(name) {
 	return join(STATE_DIR, `${name}.json`);
 }
@@ -9895,7 +10009,15 @@ function communityOf(c, privateChannels) {
 		name: c.name
 	};
 }
-const pool = new SimplePool();
+let pool = null;
+/** One pool per process (the MCP server is long-lived; the CLI closes it on exit). */
+function getPool() {
+	pool ??= new SimplePool();
+	return pool;
+}
+function closePool(relays) {
+	pool?.close(relays);
+}
 function signerOf(sk) {
 	return { signEvent: async (template) => {
 		const { finalizeEvent } = await Promise.resolve().then(() => (init_pure(), pure_exports));
@@ -9904,18 +10026,266 @@ function signerOf(sk) {
 }
 /** Publish to every home relay; throw only if NONE accept. */
 async function publishAll(relays, event, label) {
-	const results = await Promise.allSettled(pool.publish(relays, event));
+	const results = await Promise.allSettled(getPool().publish(relays, event));
 	const rejected = results.filter((r) => r.status === "rejected");
 	if (rejected.length === results.length) {
 		const reasons = rejected.map((r) => r.status === "rejected" ? String(r.reason) : "").join("; ");
 		throw new Error(`no relay accepted ${label}: ${reasons}`);
 	}
 	const size = JSON.stringify(event).length;
-	console.log(`  ✓ ${label}: kind ${event.kind} ${event.id.slice(0, 12)}… (${size} B) → ${results.length - rejected.length}/${results.length} relays`);
+	console.error(`  ✓ ${label}: kind ${event.kind} ${event.id.slice(0, 12)}… (${size} B) → ${results.length - rejected.length}/${results.length} relays`);
 }
 async function queryAll(relays, filter) {
-	return pool.querySync(relays, filter, { maxWait: 8e3 });
+	return getPool().querySync(relays, filter, { maxWait: 8e3 });
 }
+/** Resolve #general: owner's stored id, else fold the control plane. */
+async function generalChannel(state) {
+	if (state.community.general_channel_id) return {
+		idHex: state.community.general_channel_id,
+		id: hexToBytes$1(state.community.general_channel_id)
+	};
+	const community = communityOf(state.community, state.private_channels);
+	const control = currentControlGroup(community);
+	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
+		kinds: [KIND_WRAP],
+		authors: [control.pk]
+	}), [control]), community.id, community.owner);
+	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted && def.name === "general") return {
+		idHex: def.channelIdHex,
+		id: hexToBytes$1(def.channelIdHex)
+	};
+	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) return {
+		idHex: def.channelIdHex,
+		id: hexToBytes$1(def.channelIdHex)
+	};
+	throw new Error("No public channel found in the control fold.");
+}
+/** Public channels from the control fold + this identity's private channels. */
+async function listChannels(state) {
+	const community = communityOf(state.community, state.private_channels);
+	const control = currentControlGroup(community);
+	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
+		kinds: [KIND_WRAP],
+		authors: [control.pk]
+	}), [control]), community.id, community.owner);
+	const out = [];
+	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) out.push({
+		id: def.channelIdHex,
+		name: def.name,
+		private: false
+	});
+	for (const ch of state.private_channels) out.push({
+		id: ch.id,
+		name: ch.name,
+		private: true
+	});
+	return out;
+}
+/** Everything a channel operation needs, resolved once. */
+async function channelContext(state) {
+	const sk = hexToBytes$1(state.sk);
+	const pubkey = getPublicKey(sk);
+	const signer = signerOf(sk);
+	const community = communityOf(state.community, state.private_channels);
+	const channel = await generalChannel(state);
+	return {
+		sk,
+		pubkey,
+		signer,
+		community,
+		channel,
+		group: channelGroupKey(community.root, channel.id, 0n)
+	};
+}
+/** Decrypted #general history (the relay only ever sees ciphertext). */
+async function channelMessages(state) {
+	const { community, group } = await channelContext(state);
+	const wraps = await queryAll(community.relays, {
+		kinds: [KIND_WRAP],
+		authors: [group.pk]
+	});
+	const messages = [];
+	for (const wrap of wraps) try {
+		const opened = openWrap(wrap, group);
+		if (opened.kind !== 9) continue;
+		messages.push({
+			id: opened.rumorId,
+			author: opened.author,
+			ms: opened.ms,
+			content: opened.content,
+			tags: opened.tags
+		});
+	} catch {}
+	messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+	return messages;
+}
+/**
+* Post to #general. Idempotent when `idemKey` is given: the key rides as a
+* ["d", key] tag on the rumor, and a retry first scans our own history — if
+* the key already landed, we report deduped instead of double-posting
+* (AGENT_CHAT_ORCHESTRATION.md §14: machines retry, humans shouldn't see it).
+*/
+async function sendChannelMessage(state, text, opts = {}) {
+	const { pubkey, signer, community, channel, group } = await channelContext(state);
+	if (opts.idemKey) {
+		const dupe = (await channelMessages(state)).find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey));
+		if (dupe) return {
+			rumorId: dupe.id,
+			deduped: true
+		};
+	}
+	const tags = [...channelBindingTags(channel.idHex, 0n), ...opts.extraTags ?? []];
+	if (opts.idemKey) tags.push(["d", opts.idemKey]);
+	for (const match of text.match(/npub1[02-9ac-hj-np-z]{20,}/g) ?? []) try {
+		const decoded = decode(match);
+		if (decoded.type === "npub") tags.push(["p", decoded.data]);
+	} catch {}
+	const rumor = buildRumor({
+		kind: 9,
+		content: text,
+		tags,
+		pubkey,
+		ms: Date.now()
+	});
+	const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer), group);
+	await publishAll(community.relays, wrap, `message to #general`);
+	return {
+		rumorId: rumor.id,
+		deduped: false
+	};
+}
+/**
+* The mention interrupt (AGENT_CHAT_ORCHESTRATION.md §11.3, adapted for the
+* sealed stack: a relay-side #p filter cannot see inside gift wraps, so we
+* subscribe the channel's wraps by stream author and scan mentions
+* post-decrypt). Resolves on the first NEW message mentioning the identity
+* (default) or any new message. Timeout resolves `null` — a sentinel, never
+* an error. Long-lived callers (MCP) must NOT close the shared pool here.
+*/
+async function waitForInterrupt(identityName, state, opts) {
+	const { pubkey, community, group } = await channelContext(state);
+	const myNpub = npubEncode(pubkey);
+	const seen = /* @__PURE__ */ new Set();
+	for (const w of await queryAll(community.relays, {
+		kinds: [KIND_WRAP],
+		authors: [group.pk]
+	})) seen.add(w.id);
+	console.error(`listening on #general of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`);
+	return new Promise((resolve) => {
+		let sub = null;
+		const finish = (msg) => {
+			clearTimeout(timer);
+			sub?.close();
+			resolve(msg);
+		};
+		const timer = setTimeout(() => finish(null), opts.timeoutSec * 1e3);
+		sub = getPool().subscribeMany(community.relays, {
+			kinds: [KIND_WRAP],
+			authors: [group.pk],
+			since: Math.floor(Date.now() / 1e3) - 30
+		}, { onevent(wrap) {
+			if (seen.has(wrap.id)) return;
+			seen.add(wrap.id);
+			let opened;
+			try {
+				opened = openWrap(wrap, group);
+			} catch {
+				return;
+			}
+			if (opened.kind !== 9) return;
+			if (opened.author === pubkey) return;
+			const msg = {
+				id: opened.rumorId,
+				author: opened.author,
+				ms: opened.ms,
+				content: opened.content,
+				tags: opened.tags
+			};
+			if (opts.mentionsOnly && !mentionsMe({
+				tags: msg.tags,
+				content: msg.content,
+				myPubkey: pubkey,
+				myNpub,
+				myNames: [identityName]
+			})) return;
+			finish(msg);
+		} });
+	});
+}
+/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
+const CLAIM_TTL_MS = 1800 * 1e3;
+async function orchVerbPost(state, verb, taskId, text, orchId) {
+	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
+	let content = `${verb} ${taskId}`;
+	let idemKey;
+	if (verb === "CLAIM") {
+		const key = deriveClaimKey(orchId, taskId);
+		content += ` key=${key}`;
+		idemKey = key;
+	}
+	if (text) content += ` ${text}`;
+	return sendChannelMessage(state, content, {
+		idemKey,
+		extraTags
+	});
+}
+async function orchStates(state, orchId) {
+	const inputs = [];
+	for (const m of await channelMessages(state)) {
+		const msg = parseTaskMessage(m.content, m.tags);
+		if (!msg) continue;
+		const oTags = m.tags.filter((t) => t[0] === "o").map((t) => t[1]);
+		if (oTags.length > 0 && !oTags.includes(orchId)) continue;
+		inputs.push({
+			id: m.id,
+			author: m.author,
+			ms: m.ms,
+			msg
+		});
+	}
+	return resolveClaims(inputs, {
+		ttlMs: CLAIM_TTL_MS,
+		nowMs: Date.now()
+	});
+}
+//#endregion
+//#region scripts/bao-agent.ts
+/**
+* Headless Concord V2 (₿AO) driver — the agent API entry (see AGENTS.md).
+*
+* A Claude session (or any agent) can create a ₿AO, mint invite links, join
+* via one, and read/post in #general — no GUI, straight onto the relays.
+* State lives in ~/.concord-live/<name>.json (OUTSIDE the repo: it holds a
+* private key) so an identity survives reboots and later sessions can re-enter.
+*
+* Channel operations (idempotent send, history, the mention interrupt, task
+* claims) live in scripts/chat-core.ts — shared with the MCP server so the
+* two front-ends can never diverge. This file is community lifecycle + CLI.
+*
+* Build: node_modules/.bin/rolldown -c scripts/rolldown.bao-agent.config.mjs
+* Run:   node .tmp/bao-agent.mjs <mode> [args]
+*
+* Modes:
+*   create [--name "…"] [--agent-only]   genesis + first invite, saves owner state
+*   invite [--label L] [--single-use]    mint another invite link (owner state)
+*   join <invite-url> [--as name]        join with a FRESH key, saves member state
+*                                        (grinds the agent_gate PoW + checks
+*                                        single-use spend automatically)
+*   say <text> [--key K] [--as name]     post to #general (--key = idempotent:
+*                                        a retry with the same key dedupes)
+*   read [--json] [--as name]            print #general timeline + member list
+*   wait [--timeout S] [--all] [--json]  interrupt: first NEW message mentioning
+*                                        me (default) or any new message (--all).
+*                                        Exit 0 = message, 2 = timeout.
+*   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
+*   orch claim|progress|done|blocked <taskId> [text] [--orch id] [--as name]
+*   whoami [--as name]                   print the identity's npub
+*
+* Exit codes: 0 ok · 1 error · 2 timeout/no-result (Buzz-style discipline).
+*/
+init_pure();
+const HOME_RELAYS = ["wss://relay.bao.network"];
+const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 async function create(name, communityName, agentOnly) {
 	if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use invite/say/read.`);
 	const sk = generateSecretKey();
@@ -10068,70 +10438,18 @@ async function joinBao(name, inviteUrl) {
 	console.log(`\nJoined "${bundle.name}" as "${name}": ${npubEncode(pubkey)}`);
 	console.log(`State: ${statePath(name)}`);
 }
-/** Resolve #general: owner's stored id, else fold the control plane. */
-async function generalChannel(state) {
-	if (state.community.general_channel_id) return {
-		idHex: state.community.general_channel_id,
-		id: hexToBytes$1(state.community.general_channel_id)
-	};
-	const community = communityOf(state.community, state.private_channels);
-	const control = currentControlGroup(community);
-	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
-		kinds: [KIND_WRAP],
-		authors: [control.pk]
-	}), [control]), community.id, community.owner);
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted && def.name === "general") return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	throw new Error("No public channel found in the control fold.");
+async function say(name, text, idemKey, json) {
+	const { rumorId, deduped } = await sendChannelMessage(loadState(name), text, { idemKey });
+	if (json) console.log(JSON.stringify({
+		rumor_id: rumorId,
+		deduped
+	}));
+	else if (deduped) console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
 }
-async function say(name, text) {
-	const state = loadState(name);
-	const sk = hexToBytes$1(state.sk);
-	const pubkey = getPublicKey(sk);
-	const signer = signerOf(sk);
-	const community = communityOf(state.community, state.private_channels);
-	const channel = await generalChannel(state);
-	const group = channelGroupKey(community.root, channel.id, 0n);
-	const wrap = wrapSeal(await sealRumor(buildRumor({
-		kind: 9,
-		content: text,
-		tags: channelBindingTags(channel.idHex, 0n),
-		pubkey,
-		ms: Date.now()
-	}), KIND_SEAL_ENCRYPTED, group, signer), group);
-	await publishAll(community.relays, wrap, `message to #general`);
-}
-async function read(name) {
+async function read(name, json) {
 	const state = loadState(name);
 	const community = communityOf(state.community, state.private_channels);
-	const channel = await generalChannel(state);
-	const group = channelGroupKey(community.root, channel.id, 0n);
-	const wraps = await queryAll(community.relays, {
-		kinds: [KIND_WRAP],
-		authors: [group.pk]
-	});
-	const messages = [];
-	for (const wrap of wraps) try {
-		const opened = openWrap(wrap, group);
-		if (opened.kind !== 9) continue;
-		messages.push({
-			ms: opened.ms,
-			author: opened.author,
-			content: opened.content
-		});
-	} catch {}
-	messages.sort((a, b) => a.ms - b.ms);
-	console.log(`\n#general — ${messages.length} message(s):`);
-	for (const m of messages) {
-		const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
-		console.log(`  [${time}] ${npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
-	}
+	const messages = await channelMessages(state);
 	const gb = currentGuestbookGroup(community);
 	const gbWraps = await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
@@ -10142,6 +10460,32 @@ async function read(name) {
 		const opened = openWrap(wrap, gb);
 		if (opened.kind === 3306) members.set(opened.author, opened.content);
 	} catch {}
+	if (json) {
+		console.log(JSON.stringify({
+			community: community.name,
+			channel: "general",
+			channels: await listChannels(state),
+			messages: messages.map((m) => ({
+				id: m.id,
+				author: m.author,
+				author_npub: npubEncode(m.author),
+				ms: m.ms,
+				content: m.content,
+				tags: m.tags
+			})),
+			members: [...members].map(([pk, status]) => ({
+				pubkey: pk,
+				npub: npubEncode(pk),
+				status
+			}))
+		}, null, 2));
+		return;
+	}
+	console.log(`\n#general — ${messages.length} message(s):`);
+	for (const m of messages) {
+		const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
+		console.log(`  [${time}] ${npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
+	}
 	console.log(`\nMembers (${[...members.values()].filter((s) => s === "join").length}):`);
 	for (const [pk, status] of members) console.log(`  ${npubEncode(pk)} — ${status}`);
 	if (state.role === "owner") {
@@ -10172,13 +10516,87 @@ async function read(name) {
 		}
 	}
 }
+async function waitMode(name, opts) {
+	const hit = await waitForInterrupt(name, loadState(name), opts);
+	if (!hit) {
+		if (opts.json) console.log(JSON.stringify({ timeout: true }));
+		else console.log("(timeout — no matching message)");
+		process.exitCode = 2;
+		return;
+	}
+	if (opts.json) console.log(JSON.stringify({
+		timeout: false,
+		id: hit.id,
+		author: hit.author,
+		author_npub: npubEncode(hit.author),
+		ms: hit.ms,
+		content: hit.content,
+		tags: hit.tags
+	}));
+	else {
+		const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
+		console.log(`[${time}] ${npubEncode(hit.author).slice(0, 16)}…: ${hit.content}`);
+	}
+}
+async function orchVerb(name, verb, taskId, text, orchId) {
+	const { deduped } = await orchVerbPost(loadState(name), verb, taskId, text, orchId);
+	if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
+}
+async function orchShow(name, orchId, json) {
+	const states = await orchStates(loadState(name), orchId);
+	if (json) {
+		console.log(JSON.stringify({
+			orch: orchId,
+			ttl_ms: CLAIM_TTL_MS,
+			tasks: [...states.values()].map((s) => ({
+				...s,
+				claimant_npub: npubEncode(s.claimant)
+			}))
+		}, null, 2));
+		return;
+	}
+	if (states.size === 0) {
+		console.log(`orch "${orchId}": no task messages found`);
+		process.exitCode = 2;
+		return;
+	}
+	console.log(`\norch "${orchId}" — ${states.size} task(s):`);
+	for (const s of states.values()) {
+		const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
+		console.log(`  ${s.taskId}: ${status} — ${npubEncode(s.claimant).slice(0, 16)}… (claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`);
+	}
+}
 function argValue(args, flag) {
 	const i = args.indexOf(flag);
 	return i >= 0 ? args[i + 1] : void 0;
 }
+/** Flags whose NEXT token is a value (not a positional arg). */
+const VALUE_FLAGS = [
+	"--as",
+	"--key",
+	"--orch",
+	"--timeout",
+	"--name",
+	"--label"
+];
+/** Positional args: everything that isn't a --flag or a value flag's value. */
+function positionalArgs(args) {
+	const out = [];
+	for (let i = 0; i < args.length; i++) {
+		const a = args[i];
+		if (VALUE_FLAGS.includes(a)) {
+			i++;
+			continue;
+		}
+		if (a.startsWith("--")) continue;
+		out.push(a);
+	}
+	return out;
+}
 async function main() {
 	const [mode, ...rest] = process.argv.slice(2);
 	const as = argValue(rest, "--as") ?? "owner";
+	const json = rest.includes("--json");
 	switch (mode) {
 		case "create":
 			await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
@@ -10187,33 +10605,65 @@ async function main() {
 			await invite(as, argValue(rest, "--label"), rest.includes("--single-use"));
 			break;
 		case "join": {
-			const url = rest.find((a) => !a.startsWith("--") && a !== as);
+			const url = positionalArgs(rest)[0];
 			if (!url) throw new Error("join needs an invite URL");
 			await joinBao(as, url);
 			break;
 		}
 		case "say": {
-			const text = rest.filter((a) => !a.startsWith("--") && a !== as).join(" ");
+			const text = positionalArgs(rest).join(" ");
 			if (!text) throw new Error("say needs text");
-			await say(as, text);
+			await say(as, text, argValue(rest, "--key"), json);
 			break;
 		}
 		case "read":
-			await read(as);
+			await read(as, json);
 			break;
+		case "wait": {
+			const timeoutSec = Number(argValue(rest, "--timeout") ?? "60");
+			if (!Number.isFinite(timeoutSec) || timeoutSec < 1 || timeoutSec > 300) throw new Error("--timeout must be 1..300 seconds");
+			await waitMode(as, {
+				timeoutSec,
+				mentionsOnly: !rest.includes("--all"),
+				json
+			});
+			break;
+		}
+		case "orch": {
+			const pos = positionalArgs(rest);
+			const sub = pos[0];
+			const orchId = argValue(rest, "--orch") ?? "cards";
+			if (sub === "show") {
+				await orchShow(as, orchId, json);
+				break;
+			}
+			const verb = (sub ?? "").toUpperCase();
+			if (![
+				"CLAIM",
+				"PROGRESS",
+				"DONE",
+				"BLOCKED",
+				"ACK",
+				"HANDOFF"
+			].includes(verb)) throw new Error("orch needs: show | claim|progress|done|blocked|ack|handoff <taskId> [text]");
+			const taskId = pos[1];
+			if (!taskId) throw new Error(`orch ${sub} needs a taskId`);
+			await orchVerb(as, verb, taskId, pos.slice(2).join(" "), orchId);
+			break;
+		}
 		case "whoami": {
 			const state = loadState(as);
 			console.log(`${as}: ${npubEncode(getPublicKey(hexToBytes$1(state.sk)))} (${state.role} of ${state.community.name})`);
 			break;
 		}
-		default: console.log("modes: create [--agent-only] | invite | join <url> | say <text> | read | whoami   [--as identity]");
+		default: console.log("modes: create [--agent-only] | invite | join <url> | say <text> [--key K] | read [--json] | wait [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]");
 	}
 }
 main().catch((err) => {
 	console.error(`\n✗ ${err instanceof Error ? err.message : String(err)}`);
 	process.exitCode = 1;
 }).finally(() => {
-	pool.close(HOME_RELAYS);
+	closePool(HOME_RELAYS);
 	setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();
 });
 //#endregion
