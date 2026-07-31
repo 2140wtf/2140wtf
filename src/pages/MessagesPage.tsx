@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Lock, Mail, Users } from 'lucide-react';
+import { Info, Lock, Mail, Users } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { GroupList } from '@/components/group-chat/GroupList';
 import { CreateGroupDialog } from '@/components/group-chat/CreateGroupDialog';
 import { JoinGroupDialog } from '@/components/group-chat/JoinGroupDialog';
@@ -164,9 +165,27 @@ export function MessagesPage() {
                 </div>
                 <h2 className="text-xl font-bold">Private Groups</h2>
                 <p className="text-muted-foreground">
-                  Group chat encryption requires access to your private key. Please log in with an
-                  nsec key instead of a browser extension or bunker.
+                  Private groups use end-to-end encryption. Your current login method doesn't
+                  support the encryption operations needed. Please log in with an nsec key or use
+                  a signer that supports NIP-44 encryption (e.g., Alby, Amber, or a compatible
+                  bunker).
                 </p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                    >
+                      <Info className="size-3.5" />
+                      Why?
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Group chat encrypts and decrypts messages with NIP-44. Some browser extensions
+                    and bunkers don't expose these operations to apps, so 2140.wtf can't read or
+                    write encrypted group messages through them.
+                  </TooltipContent>
+                </Tooltip>
               </Card>
             </div>
           ) : (

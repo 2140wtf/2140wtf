@@ -5,7 +5,7 @@
  * Group Ratchet fallback (no Rust MLS backend required).
  */
 
-import { nip19, getPublicKey } from 'nostr-tools';
+import { nip19 } from 'nostr-tools';
 import { verifyEvent } from 'nostr-tools/pure';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -25,6 +25,7 @@ import {
   parseNostrGroupDataExtension,
   createNostrGroupDataExtension,
   isValidGroupId,
+  type GroupChatSigner,
   type NostrGroupData,
 } from './nip104Protocol';
 import {
@@ -50,6 +51,8 @@ const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MEMBERS = 500;
 const MAX_GROUP_EVENT_CONTENT_LENGTH = 64 * 1024;
 const MAX_CLOCK_SKEW_SECONDS = 300;
+
+export type { GroupChatSigner } from './nip104Protocol';
 
 export interface GroupChatGroup {
   nostrGroupId: string;
@@ -179,7 +182,7 @@ function metadataFromWelcome(wd: Record<string, unknown>): NostrGroupData | null
 
 export class GroupChatService {
   private userPubkey: string;
-  private userPrivkey: Uint8Array;
+  private signer: GroupChatSigner;
   private defaultRelays: string[];
 
   private groups: Map<string, StoredGroup> = new Map();
@@ -192,15 +195,14 @@ export class GroupChatService {
   private epochRootSecrets: Map<string, Map<number, string>> = new Map();
   private loadStatePromise: Promise<void>;
 
-  constructor(userPubkey: string, userPrivkey: Uint8Array, defaultRelays: string[] = []) {
+  constructor(userPubkey: string, signer: GroupChatSigner, defaultRelays: string[] = []) {
     this.userPubkey = userPubkey.toLowerCase();
 
-    const derivedPubkey = getPublicKey(userPrivkey).toLowerCase();
-    if (derivedPubkey !== this.userPubkey) {
-      throw new Error('Provided private key does not match the user pubkey');
+    if (!signer.nip44) {
+      throw new Error('Group chat requires a signer with NIP-44 encryption support');
     }
 
-    this.userPrivkey = userPrivkey;
+    this.signer = signer;
     this.defaultRelays = defaultRelays.filter((r) => /^wss?:\/\//.test(r));
 
     this.loadStateMetadata();
@@ -433,7 +435,7 @@ export class GroupChatService {
       return { success: false, error: 'Group encryption state missing' };
     }
 
-    const appMessage = createApplicationMessage(this.userPubkey, this.userPrivkey, trimmed, groupId, group.epoch);
+    const appMessage = await createApplicationMessage(this.userPubkey, this.signer, trimmed, groupId, group.epoch);
     const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret, group.epoch);
 
     let appTimestampMs: number;
@@ -679,8 +681,9 @@ export class GroupChatService {
           members: group.members,
           metadata,
         });
-        const welcomeEvent = createWelcomeEvent(
-          this.userPrivkey,
+        const welcomeEvent = await createWelcomeEvent(
+          this.userPubkey,
+          this.signer,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -771,8 +774,9 @@ export class GroupChatService {
             relays: group.relays,
           }),
         });
-        const welcomeEvent = createWelcomeEvent(
-          this.userPrivkey,
+        const welcomeEvent = await createWelcomeEvent(
+          this.userPubkey,
+          this.signer,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -852,8 +856,9 @@ export class GroupChatService {
           members: group.members,
           metadata,
         });
-        const welcomeEvent = createWelcomeEvent(
-          this.userPrivkey,
+        const welcomeEvent = await createWelcomeEvent(
+          this.userPubkey,
+          this.signer,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -942,8 +947,9 @@ export class GroupChatService {
           members: group.members,
           metadata,
         });
-        const welcomeEvent = createWelcomeEvent(
-          this.userPrivkey,
+        const welcomeEvent = await createWelcomeEvent(
+          this.userPubkey,
+          this.signer,
           welcomePayload,
           'placeholder',
           group.relays,
@@ -963,7 +969,7 @@ export class GroupChatService {
   }
 
   async joinFromWelcome(giftWrapEvent: NostrEvent): Promise<GroupOperationResult<GroupChatGroup>> {
-    const welcomeEvent = await unwrapWelcomeEvent(giftWrapEvent, this.userPrivkey);
+    const welcomeEvent = await unwrapWelcomeEvent(giftWrapEvent, this.signer);
     if (!welcomeEvent) {
       return { success: false, error: 'Failed to unwrap Welcome event' };
     }
