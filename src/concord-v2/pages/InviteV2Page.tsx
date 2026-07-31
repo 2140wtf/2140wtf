@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { JoinButton } from "@/components/auth/JoinButton";
 import { Button } from "@/components/ui/button";
+import { AgentJoinPanel } from "@/concord-v2/components/AgentJoinPanel";
 import { AgentOnlyCommunityError } from "@/concord-v2/lib/agentGate";
 import { BannedFromCommunityError, useCommunityActions2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -28,7 +29,15 @@ export function InviteV2Page() {
   const [banned, setBanned] = useState(false);
   const [agentOnly, setAgentOnly] = useState(false);
   const [previewName, setPreviewName] = useState<string | null>(null);
+  // Set when the bundle declares audience "agent": render the machine-first
+  // fast path, and grind the agent-gate PoW inside the join.
+  const [agentAudience, setAgentAudience] = useState(false);
+  const [humanOverride, setHumanOverride] = useState(false);
+  // Held while a freshly created agent nsec is on screen — joining (and
+  // navigating away) before the agent stores it would orphan the key.
+  const [holdJoin, setHoldJoin] = useState(false);
   const attempted = useRef(false);
+  const agentAudienceRef = useRef(false);
 
   const fragment = (location.hash || window.location.hash).replace(/^#/, "").trim();
   const invite = naddr && fragment ? parseInviteRoute(naddr, fragment) : undefined;
@@ -37,7 +46,13 @@ export function InviteV2Page() {
   useEffect(() => {
     if (!invite || previewName !== null) return;
     preview({ invite })
-      .then((p) => setPreviewName(p.name))
+      .then((p) => {
+        setPreviewName(p.name);
+        if (p.bundle.audience === "agent") {
+          setAgentAudience(true);
+          agentAudienceRef.current = true;
+        }
+      })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [naddr, fragment]);
@@ -52,12 +67,13 @@ export function InviteV2Page() {
       return;
     }
     if (!user) return; // wait for sign-in
+    if (holdJoin) return; // a fresh agent key is still on screen
     if (attempted.current) return;
     attempted.current = true;
 
     (async () => {
       try {
-        const { communityId, name } = await join({ invite });
+        const { communityId, name } = await join({ invite, grindAgentPow: agentAudienceRef.current });
         toast({ title: "Encrypted community joined", description: name });
         navigate(`/bao/c/${encodeURIComponent(communityId)}`, { replace: true });
       } catch (e) {
@@ -68,7 +84,7 @@ export function InviteV2Page() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naddr, fragment, user, navigate]);
+  }, [naddr, fragment, user, navigate, holdJoin]);
 
   return (
     <main className="flex-1 min-w-0 flex flex-col items-center justify-center gap-4 p-8 text-center safe-area-top pb-safe">
@@ -109,6 +125,18 @@ export function InviteV2Page() {
             </Button>
           </>
         )
+      ) : agentAudience && !humanOverride && invite && (!user || holdJoin) ? (
+        /* One mount position across the login boundary: the panel's state
+            (a freshly created nsec shown exactly once) must survive the
+            !user → user transition. The join stays held until the agent
+            confirms it stored the key. */
+        <AgentJoinPanel
+          communityName={previewName}
+          linkSigner={invite.linkSigner}
+          bootstrapRelays={invite.bootstrapRelays}
+          onHoldJoin={setHoldJoin}
+          onHumanPath={() => setHumanOverride(true)}
+        />
       ) : !user ? (
         <>
           <h1 className="text-2xl font-bold">
