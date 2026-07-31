@@ -47,30 +47,37 @@ export type { NAddr, NEvent, NProfile, NPub, Note };
  * Returns the precise template-literal type (`NAddr | NEvent`) so callers
  * can pass the result straight into props typed for those specific bech32
  * prefixes without re-typing as plain `string`.
+ *
+ * `relayHints` (optional) embeds NIP-19 relay hints — the relays the event
+ * was actually seen on. Always pass them for links that leave the app
+ * (copy/share): without hints a recipient whose relays don't hold the event
+ * (and whose author's outbox relays don't either) gets "Event not found"
+ * even though the link is correct. Keep it to ~3 URLs.
  */
-export function encodeEventAddress(event: NostrEvent): NAddr | NEvent {
+export function encodeEventAddress(event: NostrEvent, relayHints?: string[]): NAddr | NEvent {
+  const relays = relayHints && relayHints.length > 0 ? relayHints : undefined;
   // Addressable events: 30000–39999 (require a d-tag to identify the row).
   if (event.kind >= 30000 && event.kind < 40000) {
     const dTag = event.tags.find(([n]) => n === 'd')?.[1];
     if (dTag) {
-      return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: dTag });
+      return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: dTag, relays });
     }
     // Fall through to nevent if the addressable event is malformed (no d-tag).
   }
 
   // Replaceable events: 10000–19999 (one row per (kind, pubkey)).
   if (event.kind >= 10000 && event.kind < 20000) {
-    return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: '' });
+    return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: '', relays });
   }
 
   // Legacy replaceable kinds below 1000 (NIP-01): kind 0 metadata, kind 3
   // follow list, kind 41 channel metadata. These follow the same
   // one-row-per-(kind, pubkey) rule, so prefer naddr for stable navigation.
   if (isLegacyReplaceableKind(event.kind)) {
-    return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: '' });
+    return nip19.naddrEncode({ kind: event.kind, pubkey: event.pubkey, identifier: '', relays });
   }
 
-  return nip19.neventEncode({ id: event.id, author: event.pubkey });
+  return nip19.neventEncode({ id: event.id, author: event.pubkey, relays });
 }
 
 /**
