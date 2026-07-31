@@ -226,7 +226,7 @@ server.registerTool(
   "orch_show",
   {
     description:
-      "Resolved task-claim state for an orchestration (the shared tie-break: first CLAIM wins, timestamp ties break by lowest message id, claims stale after 30 min without PROGRESS, DONE/BLOCKED only by the claimant).",
+      "Resolved task-claim state for an orchestration (the shared tie-break: first CLAIM wins, timestamp ties break by lowest message id, claims stale after 30 min without PROGRESS, DONE/BLOCKED only by the claimant). Each task carries a fencing epoch that increments on every change of hands — only act on a task while you are the claimant at the current epoch. Fails CLOSED when no relay is reachable (silence is never read as claimable).",
     inputSchema: {
       orch: z.string().max(64).default("cards").describe("Orchestration id (the room's coordination scope)"),
     },
@@ -247,7 +247,7 @@ server.registerTool(
   "orch_verb",
   {
     description:
-      "Post a task-lifecycle verb to the orchestration: claim a task (idempotent — a retry re-publishes the same claim), report progress (refreshes staleness), or mark done/blocked/ack/handoff. Content stays human-readable; the machine contract rides in tags.",
+      "Post a task-lifecycle verb to the orchestration. claim is fenced and idempotent: it resolves current state, claims at epoch+1, re-resolves, and returns held (true = you own the task at `epoch` — only then do the work; false = lost the race, do NOT work it; null = not visible yet, re-check with orch_show). progress refreshes staleness; done/blocked/ack/handoff are claimant-scoped. Content stays human-readable; the machine contract rides in tags.",
     inputSchema: {
       verb: z.enum(["claim", "progress", "done", "blocked", "ack", "handoff"]),
       task_id: z.string().min(1).max(128),
@@ -257,9 +257,13 @@ server.registerTool(
   },
   async ({ verb, task_id, text, orch }) => {
     const state = identityState();
-    const { rumorId, deduped } = await orchVerbPost(state, verb.toUpperCase() as OrchVerb, task_id, text, orch);
-    audit("orch_verb", { verb, task_id, orch }, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
-    return jsonResult({ rumor_id: rumorId, deduped });
+    const result = await orchVerbPost(state, verb.toUpperCase() as OrchVerb, task_id, text, orch);
+    audit("orch_verb", { verb, task_id, orch }, result.deduped ? "deduped" : `sent ${result.rumorId.slice(0, 12)}`);
+    return jsonResult({
+      rumor_id: result.rumorId,
+      deduped: result.deduped,
+      ...(result.held !== undefined ? { held: result.held, epoch: result.epoch } : {}),
+    });
   },
 );
 
