@@ -22,7 +22,7 @@ function relayHost(url: string): string {
  * One relay row showing its NIP-11 identity (icon, name, host) and notable
  * NIP badges (NIP-42 AUTH, NIP-50 search). Adapted from Ditto's RelayIdentity.
  */
-function RelayIdentity({ url }: { url: string }) {
+export function RelayIdentity({ url }: { url: string }) {
   const { data: info } = useRelayInfo(url);
   const host = relayHost(url);
   const name = info?.name || host;
