@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:safe": "rm -rf node_modules/.vite && NODE_OPTIONS='--max-old-space-size=4096' vite",
+    "agent": "rolldown -c scripts/rolldown.bao-agent.config.mjs && node .tmp/bao-agent.mjs",
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
     "preview": "vite preview --port 3500",
     "test:e2e": "npm run build && PLAYWRIGHT_START_SERVER=1 playwright test -c e2e/playwright.config.ts",
