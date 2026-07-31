@@ -111,11 +111,11 @@ export function BaoFundingPage() {
 
   // Deep links (e.g. from a pet's upkeep card):
   //   /bao-fund?campaign=<id>      → preselect/expand that campaign
-  //   /bao-fund?create=1&title=…   → open the create dialog, prefilled
+  //   /bao-fund?create=1&title=…   → DO NOT auto-open the create dialog (user
+  //   lands on the funding page directly; they can open the dialog manually).
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
-    if (searchParams.get('create') === '1' && user) setCreateOpen(true);
   }, [searchParams, user]);
 
   const listQuery = useQuery({
