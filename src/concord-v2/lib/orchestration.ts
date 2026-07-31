@@ -112,6 +112,13 @@ export interface ClaimState {
   epoch: number;
   done: boolean;
   blocked: boolean;
+  /**
+   * True after the claimant's HANDOFF: the claim is RELEASED — a fresh CLAIM
+   * takes the task immediately (no TTL wait). Without this a handoff could
+   * never complete: the receiver's CLAIM would lose to the handoff-er's own
+   * live claim. Only the claimant can release.
+   */
+  released: boolean;
   /** True once the claim sat without PROGRESS past the TTL — reclaimable. */
   stale: boolean;
 }
@@ -141,8 +148,9 @@ export function resolveClaims(
     const cur = states.get(msg.taskId);
     switch (msg.verb) {
       case "CLAIM": {
-        // A fresh claim loses to a live claim, but takes over a stale/done one.
-        if (cur && !cur.stale && !cur.done) break;
+        // A fresh claim loses to a live claim, but takes over a stale/done/
+        // released one.
+        if (cur && !cur.stale && !cur.done && !cur.released) break;
         const nextEpoch = (cur?.epoch ?? 0) + 1;
         // Fencing: an epoch-bearing claim from a stale view is ignored, never
         // half-honored — its author re-resolves and retries at the right epoch.
@@ -156,6 +164,7 @@ export function resolveClaims(
           epoch: nextEpoch,
           done: false,
           blocked: false,
+          released: false,
           stale: opts.nowMs - ms > opts.ttlMs,
         });
         break;
@@ -184,8 +193,14 @@ export function resolveClaims(
         break;
       }
       case "HANDOFF": {
-        // The receiver's ACK is modeled as their fresh CLAIM (explicit transfer
-        // still ends with exactly one CLAIM winning — no second code path).
+        // The claimant's HANDOFF releases the claim: the receiver (or anyone)
+        // takes it with a fresh CLAIM at epoch+1 — explicit transfer still
+        // ends with exactly one CLAIM winning, no second code path. A
+        // bystander's HANDOFF is ignored (nobody releases another's task).
+        if (cur && cur.claimant === author && !cur.done) {
+          cur.released = true;
+          cur.lastProgressMs = ms;
+        }
         break;
       }
       case "ACK":
@@ -211,10 +226,11 @@ export function resolveClaims(
  *   AGENT it lost — otherwise it posts DONE and walks away believing it
  *   finished work it no longer owns. Own claim (even stale) may still be
  *   refreshed or marked: staleness is a lease lapse, not a loss.
- * - HANDOFF/ACK: no claim semantics, always allowed.
+ * - HANDOFF while someone else holds the claim: refused (only the claimant
+ *   can release). ACK carries no claim semantics, always allowed.
  */
 export function mayPostVerb(cur: ClaimState | undefined, author: string, verb: OrchVerb): boolean {
-  if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED") {
+  if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED" || verb === "HANDOFF") {
     if (cur && cur.claimant !== author) return false;
   }
   return true;
