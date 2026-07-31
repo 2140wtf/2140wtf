@@ -310,3 +310,160 @@ describe("mentionsMe", () => {
     expect(mentionsMe({ ...alice, tags: [], content: "bob: ping" })).toBe(false);
   });
 });
+
+// ── Round-4 fuzz lens: seeded property tests ─────────────────────────────────
+// Deterministic PRNG (no Math.random — a failing seed must reproduce).
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Serialize resolved states for cross-run comparison (Map order canonicalized). */
+function snapshot(states: Map<string, ClaimState>): string {
+  return JSON.stringify(
+    [...states.values()].sort((a, b) => (a.taskId < b.taskId ? -1 : 1)),
+  );
+}
+
+const FUZZ_VERBS = ["CLAIM", "PROGRESS", "HANDOFF", "ACK", "DONE", "BLOCKED"] as const;
+
+/** A random message soup: few authors, few tasks, epochs sometimes right. */
+function fuzzMessages(rand: () => number, n: number): ClaimInput[] {
+  const authors = ["aa".repeat(32), "bb".repeat(32), "cc".repeat(32)];
+  const tasks = ["t1", "t2", "t3"];
+  const out: ClaimInput[] = [];
+  for (let i = 0; i < n; i++) {
+    const verb = FUZZ_VERBS[Math.floor(rand() * FUZZ_VERBS.length)];
+    const taskId = tasks[Math.floor(rand() * tasks.length)];
+    const extras =
+      verb === "CLAIM"
+        ? `${rand() < 0.7 ? ` key=k${Math.floor(rand() * 5)}` : ""}${rand() < 0.7 ? ` epoch=${1 + Math.floor(rand() * 4)}` : ""}`
+        : "";
+    const msg = parseTaskMessage(`${verb} ${taskId}${extras} fuzz payload ${i}`, T);
+    if (!msg) continue;
+    out.push({
+      id: Math.floor(rand() * 0xffffffff).toString(16).padStart(8, "0"),
+      author: authors[Math.floor(rand() * authors.length)],
+      ms: 1_000_000 + Math.floor(rand() * 100_000),
+      msg,
+    });
+  }
+  return out;
+}
+
+function shuffle<T>(rand: () => number, arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+describe("fuzz — resolveClaims properties", () => {
+  it("input order NEVER changes the outcome (20 seeds × 8 shuffles)", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const rand = mulberry32(seed);
+      const msgs = fuzzMessages(rand, 40);
+      const opts = { ttlMs: 30_000, nowMs: 1_120_000 };
+      const expected = snapshot(resolveClaims(msgs, opts));
+      for (let s = 0; s < 8; s++) {
+        expect(snapshot(resolveClaims(shuffle(rand, msgs), opts)), `seed ${seed} shuffle ${s}`).toBe(expected);
+      }
+    }
+  });
+
+  it("duplicate delivery (relay sends the same event twice) changes nothing", () => {
+    for (let seed = 100; seed <= 110; seed++) {
+      const rand = mulberry32(seed);
+      const msgs = fuzzMessages(rand, 30);
+      const opts = { ttlMs: 30_000, nowMs: 1_120_000 };
+      const doubled = shuffle(rand, [...msgs, ...msgs]);
+      expect(snapshot(resolveClaims(doubled, opts)), `seed ${seed}`).toBe(snapshot(resolveClaims(msgs, opts)));
+    }
+  });
+
+  it("invariants: every resolved state is backed by its own CLAIM; DONE/released by the claimant's verb", () => {
+    for (let seed = 200; seed <= 220; seed++) {
+      const rand = mulberry32(seed);
+      const msgs = fuzzMessages(rand, 50);
+      const states = resolveClaims(msgs, { ttlMs: 30_000, nowMs: 1_120_000 });
+      for (const s of states.values()) {
+        const backing = msgs.find((m) => m.id === s.claimId);
+        expect(backing, `seed ${seed} task ${s.taskId}: claimId must resolve`).toBeDefined();
+        expect(backing!.author).toBe(s.claimant);
+        expect(backing!.msg.verb).toBe("CLAIM");
+        expect(s.epoch).toBeGreaterThanOrEqual(1);
+        if (s.done) {
+          expect(
+            msgs.some((m) => m.msg.verb === "DONE" && m.author === s.claimant && m.msg.taskId === s.taskId && m.ms >= s.claimMs),
+            `seed ${seed} task ${s.taskId}: done without claimant's DONE`,
+          ).toBe(true);
+        }
+        if (s.released) {
+          expect(
+            msgs.some((m) => m.msg.verb === "HANDOFF" && m.author === s.claimant && m.msg.taskId === s.taskId && m.ms >= s.claimMs),
+            `seed ${seed} task ${s.taskId}: released without claimant's HANDOFF`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("at most one LIVE claimant per task — two agents can never both act", () => {
+    for (let seed = 300; seed <= 320; seed++) {
+      const rand = mulberry32(seed);
+      const msgs = fuzzMessages(rand, 50);
+      const states = resolveClaims(msgs, { ttlMs: 30_000, nowMs: 1_120_000 });
+      // resolveClaims is keyed by taskId, so uniqueness is structural — but the
+      // executor-side fence must agree: for every task, mayPostVerb permits at
+      // most one author's DONE.
+      for (const s of states.values()) {
+        const permitted = [...new Set(msgs.map((m) => m.author))].filter((a) => mayPostVerb(s, a, "DONE"));
+        expect(permitted, `seed ${seed} task ${s.taskId}`).toEqual([s.claimant]);
+      }
+    }
+  });
+});
+
+describe("fuzz — parseTaskMessage never throws", () => {
+  it("survives 2000 random inputs (garbage, unicode, control chars, huge)", () => {
+    const rand = mulberry32(42);
+    const alphabets = [
+      "CLAIMPROGRESSHANDOFFACKDONEBLOCKED t123 key= epoch= \t\n🚀�\x00\x1b",
+      "aAbBzZ09 /=:._-",
+      "$$$$%%%%^^^^&&&&****(((())))",
+    ];
+    for (let i = 0; i < 2000; i++) {
+      const alpha = alphabets[i % alphabets.length];
+      const len = Math.floor(rand() * (i % 50 === 0 ? 10_000 : 120));
+      let s = "";
+      for (let j = 0; j < len; j++) s += alpha[Math.floor(rand() * alpha.length)];
+      const tags = rand() < 0.5 ? T : rand() < 0.5 ? [] : [["t", "orch-task"], ["x", s.slice(0, 8)]];
+      let out: unknown;
+      expect(() => {
+        out = parseTaskMessage(s, tags);
+      }, `input ${i} (len ${len})`).not.toThrow();
+      if (out !== null) {
+        const m = out as { verb: string; taskId: string; rest: string };
+        expect(FUZZ_VERBS).toContain(m.verb);
+        expect(typeof m.taskId).toBe("string");
+        expect(typeof m.rest).toBe("string");
+      }
+    }
+  });
+
+  it("epoch= edge values degrade safely (huge, float-ish, negative, leading zeros)", () => {
+    expect(parseTaskMessage("CLAIM t1 epoch=99999999999999999999", T)?.epoch).toBe(1e20); // parses, mismatches at resolve → ignored
+    expect(parseTaskMessage("CLAIM t1 epoch=007", T)?.epoch).toBe(7);
+    expect(parseTaskMessage("CLAIM t1 epoch=-3", T)?.epoch).toBeUndefined(); // \d+ never matches a sign
+    expect(parseTaskMessage("CLAIM t1 epoch=2.5", T)?.epoch).toBeUndefined(); // \. breaks the (\d+)(\s|$) anchor
+    expect(parseTaskMessage("CLAIM t1 epoch=1e3", T)?.epoch).toBeUndefined(); // legacy fallback — fail-safe
+  });
+});
