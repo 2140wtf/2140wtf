@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveClaimKey,
+  mayPostVerb,
   mentionsMe,
   parseTaskMessage,
   resolveClaims,
   ORCH_TASK_TAG,
   type ClaimInput,
+  type ClaimState,
 } from "@/concord-v2/lib/orchestration";
 
 const T = [["t", ORCH_TASK_TAG]];
@@ -203,6 +205,46 @@ describe("resolveClaims — fencing epochs (mosaico generation check)", () => {
     );
     expect(s.get("t1")!.claimant).toBe("bob");
     expect(s.get("t1")!.epoch).toBe(2);
+  });
+});
+
+describe("mayPostVerb — the executor-side fence", () => {
+  const held = (claimant: string, over: Partial<ClaimState> = {}): ClaimState => ({
+    taskId: "t1", claimant, claimId: "aa", claimMs: 1000, lastProgressMs: 1000,
+    epoch: 1, done: false, blocked: false, stale: false, ...over,
+  });
+
+  it("CLAIM is always allowed to attempt (the fence arbitrates at resolve)", () => {
+    expect(mayPostVerb(held("bob"), "alice", "CLAIM")).toBe(true);
+    expect(mayPostVerb(undefined, "alice", "CLAIM")).toBe(true);
+  });
+
+  it("PROGRESS/DONE/BLOCKED are refused when someone else holds the task", () => {
+    for (const v of ["PROGRESS", "DONE", "BLOCKED"] as const) {
+      expect(mayPostVerb(held("bob"), "alice", v)).toBe(false);
+    }
+  });
+
+  it("the claimant may post its own verbs — even on a stale (lapsed) claim", () => {
+    expect(mayPostVerb(held("alice"), "alice", "PROGRESS")).toBe(true);
+    expect(mayPostVerb(held("alice", { stale: true }), "alice", "PROGRESS")).toBe(true);
+    expect(mayPostVerb(held("alice", { stale: true }), "alice", "DONE")).toBe(true);
+  });
+
+  it("verbs on an unclaimed task are allowed (harmless noise, resolver ignores)", () => {
+    expect(mayPostVerb(undefined, "alice", "PROGRESS")).toBe(true);
+    expect(mayPostVerb(undefined, "alice", "DONE")).toBe(true);
+  });
+
+  it("HANDOFF/ACK carry no claim semantics", () => {
+    expect(mayPostVerb(held("bob"), "alice", "HANDOFF")).toBe(true);
+    expect(mayPostVerb(held("bob"), "alice", "ACK")).toBe(true);
+  });
+
+  it("a zombie's DONE is refused even after its own claim was taken over", () => {
+    // alice held epoch 1, bob reclaimed at epoch 2 — alice resolves and must
+    // learn she lost BEFORE posting a DONE the resolver would silently drop.
+    expect(mayPostVerb(held("bob", { epoch: 2 }), "alice", "DONE")).toBe(false);
   });
 });
 
