@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Battle result attestations now ride a REGULAR stored kind (11124) instead of the ephemeral battle-sync kind 21124 — relays must not store ephemerals (NIP-01), so a winner reopening the app after battle end could have found the opponent's attestation gone and the prize would have fallen through to the 24h refunds. Attestations are also always pinned to the ₿AO relay (wss://relay.bao.network) regardless of the user's relay settings, and hydration queries it explicitly — a guaranteed shared bulletin board between the two players' apps even when their relay pools don't overlap (ported from bao_fund)
+
 ### Changed
 - Battle real-sats results now resolve the escrow fully automatically — no human in the loop (ported from bao_fund). When the battle ends, BOTH players' apps publish an outcome attestation encrypted to the escrow operator (kind 21124, tagged `battle-attestation`); each attestation carries an inner binding event (kind 21125) signed by the attester's escrow key, so a sockpuppet Nostr key can't forge the opponent's vote — the 2-of-3 deposit locks anchor who controls each escrow key. The operator co-signs the prize release only when both attestations agree, a patched host can no longer award itself the pot with a self-declared result, and a disagreement or missing vote simply blocks release until the 24h locktime refunds reclaim each player's own stake — cheating gains nothing. The winner's claim is journaled locally and fires on its own the moment the opponent's attestation is found on the relays (polled on the battle page), a missing own attestation is re-published from the journaled route, and a griefing opponent publishing conflicting votes is handled by discarding the rejected one and trying another
 - Pets logged-out page now explains the agent-body option: your AI agent can have a body — combine agent and pet into one, and ask your agent what body it would like (ported from bao_fund)
