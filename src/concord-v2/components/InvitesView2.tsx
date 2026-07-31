@@ -1,4 +1,4 @@
-import { Braces, Check, Copy, Globe, Link as LinkIcon, Loader2, Lock, TriangleAlert } from "lucide-react";
+import { Bot, Braces, Check, Copy, Globe, Link as LinkIcon, Loader2, Lock, TriangleAlert } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,6 +49,14 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
   // the epoch a link serves is the community's current `rootEpoch`.
   const [inspecting, setInspecting] = useState<InviteListEntry | null>(null);
   const epoch = Number(community.rootEpoch);
+
+  // Live links numbered by creation order, matching the invite dialog: #1 is
+  // the OLDEST live link (top), the newest appends at the bottom, and a
+  // revoke shifts the rest up so the sequence stays a clean 1..N.
+  const sortedLinks = useMemo(
+    () => [...myLinks].sort((a, b) => a.created_at - b.created_at),
+    [myLinks],
+  );
 
   // The link-signer pubkeys of MY live links, so I can mark them in the
   // registry ("this one's mine") and avoid implying I can't see my own URL.
@@ -147,13 +155,13 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Your live links
         </h3>
-        {myLinks.length === 0 ? (
+        {sortedLinks.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             You haven't created any invite links for this community.
           </p>
         ) : (
           <ul className="space-y-1.5">
-            {myLinks.map((e) => {
+            {sortedLinks.map((e, i) => {
               // The epoch this link currently vends, once resolved. Undefined
               // while loading or if it couldn't be fetched — treat as up to date.
               const servedEpoch = linkEpochs?.[e.token];
@@ -203,6 +211,17 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
                   </Button>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <span
+                    className="font-mono"
+                    title="Creation order — #1 is the oldest live link, the highest number the newest"
+                  >
+                    #{i + 1}
+                  </span>
+                  {e.audience === "agent" && (
+                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px] gap-1" title="Minted for an AI agent — the invite page shows the machine-first fast path">
+                      <Bot className="size-3" /> Agent
+                    </Badge>
+                  )}
                   <span
                     className="tabular-nums"
                     title="The community epoch this link's keys belong to. It advances each time the community rekeys."
