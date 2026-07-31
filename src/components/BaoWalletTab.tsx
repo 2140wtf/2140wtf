@@ -145,9 +145,10 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
   const getRailBalance = (railId: WalletRailId): number => {
     const api = apiBalances.data;
     switch (railId) {
-      // Self-custody rail: local NIP-60 ecash proofs in this wallet.
+      // Custodial Cashu held on bao.markets (the per-rail breakdown also uses this).
+      // Local NIP-60 ecash is shown separately as the big "testnet sats" number above.
       case 'cashu':
-        return cashuWallet.totalBalance;
+        return api?.cashu ?? cashuWallet.totalBalance;
       // Custodial rails: balances held on bao.markets, fetched from its API.
       case 'lightning':
         return api?.lightning ?? 0;
