@@ -13,11 +13,32 @@ export const BATTLE_SYNC_KIND = 21124;
 export const BATTLE_ATTESTATION_BINDING_KIND = 21125;
 
 /**
+ * Kind for result attestations — a REGULAR-range kind on purpose. Battle
+ * sync rides the ephemeral 21124 (relays must not store ephemerals, per
+ * NIP-01 they are only pushed to live subscribers), but attestations must be
+ * RETRIEVABLE after the fact: the winner's hydration queries relays for the
+ * opponent's attestation, possibly long after it was published (closed tab,
+ * reload, slow relays). Regular kinds are stored by every standard relay.
+ */
+export const BATTLE_ATTESTATION_KIND = 11124;
+
+/**
  * Sync `t` tag marking result attestations (vs ordinary 'battle-sync'
  * messages). Lets the winner's relay query find exactly the opponent's
  * attestation without decrypting every sync message of the battle.
  */
 export const BATTLE_ATTESTATION_TAG = 'battle-attestation';
+
+/**
+ * Rendezvous relay for attestations: the escrow operator is a ₿AO-operated
+ * service (pinned by VITE_PETS_BATTLE_ESCROW_PUBKEY/URL), so attestations are
+ * ALWAYS also published to — and queried from — the ₿AO relay, regardless of
+ * the user's relay settings. This guarantees a shared bulletin board between
+ * the two players' apps even when their effective relay pools don't overlap.
+ * Tracks BAO_TEST_RELAY_URL in @/lib/appRelays.ts (owned by the relay
+ * session — update together; revisit at mainnet rollout).
+ */
+export const BATTLE_ATTESTATION_RELAY = 'wss://relay.bao.network/';
 
 /**
  * Mutual outcome attestation (encrypted TO THE ESCROW OPERATOR, not the
