@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useScopedIdentity } from "@/hooks/useScopedDisplayName";
 import { getAvatarShape } from "@/lib/avatarShape";
+import { getKeyedFallbackName } from "@/lib/getDisplayName";
 import { shortClockTime, shortTimeAgo } from "@/lib/formatTime";
 import { cn } from "@/lib/utils";
 import { useSwipeToReply } from "@/hooks/useSwipeToReply";
@@ -114,7 +115,9 @@ export const MessageRow = memo(function MessageRow({
   const author = useAuthor(identityOverride ? undefined : pubkey);
   const metadata = author.data?.metadata;
   const scoped = useScopedIdentity(identityOverride ? undefined : pubkey, metadata);
-  const displayName = identityOverride?.name ?? scoped.displayName;
+  // Chat shows a key-derived fallback instead of "Anonymous": a busy room of
+  // nameless members must still read as distinct people (who said what).
+  const displayName = identityOverride?.name ?? (scoped.displayName === "Anonymous" ? getKeyedFallbackName(pubkey) : scoped.displayName);
   const color = identityOverride?.color ?? scoped.color;
   const label = identityOverride ? undefined : scoped.label;
   const suffix = identityOverride?.suffix;
