@@ -136,6 +136,12 @@ export interface ClaimState {
  * issued from a stale view and is ignored outright, so two concurrent
  * reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
  * the check but still bump the epoch.
+ *
+ * Delivery is at-least-once (a relay can resend a stored event on a new
+ * subscription), so the SAME rumor id is processed once: a replayed legacy
+ * CLAIM on an already-stale claim would otherwise re-take the task and bump
+ * the epoch a second time, silently un-fencing every later CLAIM (found by
+ * the seed-101 fuzz property: duplication must be a no-op).
  */
 export function resolveClaims(
   messages: ClaimInput[],
@@ -143,8 +149,11 @@ export function resolveClaims(
 ): Map<string, ClaimState> {
   const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const states = new Map<string, ClaimState>();
+  const delivered = new Set<string>();
 
   for (const { id, author, ms, msg } of sorted) {
+    if (delivered.has(id)) continue; // at-least-once delivery: process a rumor once
+    delivered.add(id);
     const cur = states.get(msg.taskId);
     switch (msg.verb) {
       case "CLAIM": {
