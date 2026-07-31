@@ -1,6 +1,6 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useCommunity2 } from "@/concord-v2/hooks/useCommunityList2";
@@ -27,12 +27,12 @@ import {
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
-import { singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { joinCommitmentOf, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
 import { useGuestbook2 } from "@/concord-v2/hooks/useGuestbook2";
 import { KIND_INVITE_LIST } from "@/concord-v2/lib/kinds";
 import { inviteDeliveryRelays, recipientInboxRelays } from "@/concord-v2/lib/inviteRelays";
 import { toast } from "@/hooks/useToast";
-import { shareOrigin } from "@/lib/shareOrigin";
+import { useShareOrigin } from "@/hooks/useShareOrigin";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 
 import type { NostrEvent } from "@nostrify/nostrify";
@@ -191,6 +191,10 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
+  // Invite links are built on the configured public origin (https://2140.wtf)
+  // — never the page origin, which is localhost in dev and the WebView's local
+  // server in the APK, both dead for the link's recipient.
+  const inviteOrigin = useShareOrigin();
   const { data: folded } = useControlFold2(community);
   const inviteList = useInviteList2();
   const { mutateAsync: updateInviteList } = useUpdateInviteList2();
@@ -311,7 +315,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
         throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
       }
 
-      const url = buildInviteUrl(shareOrigin(), link.pk, token, community.relays);
+      const url = buildInviteUrl(inviteOrigin, link.pk, token, community.relays);
 
       // The creator's private bookkeeping (the merge key is the token).
       await updateInviteList({
@@ -530,4 +534,62 @@ export function useSingleUseSweep2(community: CommunityV2 | undefined): void {
         });
     }
   }, [user, community, opened, inviteList.data, revokeLink]);
+}
+
+/** Usage status of one of MY invite links: how many joins spent it, and when the first happened. */
+export interface LinkUsage {
+  count: number;
+  firstUsedMs: number;
+}
+
+/**
+ * Per-link usage for MY links in this community, keyed by the Invite List
+ * entry's token (CORD-05 §2). Every Guestbook Join cites the commitment
+ * (sha256) of the link token it spent, so the creator — the only one holding
+ * the tokens — can match joins to links. This is NOT a privacy leak: the
+ * Guestbook is sealed (relays see ciphertext; the scan runs client-side
+ * post-decrypt), and the one-way commitment is matchable only by someone
+ * holding the 128-bit token — i.e. the link's own creator. What it inherently
+ * shows the inviter is join timing, no more than watching the member list.
+ */
+export function useMyLinkUsage2(community: CommunityV2 | undefined): {
+  usage: Map<string, LinkUsage>;
+  isLoading: boolean;
+} {
+  const inviteList = useInviteList2();
+  const { data: opened, isLoading } = useGuestbook2(community);
+
+  const usage = useMemo(() => {
+    const map = new Map<string, LinkUsage>();
+    if (!community || !opened || opened.length === 0) return map;
+    // Collect every join's commitment once, then match against my tokens.
+    const joins: Array<{ commitment: string; ms: number }> = [];
+    for (const ev of opened) {
+      const commitment = joinCommitmentOf(ev);
+      if (commitment) joins.push({ commitment, ms: ev.ms });
+    }
+    if (joins.length === 0) return map;
+    for (const entry of inviteList.data?.entries ?? []) {
+      if (entry.community_id !== community.idHex) continue;
+      let commitment: string;
+      try {
+        commitment = inviteCommitment(hexToBytes(entry.token));
+      } catch {
+        continue; // a malformed stored entry can't be matched; skip it
+      }
+      for (const j of joins) {
+        if (j.commitment !== commitment) continue;
+        const cur = map.get(entry.token);
+        if (!cur) {
+          map.set(entry.token, { count: 1, firstUsedMs: j.ms });
+        } else {
+          cur.count += 1;
+          if (j.ms < cur.firstUsedMs) cur.firstUsedMs = j.ms;
+        }
+      }
+    }
+    return map;
+  }, [community, opened, inviteList.data]);
+
+  return { usage, isLoading };
 }

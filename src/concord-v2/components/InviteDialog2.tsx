@@ -9,7 +9,7 @@ import { Dialog, ChromeDialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useInviteActions2 } from "@/concord-v2/hooks/useInvites2";
+import { useInviteActions2, useMyLinkUsage2 } from "@/concord-v2/hooks/useInvites2";
 import { toast } from "@/hooks/useToast";
 import type { SearchProfile } from "@/hooks/useSearchProfiles";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -46,6 +46,9 @@ export function InviteDialog2({
 function InviteBody({ community }: { community: CommunityV2 | undefined }) {
   const { createLink, isCreatingLink, revokeLink, myLinks, sendDirectInvite, isSendingInvite, isPublic, revokeWouldPrivatize } =
     useInviteActions2(community);
+  // Per-link join status ("was it ever used?") — matched client-side from the
+  // sealed Guestbook's token commitments; only the creator can make this map.
+  const { usage } = useMyLinkUsage2(community);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [expiry, setExpiry] = useState<string>("single"); // "single" | "never" | days
@@ -274,8 +277,11 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
       {existing.length > 0 && (
         <div className="w-full space-y-1.5 border-t border-chrome pt-4">
           <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your live links — oldest first</div>
-          {existing.map((e, i) => (
-            <div key={e.token} className="flex items-center gap-2">
+          {existing.map((e, i) => {
+            const u = usage.get(e.token);
+            return (
+            <div key={e.token} className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
               <span
                 className="w-7 shrink-0 text-right font-mono text-xs text-muted-foreground"
                 title="Creation order — #1 is the oldest live link, the highest number the newest"
@@ -312,7 +318,17 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
                 {revoking === e.url ? <Loader2 className="size-3.5 animate-spin" /> : "Revoke"}
               </Button>
             </div>
-          ))}
+            <p className={cn(
+              "pl-9 text-[0.65rem]",
+              u ? "text-success" : "text-muted-foreground/70",
+            )}>
+              {u
+                ? `Used ${u.count > 1 ? `×${u.count} ` : ""}· first ${new Date(u.firstUsedMs).toLocaleDateString()}`
+                : "Not used yet"}
+            </p>
+            </div>
+            );
+          })}
         </div>
       )}
 
