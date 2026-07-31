@@ -417,7 +417,7 @@ export async function orchVerbPost(
     const myPubkey = getPublicKey(hexToBytes(state.sk));
     const before = await orchStates(state, orchId);
     const cur = before.get(taskId);
-    if (cur && !cur.stale && !cur.done) {
+    if (cur && !cur.stale && !cur.done && !cur.released) {
       // Task is live-claimed: publish nothing. If WE hold it, surface our own
       // claim id so a recovering caller can rejoin its epoch.
       return {
