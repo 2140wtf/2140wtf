@@ -87,12 +87,14 @@ import {
   signerOf,
   statePath,
   waitForInterrupt,
+  withStateLock,
   type State,
 } from "./chat-core";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const HOME_RELAYS = ["wss://relay.bao.network"];
+// BAO_RELAYS overrides (comma-separated) for live tests against a local relay.
+const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.bao.network").split(",");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 
 // ── Modes ────────────────────────────────────────────────────────────────────
@@ -180,53 +182,57 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
 }
 
 async function invite(name: string, label?: string, singleUse = false): Promise<void> {
-  const state = loadState(name);
-  if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
-  const sk = hexToBytes(state.sk);
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-  const community = communityOf(state.community, state.private_channels);
+  // Whole body under the state lock: registry_version and invites[] are a
+  // read-modify-write that races with concurrent invites/sweeps.
+  await withStateLock(name, async () => {
+    const state = loadState(name);
+    if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
+    const sk = hexToBytes(state.sk);
+    const pubkey = getPublicKey(sk);
+    const signer = signerOf(sk);
+    const community = communityOf(state.community, state.private_channels);
 
-  const token = mintToken();
-  const link = mintLinkSigner();
-  const bundle: InviteBundle = {
-    community_id: community.idHex,
-    owner: community.owner,
-    owner_salt: bytesToHex(community.ownerSalt),
-    community_root: bytesToHex(community.root),
-    root_epoch: Number(community.rootEpoch),
-    channels: [],
-    relays: community.relays,
-    name: community.name,
-    creator_npub: pubkey,
-    ...(label ? { label } : {}),
-    ...(singleUse ? { max_uses: 1 } : {}),
-  };
+    const token = mintToken();
+    const link = mintLinkSigner();
+    const bundle: InviteBundle = {
+      community_id: community.idHex,
+      owner: community.owner,
+      owner_salt: bytesToHex(community.ownerSalt),
+      community_root: bytesToHex(community.root),
+      root_epoch: Number(community.rootEpoch),
+      channels: [],
+      relays: community.relays,
+      name: community.name,
+      creator_npub: pubkey,
+      ...(label ? { label } : {}),
+      ...(singleUse ? { max_uses: 1 } : {}),
+    };
 
-  const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-  await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
+    const bundleEvent = buildBundleEvent(bundle, token, link.sk);
+    await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
 
-  // Member-facing Registry (vsk 8): this creator's live link coordinates.
-  state.registry_version += 1;
-  await publishAll(
-    community.relays,
-    await sealEdition(
-      buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
-        actorPubkey: pubkey,
-        version: BigInt(state.registry_version),
-      }),
-      currentControlGroup(community),
-      signer,
-    ),
-    "invite registry edition",
-  );
+    // Member-facing Registry (vsk 8): this creator's live link coordinates.
+    state.registry_version += 1;
+    await publishAll(
+      community.relays,
+      await sealEdition(
+        buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
+          actorPubkey: pubkey,
+          version: BigInt(state.registry_version),
+        }),
+        currentControlGroup(community),
+        signer,
+      ),
+      "invite registry edition",
+    );
 
-  const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
-  state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
-  saveState(name, state);
+    const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
+    state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
+    saveState(name, state);
 
-  console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
-  for (const url of urls) console.log(`  ${url}`);
+    console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
+    for (const url of urls) console.log(`  ${url}`);
+  });
 }
 
 async function joinBao(name: string, inviteUrl: string): Promise<void> {
@@ -381,39 +387,42 @@ async function read(name: string, json: boolean): Promise<void> {
   // shows a Join citing its token commitment — tombstone the bundle and drop
   // the coordinate from the Registry, like the app's useSingleUseSweep2.
   if (state.role === "owner") {
-    const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
-    const remaining = [];
-    for (const inv of state.invites) {
-      if (inv.max_uses !== 1) {
-        remaining.push(inv);
-        continue;
-      }
-      if (!singleUseLinkUsed(opened, inviteCommitment(hexToBytes(inv.token)))) {
-        remaining.push(inv);
-        continue;
-      }
-      const sk = hexToBytes(state.sk);
+    await withStateLock(name, async () => {
+      // Re-read under the lock — a concurrent invite may have landed since
+      // the load at the top of read(); writing the stale array back would
+      // silently drop it.
+      const fresh = loadState(name);
+      const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
+      const spent = fresh.invites.filter(
+        (inv) => inv.max_uses === 1 && singleUseLinkUsed(opened, inviteCommitment(hexToBytes(inv.token))),
+      );
+      if (spent.length === 0) return;
+      // Compute the FULL surviving set before publishing the registry: building
+      // the edition mid-scan (the old loop) omitted unspent links that sorted
+      // after a spent one — members would see an incomplete live-invite list.
+      const remaining = fresh.invites.filter((inv) => !spent.includes(inv));
+      const sk = hexToBytes(fresh.sk);
       const signer = signerOf(sk);
-      await publishAll(community.relays, buildRevocationEvent(hexToBytes(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
-      state.registry_version += 1;
+      for (const inv of spent) {
+        await publishAll(community.relays, buildRevocationEvent(hexToBytes(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
+        console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
+      }
+      fresh.registry_version += 1;
       await publishAll(
         community.relays,
         await sealEdition(
           buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
             actorPubkey: getPublicKey(sk),
-            version: BigInt(state.registry_version),
+            version: BigInt(fresh.registry_version),
           }),
           currentControlGroup(community),
           signer,
         ),
         "invite registry edition",
       );
-      console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
-    }
-    if (remaining.length !== state.invites.length) {
-      state.invites = remaining;
-      saveState(name, state);
-    }
+      fresh.invites = remaining;
+      saveState(name, fresh);
+    });
   }
 }
 
@@ -442,9 +451,9 @@ async function waitMode(
 async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: string, orchId: string): Promise<void> {
   const state = loadState(name);
   const { rumorId, deduped, held, epoch } = await orchVerbPost(state, verb, taskId, text, orchId);
+  // Fencing: the claim is only a claim while we hold it at our epoch. A loss
+  // or refusal is exit 2 (Buzz-style no-result) so calling scripts stop.
   if (verb === "CLAIM") {
-    // Fencing: the claim is only a claim while we hold it at our epoch. A loss
-    // is exit 2 (Buzz-style no-result) so calling scripts don't double-work.
     if (held === true) console.log(`  ✓ CLAIM ${taskId} held at epoch ${epoch} (rumor ${rumorId.slice(0, 12)}…${deduped ? ", deduped retry" : ""})`);
     else if (held === null) {
       console.log(`  ? CLAIM ${taskId} published at epoch ${epoch} but not visible yet — re-check: orch show --orch ${orchId}`);
@@ -453,6 +462,11 @@ async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: stri
       console.log(`  ✗ CLAIM ${taskId} NOT held — another claimant won (epoch ${epoch}). Do NOT work this task.`);
       process.exitCode = 2;
     }
+    return;
+  }
+  if (held === false) {
+    console.log(`  ✗ ${verb} ${taskId} refused — task held by another claimant (epoch ${epoch}). Do NOT work this task.`);
+    process.exitCode = 2;
     return;
   }
   if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
@@ -483,7 +497,7 @@ async function orchShow(name: string, orchId: string, json: boolean): Promise<vo
   }
   console.log(`\norch "${orchId}" — ${states.size} task(s):`);
   for (const s of states.values()) {
-    const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
+    const status = s.done ? "DONE" : s.released ? "HANDED OFF (reclaimable)" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
     console.log(
       `  ${s.taskId}: ${status} — ${nip19.npubEncode(s.claimant).slice(0, 16)}… (epoch ${s.epoch}, claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`,
     );
