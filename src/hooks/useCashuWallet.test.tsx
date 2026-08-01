@@ -3,7 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { generateSecretKey } from 'nostr-tools';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { getEncodedToken, CashuWallet } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import type { MeltQuoteResponse } from '@cashu/cashu-ts';
@@ -11,7 +11,7 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
 import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint } from '@/lib/cashu/storage';
-import { createNip60Signer, buildTokenEvent } from '@/lib/cashu/cashuNip60';
+import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -1892,4 +1892,79 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       vi.useRealTimers();
     }
   }, 20000);
+});
+
+describe('useCashuWallet sendNutzap ambiguous send failure', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.query.mockReset();
+    mocks.publish.mockReset();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupNutzap(sendImpl: (amount: number, proofs: unknown[]) => Promise<unknown>) {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+
+    // Recipient identity + their kind:10019 accepting our mint.
+    const recipientPrivkey = generateSecretKey();
+    const recipientPubkey = getPublicKey(recipientPrivkey);
+    const recipientSigner = createNip60Signer(recipientPrivkey);
+    const infoEvent = await buildNutzapInfoEvent([mintUrl], [], getPublicKey(generateSecretKey()), recipientSigner);
+    expect(infoEvent).not.toBeNull();
+    mocks.query.mockImplementation(async (filter: { kinds: number[] }) =>
+      filter.kinds.includes(10019) ? [infoEvent!] : []);
+    mocks.publish.mockResolvedValue('published-id');
+
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.send = vi.fn().mockImplementation(sendImpl);
+      return w;
+    });
+
+    const sync: Nip60SyncApi = {
+      signer: createNip60Signer(generateSecretKey()),
+      query: mocks.query,
+      publish: mocks.publish,
+      relays: [],
+    };
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    return { result, npub: nip19.npubEncode(recipientPubkey) };
+  }
+
+  it('a status-less send failure is NOT retry-safe: reports unknown, never failed', async () => {
+    // Simulates a timeout / dropped connection: the swap request may have
+    // reached the mint, which may have spent the inputs. Reporting 'failed'
+    // ("nothing was committed — safe to retry") invites a double-pay while
+    // the first attempt's recipient-locked proofs are unrecoverable.
+    const { result, npub } = await setupNutzap(async () => {
+      throw new Error('socket hang up');
+    });
+    const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
+    expect(res.status).toBe('unknown');
+  });
+
+  it('a definitive mint rejection (HTTP status) stays retry-safe failed', async () => {
+    const { result, npub } = await setupNutzap(async () => {
+      throw Object.assign(new Error('mint rejected'), { status: 400 });
+    });
+    const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
+    expect(res.status).toBe('failed');
+  });
 });
