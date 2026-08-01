@@ -28,11 +28,11 @@ function formatSats(n: number): string {
   return Number(n).toLocaleString();
 }
 
-/** Runner fee tiers from the ₿AO Fund spec: 1.0% / 2.14% / 4.21%. */
+/** Runner fee tiers from the ₿AO Fund spec: 2.14% (min) / 4.21% / 10%. */
 const FEE_OPTIONS = [
-  { value: '100', label: '1.0%' },
   { value: '214', label: '2.14%' },
   { value: '421', label: '4.21%' },
+  { value: '1000', label: '10%' },
 ] as const;
 
 const DAY = 86_400;
