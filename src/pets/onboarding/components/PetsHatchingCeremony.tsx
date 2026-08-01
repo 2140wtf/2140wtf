@@ -412,6 +412,16 @@ export function PetsHatchingCeremony({
       });
       return true;
     }
+    if (result.status === 'unknown') {
+      // The mint may have committed — honor nothing, but do NOT invite a
+      // blind retry either: a second payment cannot be clawed back.
+      toast({
+        title: 'Payment outcome unknown',
+        description: 'The mint may still have processed it. Check your wallet balance before paying again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     if (result.status !== 'sent') {
       toast({
         title: 'Payment failed',

@@ -31,6 +31,17 @@ MCP server (`scripts/bao-chat-mcp.ts`) via `scripts/chat-core.ts`.
   epoch fence ignores stale-view CLAIMs, and the settle pass catches
   propagation asymmetry at claim time. Eliminating it entirely would require
   a consensus layer the protocol deliberately does not have.
+- **Single-use ghost member.** Two joiners racing one single-use link both
+  pass the spend check (check-then-act, no atomic claim over relays). The
+  loser SELF-EJECTS after its Join lands (re-folds the guestbook, yields to an
+  earlier Join citing the same commitment, exit 2, no state saved) — but its
+  Join stays on the guestbook as a ghost membership until the owner's sweep
+  tombstones the link, and only a rekey truly excludes the key. The fold is
+  per-npub and can't dedupe a commitment: it can't tell single-use links from
+  multi-use (registry knowledge the Chat/Guestbook planes deliberately lack).
+  Residual window: a rival whose Join lands >1.5s (the settle beat) after the
+  loser's second re-fold is not seen — both stay members until the sweep.
+
 
 **Fail-safe by design (tested, no action):**
 

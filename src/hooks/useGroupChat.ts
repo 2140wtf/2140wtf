@@ -453,7 +453,8 @@ export function useGroupChat(): UseGroupChatReturn {
       setError(null);
       try {
         const result = await service.promoteAdmin(selectedGroupId, pubkey);
-        if (result.success) {
+        if (result.success && result.events) {
+          await publishEvents(result.events);
           refreshFromService();
         } else {
           setError(result.error ?? 'Failed to promote admin');
@@ -465,7 +466,7 @@ export function useGroupChat(): UseGroupChatReturn {
         return { success: false, error: message } as GroupOperationResult;
       }
     },
-    [service, selectedGroupId, refreshFromService],
+    [service, selectedGroupId, publishEvents, refreshFromService],
   );
 
   const updateGroupMetadata = useCallback(
@@ -499,8 +500,12 @@ export function useGroupChat(): UseGroupChatReturn {
       }
       setError(null);
       try {
-        const result = service.leaveGroup(groupId);
+        const result = await service.leaveGroup(groupId);
         if (result.success) {
+          // Notify remaining members of the departure-triggered key rotation.
+          if (result.events) {
+            await publishEvents(result.events);
+          }
           if (selectedGroupId === groupId) {
             setSelectedGroupId(null);
           }
@@ -515,7 +520,7 @@ export function useGroupChat(): UseGroupChatReturn {
         return { success: false, error: message } as GroupOperationResult;
       }
     },
-    [service, selectedGroupId, refreshFromService],
+    [service, selectedGroupId, publishEvents, refreshFromService],
   );
 
   const joinFromWelcome = useCallback(

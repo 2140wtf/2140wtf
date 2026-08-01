@@ -175,6 +175,10 @@ export function CashuWalletTab() {
       setNutzapRecipient('');
       setNutzapMemo('');
       toast({ title: 'Nutzap queued', description: 'The payment is being delivered — no need to send it again.' });
+    } else if (result.status === 'unknown') {
+      // The mint may have committed — keep the form and warn against a blind
+      // retry: a second send would double-pay.
+      toast({ variant: 'destructive', title: 'Payment outcome unknown', description: 'The mint may still have processed it. Check your balance before sending again.' });
     }
   };
 
