@@ -19,7 +19,7 @@ import {
   buildUnsignedPsbtHd,
   buildUnsignedSilentPaymentPsbt,
   finalizePsbt,
-  broadcastTransaction,
+  broadcastTransactionDisambiguated,
   estimateFeeWithDustChange,
   validateBitcoinAddress,
 } from '@/lib/bitcoin';
@@ -256,7 +256,9 @@ export function useOnchainZap(
 
       // Broadcast
       setProgress('broadcasting');
-      const txid = await broadcastTransaction(txHex, esploraApis);
+      // Disambiguated: a failed POST may still have reached a node —
+      // never surface that as a retry-safe failure (double-pay risk).
+      const txid = await broadcastTransactionDisambiguated(txHex, esploraApis);
 
       // Silent-payment sends publish no Nostr event — doing so would defeat
       // the unlinkability the rail provides.

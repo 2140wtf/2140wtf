@@ -180,6 +180,11 @@ export function usePetsOnboarding({
       // 'sent' or 'pending' both mean the sats are gone (pending auto-retries);
       // only 'failed' means nothing was committed and the caller may retry.
       if (result.status === 'failed') throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+      // 'unknown' means the mint may have committed: do not grant the purchase
+      // but do not invite a blind retry either.
+      if (result.status === 'unknown') {
+        throw new Error('The payment outcome is unknown — the mint may still have processed it. Check your Cashu wallet balance before paying again; if it decreased, do NOT pay again and contact support.');
+      }
     },
     [config.petsTreasuryNpub, externalWallet],
   );

@@ -36,7 +36,7 @@ import {
   type InviteBundle,
   type ParsedInviteLink,
 } from "@/concord-v2/lib/invite";
-import { KIND_INVITE_BUNDLE } from "@/concord-v2/lib/kinds";
+import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import { capRelays, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
 import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
@@ -151,17 +151,27 @@ export async function resolveBundle(
       nostr
         .relay(url)
         .query(
-          [{ kinds: [KIND_INVITE_BUNDLE], authors: [invite.linkSigner], "#d": [""], limit: 1 }],
+          // No limit: a relay's own "newest" pick between tied editions is
+          // arbitrary — the tie must be broken by OUR rule below (tombstone
+          // wins), never by what a relay happened to store first.
+          [{ kinds: [KIND_INVITE_BUNDLE], authors: [invite.linkSigner], "#d": [""] }],
           { signal: AbortSignal.timeout(8000) },
         )
         .catch(() => [] as NostrEvent[]),
     ),
   );
-  const flat = results.flat().sort((a, b) => b.created_at - a.created_at);
+  const flat = results.flat();
   if (flat.length === 0) throw new Error("Couldn't find that invite on its relays.");
   // The newest event at the coordinate wins: a refresh replaces the bundle, a
-  // revocation tombstone replaces it terminally.
-  return parseBundleEvent(flat[0], invite.linkSigner, invite.token, Date.now());
+  // revocation tombstone replaces it terminally. At a created_at TIE (clocks
+  // are second-granular; a revoke right after a refresh ties) the tombstone
+  // beats the live bundle — only a STRICTLY newer live bundle (a re-mint)
+  // overrides a revocation. Same rule as the agent CLI's join path.
+  const maxTs = flat.reduce((m, e) => Math.max(m, e.created_at), 0);
+  const atMax = flat.filter((e) => e.created_at === maxTs);
+  const newest =
+    atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
+  return parseBundleEvent(newest, invite.linkSigner, invite.token, Date.now());
 }
 
 /** Turn a verified bundle into the membership-list join material + entry. */

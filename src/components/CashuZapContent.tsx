@@ -179,6 +179,12 @@ export function CashuZapContent({
           onSuccess({ amountSats: numericSats, eventId: undefined });
           return;
         }
+        if (result.status === 'unknown') {
+          // The mint may have committed — do NOT retry. sendNutzap already set
+          // a wallet error explaining the check-balance-first rule.
+          setError(wallet.error || 'Payment outcome unknown — check your wallet balance before trying again.');
+          return;
+        }
         // Sent: the result carries the published event id (sendNutzap does not
         // add sent events to wallet.nutzaps — that list is RECEIVED nutzaps).
         onSuccess({ amountSats: numericSats, eventId: result.eventId });
