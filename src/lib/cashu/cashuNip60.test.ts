@@ -14,6 +14,7 @@ import {
   buildNutzapEvent,
   buildNutzapRedemptionHistoryEvent,
   parseWalletConfigEvent,
+  parseWalletConfigEvents,
   parseTokenEvent,
   parseHistoryEvent,
   parseNutzapInfoEvent,
@@ -82,6 +83,37 @@ describe('wallet config event', () => {
       privkey: config.privkey,
       mints: ['https://mint.example.com'],
     });
+  });
+
+  it('a malformed privkey entry never re-emits the previous config or steals its mints', async () => {
+    const signer = createNip60Signer(generateSecretKey());
+    const keyA = 'aa'.repeat(32);
+    const keyC = 'cc'.repeat(32);
+    // A three-field-plus privkey entry (garbage trailing element) sits between
+    // two valid configs. The pre-fix parser left `current` pointing at the
+    // ALREADY-PUSHED first config: the trailing mint attached to it and the
+    // final push emitted it a second time.
+    const entries = [
+      ['privkey', keyA],
+      ['mint', 'https://a.example.com'],
+      ['privkey', 'id-x', 'bb'.repeat(32), 'garbage'],
+      ['mint', 'https://b.example.com'],
+      ['privkey', keyC],
+      ['mint', 'https://c.example.com'],
+    ];
+    const content = await signer.nip44Encrypt(signer.pubkey, JSON.stringify(entries));
+    const event = await signer.signEvent({
+      kind: WALLET_CONFIG_KIND,
+      content: content!,
+      tags: [],
+      created_at: Math.floor(Date.now() / 1000),
+    });
+
+    const configs = await parseWalletConfigEvents(event!, signer);
+    expect(configs).toEqual([
+      { id: 'default', privkey: keyA, mints: ['https://a.example.com'] },
+      { id: 'default', privkey: keyC, mints: ['https://c.example.com'] },
+    ]);
   });
 });
 
