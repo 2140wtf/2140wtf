@@ -11,12 +11,16 @@ const now = () => Math.floor(Date.now() / 1000);
 describe("updateStreamCursor future-stamp clamp", () => {
   it("advances newest monotonically for normal timestamps", async () => {
     const scope = "test:clamp:normal";
-    await updateStreamCursor(scope, { newest: now() - 500 });
-    await updateStreamCursor(scope, { newest: now() - 100 });
-    expect((await readStreamCursor(scope))?.newest).toBe(now() - 100);
+    // Capture the clock ONCE: each now() below is separated by an awaited
+    // IndexedDB round-trip, so a second-boundary flip mid-test makes the
+    // expected value drift by one and flakes the suite.
+    const t = now();
+    await updateStreamCursor(scope, { newest: t - 500 });
+    await updateStreamCursor(scope, { newest: t - 100 });
+    expect((await readStreamCursor(scope))?.newest).toBe(t - 100);
     // An older patch never regresses the cursor.
-    await updateStreamCursor(scope, { newest: now() - 400 });
-    expect((await readStreamCursor(scope))?.newest).toBe(now() - 100);
+    await updateStreamCursor(scope, { newest: t - 400 });
+    expect((await readStreamCursor(scope))?.newest).toBe(t - 100);
   });
 
   it("clamps a future-stamped newest to the local clock", async () => {

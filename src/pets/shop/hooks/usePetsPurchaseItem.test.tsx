@@ -124,6 +124,31 @@ describe('usePetsPurchaseItem cashu mode', () => {
     expect(mocks.publishEvent).not.toHaveBeenCalled();
   });
 
+  it('an unknown-outcome treasury payment neither grants the item nor invites a blind retry', async () => {
+    // The mint may have committed the nutzap (timeout / dropped connection).
+    // Granting the item would give a free item on genuine failure; surfacing
+    // a plain "failed" would invite a retry that double-pays. The purchase
+    // must abort with a check-your-balance message and publish nothing.
+    const sendNutzap = vi.fn().mockResolvedValue({ status: 'unknown' });
+    const externalWallet = {
+      totalBalance: 5_000,
+      loading: false,
+      mintUrl: 'https://mock.mint',
+      balances: { 'https://mock.mint': 5_000 },
+      sendNutzap,
+    } as unknown as CashuWalletState & CashuWalletActions;
+
+    const profile = parseNostrPetProfileEvent(createProfileEvent('cashu', 20_000))!;
+    const { result } = renderHook(() => usePetsPurchaseItem(profile, null, externalWallet, undefined, 'cashu'), { wrapper });
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toContain('outcome is unknown');
+    expect(result.current.error?.message).toContain('do NOT pay again');
+    expect(mocks.publishEvent).not.toHaveBeenCalled();
+  });
+
   it('throws when the selected mint balance is insufficient', async () => {
     const externalWallet = {
       totalBalance: 5_000,
