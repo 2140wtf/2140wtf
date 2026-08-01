@@ -72,6 +72,20 @@ describe('generateEggPreviewForCategory', () => {
     }
   });
 
+  it('produces Bleep ~80% of the time in the 2140-pets category', () => {
+    // pickWeight 16 (Bleep) vs 1 × 4 (SVG forms) = 80%. 500 rolls: mean 400,
+    // std ≈ 8.9 — asserting ≥ 300 (60%) is an ~11σ margin, no flake risk.
+    let bleepCount = 0;
+    const rolls = 500;
+    for (let i = 0; i < rolls; i++) {
+      const preview = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
+      if (preview.breedAsset === 'bleep') bleepCount++;
+    }
+    expect(bleepCount).toBeGreaterThanOrEqual(300);
+    // The other members must still be reachable (20% shared).
+    expect(bleepCount).toBeLessThan(rolls);
+  });
+
   it('lets a user create multiple pets of different species', () => {
     const first = generateEggPreviewForCategory(OWNER_PUBKEY, '2140-pets');
     const second = generateEggPreviewForCategory(OWNER_PUBKEY, 'ditto-blobbi');
