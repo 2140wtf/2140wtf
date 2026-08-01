@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Live escrow /release end-to-end probe (`scripts/escrow-release-probe.mjs`, ported from bao_fund 60836d2): verifies the escrow.bao.network operator contract against real signet sats — health/pubkey check, a disagreement negative probe (must 400), then the full loop: faucet funding, two real 2-of-3 multisig deposits, mutual kind-11124 outcome attestations, /release co-sign, winner sweep (asserts 2x stake minus mint fee). Run with `node scripts/escrow-release-probe.mjs`
+
 ### Changed
 - ₿AO campaign runner-fee tiers updated to the current spec: 2.14% (min) / 4.21% / 10% — the 1.0% tier is gone and 10% added (default selection was already 2.14%, unaffected). Changelog entry for e696c7c47, mirrored to bao_fund 51a7de7 so both apps document identical fee options
 
