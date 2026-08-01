@@ -97,13 +97,11 @@ export function MarketPage(): React.JSX.Element {
   );
 
   const sortedListings = useMemo(() => {
-    if (sort === 'newest') {
-      return listings;
-    }
-
     const items = [...listings];
 
     switch (sort) {
+      case 'newest':
+        break;
       case 'oldest':
         items.reverse();
         break;
@@ -137,6 +135,10 @@ export function MarketPage(): React.JSX.Element {
         break;
       }
     }
+
+    // Listings with images first; Array.sort is stable, so the chosen
+    // ordering is preserved within each group.
+    items.sort((a, b) => Number(b.images.length > 0) - Number(a.images.length > 0));
 
     return items;
   }, [listings, sort, btcPrice, authors]);
