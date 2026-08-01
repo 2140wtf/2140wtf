@@ -218,18 +218,18 @@ export function BaoFundingPage() {
 
         <TabsContent value="campaigns" className="space-y-4 mt-4">
           {/* DEMO banner — scoped to the Campaigns tab */}
-          <div className="rounded-lg border-2 border-dashed border-amber-500/70 bg-amber-500/10 px-4 py-3 text-sm">
-            <p className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-              <Sparkles className="size-4" /> DEMO — signet, no real money
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+            <p className="font-semibold flex items-center gap-1.5">
+              <Sparkles className="size-4 text-muted-foreground" /> DEMO — signet, no real money
             </p>
             <p className="text-muted-foreground mt-0.5">
               Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. The Compute credits tab uses real sats.
             </p>
             <p className="text-muted-foreground mt-1">
-              <span className="text-amber-600 dark:text-amber-400 font-medium">Experimental:</span> demo sats are free, so market odds mean nothing — anyone can shift any vote to either side at will. Milestone resolution by crowd vote is a gameable mechanism; treat every outcome as a drill, not a signal.
+              <span className="text-foreground font-medium">Experimental:</span> demo sats are free, so market odds mean nothing — anyone can shift any vote to either side at will. Milestone resolution by crowd vote is a gameable mechanism; treat every outcome as a drill, not a signal.
             </p>
             <div className="mt-2 rounded-md bg-background/60 px-3 py-2">
-              <p className="font-medium text-amber-600 dark:text-amber-400">How to get demo sats for testing</p>
+              <p className="font-medium">How to get demo sats for testing</p>
               <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-muted-foreground text-xs">
                 <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed (anti-spam is rate limits, not fees).</li>
                 <li>
