@@ -51,7 +51,9 @@ function hostileWrap(rand: () => number, mode: number): NostrEvent {
 }
 
 describe("hostile wire — openWrap refuses with StreamError only", () => {
-  it("600 validly-signed garbage wraps: StreamError or (rarely) opens, never a raw TypeError", () => {
+  // Crypto-heavy (600 sign+encrypt+decrypt+verify cycles): the default 5s
+  // vitest timeout flakes under full-suite parallel load.
+  it("600 validly-signed garbage wraps: StreamError or (rarely) opens, never a raw TypeError", { timeout: 30_000 }, () => {
     const rand = mulberry32(6);
     for (let i = 0; i < 600; i++) {
       const wrap = hostileWrap(rand, i % 3);
@@ -74,7 +76,7 @@ describe("hostile wire — openWrap refuses with StreamError only", () => {
 });
 
 describe("hostile wire — batch openers skip-and-continue", () => {
-  it("openControlWraps / openGuestbookWraps never throw on garbage, return []", () => {
+  it("openControlWraps / openGuestbookWraps never throw on garbage, return []", { timeout: 30_000 }, () => {
     const rand = mulberry32(66);
     const garbage = Array.from({ length: 50 }, (_, i) => hostileWrap(rand, i % 3));
     expect(() => openControlWraps(garbage, [group])).not.toThrow();
@@ -97,7 +99,7 @@ describe("hostile wire — invite parsers", () => {
     }
   });
 
-  it("parseBundleEvent refuses forged/mutated events with InviteError only", () => {
+  it("parseBundleEvent refuses forged/mutated events with InviteError only", { timeout: 30_000 }, () => {
     const rand = mulberry32(66_666);
     const sk = generateSecretKey();
     const pk = getPublicKey(sk);
