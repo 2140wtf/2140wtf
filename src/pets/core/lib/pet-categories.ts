@@ -19,13 +19,22 @@ export interface BreedCategoryMeta {
   description: string;
 }
 
-export interface AdultFormMember {
+interface MemberWeight {
+  /**
+   * Relative weight in `getRandomCategoryMember` (default 1). Weights are
+   * compared within a category: a member with weight 16 among four weight-1
+   * members is picked 16/20 = 80% of the time.
+   */
+  pickWeight?: number;
+}
+
+export interface AdultFormMember extends MemberWeight {
   kind: 'adult-form';
   form: AdultForm;
   label: string;
 }
 
-export interface BaoCardMember {
+export interface BaoCardMember extends MemberWeight {
   kind: 'bao-card';
   id: string;
   label: string;
@@ -33,7 +42,7 @@ export interface BaoCardMember {
   recipeId?: string;
 }
 
-export interface BuzzMember {
+export interface BuzzMember extends MemberWeight {
   kind: 'buzz';
   /** Animated-character id ('bumble' | 'fizz' | 'honey' | 'bleep'); also the breed_asset tag value. */
   id: string;
@@ -120,7 +129,9 @@ export const CATEGORY_MEMBERS: Record<PetsBreedCategory, CategoryMember[]> = {
     },
     // Bleep is an animated WebP character (public/pets/bleep/), not an SVG
     // adult form — the 'buzz' member kind routes it to the WebP pipeline.
-    { kind: 'buzz', id: 'bleep', label: 'Bleep' },
+    // pickWeight 16 vs 1 for each other member: Bleep is the common roll
+    // (80%), the four SVG forms share the remaining 20% (5% each).
+    { kind: 'buzz', id: 'bleep', label: 'Bleep', pickWeight: 16 },
   ],
   'ditto-blobbi': [
     { kind: 'adult-form', form: 'bloomi', label: 'Bloomi' },
@@ -175,8 +186,14 @@ export function getRandomCategoryMember(category: PetsBreedCategory): CategoryMe
   if (members.length === 0) {
     throw new Error(`Breed category "${category}" has no members.`);
   }
-  const index = crypto.getRandomValues(new Uint32Array(1))[0] % members.length;
-  return members[index];
+  // Weighted pick: each member's pickWeight (default 1) over the total.
+  const totalWeight = members.reduce((sum, m) => sum + (m.pickWeight ?? 1), 0);
+  let roll = (crypto.getRandomValues(new Uint32Array(1))[0] / 0x1_0000_0000) * totalWeight;
+  for (const member of members) {
+    roll -= member.pickWeight ?? 1;
+    if (roll < 0) return member;
+  }
+  return members[members.length - 1];
 }
 
 export function isCustomCategory(category: PetsBreedCategory): boolean {
