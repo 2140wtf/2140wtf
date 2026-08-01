@@ -358,6 +358,11 @@ export async function parseWalletConfigEvents(
       const [key, ...rest] = entry;
       if (key === 'privkey') {
         if (current && current.privkey.length === 64) configs.push(current);
+        // Reset BEFORE the shape checks: a malformed privkey entry must not
+        // leave `current` pointing at the already-pushed config — trailing
+        // mint entries would attach to it (misattributing the mint) and the
+        // final push would emit the same config twice.
+        current = null;
         if (rest.length === 1 && typeof rest[0] === 'string') {
           current = { id: 'default', privkey: rest[0], mints: [] };
         } else if (rest.length === 2 && typeof rest[0] === 'string' && typeof rest[1] === 'string') {
