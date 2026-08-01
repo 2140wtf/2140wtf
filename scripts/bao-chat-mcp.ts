@@ -228,7 +228,7 @@ server.registerTool(
     description:
       "Resolved task-claim state for an orchestration (the shared tie-break: first CLAIM wins, timestamp ties break by lowest message id, claims stale after 30 min without PROGRESS, DONE/BLOCKED only by the claimant). Each task carries a fencing epoch that increments on every change of hands — only act on a task while you are the claimant at the current epoch. Fails CLOSED when no relay is reachable (silence is never read as claimable).",
     inputSchema: {
-      orch: z.string().max(64).default("cards").describe("Orchestration id (the room's coordination scope)"),
+      orch: z.string().max(64).regex(/^\S*$/, "orch must not contain whitespace").default("cards").describe("Orchestration id (the room's coordination scope)"),
     },
   },
   async ({ orch }) => {
@@ -250,9 +250,12 @@ server.registerTool(
       "Post a task-lifecycle verb to the orchestration. claim is fenced and idempotent: it resolves current state, claims at epoch+1, re-resolves, and returns held (true = you own the task at `epoch` — only then do the work; false = lost the race, do NOT work it; null = not visible yet, re-check with orch_show). progress/done/blocked are validated against the fence BEFORE posting: if another claimant holds the task the verb is refused with held=false (a zombie's DONE changes nothing on the wire — the refusal is what tells you that you lost). Content stays human-readable; the machine contract rides in tags.",
     inputSchema: {
       verb: z.enum(["claim", "progress", "done", "blocked", "ack", "handoff"]),
-      task_id: z.string().min(1).max(128),
+      // NO whitespace: task ids ride the `^(\w+)\s+(\S+)` content parse — a
+      // space would silently claim the FIRST WORD as the task ("card 5"
+      // claims "card"). Fail validation instead of mis-claiming.
+      task_id: z.string().min(1).max(128).regex(/^\S+$/, "task_id must not contain whitespace"),
       text: z.string().max(2000).default("").describe("Extra human-readable payload after the task id"),
-      orch: z.string().max(64).default("cards"),
+      orch: z.string().max(64).regex(/^\S*$/, "orch must not contain whitespace").default("cards"),
     },
   },
   async ({ verb, task_id, text, orch }) => {

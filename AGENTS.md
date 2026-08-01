@@ -342,6 +342,8 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 **Writing new test files — don't, unless the user asks.** If the user explicitly requests tests, describes a bug to diagnose with a test, or reports that a problem persists after a fix, load the **`testing`** skill for 2140.wtf's Vitest + `TestApp` setup and policy.
 
+**Fixed flake (was test-design debt):** `useCashuWallet.test.tsx › keeps the crash journal while a timed-out send is still in flight` used to fail ~1-in-3 full-suite runs: `vi.useFakeTimers({ shouldAdvanceTime: true })` lets REAL time advance the fake 60s send timeout past the CPU-starved journal write. Fixed by the injectable `sendTimeoutMs` option on `useCashuWallet` — the test sets 300s (unreachable by wall clock) and fires the timeout with one deterministic `advanceTimersByTimeAsync` jump. Same recipe for any future shouldAdvanceTime flake.
+
 ## Validating Your Changes
 
 **Your task is not finished until the code type-checks and builds without errors.** Run validation in priority order, commit when done. For the full workflow — pre-commit checks, commit-message conventions, the `2140wtf <hello@2140.wtf>` commit identity with no LLM attribution trailers, and the `Regression-of:` trailer used by the changelog generator — load the **`git-workflow`** skill.
