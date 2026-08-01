@@ -15,7 +15,7 @@ import {
   buildUnsignedPsbt,
   buildUnsignedPsbtHd,
   buildUnsignedSilentPaymentPsbt,
-  broadcastTransaction,
+  broadcastTransactionDisambiguated,
   estimateFeeWithDustChange,
   fetchUTXOs,
   finalizePsbt,
@@ -256,7 +256,9 @@ export function useCampaignZap(
       const txHex = useOnchain ? finalizePsbt(signedHex) : extractTxFromSignedPsbtV2(signedHex);
 
       setProgress('broadcasting');
-      const txid = await broadcastTransaction(txHex, esploraApis);
+      // Disambiguated: a failed POST may still have reached a node —
+      // never surface that as a retry-safe failure (double-pay risk).
+      const txid = await broadcastTransactionDisambiguated(txHex, esploraApis);
 
       // Publish a kind 8333 receipt for on-chain donations only.
       let event: NostrEvent | undefined;

@@ -11,6 +11,7 @@ import {
   countLeadingZeroBits,
   grindJoinRumor,
   meetsJoinPow,
+  powAttemptBudget,
 } from "@/concord-v2/lib/agentGate";
 import { guestbookGroupKey } from "@/concord-v2/lib/derive";
 import {
@@ -98,6 +99,20 @@ describe("grindJoinRumor", () => {
     const human = signer();
     const rumor = buildJoinRumor(human.pubkey, 5000);
     expect(meetsJoinPow(rumor.id, 24)).toBe(false);
+  });
+
+  it("the attempt budget scales with difficulty — 16× expected work at every legal difficulty", () => {
+    // The old flat 2^26 cap refused LEGAL top-range gates 37-78% of the time
+    // (expected work is 2^d). The budget must be 2^(d+4) all the way to the
+    // agentGateOf maximum (28).
+    expect(powAttemptBudget(1)).toBe(32);
+    expect(powAttemptBudget(20)).toBe(2 ** 24);
+    expect(powAttemptBudget(26)).toBe(2 ** 30);
+    expect(powAttemptBudget(MAX_AGENT_GATE_DIFFICULTY)).toBe(2 ** (MAX_AGENT_GATE_DIFFICULTY + 4));
+    // …and must never undercut the expected work 2^d at any legal difficulty.
+    for (let d = 1; d <= MAX_AGENT_GATE_DIFFICULTY; d++) {
+      expect(powAttemptBudget(d)).toBeGreaterThanOrEqual(16 * 2 ** d);
+    }
   });
 });
 

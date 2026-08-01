@@ -108,6 +108,11 @@ export interface CashuWalletState {
  *   but the nutzap event could not be published; it is saved and auto-retried.
  *   Do NOT retry the payment — it will very likely land.
  * - 'failed': nothing was committed — safe to retry.
+ * - 'unknown': the swap request may have reached the mint before the failure
+ *   (timeout, dropped connection, pre-journal validation throw). The mint may
+ *   have committed — do NOT retry: a second send double-pays while the first
+ *   attempt's recipient-locked proofs are unrecoverable. Check the balance
+ *   first; the recovery journal restores whatever the mint never spent.
  */
 export type NutzapSendResult =
   /** Published; carries the Nutzap event id so callers can reference the zap. */
@@ -115,7 +120,9 @@ export type NutzapSendResult =
   /** Sats committed but the event is queued for auto-retry; no event id yet. */
   | { status: 'pending' }
   /** Nothing was committed; the caller may retry. */
-  | { status: 'failed' };
+  | { status: 'failed' }
+  /** The mint may have committed; retrying may double-pay. */
+  | { status: 'unknown' };
 
 /**
  * The 2140 treasury publishes its kind:10019 Nutzap info only to BAO's relay
@@ -255,6 +262,14 @@ export interface UseCashuWalletOptions {
   enabled?: boolean;
   /** localStorage key prefix. Defaults to "freedomid_". */
   storageNamespace?: string;
+  /**
+   * Mint-call timeout for the send/swap path in ms. Defaults to 60000.
+   * Injectable so tests can make the timeout unreachable by REAL-time
+   * contention (vi.useFakeTimers({ shouldAdvanceTime: true }) lets wall
+   * clock advance fake timers under CPU load) and instead fire it with a
+   * deterministic fake-time advance.
+   */
+  sendTimeoutMs?: number;
 }
 
 export function useCashuWallet(
@@ -365,6 +380,8 @@ export function useCashuWallet(
   const customMintsRef = useRef(customMints);
   const walletRef = useRef<CashuWallet | null>(null);
   const receiveTokenRef = useRef<(tokenStr: string) => Promise<number>>(async () => 0);
+  const sendTimeoutMsRef = useRef(options?.sendTimeoutMs ?? 60_000);
+  useEffect(() => { sendTimeoutMsRef.current = options?.sendTimeoutMs ?? 60_000; }, [options?.sendTimeoutMs]);
 
   useEffect(() => { mintUrlRef.current = mintUrl; }, [mintUrl]);
   useEffect(() => { customMintsRef.current = customMints; }, [customMints]);
@@ -1758,6 +1775,13 @@ export function useCashuWallet(
   const reconcileProofRecovery = useCallback(async () => {
     const encKey = encKeyRef.current;
     if (!encKey || !wallet) return;
+    // Serialize against same-tab wallet ops: sends/melts/receives hold this
+    // mutex across their mint round-trip + store write, and reconcile merges
+    // journal proofs into that same store. The proof lease alone would order
+    // the merge, but reconcile holds it across a mint spent-state round-trip
+    // — without the mutex a concurrent same-tab op would spin on the lease
+    // and could spuriously fail with a lock-timeout.
+    const releaseOps = await acquireMutex(walletOpsMutexRef);
     try {
       // Mints with an unresolved pending melt: their melt-input journal is
       // the input snapshot, deliberately kept until the quote resolves
@@ -1829,11 +1853,32 @@ export function useCashuWallet(
                 return;
               }
             }
-            const merged = dedupeByKey([...existing, ...candidatesToMerge], (p) => String(p?.secret));
-            const canonical = seed ? sanitizeProofs(await filterUnspentProofs(normalized, merged, seed)) : sanitizeProofs(merged);
             await storageRef.current.withProofLock(async () => {
+              // Re-verify the candidates' spent-state INSIDE the lock. The
+              // filter above ran OUTSIDE it: a wallet op (send/melt) that
+              // committed in between already persisted its post-spend store,
+              // and unioning the stale canonical set would resurrect its
+              // just-spent inputs — a phantom balance, and every later send
+              // that selects one fails at the mint. If the re-check itself
+              // fails, skip the merge and keep the journal for the next pass
+              // rather than risk the resurrection.
+              let verified = candidatesToMerge;
+              if (seed) {
+                try {
+                  verified = strictUnspent
+                    ? sanitizeProofs(await filterSpendableProofs(normalized, candidatesToMerge, seed))
+                    : sanitizeProofs(await filterUnspentProofs(normalized, candidatesToMerge, seed));
+                } catch (recheckErr) {
+                  devLog.warn(`${label}: spent-state re-check inside the lock failed; keeping journal for retry:`, recheckErr);
+                  return;
+                }
+              }
+              // Read the store AFTER the re-check, still inside the lock:
+              // between the re-check and the merge no wallet op can persist
+              // its post-spend store (it needs this same lease), so the
+              // union below can't resurrect anything.
               const current = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-              const latest = dedupeByKey([...current, ...canonical], (p) => String(p?.secret));
+              const latest = dedupeByKey([...current, ...verified], (p) => String(p?.secret));
               await storageRef.current.saveProofsForMint(normalized, latest, encKey);
               storageRef.current.writeProofStoreTimestamp(normalized);
               if (stillLocked.length > 0) {
@@ -1862,6 +1907,8 @@ export function useCashuWallet(
       await calculateAllBalances();
     } catch (e) {
       devLog.error('Proof recovery reconciliation failed:', e);
+    } finally {
+      releaseOps();
     }
   }, [wallet, allMints, calculateAllBalances, filterUnspentProofs, filterSpendableProofs, isSpendableProof]);
 
@@ -2432,7 +2479,7 @@ export function useCashuWallet(
           multisigP2pk
             ? targetWallet.swap(amount, proofs, { proofsWeHave: proofs, p2pk: multisigP2pk })
             : targetWallet.send(amount, proofs, sendOpts),
-          60000,
+          sendTimeoutMsRef.current,
           'Send',
           () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
         );
@@ -3798,6 +3845,10 @@ export function useCashuWallet(
     // double-pays, and the first (already-paid) locked proofs sit stranded in
     // the send-recovery journal forever.
     let postCommitSendProofs: any[] | null = null;
+    // Tracks whether the mint swap request may have been sent, so the catch
+    // can refuse to classify an ambiguous failure as retry-safe 'failed' (the
+    // same contract sendToken enforces via lastSendAmbiguousRef).
+    let swapAttempted = false;
     try {
       if (mountedRef.current) setLoading(true);
       if (mountedRef.current) setError('');
@@ -3826,6 +3877,12 @@ export function useCashuWallet(
         }
 
         await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
+        // From here on the request may reach the mint: a failure without an
+        // HTTP status (timeout, dropped connection, or the invalid-response
+        // throw below) is AMBIGUOUS — the mint may have spent the inputs.
+        // Failures before it (local selection inside cashu-ts) never touched
+        // the mint. The catch must never call the ambiguous kind 'failed'.
+        swapAttempted = true;
         const sendResult = await withTimeout(
           targetWallet.send(amount, proofs, {
             proofsWeHave: proofs,
@@ -4030,6 +4087,28 @@ export function useCashuWallet(
         }
         if (mountedRef.current) setError('Nutzap paid but hit a post-payment error — saved for retry');
         return { status: 'pending' };
+      }
+      // Classify the failure for callers with an automatic retry. RETRY-SAFE
+      // (definitive): the mint explicitly rejected — cashu-ts HttpResponseError/
+      // MintOperationError carries a numeric status — or the failure never
+      // reached the mint (pre-swap validation, local selection inside
+      // cashu-ts). AMBIGUOUS: anything else past the swap call — a timeout or
+      // dropped connection (the mint may have committed after we stopped
+      // waiting) and the invalid-response throw above (the request reached
+      // the mint; the outputs died with the response). Returning 'failed'
+      // here tells the caller "safe to retry": the retry double-pays while
+      // the first attempt's recipient-locked proofs are unrecoverable. The
+      // pre-send proof journal restores only what the mint never spent.
+      const httpStatus = typeof err?.status === 'number' ? err.status : null;
+      const localSelection = typeof err?.message === 'string' && /not enough (funds|balance)/i.test(err.message);
+      if (swapAttempted && httpStatus === null && !localSelection) {
+        const timedOut = typeof err?.message === 'string' && err.message.includes('timed out');
+        if (mountedRef.current) {
+          setError(timedOut
+            ? 'Nutzap send timed out — the mint may still have processed it. Check your balance before sending again; if it decreased, the payment went through and the recovery journal will reconcile automatically.'
+            : `Nutzap send outcome unknown (${err?.message ?? err}) — the mint may still have processed it. Check your balance before sending again.`);
+        }
+        return { status: 'unknown' };
       }
       if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
       return { status: 'failed' };
