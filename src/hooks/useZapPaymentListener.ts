@@ -1,6 +1,20 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { NRelay1, type NostrEvent } from '@nostrify/nostrify';
 import type { Event } from 'nostr-tools';
+
+/**
+ * Well-known public relays that LNURL servers commonly publish kind 9735
+ * receipts to, regardless of the relay list embedded in the zap request
+ * (many servers honor only the first few requested relays, or none at all).
+ * Unioned with the caller's relays so a receipt published outside the
+ * sender's relay set is still heard.
+ */
+const RECEIPT_FALLBACK_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://relay.primal.net',
+];
 
 /**
  * Listen to configured relays for a kind 9735 zap receipt that pays the given
@@ -24,6 +38,12 @@ export function useZapPaymentListener(
   const onPaidRef = useRef(onPaid);
   onPaidRef.current = onPaid;
 
+  // Sender's relays ∪ well-known receipt relays, deduped.
+  const listenUrls = useMemo(
+    () => [...new Set([...relayUrls, ...RECEIPT_FALLBACK_RELAYS])],
+    [relayUrls],
+  );
+
   useEffect(() => {
     if (!invoice || !target || paidInvoiceRef.current === invoice) return;
 
@@ -35,7 +55,7 @@ export function useZapPaymentListener(
       return !!bolt11 && bolt11.toLowerCase() === invoice.toLowerCase();
     };
 
-    const listeners = relayUrls.map(async (url) => {
+    const listeners = listenUrls.map(async (url) => {
       if (paidInvoiceRef.current === invoice || abortController.signal.aborted) return;
       const relay = new NRelay1(url);
       try {
@@ -69,5 +89,5 @@ export function useZapPaymentListener(
       abortController.abort();
       void Promise.allSettled(listeners);
     };
-  }, [invoice, target, relayUrls]);
+  }, [invoice, target, listenUrls]);
 }
