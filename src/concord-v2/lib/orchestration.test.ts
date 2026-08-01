@@ -467,3 +467,48 @@ describe("fuzz — parseTaskMessage never throws", () => {
     expect(parseTaskMessage("CLAIM t1 epoch=1e3", T)?.epoch).toBeUndefined(); // legacy fallback — fail-safe
   });
 });
+
+describe("resolveClaims — clock robustness", () => {
+  const A = "aa".repeat(32);
+  const B = "bb".repeat(32);
+
+  it("TTL boundary is exact: not stale AT ttl, stale one ms past it", () => {
+    const now = 1_000_000;
+    const msgs = [claim("a1", A, now - 30_000, "t1", "k1", 1)];
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now }).get("t1")!.stale).toBe(false);
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now + 1 }).get("t1")!.stale).toBe(true);
+  });
+
+  it("a FUTURE-dated claim beyond the grace window is IGNORED (griefing vector)", () => {
+    const now = 1_000_000;
+    // A malicious/skewed member dates its claim a year ahead: without the
+    // grace window, nowMs - ms is negative and the claim NEVER goes stale —
+    // the task is locked until real time catches up.
+    const msgs = [claim("a1", A, now + 365 * 24 * 3600 * 1000, "t1", "k1", 1)];
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now }).get("t1"), "+1y claim is not a claim").toBeUndefined();
+    // The task is simply free: B claims it at epoch 1 immediately.
+    const reclaim = resolveClaims([...msgs, claim("b1", B, now + 1, "t1", "k2", 1)], { ttlMs: 30_000, nowMs: now + 1 });
+    expect(reclaim.get("t1")!.claimant).toBe(B);
+    expect(reclaim.get("t1")!.epoch).toBe(1);
+  });
+
+  it("a future-dated PROGRESS beyond grace does not extend the lease", () => {
+    const now = 1_000_000;
+    const msgs = [
+      claim("a1", A, now, "t1", "k1", 1),
+      progress("a2", A, now + 365 * 24 * 3600 * 1000, "t1"),
+    ];
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now + 30_000 }).get("t1")!.stale).toBe(false);
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now + 30_001 }).get("t1")!.stale).toBe(true);
+  });
+
+  it("clock skew WITHIN grace still claims — skew buys at most the grace window", () => {
+    const now = 1_000_000;
+    const skew = 10 * 60 * 1000; // +10 min, inside the 15-min grace
+    const msgs = [claim("a1", A, now + skew, "t1", "k1", 1)];
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now }).get("t1")!.claimant).toBe(A);
+    // The trusted (skewed) timestamp ages normally: stale at ms + ttl…
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now + skew + 30_000 }).get("t1")!.stale).toBe(false);
+    expect(resolveClaims(msgs, { ttlMs: 30_000, nowMs: now + skew + 30_001 }).get("t1")!.stale).toBe(true);
+  });
+});

@@ -40,6 +40,13 @@ export const ORCH_TASK_TAG = "orch-task";
 export const ORCH_MANIFEST_TAG = "bao-orch";
 export const ORCH_MANIFEST_KIND = 30078;
 
+/**
+ * How far past `now` a task message may be dated and still count (relay-style
+ * future-grace for clock skew). Beyond it the message is ignored outright —
+ * a claim dated +1 year must not lock a task for a year.
+ */
+export const MAX_FUTURE_SKEW_MS = 15 * 60 * 1000;
+
 export type OrchVerb = "CLAIM" | "PROGRESS" | "HANDOFF" | "ACK" | "DONE" | "BLOCKED";
 
 export interface TaskMessage {
@@ -150,10 +157,17 @@ export function resolveClaims(
   const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const states = new Map<string, ClaimState>();
   const delivered = new Set<string>();
+  // A created_at can LIE (skewed or malicious clock): a future-dated claim or
+  // PROGRESS would otherwise compute a negative age and never go stale,
+  // locking the task until real time catches up. Messages dated beyond the
+  // relay-style grace window are ignored OUTRIGHT (a +1-year claim is not a
+  // claim); within grace the timestamp is trusted as-is, so skew buys at most
+  // MAX_FUTURE_SKEW_MS of extra lease.
 
   for (const { id, author, ms, msg } of sorted) {
     if (delivered.has(id)) continue; // at-least-once delivery: process a rumor once
     delivered.add(id);
+    if (ms - opts.nowMs > MAX_FUTURE_SKEW_MS) continue; // beyond grace: not a verb at all
     const cur = states.get(msg.taskId);
     switch (msg.verb) {
       case "CLAIM": {
