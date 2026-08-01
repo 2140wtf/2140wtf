@@ -16,7 +16,8 @@ import { join } from "node:path";
 import { getPublicKey } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
 import { SimplePool } from "nostr-tools/pool";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import { currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
 import { channelGroupKey, type GroupKey } from "@/concord-v2/lib/derive";
@@ -113,9 +114,14 @@ export function saveState(name: string, state: State): void {
  * two concurrent CLI processes would otherwise each read the old file and
  * lose the other's write — the mosaico multi-writer lesson at file level.
  * Locks whose holder died are reclaimed after 30s by mtime.
+ *
+ * `lockSuffix` selects the lock: the default ".lock" guards the state file
+ * itself, while keyed sends use a PER-KEY suffix (".send-<hash>") so two
+ * processes racing the same idempotency key serialize their
+ * check-then-publish WITHOUT blocking unrelated sends or state ops.
  */
-export async function withStateLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
-  const lock = `${statePath(name)}.lock`;
+export async function withStateLock<T>(name: string, fn: () => Promise<T>, lockSuffix = ".lock"): Promise<T> {
+  const lock = `${statePath(name)}${lockSuffix}`;
   const deadline = Date.now() + 10_000;
   mkdirSync(STATE_DIR, { recursive: true });
   for (;;) {
@@ -131,7 +137,7 @@ export async function withStateLock<T>(name: string, fn: () => Promise<T>): Prom
         /* raced a concurrent reclaim */
       }
       if (Date.now() > deadline) {
-        throw new Error(`State for "${name}" is locked by another process — retry shortly.`);
+        throw new Error(`State for "${name}" is locked by another process (${lockSuffix}) — retry shortly.`);
       }
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -317,8 +323,21 @@ export async function channelMessages(state: State): Promise<ChannelMessage[]> {
  * (parallel MCP tool calls) would otherwise both scan before either lands and
  * double-post (found live in the round-7 MCP stress). The waiter re-scans
  * after the first send resolves and dedupes against it.
+ *
+ * The PER-PROCESS map alone leaves a CLI×CLI hole: two processes retrying the
+ * same key both scan before either publishes and double-post (round 10). So a
+ * keyed send additionally takes a per-key lockfile — the check-then-publish is
+ * then atomic across processes for that key. A contender that waits out the
+ * 10s deadline FAILS CLOSED with "locked by another process" instead of
+ * double-posting; the read-side (author, d-tag) dedupe remains as belt-and-
+ * braces for lock-free writers (older builds, other front-ends).
  */
 const inflightKeyedSends = new Map<string, Promise<unknown>>();
+
+/** Per-key lockfile suffix for cross-process keyed-send serialization. */
+function sendLockSuffix(idemKey: string): string {
+  return `.send-${bytesToHex(sha256(new TextEncoder().encode(idemKey))).slice(0, 16)}.lock`;
+}
 
 export async function sendChannelMessage(
   state: State,
@@ -329,7 +348,9 @@ export async function sendChannelMessage(
     const prior = inflightKeyedSends.get(opts.idemKey);
     if (prior) await prior.catch(() => {}); // a failed send frees the key either way
   }
-  const run = sendChannelMessageInner(state, text, opts);
+  const run = opts.idemKey
+    ? withStateLock(state.name, () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey))
+    : sendChannelMessageInner(state, text, opts);
   if (!opts.idemKey) return run;
   inflightKeyedSends.set(opts.idemKey, run);
   try {
