@@ -1793,15 +1793,26 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
     });
     try {
+      // Injectable send timeout (5min): shouldAdvanceTime lets REAL time
+      // advance fake timers under CPU contention, which used to fire the
+      // default 60s timeout before the CPU-starved promise chain wrote the
+      // journal (~1-in-3 full-suite flake). With the knob the timeout is
+      // unreachable by wall clock (the whole test runs in seconds of real
+      // time, and the pre-timeout pumps advance < 100s of fake time) and is
+      // fired below by a deterministic fake-time jump.
+      const SEND_TIMEOUT_MS = 300_000;
       const { result } = renderHook(
-        () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+        () => useCashuWallet(seedPhrase, {
+          defaultMints: [{ name: 'Test', url: mintUrl }],
+          sendTimeoutMs: SEND_TIMEOUT_MS,
+        }),
         { wrapper },
       );
       await waitFor(() => expect(result.current.wallet).not.toBeNull());
       const wallet = result.current.wallet;
       if (!wallet) throw new Error('Wallet not initialized');
 
-      // The mint response is manually released — it arrives AFTER the 60s send
+      // The mint response is manually released — it arrives AFTER the send
       // timeout but can still commit at the mint, so reconciling the crash
       // journal before it arrives is not authoritative.
       let releaseSend: (() => void) | null = null;
@@ -1848,7 +1859,12 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       expect(await loadProofRecovery(mintUrl, encKey)).not.toBeNull();
       expect(releaseSend).not.toBeNull();
 
-      // Past the 60s timeout the op rejects…
+      // Fire the send timeout with one deterministic fake-time jump PAST the
+      // knob (not real-time contention), then let the rejection settle.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS + 1000);
+        for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+      });
       await act(async () => {
         await pump(async () => sendResult !== undefined, 100);
       });

@@ -255,6 +255,14 @@ export interface UseCashuWalletOptions {
   enabled?: boolean;
   /** localStorage key prefix. Defaults to "freedomid_". */
   storageNamespace?: string;
+  /**
+   * Mint-call timeout for the send/swap path in ms. Defaults to 60000.
+   * Injectable so tests can make the timeout unreachable by REAL-time
+   * contention (vi.useFakeTimers({ shouldAdvanceTime: true }) lets wall
+   * clock advance fake timers under CPU load) and instead fire it with a
+   * deterministic fake-time advance.
+   */
+  sendTimeoutMs?: number;
 }
 
 export function useCashuWallet(
@@ -365,6 +373,8 @@ export function useCashuWallet(
   const customMintsRef = useRef(customMints);
   const walletRef = useRef<CashuWallet | null>(null);
   const receiveTokenRef = useRef<(tokenStr: string) => Promise<number>>(async () => 0);
+  const sendTimeoutMsRef = useRef(options?.sendTimeoutMs ?? 60_000);
+  useEffect(() => { sendTimeoutMsRef.current = options?.sendTimeoutMs ?? 60_000; }, [options?.sendTimeoutMs]);
 
   useEffect(() => { mintUrlRef.current = mintUrl; }, [mintUrl]);
   useEffect(() => { customMintsRef.current = customMints; }, [customMints]);
@@ -2432,7 +2442,7 @@ export function useCashuWallet(
           multisigP2pk
             ? targetWallet.swap(amount, proofs, { proofsWeHave: proofs, p2pk: multisigP2pk })
             : targetWallet.send(amount, proofs, sendOpts),
-          60000,
+          sendTimeoutMsRef.current,
           'Send',
           () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
         );
