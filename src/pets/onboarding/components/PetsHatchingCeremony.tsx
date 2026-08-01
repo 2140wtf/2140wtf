@@ -1028,7 +1028,9 @@ export function PetsHatchingCeremony({
       }}
       onClick={phase === 'dialog' ? handleDialogClick : undefined}
     >
-      {onExit && isEggPhase && (
+      {/* Back/exit is available in every interactive phase — the user must
+          never be trapped in the ceremony (e.g. if naming cannot be completed). */}
+      {onExit && (isEggPhase || phase === 'dialog' || phase === 'naming') && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -1358,7 +1360,12 @@ export function PetsHatchingCeremony({
 
       {/* ── Naming ── */}
       {phase === 'naming' && (
-        <div className="absolute inset-x-0 bottom-0 flex justify-center pb-28 sm:pb-36 px-8">
+        <div
+          className="absolute inset-x-0 bottom-0 flex justify-center pb-28 sm:pb-36 px-8"
+          // Tap anywhere while the question is typing to reveal the input
+          // immediately (same affordance as the dialog lines above).
+          onClick={!namingTypewriter.done ? () => namingTypewriter.complete() : undefined}
+        >
           <div className={cn(
             'relative max-w-md w-full text-center',
             namingVisible ? 'animate-onboard-soft-fade-in' : 'opacity-0',
@@ -1391,7 +1398,13 @@ export function PetsHatchingCeremony({
 
               {/* Input + confirm (appear after typewriter done) */}
               {namingTypewriter.done && (
-                <div className="space-y-3 animate-onboard-soft-fade-in">
+                <form
+                  className="space-y-3 animate-onboard-soft-fade-in"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (name.trim() && !isNaming) handleNameSubmit();
+                  }}
+                >
                   <Input
                     ref={nameInputRef}
                     type="text"
@@ -1400,7 +1413,13 @@ export function PetsHatchingCeremony({
                     placeholder="..."
                     maxLength={32}
                     autoFocus
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    // The ceremony root is select-none; without an explicit
+                    // override, iOS WKWebView makes the field read-only.
+                    style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
                     className={cn(
+                      'select-text',
                       'text-center text-lg font-light h-12',
                       'bg-white/10 border-transparent text-white placeholder:text-white/30',
                       'focus:bg-white/[0.25] focus:border-transparent focus:ring-0 focus:outline-none',
@@ -1409,14 +1428,11 @@ export function PetsHatchingCeremony({
                       'transition-all duration-300',
                       'rounded-full transition-shadow duration-500',
                     )}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && name.trim()) handleNameSubmit();
-                    }}
                   />
 
                   {name.trim() && (
                     <Button
-                      onClick={handleNameSubmit}
+                      type="submit"
                       disabled={isNaming}
                       className={cn(
                         'max-w-[12rem] mx-auto h-10 px-8 text-sm font-light tracking-wide',
@@ -1426,10 +1442,17 @@ export function PetsHatchingCeremony({
                       )}
                       variant="ghost"
                     >
-                      That&apos;s the one.
+                      {isNaming ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        "That's the one."
+                      )}
                     </Button>
                   )}
-                </div>
+                </form>
               )}
             </div>
           </div>
