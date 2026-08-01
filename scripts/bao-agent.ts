@@ -48,7 +48,7 @@ import {
   openControlWraps,
   sealEdition,
 } from "@/concord-v2/lib/control";
-import { buildJoinRumor, currentGuestbookGroup, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
 import {
   AGENT_GATE_METADATA_KEY,
   DEFAULT_AGENT_GATE_DIFFICULTY,
@@ -66,7 +66,7 @@ import {
   parseInviteLink,
   type InviteBundle,
 } from "@/concord-v2/lib/invite";
-import { openWrap } from "@/concord-v2/lib/stream";
+import { openWrap, resolveMs } from "@/concord-v2/lib/stream";
 import { KIND_INVITE_BUNDLE, KIND_WRAP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 import {
@@ -305,6 +305,39 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
     await sealGuestbook(rumor, currentGuestbookGroup(community), signer),
     gate ? `guestbook join (pow ≥ ${gate.difficulty})` : "guestbook join",
   );
+
+  // Single-use links: the spend check above is check-then-act, so two
+  // CONCURRENT joiners can both pass it and both post a Join — the fold is
+  // per-npub and can't dedupe a commitment (it can't tell single-use links
+  // from multi-use). Nostr has no atomic claim, so the loser SELF-EJECTS
+  // instead: re-fold, and if an earlier Join (lower ms, tie → lower rumor id)
+  // cites the same commitment, we lost the race — exit WITHOUT saving state,
+  // so the losing agent never acts as a member. (Its Join stays on the
+  // guestbook as a ghost until the owner sweeps/kicks; only a rekey truly
+  // excludes it. Documented in docs/ORCHESTRATION.md.)
+  if (bundle.max_uses === 1) {
+    const gb = currentGuestbookGroup(community);
+    const myMs = resolveMs(rumor.created_at, rumor.tags);
+    const earlierJoinWins = async (): Promise<boolean> => {
+      const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
+      const rival = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]))
+        .filter((ev) => joinCommitmentOf(ev) === commitment)
+        .map((ev) => ({ ms: ev.ms, id: ev.rumorId }))
+        .sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+      return rival !== undefined && (rival.ms < myMs || (rival.ms === myMs && rival.id < rumor.id));
+    };
+    // Immediate re-fold, then one settle beat for a rival still in flight.
+    let lost = await earlierJoinWins();
+    if (!lost) {
+      await new Promise((r) => setTimeout(r, 1500));
+      lost = await earlierJoinWins();
+    }
+    if (lost) {
+      console.error("  ✗ That single-use link was spent by a CONCURRENT join (earlier Join on the guestbook) — you are NOT a member. Ask for a fresh link.");
+      process.exitCode = 2;
+      return;
+    }
+  }
 
   const state: State = {
     sk: bytesToHex(sk),
