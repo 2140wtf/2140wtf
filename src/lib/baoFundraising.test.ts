@@ -6,10 +6,13 @@ import {
   createFundraiserRelayFirst,
   fetchVerificationModels,
   fetchVerificationStats,
+  fundingProgressPct,
+  latestVerification,
   releaseMilestone,
   scoreMilestone,
   topUpVerificationBalance,
   type BaoFundraiser,
+  type BaoMilestoneVerification,
   type CreateFundraiserInput,
 } from './baoFundraising';
 
@@ -162,11 +165,11 @@ describe('createFundraiserRelayFirst', () => {
 });
 
 describe('fetchVerificationModels', () => {
-  it('normalizes the camelCase registry wire format', async () => {
+  it('normalizes the camelCase registry wire format and keeps the server default model', async () => {
     stubFetch({
       body: {
         data: {
-          default_model: 'moonshotai/kimi-k3',
+          default_model: 'openai/gpt-5.6-sol',
           models: [
             { id: 'moonshotai/kimi-k3', label: 'Kimi K3', inputMsatsPer1M: 3_000_000, outputMsatsPer1M: 15_000_000, vision: true, tier: 'flagship' },
             { id: 'openai/gpt-5.6-sol', label: 'GPT 5.6 Sol', inputMsatsPer1M: 2_000_000, outputMsatsPer1M: 8_000_000, vision: false, tier: 'strong' },
@@ -175,8 +178,11 @@ describe('fetchVerificationModels', () => {
       },
     });
 
-    const models = await fetchVerificationModels();
+    const { defaultModel, models } = await fetchVerificationModels();
 
+    // The server's configured default must survive — discarding it used to
+    // initialize pickers to a model the server doesn't actually default to.
+    expect(defaultModel).toBe('openai/gpt-5.6-sol');
     expect(models).toHaveLength(2);
     expect(models[0]).toEqual({
       id: 'moonshotai/kimi-k3',
@@ -190,7 +196,7 @@ describe('fetchVerificationModels', () => {
     expect(models[1].vision).toBe(false);
   });
 
-  it('accepts the snake_case shape too', async () => {
+  it('falls back to the registry default when the server omits default_model', async () => {
     stubFetch({
       body: {
         data: {
@@ -201,8 +207,77 @@ describe('fetchVerificationModels', () => {
       },
     });
 
-    const models = await fetchVerificationModels();
+    const { defaultModel, models } = await fetchVerificationModels();
+    expect(defaultModel).toBe('moonshotai/kimi-k3');
     expect(models[0]).toMatchObject({ id: 'qwen/qwen3.7-max', name: 'Qwen 3.7 Max', provider: 'qwen', input_msats_per_1m: 1 });
+  });
+});
+
+describe('fundingProgressPct', () => {
+  it('guards against NaN when the goal is 0, missing, or non-finite', () => {
+    expect(fundingProgressPct(100, 0)).toBe(0);
+    expect(fundingProgressPct(100, NaN)).toBe(0);
+    expect(fundingProgressPct(100, Infinity)).toBe(0);
+    expect(fundingProgressPct(100, -5000)).toBe(0);
+  });
+
+  it('never returns a negative percentage', () => {
+    expect(fundingProgressPct(-1000, 5000)).toBe(0);
+    expect(fundingProgressPct(NaN, 5000)).toBe(0);
+  });
+
+  it('clamps at 100 and rounds normally', () => {
+    expect(fundingProgressPct(6000, 5000)).toBe(100);
+    expect(fundingProgressPct(2500, 5000)).toBe(50);
+    expect(fundingProgressPct(1, 3)).toBe(33);
+  });
+});
+
+describe('latestVerification', () => {
+  const verification = (partial: Partial<BaoMilestoneVerification>): BaoMilestoneVerification => ({
+    id: 1,
+    milestone_id: 'm_1',
+    fundraiser_id: 'fr_1',
+    attempt: 1,
+    model: 'moonshotai/kimi-k3',
+    score: 80,
+    verdict: 'pass',
+    fee_msats: 500_000,
+    inference_msats: 300_000,
+    operator_msats: 200_000,
+    input_tokens: 1000,
+    output_tokens: 100,
+    cost_msats: 300_000,
+    evidence_hash: 'sha256:a',
+    rules_hash: 'sha256:b',
+    receipt_hash: null,
+    nostr_event_id: null,
+    job_id: null,
+    created_at: '2026-07-01T00:00:00Z',
+    ...partial,
+  });
+
+  it('returns null for an empty list', () => {
+    expect(latestVerification([])).toBeNull();
+  });
+
+  it('picks the highest attempt even when the server returns them out of order', () => {
+    const older = verification({ id: 1, attempt: 1, model: 'model/old' });
+    const newer = verification({ id: 2, attempt: 2, model: 'model/new' });
+    // Server order cannot be trusted — newest first here.
+    expect(latestVerification([newer, older])?.model).toBe('model/new');
+  });
+
+  it('breaks attempt ties by creation time', () => {
+    const first = verification({ id: 1, attempt: 1, created_at: '2026-07-01T00:00:00Z' });
+    const second = verification({ id: 2, attempt: 1, created_at: '2026-07-02T00:00:00Z' });
+    expect(latestVerification([second, first])?.id).toBe(2);
+  });
+
+  it('does not mutate the input list', () => {
+    const list = [verification({ id: 2, attempt: 2 }), verification({ id: 1, attempt: 1 })];
+    latestVerification(list);
+    expect(list.map((v) => v.id)).toEqual([2, 1]);
   });
 });
 
@@ -335,5 +410,21 @@ describe('releaseMilestone', () => {
     expect(result.milestone.status).toBe('released');
     expect(result.verification_fee_msats).toBe(500_000);
     expect(result.released_sats).toBe(9_500);
+  });
+
+  it('sends the idempotency key so a retry after an ambiguous failure replays server-side', async () => {
+    const fetchMock = stubFetch({
+      body: {
+        data: {
+          milestone: { id: 'm_1', status: 'released' },
+          fundraiser: fundraiser({ id: 'fr_1' }),
+        },
+      },
+    });
+
+    await releaseMilestone(signer, 'fr_1', 'm_1', { idempotency_key: '2140:release:fr_1:m_1:abc' });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ idempotency_key: '2140:release:fr_1:m_1:abc' });
   });
 });
