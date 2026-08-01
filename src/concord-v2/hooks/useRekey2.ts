@@ -123,8 +123,13 @@ export function useRekeyWatch2(community: CommunityV2 | undefined): { stranded: 
   const { mutateAsync: updateList } = useUpdateCommunityList2();
   const entry = useCommunityEntry2(community?.idHex);
   const queryClient = useQueryClient();
-  // One adoption/removal per (community, epoch) per session — the list update
+  // One ADOPTION per (community, epoch) per session — the list update
   // re-renders with the new epoch, which re-arms the watcher naturally.
+  // Exclusions are deliberately NOT recorded here: a re-including rotation
+  // for the SAME epoch can arrive after an excluding one was processed
+  // (racing Refoundings converge on the lowest key), and the watcher must
+  // stay able to adopt it. Exclusion re-publishes are gated on the entry's
+  // own marker instead (markExcluded is idempotent).
   const handled = useRef(new Set<string>());
   // STRANDED: a fresh joiner sitting on an epoch the community has already
   // rotated past, whose rotation predates the join and carries no blob for them
@@ -219,7 +224,7 @@ export function useRekeyWatch2(community: CommunityV2 | undefined): { stranded: 
     // owner's tombstone — no epoch advance past it is honored.
     if (dissolved) return;
     const key = `${community.idHex}:${nextEpoch}`;
-    if (handled.current.has(key)) return;
+    const adoptionHandled = handled.current.has(key);
     const nip44 = user.signer.nip44;
     if (!nip44) return;
 
@@ -294,6 +299,7 @@ export function useRekeyWatch2(community: CommunityV2 | undefined): { stranded: 
       if (cancelled) return;
 
       if (adopted) {
+        if (adoptionHandled) return; // already published this adoption this session
         handled.current.add(key);
         setStranded(false);
         const heldRoots: HeldRoot[] = [
@@ -324,16 +330,23 @@ export function useRekeyWatch2(community: CommunityV2 | undefined): { stranded: 
       // excluded (kicked/banned). Being excluded is NOT leaving: mark the entry
       // read-only at this epoch but KEEP it on the rail. It disappears only if
       // the user chooses to leave or the owner dissolves. A later Refounding
-      // that re-includes me (adoption above) clears the marker. A rotation that
-      // entirely predates my join is community history, not an exclusion.
+      // that re-includes me (adoption above) clears the marker — which is why
+      // this path never touches `handled`: the re-including rotation can arrive
+      // in a LATER poll of this same epoch, and the scan must stay live for it.
+      // Re-publish is gated on the entry's marker (markExcluded is idempotent).
+      // A rotation that entirely predates my join is community history, not an
+      // exclusion.
       if (sawExcludingRotation) {
-        handled.current.add(key);
-        await updateList({
-          type: "exclude",
-          communityId: community.idHex,
-          epoch: Number(nextEpoch),
-        }).catch(() => handled.current.delete(key));
-        queryClient.invalidateQueries({ queryKey: ["concord2", "list"] });
+        const alreadyMarked =
+          typeof entry?.excluded_at_epoch === "number" && entry.excluded_at_epoch >= Number(nextEpoch);
+        if (!alreadyMarked) {
+          await updateList({
+            type: "exclude",
+            communityId: community.idHex,
+            epoch: Number(nextEpoch),
+          }).catch(() => undefined);
+          queryClient.invalidateQueries({ queryKey: ["concord2", "list"] });
+        }
       }
 
       // A complete rotation that PREDATES my join and carries no blob for me
@@ -559,6 +572,11 @@ export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
       // Walk each held channel independently; accumulate one channels update.
       let nextChannels = entry.current.channels.map((c) => ({ ...c }));
       let changed = false;
+      // Keys marked this run, so a failed publish can roll them back and the
+      // next poll retries (the base watcher has always done this; losing the
+      // adoption to a transient failure left the channel undecryptable for the
+      // rest of the session).
+      const markedThisRun: string[] = [];
 
       for (const ch of community.privateChannels) {
         const chIdHex = bytesToHex(ch.id);
@@ -606,6 +624,7 @@ export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
 
         if (adopted) {
           handled.current.add(key);
+          markedThisRun.push(key);
           const keyHex = bytesToHex(adopted);
           nextChannels = nextChannels.map((c) =>
             c.id.toLowerCase() === chIdHex ? { ...c, key: keyHex, epoch: Number(chNext) } : c,
@@ -616,6 +635,7 @@ export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
           // (CORD-06 §2). `seed` retains the original key; only `current`
           // forgets it.
           handled.current.add(key);
+          markedThisRun.push(key);
           nextChannels = nextChannels.filter((c) => c.id.toLowerCase() !== chIdHex);
           changed = true;
         }
@@ -623,7 +643,10 @@ export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
 
       if (!changed || cancelled) return;
       await updateList({ type: "refresh-channels", communityId: community.idHex, channels: nextChannels }).catch(
-        () => undefined,
+        () => {
+          // Publish failed: unmark so a later poll retries the adoption/removal.
+          for (const k of markedThisRun) handled.current.delete(k);
+        },
       );
       queryClient.invalidateQueries({ queryKey: ["concord2", "list"] });
     })();
