@@ -62,6 +62,7 @@ vi.mock('@/lib/bitcoin', () => ({
   buildUnsignedSilentPaymentPsbt: vi.fn(),
   finalizePsbt: vi.fn(() => 'final-tx-hex'),
   broadcastTransaction: vi.fn(async () => 'broadcast-txid'),
+  broadcastTransactionDisambiguated: vi.fn(async () => 'broadcast-txid'),
   estimateFeeWithDustChange: vi.fn(() => ({ fee: 500 })),
   validateBitcoinAddress: () => true,
 }));
