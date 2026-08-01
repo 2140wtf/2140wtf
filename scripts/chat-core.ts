@@ -284,7 +284,19 @@ export async function channelMessages(state: State): Promise<ChannelMessage[]> {
     }
   }
   messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return messages;
+  // Read-side idempotency: a keyed send that DID double-post (two processes
+  // raced the check-then-publish scan — only in-process races are serialized,
+  // see sendChannelMessage) renders once. The d-tag is a machine idempotency
+  // key; for one author + one key, the earliest landing is the canonical copy.
+  const seenKeys = new Set<string>();
+  return messages.filter((m) => {
+    const d = m.tags.find((t) => t[0] === "d")?.[1];
+    if (d === undefined) return true;
+    const k = `${m.author}:${d}`;
+    if (seenKeys.has(k)) return false;
+    seenKeys.add(k);
+    return true;
+  });
 }
 
 /**
@@ -299,7 +311,35 @@ export async function channelMessages(state: State): Promise<ChannelMessage[]> {
  * retry. Revisit if agents start unattended loops or money-adjacent verbs —
  * at that point intents must survive the process.
  */
+/**
+ * In-flight keyed sends serialize PER PROCESS: the idempotency scan below is
+ * check-then-publish and not atomic, and concurrent callers in one process
+ * (parallel MCP tool calls) would otherwise both scan before either lands and
+ * double-post (found live in the round-7 MCP stress). The waiter re-scans
+ * after the first send resolves and dedupes against it.
+ */
+const inflightKeyedSends = new Map<string, Promise<unknown>>();
+
 export async function sendChannelMessage(
+  state: State,
+  text: string,
+  opts: { idemKey?: string; extraTags?: string[][] } = {},
+): Promise<{ rumorId: string; deduped: boolean }> {
+  if (opts.idemKey) {
+    const prior = inflightKeyedSends.get(opts.idemKey);
+    if (prior) await prior.catch(() => {}); // a failed send frees the key either way
+  }
+  const run = sendChannelMessageInner(state, text, opts);
+  if (!opts.idemKey) return run;
+  inflightKeyedSends.set(opts.idemKey, run);
+  try {
+    return await run;
+  } finally {
+    if (inflightKeyedSends.get(opts.idemKey) === run) inflightKeyedSends.delete(opts.idemKey);
+  }
+}
+
+async function sendChannelMessageInner(
   state: State,
   text: string,
   opts: { idemKey?: string; extraTags?: string[][] } = {},
