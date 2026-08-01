@@ -356,6 +356,13 @@ export function usePetsPurchaseItem(
             if (sendResult.status === 'failed') {
               throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
             }
+            if (sendResult.status === 'unknown') {
+              // The mint may have committed the payment. Do NOT grant the item
+              // (the payment may genuinely have failed) but do NOT invite a
+              // blind retry either (it may have gone through — a second
+              // payment cannot be clawed back automatically).
+              throw new Error('The payment outcome is unknown — the mint may still have processed it. Check your Cashu wallet balance first; if it decreased, do NOT pay again and contact support.');
+            }
             // 'sent' or 'pending': the sats are gone either way — a pending
             // nutzap is saved and auto-retried until it lands, so the purchase
             // MUST proceed. Telling the user it failed would invite a retry and

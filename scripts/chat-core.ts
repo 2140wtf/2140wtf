@@ -16,7 +16,8 @@ import { join } from "node:path";
 import { getPublicKey } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
 import { SimplePool } from "nostr-tools/pool";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import { currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
 import { channelGroupKey, type GroupKey } from "@/concord-v2/lib/derive";
@@ -113,9 +114,14 @@ export function saveState(name: string, state: State): void {
  * two concurrent CLI processes would otherwise each read the old file and
  * lose the other's write — the mosaico multi-writer lesson at file level.
  * Locks whose holder died are reclaimed after 30s by mtime.
+ *
+ * `lockSuffix` selects the lock: the default ".lock" guards the state file
+ * itself, while keyed sends use a PER-KEY suffix (".send-<hash>") so two
+ * processes racing the same idempotency key serialize their
+ * check-then-publish WITHOUT blocking unrelated sends or state ops.
  */
-export async function withStateLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
-  const lock = `${statePath(name)}.lock`;
+export async function withStateLock<T>(name: string, fn: () => Promise<T>, lockSuffix = ".lock"): Promise<T> {
+  const lock = `${statePath(name)}${lockSuffix}`;
   const deadline = Date.now() + 10_000;
   mkdirSync(STATE_DIR, { recursive: true });
   for (;;) {
@@ -131,7 +137,7 @@ export async function withStateLock<T>(name: string, fn: () => Promise<T>): Prom
         /* raced a concurrent reclaim */
       }
       if (Date.now() > deadline) {
-        throw new Error(`State for "${name}" is locked by another process — retry shortly.`);
+        throw new Error(`State for "${name}" is locked by another process (${lockSuffix}) — retry shortly.`);
       }
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -284,7 +290,19 @@ export async function channelMessages(state: State): Promise<ChannelMessage[]> {
     }
   }
   messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return messages;
+  // Read-side idempotency: a keyed send that DID double-post (two processes
+  // raced the check-then-publish scan — only in-process races are serialized,
+  // see sendChannelMessage) renders once. The d-tag is a machine idempotency
+  // key; for one author + one key, the earliest landing is the canonical copy.
+  const seenKeys = new Set<string>();
+  return messages.filter((m) => {
+    const d = m.tags.find((t) => t[0] === "d")?.[1];
+    if (d === undefined) return true;
+    const k = `${m.author}:${d}`;
+    if (seenKeys.has(k)) return false;
+    seenKeys.add(k);
+    return true;
+  });
 }
 
 /**
@@ -299,11 +317,68 @@ export async function channelMessages(state: State): Promise<ChannelMessage[]> {
  * retry. Revisit if agents start unattended loops or money-adjacent verbs —
  * at that point intents must survive the process.
  */
+/**
+ * In-flight keyed sends serialize PER PROCESS: the idempotency scan below is
+ * check-then-publish and not atomic, and concurrent callers in one process
+ * (parallel MCP tool calls) would otherwise both scan before either lands and
+ * double-post (found live in the round-7 MCP stress). The waiter re-scans
+ * after the first send resolves and dedupes against it.
+ *
+ * The PER-PROCESS map alone leaves a CLI×CLI hole: two processes retrying the
+ * same key both scan before either publishes and double-post (round 10). So a
+ * keyed send additionally takes a per-key lockfile — the check-then-publish is
+ * then atomic across processes for that key. A contender that waits out the
+ * 10s deadline FAILS CLOSED with "locked by another process" instead of
+ * double-posting; the read-side (author, d-tag) dedupe remains as belt-and-
+ * braces for lock-free writers (older builds, other front-ends).
+ */
+const inflightKeyedSends = new Map<string, Promise<unknown>>();
+
+/** Per-key lockfile suffix for cross-process keyed-send serialization. */
+function sendLockSuffix(idemKey: string): string {
+  return `.send-${bytesToHex(sha256(new TextEncoder().encode(idemKey))).slice(0, 16)}.lock`;
+}
+
 export async function sendChannelMessage(
   state: State,
   text: string,
   opts: { idemKey?: string; extraTags?: string[][] } = {},
 ): Promise<{ rumorId: string; deduped: boolean }> {
+  if (opts.idemKey) {
+    const prior = inflightKeyedSends.get(opts.idemKey);
+    if (prior) await prior.catch(() => {}); // a failed send frees the key either way
+  }
+  const run = opts.idemKey
+    ? withStateLock(state.name, () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey))
+    : sendChannelMessageInner(state, text, opts);
+  if (!opts.idemKey) return run;
+  inflightKeyedSends.set(opts.idemKey, run);
+  try {
+    return await run;
+  } finally {
+    if (inflightKeyedSends.get(opts.idemKey) === run) inflightKeyedSends.delete(opts.idemKey);
+  }
+}
+
+async function sendChannelMessageInner(
+  state: State,
+  text: string,
+  opts: { idemKey?: string; extraTags?: string[][] } = {},
+): Promise<{ rumorId: string; deduped: boolean }> {
+  // Size guard BEFORE building anything: the rumor is nip44-encrypted into a
+  // seal, the seal JSON is nip44-encrypted again into the wrap, and NIP-44
+  // rejects plaintexts over 65,535 bytes (encryptChecked). With NIP-44's
+  // padding (≤ +8,192 for this range) and base64 (×4/3), 40,000 utf8 BYTES of
+  // text lands at ~55KB of seal JSON — inside the cap with ~10KB headroom;
+  // anything larger risks a raw crypto throw deep in wrapSeal (the CLI prints
+  // a stack, MCP a bare isError). 40,000 bytes exactly matches the MCP zod
+  // cap's worst case (20,000 UTF-16 units × 2-byte-per-unit astral chars), so
+  // every schema-legal MCP message remains sendable — this guard is for the
+  // UNLIMITED paths (CLI say, future front-ends).
+  const textBytes = new TextEncoder().encode(text).length;
+  if (textBytes > 40_000) {
+    throw new Error(`Message too large: ${textBytes} bytes (max 40,000 — the sealed wrap must fit NIP-44's 65,535-byte plaintext cap)`);
+  }
   const { pubkey, signer, community, channel, group } = await channelContext(state);
 
   if (opts.idemKey) {
@@ -465,6 +540,11 @@ export async function orchVerbPost(
   text: string,
   orchId: string,
 ): Promise<OrchVerbResult> {
+  // The task id rides the content parse `^(\w+)\s+(\S+)`: whitespace would
+  // silently turn "CLAIM card 5 …" into a claim on task "card" — refuse for
+  // every front-end (MCP's zod regex only covers the MCP path; a quoted CLI
+  // argv reaches here too).
+  if (/\s/.test(taskId)) throw new Error(`Task id must not contain whitespace: ${JSON.stringify(taskId)}`);
   if (verb === "CLAIM") {
     // Fenced claim: resolve the CURRENT state, claim at exactly its epoch+1,
     // then re-resolve and report whether we hold it. Two concurrent reclaimers

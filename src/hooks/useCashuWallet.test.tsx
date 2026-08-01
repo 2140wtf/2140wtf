@@ -3,15 +3,15 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { generateSecretKey } from 'nostr-tools';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { getEncodedToken, CashuWallet } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
-import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint } from '@/lib/cashu/storage';
-import { createNip60Signer, buildTokenEvent } from '@/lib/cashu/cashuNip60';
+import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint, withProofLock } from '@/lib/cashu/storage';
+import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -1793,15 +1793,26 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
     });
     try {
+      // Injectable send timeout (5min): shouldAdvanceTime lets REAL time
+      // advance fake timers under CPU contention, which used to fire the
+      // default 60s timeout before the CPU-starved promise chain wrote the
+      // journal (~1-in-3 full-suite flake). With the knob the timeout is
+      // unreachable by wall clock (the whole test runs in seconds of real
+      // time, and the pre-timeout pumps advance < 100s of fake time) and is
+      // fired below by a deterministic fake-time jump.
+      const SEND_TIMEOUT_MS = 300_000;
       const { result } = renderHook(
-        () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+        () => useCashuWallet(seedPhrase, {
+          defaultMints: [{ name: 'Test', url: mintUrl }],
+          sendTimeoutMs: SEND_TIMEOUT_MS,
+        }),
         { wrapper },
       );
       await waitFor(() => expect(result.current.wallet).not.toBeNull());
       const wallet = result.current.wallet;
       if (!wallet) throw new Error('Wallet not initialized');
 
-      // The mint response is manually released — it arrives AFTER the 60s send
+      // The mint response is manually released — it arrives AFTER the send
       // timeout but can still commit at the mint, so reconciling the crash
       // journal before it arrives is not authoritative.
       let releaseSend: (() => void) | null = null;
@@ -1820,12 +1831,16 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       );
 
       // Under fake timers each storage/IDB/webcrypto hop needs both a timer
-      // advance and a real event-loop turn — pump both until the condition
-      // holds (bounded so a regression fails instead of hanging).
-      const pump = async (cond: () => Promise<boolean>, maxSeconds = 130) => {
+      // advance and real event-loop turns — and the chains are DEEP (mutex →
+      // load → mint call → journal write), so give each fake second several
+      // turns and a generous bound: when the condition holds the pump returns
+      // immediately, so a high bound only costs time on a genuine regression
+      // (the captured 1-in-N full-suite flake was this pump starving at 90
+      // iterations under CPU contention — a late start, not a logic failure).
+      const pump = async (cond: () => Promise<boolean>, maxSeconds = 300) => {
         for (let i = 0; i < maxSeconds; i++) {
           await vi.advanceTimersByTimeAsync(1000);
-          await new Promise((r) => setImmediate(r));
+          for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r));
           if (await cond()) return true;
         }
         return false;
@@ -1843,14 +1858,19 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
 
       // The send reaches the mint and the crash journal is written.
       await act(async () => {
-        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) !== null, 90);
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) !== null);
       });
       expect(await loadProofRecovery(mintUrl, encKey)).not.toBeNull();
       expect(releaseSend).not.toBeNull();
 
-      // Past the 60s timeout the op rejects…
+      // Fire the send timeout with one deterministic fake-time jump PAST the
+      // knob (not real-time contention), then let the rejection settle.
       await act(async () => {
-        await pump(async () => sendResult !== undefined, 100);
+        await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS + 1000);
+        for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+      });
+      await act(async () => {
+        await pump(async () => sendResult !== undefined);
       });
       expect(sendResult).toBeNull();
 
@@ -1863,7 +1883,7 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       // (UNSPENT per the mock → inputs merged back, journal cleared).
       releaseSend!();
       await act(async () => {
-        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) === null, 60);
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) === null);
       });
       expect(await loadProofRecovery(mintUrl, encKey)).toBeNull();
       const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
@@ -1871,5 +1891,172 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
     } finally {
       vi.useRealTimers();
     }
+  }, 20000);
+});
+
+describe('useCashuWallet sendNutzap ambiguous send failure', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.query.mockReset();
+    mocks.publish.mockReset();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  async function setupNutzap(sendImpl: (amount: number, proofs: unknown[]) => Promise<unknown>) {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(
+      mintUrl,
+      [
+        { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' },
+        { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' },
+      ],
+      encKey,
+    );
+
+    // Recipient identity + their kind:10019 accepting our mint.
+    const recipientPrivkey = generateSecretKey();
+    const recipientPubkey = getPublicKey(recipientPrivkey);
+    const recipientSigner = createNip60Signer(recipientPrivkey);
+    const infoEvent = await buildNutzapInfoEvent([mintUrl], [], getPublicKey(generateSecretKey()), recipientSigner);
+    expect(infoEvent).not.toBeNull();
+    mocks.query.mockImplementation(async (filter: { kinds: number[] }) =>
+      filter.kinds.includes(10019) ? [infoEvent!] : []);
+    mocks.publish.mockResolvedValue('published-id');
+
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.send = vi.fn().mockImplementation(sendImpl);
+      return w;
+    });
+
+    const sync: Nip60SyncApi = {
+      signer: createNip60Signer(generateSecretKey()),
+      query: mocks.query,
+      publish: mocks.publish,
+      relays: [],
+    };
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    return { result, npub: nip19.npubEncode(recipientPubkey) };
+  }
+
+  it('a status-less send failure is NOT retry-safe: reports unknown, never failed', async () => {
+    // Simulates a timeout / dropped connection: the swap request may have
+    // reached the mint, which may have spent the inputs. Reporting 'failed'
+    // ("nothing was committed — safe to retry") invites a double-pay while
+    // the first attempt's recipient-locked proofs are unrecoverable.
+    const { result, npub } = await setupNutzap(async () => {
+      throw new Error('socket hang up');
+    });
+    const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
+    expect(res.status).toBe('unknown');
+  });
+
+  it('a definitive mint rejection (HTTP status) stays retry-safe failed', async () => {
+    const { result, npub } = await setupNutzap(async () => {
+      throw Object.assign(new Error('mint rejected'), { status: 400 });
+    });
+    const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
+    expect(res.status).toBe('failed');
+  });
+});
+
+describe('useCashuWallet reconcile resurrection race', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.query.mockReset();
+    mocks.publish.mockReset();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('a proof spent by a send committing DURING reconcile is never resurrected into the store', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const proofA = { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' };
+    const proofB = { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' };
+    await saveProofsForMint(mintUrl, [proofA, proofB], encKey);
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    // Generous timeout: wallet init derives keys via webcrypto and can exceed
+    // waitFor's 1s default on a loaded machine (observed locally).
+    await waitFor(() => expect(result.current.wallet).not.toBeNull(), { timeout: 15000 });
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+
+    // Let startup effects settle (the startup reconcile finds no journals and
+    // makes no mint calls).
+    await act(async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); });
+
+    // A previous op journaled its full input snapshot before dying (sendToken
+    // writes exactly this before calling the mint).
+    await writeProofRecovery(mintUrl, [proofA, proofB], encKey);
+
+    // Model the interleaving send as a LOCK-RESPECTING writer: it holds the
+    // proof lock for its whole op, so reconcile's merge must queue behind it.
+    // The send releases only after it has committed B at the mint and saved
+    // its post-send store {A}.
+    let bSpent = false;
+    let releaseSendLock: (() => void) | null = null;
+    const sendHold = withProofLock(
+      () => new Promise<void>((resolve) => { releaseSendLock = resolve; }),
+    );
+
+    // The mint answers spent-state from the bSpent flag: UNSPENT while the
+    // send is still in flight, SPENT once it committed.
+    const encoder = new TextEncoder();
+    let stateCalls = 0;
+    vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) => {
+      stateCalls++;
+      const ps = proofs as Array<{ secret: string }>;
+      return ps.map((p) => ({
+        Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+        state: bSpent && p.secret === 'secret-b' ? 'SPENT' : 'UNSPENT',
+      })) as never;
+    });
+
+    // Fire a fresh reconcile pass: changing allMints re-runs the effect.
+    act(() => { result.current.addCustomMint('Second', 'https://second.example.com'); });
+
+    // THE BUG, observable: a vulnerable reconcile asks the mint for
+    // spent-state BEFORE acquiring the proof lock, so the mock sees a call
+    // while the "send" still holds it (B still UNSPENT — the race). Fixed
+    // code checks INSIDE the lock, so no call can arrive here and the poll
+    // expires instead.
+    try {
+      await waitFor(() => expect(stateCalls).toBe(1), { timeout: 3000, interval: 50 });
+    } catch { /* fixed: the spent-state check runs under the lock */ }
+
+    // The send commits: B is spent at the mint and the post-send store {A}
+    // is persisted — THEN the lock is released and reconcile's merge runs.
+    bSpent = true;
+    await saveProofsForMint(mintUrl, [proofA], encKey);
+    releaseSendLock!();
+    await sendHold;
+
+    // Reconcile ran to completion once the journal is gone.
+    await waitFor(async () => {
+      expect(await loadProofRecovery(mintUrl, encKey)).toBeNull();
+    }, { timeout: 15000 });
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    // B was spent by the interleaving send: resurrecting it inflates the
+    // balance and makes every later send that selects it fail at the mint.
+    expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a']);
+    // Generous timeout: post-fix the pre-lock poll deliberately expires (3s)
+    // and wallet init derives keys via webcrypto.
   }, 20000);
 });

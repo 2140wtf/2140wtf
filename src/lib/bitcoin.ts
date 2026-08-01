@@ -810,6 +810,105 @@ export async function broadcastTransaction(
 }
 
 /**
+ * Thrown when a broadcast attempt failed AND the follow-up visibility probe
+ * could not get a definitive answer from any endpoint — the transaction may
+ * still have reached the network. Blind-retrying would build a second,
+ * different transaction and double-pay, so this error names the txid and
+ * deliberately does NOT invite a retry.
+ */
+export class BroadcastOutcomeUnknownError extends Error {
+  /** Locally computed txid of the transaction whose fate is unknown. */
+  readonly txid: string;
+  constructor(txid: string) {
+    super(
+      `Broadcast outcome unknown — the transaction may still have reached the network. ` +
+      `Check for txid ${txid} in your transaction history or a block explorer; ` +
+      `if it appears, do NOT retry — the payment went through.`,
+    );
+    this.name = 'BroadcastOutcomeUnknownError';
+    this.txid = txid;
+  }
+}
+
+/**
+ * Compute the txid of a raw (signed) transaction. A pure function of the
+ * bytes — valid before broadcast, which is what makes post-failure
+ * disambiguation possible.
+ */
+export function txidFromRawTx(txHex: string): string {
+  return btc.Transaction.fromRaw(hexToBytes(txHex)).id;
+}
+
+/** Tunables for the post-failure visibility probe (tests inject zeros). */
+export interface BroadcastProbeOptions {
+  /** Probe rounds over the whole endpoint list. Default 2. */
+  probeRounds?: number;
+  /** Delay between probe rounds in ms (propagation slack). Default 1500. */
+  probeDelayMs?: number;
+}
+
+/**
+ * Broadcast a signed transaction, disambiguating failures so callers never
+ * mistake "the network ate our POST" for "the tx was rejected".
+ *
+ * A failed `POST /tx` is ambiguous: the request may have reached a node
+ * before the connection dropped, and an HTTP 400 can mean "already in
+ * mempool" — both are successes in disguise. Because the txid is a pure
+ * function of the signed bytes, any failure is followed by a `GET
+ * /tx/{txid}` probe of every configured endpoint:
+ *
+ * - visible anywhere → the broadcast landed; return the txid (success);
+ * - at least one endpoint answered 404 and none returned 2xx → the tx is
+ *   known-nowhere; rethrow the original (retry-safe) broadcast error;
+ * - no endpoint gave any answer → throw {@link BroadcastOutcomeUnknownError}
+ *   so the UI can warn instead of inviting a double-paying retry.
+ */
+export async function broadcastTransactionDisambiguated(
+  txHex: string,
+  baseUrls: string[],
+  signal?: AbortSignal,
+  opts?: BroadcastProbeOptions,
+): Promise<string> {
+  if (baseUrls.length === 0) {
+    // Nothing to broadcast through and nothing to probe — let the failover
+    // client's own all-endpoints error through untouched.
+    return broadcastTransaction(txHex, baseUrls, signal);
+  }
+  const txid = txidFromRawTx(txHex);
+  let broadcastErr: unknown;
+  try {
+    return await broadcastTransaction(txHex, baseUrls, signal);
+  } catch (err) {
+    broadcastErr = err;
+  }
+  // A caller abort is never ambiguous — propagate it as-is.
+  if (signal?.aborted) throw broadcastErr;
+
+  const rounds = opts?.probeRounds ?? 2;
+  const delay = opts?.probeDelayMs ?? 1500;
+  let answeredNotFound = false;
+  for (let round = 0; round < rounds; round++) {
+    if (round > 0 && delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    for (const url of baseUrls) {
+      if (signal?.aborted) throw broadcastErr;
+      try {
+        const res = await esploraFetch([url], `/tx/${txid}`, { signal });
+        if (res.ok) return txid;
+        if (res.status === 404) answeredNotFound = true;
+      } catch {
+        // Endpoint unreachable — no answer from this one.
+      }
+    }
+  }
+  // A definitive "never seen it" from any reachable endpoint (and a 2xx
+  // nowhere) means the broadcast genuinely failed — safe to retry.
+  if (answeredNotFound) throw broadcastErr;
+  throw new BroadcastOutcomeUnknownError(txid);
+}
+
+/**
  * Compute the maximum sendable amount (in sats) after fees.
  *
  * @param totalBalance Total spendable sats across all UTXOs.

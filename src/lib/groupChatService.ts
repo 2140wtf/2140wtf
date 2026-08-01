@@ -51,6 +51,12 @@ const MAX_MESSAGE_LENGTH = 4000;
 const MAX_MEMBERS = 500;
 const MAX_GROUP_EVENT_CONTENT_LENGTH = 64 * 1024;
 const MAX_CLOCK_SKEW_SECONDS = 300;
+/** How far ahead of the local epoch a buffered future-epoch event may be. */
+const MAX_EPOCH_GAP = 100;
+/** Maximum number of future-epoch events buffered per group (oldest evicted). */
+const MAX_PENDING_GROUP_EVENTS = 200;
+/** Events older than this are never buffered for future epochs. */
+const MAX_GROUP_EVENT_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export type { GroupChatSigner } from './nip104Protocol';
 
@@ -413,6 +419,13 @@ export class GroupChatService {
     groupId: string,
     content: string,
   ): Promise<GroupOperationResult<GroupChatMessage>> {
+    return this.withGroupLock(groupId, () => this.sendMessageLocked(groupId, content));
+  }
+
+  private async sendMessageLocked(
+    groupId: string,
+    content: string,
+  ): Promise<GroupOperationResult<GroupChatMessage>> {
     await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
@@ -430,13 +443,17 @@ export class GroupChatService {
       return { success: false, error: `Message too long (max ${MAX_MESSAGE_LENGTH} chars)` };
     }
 
+    // Capture epoch and exporter secret atomically (under the group lock) so a
+    // concurrent rotation can't tag the event with a new epoch while encrypting
+    // it with the old epoch's key.
+    const epoch = group.epoch;
     const exporterSecret = this.getExporterSecret(groupId);
     if (!exporterSecret) {
       return { success: false, error: 'Group encryption state missing' };
     }
 
-    const appMessage = await createApplicationMessage(this.userPubkey, this.signer, trimmed, groupId, group.epoch);
-    const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret, group.epoch);
+    const appMessage = await createApplicationMessage(this.userPubkey, this.signer, trimmed, groupId, epoch);
+    const groupEvent = await createGroupEvent(groupId, appMessage, exporterSecret, epoch);
 
     let appTimestampMs: number;
     try {
@@ -453,7 +470,7 @@ export class GroupChatService {
       content: trimmed,
       timestamp: appTimestampMs,
       isOwn: true,
-      epoch: group.epoch,
+      epoch,
       eventId: groupEvent.id ?? '',
     };
 
@@ -513,9 +530,20 @@ export class GroupChatService {
     }
 
     if (eventEpoch > group.epoch) {
+      // Reject absurdly distant epochs so an attacker can't flood the buffer.
+      if (eventEpoch > group.epoch + MAX_EPOCH_GAP) {
+        return { success: false, error: 'Event epoch too far in the future' };
+      }
+      // Don't buffer events that are absurdly old.
+      if (event.created_at < Math.floor(Date.now() / 1000) - MAX_GROUP_EVENT_AGE_SECONDS) {
+        return { success: false, error: 'Event is too old to buffer' };
+      }
       // We don't have the secret for this epoch yet; buffer for later.
       const pending = this.pendingGroupEvents.get(groupId) ?? [];
       if (!pending.some((e) => e.id === event.id)) {
+        if (pending.length >= MAX_PENDING_GROUP_EVENTS) {
+          pending.shift(); // Evict the oldest buffered event.
+        }
         pending.push(event);
         this.pendingGroupEvents.set(groupId, pending);
       }
@@ -676,6 +704,7 @@ export class GroupChatService {
           groupId,
           epoch: newEpoch,
           type: 'member_add',
+          recipient: target,
           rootSecret: newRootSecret,
           exporterSecret: newExporterSecret,
           members: group.members,
@@ -763,6 +792,7 @@ export class GroupChatService {
           groupId,
           epoch: newEpoch,
           type: 'key_rotation',
+          recipient: remainingMember,
           rootSecret: newRootSecret,
           exporterSecret: newExporterSecret,
           members: group.members,
@@ -851,6 +881,7 @@ export class GroupChatService {
           groupId,
           epoch: newEpoch,
           type: 'admin_promotion',
+          recipient: target,
           rootSecret: newRootSecret,
           exporterSecret: newExporterSecret,
           members: group.members,
@@ -942,6 +973,7 @@ export class GroupChatService {
           groupId,
           epoch: newEpoch,
           type: 'metadata_update',
+          recipient: target,
           rootSecret: newRootSecret,
           exporterSecret: newExporterSecret,
           members: group.members,
@@ -1005,6 +1037,12 @@ export class GroupChatService {
     await this.ensureLoaded();
     const welcomeEpoch = typeof wd.epoch === 'number' ? wd.epoch : 0;
 
+    // The Welcome must be bound to us. A member forwarding their Welcome to an
+    // outsider must not grant the outsider the group's epoch secrets.
+    if (wd.recipient !== this.userPubkey) {
+      return { success: false, error: 'Welcome is not addressed to you' };
+    }
+
     const existing = this.groups.get(groupId);
     if (existing && existing.bannedPubkeys.some((b) => b === this.userPubkey)) {
       return { success: false, error: 'You are banned from this group' };
@@ -1012,7 +1050,17 @@ export class GroupChatService {
     if (existing && welcomeEpoch <= existing.epoch) {
       return { success: false, error: 'Welcome event is outdated' };
     }
-    if (existing && !existing.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
+    const isLeaveNotice = wd.type === 'member_leave';
+    if (isLeaveNotice) {
+      // A leave notice rotates the group like an admin removal, but is signed
+      // by the departing member rather than an admin.
+      if (!existing) {
+        return { success: false, error: 'Leave notice for an unknown group' };
+      }
+      if (!existing.members.some((m) => m === welcomeEvent.pubkey)) {
+        return { success: false, error: 'Leave notice not from a group member' };
+      }
+    } else if (existing && !existing.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
       return { success: false, error: 'Welcome not from a group admin' };
     }
 
@@ -1026,7 +1074,7 @@ export class GroupChatService {
     if (!metadata) {
       return { success: false, error: 'Invalid group metadata in Welcome' };
     }
-    if (!metadata.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
+    if (!isLeaveNotice && !metadata.adminPubkeys.some((a) => a === welcomeEvent.pubkey)) {
       return { success: false, error: 'Welcome sender is not a group admin' };
     }
 
@@ -1086,12 +1134,28 @@ export class GroupChatService {
         welcomeMembers = [...welcomeMembers, this.userPubkey];
       }
 
+      // A leave notice may only remove the sender. Pin the member and admin
+      // lists to the current roster minus the leaver so a malicious leaver
+      // can't smuggle in other membership or admin changes.
+      const isLeaveNotice = wd.type === 'member_leave';
+      if (isLeaveNotice && existing) {
+        const expectedMembers = existing.members.filter((m) => m !== entry.welcomeEvent.pubkey);
+        if (
+          welcomeMembers.length !== expectedMembers.length ||
+          !expectedMembers.every((m) => welcomeMembers.includes(m))
+        ) {
+          return { success: false, error: 'Leave notice member list mismatch' };
+        }
+      }
+
       const metadata = metadataFromWelcome(wd);
       const stored: StoredGroup = {
         nostrGroupId: groupId,
         name: metadata?.name ?? existing?.name ?? '',
         description: metadata?.description ?? existing?.description,
-        adminPubkeys: metadata?.adminPubkeys ?? existing?.adminPubkeys ?? [this.userPubkey],
+        adminPubkeys: isLeaveNotice && existing
+          ? existing.adminPubkeys.filter((a) => a !== entry.welcomeEvent.pubkey)
+          : metadata?.adminPubkeys ?? existing?.adminPubkeys ?? [this.userPubkey],
         members: welcomeMembers.length > 0 ? welcomeMembers : (existing?.members ?? [this.userPubkey]),
         relays: metadata?.relays ?? existing?.relays ?? [],
         epoch,
@@ -1115,17 +1179,77 @@ export class GroupChatService {
     return lastResult;
   }
 
-  leaveGroup(groupId: string): GroupOperationResult {
+  async leaveGroup(groupId: string): Promise<GroupOperationResult> {
+    return this.withGroupLock(groupId, () => this.leaveGroupLocked(groupId));
+  }
+
+  private async leaveGroupLocked(groupId: string): Promise<GroupOperationResult> {
+    await this.ensureLoaded();
     const group = this.groups.get(groupId);
     if (!group) {
       return { success: false, error: 'Group not found' };
     }
 
-    if (this.isAdmin(group) && group.adminPubkeys.length === 1) {
+    const remainingMembers = group.members.filter((m) => m !== this.userPubkey);
+    const remainingAdmins = group.adminPubkeys.filter((a) => a !== this.userPubkey);
+
+    if (this.isAdmin(group) && group.adminPubkeys.length === 1 && remainingMembers.length > 0) {
       return {
         success: false,
         error: 'Transfer admin role before leaving the group',
       };
+    }
+
+    // Rotate the epoch and distribute a fresh root to the remaining members
+    // (exactly like removeOrBanMemberLocked) so the leaver cannot decrypt
+    // subsequent epochs with the secrets they retain.
+    const events: NostrEvent[] = [];
+    let failedCount = 0;
+    if (remainingMembers.length > 0) {
+      const oldRootSecret = this.getRootSecret(groupId);
+      if (!oldRootSecret) {
+        return { success: false, error: 'Missing group root secret' };
+      }
+
+      const newEpoch = group.epoch + 1;
+      const newRootSecret = generateRootSecret();
+      const newExporterSecret = await deriveEpochSecret(newRootSecret, newEpoch, groupId);
+
+      const metadata = createNostrGroupDataExtension({
+        nostrGroupId: groupId,
+        name: group.name,
+        description: group.description,
+        adminPubkeys: remainingAdmins,
+        relays: group.relays,
+      });
+
+      for (const target of remainingMembers) {
+        try {
+          const welcomePayload = JSON.stringify({
+            groupId,
+            epoch: newEpoch,
+            type: 'member_leave',
+            recipient: target,
+            rootSecret: newRootSecret,
+            exporterSecret: newExporterSecret,
+            members: remainingMembers,
+            metadata,
+          });
+          const welcomeEvent = await createWelcomeEvent(
+            this.userPubkey,
+            this.signer,
+            welcomePayload,
+            'placeholder',
+            group.relays,
+            newEpoch,
+          );
+          const giftWrap = await wrapWelcomeEvent(welcomeEvent, target);
+          events.push(giftWrap);
+        } catch (err) {
+          failedCount++;
+          console.error(`Failed to wrap leave-notice Welcome for ${target.slice(0, 8)}...`, err);
+        }
+      }
     }
 
     deleteGroup(this.userPubkey, groupId);
@@ -1138,6 +1262,6 @@ export class GroupChatService {
     this.pendingGroupEvents.delete(groupId);
     this.epochSecretCache.delete(groupId);
 
-    return { success: true };
+    return { success: true, events, ...(failedCount > 0 ? { error: `${failedCount} welcome(s) failed to wrap` } : {}) };
   }
 }
