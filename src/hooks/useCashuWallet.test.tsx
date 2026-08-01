@@ -1831,12 +1831,16 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       );
 
       // Under fake timers each storage/IDB/webcrypto hop needs both a timer
-      // advance and a real event-loop turn — pump both until the condition
-      // holds (bounded so a regression fails instead of hanging).
-      const pump = async (cond: () => Promise<boolean>, maxSeconds = 130) => {
+      // advance and real event-loop turns — and the chains are DEEP (mutex →
+      // load → mint call → journal write), so give each fake second several
+      // turns and a generous bound: when the condition holds the pump returns
+      // immediately, so a high bound only costs time on a genuine regression
+      // (the captured 1-in-N full-suite flake was this pump starving at 90
+      // iterations under CPU contention — a late start, not a logic failure).
+      const pump = async (cond: () => Promise<boolean>, maxSeconds = 300) => {
         for (let i = 0; i < maxSeconds; i++) {
           await vi.advanceTimersByTimeAsync(1000);
-          await new Promise((r) => setImmediate(r));
+          for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r));
           if (await cond()) return true;
         }
         return false;
@@ -1854,7 +1858,7 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
 
       // The send reaches the mint and the crash journal is written.
       await act(async () => {
-        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) !== null, 90);
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) !== null);
       });
       expect(await loadProofRecovery(mintUrl, encKey)).not.toBeNull();
       expect(releaseSend).not.toBeNull();
@@ -1866,7 +1870,7 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
         for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
       });
       await act(async () => {
-        await pump(async () => sendResult !== undefined, 100);
+        await pump(async () => sendResult !== undefined);
       });
       expect(sendResult).toBeNull();
 
@@ -1879,7 +1883,7 @@ describe('useCashuWallet hunt regressions: timeout recovery deferred until the r
       // (UNSPENT per the mock → inputs merged back, journal cleared).
       releaseSend!();
       await act(async () => {
-        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) === null, 60);
+        await pump(async () => (await loadProofRecovery(mintUrl, encKey)) === null);
       });
       expect(await loadProofRecovery(mintUrl, encKey)).toBeNull();
       const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
