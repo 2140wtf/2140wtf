@@ -105,13 +105,17 @@ const API_RAIL_LABELS: Record<keyof BaoWalletBalances, string> = {
   ark: 'Ark',
 };
 
-/** Map a rail id to its displayed balance: custodial API balance for all rails.
- * Local NIP-60 ecash is shown separately as the big "testnet sats" number above.
+/** Map a rail id to its displayed balance.
+ *
+ * The Cashu rail always shows the local NIP-60 balance, because its panel
+ * (CashuPanel) spends local proofs — the tile must match the panel. The
+ * custodial bao.markets Cashu balance is only shown in the breakdown line
+ * above. All other rails show the custodial bao.markets API balance.
  */
 export function getRailBalance(railId: WalletRailId, apiBalances: BaoWalletBalances | undefined, localCashuBalance: number): number {
   switch (railId) {
     case 'cashu':
-      return apiBalances?.cashu ?? localCashuBalance;
+      return localCashuBalance;
     case 'lightning':
       return apiBalances?.lightning ?? 0;
     case 'liquid':
@@ -127,6 +131,37 @@ export function getRailBalance(railId: WalletRailId, apiBalances: BaoWalletBalan
     default:
       return 0;
   }
+}
+
+/** Text shown on a rail tile: the balance line plus an optional qualifier. */
+export interface RailTileBalance {
+  /** Main balance line, e.g. "42 sats" or "—" when the API balance is unknown. */
+  main: string;
+  /** Qualifier shown under the balance, e.g. "on bao.markets". */
+  sub?: string;
+}
+
+/**
+ * Balance text for a rail tile.
+ *
+ * The Cashu tile always shows the local balance (never the custodial API
+ * balance, and never falls back between the two depending on API health).
+ * The Lightning tile shows the custodial bao.markets balance with an "on
+ * bao.markets" qualifier, because its panel pays via the user's external
+ * NWC/WebLN wallet and cannot touch the displayed custodial sats.
+ */
+export function getRailTileBalance(railId: WalletRailId, apiBalances: BaoWalletBalances | undefined, localCashuBalance: number): RailTileBalance {
+  if (railId === 'cashu') {
+    return { main: `${localCashuBalance} sats` };
+  }
+  if (!apiBalances) {
+    return { main: '—' };
+  }
+  const sats = getRailBalance(railId, apiBalances, localCashuBalance);
+  if (railId === 'lightning') {
+    return { main: `${sats} sats`, sub: 'on bao.markets' };
+  }
+  return { main: `${sats} sats` };
 }
 
 export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps) {
@@ -237,31 +272,33 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
       </Card>
 
       <div className='grid grid-cols-4 gap-3'>
-        {WALLET_RAILS.map((rail) => (
-          <button
-            key={rail.id}
-            type='button'
-            onClick={() => setSelectedRail(rail.id)}
-            className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-colors ${
-              selectedRail === rail.id
-                ? 'border-primary bg-primary/5'
-                : 'hover:bg-muted/50'
-            }`}
-          >
-            <div
-              className='flex items-center justify-center size-10 rounded-full'
-              style={{ backgroundColor: rail.bg }}
+        {WALLET_RAILS.map((rail) => {
+          const tile = getRailTileBalance(rail.id, apiBalances.data, cashuWallet.totalBalance);
+          return (
+            <button
+              key={rail.id}
+              type='button'
+              onClick={() => setSelectedRail(rail.id)}
+              className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-colors ${
+                selectedRail === rail.id
+                  ? 'border-primary bg-primary/5'
+                  : 'hover:bg-muted/50'
+              }`}
             >
-              <RailIcon rail={rail} className='size-5' />
-            </div>
-            <span className='text-xs font-medium leading-tight'>{rail.label}</span>
-            <span className='text-xs text-muted-foreground leading-tight'>
-              {rail.id === 'cashu' || apiBalances.data
-                ? `${railBalance(rail.id)} sats`
-                : '—'}
-            </span>
-          </button>
-        ))}
+              <div
+                className='flex items-center justify-center size-10 rounded-full'
+                style={{ backgroundColor: rail.bg }}
+              >
+                <RailIcon rail={rail} className='size-5' />
+              </div>
+              <span className='text-xs font-medium leading-tight'>{rail.label}</span>
+              <span className='text-xs text-muted-foreground leading-tight'>{tile.main}</span>
+              {tile.sub && (
+                <span className='text-[10px] text-muted-foreground/70 leading-tight'>{tile.sub}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {showSwapHint && (
