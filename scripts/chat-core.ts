@@ -9,7 +9,7 @@
  * JSON-RPC on stdout; a stray stdout write corrupts the protocol stream.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type Str
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import {
   deriveClaimKey,
+  mayPostVerb,
   mentionsMe,
   parseTaskMessage,
   resolveClaims,
@@ -94,9 +95,56 @@ export function loadState(name: string): State {
   return state;
 }
 
+/**
+ * Atomic write: crash mid-write must never leave a truncated state file —
+ * it holds the hex private key, and losing it orphans the identity (mosaico
+ * daemon-design, adopted as-is). tmp + rename is atomic on POSIX same-dir.
+ */
 export function saveState(name: string, state: State): void {
   mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(statePath(name), JSON.stringify(state, null, 2), { mode: 0o600 });
+  const path = statePath(name);
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+  renameSync(tmp, path); // keeps the 0o600 inode; atomic on POSIX same-dir
+}
+
+/**
+ * Advisory lockfile around state read-modify-write ops (invite, sweep):
+ * two concurrent CLI processes would otherwise each read the old file and
+ * lose the other's write — the mosaico multi-writer lesson at file level.
+ * Locks whose holder died are reclaimed after 30s by mtime.
+ */
+export async function withStateLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const lock = `${statePath(name)}.lock`;
+  const deadline = Date.now() + 10_000;
+  mkdirSync(STATE_DIR, { recursive: true });
+  for (;;) {
+    try {
+      const fd = openSync(lock, "wx");
+      closeSync(fd);
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 30_000) unlinkSync(lock); // stale holder
+      } catch {
+        /* raced a concurrent reclaim */
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`State for "${name}" is locked by another process — retry shortly.`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      unlinkSync(lock);
+    } catch {
+      /* already reclaimed */
+    }
+  }
 }
 
 export function communityOf(c: SavedCommunity, privateChannels: State["private_channels"]): CommunityV2 {
@@ -364,20 +412,36 @@ export async function publishAgentProfile(sk: Uint8Array, name: string, relays: 
 
 // ── Orchestration (task claims over chat) ────────────────────────────────────
 
-/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
-export const CLAIM_TTL_MS = 30 * 60 * 1000;
+/** A claim with no PROGRESS from its claimant for this long is reclaimable.
+ *  BAO_CLAIM_TTL_MS overrides for live tests against a local relay. */
+export const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 30 * 60 * 1000);
+
+/**
+ * Wait this long before DECLARING a claim held, then re-resolve. A claim that
+ * appears to win on a PARTIAL view — a rival's earlier-ms claim still in
+ * flight — flips to held=false on this confirmation pass instead of letting
+ * both racers believe they won (read-your-writes is not read-their-writes).
+ * BAO_CLAIM_SETTLE_MS overrides for live tests.
+ */
+export const CLAIM_SETTLE_MS = Number(process.env.BAO_CLAIM_SETTLE_MS ?? 1500);
 
 /**
  * Fail-closed (mosaico daemon-design: "an unavailable control channel fails
  * closed"). An empty claim history means one of two very different things —
  * "no claims yet" or "the relays are down and we can't see the claims". Only
- * the first may resolve to an empty map; the second must throw, or an agent
- * would read silence as claimable and double-work a live claim.
+ * the first may proceed; the second must throw, or an agent would read
+ * silence as claimable and double-work a live claim.
+ *
+ * Probes ACTIVELY (ensureRelay), not via listConnectionStatus: the status map
+ * is keyed by normalized URL and only reflects past connections, so a passive
+ * read both misses keys and can't run before the first query.
  */
-function assertRelayReachable(relays: string[]): void {
-  const status = getPool().listConnectionStatus();
-  const up = relays.filter((r) => status.get(r) === true);
-  if (up.length === 0) {
+async function assertRelayReachable(relays: string[]): Promise<void> {
+  const probes = await Promise.allSettled(
+    relays.map((r) => getPool().ensureRelay(r, { connectionTimeout: 2500 })),
+  );
+  const up = probes.filter((p) => p.status === "fulfilled").length;
+  if (up === 0) {
     throw new Error(
       `cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`,
     );
@@ -409,7 +473,7 @@ export async function orchVerbPost(
     const myPubkey = getPublicKey(hexToBytes(state.sk));
     const before = await orchStates(state, orchId);
     const cur = before.get(taskId);
-    if (cur && !cur.stale && !cur.done) {
+    if (cur && !cur.stale && !cur.done && !cur.released) {
       // Task is live-claimed: publish nothing. If WE hold it, surface our own
       // claim id so a recovering caller can rejoin its epoch.
       return {
@@ -432,13 +496,30 @@ export async function orchVerbPost(
     });
 
     // Re-resolve and report the outcome honestly.
-    const after = await orchStates(state, orchId);
-    const now = after.get(taskId);
-    if (!now) return { ...sent, held: null, epoch }; // our claim isn't visible yet
-    // We hold it only if the resolved winner is US at OUR epoch. Anything
-    // else — another claimant's tie-break win, or a same-author claim at a
-    // different epoch — is a loss the caller must NOT act on.
-    return { ...sent, held: now.claimant === myPubkey && now.epoch === epoch, epoch };
+    const holdsUs = (s: { claimant: string; epoch: number } | undefined) => !!s && s.claimant === myPubkey && s.epoch === epoch;
+    let now = (await orchStates(state, orchId)).get(taskId);
+    if (holdsUs(now) || !now) {
+      // Winning (or not yet visible) on the FIRST view proves nothing — a
+      // rival's claim may still be propagating. Settle, then confirm.
+      await new Promise((r) => setTimeout(r, CLAIM_SETTLE_MS));
+      now = (await orchStates(state, orchId)).get(taskId);
+    }
+    if (!now) return { ...sent, held: null, epoch }; // our claim never landed
+    // We hold it only if the CONFIRMED winner is US at OUR epoch. Anything
+    // else — a tie-break loss that flipped in during the settle window, or a
+    // same-author claim at a different epoch — is a loss the caller must NOT
+    // act on.
+    return { ...sent, held: holdsUs(now), epoch };
+  }
+
+  // PROGRESS/DONE/BLOCKED: executor-side fence — refuse when someone else
+  // holds the task, so a zombie learns it lost instead of believing its DONE
+  // landed (the resolver would ignore the verb; the agent would not know).
+  const myPubkey = getPublicKey(hexToBytes(state.sk));
+  const before = await orchStates(state, orchId);
+  const cur = before.get(taskId);
+  if (!mayPostVerb(cur, myPubkey, verb)) {
+    return { rumorId: "", deduped: false, held: false, epoch: cur?.epoch };
   }
 
   const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
@@ -447,6 +528,9 @@ export async function orchVerbPost(
 }
 
 export async function orchStates(state: State, orchId: string): Promise<Map<string, ClaimState>> {
+  // Probe FIRST: with relays down, a member's control fold comes back empty
+  // and would throw a misleading "no channel" error before we ever get here.
+  await assertRelayReachable(state.community.relays);
   const inputs: ClaimInput[] = [];
   const messages = await channelMessages(state);
   for (const m of messages) {
@@ -458,6 +542,5 @@ export async function orchStates(state: State, orchId: string): Promise<Map<stri
     if (oTags.length > 0 && !oTags.includes(orchId)) continue;
     inputs.push({ id: m.id, author: m.author, ms: m.ms, msg });
   }
-  if (messages.length === 0) assertRelayReachable(state.community.relays);
   return resolveClaims(inputs, { ttlMs: CLAIM_TTL_MS, nowMs: Date.now() });
 }

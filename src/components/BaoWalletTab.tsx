@@ -105,6 +105,30 @@ const API_RAIL_LABELS: Record<keyof BaoWalletBalances, string> = {
   ark: 'Ark',
 };
 
+/** Map a rail id to its displayed balance: custodial API balance for all rails.
+ * Local NIP-60 ecash is shown separately as the big "testnet sats" number above.
+ */
+export function getRailBalance(railId: WalletRailId, apiBalances: BaoWalletBalances | undefined, localCashuBalance: number): number {
+  switch (railId) {
+    case 'cashu':
+      return apiBalances?.cashu ?? localCashuBalance;
+    case 'lightning':
+      return apiBalances?.lightning ?? 0;
+    case 'liquid':
+      return apiBalances?.liquid ?? 0;
+    case 'spark':
+      return apiBalances?.spark ?? 0;
+    case 'ark':
+      return apiBalances?.ark ?? 0;
+    case 'fedimint':
+      return apiBalances?.ecash ?? 0;
+    case 'l1':
+      return apiBalances?.l1 ?? 0;
+    default:
+      return 0;
+  }
+}
+
 export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps) {
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
 
@@ -142,29 +166,8 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
     void apiBalances.refetch();
   };
 
-  const getRailBalance = (railId: WalletRailId): number => {
-    const api = apiBalances.data;
-    switch (railId) {
-      // Self-custody rail: local NIP-60 ecash proofs in this wallet.
-      case 'cashu':
-        return cashuWallet.totalBalance;
-      // Custodial rails: balances held on bao.markets, fetched from its API.
-      case 'lightning':
-        return api?.lightning ?? 0;
-      case 'liquid':
-        return api?.liquid ?? 0;
-      case 'spark':
-        return api?.spark ?? 0;
-      case 'ark':
-        return api?.ark ?? 0;
-      case 'fedimint':
-        return api?.ecash ?? 0;
-      case 'l1':
-        return api?.l1 ?? 0;
-      default:
-        return 0;
-    }
-  };
+  const railBalance = (railId: WalletRailId): number =>
+    getRailBalance(railId, apiBalances.data, cashuWallet.totalBalance);
 
   const apiTotal = apiBalances.data ? totalBaoApiBalance(apiBalances.data) : null;
 
@@ -254,7 +257,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
             <span className='text-xs font-medium leading-tight'>{rail.label}</span>
             <span className='text-xs text-muted-foreground leading-tight'>
               {rail.id === 'cashu' || apiBalances.data
-                ? `${getRailBalance(rail.id)} sats`
+                ? `${railBalance(rail.id)} sats`
                 : '—'}
             </span>
           </button>
@@ -296,7 +299,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           )}
           {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} />}
           {['liquid', 'spark', 'ark', 'fedimint', 'l1'].includes(selectedRail) && (
-            <DemoPlaceholderPanel rail={selectedConfig} balance={getRailBalance(selectedRail)} />
+            <DemoPlaceholderPanel rail={selectedConfig} balance={railBalance(selectedRail)} />
           )}
         </CardContent>
       </Card>
