@@ -7,8 +7,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNostr } from '@nostrify/react';
-import { useNostrLogin } from '@nostrify/react/login';
-import { nip19, getPublicKey } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
@@ -24,29 +22,6 @@ import {
   type GroupOperationResult,
 } from '@/lib/groupChatService';
 import { KIND_GROUP } from '@/lib/nip104Protocol';
-
-function extractPrivateKey(logins: unknown[], userPubkey?: string): Uint8Array | null {
-  if (!Array.isArray(logins) || !userPubkey) return null;
-  const targetPubkey = userPubkey.toLowerCase();
-  for (const login of logins) {
-    const l = login as { type?: string; data?: { nsec?: string } } | undefined;
-    if (!l || l.type !== 'nsec' || !l.data?.nsec) continue;
-
-    try {
-      const decoded = nip19.decode(l.data.nsec);
-      if (decoded.type === 'nsec') {
-        const privkey = decoded.data as Uint8Array;
-        const pubkey = getPublicKey(privkey).toLowerCase();
-        if (pubkey === targetPubkey) {
-          return privkey;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
 
 export interface UseGroupChatReturn {
   groups: GroupChatGroup[];
@@ -77,15 +52,14 @@ export interface UseGroupChatReturn {
 export function useGroupChat(): UseGroupChatReturn {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
-  const { logins } = useNostrLogin();
   const { config } = useAppContext();
   const { isEnabled } = usePublishPreferences();
   const { toast } = useToast();
 
-  const privateKey = useMemo(
-    () => extractPrivateKey(logins as unknown[], user?.pubkey),
-    [logins, user?.pubkey],
-  );
+  // Group chat works with any signer that supports NIP-44 (nsec, browser
+  // extension, bunker). Only signers without NIP-44 are excluded.
+  const signer = user?.signer;
+  const supportsNip44 = !!signer?.nip44;
   const effectiveRelays = useMemo(
     () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays).relays,
     [config.relayMetadata, config.useAppRelays, config.useUserRelays],
@@ -104,18 +78,18 @@ export function useGroupChat(): UseGroupChatReturn {
 
   const [service, setService] = useState<GroupChatService | null>(null);
   useEffect(() => {
-    if (!user || !privateKey) {
+    if (!user || !signer || !supportsNip44) {
       setService(null);
       return;
     }
     try {
-      setService(new GroupChatService(user.pubkey, privateKey, groupChatRelays));
+      setService(new GroupChatService(user.pubkey, signer, groupChatRelays));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize group chat';
       console.error('[useGroupChat] Service construction failed:', message);
       setService(null);
     }
-  }, [user, privateKey, groupChatRelays]);
+  }, [user, signer, supportsNip44, groupChatRelays]);
 
   const [groups, setGroups] = useState<GroupChatGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -140,7 +114,7 @@ export function useGroupChat(): UseGroupChatReturn {
   );
 
   const canUseGroupChat = !!service;
-  const requiresNsec = !!user && !privateKey;
+  const requiresNsec = !!user && !supportsNip44;
 
   const refreshFromService = useCallback(() => {
     if (!service) return;
@@ -348,7 +322,7 @@ export function useGroupChat(): UseGroupChatReturn {
   const createGroup = useCallback(
     async (name: string, description?: string, relays?: string[]) => {
       if (!service) {
-        return { success: false, error: 'Group chat requires nsec login' } as GroupOperationResult<GroupChatGroup>;
+        return { success: false, error: 'Group chat requires a signer with NIP-44 encryption support' } as GroupOperationResult<GroupChatGroup>;
       }
       setIsLoading(true);
       setError(null);
@@ -521,7 +495,7 @@ export function useGroupChat(): UseGroupChatReturn {
   const leaveGroup = useCallback(
     async (groupId: string) => {
       if (!service) {
-        return { success: false, error: 'Group chat requires nsec login' } as GroupOperationResult;
+        return { success: false, error: 'Group chat requires a signer with NIP-44 encryption support' } as GroupOperationResult;
       }
       setError(null);
       try {
@@ -547,7 +521,7 @@ export function useGroupChat(): UseGroupChatReturn {
   const joinFromWelcome = useCallback(
     async (giftWrapEvent: NostrEvent) => {
       if (!service) {
-        return { success: false, error: 'Group chat requires nsec login' } as GroupOperationResult<GroupChatGroup>;
+        return { success: false, error: 'Group chat requires a signer with NIP-44 encryption support' } as GroupOperationResult<GroupChatGroup>;
       }
       setIsLoading(true);
       setError(null);

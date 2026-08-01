@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Bot, CheckCircle2, Lock, TrendingUp, Unlock, XCircle } from 'lucide-react';
-import { baoApiDate } from "@/lib/baoFundraising";
+import { baoApiDate, fundingProgressPct } from "@/lib/baoFundraising";
 
 import { BaoMarketDetailDialog } from '@/components/BaoMarketDetailDialog';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,7 @@ function formatDeadline(deadline: number | string | null | undefined): string | 
 
 function feeLabel(feeBps: number | undefined): string | null {
   if (!feeBps) return null;
-  return `${(feeBps / 100).toFixed(2).replace(/0$/, '')}% fee`;
+  return `${(feeBps / 100).toFixed(2).replace(/0$/, '')}% runner fee on payout`;
 }
 
 /** msats → whole sats, rounding up (matches the API's release deduction). */
@@ -68,12 +68,9 @@ export function MilestoneMarketWidget({ milestone, fundraiser, verification }: {
   const fee = feeLabel(milestone.fee_bps);
 
   const fundedPct = fundraiser
-    ? Math.min(100, Math.round((Number(fundraiser.raised_sats) / Number(fundraiser.goal_sats)) * 100))
+    ? fundingProgressPct(Number(fundraiser.raised_sats), Number(fundraiser.goal_sats))
     : null;
   const verificationFeeSats = verification ? msatsToSats(Number(verification.fee_msats)) : null;
-  const releasedSats = milestone.status === 'released' && verificationFeeSats !== null
-    ? Number(milestone.amount_sats) - verificationFeeSats
-    : null;
 
   return (
     <div className="rounded-md border px-3 py-2 space-y-2">
@@ -123,8 +120,9 @@ export function MilestoneMarketWidget({ milestone, fundraiser, verification }: {
       {milestone.market_id ? (
         <button
           type="button"
-          onClick={() => setDialogOpen(true)}
-          className="w-full rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-left transition-colors hover:border-primary/50"
+          disabled={marketQuery.isLoading}
+          onClick={() => market && setDialogOpen(true)}
+          className="w-full rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-left transition-colors hover:border-primary/50 disabled:cursor-wait disabled:opacity-70"
         >
           {marketQuery.isLoading ? (
             <Skeleton className="h-5 w-full" />
@@ -188,9 +186,11 @@ export function MilestoneMarketWidget({ milestone, fundraiser, verification }: {
         </div>
       )}
 
-      {releasedSats !== null && verificationFeeSats !== null && (
+      {/* Never compute the released amount client-side (amount − fee can be
+          wrong or negative vs. the server's ledger) — show the recorded fee. */}
+      {milestone.status === 'released' && verificationFeeSats !== null && (
         <p className="text-[11px] text-muted-foreground">
-          Released {formatSats(releasedSats)} sats after a {formatSats(verificationFeeSats)} sats AI verification fee.
+          AI verification fee: {formatSats(verificationFeeSats)} sats.
         </p>
       )}
 
