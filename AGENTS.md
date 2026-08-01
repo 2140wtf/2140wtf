@@ -342,7 +342,7 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 **Writing new test files — don't, unless the user asks.** If the user explicitly requests tests, describes a bug to diagnose with a test, or reports that a problem persists after a fix, load the **`testing`** skill for 2140.wtf's Vitest + `TestApp` setup and policy.
 
-**Known flake (test-design debt, not a production bug):** `useCashuWallet.test.tsx › keeps the crash journal while a timed-out send is still in flight` fails intermittently under full-suite CPU contention. Root cause: `vi.useFakeTimers({ shouldAdvanceTime: true })` lets REAL time advance the fake 60s send timeout, so under load the timeout can fire before the CPU-starved promise chain writes the journal. Fix recipe (not yet applied): extract the hardcoded `60000` send timeout in `useCashuWallet.ts` into an injectable knob so the test can set it to hours, making the race unreachable. If it fails in your run, re-run; if you touch that area, apply the recipe.
+**Fixed flake (was test-design debt):** `useCashuWallet.test.tsx › keeps the crash journal while a timed-out send is still in flight` used to fail ~1-in-3 full-suite runs: `vi.useFakeTimers({ shouldAdvanceTime: true })` lets REAL time advance the fake 60s send timeout past the CPU-starved journal write. Fixed by the injectable `sendTimeoutMs` option on `useCashuWallet` — the test sets 300s (unreachable by wall clock) and fires the timeout with one deterministic `advanceTimersByTimeAsync` jump. Same recipe for any future shouldAdvanceTime flake.
 
 ## Validating Your Changes
 
