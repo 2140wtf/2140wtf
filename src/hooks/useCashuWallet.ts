@@ -1775,6 +1775,13 @@ export function useCashuWallet(
   const reconcileProofRecovery = useCallback(async () => {
     const encKey = encKeyRef.current;
     if (!encKey || !wallet) return;
+    // Serialize against same-tab wallet ops: sends/melts/receives hold this
+    // mutex across their mint round-trip + store write, and reconcile merges
+    // journal proofs into that same store. The proof lease alone would order
+    // the merge, but reconcile holds it across a mint spent-state round-trip
+    // — without the mutex a concurrent same-tab op would spin on the lease
+    // and could spuriously fail with a lock-timeout.
+    const releaseOps = await acquireMutex(walletOpsMutexRef);
     try {
       // Mints with an unresolved pending melt: their melt-input journal is
       // the input snapshot, deliberately kept until the quote resolves
@@ -1846,11 +1853,32 @@ export function useCashuWallet(
                 return;
               }
             }
-            const merged = dedupeByKey([...existing, ...candidatesToMerge], (p) => String(p?.secret));
-            const canonical = seed ? sanitizeProofs(await filterUnspentProofs(normalized, merged, seed)) : sanitizeProofs(merged);
             await storageRef.current.withProofLock(async () => {
+              // Re-verify the candidates' spent-state INSIDE the lock. The
+              // filter above ran OUTSIDE it: a wallet op (send/melt) that
+              // committed in between already persisted its post-spend store,
+              // and unioning the stale canonical set would resurrect its
+              // just-spent inputs — a phantom balance, and every later send
+              // that selects one fails at the mint. If the re-check itself
+              // fails, skip the merge and keep the journal for the next pass
+              // rather than risk the resurrection.
+              let verified = candidatesToMerge;
+              if (seed) {
+                try {
+                  verified = strictUnspent
+                    ? sanitizeProofs(await filterSpendableProofs(normalized, candidatesToMerge, seed))
+                    : sanitizeProofs(await filterUnspentProofs(normalized, candidatesToMerge, seed));
+                } catch (recheckErr) {
+                  devLog.warn(`${label}: spent-state re-check inside the lock failed; keeping journal for retry:`, recheckErr);
+                  return;
+                }
+              }
+              // Read the store AFTER the re-check, still inside the lock:
+              // between the re-check and the merge no wallet op can persist
+              // its post-spend store (it needs this same lease), so the
+              // union below can't resurrect anything.
               const current = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-              const latest = dedupeByKey([...current, ...canonical], (p) => String(p?.secret));
+              const latest = dedupeByKey([...current, ...verified], (p) => String(p?.secret));
               await storageRef.current.saveProofsForMint(normalized, latest, encKey);
               storageRef.current.writeProofStoreTimestamp(normalized);
               if (stillLocked.length > 0) {
@@ -1879,6 +1907,8 @@ export function useCashuWallet(
       await calculateAllBalances();
     } catch (e) {
       devLog.error('Proof recovery reconciliation failed:', e);
+    } finally {
+      releaseOps();
     }
   }, [wallet, allMints, calculateAllBalances, filterUnspentProofs, filterSpendableProofs, isSpendableProof]);
 
