@@ -393,6 +393,65 @@ describe("useRekeyWatch2 stranded detection", () => {
   );
 });
 
+// ── useRekeyWatch2: exclusion → re-inclusion convergence (CORD-06 §2) ───────
+
+describe("useRekeyWatch2 exclusion → re-inclusion convergence", () => {
+  it(
+    "a same-epoch re-including rotation arriving AFTER an exclusion is still adopted (racing Refoundings converge)",
+    { timeout: 30_000 },
+    async () => {
+      const owner = member(); // rotator A: refounds WITHOUT me
+      const admin = member(); // rotator B: racing Refounding that re-includes me (holds BAN)
+      const me = member();
+      const { community } = mintCommunity("Fleet", owner.pubkey, [RELAY]);
+      // A's rotation: 0→1, no blob for me, published after I joined → exclusion.
+      const wrapsA = await rotationWraps(owner, community, random32(), [owner.pubkey, admin.pubkey], Date.now());
+
+      const relay = new FakeRelay();
+      relay.events = [...wrapsA];
+      h.pool = { relay: () => relay, query: async () => [] };
+      h.user = asNUser(me);
+      h.folded = foldedFor(owner.pubkey, undefined, admin.pubkey); // admin holds an admin role (BAN)
+      h.updateList = vi.fn(async () => {});
+      const jm = jmOf(community, owner.pubkey);
+      h.entry = { community_id: community.idHex, seed: jm, current: jm, added_at: 1 } satisfies CommunityListEntry;
+
+      const { queryClient, wrapper } = makeWrapper();
+      renderHook(() => useRekeyWatch2(community), { wrapper });
+
+      // The exclusion is marked…
+      await waitFor(
+        () =>
+          expect(h.updateList).toHaveBeenCalledWith(
+            expect.objectContaining({ type: "exclude", communityId: community.idHex, epoch: 1 }),
+          ),
+        { timeout: 10_000 },
+      );
+
+      // …then the racing Refounding that RE-INCLUDES me lands — same epoch, a
+      // later poll. The watcher must still adopt it: refreshCurrent is what
+      // clears the spent exclusion marker (communityList.ts).
+      const rootB = random32();
+      const wrapsB = await rotationWraps(admin, community, rootB, [owner.pubkey, admin.pubkey, me.pubkey], Date.now());
+      relay.events.push(...wrapsB);
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: ["concord2", "rekey"] });
+      });
+
+      await waitFor(
+        () =>
+          expect(h.updateList).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: "refresh-current",
+              current: expect.objectContaining({ root_epoch: 1, community_root: bytesToHex(rootB) }),
+            }),
+          ),
+        { timeout: 10_000 },
+      );
+    },
+  );
+});
+
 // ── useLinkRefreshWatch2: creator-side stale-link roll-forward (CORD-05 §2) ──
 
 describe("useLinkRefreshWatch2", () => {
@@ -535,6 +594,54 @@ describe("useChannelRekeyWatch2 (CORD-06 §2 channel rotations)", () => {
               type: "refresh-channels",
               communityId: community.idHex,
               channels: [],
+            }),
+          ),
+        { timeout: 10_000 },
+      );
+    },
+  );
+
+  it(
+    "a failed refresh-channels publish rolls the handled marks back so the next rotation data retries",
+    { timeout: 30_000 },
+    async () => {
+      const { owner, me, community, ch } = setupChannel();
+      const key1 = random32();
+      const wraps1 = await channelRotationWraps(owner, community.root, ch, key1, [owner.pubkey, me.pubkey], Date.now());
+
+      const relay = new FakeRelay();
+      relay.events = [...wraps1];
+      h.pool = { relay: () => relay, query: async () => [] };
+      h.user = asNUser(me);
+      h.folded = foldedFor(owner.pubkey);
+      // The FIRST publish fails (transient); the retry must happen and succeed.
+      h.updateList = vi.fn().mockRejectedValueOnce(new Error("relay down")).mockResolvedValue(undefined);
+      const jm = jmOf(community, owner.pubkey);
+      h.entry = { community_id: community.idHex, seed: jm, current: jm, added_at: 1 } satisfies CommunityListEntry;
+
+      const { queryClient, wrapper } = makeWrapper();
+      renderHook(() => useChannelRekeyWatch2(community), { wrapper });
+
+      await waitFor(() => expect(h.updateList).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+
+      // New rotation data arrives (a racing second rotation for the same
+      // channel epoch): the failed adoption must be retried — converging on
+      // the lower of the two keys.
+      const key2 = random32();
+      const wraps2 = await channelRotationWraps(owner, community.root, ch, key2, [owner.pubkey, me.pubkey], Date.now());
+      relay.events.push(...wraps2);
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: ["concord2", "chrekey"] });
+      });
+
+      const expectedHex = [bytesToHex(key1), bytesToHex(key2)].sort()[0];
+      await waitFor(
+        () =>
+          expect(h.updateList).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: "refresh-channels",
+              communityId: community.idHex,
+              channels: [expect.objectContaining({ id: bytesToHex(ch.id), key: expectedHex, epoch: 1 })],
             }),
           ),
         { timeout: 10_000 },
