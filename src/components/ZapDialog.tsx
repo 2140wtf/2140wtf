@@ -141,6 +141,9 @@ interface LightningZapContentProps {
   setEditingAmount: (v: boolean) => void;
   amountInputRef: React.RefObject<HTMLInputElement | null>;
   payWithWebLN: () => void;
+  /** True once the receipt wait has run long enough to show the fallback hint. */
+  receiptHintVisible: boolean;
+  onClose: () => void;
 }
 
 /**
@@ -172,6 +175,8 @@ const LightningZapContent = forwardRef<HTMLDivElement, LightningZapContentProps>
   setEditingAmount,
   amountInputRef,
   payWithWebLN,
+  receiptHintVisible,
+  onClose,
 }, ref) => {
   const numericSats = typeof amountSats === 'string'
     ? (amountSats.trim() === '' ? 0 : Number(amountSats.replace(/,/g, '')))
@@ -255,6 +260,28 @@ const LightningZapContent = forwardRef<HTMLDivElement, LightningZapContentProps>
         <p className="text-[11px] text-muted-foreground text-center">
           Scan the QR or copy the invoice to pay with any Lightning wallet.
         </p>
+
+        {/* Live receipt indicator — the dialog is subscribed for the kind
+            9735 zap receipt and flips to the success screen automatically. */}
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" />
+          Waiting for payment — this screen updates when it arrives.
+        </div>
+
+        {/* Fallback for LNURL servers that never publish a zap receipt:
+            after a while, tell the user their payment still counts and let
+            them leave instead of waiting forever. */}
+        {receiptHintVisible && (
+          <div className="text-center space-y-2 animate-in fade-in duration-500">
+            <p className="text-[11px] text-muted-foreground">
+              Already paid? Some wallets don&apos;t send a receipt — if your wallet
+              shows the payment as sent, the zap went through.
+            </p>
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Done
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -431,9 +458,11 @@ export function ZapDialog({
   const insufficient = false;
 
   // Listen for a kind 9735 zap receipt on the QR-code path (WebLN/NWC already
-  // report success through handleLightningSuccess).
+  // report success through handleLightningSuccess). Use ALL configured relays
+  // (not just read relays): the zap request advertises every one of them to
+  // the LNURL server, so a receipt can land on a write-only relay too.
   const relayUrls = useMemo(
-    () => config.relayMetadata.relays.filter((r) => r.read).map((r) => r.url),
+    () => config.relayMetadata.relays.map((r) => r.url),
     [config.relayMetadata.relays],
   );
   useZapPaymentListener(
@@ -446,6 +475,20 @@ export function ZapDialog({
       onZapSuccessProp?.({ amountSats: numericAmountSats });
     }, [success, numericAmountSats, onZapSuccessProp]),
   );
+
+  // Receipt-wait fallback: while the QR is on screen we listen for the kind
+  // 9735 receipt, but some LNURL servers never publish one. After 45s of
+  // silence, surface the "already paid?" hint so the user isn't stuck
+  // watching a spinner forever.
+  const [receiptHintVisible, setReceiptHintVisible] = useState(false);
+  useEffect(() => {
+    if (!invoice || success) {
+      setReceiptHintVisible(false);
+      return;
+    }
+    const timer = setTimeout(() => setReceiptHintVisible(true), 45_000);
+    return () => clearTimeout(timer);
+  }, [invoice, success]);
 
   // Default method: Bitcoin. Users can switch to Lightning or any configured
   // payment target via the title dropdown. If the user's signer can't sign
@@ -688,6 +731,8 @@ export function ZapDialog({
     setEditingAmount,
     amountInputRef,
     payWithWebLN,
+    receiptHintVisible,
+    onClose: () => setOpen(false),
   };
 
   // Zap button shows for any logged-in user except when targeting oneself.

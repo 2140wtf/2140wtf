@@ -8,13 +8,15 @@ import { useZapPaymentListener } from './useZapPaymentListener';
 const mocks = vi.hoisted(() => ({
   reqMock: vi.fn(),
   closeMock: vi.fn().mockResolvedValue(undefined),
+  relayConstructor: vi.fn(),
 }));
 
 vi.mock('@nostrify/nostrify', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@nostrify/nostrify')>();
   return {
     ...actual,
-    NRelay1: vi.fn(function (this: Record<string, unknown>, _url: string) {
+    NRelay1: vi.fn(function (this: Record<string, unknown>, url: string) {
+      mocks.relayConstructor(url);
       this.req = mocks.reqMock;
       this.close = mocks.closeMock;
     }),
@@ -70,6 +72,19 @@ describe('useZapPaymentListener', () => {
         expect.objectContaining({ kinds: [9735], '#p': ['target-pubkey'] }),
       ]),
     );
+  });
+
+  it('also subscribes the well-known receipt relays beyond the caller list', async () => {
+    // LNURL servers often publish receipts to their own fixed relay set
+    // (damus, nos.lol, …) instead of the zap-request relays — a receipt the
+    // sender's relays never see must still be heard.
+    renderHook(() => useZapPaymentListener(invoice, makeTarget(0), ['wss://relay.example.com'], vi.fn()));
+
+    await waitFor(() => expect(mocks.relayConstructor).toHaveBeenCalled());
+    const urls = mocks.relayConstructor.mock.calls.map(([url]) => url);
+    expect(urls).toContain('wss://relay.example.com');
+    expect(urls).toContain('wss://relay.damus.io');
+    expect(urls).toContain('wss://nos.lol');
   });
 
   it('fires onPaid for a p-tagged receipt whose bolt11 matches the invoice', async () => {
