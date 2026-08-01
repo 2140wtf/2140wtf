@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hex } from '@scure/base';
 import { nip19 } from 'nostr-tools';
 
@@ -19,6 +19,14 @@ import {
 } from '@/lib/bitcoin';
 import { encodePsbtV2, parsePsbtV2, extractTxFromSignedPsbtV2 } from '@/lib/psbtV2';
 import { NSecSignerBtc } from '@/lib/bitcoin-signers';
+import { esploraFetch } from '@/lib/esplora';
+
+// broadcastTransactionDisambiguated tests stub the failover client; the rest
+// of this file never touches the network, so a file-wide mock is safe.
+vi.mock('@/lib/esplora', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/esplora')>()),
+  esploraFetch: vi.fn(),
+}));
 
 /**
  * Regression test vectors for key-path-only P2TR address derivation using the
@@ -664,7 +672,10 @@ describe('NSecSignerBtc.signPsbt — BIP-375 path', () => {
 
 import * as btc from '@scure/btc-signer';
 import {
+  BroadcastOutcomeUnknownError,
+  broadcastTransactionDisambiguated,
   createBitcoinTransaction,
+  txidFromRawTx,
   MAX_FEE_RATE_SATS_PER_VB,
   signPsbtLocal,
 } from '@/lib/bitcoin';
@@ -1065,5 +1076,80 @@ describe('signPsbtLocal additional adversarial cases', () => {
       spy.mockRestore();
     }
     expect(zeroized).toBe(true);
+  });
+});
+
+
+describe('broadcastTransactionDisambiguated', () => {
+  // A real signed tx: the disambiguator derives the txid from the raw bytes
+  // and probes `/tx/{txid}` after a failed broadcast.
+  const DONATION_TX_HEX = createBitcoinTransaction(
+    SENDER_NSEC_HEX,
+    'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5',
+    40_000,
+    [{ txid: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16', vout: 0, value: 100_000, status: { confirmed: true } }],
+    5,
+  ).txHex;
+  const TXID = txidFromRawTx(DONATION_TX_HEX);
+  const URLS = ['https://a.example/api', 'https://b.example/api'];
+  const PROBE = { probeRounds: 2, probeDelayMs: 0 };
+  const mockEsplora = vi.mocked(esploraFetch);
+
+  beforeEach(() => { mockEsplora.mockReset(); });
+
+  it('derives the txid from the raw transaction bytes', () => {
+    expect(TXID).toMatch(/^[0-9a-f]{64}$/);
+    expect(TXID).toBe(btc.Transaction.fromRaw(hex.decode(DONATION_TX_HEX)).id);
+  });
+
+  it('returns the broadcast txid on a clean broadcast, without probing', async () => {
+    mockEsplora.mockResolvedValueOnce(new Response('f'.repeat(64), { status: 200 }));
+    await expect(broadcastTransactionDisambiguated(DONATION_TX_HEX, URLS, undefined, PROBE))
+      .resolves.toBe('f'.repeat(64));
+    expect(mockEsplora).toHaveBeenCalledTimes(1);
+  });
+
+  it('a dropped-connection broadcast that actually LANDED resolves as success via the probe', async () => {
+    // The POST dies after the node accepted the tx (timeout, socket hang-up).
+    // Blind-retrying here would build a second transaction and double-pay.
+    mockEsplora.mockImplementation(async (_urls: string[], path: string, init?: { method?: string }) => {
+      if (init?.method === 'POST') throw new Error('socket hang up');
+      if (path === `/tx/${TXID}`) return new Response('{}', { status: 200 });
+      throw new Error(`unexpected path ${path}`);
+    });
+    await expect(broadcastTransactionDisambiguated(DONATION_TX_HEX, URLS, undefined, PROBE))
+      .resolves.toBe(TXID);
+  });
+
+  it('an "already in mempool" 400 resolves as success via the probe', async () => {
+    mockEsplora.mockImplementation(async (_urls: string[], path: string, init?: { method?: string }) => {
+      if (init?.method === 'POST') return new Response('already in mempool', { status: 400 });
+      if (path === `/tx/${TXID}`) return new Response('{}', { status: 200 });
+      throw new Error(`unexpected path ${path}`);
+    });
+    await expect(broadcastTransactionDisambiguated(DONATION_TX_HEX, URLS, undefined, PROBE))
+      .resolves.toBe(TXID);
+  });
+
+  it('a definitive rejection with the tx nowhere visible stays retry-safe failed', async () => {
+    mockEsplora.mockImplementation(async (_urls: string[], path: string, init?: { method?: string }) => {
+      if (init?.method === 'POST') return new Response('bad-txns-inputs-missingorspent', { status: 400 });
+      if (path === `/tx/${TXID}`) return new Response('Transaction not found', { status: 404 });
+      throw new Error(`unexpected path ${path}`);
+    });
+    const err = await broadcastTransactionDisambiguated(DONATION_TX_HEX, URLS, undefined, PROBE).catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(BroadcastOutcomeUnknownError);
+    expect(String(err.message)).toContain('Broadcast failed (400)');
+  });
+
+  it('broadcast failure with the probe ALSO unreachable is outcome-unknown, not retry-safe', async () => {
+    mockEsplora.mockRejectedValue(new Error('network down'));
+    const err = await broadcastTransactionDisambiguated(DONATION_TX_HEX, URLS, undefined, PROBE).catch((e) => e);
+    expect(err).toBeInstanceOf(BroadcastOutcomeUnknownError);
+    // Names the txid so the user can check before deciding, and never
+    // invites a blind retry.
+    expect(String(err.message)).toContain(TXID);
+    expect(String(err.message)).toMatch(/do NOT retry/i);
   });
 });
