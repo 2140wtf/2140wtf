@@ -10,7 +10,7 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
-import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint } from '@/lib/cashu/storage';
+import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint, withProofLock } from '@/lib/cashu/storage';
 import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -1967,4 +1967,96 @@ describe('useCashuWallet sendNutzap ambiguous send failure', () => {
     const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
     expect(res.status).toBe('failed');
   });
+});
+
+describe('useCashuWallet reconcile resurrection race', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    mocks.query.mockReset();
+    mocks.publish.mockReset();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+  });
+
+  it('a proof spent by a send committing DURING reconcile is never resurrected into the store', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const proofA = { id: 'ks', amount: 21, secret: 'secret-a', C: 'C-a' };
+    const proofB = { id: 'ks', amount: 79, secret: 'secret-b', C: 'C-b' };
+    await saveProofsForMint(mintUrl, [proofA, proofB], encKey);
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    // Generous timeout: wallet init derives keys via webcrypto and can exceed
+    // waitFor's 1s default on a loaded machine (observed locally).
+    await waitFor(() => expect(result.current.wallet).not.toBeNull(), { timeout: 15000 });
+    const wallet = result.current.wallet;
+    if (!wallet) throw new Error('Wallet not initialized');
+
+    // Let startup effects settle (the startup reconcile finds no journals and
+    // makes no mint calls).
+    await act(async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); });
+
+    // A previous op journaled its full input snapshot before dying (sendToken
+    // writes exactly this before calling the mint).
+    await writeProofRecovery(mintUrl, [proofA, proofB], encKey);
+
+    // Model the interleaving send as a LOCK-RESPECTING writer: it holds the
+    // proof lock for its whole op, so reconcile's merge must queue behind it.
+    // The send releases only after it has committed B at the mint and saved
+    // its post-send store {A}.
+    let bSpent = false;
+    let releaseSendLock: (() => void) | null = null;
+    const sendHold = withProofLock(
+      () => new Promise<void>((resolve) => { releaseSendLock = resolve; }),
+    );
+
+    // The mint answers spent-state from the bSpent flag: UNSPENT while the
+    // send is still in flight, SPENT once it committed.
+    const encoder = new TextEncoder();
+    let stateCalls = 0;
+    vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) => {
+      stateCalls++;
+      const ps = proofs as Array<{ secret: string }>;
+      return ps.map((p) => ({
+        Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+        state: bSpent && p.secret === 'secret-b' ? 'SPENT' : 'UNSPENT',
+      })) as never;
+    });
+
+    // Fire a fresh reconcile pass: changing allMints re-runs the effect.
+    act(() => { result.current.addCustomMint('Second', 'https://second.example.com'); });
+
+    // THE BUG, observable: a vulnerable reconcile asks the mint for
+    // spent-state BEFORE acquiring the proof lock, so the mock sees a call
+    // while the "send" still holds it (B still UNSPENT — the race). Fixed
+    // code checks INSIDE the lock, so no call can arrive here and the poll
+    // expires instead.
+    try {
+      await waitFor(() => expect(stateCalls).toBe(1), { timeout: 3000, interval: 50 });
+    } catch { /* fixed: the spent-state check runs under the lock */ }
+
+    // The send commits: B is spent at the mint and the post-send store {A}
+    // is persisted — THEN the lock is released and reconcile's merge runs.
+    bSpent = true;
+    await saveProofsForMint(mintUrl, [proofA], encKey);
+    releaseSendLock!();
+    await sendHold;
+
+    // Reconcile ran to completion once the journal is gone.
+    await waitFor(async () => {
+      expect(await loadProofRecovery(mintUrl, encKey)).toBeNull();
+    }, { timeout: 15000 });
+    const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
+    // B was spent by the interleaving send: resurrecting it inflates the
+    // balance and makes every later send that selects it fail at the mint.
+    expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a']);
+    // Generous timeout: post-fix the pre-lock poll deliberately expires (3s)
+    // and wallet init derives keys via webcrypto.
+  }, 20000);
 });
