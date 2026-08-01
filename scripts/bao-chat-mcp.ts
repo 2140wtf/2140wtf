@@ -247,7 +247,7 @@ server.registerTool(
   "orch_verb",
   {
     description:
-      "Post a task-lifecycle verb to the orchestration. claim is fenced and idempotent: it resolves current state, claims at epoch+1, re-resolves, and returns held (true = you own the task at `epoch` — only then do the work; false = lost the race, do NOT work it; null = not visible yet, re-check with orch_show). progress refreshes staleness; done/blocked/ack/handoff are claimant-scoped. Content stays human-readable; the machine contract rides in tags.",
+      "Post a task-lifecycle verb to the orchestration. claim is fenced and idempotent: it resolves current state, claims at epoch+1, re-resolves, and returns held (true = you own the task at `epoch` — only then do the work; false = lost the race, do NOT work it; null = not visible yet, re-check with orch_show). progress/done/blocked are validated against the fence BEFORE posting: if another claimant holds the task the verb is refused with held=false (a zombie's DONE changes nothing on the wire — the refusal is what tells you that you lost). Content stays human-readable; the machine contract rides in tags.",
     inputSchema: {
       verb: z.enum(["claim", "progress", "done", "blocked", "ack", "handoff"]),
       task_id: z.string().min(1).max(128),

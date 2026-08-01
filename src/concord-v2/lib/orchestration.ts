@@ -112,6 +112,13 @@ export interface ClaimState {
   epoch: number;
   done: boolean;
   blocked: boolean;
+  /**
+   * True after the claimant's HANDOFF: the claim is RELEASED — a fresh CLAIM
+   * takes the task immediately (no TTL wait). Without this a handoff could
+   * never complete: the receiver's CLAIM would lose to the handoff-er's own
+   * live claim. Only the claimant can release.
+   */
+  released: boolean;
   /** True once the claim sat without PROGRESS past the TTL — reclaimable. */
   stale: boolean;
 }
@@ -129,6 +136,12 @@ export interface ClaimState {
  * issued from a stale view and is ignored outright, so two concurrent
  * reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
  * the check but still bump the epoch.
+ *
+ * Delivery is at-least-once (a relay can resend a stored event on a new
+ * subscription), so the SAME rumor id is processed once: a replayed legacy
+ * CLAIM on an already-stale claim would otherwise re-take the task and bump
+ * the epoch a second time, silently un-fencing every later CLAIM (found by
+ * the seed-101 fuzz property: duplication must be a no-op).
  */
 export function resolveClaims(
   messages: ClaimInput[],
@@ -136,13 +149,17 @@ export function resolveClaims(
 ): Map<string, ClaimState> {
   const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const states = new Map<string, ClaimState>();
+  const delivered = new Set<string>();
 
   for (const { id, author, ms, msg } of sorted) {
+    if (delivered.has(id)) continue; // at-least-once delivery: process a rumor once
+    delivered.add(id);
     const cur = states.get(msg.taskId);
     switch (msg.verb) {
       case "CLAIM": {
-        // A fresh claim loses to a live claim, but takes over a stale/done one.
-        if (cur && !cur.stale && !cur.done) break;
+        // A fresh claim loses to a live claim, but takes over a stale/done/
+        // released one.
+        if (cur && !cur.stale && !cur.done && !cur.released) break;
         const nextEpoch = (cur?.epoch ?? 0) + 1;
         // Fencing: an epoch-bearing claim from a stale view is ignored, never
         // half-honored — its author re-resolves and retries at the right epoch.
@@ -156,6 +173,7 @@ export function resolveClaims(
           epoch: nextEpoch,
           done: false,
           blocked: false,
+          released: false,
           stale: opts.nowMs - ms > opts.ttlMs,
         });
         break;
@@ -184,8 +202,14 @@ export function resolveClaims(
         break;
       }
       case "HANDOFF": {
-        // The receiver's ACK is modeled as their fresh CLAIM (explicit transfer
-        // still ends with exactly one CLAIM winning — no second code path).
+        // The claimant's HANDOFF releases the claim: the receiver (or anyone)
+        // takes it with a fresh CLAIM at epoch+1 — explicit transfer still
+        // ends with exactly one CLAIM winning, no second code path. A
+        // bystander's HANDOFF is ignored (nobody releases another's task).
+        if (cur && cur.claimant === author && !cur.done) {
+          cur.released = true;
+          cur.lastProgressMs = ms;
+        }
         break;
       }
       case "ACK":
@@ -199,6 +223,26 @@ export function resolveClaims(
     if (!s.done && opts.nowMs - s.lastProgressMs > opts.ttlMs) s.stale = true;
   }
   return states;
+}
+
+/**
+ * Executor-side fence check (mosaico: validate before acting, not only at
+ * claim time). May this author post this verb, given the resolved state?
+ *
+ * - CLAIM: always allowed to ATTEMPT — the fence arbitrates at resolve.
+ * - PROGRESS/DONE/BLOCKED while someone ELSE holds the claim: refused. The
+ *   resolver would ignore the zombie's verb anyway, but the refusal tells the
+ *   AGENT it lost — otherwise it posts DONE and walks away believing it
+ *   finished work it no longer owns. Own claim (even stale) may still be
+ *   refreshed or marked: staleness is a lease lapse, not a loss.
+ * - HANDOFF while someone else holds the claim: refused (only the claimant
+ *   can release). ACK carries no claim semantics, always allowed.
+ */
+export function mayPostVerb(cur: ClaimState | undefined, author: string, verb: OrchVerb): boolean {
+  if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED" || verb === "HANDOFF") {
+    if (cur && cur.claimant !== author) return false;
+  }
+  return true;
 }
 
 /**

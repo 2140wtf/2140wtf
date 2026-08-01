@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Lock, LogIn, LogOut, Menu, PanelLeft, PanelRight, Pencil, Shield, UserPlus, Users } from 'lucide-react';
+import { Info, Lock, LogIn, LogOut, Menu, PanelLeft, PanelRight, Pencil, Shield, UserPlus, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Sheet,
   SheetContent,
@@ -174,9 +175,26 @@ export function GroupChatPage() {
           </div>
           <h1 className="text-2xl font-bold">Private Groups</h1>
           <p className="text-muted-foreground">
-            Group chat encryption requires access to your private key. Please log in with an
-            nsec key instead of a browser extension or bunker.
+            Private groups use end-to-end encryption. Your current login method doesn't support the
+            encryption operations needed. Please log in with an nsec key or use a signer that
+            supports NIP-44 encryption (e.g., Alby, Amber, or a compatible bunker).
           </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+              >
+                <Info className="size-3.5" />
+                Why?
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Group chat encrypts and decrypts messages with NIP-44. Some browser extensions and
+              bunkers don't expose these operations to apps, so 2140.wtf can't read or write
+              encrypted group messages through them.
+            </TooltipContent>
+          </Tooltip>
           <Button onClick={() => window.location.reload()}>
             <LogIn className="size-4 mr-2" />
             Switch account
