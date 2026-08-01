@@ -108,6 +108,11 @@ export interface CashuWalletState {
  *   but the nutzap event could not be published; it is saved and auto-retried.
  *   Do NOT retry the payment — it will very likely land.
  * - 'failed': nothing was committed — safe to retry.
+ * - 'unknown': the swap request may have reached the mint before the failure
+ *   (timeout, dropped connection, pre-journal validation throw). The mint may
+ *   have committed — do NOT retry: a second send double-pays while the first
+ *   attempt's recipient-locked proofs are unrecoverable. Check the balance
+ *   first; the recovery journal restores whatever the mint never spent.
  */
 export type NutzapSendResult =
   /** Published; carries the Nutzap event id so callers can reference the zap. */
@@ -115,7 +120,9 @@ export type NutzapSendResult =
   /** Sats committed but the event is queued for auto-retry; no event id yet. */
   | { status: 'pending' }
   /** Nothing was committed; the caller may retry. */
-  | { status: 'failed' };
+  | { status: 'failed' }
+  /** The mint may have committed; retrying may double-pay. */
+  | { status: 'unknown' };
 
 /**
  * The 2140 treasury publishes its kind:10019 Nutzap info only to BAO's relay
@@ -3808,6 +3815,10 @@ export function useCashuWallet(
     // double-pays, and the first (already-paid) locked proofs sit stranded in
     // the send-recovery journal forever.
     let postCommitSendProofs: any[] | null = null;
+    // Tracks whether the mint swap request may have been sent, so the catch
+    // can refuse to classify an ambiguous failure as retry-safe 'failed' (the
+    // same contract sendToken enforces via lastSendAmbiguousRef).
+    let swapAttempted = false;
     try {
       if (mountedRef.current) setLoading(true);
       if (mountedRef.current) setError('');
@@ -3836,6 +3847,12 @@ export function useCashuWallet(
         }
 
         await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
+        // From here on the request may reach the mint: a failure without an
+        // HTTP status (timeout, dropped connection, or the invalid-response
+        // throw below) is AMBIGUOUS — the mint may have spent the inputs.
+        // Failures before it (local selection inside cashu-ts) never touched
+        // the mint. The catch must never call the ambiguous kind 'failed'.
+        swapAttempted = true;
         const sendResult = await withTimeout(
           targetWallet.send(amount, proofs, {
             proofsWeHave: proofs,
@@ -4040,6 +4057,28 @@ export function useCashuWallet(
         }
         if (mountedRef.current) setError('Nutzap paid but hit a post-payment error — saved for retry');
         return { status: 'pending' };
+      }
+      // Classify the failure for callers with an automatic retry. RETRY-SAFE
+      // (definitive): the mint explicitly rejected — cashu-ts HttpResponseError/
+      // MintOperationError carries a numeric status — or the failure never
+      // reached the mint (pre-swap validation, local selection inside
+      // cashu-ts). AMBIGUOUS: anything else past the swap call — a timeout or
+      // dropped connection (the mint may have committed after we stopped
+      // waiting) and the invalid-response throw above (the request reached
+      // the mint; the outputs died with the response). Returning 'failed'
+      // here tells the caller "safe to retry": the retry double-pays while
+      // the first attempt's recipient-locked proofs are unrecoverable. The
+      // pre-send proof journal restores only what the mint never spent.
+      const httpStatus = typeof err?.status === 'number' ? err.status : null;
+      const localSelection = typeof err?.message === 'string' && /not enough (funds|balance)/i.test(err.message);
+      if (swapAttempted && httpStatus === null && !localSelection) {
+        const timedOut = typeof err?.message === 'string' && err.message.includes('timed out');
+        if (mountedRef.current) {
+          setError(timedOut
+            ? 'Nutzap send timed out — the mint may still have processed it. Check your balance before sending again; if it decreased, the payment went through and the recovery journal will reconcile automatically.'
+            : `Nutzap send outcome unknown (${err?.message ?? err}) — the mint may still have processed it. Check your balance before sending again.`);
+        }
+        return { status: 'unknown' };
       }
       if (mountedRef.current) setError(`Nutzap send failed: ${err.message}`);
       return { status: 'failed' };
