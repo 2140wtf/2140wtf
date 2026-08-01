@@ -67,7 +67,7 @@ import {
   type InviteBundle,
 } from "@/concord-v2/lib/invite";
 import { openWrap } from "@/concord-v2/lib/stream";
-import { KIND_INVITE_BUNDLE, KIND_WRAP } from "@/concord-v2/lib/kinds";
+import { KIND_INVITE_BUNDLE, KIND_WRAP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 import {
   CLAIM_TTL_MS,
@@ -244,9 +244,19 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
     kinds: [KIND_INVITE_BUNDLE],
     authors: [parsed.linkSigner],
     "#d": [""],
-    limit: 1,
+    // NO limit: a relay holding several editions may satisfy limit:1 with a
+    // STALE one (a live bundle superseded by its revocation tombstone).
   });
-  const newest = events.sort((a, b) => b.created_at - a.created_at)[0];
+  // Newest edition wins — but a revocation tombstone wins TIES (and anything
+  // older): created_at has second granularity, so a revoked-then-reshown live
+  // bundle can tie the tombstone, and a relay's delivery order is not a trust
+  // signal. Only a strictly-newer live bundle (a genuine re-mint) overrides
+  // revocation.
+  const ts = (e: (typeof events)[number]) => e.created_at;
+  const maxTs = events.reduce((m, e) => Math.max(m, ts(e)), 0);
+  const atMax = events.filter((e) => ts(e) === maxTs);
+  const newest =
+    atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
   if (!newest) throw new Error("Couldn't find that invite on its relays.");
   const bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
 
