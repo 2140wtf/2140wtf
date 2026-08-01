@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- ₿AO campaign runner-fee tiers updated to the current spec: 2.14% (min) / 4.21% / 10% — the 1.0% tier is gone and 10% added (default selection was already 2.14%, unaffected). Changelog entry for e696c7c47, mirrored to bao_fund 51a7de7 so both apps document identical fee options
+
 ### Fixed
 - QR-code zaps now confirm on screen when the payment lands — the Lightning QR screen could sit forever even though the recipient received the sats, because the zap receipt (kind 9735) was only awaited on the sender's read relays while the zap request advertises every configured relay (receipts can land on write-only ones), and many LNURL servers publish receipts to their own fixed relay set instead of the requested ones. The receipt listener now subscribes every configured relay plus the well-known public receipt relays (damus, nos.lol, nostr.band, primal), the QR screen shows a live "waiting for payment" indicator so you know it's listening, and after 45s of silence an honest fallback appears — some wallets never send a receipt, so if your wallet shows the payment as sent, the zap went through and you can close the dialog
 - Sealed group chat hardened against Welcome-forgery and leave-notice abuse: a Welcome event must now be addressed to the recipient (a member forwarding their own Welcome to an outsider no longer leaks the group's epoch secrets), a member-leave notice is only honored when signed by the departing member and may only remove that member — the member/admin lists are pinned to the current roster so a malicious leaver can't smuggle in roster or admin changes — and the leave-triggered key rotation is now actually published to the remaining members (previously the leaver just vanished and everyone kept encrypting to a key the leaver still held). Admin-promotion rotation events are likewise published on success
