@@ -365,6 +365,20 @@ async function sendChannelMessageInner(
   text: string,
   opts: { idemKey?: string; extraTags?: string[][] } = {},
 ): Promise<{ rumorId: string; deduped: boolean }> {
+  // Size guard BEFORE building anything: the rumor is nip44-encrypted into a
+  // seal, the seal JSON is nip44-encrypted again into the wrap, and NIP-44
+  // rejects plaintexts over 65,535 bytes (encryptChecked). With NIP-44's
+  // padding (≤ +8,192 for this range) and base64 (×4/3), 40,000 utf8 BYTES of
+  // text lands at ~55KB of seal JSON — inside the cap with ~10KB headroom;
+  // anything larger risks a raw crypto throw deep in wrapSeal (the CLI prints
+  // a stack, MCP a bare isError). 40,000 bytes exactly matches the MCP zod
+  // cap's worst case (20,000 UTF-16 units × 2-byte-per-unit astral chars), so
+  // every schema-legal MCP message remains sendable — this guard is for the
+  // UNLIMITED paths (CLI say, future front-ends).
+  const textBytes = new TextEncoder().encode(text).length;
+  if (textBytes > 40_000) {
+    throw new Error(`Message too large: ${textBytes} bytes (max 40,000 — the sealed wrap must fit NIP-44's 65,535-byte plaintext cap)`);
+  }
   const { pubkey, signer, community, channel, group } = await channelContext(state);
 
   if (opts.idemKey) {
@@ -526,6 +540,11 @@ export async function orchVerbPost(
   text: string,
   orchId: string,
 ): Promise<OrchVerbResult> {
+  // The task id rides the content parse `^(\w+)\s+(\S+)`: whitespace would
+  // silently turn "CLAIM card 5 …" into a claim on task "card" — refuse for
+  // every front-end (MCP's zod regex only covers the MCP path; a quoted CLI
+  // argv reaches here too).
+  if (/\s/.test(taskId)) throw new Error(`Task id must not contain whitespace: ${JSON.stringify(taskId)}`);
   if (verb === "CLAIM") {
     // Fenced claim: resolve the CURRENT state, claim at exactly its epoch+1,
     // then re-resolve and report whether we hold it. Two concurrent reclaimers
