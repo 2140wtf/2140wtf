@@ -68,6 +68,9 @@ playwright/.cache/
 # Local experimental-branch notes
 EXPERIMENTAL_BRANCHES.md
 
+# Private project notes and audits — never publish
+docs/
+
 # Claude local settings with credentials
 .claude/settings.local.json
 
