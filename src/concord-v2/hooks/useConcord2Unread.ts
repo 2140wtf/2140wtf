@@ -48,9 +48,6 @@ export function useConcord2Unread(channels: ChannelV2[]): {
   const pubkey = user?.pubkey;
   const queryClient = useQueryClient();
 
-  const channelSig = channels.map((c) => c.idHex).join(",");
-  const channelIds = useMemo(() => channels.map((c) => c.idHex), [channelSig]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // The persisted read map, shared across mounts via the query cache —
   // `markRead` updates it with `setQueryData`, notifying all subscribers.
   const { data: readMap = {} } = useQuery<Concord2ReadMap>({
@@ -61,7 +58,7 @@ export function useConcord2Unread(channels: ChannelV2[]): {
   });
 
   // The one shared community read (see useCommunityRumors).
-  const { byChannel: rumorsByChannel } = useCommunityRumors(channelIds);
+  const { byChannel: rumorsByChannel } = useCommunityRumors(channels);
 
   const byChannel = useMemo<Record<string, Concord2Unread>>(() => {
     const next: Record<string, Concord2Unread> = {};

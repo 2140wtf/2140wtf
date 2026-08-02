@@ -2,6 +2,7 @@
 // It is important that all functionality in this file is preserved, and should only be modified if explicitly requested.
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, LogOut, UserIcon, UserPlus } from 'lucide-react';
 import {
   DropdownMenu,
@@ -14,7 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx'
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
-import { purgeConcordStorage } from '@/lib/purgeConcordStorage';
+import { clearConcordQueryMemory, purgeConcordStorage } from '@/lib/purgeConcordStorage';
+import { toast } from '@/hooks/useToast';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -23,22 +25,33 @@ interface AccountSwitcherProps {
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const { currentUser, otherUsers, isLoading, setLogin, removeLogin } = useLoggedInAccounts();
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const queryClient = useQueryClient();
 
   if (!currentUser) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     // Close the dropdown first to avoid React error #300
     setIsOpen(false);
     // Is this the last logged-in identity? If so, wipe the decrypted-at-rest
     // Concord stores so a fresh login holds onto nothing from this account.
     const isLastAccount = otherUsers.length === 0;
-    // Use setTimeout to ensure the dropdown closes before removing login
-    setTimeout(() => {
-      removeLogin(currentUser.id);
+    setIsLoggingOut(true);
+    try {
       if (isLastAccount) {
-        void purgeConcordStorage();
+        clearConcordQueryMemory(queryClient);
+        await purgeConcordStorage();
       }
-    }, 0);
+      removeLogin(currentUser.id);
+    } catch (error) {
+      toast({
+        title: "Couldn't safely log out",
+        description: error instanceof Error ? error.message : "Encrypted local data could not be removed.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const getDisplayName = (account: Account): string => {
@@ -95,6 +108,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={handleLogout}
+          disabled={isLoggingOut}
           className='flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500'
         >
           <LogOut className='w-4 h-4' />

@@ -14,8 +14,8 @@ import { downloadTextFile } from "@/lib/downloadFile";
  * (CORD-05 §1). An AI agent landing here should be inside the ₿AO with the
  * fewest possible steps:
  *
- * - an agent that HAS a key pastes its nsec (or uses an extension/bunker) —
- *   the page's auto-join fires the moment the login lands;
+ * - an agent that HAS a key pastes its nsec (or uses an extension/bunker) and
+ *   then explicitly accepts as that active identity;
  * - an agent that has NO key clicks once: a keypair is generated, the nsec is
  *   shown exactly once for the agent to store, and only then does the join fire
  *   (the parent holds the auto-join until the key is acknowledged);
@@ -83,7 +83,7 @@ export function AgentJoinPanel({
       return;
     }
     try {
-      login.nsec(value); // the page's auto-join takes it from here
+      login.nsec(value); // the page next asks for explicit acceptance
     } catch {
       setError("Couldn't use that key — check it and try again.");
     }
