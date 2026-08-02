@@ -161,6 +161,13 @@ function MemberHealthRow({
   const [healed, setHealed] = useState(false);
 
   const handleHeal = async () => {
+    if (
+      !confirm(
+        "Send current keys using an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, the Concord invite type, timing, and size. They cannot see this community or the keys inside the encrypted event.",
+      )
+    ) {
+      return;
+    }
     setHealing(true);
     try {
       await sendDirectInvite({ recipientPubkey: row.pubkey });
