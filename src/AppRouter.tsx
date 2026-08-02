@@ -92,6 +92,7 @@ const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default:
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
+const MintDetailsPage = lazy(() => import("./pages/MintDetailsPage").then(m => ({ default: m.MintDetailsPage })));
 // ₿AO chat (Concord V2 E2EE communities)
 const BaoCommunitiesPage = lazy(() => import("./pages/BaoCommunitiesPage").then(m => ({ default: m.BaoCommunitiesPage })));
 const ConcordV2Page = lazy(() => import("./concord-v2/pages/ConcordV2Page").then(m => ({ default: m.ConcordV2Page })));
@@ -363,6 +364,7 @@ export function AppRouter() {
                 element={<Navigate to="/bao-fund" replace />}
               />
           <Route path="/mints" element={<MintDiscoveryPage />} />
+              <Route path="/mints/details" element={<MintDetailsPage />} />
               <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="/groups" element={<GroupChatPage />} />
