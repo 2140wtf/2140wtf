@@ -411,6 +411,15 @@ export function PredictionMarketsPage(): React.JSX.Element {
       </PageHeader>
 
       <div className="px-4 py-4 max-w-6xl mx-auto space-y-4">
+        <Alert className="border-primary/30 bg-primary/5">
+          <Info className="size-4" />
+          <AlertDescription>
+            <span className="font-semibold text-foreground">The first Bitcoin-only prediction market on Nostr.</span>{' '}
+            ₿AO MARKETS is currently for training and demo use only. Mainnet is expected after testing passes.
+            Feedback is welcome while we prepare it.
+          </AlertDescription>
+        </Alert>
+
         <MyTradesSection
           onOpenMarket={(market, position) => {
             if (market) {
@@ -500,8 +509,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            Prediction Markets powered by ₿AO MARKETS. All markets are for play only with dummy
-            bitcoin in demo mode, claim testnet bitcoin by visiting{' '}
+            Practice with dummy bitcoin in demo mode; claim testnet bitcoin by visiting{' '}
             <button
               type="button"
               onClick={() => openUrl("https://bao.markets")}

@@ -52,7 +52,7 @@ export function MobileTopBar({ onAvatarClick, hasSubHeader }: MobileTopBarProps)
           </div>
 
           {/* Right: color mode switch (Bright → Dark → Hacker) */}
-          <div className="flex w-7 shrink-0 items-center justify-center">
+          <div className="flex w-9 shrink-0 items-center justify-center">
             <ThemeQuickSwitch compact />
           </div>
         </div>
