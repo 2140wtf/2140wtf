@@ -63,7 +63,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     setError(null);
     if (
       !confirm(
-        "Send an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, that this is a Concord invite, and its timing, size, and expiry. They cannot see the inviter or community inside it. Cancel and create a link below for lower linkability.",
+        "Send an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, that this is a Concord invite, and its timing, size, and expiry. The encrypted event does not name the inviter or community, but the relay can observe and may correlate the publishing connection and timing. Cancel and create a link below for lower linkability.",
       )
     ) {
       return;
