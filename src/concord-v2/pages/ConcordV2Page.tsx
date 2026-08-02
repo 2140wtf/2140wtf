@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { openUrl } from "@/lib/downloadFile";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { ChannelNavContext } from "@/contexts/ChannelNavContext";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { ComposerBoundsProvider } from "@/contexts/ComposerBoundsContext";
@@ -1707,7 +1708,7 @@ export function ConcordV2Page() {
             </button>
             </div>
             <div className="ml-auto flex items-center gap-0.5">
-              {folded?.metadata?.repo && (
+              {sanitizeUrl(folded?.metadata?.repo) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1715,12 +1716,15 @@ export function ConcordV2Page() {
                       size="icon"
                       className="size-8 touch:size-11"
                       aria-label="Open community repository"
-                      onClick={() => openUrl(folded.metadata!.repo as string)}
+                      onClick={() => {
+                        const safeRepo = sanitizeUrl(folded?.metadata?.repo);
+                        if (safeRepo) void openUrl(safeRepo);
+                      }}
                     >
                       <GitBranch className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{folded.metadata.repo as string}</TooltipContent>
+                  <TooltipContent>{folded?.metadata?.repo as string}</TooltipContent>
                 </Tooltip>
               )}
               {user && channel && canWrite && (

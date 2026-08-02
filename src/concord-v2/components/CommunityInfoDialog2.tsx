@@ -36,6 +36,7 @@ import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
 import { toast } from "@/hooks/useToast";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { encryptImageBlob } from "@/concord-v2/lib/image";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { mirrorHistoryToRelays, type MirrorProgress } from "@/concord-v2/lib/relayMirror";
 import {
   MAX_COMMUNITY_RELAYS,
@@ -333,8 +334,13 @@ function InfoBody({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => openUrl(metadata.repo!)}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-secondary/40 px-2 py-1.5 text-left text-sm text-primary hover:underline"
+              disabled={!sanitizeUrl(metadata.repo)}
+              onClick={() => {
+                const safeRepo = sanitizeUrl(metadata.repo);
+                if (safeRepo) void openUrl(safeRepo);
+              }}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-secondary/40 px-2 py-1.5 text-left text-sm text-primary enabled:hover:underline disabled:cursor-default disabled:text-muted-foreground"
+              title={sanitizeUrl(metadata.repo) ? "Open repository" : "Only public HTTPS repository links can be opened"}
             >
               <GitBranch className="size-4 shrink-0" />
               <span className="truncate">{metadata.repo}</span>
