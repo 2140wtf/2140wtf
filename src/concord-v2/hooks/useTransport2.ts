@@ -161,6 +161,11 @@ export function useTransport2(
   }, [folded.reactions, user]);
 
   const channelIdHex = channel?.idHex ?? null;
+  const streamSig = (channel?.streams ?? []).map((stream) => stream.group.pk).sort().join(",");
+  const rawChannelKey = useMemo(
+    () => channelKey(user?.pubkey, channelIdHex, streamSig ? streamSig.split(",") : []),
+    [user?.pubkey, channelIdHex, streamSig],
+  );
 
   // Author lookup by rumor id, so a reaction can carry a NIP-25 `p` tag for the
   // reacted-to author (mirroring the NIP-29 path). Invisible to the relay: the
@@ -183,7 +188,7 @@ export function useTransport2(
             // even sealed). Also strip it from the query cache so the fold
             // doesn't see it at all.
             markReactionDeleted(input.mineEventId);
-            queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old = []) =>
+            queryClient.setQueryData<OpenedChat[]>(rawChannelKey, (old = []) =>
               old.filter((m) => m.rumorId !== input.mineEventId),
             );
             // Seal + publish the kind-5 delete rumor (the store's NIP-09
@@ -217,7 +222,7 @@ export function useTransport2(
       objCache.set(id, { tallies, value });
       return value;
     };
-  }, [talliesById, send, queryClient, channelIdHex, authorById]);
+  }, [talliesById, send, queryClient, rawChannelKey, authorById]);
 
   // CORD.md zap tallies from the fold (only VERIFIED zaps ever reach it).
   const zapTalliesById = useMemo(() => {

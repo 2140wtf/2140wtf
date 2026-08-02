@@ -55,13 +55,26 @@ export function useConcord2Mentions(channels: ChannelV2[], communityIdHex: strin
 
   // A stable list of channel ids (recomputed only when the set changes), so
   // the query key doesn't churn on every parent re-render.
-  const channelSig = channels.map((c) => c.idHex).join(",");
-  const channelIds = useMemo(() => channels.map((c) => c.idHex), [channelSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const channelSig = channels
+    .map((channel) => `${channel.idHex}:${channel.streams.map((stream) => stream.group.pk).sort().join(".")}`)
+    .sort()
+    .join(",");
+  const authorizedChannels = useMemo(
+    () => channels.map((channel) => ({
+      idHex: channel.idHex,
+      streamPks: channel.streams.map((stream) => stream.group.pk),
+    })),
+    [channelSig], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const channelIds = useMemo(
+    () => authorizedChannels.map((channel) => channel.idHex),
+    [authorizedChannels],
+  );
 
   const { data: mentions = [], isLoading } = useQuery<ChatMsg[]>({
     queryKey: ["concord2-mentions", pubkey, channelSig],
     queryFn: async ({ signal }) => {
-      const rumors = await queryMentionRumors(channelIds, pubkey!, { limit: MENTION_LIMIT, signal });
+      const rumors = await queryMentionRumors(authorizedChannels, pubkey!, { limit: MENTION_LIMIT, signal });
       // Never surface self-mentions (e.g. quoting yourself). Newest-first.
       return rumors
         .filter((r) => r.author !== pubkey)

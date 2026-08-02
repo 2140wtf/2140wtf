@@ -1,5 +1,5 @@
 import { Ban, Bot, Loader2, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { JoinButton } from "@/components/auth/JoinButton";
@@ -33,27 +33,34 @@ export function InviteV2Page() {
   // fast path, and grind the agent-gate PoW inside the join.
   const [agentAudience, setAgentAudience] = useState(false);
   const [humanOverride, setHumanOverride] = useState(false);
+  const [previewResolved, setPreviewResolved] = useState(false);
+  const [joining, setJoining] = useState(false);
   // Held while a freshly created agent nsec is on screen — joining (and
   // navigating away) before the agent stores it would orphan the key.
   const [holdJoin, setHoldJoin] = useState(false);
-  const attempted = useRef(false);
-  const agentAudienceRef = useRef(false);
 
   const fragment = (location.hash || window.location.hash).replace(/^#/, "").trim();
   const invite = naddr && fragment ? parseInviteRoute(naddr, fragment) : undefined;
 
   // Look before you leap: resolve the preview even before sign-in.
   useEffect(() => {
-    if (!invite || previewName !== null) return;
+    if (!invite) return;
+    let cancelled = false;
+    setPreviewResolved(false);
+    setError(null);
     preview({ invite })
       .then((p) => {
+        if (cancelled) return;
         setPreviewName(p.name);
-        if (p.bundle.audience === "agent") {
-          setAgentAudience(true);
-          agentAudienceRef.current = true;
-        }
+        setAgentAudience(p.bundle.audience === "agent");
+        setPreviewResolved(true);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setError("Couldn't preview this invite. Check your connection and try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [naddr, fragment]);
 
@@ -66,25 +73,24 @@ export function InviteV2Page() {
       setError("This invite link is malformed or from a newer client.");
       return;
     }
-    if (!user) return; // wait for sign-in
-    if (holdJoin) return; // a fresh agent key is still on screen
-    if (attempted.current) return;
-    attempted.current = true;
+  }, [naddr, fragment, invite]);
 
-    (async () => {
-      try {
-        const { communityId, name } = await join({ invite, grindAgentPow: agentAudienceRef.current });
-        toast({ title: "Encrypted community joined", description: name });
-        navigate(`/bao/c/${encodeURIComponent(communityId)}`, { replace: true });
-      } catch (e) {
-        attempted.current = false; // allow a retry
-        setBanned(e instanceof BannedFromCommunityError);
-        setAgentOnly(e instanceof AgentOnlyCommunityError);
-        setError(e instanceof Error ? e.message : "Couldn't join with that invite link.");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naddr, fragment, user, navigate, holdJoin]);
+  const handleAccept = async () => {
+    if (!invite || !user || !previewResolved || joining || holdJoin) return;
+    setJoining(true);
+    setError(null);
+    try {
+      const { communityId, name } = await join({ invite, grindAgentPow: agentAudience });
+      toast({ title: "Encrypted community joined", description: name });
+      navigate(`/bao/c/${encodeURIComponent(communityId)}`, { replace: true });
+    } catch (e) {
+      setBanned(e instanceof BannedFromCommunityError);
+      setAgentOnly(e instanceof AgentOnlyCommunityError);
+      setError(e instanceof Error ? e.message : "Couldn't join with that invite link.");
+    } finally {
+      setJoining(false);
+    }
+  };
 
   return (
     <main className="flex-1 min-w-0 flex flex-col items-center justify-center gap-4 p-8 text-center safe-area-top pb-safe">
@@ -125,6 +131,11 @@ export function InviteV2Page() {
             </Button>
           </>
         )
+      ) : !previewResolved ? (
+        <>
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          <p className="text-muted-foreground">Checking the encrypted invite…</p>
+        </>
       ) : agentAudience && !humanOverride && invite && (!user || holdJoin) ? (
         /* One mount position across the login boundary: the panel's state
             (a freshly created nsec shown exactly once) must survive the
@@ -153,10 +164,15 @@ export function InviteV2Page() {
         </>
       ) : (
         <>
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          <p className="text-muted-foreground">
-            Joining {previewName ? <span className="text-foreground">{previewName}</span> : "the encrypted community"}…
+          <h1 className="text-2xl font-bold">
+            Accept invite to {previewName ? <span className="text-primary">{previewName}</span> : "this private community"}?
+          </h1>
+          <p className="max-w-md text-muted-foreground">
+            This will join using your active account <span className="font-mono text-foreground">{user.pubkey.slice(0, 12)}…</span>.
           </p>
+          <Button type="button" size="lg" className="h-12 w-full max-w-xs clip-corner-lg" onClick={handleAccept} disabled={joining}>
+            {joining ? <Loader2 className="size-4 animate-spin" /> : `Accept as ${user.pubkey.slice(0, 8)}…`}
+          </Button>
         </>
       )}
     </main>

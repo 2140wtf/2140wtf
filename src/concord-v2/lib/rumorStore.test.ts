@@ -56,11 +56,12 @@ function chatRumor(
   content: string,
   ms: number,
   extra: string[][] = [],
+  epoch = 0n,
 ): Rumor {
   return buildRumor({
     kind,
     content,
-    tags: [...channelBindingTags(idHex, 0n), ...extra],
+    tags: [...channelBindingTags(idHex, epoch), ...extra],
     pubkey: s.pubkey,
     ms,
   });
@@ -126,7 +127,7 @@ describe("concord-v2 rumor store", () => {
     writeRumors(opened);
 
     const got = await eventually(
-      () => queryChannelRumors(idHex, { limit: 100 }),
+      () => queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 100 }),
       (r) => r.length === 3,
     );
     expect(got.length).toBe(3);
@@ -134,8 +135,40 @@ describe("concord-v2 rumor store", () => {
     expect(msgs).toEqual(["first", "second"]);
 
     // A different channel id matches nothing.
-    const none = await queryChannelRumors("ff".repeat(32), { limit: 100 });
+    const none = await queryChannelRumors("ff".repeat(32), {
+      streamPks: channel.streams.map((s) => s.group.pk),
+      limit: 100,
+    });
     expect(none.length).toBe(0);
+  });
+
+  it("authorizes cached plaintext by held epoch streams, including explicitly retained history", async () => {
+    const { channel: epoch0, idHex } = makeChannel();
+    const alice = signer();
+    const epoch1Root = new Uint8Array(32).fill(19);
+    const epoch1Stream = { epoch: 1n, group: channelGroupKey(epoch1Root, epoch0.id, 1) };
+    const epoch1: ChannelV2 = { ...epoch0, streams: [epoch1Stream], current: epoch1Stream };
+
+    const oldWrap = await wrapChat(chatRumor(idHex, alice, KIND_MESSAGE, "old plaintext", 1000), epoch0, alice);
+    const newWrap = await wrapChat(chatRumor(idHex, alice, KIND_MESSAGE, "new plaintext", 2000, [], 1n), epoch1, alice);
+    writeRumors([
+      ...(await openChatBatch([oldWrap], epoch0)),
+      ...(await openChatBatch([newWrap], epoch1)),
+    ]);
+
+    const currentOnly = await eventually(
+      () => queryChannelRumors(idHex, { streamPks: [epoch1Stream.group.pk], limit: 100 }),
+      (rows) => rows.length === 1,
+    );
+    expect(currentOnly.map((row) => row.content)).toEqual(["new plaintext"]);
+
+    // An invite/configuration that grants the historical root derives and
+    // supplies both streams, so history visibility remains configurable.
+    const withHistory = await queryChannelRumors(idHex, {
+      streamPks: [epoch0.current.group.pk, epoch1Stream.group.pk],
+      limit: 100,
+    });
+    expect(withHistory.map((row) => row.content).sort()).toEqual(["new plaintext", "old plaintext"]);
   });
 
   it("delete=delete: a self kind-5 physically removes its target", async () => {
@@ -146,12 +179,15 @@ describe("concord-v2 rumor store", () => {
     const del = chatRumor(idHex, alice, KIND_DELETE, "", 2000, [["e", msg.id], ["k", "9"]]);
 
     writeRumors(await openChatBatch([await wrapChat(msg, channel, alice)], channel));
-    await eventually(() => queryChannelRumors(idHex, { limit: 100 }), (r) => r.length === 1);
+    await eventually(
+      () => queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 100 }),
+      (r) => r.length === 1,
+    );
 
     writeRumors(await openChatBatch([await wrapChat(del, channel, alice)], channel));
     // The delete rumor is stored; NIP-09 removes the targeted message.
     const after = await eventually(
-      () => queryChannelRumors(idHex, { limit: 100 }),
+      () => queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 100 }),
       (r) => !r.some((m) => m.rumorId === msg.id),
     );
     expect(after.some((m) => m.rumorId === msg.id)).toBe(false);
@@ -241,17 +277,21 @@ describe("concord-v2 rumor store", () => {
     ];
     const wraps = await Promise.all(rumors.map((r) => wrapChat(r, channel, alice)));
     writeRumors(await openChatBatch(wraps, channel));
-    await eventually(() => queryChannelRumors(idHex, { limit: 100 }), (r) => r.length === 21);
+    await eventually(
+      () => queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 100 }),
+      (r) => r.length === 21,
+    );
 
     // A newest-window community scan (as used by unread/threads) misses it…
-    const windowed = await queryRumorsByChannel([idHex], { perChannel: 10 });
+    const authorized = [{ idHex, streamPks: channel.streams.map((s) => s.group.pk) }];
+    const windowed = await queryRumorsByChannel(authorized, { perChannel: 10 });
     expect(windowed.get(idHex)?.some((r) => r.content === "hey @me")).toBe(false);
 
     // …but the mentions view must still find it: its own index-backed `#p`
     // filter reaches the whole store. (Regression: deriving mentions from the
     // shared per-channel window silently dropped mentions older than a busy
     // channel's newest page.)
-    const mentions = await queryMentionRumors([idHex], me.pubkey, { limit: 200 });
+    const mentions = await queryMentionRumors(authorized, me.pubkey, { limit: 200 });
     expect(mentions.map((r) => r.content)).toEqual(["hey @me"]);
     expect(mentions[0].channelIdHex).toBe(idHex);
   });
