@@ -16,6 +16,7 @@
 - Signet escrow release end-to-end probe.
 
 ### Changed
+- Weighted the 2140-pets hatch pool so Bleep appears 80% of the time.
 - Simplified ₿AO Fund creation, funding, milestone, and collaboration flows.
 - Improved responsive layouts, focus modes, navigation, and mobile controls.
 - Strengthened privacy defaults for communities, invitations, relays, and Nutzaps.
