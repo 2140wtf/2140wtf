@@ -5,6 +5,7 @@ import QrScanner from 'qr-scanner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CashuUrDecoder, CASHU_UR_PREFIX } from '@/lib/cashu/nut16';
 import { cn } from '@/lib/utils';
 
 interface QrScannerDialogProps {
@@ -46,6 +47,7 @@ export function QrScannerDialog({ isOpen, onClose, onScan, title = 'Scan QR code
   // exists in the DOM.
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
+  const cashuUrDecoderRef = useRef<CashuUrDecoder | null>(null);
   // Keep the latest onScan in a ref so the start effect doesn't tear down
   // the camera every time the parent passes a new callback identity.
   const onScanRef = useRef(onScan);
@@ -55,6 +57,7 @@ export function QrScannerDialog({ isOpen, onClose, onScan, title = 'Scan QR code
   const [error, setError] = useState<string | null>(null);
   const [hasFlash, setHasFlash] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
+  const [urProgress, setUrProgress] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,9 +80,29 @@ export function QrScannerDialog({ isOpen, onClose, onScan, title = 'Scan QR code
     let readyTimer: ReturnType<typeof setTimeout> | undefined;
     setStatus('starting');
     setError(null);
+    cashuUrDecoderRef.current = null;
+    setUrProgress(null);
 
     const handleDecode = (result: QrScanner.ScanResult) => {
       if (cancelled) return;
+      if (result.data.toLowerCase().startsWith(CASHU_UR_PREFIX)) {
+        try {
+          const decoder = cashuUrDecoderRef.current ?? new CashuUrDecoder();
+          cashuUrDecoderRef.current = decoder;
+          const decoded = decoder.receive(result.data);
+          setUrProgress(decoded.progress);
+          if (!decoded.complete || !decoded.token) return;
+          cancelled = true;
+          scanner.stop();
+          onScanRef.current(decoded.token);
+        } catch (scanError) {
+          cancelled = true;
+          scanner.stop();
+          setStatus('error');
+          setError(scanError instanceof Error ? scanError.message : 'Animated QR scan failed.');
+        }
+        return;
+      }
       cancelled = true;
       scanner.stop();
       onScanRef.current(result.data);
@@ -187,8 +210,10 @@ export function QrScannerDialog({ isOpen, onClose, onScan, title = 'Scan QR code
       scanner.stop();
       scanner.destroy();
       scannerRef.current = null;
+      cashuUrDecoderRef.current = null;
       setHasFlash(false);
       setFlashOn(false);
+      setUrProgress(null);
     };
   }, [isOpen, video]);
 
@@ -265,7 +290,9 @@ export function QrScannerDialog({ isOpen, onClose, onScan, title = 'Scan QR code
 
         <div className="px-4 py-3 shrink-0">
           <p className="text-xs text-muted-foreground text-center">
-            Point your camera at a QR code.
+            {urProgress === null
+              ? 'Point your camera at a QR code.'
+              : `Reading animated Cashu QR… ${urProgress}%`}
           </p>
           {status === 'error' && (
             <Button onClick={onClose} variant="outline" className="w-full mt-3">

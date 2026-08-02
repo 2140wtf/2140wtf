@@ -7,6 +7,7 @@ import { useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Camera,
   Check,
   Copy,
   RefreshCw,
@@ -14,6 +15,8 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { CashuTokenQr } from '@/components/CashuTokenQr';
+import { QrScannerDialog } from '@/components/QrScannerDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -55,6 +58,7 @@ export function CashuWalletDrawer({
   const { toast } = useToast();
   const { user } = useCurrentUser();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
   // The generated send token is persisted in localStorage (scoped by user +
@@ -200,10 +204,16 @@ export function CashuWalletDrawer({
                   onChange={(e) => setReceiveTokenStr(e.target.value)}
                   rows={4}
                 />
-                <Button onClick={() => void handleReceive()} disabled={!receiveTokenStr.trim() || wallet.loading}>
-                  <ArrowDownLeft className="size-4 mr-1.5" />
-                  Receive token
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => void handleReceive()} disabled={!receiveTokenStr.trim() || wallet.loading}>
+                    <ArrowDownLeft className="size-4 mr-1.5" />
+                    Receive token
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+                    <Camera className="size-4 mr-1.5" />
+                    Scan QR
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -236,6 +246,7 @@ export function CashuWalletDrawer({
                       This token IS the money — your wallet is already debited. It is stored in
                       this browser until you dismiss it; copy it before moving on.
                     </p>
+                    <CashuTokenQr token={generatedToken} size={180} />
                     <div className="rounded-lg border bg-muted p-3 font-mono text-xs break-all">{generatedToken}</div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" onClick={() => void copyGeneratedToken()}>
@@ -282,6 +293,15 @@ export function CashuWalletDrawer({
             </Card>
           </TabsContent>
         </Tabs>
+        <QrScannerDialog
+          isOpen={scannerOpen}
+          onClose={() => setScannerOpen(false)}
+          title="Scan Cashu token"
+          onScan={(token) => {
+            setReceiveTokenStr(token);
+            setScannerOpen(false);
+          }}
+        />
       </div>
     </ScrollArea>
   );

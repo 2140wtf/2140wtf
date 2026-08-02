@@ -3,6 +3,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Bitcoin,
+  Camera,
   Check,
   Coins,
   Copy,
@@ -18,6 +19,8 @@ import { QRCodeSVG } from 'qrcode.react';
 
 import { Button } from '@/components/ui/button';
 import { SatsPresetPills } from '@/components/SatsPresetPills';
+import { CashuTokenQr } from '@/components/CashuTokenQr';
+import { QrScannerDialog } from '@/components/QrScannerDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -572,6 +575,7 @@ function LightningPanel({
 function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }) {
   const { toast } = useToast();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
   const [generatedToken, setGeneratedToken] = useState('');
@@ -702,10 +706,16 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
             onChange={(e) => setReceiveTokenStr(e.target.value)}
             rows={4}
           />
-          <Button onClick={handleReceive} disabled={!receiveTokenStr.trim() || wallet.loading}>
-            <ArrowDownLeft className='size-4 mr-1.5' />
-            Receive token
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleReceive} disabled={!receiveTokenStr.trim() || wallet.loading}>
+              <ArrowDownLeft className='size-4 mr-1.5' />
+              Receive token
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+              <Camera className="size-4 mr-1.5" />
+              Scan QR
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value='send' className='space-y-4 pt-2'>
@@ -730,9 +740,7 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
             <SatsPresetPills value={sendAmount} onSelect={(s) => setSendAmount(String(s))} />
             {generatedToken && (
               <div className='space-y-4 flex flex-col items-center pt-2'>
-                <div className='rounded-xl bg-white p-4 shadow-sm'>
-                  <QRCodeSVG value={generatedToken} size={180} level='M' />
-                </div>
+                <CashuTokenQr token={generatedToken} size={180} />
                 <p className='text-xs text-muted-foreground text-center break-all max-w-xs'>
                   {generatedToken}
                 </p>
@@ -813,6 +821,15 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
           ))}
         </div>
       )}
+      <QrScannerDialog
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        title="Scan ₿AO Cashu token"
+        onScan={(token) => {
+          setReceiveTokenStr(token);
+          setScannerOpen(false);
+        }}
+      />
     </div>
   );
 }
