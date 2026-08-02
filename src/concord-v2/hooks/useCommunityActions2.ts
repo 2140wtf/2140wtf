@@ -26,7 +26,7 @@ import {
   buildMetadataEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { bytesToHex, hex32, random32 } from "@/concord-v2/lib/derive";
+import { bytesToHex, dissolvedGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
 import {
   encodeFragment,
   inviteCommitment,
@@ -39,10 +39,10 @@ import {
 import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import { capRelays, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
-import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
+import { concordClient, ephemeralRelayClient } from "@/concord-v2/lib/concordTransport";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
 
-import type { NostrEvent } from "@nostrify/nostrify";
+import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
 /** Thrown when the joiner is on the community's folded Banlist (CORD-04 §4). */
 export class BannedFromCommunityError extends Error {
@@ -89,11 +89,11 @@ export class SingleUseLinkUsedError extends Error {
  * cross-epoch fold semantics (see headCandidates' `snapshot`).
  */
 export async function assertNotBanned(
-  nostr: ReturnType<typeof useNostr>["nostr"],
+  client: ReturnType<typeof concordClient>,
   community: CommunityV2,
   pubkey: string,
 ): Promise<void> {
-  const folded = await fetchControlFold(nostr, community);
+  const folded = await fetchControlFold(client, community);
   if (folded.banned.has(pubkey)) throw new BannedFromCommunityError();
 }
 
@@ -104,7 +104,7 @@ export async function assertNotBanned(
  * refuse-and-retry rather than wave anyone through.
  */
 export async function fetchControlFold(
-  nostr: ReturnType<typeof useNostr>["nostr"],
+  client: ReturnType<typeof concordClient>,
   community: CommunityV2,
 ): Promise<FoldedControl> {
   // Enforce the single-epoch invariant in code, not just prose: this fold omits
@@ -112,13 +112,10 @@ export async function fetchControlFold(
   // old-epoch fragment and wave a banned rejoiner through. Fail closed.
   if (community.heldRoots.length !== 1) throw new ControlUnreadableError();
   const groups = controlGroups(community);
-  // Answer the relays' NIP-42 challenge with the control-group keys, else a
-  // gated relay serves nothing and the state goes unseen.
-  registerStreamKeys(groups, community.relays);
   const authors = groups.map((g) => g.pk);
   const results = await Promise.all(
     community.relays.map((url) =>
-      nostr
+      client
         .relay(url)
         .query([{ kinds: [KIND_WRAP], authors }], { signal: AbortSignal.timeout(12_000) })
         .catch(() => [] as NostrEvent[]),
@@ -139,9 +136,15 @@ export interface InvitePreview2 {
   bundle: InviteBundle;
 }
 
+interface InviteBundleReader {
+  relay(url: string): {
+    query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
+  };
+}
+
 /** Fetch + verify a V2 invite bundle from its bootstrap relays. */
 export async function resolveBundle(
-  nostr: ReturnType<typeof useNostr>["nostr"],
+  nostr: InviteBundleReader,
   invite: ParsedInviteLink,
   fallbackRelays: string[],
 ): Promise<InviteBundle> {
@@ -172,6 +175,18 @@ export async function resolveBundle(
   const newest =
     atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
   return parseBundleEvent(newest, invite.linkSigner, invite.token, Date.now());
+}
+
+async function resolveBundlePrivately(
+  invite: ParsedInviteLink,
+  fallbackRelays: string[],
+): Promise<InviteBundle> {
+  const client = ephemeralRelayClient();
+  try {
+    return await resolveBundle(client, invite, fallbackRelays);
+  } finally {
+    client.close();
+  }
 }
 
 /** Turn a verified bundle into the membership-list join material + entry. */
@@ -301,7 +316,6 @@ export function useCommunityActions2() {
       // agent-only create seals the gate INTO the metadata edition: every
       // conforming client then drops Guestbook Joins that lack the PoW.
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildMetadataEdition(
@@ -317,7 +331,6 @@ export function useCommunityActions2() {
         ),
       );
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildChannelEdition(
@@ -341,9 +354,12 @@ export function useCommunityActions2() {
         const rumor = agentOnly
           ? grindJoinRumor(user.pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY)
           : buildJoinRumor(user.pubkey, Date.now());
-        const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
+        const group = currentGuestbookGroup(community);
+        const wrap = await sealGuestbook(rumor, group, user.signer);
         await Promise.allSettled(
-          community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+          community.relays.map((url) =>
+            concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+          ),
         );
       })().catch(() => undefined);
 
@@ -353,7 +369,7 @@ export function useCommunityActions2() {
 
   const preview = useMutation<InvitePreview2, Error, { invite: ParsedInviteLink }>({
     mutationFn: async ({ invite }) => {
-      const bundle = await resolveBundle(nostr, invite, bootstrapRelays);
+      const bundle = await resolveBundlePrivately(invite, bootstrapRelays);
       // Fail loudly when this platform can't reach ANY of the community's
       // relays (#47) — e.g. a ws://-only dev community opened on the APK,
       // where mixed content silently blocks every connection.
@@ -372,7 +388,7 @@ export function useCommunityActions2() {
   const join = useMutation<{ communityId: string; name: string }, Error, { invite: ParsedInviteLink; grindAgentPow?: boolean }>({
     mutationFn: async ({ invite, grindAgentPow }) => {
       if (!user) throw new Error("Sign in to join an encrypted community.");
-      const bundle = await resolveBundle(nostr, invite, bootstrapRelays);
+      const bundle = await resolveBundlePrivately(invite, bootstrapRelays);
       const unusable = unusableRelaysReason(bundle.relays);
       if (unusable) throw new Error(unusable);
       const entry = bundleToEntry(bundle, { inviteRef: inviteRefOf(invite) });
@@ -387,7 +403,10 @@ export function useCommunityActions2() {
       // (an agent-audience invite): the Guestbook Join then carries the PoW.
       let grindDifficulty: number | undefined;
       if (community) {
-        const folded = await fetchControlFold(nostr, community);
+        const folded = await fetchControlFold(
+          concordClient(community.idHex, controlGroups(community)),
+          community,
+        );
         if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
         const gate = agentGateOf(folded.metadata);
         // The human app path refuses on purpose: the gate's proof-of-work is
@@ -403,9 +422,16 @@ export function useCommunityActions2() {
         // skips this, so creators should rotate keys when it truly matters.
         if (bundle.max_uses === 1) {
           const group = currentGuestbookGroup(community);
-          const wraps = await nostr.query([{ kinds: [KIND_WRAP], authors: [group.pk] }], {
-            signal: AbortSignal.timeout(8000),
-          });
+          const client = concordClient(community.idHex, [group]);
+          const results = await Promise.all(
+            community.relays.map((url) =>
+              client.relay(url).query([{ kinds: [KIND_WRAP], authors: [group.pk] }], {
+                signal: AbortSignal.timeout(8000),
+              }).catch(() => [] as NostrEvent[]),
+            ),
+          );
+          const seen = new Set<string>();
+          const wraps = results.flat().filter((event) => (seen.has(event.id) ? false : seen.add(event.id)));
           if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(wraps, [group])), commitment)) {
             throw new SingleUseLinkUsedError();
           }
@@ -425,9 +451,12 @@ export function useCommunityActions2() {
             grindDifficulty !== undefined
               ? grindJoinRumor(user.pubkey, Date.now(), grindDifficulty, attribution)
               : buildJoinRumor(user.pubkey, Date.now(), attribution);
-          const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
+          const group = currentGuestbookGroup(community);
+          const wrap = await sealGuestbook(rumor, group, user.signer);
           await Promise.allSettled(
-            community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+            community.relays.map((url) =>
+              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            ),
           );
         })().catch(() => undefined);
       }
@@ -448,7 +477,6 @@ export function useCommunityActions2() {
 
 /** Per-community actions: leave, dissolve, and channel management. */
 export function useCommunityManagement2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: updateList } = useUpdateCommunityList2();
   const { data: folded } = useControlFold2(community);
@@ -469,9 +497,12 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
     mutationFn: async () => {
       if (!user || !community) throw new Error("Not ready.");
       if (user.pubkey !== community.owner) throw new Error("Only the owner can dissolve the community.");
+      const group = dissolvedGroupKey(community.id);
       const wrap = await sealDissolved(community.id, user.pubkey, user.signer);
       const results = await Promise.allSettled(
-        community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+        community.relays.map((url) =>
+          concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+        ),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error("No relay accepted the dissolution.");
@@ -487,7 +518,6 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       if (!trimmed) throw new Error("Channel name is required.");
       const channelId = random32();
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildChannelEdition(
@@ -509,7 +539,6 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       const def = folded?.channels.get(channelIdHex);
       const head = folded?.heads.get(channelIdHex);
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildChannelEdition(
@@ -534,7 +563,6 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       const def = folded?.channels.get(channelIdHex);
       const head = folded?.heads.get(channelIdHex);
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildChannelEdition(
@@ -591,7 +619,6 @@ export function useStrandedRecovery2(
   community: CommunityV2 | undefined,
   stranded: boolean,
 ): { canRecover: boolean; checking: boolean; checkNow: () => Promise<boolean> } {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const { mutateAsync: updateList } = useUpdateCommunityList2();
@@ -612,7 +639,7 @@ export function useStrandedRecovery2(
     inFlight.current = true;
     setChecking(true);
     try {
-      const bundle = await resolveBundle(nostr, invite, bootstrapRelays);
+      const bundle = await resolveBundlePrivately(invite, bootstrapRelays);
       // Still vending the epoch we hold (or older): the creator hasn't
       // refreshed yet. Nothing to do — the next poll re-asks.
       if (BigInt(bundle.root_epoch) <= community.rootEpoch) return false;
@@ -630,9 +657,12 @@ export function useStrandedRecovery2(
           ? { creator: bundle.creator_npub, label: bundle.label }
           : undefined;
         const rumor = buildJoinRumor(user.pubkey, Date.now(), attribution);
-        const wrap = await sealGuestbook(rumor, currentGuestbookGroup(rehydrated), user.signer);
+        const group = currentGuestbookGroup(rehydrated);
+        const wrap = await sealGuestbook(rumor, group, user.signer);
         await Promise.allSettled(
-          rehydrated.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+          rehydrated.relays.map((url) =>
+            concordClient(rehydrated.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+          ),
         );
       })().catch(() => undefined);
       return true;

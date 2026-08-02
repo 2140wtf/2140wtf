@@ -1,10 +1,10 @@
-import { useNostr } from "@nostrify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { KIND_SEAL_ENCRYPTED, KIND_TYPING, KIND_WRAP_EPHEMERAL } from "@/concord-v2/lib/kinds";
 import { buildRumor, channelBindingTags, checkChannelBinding, openWrap, sealRumor, wrapSeal } from "@/concord-v2/lib/stream";
 import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -20,7 +20,6 @@ const TYPING_THROTTLE_MS = 4000;
  * live `req()` per relay feeds a decaying in-memory map.
  */
 export function useTyping2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined): string[] {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const [typers, setTypers] = useState<string[]>([]);
   const seen = useRef(new Map<string, number>());
@@ -66,7 +65,7 @@ export function useTyping2(community: CommunityV2 | undefined, channel: ChannelV
     for (const url of community.relays) {
       void (async () => {
         try {
-          for await (const msg of nostr.relay(url).req(
+          for await (const msg of concordClient(community.idHex, channel.streams.map((s) => s.group)).relay(url).req(
             [{ kinds: [KIND_WRAP_EPHEMERAL], authors: [currentPk] }],
             { signal: controller.signal },
           )) {
@@ -84,14 +83,13 @@ export function useTyping2(community: CommunityV2 | undefined, channel: ChannelV
       clearInterval(decay);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nostr, community?.idHex, channelIdHex, currentPk, user?.pubkey]);
+  }, [community, channel, channelIdHex, currentPk, user?.pubkey]);
 
   return typers;
 }
 
 /** A throttled publisher for the current user's typing signal. */
 export function useTypingPublisher2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const lastSent = useRef(0);
 
@@ -113,11 +111,15 @@ export function useTypingPublisher2(community: CommunityV2 | undefined, channel:
         const seal = await sealRumor(rumor, KIND_SEAL_ENCRYPTED, channel.current.group, user.signer);
         const wrap = wrapSeal(seal, channel.current.group, { ephemeral: true });
         await Promise.allSettled(
-          community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(6000) })),
+          community.relays.map((url) =>
+            concordClient(community.idHex, channel.streams.map((s) => s.group))
+              .relay(url)
+              .event(wrap, { signal: AbortSignal.timeout(6000) }),
+          ),
         );
       } catch {
         // best-effort; typing is ephemeral
       }
     })();
-  }, [nostr, user, community, channel]);
+  }, [user, community, channel]);
 }

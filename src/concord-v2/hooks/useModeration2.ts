@@ -1,4 +1,3 @@
-import { useNostr } from "@nostrify/react";
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
@@ -34,7 +33,6 @@ import { toast } from "@/hooks/useToast";
 export type BanPhase = "silence" | "roles" | "rekey";
 
 export function useModeration2(community: CommunityV2 | undefined, recipients: string[]) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { data: folded } = useControlFold2(community);
@@ -56,7 +54,6 @@ export function useModeration2(community: CommunityV2 | undefined, recipients: s
     if (!user || !community) throw new Error("Not ready.");
     const head = folded?.heads.get(bytesToHex(banlistLocator(community.id)));
     await publishEdition2(
-      nostr,
       community,
       user.signer,
       buildBanlistEdition(community.id, banned, {
@@ -81,7 +78,6 @@ export function useModeration2(community: CommunityV2 | undefined, recipients: s
     if (!canActOn(target, Permissions.MANAGE_ROLES)) return;
     const head = folded?.heads.get(bytesToHex(grantLocator(community.id, hex32(target))));
     await publishEdition2(
-      nostr,
       community,
       user.signer,
       buildGrantEdition(

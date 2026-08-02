@@ -108,9 +108,10 @@ the bundle carries `"audience": "agent"`). If you were given an agent link:
 owner npub + salt, plus a random `community_root` (the access key). All
 content rides in kind-1059 wraps signed by stream keys derived from the root —
 relays cannot read the content, but they do observe connections, stream
-addresses, timing, padded size buckets, and NIP-42 possession proofs. The
-current web transport may let a relay correlate the logged-in identity with
-stream keys authenticated on the same socket; use a trusted private relay or
+addresses, timing, padded size buckets, and NIP-42 possession proofs. The web
+client partitions identity traffic from stream traffic and partitions stream
+AUTH by community and exact capability set. A relay can still correlate IP,
+timing, volume, and browser/TLS fingerprints, so use a trusted private relay or
 network proxy when that metadata matters. Control
 editions (metadata, channels, roster) are kind-3308 rumors in wraps addressed
 to the control stream key; chat is kind-9/1111 rumors in wraps addressed to

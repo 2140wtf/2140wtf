@@ -8,11 +8,12 @@ import { resolveBundle } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { buildRegistryEdition } from "@/concord-v2/lib/control";
 import { isAuthorized, Permissions } from "@/concord-v2/lib/roles";
-import { bytesToHex, grantLocator, hexToBytes, inviteLinksLocator, hex32 } from "@/concord-v2/lib/derive";
+import { bytesToHex, grantLocator, hexToBytes, inviteLinksLocator, hex32, type GroupKey } from "@/concord-v2/lib/derive";
+import { concordClient, concordTransport } from "@/concord-v2/lib/concordTransport";
 import {
   buildDirectInviteRumor,
   sealDirectInvite,
-  wrapDirectInvite,
+  wrapDirectInviteWithKey,
 } from "@/concord-v2/lib/directInvite";
 import {
   buildBundleEvent,
@@ -37,6 +38,7 @@ import type { CommunityV2 } from "@/concord-v2/lib/types";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 import type { NUser } from "@nostrify/react/login";
+import { getConversationKey } from "nostr-tools/nip44";
 
 /**
  * The creator's Invite List (kind 13303, CORD-05 §4): private bookkeeping for
@@ -44,6 +46,11 @@ import type { NUser } from "@nostrify/react/login";
  * across the creator's devices, NIP-44-encrypted to self.
  */
 const inviteListKey = (pubkey: string | undefined) => ["concord2", "invite-list", pubkey] as const;
+
+/** A link signer is also the exact NIP-42 identity for its bundle coordinate. */
+function linkAuthKey(sk: Uint8Array, pk: string): GroupKey {
+  return { sk, pk, convKey: getConversationKey(sk, pk) };
+}
 
 async function readInviteList(
   event: NostrEvent | null,
@@ -120,7 +127,6 @@ export function useInviteList2() {
  * simply absent from the map rather than failing the whole query.
  */
 export function useMyLinkEpochs2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const inviteList = useInviteList2();
 
   const links = (inviteList.data?.entries ?? []).filter((e) => e.community_id === community?.idHex);
@@ -136,7 +142,12 @@ export function useMyLinkEpochs2(community: CommunityV2 | undefined) {
           const parsed = parseInviteLink(e.url);
           if (!parsed) return;
           try {
-            const bundle = await resolveBundle(nostr, parsed, community!.relays);
+            const sk = hexToBytes(e.signer_sk);
+            const bundle = await resolveBundle(
+              concordClient(community!.idHex, [linkAuthKey(sk, parsed.linkSigner)]),
+              parsed,
+              community!.relays,
+            );
             if (typeof bundle.root_epoch === "number") out[e.token] = bundle.root_epoch;
           } catch {
             // Revoked/expired/offline: leave it absent (no notice, not "behind").
@@ -268,7 +279,6 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
     const eid = bytesToHex(inviteLinksLocator(community.id, hex32(user.pubkey)));
     const head = folded?.heads.get(eid);
     await publishEdition2(
-      nostr,
       community,
       user.signer,
       buildRegistryEdition(community.id, user.pubkey, live, {
@@ -308,9 +318,18 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       const bundle = buildBundle({ expiresAtMs, label, maxUses, audience });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-      const results = await Promise.allSettled(
-        community.relays.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) })),
-      );
+      const authKey = linkAuthKey(link.sk, link.pk);
+      let results: PromiseSettledResult<void>[];
+      try {
+        const client = concordClient(community.idHex, [authKey]);
+        results = await Promise.allSettled(
+          community.relays.map((url) =>
+            client.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) }),
+          ),
+        );
+      } finally {
+        concordTransport.closeCapability(community.idHex, [authKey]);
+      }
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
       }
@@ -357,9 +376,20 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       if (!entry) throw new Error("This device doesn't hold that link's signing secret.");
 
       const tomb = buildRevocationEvent(hexToBytes(entry.signer_sk));
-      const results = await Promise.allSettled(
-        community.relays.map((relay) => nostr.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) })),
-      );
+      const authKey = linkAuthKey(hexToBytes(entry.signer_sk), parsed.linkSigner);
+      let results: PromiseSettledResult<void>[];
+      try {
+        const client = concordClient(community.idHex, [authKey]);
+        results = await Promise.allSettled(
+          community.relays.map((relay) =>
+            client.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) }),
+          ),
+        );
+      } finally {
+        concordTransport.closeCapability(community.idHex, [authKey]);
+        authKey.sk.fill(0);
+        authKey.convKey.fill(0);
+      }
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
       }
@@ -391,7 +421,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       const bundle = buildBundle({ expiresAtMs });
       const rumor = buildDirectInviteRumor(bundle, user.pubkey);
       const seal = await sealDirectInvite(rumor, recipientPubkey, user.signer);
-      const wrap = wrapDirectInvite(seal, recipientPubkey, { expiresAtMs });
+      const { event: wrap, authKey } = wrapDirectInviteWithKey(seal, recipientPubkey, { expiresAtMs });
 
       // Deliver to the recipient's giftwrap inbox (their 10050 DM relays, else
       // NIP-65 reads), or the stock interop floor when they've published
@@ -402,9 +432,20 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       // success). Fail loudly so the user retries once the network settles.
       if (inbox === null) throw new Error("Couldn't reach the network to send the invite. Please try again.");
       const relays = inviteDeliveryRelays(inbox);
-      const results = await Promise.allSettled(
-        relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
-      );
+      const delivery = concordClient(wrap.id, [authKey]);
+      let results: PromiseSettledResult<void>[];
+      try {
+        results = await Promise.allSettled(
+          relays.map((url) => delivery.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+        );
+      } finally {
+        // The outer author is single-use. Closing zeroizes its transport copy
+        // and prevents this delivery identity from being correlated with any
+        // later community session on the same relay.
+        concordTransport.closeCommunity(wrap.id);
+        authKey.sk.fill(0);
+        authKey.convKey.fill(0);
+      }
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error("No relay accepted the invite.");
       }

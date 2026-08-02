@@ -49,6 +49,10 @@ import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
 /** Minimal relay-capable Nostr client the sweeps need (batcher-backed). */
 interface NostrLike {
+  /** Present only for a community-isolated transport capability. */
+  _concordScope?: string;
+  /** Exact stream capability set; prevents unlike plane clients co-batching. */
+  _concordKeySig?: string;
   relay(url: string): {
     query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
   };
@@ -455,7 +459,7 @@ async function runScopes(
       // lost to a lazy NIP-42 challenge (REQ → CLOSED auth-required → AUTHs
       // sent) passes once the relay has acked the stream AUTHs.
       await new Promise((r) => setTimeout(r, 250));
-      await whenAuthReady(url, () => scopes.flatMap((s) => s.groups));
+      if (!nostr._concordScope) await whenAuthReady(url, () => scopes.flatMap((s) => s.groups));
     }
   }
   return out;
@@ -475,6 +479,10 @@ interface RelayBatch {
 }
 const batches = new Map<string, RelayBatch>();
 
+function relayBatchKey(nostr: NostrLike, url: string): string {
+  return `${nostr._concordScope ?? "shared"}|${nostr._concordKeySig ?? "shared"}|${url}`;
+}
+
 /** Build and register a fresh batch; its promise resolves after the auth gate. */
 function newBatch(nostr: NostrLike, url: string): RelayBatch {
   const b: RelayBatch = { scopes: [], closed: false, promise: Promise.resolve(new Map()) };
@@ -484,21 +492,22 @@ function newBatch(nostr: NostrLike, url: string): RelayBatch {
     const task = beginSyncTask("community updates");
     try {
       await new Promise((r) => setTimeout(r, BATCH_WINDOW_MS));
-      await whenAuthReady(url, () => b.scopes.flatMap((s) => s.groups));
+      if (!nostr._concordScope) await whenAuthReady(url, () => b.scopes.flatMap((s) => s.groups));
       b.closed = true;
-      if (batches.get(url) === b) batches.delete(url);
+      const key = relayBatchKey(nostr, url);
+      if (batches.get(key) === b) batches.delete(key);
       return await runScopes(nostr, url, b.scopes);
     } finally {
       task.end();
     }
   })();
-  batches.set(url, b);
+  batches.set(relayBatchKey(nostr, url), b);
   return b;
 }
 
 /** Enroll one scope into the relay's open batch (creating one if needed). */
 function enqueue(nostr: NostrLike, url: string, scope: PlaneScope): Promise<OpenedEvent[]> {
-  const batch = batches.get(url);
+  const batch = batches.get(relayBatchKey(nostr, url));
   const b = batch && !batch.closed ? batch : newBatch(nostr, url);
   b.scopes.push(scope);
   const one = b.promise.then((m) => m.get(scope.scope) ?? []);

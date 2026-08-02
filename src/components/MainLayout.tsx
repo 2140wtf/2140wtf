@@ -13,7 +13,6 @@ import { NsitePlayerContext, type NsitePlayerState } from '@/contexts/NsitePlaye
 import { useAppContext } from '@/hooks/useAppContext';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { DirectInvitesPrompt2 } from '@/concord-v2/components/DirectInvitesPrompt2';
-import { useRegisterAllStreamKeys2 } from '@/concord-v2/hooks/useStreamAuth2';
 import { useForegroundNotifications } from '@/hooks/useForegroundNotifications';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +57,6 @@ function MainLayoutInner() {
   // ₿AO chat (Concord V2) rides auth-gated kind-1059 streams: authenticate
   // the connection as every live community's derived stream keys so its
   // planes are readable. Lives in the layout so it never unmounts on navigation.
-  useRegisterAllStreamKeys2();
 
   // ₿AO chat: toast incoming Concord V2 messages while the app is open,
   // gated on the per-channel/community notification levels.
