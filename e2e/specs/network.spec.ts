@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { injectTestLogin } from '../fixtures/login';
-import { measurePageLoad, NetworkMonitor } from '../fixtures/network';
+import { installReadOnlyNetworkGuard, measurePageLoad, NetworkMonitor } from '../fixtures/network';
 
 const LOAD_THRESHOLD_MS = 5_000;
 const ITERATIONS = 5;
 
 test.describe('network behavior under real load', () => {
+  test.beforeEach(async ({ page }) => installReadOnlyNetworkGuard(page));
   test('home page reloads stay within timing threshold and do not hard-fail', async ({ page }) => {
     const monitor = new NetworkMonitor({ tolerateRelayErrors: true });
     monitor.attach(page);
@@ -16,7 +17,7 @@ test.describe('network behavior under real load', () => {
       const { loadTime } = await measurePageLoad(page, '/');
       timings.push(loadTime);
       // Wait for the feed chrome to settle before the next reload.
-      await page.getByRole('button', { name: 'Follows' }).waitFor({ state: 'visible', timeout: 15_000 });
+      await page.getByRole('button', { name: 'Follows', exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
     }
 
     timings.sort((a, b) => a - b);
