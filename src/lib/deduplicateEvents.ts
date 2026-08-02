@@ -54,8 +54,10 @@ export function deduplicateEvents(pages: NostrEvent[][] | undefined): NostrEvent
       best.set(key, event);
     } else if (key === event.id) {
       // Regular event — same id means same event, skip.
-    } else if (event.created_at > existing.created_at) {
-      // Replaceable / addressable — keep the newer version.
+    } else if (event.created_at >= existing.created_at) {
+      // Replaceable / addressable — keep the newer version (>= matches the
+      // streaming dedup paths in useStreamPosts/useStreamKind, which keep the
+      // last-encountered event on an exact-timestamp tie).
       best.set(key, event);
     }
   }

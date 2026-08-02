@@ -18,6 +18,7 @@ import { useRelayInfo, type RelayInfoDocument } from '@/hooks/useRelayInfo';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 import { isRepostKind } from '@/lib/feedUtils';
 import { isEventMuted } from '@/lib/muteHelpers';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import type { NostrEvent } from '@nostrify/nostrify';
 import NotFound from './NotFound';
 
@@ -148,6 +149,9 @@ function RelayInfoPanel({ info, infoLoading, infoError, open }: {
   infoError: boolean;
   open: boolean;
 }) {
+  // Relay NIP-11 content is untrusted — sanitize before it lands in <img src>.
+  const bannerUrl = sanitizeUrl(info?.banner);
+  const iconUrl = sanitizeUrl(info?.icon);
   return (
     <div
       style={{
@@ -174,16 +178,16 @@ function RelayInfoPanel({ info, infoLoading, infoError, open }: {
         ) : info ? (
           <div className="p-4 space-y-4">
             {/* Banner */}
-            {info.banner && (
+            {bannerUrl && (
               <div className="w-full h-40 overflow-hidden rounded-lg">
-                <img src={info.banner} alt="" className="w-full h-full object-cover" />
+                <img src={bannerUrl} alt="" className="w-full h-full object-cover" />
               </div>
             )}
 
             {/* Icon + name (when different from hostname) */}
-            {info.icon && (
+            {iconUrl && (
               <div className="flex items-center gap-2.5">
-                <img src={info.icon} alt="" className="size-8 rounded-full object-cover ring-1 ring-border" />
+                <img src={iconUrl} alt="" className="size-8 rounded-full object-cover ring-1 ring-border" />
                 {info.name && (
                   <span className="text-sm font-medium">{info.name}</span>
                 )}
