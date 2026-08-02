@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useRef } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
+import { sanitizePlausibleRequest } from '@/lib/plausiblePrivacy';
 
 interface PlausibleProviderProps {
   children: ReactNode;
@@ -21,6 +22,7 @@ export function PlausibleProvider({ children }: PlausibleProviderProps) {
       init({
         domain: config.plausibleDomain,
         ...(config.plausibleEndpoint && { endpoint: config.plausibleEndpoint }),
+        transformRequest: sanitizePlausibleRequest,
       });
     }).catch(console.error);
   }, [config.plausibleDomain, config.plausibleEndpoint]);
