@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   nsec: vi.fn(),
   extension: vi.fn(),
   bunker: vi.fn(),
-  nostrEvent: vi.fn(async (_event: { kind: number; content: string }) => ({})),
   onHoldJoin: vi.fn(),
   onHumanPath: vi.fn(),
 }));
@@ -18,10 +17,6 @@ vi.mock('@/hooks/useLoginActions', () => ({
     extension: mocks.extension,
     bunker: mocks.bunker,
   }),
-}));
-
-vi.mock('@nostrify/react', () => ({
-  useNostr: () => ({ nostr: { event: mocks.nostrEvent } }),
 }));
 
 function renderPanel() {
@@ -52,6 +47,8 @@ describe('AgentJoinPanel', () => {
     expect(card.bundle_coordinate).toEqual({ kind: 33301, author: 'ab'.repeat(32), d: '' });
     expect(card.bootstrap_relays).toEqual(['wss://relay.example']);
     expect(card.docs).toMatch(/\/AGENTS\.md$/);
+    expect(card.display_name_required).toBe(false);
+    expect(card.profile_optional).toMatch(/optional/i);
     expect(getByText(/I'm a human/)).toBeTruthy();
   });
 
@@ -73,9 +70,8 @@ describe('AgentJoinPanel', () => {
     expect(mocks.onHoldJoin).not.toHaveBeenCalled();
   });
 
-  it('create-key generates a login, marks the bot profile, reveals the nsec, and HOLDS the join', async () => {
-    const { getByText, getByLabelText, getByDisplayValue } = renderPanel();
-    fireEvent.change(getByLabelText('Agent name'), { target: { value: 'swarm-7' } });
+  it('create-key generates a login without publishing a profile, reveals the nsec, and HOLDS the join', async () => {
+    const { getByText, getByDisplayValue } = renderPanel();
     fireEvent.click(getByText('Create my agent key & join'));
 
     await waitFor(() => expect(mocks.nsec).toHaveBeenCalledTimes(1));
@@ -84,38 +80,9 @@ describe('AgentJoinPanel', () => {
     // The revealed key matches the logged-in key, shown exactly once, join held.
     getByDisplayValue(nsec);
     expect(mocks.onHoldJoin).toHaveBeenCalledWith(true);
-    // Bot profile published straight from the fresh key (kind 0, bot: true).
-    await waitFor(() => expect(mocks.nostrEvent).toHaveBeenCalledTimes(1));
-    const profile = mocks.nostrEvent.mock.calls[0][0];
-    expect(profile.kind).toBe(0);
-    expect(JSON.parse(profile.content)).toEqual({ name: 'swarm-7', bot: true });
-
     // Releasing the hold is the agent's explicit "I stored it" action.
     fireEvent.click(getByText('My key is stored — take me into the ₿AO'));
     expect(mocks.onHoldJoin).toHaveBeenLastCalledWith(false);
-  });
-
-  it('requires a name — the create button stays disabled and no key is made without one', () => {
-    const { getByText, getByRole } = renderPanel();
-    const create = getByText('Create my agent key & join').closest('button')!;
-    expect(create.disabled).toBe(true);
-    fireEvent.click(create);
-    expect(mocks.nsec).not.toHaveBeenCalled();
-    expect(mocks.nostrEvent).not.toHaveBeenCalled();
-    expect(getByRole('textbox', { name: 'Agent name' })).toBeTruthy();
-  });
-
-  it('unticking the bot box still publishes the named profile — just without bot: true', async () => {
-    const { getByText, getByRole, getByLabelText } = renderPanel();
-    fireEvent.change(getByLabelText('Agent name'), { target: { value: 'swarm-8' } });
-    fireEvent.click(getByRole('checkbox'));
-    fireEvent.click(getByText('Create my agent key & join'));
-    await waitFor(() => expect(mocks.nsec).toHaveBeenCalledTimes(1));
-    // The name is enforced for everyone; only the bot flag is optional.
-    await waitFor(() => expect(mocks.nostrEvent).toHaveBeenCalledTimes(1));
-    const profile = mocks.nostrEvent.mock.calls[0][0];
-    expect(profile.kind).toBe(0);
-    expect(JSON.parse(profile.content)).toEqual({ name: 'swarm-8' });
   });
 
   it('lets a human take the normal path', () => {
