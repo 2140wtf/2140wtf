@@ -339,7 +339,7 @@ function RoundView({ round, now, userPubkey, votePending, onVote }: {
           </div>
         ) : (
           <p className="text-[11px] text-muted-foreground">
-            Only donors to this milestone vote — your read-only view shows the live tally. Weight = sats donated, frozen at the objection.
+            Campaign donors vote — your read-only view shows the live tally. Weight = sats contributed to the campaign, frozen at the objection.
           </p>
         )
       ) : (

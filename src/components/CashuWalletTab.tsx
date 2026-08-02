@@ -45,6 +45,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
+import type { Nut15PaymentPlan } from '@/lib/cashu/nut15';
 interface DepositQuote {
   method: 'bolt11' | 'bolt12';
   quoteId: string;
@@ -76,6 +77,7 @@ export function CashuWalletTab() {
   const sendOutboxKey = `bao_cashu_wallet_send_${user?.pubkey ?? 'anon'}_${wallet.mintUrl ?? 'default'}`;
   const [generatedToken, setGeneratedToken] = useLocalStorage<string>(sendOutboxKey, '');
   const [sendInvoice, setSendInvoice] = useState('');
+  const [multiPathPlan, setMultiPathPlan] = useState<Nut15PaymentPlan | null>(null);
 
   const [mintName, setMintName] = useState('');
   const [mintUrl, setMintUrl] = useState('');
@@ -180,7 +182,7 @@ export function CashuWalletTab() {
     mintingQuoteRef.current = invoiceQuote.quoteId;
     try {
       const issued = await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount, invoiceQuote.method);
-      if (issued) {
+      if (issued && invoiceQuote.method === 'bolt11') {
         setInvoiceQuote(null);
         setInvoiceAmount('');
       }
@@ -193,13 +195,13 @@ export function CashuWalletTab() {
   // settles. The button stays available as a polling fallback for older mints
   // and WebViews where the WebSocket cannot connect.
   useEffect(() => {
-    if (!invoiceQuote || invoiceQuote.method !== 'bolt11' || typeof wallet.watchMintQuote !== 'function') return;
+    if (!invoiceQuote || typeof wallet.watchMintQuote !== 'function') return;
     let active = true;
     let cancel = () => {};
     void wallet.watchMintQuote(invoiceQuote.quoteId, () => {
       if (!active) return;
       void handleMintInvoice();
-    }).then((stop) => {
+    }, invoiceQuote.method).then((stop) => {
       if (active) cancel = stop;
       else stop();
     });
@@ -229,6 +231,19 @@ export function CashuWalletTab() {
     if (result.success) {
       setSendInvoice('');
     }
+  };
+
+  const handlePrepareMultiPath = async () => {
+    const invoice = sendInvoice.trim();
+    if (!invoice) return;
+    setMultiPathPlan(await wallet.prepareMultiPathPayment(invoice));
+  };
+
+  const handleConfirmMultiPath = async () => {
+    if (!multiPathPlan) return;
+    const result = await wallet.executeMultiPathPayment(multiPathPlan);
+    if (result.success) setSendInvoice('');
+    setMultiPathPlan(null);
   };
 
   const handleSendNutzap = async () => {
@@ -580,6 +595,30 @@ export function CashuWalletTab() {
                     <ArrowUpRight className='size-4 mr-1.5' />
                     Pay invoice
                   </Button>
+                  <Button variant='outline' onClick={handlePrepareMultiPath} disabled={!sendInvoice.trim() || wallet.loading}>
+                    Split across mints
+                  </Button>
+                  {multiPathPlan && (
+                    <div className='space-y-3 rounded-xl border bg-muted/40 p-4' role='region' aria-label='Multi-mint payment confirmation'>
+                      <div>
+                        <p className='font-medium'>Confirm {multiPathPlan.amountSats} sat multi-mint payment</p>
+                        <p className='text-sm text-muted-foreground'>Maximum routing fees: {multiPathPlan.totalFeeReserveSats} sats. All legs are submitted together.</p>
+                      </div>
+                      <div className='space-y-2'>
+                        {multiPathPlan.legs.map((leg) => (
+                          <div key={leg.mintUrl} className='flex items-start justify-between gap-4 text-sm'>
+                            <span className='min-w-0 break-all text-muted-foreground'>{leg.mintUrl.replace(/^https?:\/\//, '')}</span>
+                            <span className='shrink-0 font-medium'>{leg.amountSats} + ≤{leg.quote.fee_reserve} sats</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className='text-xs text-muted-foreground'>Cashu mints are custodial. A partial Lightning failure can take time to reconcile; do not retry while a leg is pending.</p>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button onClick={handleConfirmMultiPath} disabled={wallet.loading}>Confirm and pay</Button>
+                        <Button variant='ghost' onClick={() => setMultiPathPlan(null)} disabled={wallet.loading}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </CardContent>

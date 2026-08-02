@@ -1,4 +1,5 @@
 import type { NostrEvent } from '@nostrify/nostrify';
+import { shouldReplaceNostrEvent } from './replaceableEvent';
 
 /** Whether a kind falls in the addressable (parameterized-replaceable) range. */
 function isAddressable(kind: number): boolean {
@@ -54,10 +55,9 @@ export function deduplicateEvents(pages: NostrEvent[][] | undefined): NostrEvent
       best.set(key, event);
     } else if (key === event.id) {
       // Regular event — same id means same event, skip.
-    } else if (event.created_at >= existing.created_at) {
-      // Replaceable / addressable — keep the newer version (>= matches the
-      // streaming dedup paths in useStreamPosts/useStreamKind, which keep the
-      // last-encountered event on an exact-timestamp tie).
+    } else if (shouldReplaceNostrEvent(existing, event)) {
+      // NIP-01: newest wins; equal timestamps deterministically keep the event
+      // with the lexicographically lowest id, independent of relay/page order.
       best.set(key, event);
     }
   }

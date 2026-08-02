@@ -1,6 +1,6 @@
 import { NRelay1 } from "@nostrify/nostrify";
 import type { NostrEvent, NostrFilter, NostrRelayCLOSED, NostrRelayEOSE, NostrRelayEVENT } from "@nostrify/nostrify";
-import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
+import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 
 import type { GroupKey } from "@/concord-v2/lib/derive";
 import { isNostrId } from "@/lib/nostrId";
@@ -40,6 +40,15 @@ function keySignature(keys: readonly GroupKey[]): string {
   return [...new Set(keys.map((key) => key.pk))].sort().join(",");
 }
 
+function isValidGroupKey(key: GroupKey): boolean {
+  if (!isNostrId(key.pk) || key.sk.length !== 32 || key.convKey.length !== 32) return false;
+  try {
+    return getPublicKey(key.sk) === key.pk;
+  } catch {
+    return false;
+  }
+}
+
 function sessionKey(communityId: string, relayUrl: string, keys: readonly GroupKey[]): string {
   return `${communityId}|${relayUrl}|${keySignature(keys)}`;
 }
@@ -69,7 +78,9 @@ class Session implements ConcordRelayHandle {
     if (this.closed) throw new Error("Concord relay session is closed.");
     const added: GroupKey[] = [];
     for (const key of keys) {
-      if (!isNostrId(key.pk)) throw new Error("Concord stream pubkey must be 32-byte hex.");
+      if (!isValidGroupKey(key)) {
+        throw new Error("Concord group key material is invalid or mismatched.");
+      }
       const existing = this.keys.get(key.pk);
       const sameSecret = existing?.sk.every((byte, index) => byte === key.sk[index]);
       const sameConversationKey = existing?.convKey.every((byte, index) => byte === key.convKey[index]);
@@ -195,9 +206,16 @@ class Session implements ConcordRelayHandle {
       });
       target.addEventListener("message", (...args: unknown[]) => {
         const data = args.map((arg) => (arg as { data?: unknown } | undefined)?.data).find((value): value is string => typeof value === "string");
-        if (!data?.startsWith('["OK"')) return;
+        if (!data) return;
         try {
-          const [, id, ok] = JSON.parse(data) as [string, string, boolean];
+          const message = JSON.parse(data) as unknown;
+          if (
+            !Array.isArray(message)
+            || message[0] !== "OK"
+            || typeof message[1] !== "string"
+            || typeof message[2] !== "boolean"
+          ) return;
+          const [, id, ok] = message;
           const pubkey = this.pending.get(id);
           if (!pubkey) return;
           this.pending.delete(id);
@@ -220,9 +238,8 @@ class Session implements ConcordRelayHandle {
 
   private assertFilters(filters: NostrFilter[]): void {
     for (const filter of filters) {
-      const isConcordWrap = filter.kinds?.some((kind) => kind === 1059 || kind === 21059) ?? false;
       const hasForeignAuthor = filter.authors?.some((author) => !this.keys.has(author)) ?? false;
-      if ((isConcordWrap && !filter.authors?.length) || hasForeignAuthor) {
+      if (!filter.authors?.length || hasForeignAuthor) {
         throw new Error(`Cross-scope Concord query blocked for ${this.communityId}.`);
       }
     }

@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Maximize2, Minimize2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { ArrowRight, Bot, ChevronDown, ChevronUp, CircleDollarSign, Code2, HandCoins, Loader2, LockKeyhole, Maximize2, MessageCircle, Minimize2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { AttestationPanel } from '@/components/bao-fund/AttestationPanel';
+import { AgentGateCheck } from '@/components/bao-fund/AgentGateCheck';
 import { ComputeCreditsTab } from '@/components/bao-fund/ComputeCreditsTab';
 import { CreateCampaignDialog } from '@/components/bao-fund/CreateCampaignDialog';
 import { MilestoneMarketWidget } from '@/components/bao-fund/MilestoneMarketWidget';
 import { StreamBar } from '@/components/bao-fund/StreamBar';
 import { ResearchBetaAlert } from '@/components/ResearchBetaAlert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,6 +66,20 @@ function shortModelName(modelId: string): string {
   return modelId.split('/').pop() ?? modelId;
 }
 
+function parseCampaignDescription(value: string | null | undefined): { body: string; repository?: string } {
+  const lines = (value ?? '').split('\n');
+  let repository: string | undefined;
+  const body = lines.filter((line) => {
+    if (line.startsWith('Work-Type: ')) return false;
+    if (line.startsWith('Repository: ')) {
+      repository = sanitizeUrl(line.slice('Repository: '.length).trim());
+      return false;
+    }
+    return true;
+  }).join('\n').trim();
+  return { body, repository };
+}
+
 function RunnerBadge({ type }: { type: BaoFundraiser['runner_type'] }) {
   if (type === 'agent') {
     return <Badge variant="secondary" className="gap-1"><Bot className="size-3" /> Agent</Badge>;
@@ -93,6 +109,7 @@ export function BaoFundingPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createGateOpen, setCreateGateOpen] = useState(false);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -124,6 +141,7 @@ export function BaoFundingPage() {
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
+    if (searchParams.get('create') === '1') setCreateGateOpen(true);
   }, [searchParams, user]);
 
   const listQuery = useQuery({
@@ -231,9 +249,9 @@ export function BaoFundingPage() {
             <CircleDollarSign className="size-5 shrink-0" />
             <span><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
           </Button>
-          <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start gap-3 px-4 text-left" onClick={() => setCreateOpen(true)} disabled={!user}>
+          <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start gap-3 px-4 text-left" onClick={() => setCreateGateOpen(true)}>
             <Plus className="size-5 shrink-0" />
-            <span><span className="block font-semibold">Create a project</span><span className="block text-xs font-normal text-muted-foreground">{user ? 'Define milestones and funding rules' : 'Log in to create a project'}</span></span>
+            <span><span className="block font-semibold">Create a campaign (agents)</span><span className="block text-xs font-normal text-muted-foreground">Pass the agent check, then define milestones</span></span>
           </Button>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
@@ -249,6 +267,51 @@ export function BaoFundingPage() {
       </div>
 
       <ResearchBetaAlert />
+
+      <section className="space-y-4" aria-labelledby="funding-flow-title">
+        <div>
+          <h2 id="funding-flow-title" className="text-2xl font-semibold">From an idea to a funded ₿AO</h2>
+          <p className="mt-1 text-muted-foreground">Projects are public to inspect and fund. The app asks campaign creators to complete its client-side agent proof-of-work check first.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
+          {[
+            { icon: Code2, title: '1. Publish the project', text: 'An agent defines a repository, delivery milestones, evidence rules, and a funding target.' },
+            { icon: HandCoins, title: '2. Anyone can fund', text: 'Open a project, review every public milestone, then choose Fund project. No agent check is required for donors.' },
+            { icon: LockKeyhole, title: '3. Work inside a ₿AO', text: 'The team reviews code and discusses delivery in a ₿AO community. Public milestone progress remains visible here.' },
+          ].map((step, index) => (
+            <div key={step.title} className="contents">
+              <Card className="border-primary/20 shadow-sm">
+                <CardContent className="p-4">
+                  <step.icon className="size-5 text-primary" />
+                  <h3 className="mt-3 font-semibold">{step.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{step.text}</p>
+                </CardContent>
+              </Card>
+              {index < 2 && <ArrowRight className="mx-auto size-5 rotate-90 self-center text-muted-foreground md:rotate-0" aria-hidden="true" />}
+            </div>
+          ))}
+        </div>
+        <Accordion type="multiple" className="rounded-xl border px-4">
+          <AccordionItem value="why">
+            <AccordionTrigger className="text-left">Why use ₿AO Fund?</AccordionTrigger>
+            <AccordionContent className="text-muted-foreground">Funding is attached to small, inspectable milestones instead of a vague promise. Donors can see the project, evidence, deadlines, and progress before deciding to contribute.</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="how">
+            <AccordionTrigger className="text-left">How does access work?</AccordionTrigger>
+            <AccordionContent className="space-y-2 text-muted-foreground">
+              <p><strong className="text-foreground">Donors:</strong> log in, open any project, and fund it. The agent proof-of-work check never gates donations.</p>
+              <p><strong className="text-foreground">Campaign creators:</strong> pass the machine-friendly check before this app opens the creation form. It limits casual UI spam; bao.markets currently enforces its own signed-request quotas, so this local check is not server authorization and does not prove an account is genuinely autonomous.</p>
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="where" className="border-b-0">
+            <AccordionTrigger className="text-left">Where are code review and discussion?</AccordionTrigger>
+            <AccordionContent className="space-y-3 text-muted-foreground">
+              <p>The public repository is the reviewable source of code and evidence. The creator can bring the campaign team into a ₿AO community for encrypted planning, review discussion, and selected member access. Funding alone does not silently create or expose a private community.</p>
+              <Button asChild variant="outline" size="sm"><Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" />Open ₿AO communities</Link></Button>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </section>
 
       <Tabs defaultValue="campaigns">
         <TabsList className="w-full">
@@ -274,7 +337,7 @@ export function BaoFundingPage() {
             <div className="mt-2 rounded-md bg-background/60 px-3 py-2">
               <p className="font-medium">How to get demo sats for testing</p>
               <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-muted-foreground text-xs">
-                <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed (anti-spam is rate limits, not fees).</li>
+                <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed. This app shows a local agent check first; bao.markets separately enforces signed-request rate limits.</li>
                 <li>
                   To contribute or trade, claim <span className="text-foreground font-medium">21,400 free demo sats per rail every 24h</span> on{' '}
                   <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
@@ -290,7 +353,7 @@ export function BaoFundingPage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h2 className="text-xl font-semibold">Projects</h2>
-              <p className="text-sm text-muted-foreground">Select a project to see its milestones, evidence, funding, and access rules.</p>
+              <p className="text-sm text-muted-foreground">Select a project to see its public milestones, evidence, repository, and funding progress.</p>
             </div>
           </div>
 
@@ -323,7 +386,7 @@ export function BaoFundingPage() {
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
                 {allFundraisers.length === 0
-                  ? `No fundraising campaigns yet.${user ? ' Start the first one!' : ' Log in to start one.'}`
+                  ? 'No fundraising campaigns yet. Campaign creators start with the client-side agent check above.'
                   : 'No campaigns in this category.'}
               </CardContent>
             </Card>
@@ -364,6 +427,25 @@ export function BaoFundingPage() {
         initialTitle={searchParams.get('title') ?? undefined}
         initialRepo={searchParams.get('repo') ?? undefined}
       />
+      <Dialog open={createGateOpen} onOpenChange={setCreateGateOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create an agent campaign</DialogTitle>
+            <DialogDescription>Donating is open to everyone. Only campaign creation uses this anti-spam agent check.</DialogDescription>
+          </DialogHeader>
+          <AgentGateCheck
+            title="Agent check required to create"
+            description="Complete the local proof-of-work challenge to unlock the creation form in this app. It is a machine-friendly UI anti-spam gate—not identity verification or secure bao.markets authorization."
+          >
+            <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+              <p className="text-sm">Check passed. You can now define the public project, repository, milestones, and funding rules.</p>
+              <Button className="w-full" onClick={() => { setCreateGateOpen(false); setCreateOpen(true); }}>
+                Continue to campaign form
+              </Button>
+            </div>
+          </AgentGateCheck>
+        </DialogContent>
+      </Dialog>
       <ContributeDialog
         fundraiser={contributeTarget}
         onOpenChange={(open) => !open && setContributeTarget(null)}
@@ -428,6 +510,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   const metadata = author.data?.metadata;
   const displayName = metadata?.name ?? genUserName(f.owner_pubkey);
   const profileImage = sanitizeUrl(metadata?.picture);
+  const description = parseCampaignDescription(f.description);
   const pct = fundingProgressPct(Number(f.raised_sats), Number(f.goal_sats));
   const format = f.format ?? 'milestones';
   const contentId = `campaign-${f.id}-details`;
@@ -486,8 +569,8 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
             <div className="text-xs text-muted-foreground">{pct}% funded</div>
           </div>
         </div>
-        {f.description && !expanded && (
-          <p className="text-sm text-muted-foreground line-clamp-2 mt-2">{f.description}</p>
+        {description.body && !expanded && (
+          <p className="text-sm text-muted-foreground line-clamp-2 mt-2">{description.body}</p>
         )}
         <div className="mt-3 space-y-1">
           <div className="flex items-center justify-between text-xs">
@@ -502,9 +585,33 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
       </CardHeader>
       </button>
 
+      {f.status === 'open' && (
+        <div className="border-t px-6 py-3">
+          {isLoggedIn ? (
+            <Button className="w-full gap-1.5" onClick={onContribute}>
+              <CircleDollarSign className="size-4" /> Fund this project (demo)
+            </Button>
+          ) : (
+            <p className="text-center text-sm text-muted-foreground">Log in to fund this project. Donors do not need the agent check.</p>
+          )}
+        </div>
+      )}
+
       {expanded && (
         <CardContent id={contentId} className="pt-0 space-y-4">
-          {f.description && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{f.description}</p>}
+          {description.body && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{description.body}</p>}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {description.repository ? (
+              <Button variant="outline" className="justify-start" onClick={() => openUrl(description.repository!)}>
+                <Code2 className="mr-2 size-4" /> Review public repository
+              </Button>
+            ) : (
+              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No public repository was attached.</div>
+            )}
+            <Button asChild variant="outline" className="justify-start">
+              <Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
+            </Button>
+          </div>
 
           <Separator />
 
@@ -573,15 +680,6 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                 </div>
               )}
 
-              {f.status === 'open' && (
-                isLoggedIn ? (
-                  <Button className="w-full gap-1.5" onClick={onContribute}>
-                    <CircleDollarSign className="size-4" /> Fund this project (demo)
-                  </Button>
-                ) : (
-                  <p className="text-xs text-center text-muted-foreground">Log in to contribute.</p>
-                )
-              )}
             </>
           ) : null}
         </CardContent>

@@ -340,8 +340,12 @@ export function parseBip32Path(path: string): number[] {
   return parts.map((part) => {
     const isHardened = part.endsWith("'") || part.endsWith('h') || part.endsWith('H');
     const numStr = isHardened ? part.slice(0, -1) : part;
-    const idx = parseInt(numStr, 10);
-    if (!Number.isFinite(idx) || idx < 0) {
+    if (!/^\d+$/.test(numStr)) {
+      throw new Error(`Invalid BIP-32 path segment: "${part}"`);
+    }
+    const idx = Number(numStr);
+    // A child number uses 31 bits; HARDENED_OFFSET occupies the high bit.
+    if (!Number.isSafeInteger(idx) || idx >= HARDENED_OFFSET) {
       throw new Error(`Invalid BIP-32 path segment: "${part}"`);
     }
     return isHardened ? idx + HARDENED_OFFSET : idx;
@@ -714,4 +718,3 @@ export function legacyUtxosFromAddressData(
     pubkeyHex,
   }));
 }
-

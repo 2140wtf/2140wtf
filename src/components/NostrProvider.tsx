@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
 import { verifyEvent } from 'nostr-tools';
 import { NostrContext } from '@nostrify/react';
@@ -244,6 +244,10 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // logic in useCurrentUser but avoids a circular dependency (useCurrentUser
   // depends on NostrContext which we are providing here).
   const currentLogin = logins[0];
+  // Descendants that acquire Concord capabilities stay unmounted across an
+  // account boundary until the parent has revoked the old transport sessions.
+  // `null` is the initial not-yet-reset sentinel; `undefined` means logged out.
+  const [transportAccount, setTransportAccount] = useState<string | undefined | null>(null);
   const currentSigner = useMemo(() => {
     if (!currentLogin) return undefined;
     try {
@@ -275,7 +279,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // Reset both isolated Concord sessions and the dormant legacy stream-auth
   // registry on account switch / logout. No derived key is authenticated on
   // this ordinary application pool.
-  const prevPubkeyRef = useRef<string | undefined>(undefined);
+  const prevPubkeyRef = useRef<string | undefined | null>(null);
   useEffect(() => {
     if (prevPubkeyRef.current !== currentLogin?.pubkey) {
       prevPubkeyRef.current = currentLogin?.pubkey;
@@ -294,6 +298,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       authCooldownRef.current.clear();
       authInFlightRef.current.clear();
       authChallengeRef.current.clear();
+      setTransportAccount(currentLogin?.pubkey);
     }
   }, [currentLogin?.pubkey]);
 
@@ -511,7 +516,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     <NostrContext.Provider value={{ nostr: (appPool.current ?? pool.current) as unknown as NPool }}>
       <NostrStorageContext.Provider value={eventStore.current ?? null}>
         <EventStoreContext.Provider value={baoEventStore.current}>
-          {children}
+          {transportAccount !== null && transportAccount === currentLogin?.pubkey ? children : null}
         </EventStoreContext.Provider>
       </NostrStorageContext.Provider>
     </NostrContext.Provider>

@@ -787,6 +787,8 @@ const PENDING_MINT_CONTEXT = 'freedomid:pending-mint';
 
 export interface PendingMintEntry {
   quoteId: string;
+  /** Quote payment method; absent journals are legacy BOLT11 entries. */
+  method?: 'bolt11' | 'bolt12';
   /** Deterministic counter at which the mint outputs were derived. */
   counterStart: number;
   amount: number;
@@ -818,7 +820,12 @@ export async function loadPendingMint(mintUrl: string, key: CryptoKey, legacyKey
       typeof parsed === 'object' &&
       typeof (parsed as Record<string, unknown>).quoteId === 'string' &&
       typeof (parsed as Record<string, unknown>).counterStart === 'number' &&
-      typeof (parsed as Record<string, unknown>).amount === 'number'
+      typeof (parsed as Record<string, unknown>).amount === 'number' &&
+      (
+        (parsed as Record<string, unknown>).method === undefined
+        || (parsed as Record<string, unknown>).method === 'bolt11'
+        || (parsed as Record<string, unknown>).method === 'bolt12'
+      )
     ) {
       return parsed as PendingMintEntry;
     }
@@ -851,6 +858,12 @@ export interface Transaction {
   /** NUT-20 per-quote signing key. Stored only inside the encrypted
    * transaction envelope; never render, log, or publish it. */
   quotePrivateKey?: string;
+  /** Shared id for every leg of one atomic NUT-15 multi-mint payment. */
+  mppGroupId?: string;
+  /** This mint's partial payment amount in millisats. */
+  mppAmountMsats?: number;
+  /** Expected number of legs in the NUT-15 payment. */
+  mppLegCount?: number;
 }
 
 export interface StoredMint {

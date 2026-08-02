@@ -83,6 +83,8 @@ import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
 import { BAO_MARKETS_RELAY } from '@/lib/baoRelayMarkets';
 import { buildNut27MintListEvent, restoreNut27MintList } from '@/lib/cashu/nut27';
+import { allocateNut15Payment, MAX_NUT15_LEGS, type Nut15PaymentPlan } from '@/lib/cashu/nut15';
+import { bolt11Info } from '@/lib/zaps';
 
 export interface CashuWalletState {
   wallet: CashuWallet | null;
@@ -173,8 +175,10 @@ export interface CashuWalletActions {
   requestBolt12Offer: (amount: number, description?: string) => Promise<Bolt12MintQuoteResponse | null>;
   mintFromQuote: (quoteId: string, amount: number, method?: 'bolt11' | 'bolt12') => Promise<boolean>;
   /** NUT-17 live quote updates. Returns a no-op when the mint lacks support. */
-  watchMintQuote: (quoteId: string, onPaid: () => void) => Promise<() => void>;
+  watchMintQuote: (quoteId: string, onPaid: () => void, method?: 'bolt11' | 'bolt12') => Promise<() => void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
+  prepareMultiPathPayment: (invoice: string) => Promise<Nut15PaymentPlan | null>;
+  executeMultiPathPayment: (plan: Nut15PaymentPlan) => Promise<{ success: boolean; amount: number; pending?: boolean }>;
   payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
   sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<NutzapSendResult>;
   receiveNutzap: (event: NostrEvent) => Promise<void>;
@@ -547,6 +551,8 @@ export function useCashuWallet(
     }
   }, []);
 
+  const restoreMeltInputProofsRef = useRef<(mintUrl: string) => Promise<void>>(async () => {});
+
   /** Restore input proofs for a melt that resolved to UNPAID. */
   const restoreMeltInputProofs = async (mintUrl: string) => {
     const encKey = encKeyRef.current;
@@ -611,6 +617,7 @@ export function useCashuWallet(
     }
     await calculateAllBalances();
   };
+  restoreMeltInputProofsRef.current = restoreMeltInputProofs;
 
   /** Deduplicate an array by a key function. */
   const dedupeByKey = <T,>(arr: T[], keyFn: (item: T) => string): T[] => {
@@ -2834,17 +2841,41 @@ export function useCashuWallet(
     }
   }, [wallet, mintUrl, triggerBackup, refreshTransactions]);
 
-  const watchMintQuote = useCallback(async (quoteId: string, onPaid: () => void): Promise<() => void> => {
+  const watchMintQuote = useCallback(async (
+    quoteId: string,
+    onPaid: () => void,
+    method: 'bolt11' | 'bolt12' = 'bolt11',
+  ): Promise<() => void> => {
     if (!wallet || !quoteId) return () => {};
     try {
       const support = (await wallet.lazyGetMintInfo()).isSupported(17);
+      const command = `${method}_mint_quote`;
       const supportsMintQuotes = support.supported && (support.params ?? []).some((p) =>
-        p.method === 'bolt11' && p.unit === 'sat' && p.commands.includes('bolt11_mint_quote'),
+        p.method === method && p.unit === 'sat' && p.commands.includes(command),
       );
       if (!supportsMintQuotes) return () => {};
-      return await wallet.onMintQuotePaid(quoteId, () => onPaid(), (error) => {
+      const reportError = (error: Error) => {
         devLog.warn('NUT-17 mint quote subscription failed; manual confirmation remains available:', error);
-      });
+      };
+      if (method === 'bolt11') {
+        return await wallet.onMintQuotePaid(quoteId, () => onPaid(), reportError);
+      }
+
+      // cashu-ts 2.x types predate the BOLT12 NUT-17 subscription kinds, but
+      // its public JSON-RPC WebSocket transport is protocol-generic. Keep this
+      // compatibility shim local until the upstream union includes BOLT12.
+      await wallet.mint.connectWebSocket();
+      const connection = wallet.mint.webSocketConnection;
+      if (!connection) return () => {};
+      const params = {
+        kind: 'bolt12_mint_quote',
+        filters: [quoteId],
+      } as unknown as Parameters<typeof connection.createSubscription>[0];
+      const handleQuote = (quote: Bolt12MintQuoteResponse) => {
+        if (quote.quote === quoteId && quote.amount_paid > quote.amount_issued) onPaid();
+      };
+      const subscriptionId = connection.createSubscription<Bolt12MintQuoteResponse>(params, handleQuote, reportError);
+      return () => connection.cancelSubscription(subscriptionId, handleQuote, reportError);
     } catch (error) {
       devLog.warn('NUT-17 unavailable; manual confirmation remains available:', error);
       return () => {};
@@ -2862,12 +2893,18 @@ export function useCashuWallet(
     try {
       setLoading(true);
       setError('');
-      const compressedPubkey = bytesToHex(secp256k1.getPublicKey(key.privkey, true));
+      // A fresh key per offer prevents the mint from linking every BOLT12
+      // deposit to the wallet's long-lived NIP-60 receive identity.
+      const quotePrivateKey = generateSecretKey();
+      const compressedPubkey = bytesToHex(secp256k1.getPublicKey(quotePrivateKey, true));
       const quote = await withTimeout(
         wallet.createMintQuoteBolt12(compressedPubkey, { amount, description }),
         30000,
         'BOLT12 offer creation',
       );
+      if (quote.pubkey !== compressedPubkey || quote.unit !== 'sat' || quote.amount !== amount) {
+        throw new Error('Mint returned a mismatched protected BOLT12 quote');
+      }
       await storageRef.current.withTxLock(async () => {
         await storageRef.current.addTransaction({
           type: 'mint',
@@ -2879,6 +2916,7 @@ export function useCashuWallet(
           expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
           bolt12: true,
           paymentRequest: quote.request,
+          quotePrivateKey: bytesToHex(quotePrivateKey),
         }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
       });
       await refreshTransactions();
@@ -2907,6 +2945,7 @@ export function useCashuWallet(
       return false;
     }
     const release = await acquireMutex(walletOpsMutexRef);
+    let issuedAmount = 0;
     try {
       setLoading(true);
       setError('');
@@ -2941,9 +2980,15 @@ export function useCashuWallet(
           wallet.checkMintQuote(quoteId),
           15000, 'Mint quote check'
         );
+        const pendingMint = await storageRef.current.loadPendingMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined);
         const bolt12Available = checkedBolt12 ? checkedBolt12.amount_paid - checkedBolt12.amount_issued : 0;
         const mintAmount = checkedBolt12 ? bolt12Available : amount;
-        const quoteState = checkedBolt12 ? (bolt12Available > 0 ? 'PAID' : 'UNPAID') : (quoteCheck as MintQuoteResponse)?.state;
+        // If a BOLT12 mint call committed but its response was lost, the mint's
+        // amount_issued already consumed the available balance. The durable
+        // counter journal is the authority that tells us to restore outputs.
+        const quoteState = checkedBolt12
+          ? (pendingMint?.quoteId === quoteId ? 'ISSUED' : bolt12Available > 0 ? 'PAID' : 'UNPAID')
+          : (quoteCheck as MintQuoteResponse)?.state;
         if (quoteState === 'UNPAID' && quoteCheck && typeof quoteCheck.expiry === 'number' && quoteCheck.expiry > 0 && Date.now() > quoteCheck.expiry * 1000) {
           await markPendingMint('expired');
           throw new Error('Mint quote has expired. Create a new invoice.');
@@ -2956,7 +3001,7 @@ export function useCashuWallet(
         }
 
         const mintedQuotes = await storageRef.current.loadMintedQuotes(encKey, legacyEncKeyRef.current ?? undefined);
-        if (mintedQuotes.includes(quoteId)) {
+        if (method === 'bolt11' && mintedQuotes.includes(quoteId)) {
           throw new Error('This quote has already been minted');
         }
 
@@ -2967,7 +3012,6 @@ export function useCashuWallet(
         // counter window would be rejected as duplicate blinded messages and
         // the interrupted quote's paid sats would be stranded. NUT-09 restore
         // regenerates the exact blinded messages and re-claims the signatures.
-        const pendingMint = await storageRef.current.loadPendingMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined);
         if (pendingMint && pendingMint.quoteId !== quoteId) {
           let restored: { proofs: any[] };
           try {
@@ -2981,8 +3025,20 @@ export function useCashuWallet(
             const mergedProofs = sanitizeProofs(dedupeProofs([...existingProofs, ...restoredProofs]));
             await storageRef.current.saveProofsForMint(normalizedMint, mergedProofs, encKey);
             storageRef.current.writeProofStoreTimestamp(normalizedMint);
-            await storageRef.current.writeMintedQuote(pendingMint.quoteId, encKey);
-            await markPendingMint('completed', pendingMint.quoteId, pendingMint.amount);
+            if (pendingMint.method !== 'bolt12') {
+              await storageRef.current.writeMintedQuote(pendingMint.quoteId, encKey);
+              await markPendingMint('completed', pendingMint.quoteId, pendingMint.amount);
+            } else {
+              await storageRef.current.addTransaction({
+                type: 'mint',
+                amount: sumProofAmounts(restoredProofs),
+                memo: 'BOLT12 deposit',
+                mintUrl: normalizedMint,
+                status: 'completed',
+                quoteId: pendingMint.quoteId,
+                bolt12: true,
+              }, encKey, legacyEncKeyRef.current ?? undefined);
+            }
           }
           // Advance the counter past the scanned window whether or not proofs
           // came back — deterministic secrets in the window must never be
@@ -3018,13 +3074,24 @@ export function useCashuWallet(
           // Journal the quote + counter window BEFORE minting so a crash
           // between the mint issuing outputs and our commit is recoverable
           // via the restore path above.
-          await storageRef.current.writePendingMint(normalizedMint, { quoteId, counterStart, amount: mintAmount, timestamp: Date.now() }, encKey);
+          await storageRef.current.writePendingMint(normalizedMint, {
+            quoteId,
+            counterStart,
+            amount: mintAmount,
+            timestamp: Date.now(),
+            method,
+          }, encKey);
           const pendingTransactions = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
           const quoteTransaction = pendingTransactions.find((t) => t.type === 'mint' && t.quoteId === quoteId);
           const lockedQuotePrivateKey = quoteTransaction?.quotePrivateKey;
           newProofs = await withTimeout(
             checkedBolt12
-              ? wallet.mintProofsBolt12(mintAmount, checkedBolt12, bytesToHex(nip60WalletKeyRef.current!.privkey), { counter: counterStart })
+              ? wallet.mintProofsBolt12(
+                  mintAmount,
+                  checkedBolt12,
+                  lockedQuotePrivateKey ?? bytesToHex(nip60WalletKeyRef.current!.privkey),
+                  { counter: counterStart },
+                )
               : typeof (quoteCheck as MintQuoteResponse).pubkey === 'string' && lockedQuotePrivateKey
                 ? wallet.mintProofs(mintAmount, quoteCheck as MintQuoteResponse, {
                     counter: counterStart,
@@ -3047,9 +3114,10 @@ export function useCashuWallet(
         // fresh proofs IMMEDIATELY — every validation and network call below
         // can throw or time out, and without this the paid Lightning sats
         // would be stuck with no app-level recovery path.
-        await storageRef.current.writeMintedQuote(quoteId, encKey);
+        if (method === 'bolt11') await storageRef.current.writeMintedQuote(quoteId, encKey);
         await storageRef.current.writeProofRecovery(normalizedMint, sanitizeProofs(newProofs), encKey);
         const mintedAmount = sumProofAmounts(newProofs);
+        issuedAmount = mintedAmount;
         if (!recoveredViaRestore && mintedAmount !== mintAmount) {
           throw new Error('Mint returned proofs with incorrect total amount');
         }
@@ -3101,11 +3169,19 @@ export function useCashuWallet(
               t.mintUrl === mintUrl &&
               (t.quoteId === quoteId || (t.amount === mintedAmount && !t.quoteId)),
           );
-          if (pendingIdx >= 0) {
+          if (pendingIdx >= 0 && method === 'bolt11') {
             await storageRef.current.updateTransactionStatus(txs[pendingIdx].id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
           } else {
             await storageRef.current.addTransaction(
-              { type: 'mint', amount: mintedAmount, memo: 'Lightning deposit', mintUrl, status: 'completed', quoteId },
+              {
+                type: 'mint',
+                amount: mintedAmount,
+                memo: method === 'bolt12' ? 'BOLT12 deposit' : 'Lightning deposit',
+                mintUrl,
+                status: 'completed',
+                quoteId,
+                bolt12: method === 'bolt12' || undefined,
+              },
               encKey,
               legacyEncKeyRef.current ?? undefined
             );
@@ -3116,9 +3192,9 @@ export function useCashuWallet(
         await calculateAllBalances();
       });
 
-      await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'in', amount);
+      await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'in', issuedAmount);
 
-      if (mountedRef.current) setSuccessTimed(`${amount} sats minted successfully!`);
+      if (mountedRef.current) setSuccessTimed(`${issuedAmount} sats minted successfully!`);
       return true;
     } catch (err: any) {
       if (mountedRef.current) setError(`Mint failed: ${err.message}`);
@@ -3129,6 +3205,244 @@ export function useCashuWallet(
       await triggerBackup();
     }
   }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, filterUnspentProofs]);
+
+  const prepareMultiPathPayment = useCallback(async (invoice: string): Promise<Nut15PaymentPlan | null> => {
+    const trimmedInvoice = invoice.trim();
+    const { amountMsats } = bolt11Info(trimmedInvoice);
+    if (!amountMsats || !Number.isSafeInteger(amountMsats) || amountMsats % 1000 !== 0) {
+      setError('NUT-15 requires a valid BOLT11 invoice with a whole-sat amount');
+      return null;
+    }
+    const seed = bip39SeedRef.current;
+    if (!seed || !encKeyRef.current) {
+      setError('Wallet not initialized');
+      return null;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+      const supported = (await Promise.all(Object.entries(balances).map(async ([url, balance]) => {
+        if (!Number.isSafeInteger(balance) || balance <= 1) return null;
+        try {
+          const candidateWallet = await getOrCreateWallet(url, seed);
+          const support = (await candidateWallet.lazyGetMintInfo()).isSupported(15);
+          const canMpp = support.supported && (support.params ?? []).some(
+            (method) => method.method === 'bolt11' && method.unit === 'sat',
+          );
+          return canMpp ? { mintUrl: safeNormalizeMintUrl(url), balanceSats: balance, wallet: candidateWallet } : null;
+        } catch (error) {
+          devLog.warn('Skipping unavailable NUT-15 mint:', url, error);
+          return null;
+        }
+      }))).filter((candidate): candidate is { mintUrl: string; balanceSats: number; wallet: CashuWallet } => candidate !== null);
+
+      const allocations = allocateNut15Payment(amountMsats, supported, MAX_MINT_FEE_PPM);
+      const byMint = new Map(supported.map((candidate) => [candidate.mintUrl, candidate]));
+      const legs = await Promise.all(allocations.map(async (allocation) => {
+        const candidate = byMint.get(allocation.mintUrl);
+        if (!candidate) throw new Error('NUT-15 allocation referenced an unavailable mint');
+        const quote = await withTimeout(
+          candidate.wallet.createMultiPathMeltQuote(trimmedInvoice, allocation.amountMsats),
+          30_000,
+          'NUT-15 melt quote creation',
+        );
+        const quoteAmount = Number(quote.amount);
+        const feeReserve = Number(quote.fee_reserve);
+        if (
+          quoteAmount !== allocation.amountSats
+          || !Number.isSafeInteger(feeReserve)
+          || feeReserve < 0
+          || (quote.state && quote.state !== 'UNPAID')
+        ) {
+          throw new Error(`Mint returned an invalid NUT-15 quote for ${allocation.mintUrl}`);
+        }
+        if (quoteAmount + feeReserve > allocation.balanceSats) {
+          throw new Error(`NUT-15 fees exceed the available balance at ${allocation.mintUrl}`);
+        }
+        if (!isFeeWithinMaxPpm(feeReserve, allocation.balanceSats, MAX_MINT_FEE_PPM)) {
+          throw new Error(`NUT-15 fee reserve exceeds the wallet limit at ${allocation.mintUrl}`);
+        }
+        return { ...allocation, quote };
+      }));
+
+      return {
+        id: globalThis.crypto.randomUUID(),
+        invoice: trimmedInvoice,
+        amountSats: amountMsats / 1000,
+        totalFeeReserveSats: legs.reduce((sum, leg) => sum + Number(leg.quote.fee_reserve), 0),
+        createdAt: Date.now(),
+        legs,
+      };
+    } catch (error) {
+      if (mountedRef.current) setError(`Multi-mint payment unavailable: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return null;
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [balances, getOrCreateWallet]);
+
+  const executeMultiPathPayment = useCallback(async (plan: Nut15PaymentPlan): Promise<{ success: boolean; amount: number; pending?: boolean }> => {
+    const seed = bip39SeedRef.current;
+    const encKey = encKeyRef.current;
+    if (!seed || !encKey) {
+      setError('Wallet not initialized');
+      return { success: false, amount: 0 };
+    }
+    const decoded = bolt11Info(plan.invoice);
+    const mintUrls = plan.legs.map((leg) => safeNormalizeMintUrl(leg.mintUrl));
+    if (
+      Date.now() - plan.createdAt > 10 * 60 * 1000
+      || plan.legs.length < 2
+      || plan.legs.length > MAX_NUT15_LEGS
+      || new Set(mintUrls).size !== mintUrls.length
+      || decoded.amountMsats !== plan.amountSats * 1000
+      || plan.legs.reduce((sum, leg) => sum + leg.amountMsats, 0) !== decoded.amountMsats
+    ) {
+      setError('This multi-mint payment plan is invalid or expired. Create a new plan.');
+      return { success: false, amount: 0 };
+    }
+
+    const release = await acquireMutex(walletOpsMutexRef);
+    try {
+      setLoading(true);
+      setError('');
+      const result = await storageRef.current.withProofLock(async () => {
+        const existingTxs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        type Prepared = {
+          leg: Nut15PaymentPlan['legs'][number];
+          mintUrl: string;
+          wallet: CashuWallet;
+          original: any[];
+          selected: any[];
+          keep: any[];
+          inputAmount: number;
+          txId?: string;
+        };
+        const prepared: Prepared[] = [];
+
+        for (const [index, leg] of plan.legs.entries()) {
+          const normalized = mintUrls[index];
+          if (existingTxs.some((tx) => tx.type === 'melt' && tx.status === 'pending' && safeNormalizeMintUrl(tx.mintUrl) === normalized)) {
+            throw new Error(`Another payment from ${normalized} is still resolving`);
+          }
+          const existingJournal = await storageRef.current.loadMeltInputRecovery(normalized, encKey, legacyEncKeyRef.current ?? undefined);
+          if (existingJournal?.proofs.length) throw new Error(`A previous payment from ${normalized} is still resolving`);
+          const candidateWallet = await getOrCreateWallet(normalized, seed);
+          const original = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
+          const quoteAmount = Number(leg.quote.amount);
+          const feeReserve = Number(leg.quote.fee_reserve);
+          if (quoteAmount !== leg.amountSats || leg.amountMsats !== quoteAmount * 1000 || leg.quote.state && leg.quote.state !== 'UNPAID') {
+            throw new Error(`Stale or invalid quote from ${normalized}`);
+          }
+          const selection = candidateWallet.selectProofsToSend(original, quoteAmount + feeReserve, true);
+          const selected = sanitizeProofs(dedupeProofs(selection.send));
+          const keep = sanitizeProofs(dedupeProofs(selection.keep));
+          const inputAmount = sumProofAmounts(selected);
+          if (inputAmount < quoteAmount + feeReserve || !isFeeWithinMaxPpm(feeReserve, inputAmount, MAX_MINT_FEE_PPM)) {
+            throw new Error(`Insufficient balance or excessive fee at ${normalized}`);
+          }
+          prepared.push({ leg, mintUrl: normalized, wallet: candidateWallet, original, selected, keep, inputAmount });
+        }
+
+        // Quarantine every leg before contacting any mint. A verified encrypted
+        // journal is the durable rollback path if a response is lost.
+        try {
+          for (const item of prepared) {
+            await storageRef.current.writeMeltInputRecovery(item.mintUrl, item.selected, encKey);
+            const journal = await storageRef.current.loadMeltInputRecovery(item.mintUrl, encKey, legacyEncKeyRef.current ?? undefined);
+            if (!journal || journal.proofs.length !== item.selected.length) throw new Error(`Could not durably journal ${item.mintUrl}`);
+            await storageRef.current.saveProofsForMint(item.mintUrl, item.keep, encKey);
+            storageRef.current.writeProofStoreTimestamp(item.mintUrl);
+          }
+          for (const item of prepared) {
+            item.txId = await storageRef.current.addTransaction({
+              type: 'melt', amount: item.leg.amountSats, memo: 'Multi-mint Lightning payment (pending)',
+              mintUrl: item.mintUrl, status: 'pending', quoteId: item.leg.quote.quote,
+              expiresAt: typeof item.leg.quote.expiry === 'number' ? item.leg.quote.expiry * 1000 : undefined,
+              mppGroupId: plan.id, mppAmountMsats: item.leg.amountMsats, mppLegCount: prepared.length,
+            }, encKey, legacyEncKeyRef.current ?? undefined);
+          }
+        } catch (error) {
+          for (const item of prepared) {
+            await storageRef.current.saveProofsForMint(item.mintUrl, item.original, encKey);
+            storageRef.current.clearMeltInputRecovery(item.mintUrl);
+          }
+          throw error;
+        }
+
+        const responses = await Promise.allSettled(prepared.map((item) =>
+          withTimeout(item.wallet.meltProofs(item.leg.quote as MeltQuoteResponse, item.selected), 60_000, 'NUT-15 melt leg'),
+        ));
+        let pending = false;
+        let failed = false;
+        for (const [index, response] of responses.entries()) {
+          const item = prepared[index];
+          if (response.status === 'rejected') {
+            pending = true;
+            continue;
+          }
+          try {
+            const meltResult = response.value;
+            if (!meltResult || !Array.isArray(meltResult.change)) throw new Error('Invalid melt response');
+            const change = sanitizeProofs(dedupeProofs(meltResult.change));
+            const validation = validateReceivedProofs(change, {
+              activeKeysetIds: new Set(item.wallet.keysets.filter((keyset) => keyset.active).map((keyset) => keyset.id)),
+              localSecrets: new Set([...item.selected, ...item.keep].map((proof) => String(proof?.secret))),
+              getKeyset: (id) => item.wallet.keys.get(id), requireDleq: true,
+            });
+            if (!validation.valid) throw new Error(validation.reason);
+            if (change.length) await storageRef.current.writeMeltChangeRecovery(item.mintUrl, change, encKey);
+            const changeAmount = sumProofAmounts(change);
+            const feeReserve = Number(item.leg.quote.fee_reserve);
+            if (changeAmount > item.inputAmount - item.leg.amountSats || changeAmount < item.inputAmount - item.leg.amountSats - feeReserve) {
+              throw new Error('Invalid melt change amount');
+            }
+            const state = meltResult.quote?.state;
+            if (state === 'UNPAID') {
+              await storageRef.current.saveProofsForMint(item.mintUrl, item.original, encKey);
+              storageRef.current.clearMeltInputRecovery(item.mintUrl);
+              storageRef.current.clearMeltChangeRecovery(item.mintUrl);
+              if (item.txId) await storageRef.current.updateTransactionStatus(item.txId, 'failed', encKey, legacyEncKeyRef.current ?? undefined);
+              failed = true;
+            } else if (state === 'PAID') {
+              await storageRef.current.saveProofsForMint(item.mintUrl, sanitizeProofs(dedupeProofs([...item.keep, ...change])), encKey);
+              storageRef.current.clearMeltInputRecovery(item.mintUrl);
+              storageRef.current.clearMeltChangeRecovery(item.mintUrl);
+              if (item.txId) await storageRef.current.updateTransactionStatus(item.txId, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
+            } else {
+              await storageRef.current.saveProofsForMint(item.mintUrl, sanitizeProofs(dedupeProofs([...item.keep, ...change])), encKey);
+              pending = true;
+            }
+            storageRef.current.writeProofStoreTimestamp(item.mintUrl);
+          } catch (error) {
+            devLog.warn('NUT-15 leg requires reconciliation:', item.mintUrl, error);
+            pending = true;
+          }
+        }
+        await storageRef.current.assertProofLockOwnership();
+        return { pending, failed };
+      });
+
+      await calculateAllBalances();
+      await refreshTransactions();
+      for (const leg of plan.legs) {
+        if (!result.failed) await syncNip60TokenForMint(safeNormalizeMintUrl(leg.mintUrl), 'out', leg.amountSats);
+      }
+      if (result.pending) setSuccessTimed('Multi-mint payment submitted — resolving all legs');
+      else if (result.failed) setError('Multi-mint payment failed. Any unresolved legs will keep reconciling.');
+      else setSuccessTimed('Multi-mint payment sent!');
+      return { success: !result.failed, amount: result.failed ? 0 : plan.amountSats, pending: result.pending || undefined };
+    } catch (error) {
+      devLog.error('NUT-15 payment failed:', error);
+      if (mountedRef.current) setError(`Multi-mint payment failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return { success: false, amount: 0 };
+    } finally {
+      release();
+      if (mountedRef.current) setLoading(false);
+      await triggerBackup();
+    }
+  }, [calculateAllBalances, getOrCreateWallet, refreshTransactions, syncNip60TokenForMint, triggerBackup]);
 
   const payInvoice = useCallback(async (invoice: string): Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }> => {
     const trimmedInvoice = typeof invoice === 'string' ? invoice.trim() : '';
@@ -4463,26 +4777,29 @@ export function useCashuWallet(
     }
   }, [wallet]);
 
-  // Poll pending melt quotes so payments that settle asynchronously update balances.
-  useEffect(() => {
+  const pendingMeltCheckRunningRef = useRef(false);
+  const reconcilePendingMelts = useCallback(async (): Promise<void> => {
     const encKey = encKeyRef.current;
-    if (!encKey || !wallet) return;
-    let cancelled = false;
-    const interval = setInterval(() => {
-      (async () => {
-        try {
-          const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
-          const pendingMelts = txs.filter(
-            (t): t is Transaction & { quoteId: string } =>
-              t.type === 'melt' && t.status === 'pending' && typeof t.quoteId === 'string' && t.quoteId.length > 0
-          );
-          for (const t of pendingMelts) {
-            if (cancelled) return;
-            // BOLT12 quotes only resolve on the bolt12 endpoint — the bolt11
-            // check can never return their state.
-            const updated = t.bolt12
-              ? await withTimeout(wallet.checkMeltQuoteBolt12(t.quoteId), 15000, 'Check BOLT12 melt quote').catch(() => null)
-              : await checkMeltQuote({ quote: t.quoteId } as MeltQuoteResponse);
+    const seed = bip39SeedRef.current;
+    if (!encKey || !wallet || !seed || pendingMeltCheckRunningRef.current) return;
+    pendingMeltCheckRunningRef.current = true;
+    try {
+      const txs = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+      const pendingMelts = txs.filter(
+        (t): t is Transaction & { quoteId: string } =>
+          t.type === 'melt'
+          && t.status === 'pending'
+          && typeof t.quoteId === 'string'
+          && t.quoteId.length > 0
+      );
+      for (const t of pendingMelts) {
+        const meltWallet = await getOrCreateWallet(t.mintUrl, seed).catch(() => null);
+        if (!meltWallet) continue;
+        // BOLT12 quotes only resolve on the bolt12 endpoint — the bolt11
+        // check can never return their state.
+        const updated = t.bolt12
+              ? await withTimeout(meltWallet.checkMeltQuoteBolt12(t.quoteId), 15000, 'Check BOLT12 melt quote').catch(() => null)
+              : await withTimeout(meltWallet.checkMeltQuote(t.quoteId), 15000, 'Check BOLT11 melt quote').catch(() => null);
             const state = updated?.state;
             if (state === 'PAID') {
               await storageRef.current.updateTransactionStatus(t.id, 'completed', encKey, legacyEncKeyRef.current ?? undefined);
@@ -4521,26 +4838,81 @@ export function useCashuWallet(
               if (mountedRef.current) setSuccessTimed('Lightning payment confirmed');
             } else if (state === 'UNPAID') {
               await storageRef.current.updateTransactionStatus(t.id, 'failed', encKey, legacyEncKeyRef.current ?? undefined);
-              await restoreMeltInputProofs(t.mintUrl);
+              await restoreMeltInputProofsRef.current(t.mintUrl);
               await calculateAllBalances();
             } else if (state !== 'PENDING' && typeof updated?.expiry === 'number' && updated.expiry > 0 && Date.now() > updated.expiry * 1000) {
               // Only treat expiry as final when the quote is NOT pending: a
               // PENDING quote past its wall-clock expiry can still settle
               // (expiry does not cancel a dispatched payment), so keep polling.
               await storageRef.current.updateTransactionStatus(t.id, 'expired', encKey, legacyEncKeyRef.current ?? undefined);
-              await restoreMeltInputProofs(t.mintUrl);
+              await restoreMeltInputProofsRef.current(t.mintUrl);
               await calculateAllBalances();
             }
-          }
-          if (!cancelled && pendingMelts.length > 0) await refreshTransactions();
-        } catch (e) {
-          devLog.error('Pending melt poll failed:', e);
+      }
+      if (pendingMelts.length > 0) await refreshTransactions();
+    } catch (e) {
+      devLog.error('Pending melt reconciliation failed:', e);
+    } finally {
+      pendingMeltCheckRunningRef.current = false;
+    }
+  }, [wallet, getOrCreateWallet, calculateAllBalances, refreshTransactions]);
+
+  // Polling remains the universal fallback for older mints, disconnected
+  // WebViews, and NUT-17 transports that fail after initial subscription.
+  useEffect(() => {
+    if (!wallet || !encKeyRef.current) return;
+    const interval = setInterval(() => void reconcilePendingMelts(), 10000);
+    return () => clearInterval(interval);
+  }, [wallet, reconcilePendingMelts]);
+
+  // NUT-17 gives pending BOLT11/BOLT12 outgoing payments immediate settlement
+  // updates. A subscription is only opened when the mint explicitly advertises
+  // the corresponding command; the polling effect above always remains active.
+  useEffect(() => {
+    if (!wallet) return;
+    const pending = transactions.filter(
+      (t): t is Transaction & { quoteId: string } =>
+        t.type === 'melt'
+        && t.status === 'pending'
+        && safeNormalizeMintUrl(t.mintUrl) === safeNormalizeMintUrl(mintUrl)
+        && typeof t.quoteId === 'string'
+        && t.quoteId.length > 0,
+    );
+    if (pending.length === 0) return;
+    let active = true;
+    const cancellations: Array<() => void> = [];
+    void (async () => {
+      try {
+        const support = (await wallet.lazyGetMintInfo()).isSupported(17);
+        if (!active || !support.supported) return;
+        await wallet.mint.connectWebSocket();
+        const connection = wallet.mint.webSocketConnection;
+        if (!active || !connection) return;
+        for (const method of ['bolt11', 'bolt12'] as const) {
+          const command = `${method}_melt_quote`;
+          const quoteIds = pending.filter((t) => Boolean(t.bolt12) === (method === 'bolt12')).map((t) => t.quoteId);
+          const advertised = (support.params ?? []).some((p) =>
+            p.method === method && p.unit === 'sat' && p.commands.includes(command),
+          );
+          if (!advertised || quoteIds.length === 0) continue;
+          const params = { kind: command, filters: quoteIds } as unknown as Parameters<typeof connection.createSubscription>[0];
+          const handleUpdate = () => void reconcilePendingMelts();
+          const reportError = (error: Error) => devLog.warn(
+            `NUT-17 ${method} melt subscription failed; polling remains active:`,
+            error,
+          );
+          const id = connection.createSubscription(params, handleUpdate, reportError);
+          cancellations.push(() => connection.cancelSubscription(id, handleUpdate, reportError));
         }
-      })();
-    }, 10000);
-    return () => { cancelled = true; clearInterval(interval); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet]);
+      } catch (error) {
+        devLog.warn('NUT-17 melt subscriptions unavailable; polling remains active:', error);
+      }
+    })();
+    return () => {
+      active = false;
+      cancellations.forEach((cancel) => cancel());
+    };
+  }, [wallet, mintUrl, transactions, reconcilePendingMelts]);
 
   const wasLastSendAmbiguous = useCallback(() => lastSendAmbiguousRef.current, []);
 
@@ -4580,6 +4952,8 @@ export function useCashuWallet(
     mintFromQuote,
     watchMintQuote,
     payInvoice,
+    prepareMultiPathPayment,
+    executeMultiPathPayment,
     payBolt12,
     sendNutzap,
     receiveNutzap,
