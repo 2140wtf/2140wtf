@@ -34563,7 +34563,52 @@ function loadState(name) {
 	if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
 	const state = JSON.parse(readFileSync(path, "utf8"));
 	if ((state.protocol_version ?? 1) > 1) throw new Error(`Identity "${name}" was written by protocol v${state.protocol_version} but this binary speaks v1 — re-fetch bao-agent.mjs (never half-run a stale binary).`);
-	return state;
+	return migrateState(state);
+}
+const HEX_32 = /^[0-9a-f]{64}$/i;
+function validEpoch(value) {
+	return Number.isSafeInteger(value) && value >= 0;
+}
+/**
+* Upgrade and canonicalize the access portion of an on-disk identity without
+* mutating the parsed object. Pre-retained-root states remain readable: their
+* current root becomes the sole held root at runtime and `joined_at=0` makes a
+* future exclusion check fail closed (every observed rekey may concern them).
+*/
+function migrateSavedCommunityAccess(community) {
+	if (!validEpoch(community.root_epoch)) throw new Error("Saved community root_epoch must be a non-negative safe integer.");
+	if (!HEX_32.test(community.community_root)) throw new Error("Saved community_root must be 32-byte hex.");
+	const currentKey = community.community_root.toLowerCase();
+	const roots = /* @__PURE__ */ new Map();
+	for (const held of community.held_roots ?? []) {
+		if (!validEpoch(held.epoch) || !HEX_32.test(held.key)) throw new Error("Saved community retained roots must contain a non-negative safe epoch and 32-byte hex key.");
+		if (held.epoch > community.root_epoch) throw new Error(`Saved community retained root epoch ${held.epoch} is newer than current epoch ${community.root_epoch}.`);
+		if (held.epoch === community.root_epoch) {
+			if (held.key.toLowerCase() !== currentKey) throw new Error("Saved community has conflicting keys for its current root epoch.");
+			continue;
+		}
+		const key = held.key.toLowerCase();
+		const prior = roots.get(held.epoch);
+		if (prior !== void 0 && prior !== key) throw new Error(`Saved community has conflicting keys for retained root epoch ${held.epoch}.`);
+		roots.set(held.epoch, key);
+	}
+	return {
+		...community,
+		community_root: currentKey,
+		held_roots: [...roots].sort(([a], [b]) => b - a).map(([epoch, key]) => ({
+			epoch,
+			key
+		})),
+		joined_at: validEpoch(community.joined_at ?? 0) ? community.joined_at ?? 0 : 0,
+		...community.refounder && HEX_32.test(community.refounder) ? { refounder: community.refounder.toLowerCase() } : { refounder: void 0 }
+	};
+}
+/** Pure whole-state migration used by loadState and tests. */
+function migrateState(state) {
+	return {
+		...state,
+		community: migrateSavedCommunityAccess(state.community)
+	};
 }
 /**
 * Advisory lockfile around state read-modify-write ops (invite, sweep):
@@ -34600,26 +34645,32 @@ async function withStateLock(name, fn, lockSuffix = ".lock") {
 	}
 }
 function communityOf(c, privateChannels) {
-	const root = hexToBytes$1(c.community_root);
+	const saved = migrateSavedCommunityAccess(c);
+	const root = hexToBytes$1(saved.community_root);
+	const heldRoots = [{
+		epoch: BigInt(saved.root_epoch),
+		key: root
+	}, ...(saved.held_roots ?? []).map((held) => ({
+		epoch: BigInt(held.epoch),
+		key: hexToBytes$1(held.key)
+	}))];
 	return {
-		id: hexToBytes$1(c.id),
-		idHex: c.id,
-		owner: c.owner,
-		ownerSalt: hexToBytes$1(c.owner_salt),
+		id: hexToBytes$1(saved.id),
+		idHex: saved.id,
+		owner: saved.owner,
+		ownerSalt: hexToBytes$1(saved.owner_salt),
 		root,
-		rootEpoch: BigInt(c.root_epoch),
-		heldRoots: [{
-			epoch: BigInt(c.root_epoch),
-			key: root
-		}],
+		rootEpoch: BigInt(saved.root_epoch),
+		heldRoots,
 		privateChannels: privateChannels.map((ch) => ({
 			id: hexToBytes$1(ch.id),
 			key: hexToBytes$1(ch.key),
 			epoch: BigInt(ch.epoch),
 			name: ch.name
 		})),
-		relays: c.relays,
-		name: c.name
+		relays: saved.relays,
+		name: saved.name,
+		refounder: saved.refounder
 	};
 }
 let pool = null;
