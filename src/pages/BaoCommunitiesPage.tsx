@@ -22,7 +22,24 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useMutes } from "@/hooks/useMutes";
 import { toast } from "@/hooks/useToast";
 import { normalizeRelayUrl } from "@/lib/platform";
+import { APP_RELAYS as APP_RELAY_METADATA } from "@/lib/appRelays";
+import { STOCK_RELAYS } from "@/concord-v2/lib/invite";
 import { cn } from "@/lib/utils";
+
+const DISCOVERY_RELAY_URLS = [
+  "wss://atlas.nostr.land", "wss://eden.nostr.land",
+  "wss://relay.dreamith.to", "wss://relay.primal.net", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band",
+  "wss://offchain.pub", "wss://relay.snort.social", "wss://bitcoiner.social", "wss://nostr.bitcoiner.social", "wss://nostr.jcloud.es",
+  "wss://purplepag.es", "wss://relay.mostr.pub", "wss://relay.nsecbunker.com", "wss://nostr-relay.psfoundation.info", "wss://nostr.swiss-enigma.ch", "wss://jskitty.com/nostr",
+  "wss://asia.vectorapp.io/nostr", "wss://relay.nostrview.com", "wss://relay.notoshi.io", "wss://nostr.slothy.win", "wss://relay.nostr.ro",
+  "wss://relay.nostr.bg", "wss://nostr.wine", "wss://nostr.land", "wss://relay.nostr.info", "wss://relay.nostrati.com",
+  "wss://relay.nostr.net", "wss://nostr.mom", "wss://nostr.oxtr.dev", "wss://relay.orangepill.dev", "wss://relay.f7z.io",
+  "wss://nostr21.com", "wss://relay.nostr.band", "wss://relay.nostrplebs.com", "wss://relay.nostrified.org", "wss://nostr-relay.app",
+  "wss://nostr-relay.wlvs.dev", "wss://relay.nostr.net", "wss://nostr.mutinywallet.com", "wss://relay.nostr.bg", "wss://relay.nostrverse.com",
+  "wss://nostr-relay.dtonon.com", "wss://relay.nostr.wine", "wss://nostr.azzamo.net", "wss://relay.nostr.ro", "wss://nostr.privex.io",
+  "wss://nostr-relay.schnitzel.world", "wss://relay.nostr.express", "wss://relay.nostr.au", "wss://nostr-relay.online", "wss://nostr.21.co",
+  "wss://relay.nostr.nu", "wss://relay.nostr.place", "wss://nostr-relay.einundzwanzig.space", "wss://relay.nostr.guru", "wss://nostr-relay.damus.io",
+];
 
 /**
  * One community row: decrypted icon + name (the fold's metadata wins over the
@@ -110,18 +127,47 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   // let a privacy-sensitive creator mint a community onto the full feed relay
   // set without ever looking at this section.
   const [picked, setPicked] = useState<string[]>([]);
+  const [showMoreRelays, setShowMoreRelays] = useState(false);
+  const [relaySearch, setRelaySearch] = useState("");
   const { data: candidates } = useCreateRelayCandidates2(open);
   // Rows = candidates ∪ picked — a custom-added relay is simply a picked
   // relay the candidates don't know about, so unticking it drops it from the
   // list again.
+  const starterCandidates = useMemo(() => {
+    const neutral = (candidates ?? []).filter((candidate) => !candidate.url.includes("relay.ditto.pub"));
+    const preferred = DISCOVERY_RELAY_URLS
+      .map(normalizeRelayUrl)
+      .filter((url): url is string => Boolean(url))
+      .filter((url) => !neutral.some((candidate) => candidate.url === url))
+      .slice(0, 5 - neutral.length)
+      .map((url) => ({ url, source: "fallback" as const }));
+    return [...neutral, ...preferred].slice(0, 5);
+  }, [candidates]);
   const relayRows = useMemo(() => {
     const rows = new Map<string, "dm" | "app" | "fallback" | "custom">();
-    for (const candidate of candidates ?? []) rows.set(candidate.url, candidate.source);
+    for (const candidate of starterCandidates) rows.set(candidate.url, candidate.source);
     for (const url of picked) {
       if (!rows.has(url)) rows.set(url, "custom");
     }
     return [...rows].map(([url, source]) => ({ url, source }));
-  }, [candidates, picked]);
+  }, [starterCandidates, picked]);
+  const allSuggestedRelaysPicked = Boolean(
+    starterCandidates.length > 0 && starterCandidates.every((candidate) => picked.includes(candidate.url)),
+  );
+  const discoveryRelays = useMemo(() => {
+    const known = new Set(relayRows.map((row) => row.url));
+    const urls = [
+      ...DISCOVERY_RELAY_URLS,
+      ...APP_RELAY_METADATA.relays.map((relay) => relay.url),
+      ...STOCK_RELAYS,
+    ];
+    return [...new Set(urls.map(normalizeRelayUrl).filter((url): url is string => Boolean(url)))]
+      .filter((url) => !known.has(url) && !url.includes("relay.ditto.pub"));
+  }, [relayRows]);
+  const filteredDiscoveryRelays = useMemo(() => {
+    const query = relaySearch.trim().toLowerCase();
+    return query ? discoveryRelays.filter((url) => url.toLowerCase().includes(query)) : discoveryRelays;
+  }, [discoveryRelays, relaySearch]);
 
   const toggleRelay = (url: string, on: boolean) =>
     setPicked((cur) => (on ? (cur.includes(url) ? cur : [...cur, url]) : cur.filter((u) => u !== url)));
@@ -270,6 +316,53 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 )}
               </div>
 
+              {discoveryRelays.length > 0 && (
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="px-0 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowMoreRelays((open) => !open)}
+                    aria-expanded={showMoreRelays}
+                  >
+                    {showMoreRelays ? "Hide additional relays" : "Discover more relays"}
+                  </Button>
+                  {showMoreRelays && (
+                    <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/30 p-1.5">
+                      <Input
+                        value={relaySearch}
+                        onChange={(event) => setRelaySearch(event.target.value)}
+                        placeholder="Search relays…"
+                        aria-label="Search additional relays"
+                        className="h-8 bg-background/60 text-xs"
+                      />
+                      {filteredDiscoveryRelays.map((url, index) => {
+                        const checkboxId = `community-discovery-relay-${index}`;
+                        return (
+                          <div key={url} className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-background/60">
+                            <Checkbox
+                              id={checkboxId}
+                              checked={picked.includes(url)}
+                              onCheckedChange={(checked) => toggleRelay(url, checked === true)}
+                              disabled={busy || (!picked.includes(url) && picked.length >= MAX_COMMUNITY_RELAYS)}
+                              aria-label={`Use relay ${url}`}
+                            />
+                            <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer text-xs">
+                              <span className="block truncate">{url}</span>
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Discovery relay</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {filteredDiscoveryRelays.length === 0 && (
+                        <p className="px-2 py-3 text-xs text-muted-foreground">No relays match that search.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Not a <form>: nested forms are invalid HTML — the browser drops
                   the inner one and "Add" would submit the parent. */}
               <div className="flex gap-2 pt-1">
@@ -298,16 +391,22 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     ? "Pick at least one relay to enable Create."
                     : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked${picked.length > MAX_COMMUNITY_RELAYS ? ` — only the first ${MAX_COMMUNITY_RELAYS} are used` : ""}`}
                 </p>
-                {candidates && candidates.length > 0 && (
+                {starterCandidates.length > 0 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="text-muted-foreground -mr-2"
                     disabled={busy}
-                    onClick={() => setPicked((cur) => [...new Set([...cur, ...candidates.map((candidate) => candidate.url)])])}
+                    onClick={() => {
+                      if (allSuggestedRelaysPicked) {
+                        setPicked([]);
+                      } else {
+                        setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
+                      }
+                    }}
                   >
-                    Select all
+                    {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
                   </Button>
                 )}
               </div>
