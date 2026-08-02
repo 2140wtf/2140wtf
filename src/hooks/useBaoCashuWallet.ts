@@ -12,6 +12,7 @@ import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted }
 import { devLog } from '@/lib/cashu/devLog';
 import { syncCashuState, restoreCashuState as fetchCashuBackup } from '@/lib/cashu/cashuBackup';
 import type { CashuBackupPayload } from '@/lib/cashu/cashuBackup';
+import { resolveMintAlias } from '@/lib/cashu/cashuNip60';
 
 /** DPCS d-tag used for the BAO demo Cashu wallet fallback backup. */
 export const BAO_BACKUP_D_TAG = 'freedomid:cashu:bao';
@@ -50,7 +51,7 @@ export function useBaoCashuWallet(
   const defaultMints = useMemo(() => {
     const url = config.baoSignetMintUrl?.trim();
     if (!url) return [];
-    return [{ name: '₿AO Signet Mint', url }];
+    return [{ name: '₿AO Signet Mint', url: resolveMintAlias(url) }];
   }, [config.baoSignetMintUrl]);
 
   // Use a per-pubkey DPCS backup d-tag so different identities never share BAO backup state.
