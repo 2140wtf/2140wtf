@@ -61,7 +61,7 @@ describe('AgentJoinPanel', () => {
     expect(getByText(/doesn't look like an nsec/)).toBeTruthy();
   });
 
-  it('logs in with a pasted nsec (the page auto-join takes over — no hold)', () => {
+  it('logs in with a pasted nsec (the page next asks for explicit acceptance — no hold)', () => {
     const { getByLabelText, getByText } = renderPanel();
     fireEvent.click(getByText('I have a Nostr key — log in & join'));
     fireEvent.change(getByLabelText('Your nsec'), { target: { value: 'nsec1whatever' } });

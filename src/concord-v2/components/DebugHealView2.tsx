@@ -46,8 +46,7 @@ export function DebugHealView({
 }) {
   const { user } = useCurrentUser();
   const channels = useChannels2(community);
-  const channelIds = useMemo(() => channels.map((c) => c.idHex), [channels]);
-  const { byChannel } = useCommunityRumors(channelIds);
+  const { byChannel } = useCommunityRumors(channels);
   const { data: folded } = useControlFold2(community);
 
   // Newest epoch + newest activity ms observed per author across all channels.
