@@ -11,6 +11,12 @@ const PRIVATE_PATHS = [
   /^\/invite(?:\/|$)/i,
 ];
 
+const PRIVATE_PATH_SUBSTRINGS = [
+  /\/bao\/c(?:\/|[?#\s]|$)/i,
+  /\/bao\/invite(?:\/|[?#\s]|$)/i,
+  /\/invite(?:\/|[?#\s]|$)/i,
+];
+
 export function isPrivateRouteUrl(raw: string): boolean {
   try {
     const url = new URL(raw, "https://local.invalid");
@@ -22,7 +28,15 @@ export function isPrivateRouteUrl(raw: string): boolean {
 
 /** Find a private route anywhere in a telemetry payload; fail closed upstream. */
 export function containsPrivateRoute(value: unknown): boolean {
-  if (typeof value === "string") return isPrivateRouteUrl(value) || PRIVATE_PATHS.some((pattern) => pattern.test(value));
+  if (typeof value === "string") {
+    let decoded = value;
+    try {
+      decoded = decodeURIComponent(value);
+    } catch {
+      // Keep malformed input unchanged and still scan it fail-closed.
+    }
+    return isPrivateRouteUrl(decoded) || PRIVATE_PATH_SUBSTRINGS.some((pattern) => pattern.test(decoded));
+  }
   if (Array.isArray(value)) return value.some(containsPrivateRoute);
   if (value && typeof value === "object") return Object.values(value).some(containsPrivateRoute);
   return false;

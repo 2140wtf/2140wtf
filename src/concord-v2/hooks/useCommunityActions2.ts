@@ -36,7 +36,7 @@ import {
   type ParsedInviteLink,
 } from "@/concord-v2/lib/invite";
 import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
-import { capRelays, type CommunityV2 } from "@/concord-v2/lib/types";
+import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
 import { concordClient, ephemeralRelayClient } from "@/concord-v2/lib/concordTransport";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
@@ -241,7 +241,11 @@ export interface CreateRelayCandidate {
 export function createRelayCandidates(appRelays: string[], dmRelays: string[]): CreateRelayCandidate[] {
   const dm = preferPortableRelays(dmRelays);
   const app = preferPortableRelays(appRelays);
-  const urls = capRelays(dm.length > 0 || app.length > 0 ? [...dm, ...app] : preferPortableRelays(STOCK_RELAYS));
+  const distinctApp = app.filter((url) => !dm.includes(url));
+  const candidates = dm.length > 0 && distinctApp.length > 0
+    ? [...dm.slice(0, MAX_COMMUNITY_RELAYS - 1), distinctApp[0], ...distinctApp.slice(1)]
+    : [...dm, ...app];
+  const urls = capRelays(candidates.length > 0 ? candidates : preferPortableRelays(STOCK_RELAYS));
   const dmSet = new Set(capRelays(dm));
   const appSet = new Set(capRelays(app));
   return urls.map((url) => ({

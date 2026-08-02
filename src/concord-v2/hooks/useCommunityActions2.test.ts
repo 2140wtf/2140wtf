@@ -35,6 +35,14 @@ describe('createRelayCandidates', () => {
       { url: 'wss://app.relay', source: 'app' },
     ]);
   });
+
+  it('keeps an app relay available when DM relays fill the cap', () => {
+    const dmRelays = Array.from({ length: MAX_COMMUNITY_RELAYS }, (_, index) => `wss://inbox-${index}.relay/`);
+    const candidates = createRelayCandidates(['wss://app.relay/'], dmRelays);
+
+    expect(candidates).toHaveLength(MAX_COMMUNITY_RELAYS);
+    expect(candidates).toContainEqual({ url: 'wss://app.relay', source: 'app' });
+  });
 });
 
 // ── resolveBundle: revocation tie-break at the bundle coordinate ─────────────
