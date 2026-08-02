@@ -54,8 +54,12 @@ describe('getListingPriceState', () => {
     expect(state).toEqual({ kind: 'ready', amountSats: 50_000, initialAmountSats: 50_000 });
   });
 
-  it('rejects unsupported currencies', () => {
-    expect(getListingPriceState(makeListing({ value: 10, currency: 'eur' }), 100_000).kind).toBe('unsupported');
+  it('converts supported fiat currencies to sats', () => {
+    expect(getListingPriceState(makeListing({ value: 10, currency: 'eur' }), 100_000)).toEqual({
+      kind: 'ready',
+      amountSats: 10_000,
+      initialAmountSats: 10_000,
+    });
   });
 
   it('rejects BTC amounts that round to zero sats', () => {
@@ -74,9 +78,9 @@ describe('formatBuyAmount', () => {
     expect(formatBuyAmount(listing, 100_000)).toContain('100,000');
   });
 
-  it('falls back to formatted price for unsupported currency', () => {
+  it('formats a converted fiat price in sats', () => {
     const listing = makeListing({ value: 10, currency: 'eur' });
-    expect(formatBuyAmount(listing, 100_000)).toBe('10 eur');
+    expect(formatBuyAmount(listing, 100_000)).toContain('10,000');
   });
 
   it('falls back to price on request when price is null', () => {
