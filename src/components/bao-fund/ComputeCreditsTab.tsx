@@ -152,7 +152,7 @@ function AgentReputationBadge({ pubkey }: { pubkey: string }) {
  * since anyone can publish a 4972 for any request. The agent redeems the
  * token at Routstr for an `sk_…` compute key. Mainnet, tokens only.
  */
-export function ComputeCreditsTab() {
+export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'browse' | 'agent' }) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
@@ -264,7 +264,7 @@ export function ComputeCreditsTab() {
 
       <RoutstrExplainer />
 
-      <Tabs defaultValue="browse" className="space-y-4">
+      <Tabs defaultValue={defaultView} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2">
           <TabsTrigger value="browse" className="min-h-11 gap-2 whitespace-normal py-2">
             <Bot className="size-4" /> Browse requests
