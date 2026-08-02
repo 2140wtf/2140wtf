@@ -9,6 +9,7 @@ import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlan
 import { useCommunityRumors } from "@/concord-v2/hooks/useCommunityRumors";
 import { useMembers2 } from "@/concord-v2/hooks/useGuestbook2";
 import { useInviteActions2 } from "@/concord-v2/hooks/useInvites2";
+import { DIRECT_INVITE_DISCLOSURE } from "@/concord-v2/lib/directInvite";
 import { KIND_COMMENT, KIND_MESSAGE } from "@/concord-v2/lib/kinds";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { useAuthor } from "@/hooks/useAuthor";
@@ -161,6 +162,13 @@ function MemberHealthRow({
   const [healed, setHealed] = useState(false);
 
   const handleHeal = async () => {
+    if (
+      !confirm(
+        DIRECT_INVITE_DISCLOSURE,
+      )
+    ) {
+      return;
+    }
     setHealing(true);
     try {
       await sendDirectInvite({ recipientPubkey: row.pubkey });

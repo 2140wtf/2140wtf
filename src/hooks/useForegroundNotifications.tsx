@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -6,8 +5,6 @@ import { ToastAction } from "@/components/ui/toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useNotifLevels, type NotifLevel } from "@/hooks/useNotifLevels";
 import { toast } from "@/hooks/useToast";
-import { parseAuthorEvent, type AuthorResult } from "@/hooks/useAuthor";
-import { getDisplayName } from "@/lib/getDisplayName";
 import { isRoomActive } from "@/lib/activeRooms";
 import { registerNotifySink } from "@/wire/notify";
 
@@ -18,6 +15,8 @@ import { registerNotifySink } from "@/wire/notify";
  * app is open. The wire's ingest hands every live, fully-decrypted event to
  * the registered sink exactly once ({@link registerNotifySink}), so this hook
  * only decides what to surface — no store reads, no re-derivation.
+ * Toast copy is deliberately generic: sender identity, room names, message or
+ * task text, and reaction content are never rendered on the ambient surface.
  *
  * Gating (all must pass to notify):
  *   - the conversation's resolved notification level (Discord-style
@@ -41,13 +40,12 @@ function levelAdmits(level: NotifLevel, mention: boolean): boolean {
 export function useForegroundNotifications(): void {
   const { user } = useCurrentUser();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { concordChannelLevel } = useNotifLevels();
 
   // Refs so the (stable) sink reads current values without re-registering on
   // every render — a re-register would drop the wire's reference to the sink.
-  const ctx = useRef({ concordChannelLevel, navigate, queryClient });
-  ctx.current = { concordChannelLevel, navigate, queryClient };
+  const ctx = useRef({ concordChannelLevel, navigate });
+  ctx.current = { concordChannelLevel, navigate };
 
   // Session floor: never notify for anything older than the moment the notifier
   // mounted (a fresh login backfilling weeks of history must stay silent).
@@ -58,15 +56,6 @@ export function useForegroundNotifications(): void {
 
   useEffect(() => {
     if (!user) return;
-
-    /** Resolve a display name from the author cache; fall back to a short hex. */
-    const displayNameFor = (pubkey: string): string => {
-      if (!pubkey) return "Someone";
-      const cached = ctx.current.queryClient.getQueryData<AuthorResult>(["author", pubkey]);
-      if (cached?.metadata) return getDisplayName(cached.metadata, pubkey);
-      if (cached?.event) return getDisplayName(parseAuthorEvent(cached.event).metadata, pubkey);
-      return `${pubkey.slice(0, 8)}…`;
-    };
 
     const unregister = registerNotifySink((candidates) => {
       const c = ctx.current;
@@ -95,30 +84,20 @@ export function useForegroundNotifications(): void {
         if (cand.createdAt <= mark) continue;
         lastNotified.current.set(cand.roomKey, cand.createdAt);
 
-        const name = displayNameFor(cand.author);
         const path = cand.path;
-
-        if (cand.reaction) {
-          toast({
-            title: name,
-            description: `Reacted ${cand.reactionEmoji ?? "👍"} to your message`,
-            action: (
-              <ToastAction altText="Open channel" onClick={() => c.navigate(path)}>
-                Open
-              </ToastAction>
-            ),
-          });
-        } else {
-          toast({
-            title: cand.mention ? `${name} mentioned you` : name,
-            description: cand.body ?? "New message",
-            action: (
-              <ToastAction altText="Open channel" onClick={() => c.navigate(path)}>
-                Open
-              </ToastAction>
-            ),
-          });
-        }
+        toast({
+          title: "Encrypted community activity",
+          description: cand.reaction
+            ? "Someone reacted to your message"
+            : cand.mention
+              ? "You were mentioned"
+              : "New message",
+          action: (
+            <ToastAction altText="Open encrypted community" onClick={() => c.navigate(path)}>
+              Open
+            </ToastAction>
+          ),
+        });
       }
     });
 

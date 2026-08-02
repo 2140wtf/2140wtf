@@ -24,7 +24,7 @@ export function BannedView({ community }: { community: CommunityV2 }) {
     setPending(pubkey);
     try {
       await unban({ target: pubkey });
-      toast({ title: "Member unbanned", description: "They can take part in the community again." });
+      toast({ title: "Member unbanned", description: "If keys were rotated, send a new invite to restore access." });
     } catch (e) {
       toast({
         title: "Couldn't unban",
@@ -41,8 +41,8 @@ export function BannedView({ community }: { community: CommunityV2 }) {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-4 p-4">
       <p className="text-sm text-muted-foreground">
-        Banned members are silenced and hidden for everyone in this community. Unbanning lets
-        them take part again.
+        Banned members are silenced in compatible clients. Unbanning permits a new invite; it
+        does not restore keys that were rotated.
       </p>
       {list.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-md bg-foreground/5 px-4 py-8 text-sm text-muted-foreground">

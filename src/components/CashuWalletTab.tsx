@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowDownLeft,
@@ -10,6 +10,7 @@ import {
   Landmark,
   RefreshCw,
   Shield,
+  Settings2,
   Trash2,
   Wallet as WalletIcon,
   Zap,
@@ -20,6 +21,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SatsPresetPills } from '@/components/SatsPresetPills';
 import { CashuTokenQr } from '@/components/CashuTokenQr';
 import { QrScannerDialog } from '@/components/QrScannerDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -43,7 +54,7 @@ import { Link } from 'react-router-dom';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
+import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
 import type { Nut15PaymentPlan } from '@/lib/cashu/nut15';
 interface DepositQuote {
@@ -81,6 +92,9 @@ export function CashuWalletTab() {
 
   const [mintName, setMintName] = useState('');
   const [mintUrl, setMintUrl] = useState('');
+  const [manageMintsOpen, setManageMintsOpen] = useState(false);
+  const [removingMintUrl, setRemovingMintUrl] = useState<string | null>(null);
+  const [pendingMintRemoval, setPendingMintRemoval] = useState<{ name: string; url: string; balance: number } | null>(null);
 
   const [showSeedBackup, setShowSeedBackup] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
@@ -119,11 +133,20 @@ export function CashuWalletTab() {
     }
   }, [walletSuccess, toast, clearWalletSuccess]);
 
-  const customMints = useMemo(() => {
-    return wallet.allMints.filter(
-      (m) => !DEFAULT_MINTS.some((d) => normalizeMintUrl(d.url) === normalizeMintUrl(m.url)),
-    );
-  }, [wallet.allMints]);
+  const handleRemoveMint = async (name: string, url: string, expectedBalance?: number) => {
+    setRemovingMintUrl(url);
+    try {
+      const result = await wallet.removeCustomMint(url, expectedBalance);
+      if (result.status === 'confirmation-required') {
+        setPendingMintRemoval({ name, url, balance: result.balance });
+      } else if (result.status === 'removed') {
+        setPendingMintRemoval(null);
+        toast({ variant: 'success', title: 'Mint removed', description: `${name} was removed from this wallet.` });
+      }
+    } finally {
+      setRemovingMintUrl(null);
+    }
+  };
 
   const supportsBolt12Mint = Array.isArray(wallet.mintInfo?.nuts?.['4']?.methods)
     && wallet.mintInfo.nuts['4'].methods.some((method: { method?: unknown; unit?: unknown }) => method.method === 'bolt12' && method.unit === 'sat');
@@ -368,25 +391,10 @@ export function CashuWalletTab() {
             </SelectContent>
           </Select>
 
-          {customMints.length > 0 && (
-            <div className='space-y-2'>
-              <p className='text-xs text-muted-foreground'>Custom mints</p>
-              <div className='flex flex-wrap gap-2'>
-                {customMints.map((m) => (
-                  <Badge key={normalizeMintUrl(m.url)} variant='secondary' className='flex items-center gap-1.5 pr-1'>
-                    {m.name}
-                    <button
-                      className='rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive'
-                      onClick={() => wallet.removeCustomMint(m.url)}
-                      aria-label={`Remove ${m.name}`}
-                    >
-                      <Trash2 className='size-3' />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
+          <Button variant='outline' size='sm' className='w-full gap-2' onClick={() => setManageMintsOpen(true)}>
+            <Settings2 className='size-4' />
+            Manage mints
+          </Button>
 
           <div className='flex gap-2'>
             <Input
@@ -423,6 +431,74 @@ export function CashuWalletTab() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={manageMintsOpen} onOpenChange={setManageMintsOpen}>
+        <DialogContent className='max-w-lg'>
+          <DialogHeader>
+            <DialogTitle>Manage mints</DialogTitle>
+          </DialogHeader>
+          <div className='space-y-3'>
+            {wallet.allMints.map((mint) => {
+              const normalized = safeNormalizeMintUrl(mint.url);
+              const balance = wallet.balances[normalized] ?? 0;
+              const removing = removingMintUrl === mint.url;
+              return (
+                <div key={normalized} className='flex min-w-0 items-center gap-3 rounded-lg border p-3'>
+                  <div className='min-w-0 flex-1'>
+                    <p className='font-medium'>{mint.name}</p>
+                    <p className='truncate text-xs text-muted-foreground'>{normalized}</p>
+                    <p className='text-sm text-muted-foreground'>{balance} sats</p>
+                  </div>
+                  <Button
+                    type='button'
+                    variant='destructive'
+                    size='sm'
+                    disabled={removing}
+                    onClick={() => void handleRemoveMint(mint.name, mint.url)}
+                    aria-label={`Remove ${mint.name}`}
+                  >
+                    <Trash2 className='mr-1.5 size-3.5' />
+                    {removing ? 'Checking…' : 'Remove'}
+                  </Button>
+                </div>
+              );
+            })}
+            {wallet.allMints.length === 0 && (
+              <p className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>
+                No mints configured. Add one from the wallet screen.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={pendingMintRemoval !== null} onOpenChange={(open) => { if (!open) setPendingMintRemoval(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>This mint still holds ecash</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingMintRemoval
+                ? `${pendingMintRemoval.name} holds ${pendingMintRemoval.balance} sats. Removing it deletes the local proofs and may permanently lose those funds. Spend or sweep them first unless you accept that loss.`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep mint</AlertDialogCancel>
+            <AlertDialogAction
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              disabled={!pendingMintRemoval || removingMintUrl !== null}
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingMintRemoval) {
+                  void handleRemoveMint(pendingMintRemoval.name, pendingMintRemoval.url, pendingMintRemoval.balance);
+                }
+              }}
+            >
+              {pendingMintRemoval ? `Remove and lose ${pendingMintRemoval.balance} sats` : 'Remove mint'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Receive / Send tabs */}
       <Tabs defaultValue='receive' className='w-full'>

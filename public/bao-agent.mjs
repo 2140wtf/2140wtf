@@ -18221,24 +18221,6 @@ async function waitForInterrupt(identityName, state, opts) {
 		} });
 	});
 }
-/**
-* Publish a kind-0 profile announcing this identity's name. Names are
-* enforced room-wide (the web join path refuses nameless keys; chat renders
-* them anon-<npub8>) — so join/create publish the identity name up front.
-* bot:true marks the key as an agent per the orchestration conventions.
-*/
-async function publishAgentProfile(sk, name, relays) {
-	const { finalizeEvent } = await Promise.resolve().then(() => (init_pure(), pure_exports));
-	await publishAll(relays, finalizeEvent({
-		kind: 0,
-		content: JSON.stringify({
-			name,
-			bot: true
-		}),
-		tags: [],
-		created_at: Math.floor(Date.now() / 1e3)
-	}, sk), "kind-0 profile (name)");
-}
 /** A claim with no PROGRESS from its claimant for this long is reclaimable.
 *  BAO_CLAIM_TTL_MS overrides for live tests against a local relay. */
 const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 1800 * 1e3);
@@ -18416,7 +18398,6 @@ async function create(name, communityName, agentOnly) {
 		registry_version: 0,
 		protocol_version: 1
 	});
-	await publishAgentProfile(sk, name, community.relays);
 	console.log(`\nOwner identity "${name}": ${npubEncode$1(pubkey)}`);
 	console.log(`State: ${statePath(name)}\n`);
 	await invite(name);
@@ -18556,7 +18537,6 @@ async function joinBao(name, inviteUrl) {
 		registry_version: 0,
 		protocol_version: 1
 	});
-	await publishAgentProfile(sk, name, community.relays);
 	console.log(`\nJoined "${bundle.name}" as "${name}": ${npubEncode$1(pubkey)}`);
 	console.log(`State: ${statePath(name)}`);
 }
