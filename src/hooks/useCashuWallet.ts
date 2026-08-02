@@ -9,7 +9,8 @@ import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 import { verifyEvent, nip19 } from 'nostr-tools';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
-import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MeltQuoteResponse } from '@cashu/cashu-ts';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MintQuoteResponse, Bolt12MeltQuoteResponse } from '@cashu/cashu-ts';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { NRelay1 } from '@nostrify/nostrify';
 import {
@@ -161,7 +162,8 @@ export interface CashuWalletActions {
   /** Read-only accessor for this wallet's NIP-60 P2PK pubkey (x-only hex), null before wallet init. */
   getWalletP2pkPubkey: () => string | null;
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
-  mintFromQuote: (quoteId: string, amount: number) => Promise<void>;
+  requestBolt12Offer: (amount: number, description?: string) => Promise<Bolt12MintQuoteResponse | null>;
+  mintFromQuote: (quoteId: string, amount: number, bolt12Quote?: Bolt12MintQuoteResponse) => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
   payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
   sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<NutzapSendResult>;
@@ -2749,7 +2751,48 @@ export function useCashuWallet(
     }
   }, [wallet, mintUrl, triggerBackup, refreshTransactions]);
 
-  const mintFromQuote = useCallback(async (quoteId: string, amount: number) => {
+  const requestBolt12Offer = useCallback(async (amount: number, description = '2140.wtf Cashu deposit'): Promise<Bolt12MintQuoteResponse | null> => {
+    const err = validateAmount(amount);
+    if (err) { setError(err); return null; }
+    const key = nip60WalletKeyRef.current;
+    if (!wallet || !encKeyRef.current || !key) {
+      setError('Wallet not initialized');
+      return null;
+    }
+    try {
+      setLoading(true);
+      setError('');
+      const compressedPubkey = bytesToHex(secp256k1.getPublicKey(key.privkey, true));
+      const quote = await withTimeout(
+        wallet.createMintQuoteBolt12(compressedPubkey, { amount, description }),
+        30000,
+        'BOLT12 offer creation',
+      );
+      await storageRef.current.withTxLock(async () => {
+        await storageRef.current.addTransaction({
+          type: 'mint',
+          amount,
+          memo: 'BOLT12 deposit',
+          mintUrl,
+          status: 'pending',
+          quoteId: quote.quote,
+          expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
+          bolt12: true,
+        }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
+      });
+      await refreshTransactions();
+      setSuccessTimed('BOLT12 offer created. Pay it to receive sats.', 4000);
+      return quote;
+    } catch (error: any) {
+      setError(`Failed to create BOLT12 offer: ${error.message}`);
+      return null;
+    } finally {
+      setLoading(false);
+      await triggerBackup();
+    }
+  }, [wallet, mintUrl, refreshTransactions, triggerBackup]);
+
+  const mintFromQuote = useCallback(async (quoteId: string, amount: number, bolt12Quote?: Bolt12MintQuoteResponse) => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
@@ -2790,18 +2833,23 @@ export function useCashuWallet(
 
       await storageRef.current.withProofLock(async () => {
         // Verify quote is paid inside the lock to prevent race-conditioned double-mint
-        const quoteCheck = await withTimeout(
+        const checkedBolt12 = bolt12Quote
+          ? await withTimeout(wallet.checkMintQuoteBolt12(quoteId), 15000, 'BOLT12 mint quote check')
+          : null;
+        const quoteCheck = checkedBolt12 ?? await withTimeout(
           wallet.checkMintQuote(quoteId),
           15000, 'Mint quote check'
         );
-        const quoteState = quoteCheck?.state;
+        const bolt12Available = checkedBolt12 ? checkedBolt12.amount_paid - checkedBolt12.amount_issued : 0;
+        const mintAmount = checkedBolt12 ? bolt12Available : amount;
+        const quoteState = checkedBolt12 ? (bolt12Available > 0 ? 'PAID' : 'UNPAID') : (quoteCheck as MintQuoteResponse)?.state;
         if (quoteCheck && typeof quoteCheck.expiry === 'number' && quoteCheck.expiry > 0 && Date.now() > quoteCheck.expiry * 1000) {
           await markPendingMint('expired');
           throw new Error('Mint quote has expired. Create a new invoice.');
         }
         if (quoteState === 'UNPAID') {
           await markPendingMint('failed');
-          throw new Error('Invoice not yet paid. Pay the invoice first, then try again.');
+          throw new Error(`${checkedBolt12 ? 'Offer' : 'Invoice'} not yet paid. Pay it first, then try again.`);
         }
         if (!quoteCheck || (quoteState !== 'PAID' && quoteState !== 'ISSUED')) {
           throw new Error('Payment is still being processed. Wait a moment and try again.');
@@ -2870,9 +2918,11 @@ export function useCashuWallet(
           // Journal the quote + counter window BEFORE minting so a crash
           // between the mint issuing outputs and our commit is recoverable
           // via the restore path above.
-          await storageRef.current.writePendingMint(normalizedMint, { quoteId, counterStart, amount, timestamp: Date.now() }, encKey);
+          await storageRef.current.writePendingMint(normalizedMint, { quoteId, counterStart, amount: mintAmount, timestamp: Date.now() }, encKey);
           newProofs = await withTimeout(
-            wallet.mintProofs(amount, quoteId, { counter: counterStart }),
+            checkedBolt12
+              ? wallet.mintProofsBolt12(mintAmount, checkedBolt12, bytesToHex(nip60WalletKeyRef.current!.privkey), { counter: counterStart })
+              : wallet.mintProofs(mintAmount, quoteId, { counter: counterStart }),
             60000,
             'Mint proofs',
             () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -2892,7 +2942,7 @@ export function useCashuWallet(
         await storageRef.current.writeMintedQuote(quoteId, encKey);
         await storageRef.current.writeProofRecovery(normalizedMint, sanitizeProofs(newProofs), encKey);
         const mintedAmount = sumProofAmounts(newProofs);
-        if (!recoveredViaRestore && mintedAmount !== amount) {
+        if (!recoveredViaRestore && mintedAmount !== mintAmount) {
           throw new Error('Mint returned proofs with incorrect total amount');
         }
         const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined));
@@ -4413,6 +4463,7 @@ export function useCashuWallet(
     sweepWalletLockedToken,
     getWalletP2pkPubkey,
     requestInvoice,
+    requestBolt12Offer,
     mintFromQuote,
     payInvoice,
     payBolt12,
