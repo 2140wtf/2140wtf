@@ -22,7 +22,6 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -107,9 +106,12 @@ export function BaoFundingPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createChoiceOpen, setCreateChoiceOpen] = useState(false);
+  const [computeEntryKey, setComputeEntryKey] = useState(0);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [opportunityFilter, setOpportunityFilter] = useState<'all' | 'campaigns' | 'compute'>('all');
   const [focusMode, setFocusMode] = useState(false);
   const [searchParams] = useSearchParams();
   useLayoutOptions(focusMode
@@ -231,14 +233,14 @@ export function BaoFundingPage() {
           <Button
             size="lg"
             className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left"
-            onClick={() => projectsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            onClick={() => projectsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}
           >
             <CircleDollarSign className="size-5 shrink-0" />
-            <span className="min-w-0"><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
+            <span className="min-w-0"><span className="block font-semibold">Donate</span><span className="block text-xs font-normal opacity-80">Browse every open funding opportunity</span></span>
           </Button>
-          <Button size="lg" variant="outline" className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left" onClick={() => setCreateOpen(true)}>
+          <Button size="lg" variant="outline" className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left" onClick={() => setCreateChoiceOpen(true)}>
             <Plus className="size-5 shrink-0" />
-            <span className="min-w-0"><span className="block font-semibold">Create a campaign</span><span className="block text-xs font-normal text-muted-foreground">For human, agent, or mixed teams</span></span>
+            <span className="min-w-0"><span className="block font-semibold">Create</span><span className="block text-xs font-normal text-muted-foreground">Start a campaign or request agent compute</span></span>
           </Button>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
@@ -300,26 +302,40 @@ export function BaoFundingPage() {
         </Accordion>
       </section>
 
-      <Tabs defaultValue="campaigns">
-        <TabsList className="w-full">
-          <TabsTrigger value="campaigns" className="flex-1 gap-1.5">
-            Campaigns
-            <Badge variant="outline" className="px-1 py-0 text-[10px]">DEMO · SIGNET</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="compute" className="flex-1 gap-1.5">
-            Compute credits
-            <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-500 border-green-500/40">REAL</Badge>
-          </TabsTrigger>
-        </TabsList>
+      <section className="space-y-4" ref={projectsRef} aria-labelledby="opportunities-title">
+        <div>
+          <h2 id="opportunities-title" className="text-2xl font-semibold">Funding opportunities</h2>
+          <p className="mt-1 text-muted-foreground">Browse milestone campaigns and agent compute requests together, then filter by the kind of work you want to support.</p>
+        </div>
+        <div className="flex flex-wrap gap-2" aria-label="Filter funding opportunities">
+          {([
+            { id: 'all', label: 'All opportunities' },
+            { id: 'campaigns', label: 'Milestone campaigns', badge: 'DEMO · SIGNET' },
+            { id: 'compute', label: 'Compute credits', badge: 'REAL' },
+          ] as const).map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              size="sm"
+              variant={opportunityFilter === option.id ? 'default' : 'outline'}
+              aria-pressed={opportunityFilter === option.id}
+              onClick={() => setOpportunityFilter(option.id)}
+            >
+              {option.label}
+              {'badge' in option && <Badge variant="outline" className="ml-1 px-1 py-0 text-[10px]">{option.badge}</Badge>}
+            </Button>
+          ))}
+        </div>
 
-        <TabsContent value="campaigns" className="space-y-4 mt-4" ref={projectsRef}>
-          {/* DEMO banner — scoped to the Campaigns tab */}
+        {(opportunityFilter === 'all' || opportunityFilter === 'campaigns') && (
+        <div className="space-y-4">
+          {/* DEMO banner — scoped to milestone campaigns */}
           <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
             <p className="font-semibold flex items-center gap-1.5">
               <Sparkles className="size-4 text-muted-foreground" /> DEMO — signet, no real money
             </p>
             <p className="text-muted-foreground mt-0.5">
-              Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. The Compute credits tab uses real sats.
+              Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. Compute-credit requests below use real sats.
             </p>
             <p className="text-muted-foreground mt-1">
               <span className="text-foreground font-medium">Experimental:</span> demo sats are free, so market odds mean nothing — anyone can shift any vote to either side at will. Milestone resolution by crowd vote is a gameable mechanism; treat every outcome as a drill, not a signal.
@@ -401,12 +417,15 @@ export function BaoFundingPage() {
               ))}
             </div>
           )}
-        </TabsContent>
+        </div>
+        )}
 
-        <TabsContent value="compute" className="mt-4">
-          <ComputeCreditsTab />
-        </TabsContent>
-      </Tabs>
+        {(opportunityFilter === 'all' || opportunityFilter === 'compute') && (
+        <div className="border-t pt-4">
+          <ComputeCreditsTab key={computeEntryKey} defaultView={computeEntryKey > 0 ? 'agent' : 'browse'} />
+        </div>
+        )}
+      </section>
 
       <CreateCampaignDialog
         open={createOpen}
@@ -415,6 +434,39 @@ export function BaoFundingPage() {
         initialTitle={searchParams.get('title') ?? undefined}
         initialRepo={searchParams.get('repo') ?? undefined}
       />
+      <Dialog open={createChoiceOpen} onOpenChange={setCreateChoiceOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>What do you want to create?</DialogTitle>
+            <DialogDescription>Choose the funding flow that matches the work.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-28 flex-col items-start justify-start whitespace-normal p-4 text-left"
+              onClick={() => { setCreateChoiceOpen(false); setCreateOpen(true); }}
+            >
+              <span className="font-semibold">Create milestone campaign</span>
+              <span className="mt-1 text-xs font-normal text-muted-foreground">Demo signet funding for a human, agent, or mixed team.</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-28 flex-col items-start justify-start whitespace-normal p-4 text-left"
+              onClick={() => {
+                setCreateChoiceOpen(false);
+                setOpportunityFilter('compute');
+                setComputeEntryKey((value) => value + 1);
+                requestAnimationFrame(() => projectsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+              }}
+            >
+              <span className="font-semibold">Request agent compute</span>
+              <span className="mt-1 text-xs font-normal text-muted-foreground">Ask for real-mainnet Cashu credits for AI computation.</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <ContributeDialog
         fundraiser={contributeTarget}
         onOpenChange={(open) => !open && setContributeTarget(null)}
