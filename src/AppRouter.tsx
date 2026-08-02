@@ -61,6 +61,7 @@ const GeotagPage = lazy(() => import("./pages/GeotagPage").then(m => ({ default:
 const HashtagPage = lazy(() => import("./pages/HashtagPage").then(m => ({ default: m.HashtagPage })));
 const HelpPage = lazy(() => import("./pages/HelpPage").then(m => ({ default: m.HelpPage })));
 const KindFeedPage = lazy(() => import("./pages/KindFeedPage").then(m => ({ default: m.KindFeedPage })));
+const LegalPage = lazy(() => import("./pages/LegalPage").then(m => ({ default: m.LegalPage })));
 const MagicSettingsPage = lazy(() => import("./pages/MagicSettingsPage").then(m => ({ default: m.MagicSettingsPage })));
 const MusicPage = lazy(() => import("./pages/MusicPage").then(m => ({ default: m.MusicPage })));
 const NetworkSettingsPage = lazy(() => import("./pages/NetworkSettingsPage").then(m => ({ default: m.NetworkSettingsPage })));
@@ -379,6 +380,7 @@ export function AppRouter() {
               <Route path="/wikipedia" element={<WikipediaPage />} />
               <Route path="/help" element={<HelpPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/legal" element={<LegalPage />} />
               <Route path="/safety" element={<CSAEPolicyPage />} />
               <Route path="/changelog" element={<ChangelogPage />} />
               <Route path="/about" element={<LandingPage />} />

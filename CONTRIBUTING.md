@@ -2,6 +2,19 @@
 
 We welcome contributions, but we have high standards. 2140.wtf is a carefully designed product with a specific vision, and every pull request must meet that bar. This guide exists to help you succeed.
 
+## Contribution license and provenance
+
+By submitting a contribution, you agree to license it under
+`AGPL-3.0-only`, the same license as this project. You retain copyright in
+your contribution. You also certify that you created the contribution or
+otherwise have the right to submit it under these terms, and that required
+third-party notices and source information are included.
+
+Do not submit code, generated assets, media, fonts, or other material unless
+its license permits commercial use and redistribution under, or alongside,
+this project. Identify separately licensed material in the pull request and
+update `THIRD_PARTY_NOTICES.md` when applicable.
+
 **Required reading before you start:**
 
 - **2140.wtf Philosophy** (summarized below under "Understanding 2140.wtf") -- the product vision. Your change must align with it.
