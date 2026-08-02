@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Info } from 'lucide-react';
+import { Info, Scale } from 'lucide-react';
 
 interface LinkFooterProps {
   /** Optional callback fired when an internal (React Router) link is clicked. */
@@ -18,6 +18,10 @@ export function LinkFooter({ onNavigate }: LinkFooterProps) {
         <Link to="/about" className={chipClass} onClick={onNavigate}>
           <Info className={iconClass} />
           About
+        </Link>
+        <Link to="/legal" className={chipClass} onClick={onNavigate}>
+          <Scale className={iconClass} />
+          Legal &amp; source
         </Link>
       </nav>
     </footer>

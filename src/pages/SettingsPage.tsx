@@ -86,6 +86,13 @@ const settingsSections: SettingsSection[] = [
     path: '/settings/advanced',
   },
   {
+    id: 'legal',
+    label: 'Legal & Source',
+    description: 'License, corresponding source, attribution, and warranty',
+    illustration: '/advanced-intro.png',
+    path: '/legal',
+  },
+  {
     id: 'magic',
     label: 'Magic',
     description: 'Enchanted cursor effects and mystical interface powers',

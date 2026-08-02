@@ -1,4 +1,5 @@
 import path from "node:path";
+import { standaloneLicenseBanner } from "./standalone-license-banner.mjs";
 
 // Bundles the ₿AO chat MCP server (scripts/bao-chat-mcp.ts) into ONE
 // self-contained node ESM file at public/bao-chat-mcp.mjs — every dependency
@@ -21,5 +22,6 @@ export default {
     format: "esm",
     // One single file — nostr-tools uses dynamic imports internally.
     codeSplitting: false,
+    banner: standaloneLicenseBanner('bao-chat-mcp.mjs'),
   },
 };
