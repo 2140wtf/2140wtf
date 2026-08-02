@@ -1,6 +1,6 @@
-import { useNostr } from "@nostrify/react";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { useQuery } from "@tanstack/react-query";
+import { SimplePool } from "nostr-tools/pool";
 
 import {
   NIP34_ISSUE_KIND,
@@ -45,7 +45,6 @@ function newestFirst(a: { event: NostrEvent }, b: { event: NostrEvent }): number
 
 /** Public NIP-34 project data for one canonical repository coordinate. */
 export function useNip34Project(repoNaddr: string | undefined) {
-  const { nostr } = useNostr();
   const pointer = parseRepoNaddr(repoNaddr);
 
   return useQuery({
@@ -53,13 +52,26 @@ export function useNip34Project(repoNaddr: string | undefined) {
     enabled: !!pointer,
     queryFn: async ({ signal }): Promise<Nip34Project> => {
       const p = pointer!;
-      const discovery = p.relays.length > 0 ? nostr.group(p.relays) : nostr;
-      const repoEvents = await discovery.query([{
+      if (p.relays.length === 0) {
+        throw new Error("This private workspace requires an naddr with repository relay hints; refusing to broadcast the project coordinate to your personal relays.");
+      }
+      // Deliberately separate from the app's authenticated Nostr pool. A repo
+      // hint is manager-controlled and may be a tracking relay; it must never
+      // observe the logged-in npub or Concord stream identities via NIP-42.
+      const pool = new SimplePool();
+      const queriedRelays = new Set(p.relays);
+      const query = async (relays: string[], filters: Array<Record<string, unknown>>): Promise<NostrEvent[]> => {
+        if (signal.aborted) throw new DOMException("Project query aborted", "AbortError");
+        relays.forEach((relay) => queriedRelays.add(relay));
+        return pool.querySync(relays, filters as never, { maxWait: 8_000 }) as Promise<NostrEvent[]>;
+      };
+      try {
+      const repoEvents = await query(p.relays, [{
         kinds: [NIP34_REPOSITORY_KIND],
         authors: [p.owner],
         "#d": [p.identifier],
         limit: 1,
-      }], { signal });
+      }]);
       const warnings: string[] = [];
       const repository = repoEvents.map((event) => parseRepositoryEvent(event, p)).filter((event): event is NostrEvent => !!event)
         .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id))[0];
@@ -67,8 +79,8 @@ export function useNip34Project(repoNaddr: string | undefined) {
 
       const maintainers = repositoryMaintainers(repository, p);
       const artifactRelays = repositoryRelays(repository);
-      const artifactSource = artifactRelays.length > 0 ? nostr.group(artifactRelays) : discovery;
-      const artifactEvents = await artifactSource.query([
+      const artifactSource = artifactRelays.length > 0 ? artifactRelays : p.relays;
+      const artifactEvents = await query(artifactSource, [
         {
           kinds: [NIP34_REPOSITORY_STATE_KIND],
           authors: [...maintainers],
@@ -80,7 +92,7 @@ export function useNip34Project(repoNaddr: string | undefined) {
           "#a": [p.coordinate],
           limit: 300,
         },
-      ], { signal });
+      ]);
 
       const stateCandidates = artifactEvents
         .map((event) => parseRepositoryState(event, p, maintainers))
@@ -108,7 +120,7 @@ export function useNip34Project(repoNaddr: string | undefined) {
           limit: Math.min(500, Math.max(1, ids.slice(index, index + 100).length * 4)),
         });
       }
-      const statusEvents = statusFilters.length > 0 ? await artifactSource.query(statusFilters, { signal }) : [];
+      const statusEvents = statusFilters.length > 0 ? await query(artifactSource, statusFilters) : [];
       const statuses = statusEvents
         .map((event) => parseAuthoritativeStatus(event, artifactsById, maintainers))
         .filter((status): status is Nip34Status => !!status);
@@ -124,6 +136,9 @@ export function useNip34Project(repoNaddr: string | undefined) {
       ].sort(newestFirst);
 
       return { pointer: p, repository, repositoryStates, maintainers, artifactRelays, issues, patches, pullRequests, pullRequestUpdates, activity, statusByArtifact, warnings };
+      } finally {
+        pool.close([...queriedRelays]);
+      }
     },
     staleTime: 30_000,
   });
