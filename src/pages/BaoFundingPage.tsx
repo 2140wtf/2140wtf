@@ -12,7 +12,7 @@ import { ResearchBetaAlert } from '@/components/ResearchBetaAlert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -99,7 +99,7 @@ export function BaoFundingPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [searchParams] = useSearchParams();
   useLayoutOptions(focusMode
-    ? { hideLeftSidebar: true, rightSidebar: null, noMaxWidth: true, wrapperClassName: 'max-w-none w-full' }
+    ? { collapseLeftSidebar: true, rightSidebar: null, noMaxWidth: true, wrapperClassName: 'max-w-none w-full' }
     : {});
   // Itemized fee breakdown of the most recent release, built in onSuccess so
   // fresh response data can never pair with stale variables (or vice versa).
@@ -465,7 +465,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="text-base truncate">{f.title}</CardTitle>
-            <CardDescription className="mt-1 flex items-center gap-2 flex-wrap">
+            <div className="mt-1 flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5 text-xs">
                 <Avatar className="size-4">
                   <AvatarImage src={profileImage} alt={displayName} />
@@ -479,7 +479,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               )}
               <Badge variant={f.status === 'open' ? 'outline' : 'default'} className="capitalize">{f.status}</Badge>
               {f.category && <Badge variant="outline" className="capitalize">{f.category === 'daos' || f.category === 'baos' ? '₿AOs' : f.category}</Badge>}
-            </CardDescription>
+            </div>
           </div>
           <div className="text-right shrink-0">
             <div className="text-sm font-semibold tabular-nums">{formatSats(Number(f.raised_sats))} / {formatSats(Number(f.goal_sats))} sats</div>
