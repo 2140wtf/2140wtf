@@ -155,6 +155,12 @@ export default defineConfig(({ mode }) => {
   const isNsite = mode === 'nsite';
 
   return {
+    optimizeDeps: {
+      // @vbyte/frost is native ESM and Vite's dev pre-bundler repeatedly
+      // invalidates its optimized artifact, making /court return a 504 until
+      // the server is restarted. Serve the package directly instead.
+      exclude: ['@vbyte/frost'],
+    },
     server: {
       host: "::",
       port: 3500,
