@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useInviteActions2, useMyLinkUsage2 } from "@/concord-v2/hooks/useInvites2";
+import { DIRECT_INVITE_DISCLOSURE } from "@/concord-v2/lib/directInvite";
 import { toast } from "@/hooks/useToast";
 import type { SearchProfile } from "@/hooks/useSearchProfiles";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -63,7 +64,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     setError(null);
     if (
       !confirm(
-        "Send an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, that this is a Concord invite, and its timing, size, and expiry. The encrypted event does not name the inviter or community, but the relay can observe and may correlate the publishing connection and timing. Cancel and create a link below for lower linkability.",
+        `${DIRECT_INVITE_DISCLOSURE} Cancel and create a link below for lower linkability.`,
       )
     ) {
       return;
@@ -189,7 +190,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
         )}
         <p className="text-[11px] leading-relaxed text-muted-foreground/80">
           A direct invite exposes the recipient's pubkey, the Concord invite classifier,
-          timing, size, and expiry to their inbox relays. A link avoids publishing the
+          timing, size, and expiry when set to their inbox relays. A link avoids publishing the
           recipient before acceptance, but relay traffic can still be correlated.
         </p>
       </div>

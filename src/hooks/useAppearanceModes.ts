@@ -37,8 +37,10 @@ export function useAppearanceModes(): AppearanceMode[] {
       id: 'hacker',
       label: 'Hacker',
       icon: Terminal,
-      active: theme === 'custom' && customTheme?.title === hacker.label,
-      onSelect: () => applyCustomTheme(hacker),
+      active:
+        theme === 'custom' &&
+        JSON.stringify(customTheme?.colors) === JSON.stringify(hacker.colors),
+      onSelect: () => applyCustomTheme({ ...hacker, title: hacker.label }),
     },
   ];
 }
