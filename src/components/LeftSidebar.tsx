@@ -15,6 +15,7 @@ import { EmojifiedText } from '@/components/CustomEmoji';
 import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { SidebarNavList } from '@/components/SidebarNavItem';
 import { SidebarMoreMenu } from '@/components/SidebarMoreMenu';
+import { ThemeQuickSwitch } from '@/components/ThemeQuickSwitch';
 
 import LoginDialog from '@/components/auth/LoginDialog';
 import { FollowQRDialog } from '@/components/FollowQRDialog';
@@ -103,22 +104,25 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
         collapsed ? 'w-[72px] px-2 items-center' : 'px-4 w-[300px] lg:w-1/4 lg:max-w-[300px]',
       )}
     >
-      {/* Logo + collapse toggle */}
+      {/* Logo + color mode + collapse toggle */}
       <div className={cn('flex mb-1', collapsed ? 'flex-col items-center gap-2 px-1' : 'items-center justify-between px-3')}>
-        <Link to="/" onClick={scrollToTopIfCurrent('/')}>
+        <Link to="/" onClick={scrollToTopIfCurrent('/')} className="shrink-0">
           <div className="bg-background/85 rounded-full">
             <AppLogo size={collapsed ? 36 : 48} />
           </div>
         </Link>
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-        </button>
+        <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'gap-1.5')}>
+          <ThemeQuickSwitch compact={collapsed} />
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+          </button>
+        </div>
       </div>
 
       {/* Search */}
