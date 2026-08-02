@@ -96,7 +96,9 @@ export function BanMemberDialog({ target, willRotate, onClose, onConfirm }: BanM
         <DialogHeader>
           <DialogTitle>Ban {name || "member"}?</DialogTitle>
           <DialogDescription>
-            They will be removed and silenced for everyone in this community.
+            {willRotate
+              ? "They’ll be silenced immediately. The app will then rotate keys to stop new access. Previously shared history remains readable."
+              : "They’ll be silenced in compatible clients, but keys will not rotate. They may retain access with keys they already hold."}
           </DialogDescription>
         </DialogHeader>
 
