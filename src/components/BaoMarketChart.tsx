@@ -8,7 +8,7 @@ import { useBaoSmjHistory } from '@/hooks/useBaoSmjHistory';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { hslStringToHex } from '@/lib/colorUtils';
-import { normalizeBaoPriceHistory } from '@/lib/baoChartData';
+import { buildCurrentPoolSnapshot, normalizeBaoPriceHistory } from '@/lib/baoChartData';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
 const TIME_RANGES: PriceHistoryRange[] = ['1H', '1D', '1W', '1M', 'ALL'];
@@ -39,6 +39,18 @@ interface OutcomeChartData {
   areaData: ChartPoint[];
   currentPrice: number;
   priceChangePercent: number;
+  isSnapshot: boolean;
+}
+
+function rangeStartTime(range: PriceHistoryRange, marketCreatedAt: number, now: number): number {
+  const secondsByRange: Record<Exclude<PriceHistoryRange, 'ALL'>, number> = {
+    '1H': 60 * 60,
+    '1D': 24 * 60 * 60,
+    '1W': 7 * 24 * 60 * 60,
+    '1M': 30 * 24 * 60 * 60,
+  };
+  if (range === 'ALL') return marketCreatedAt > 0 ? marketCreatedAt : now - secondsByRange['1M'];
+  return now - secondsByRange[range];
 }
 
 function getOutcomeColor(outcome: BaoMarket['outcomes'][number], index: number): string {
@@ -66,13 +78,15 @@ function formatTimeLeft(endTime: number): string {
 function computeOutcomeData(
   outcome: BaoMarket['outcomes'][number],
   historyPoints: Array<{ time: number; price: number }> | undefined,
-  marketId: string,
+  marketCreatedAt: number,
   range: PriceHistoryRange,
   color: string,
   mirroredValues?: number[],
+  allowCurrentSnapshot = false,
 ): OutcomeChartData {
   const fallbackProb = outcome.probability ?? 0.5;
   let areaData: ChartPoint[];
+  let isSnapshot = false;
 
   if (historyPoints && historyPoints.length >= 2) {
     areaData = normalizeBaoPriceHistory(historyPoints)
@@ -86,6 +100,14 @@ function computeOutcomeData(
       time: now - 86400 + Math.floor(i * step),
       value: (1 - v) * 100,
     }));
+  } else if (allowCurrentSnapshot) {
+    const now = Math.floor(Date.now() / 1000);
+    areaData = buildCurrentPoolSnapshot(
+      fallbackProb,
+      rangeStartTime(range, marketCreatedAt, now),
+      now,
+    ).map((point) => ({ time: point.time, value: point.price * 100 }));
+    isSnapshot = true;
   } else {
     // No real trade history — leave empty so the chart shows the honest
     // "No trade history yet" state instead of a fabricated sparkline.
@@ -105,6 +127,7 @@ function computeOutcomeData(
     areaData,
     currentPrice,
     priceChangePercent,
+    isSnapshot,
   };
 }
 
@@ -218,6 +241,7 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
   const outcomeData = useMemo<OutcomeChartData[]>(() => {
     const isBinary = market.outcomes.length === 2;
     let yesValues: number[] | undefined;
+    let yesIsSnapshot = false;
 
     return market.outcomes.map((outcome, idx) => {
       const color = getOutcomeColor(outcome, idx);
@@ -226,18 +250,28 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
       const isNo = isBinary && normalizedLabel === 'NO';
 
       if (isBinary && normalizedLabel === 'YES') {
-        const result = computeOutcomeData(outcome, points, market.marketId, range, color);
+        const result = computeOutcomeData(
+          outcome,
+          points,
+          market.createdAt,
+          range,
+          color,
+          undefined,
+          (market.totalVolumeSats ?? 0) > 0,
+        );
         yesValues = result.areaData.map((p) => p.value / 100);
+        yesIsSnapshot = result.isSnapshot;
         return result;
       }
 
       return computeOutcomeData(
         outcome,
         points,
-        market.marketId,
+        market.createdAt,
         range,
         color,
-        isNo ? yesValues : undefined,
+        isNo && !yesIsSnapshot ? yesValues : undefined,
+        (market.totalVolumeSats ?? 0) > 0,
       );
     });
   }, [effectiveHistory, market, range]);
@@ -383,6 +417,7 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
   }, [outcomeData, selectedOutcome]);
 
   const hasData = outcomeData.some((o) => o.areaData.length > 0);
+  const usesCurrentSnapshot = outcomeData.some((o) => o.isSnapshot);
 
   if (isLoading) {
     return <Skeleton className={cn('h-80 w-full rounded-xl', className)} />;
@@ -446,6 +481,12 @@ export function BaoMarketChart({ market, className }: BaoMarketChartProps) {
               !isChartReady && 'bg-muted/30',
             )}
           />
+        )}
+
+        {usesCurrentSnapshot && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Current pool snapshot — ₿AO Markets has not exposed historical fills for this market yet.
+          </p>
         )}
 
         {/* Time range selector */}
