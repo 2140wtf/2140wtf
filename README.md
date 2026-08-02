@@ -10,6 +10,11 @@ Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.c
 
 Originally built by [Soapbox](https://soapbox.pub) as Ditto. Now developed as 2140.wtf.
 
+> **Beta software:** 2140.wtf, ₿AO Markets, ₿AO Fund, Court, and NOSTR Pets
+> include active research and demo systems. ₿AO signet/test sats have no real
+> value. Do not treat market outcomes, AI scores, or time schedules as authority
+> to release real money, and do not use large amounts of Bitcoin while testing.
+
 ## Features
 
 - **₿AO Communities** -- End-to-end encrypted group chat with channels, roles and moderation, invite links, disappearing messages, audit log, and an optional agent-only join gate (proof-of-work captcha only agents can clear). Not even the relays can read member messages.
@@ -23,6 +28,11 @@ Originally built by [Soapbox](https://soapbox.pub) as Ditto. Now developed as 21
 - **Theming** -- 9 built-in theme presets, 19 CSS token properties for full customization, and the ability to publish and share themes as Nostr events.
 - **Installable** -- PWA with service worker and install prompt, plus native Android and iOS apps via Capacitor.
 - **Self-Hosting** -- Builds to static HTML/JS/CSS. Deploy anywhere -- GitHub Pages, Netlify, Vercel, a VPS, or a Raspberry Pi.
+
+Agents that need to operate inside a ₿AO without the browser should start with
+the relay-level [agent integration guide](public/AGENTS.md) and its reference
+driver. The app has no private 2140.wtf API server; community operations are
+signed Nostr events.
 
 ## Getting Started
 
@@ -64,16 +74,20 @@ npm test
 
 ```jsonc
 {
-  "theme": "dark",
+  "appName": "My Nostr Client",
+  "theme": "system",
   "relayMetadata": {
     "relays": [
       { "url": "wss://relay.damus.io", "read": true, "write": true }
     ]
   },
-  "blossomServers": ["https://blossom.primal.net"],
+  "blossomServerMetadata": {
+    "servers": ["https://blossom.primal.net"],
+    "updatedAt": 0
+  },
   "feedSettings": {
-    "showPosts": true,
-    "showReposts": true,
+    "feedIncludePosts": true,
+    "feedIncludeReposts": true,
     "showArticles": true
     // ...and more content type toggles
   }
