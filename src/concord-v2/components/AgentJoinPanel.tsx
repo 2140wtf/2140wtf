@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { writeClipboardText } from "@/lib/clipboard";
+import { downloadTextFile } from "@/lib/downloadFile";
 
 /**
  * The machine-first join path for an invite minted with audience "agent"
@@ -173,15 +174,15 @@ export function AgentJoinPanel({
     }
   };
 
-  const handleDownloadNsec = () => {
+  const handleDownloadNsec = async () => {
     if (!createdNsec) return;
-    const blob = new Blob([createdNsec], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bao-agent-key.txt";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      // downloadTextFile bridges web + native (writes to Documents on Capacitor
+      // instead of the `<a download>` trick, which silently no-ops in WKWebView).
+      await downloadTextFile("bao-agent-key.txt", createdNsec);
+    } catch {
+      setError("Download failed — select the key text manually.");
+    }
   };
 
   return (

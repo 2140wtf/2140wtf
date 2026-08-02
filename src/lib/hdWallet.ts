@@ -332,14 +332,19 @@ export async function findNextUnusedAddressIndex(
 // Path utilities
 // ---------------------------------------------------------------------------
 
-/** Parse a BIP-32 path string into an array of indices. */
+/** Parse a BIP-32 path string into an array of indices. Hardened segments may
+ *  use any of the three standard markers (`'`, `h`, `H`). Throws on a segment
+ *  that isn't a valid non-negative index. */
 export function parseBip32Path(path: string): number[] {
   const parts = path.replace(/^m\//, '').split('/');
   return parts.map((part) => {
-    if (part.endsWith("'")) {
-      return parseInt(part.slice(0, -1), 10) + HARDENED_OFFSET;
+    const isHardened = part.endsWith("'") || part.endsWith('h') || part.endsWith('H');
+    const numStr = isHardened ? part.slice(0, -1) : part;
+    const idx = parseInt(numStr, 10);
+    if (!Number.isFinite(idx) || idx < 0) {
+      throw new Error(`Invalid BIP-32 path segment: "${part}"`);
     }
-    return parseInt(part, 10);
+    return isHardened ? idx + HARDENED_OFFSET : idx;
   });
 }
 
@@ -355,7 +360,7 @@ export function isChangePath(path: string): boolean {
 
 /** Extract chain and index from a wallet path like "m/86'/0'/0'/0/5". */
 export function pathToChainAndIndex(path: string): { chain: number; index: number } {
-  const match = path.match(new RegExp(`^${BITCOIN_WALLET_PATH.replace(/'/g, "'")}/(\\d+)/(\\d+)$`));
+  const match = path.match(new RegExp(`^${BITCOIN_WALLET_PATH}/(\\d+)/(\\d+)$`));
   if (!match) {
     throw new Error(`Not a wallet address path: ${path}`);
   }

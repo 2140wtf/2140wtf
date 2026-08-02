@@ -26,6 +26,7 @@ import { ProfileSearchDropdown } from '@/components/ProfileSearchDropdown';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useUserLists, useMatchedListId } from '@/hooks/useUserLists';
 import { useFollowPacks } from '@/hooks/useFollowPacks';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import type { TabFilter } from '@/contexts/AppContext';
 import type { SearchProfile } from '@/hooks/useSearchProfiles';
@@ -514,7 +515,7 @@ export function AuthorChip({ pubkey, onRemove }: { pubkey: string; onRemove: () 
   }, [pubkey]);
   const author = useAuthor(hexPubkey);
   const name = author.data?.metadata?.name || author.data?.metadata?.display_name || pubkey.slice(0, 10) + '...';
-  const picture = author.data?.metadata?.picture;
+  const picture = sanitizeUrl(author.data?.metadata?.picture);
   return (
     <span className="inline-flex items-center gap-1.5 pl-1.5 pr-1 py-0.5 rounded-full bg-secondary border border-border text-xs max-w-[160px]">
       {picture

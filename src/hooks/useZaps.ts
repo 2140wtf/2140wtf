@@ -59,10 +59,10 @@ export function useZaps(
   const MAX_ZAP_AMOUNT_SATS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 
   // Cleanup state when component unmounts
+  // Reset the in-flight guard when the component unmounts so it can't block a
+  // later mount of the same hook instance.
   useEffect(() => {
     return () => {
-      setIsZapping(false);
-      setInvoice(null);
       zapInFlightRef.current = false;
     };
   }, []);
