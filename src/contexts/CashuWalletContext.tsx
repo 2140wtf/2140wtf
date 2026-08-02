@@ -100,6 +100,7 @@ export function CashuWalletProvider({ children }: { children: React.ReactNode })
     restoreCashuState,
     nip60Sync,
     enabled: walletEnabled,
+    preferenceScope: user?.pubkey,
   });
 
   useNutzapReceiver(seedPhrase ?? '', wallet.allMints, wallet.receiveNutzap);
@@ -128,5 +129,4 @@ export function CashuWalletProvider({ children }: { children: React.ReactNode })
 }
 
 export { CashuWalletContext };
-
 
