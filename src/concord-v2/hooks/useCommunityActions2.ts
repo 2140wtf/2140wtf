@@ -232,6 +232,24 @@ export function defaultCreateRelays(appRelays: string[], dmRelays: string[]): st
   return capRelays(app.length > 0 ? app : preferPortableRelays(STOCK_RELAYS));
 }
 
+export interface CreateRelayCandidate {
+  url: string;
+  source: "dm" | "app" | "fallback";
+}
+
+/** Explicit-picker choices: private inbox relays first, then configured app relays. */
+export function createRelayCandidates(appRelays: string[], dmRelays: string[]): CreateRelayCandidate[] {
+  const dm = preferPortableRelays(dmRelays);
+  const app = preferPortableRelays(appRelays);
+  const urls = capRelays(dm.length > 0 || app.length > 0 ? [...dm, ...app] : preferPortableRelays(STOCK_RELAYS));
+  const dmSet = new Set(capRelays(dm));
+  const appSet = new Set(capRelays(app));
+  return urls.map((url) => ({
+    url,
+    source: dmSet.has(url) ? "dm" : appSet.has(url) ? "app" : "fallback",
+  }));
+}
+
 /**
  * Privacy-minimal candidate relays for the create menu. Nothing is preselected;
  * the creator must choose each relay before minting. Gated
@@ -243,13 +261,13 @@ export function useCreateRelayCandidates2(enabled = true) {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const appRelays = config.appRelays.length > 0 ? config.appRelays : APP_RELAYS;
-  return useQuery<string[]>({
+  return useQuery<CreateRelayCandidate[]>({
     queryKey: ["concord2", "create-relays", user?.pubkey ?? null, appRelays],
     enabled: enabled && Boolean(user),
     staleTime: 60_000,
     queryFn: async () => {
       const dm = user ? await fetchCreatorDmRelays(nostr, user.pubkey).catch(() => []) : [];
-      return defaultCreateRelays(appRelays, dm);
+      return createRelayCandidates(appRelays, dm);
     },
   });
 }

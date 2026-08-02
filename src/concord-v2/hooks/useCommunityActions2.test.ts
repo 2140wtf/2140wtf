@@ -3,7 +3,7 @@ import { finalizeEvent } from 'nostr-tools/pure';
 import type { NostrEvent } from 'nostr-tools/pure';
 import { encrypt as nip44Encrypt } from 'nostr-tools/nip44';
 
-import { defaultCreateRelays, resolveBundle } from './useCommunityActions2';
+import { createRelayCandidates, defaultCreateRelays, resolveBundle } from './useCommunityActions2';
 import { mintCommunity } from '@/concord-v2/lib/community';
 import { bytesToHex, inviteBundleKey, random32 } from '@/concord-v2/lib/derive';
 import { mintLinkSigner, mintToken, type InviteBundle } from '@/concord-v2/lib/invite';
@@ -25,6 +25,15 @@ describe('defaultCreateRelays', () => {
   it('prefers only DM relays and stays within the community relay cap', () => {
     const relays = defaultCreateRelays(['wss://my.relay/'], ['wss://my-inbox.relay/']);
     expect(relays).toEqual(['wss://my-inbox.relay']);
+  });
+});
+
+describe('createRelayCandidates', () => {
+  it('offers DM and configured app relays without adding feed or stock relays', () => {
+    expect(createRelayCandidates(['wss://app.relay/'], ['wss://inbox.relay/'])).toEqual([
+      { url: 'wss://inbox.relay', source: 'dm' },
+      { url: 'wss://app.relay', source: 'app' },
+    ]);
   });
 });
 
