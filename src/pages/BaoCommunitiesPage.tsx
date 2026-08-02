@@ -229,8 +229,8 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 messages, member list, and community metadata stay sealed — relays
                 only ever hold ciphertext. What every relay you add CAN see is
                 traffic shape (timing and volume) and direct-invite handoffs
-                (a direct invite p-tags the invitee once; anonymous link joins
-                don't). For most communities the everyday app relays are a fine
+                (a direct invite p-tags the invitee once; links avoid that recipient
+                tag but are not anonymous). For most communities the everyday app relays are a fine
                 home; only a super privacy-focused group benefits from trimming
                 down to a single relay you control, ideally with NIP-42 read
                 auth — and preferring invite links over direct invites. Nothing
