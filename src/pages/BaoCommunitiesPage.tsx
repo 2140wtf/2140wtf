@@ -319,13 +319,13 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 }
 
 /**
- * `/bao/chat` — the ₿AO communities list: every Concord V2 community the user
+ * `/bao/baocommunity` — the ₿AO communities list: every Concord V2 community the user
  * holds keys for, with unread/mention rollups. This replaces Armada's
  * ServerRail: cross-community navigation starts here, and each community's
  * channel sidebar lives inside the community page.
  */
 export function BaoCommunitiesPage() {
-  useSeoMeta({ title: "₿AO CHAT — 2140.wtf" });
+  useSeoMeta({ title: "₿AO Community — 2140.wtf" });
   const { user } = useCurrentUser();
   const entries = useLiveCommunities2();
   const [createOpen, setCreateOpen] = useState(false);
@@ -333,7 +333,7 @@ export function BaoCommunitiesPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title="₿AO CHAT"
+        title="₿AO Community"
         icon={<MessagesSquare className="size-6 text-primary" />}
       >
         {user && (
