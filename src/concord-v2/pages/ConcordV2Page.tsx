@@ -14,6 +14,7 @@ import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { CommunityInfoDialog2 } from "@/concord-v2/components/CommunityInfoDialog2";
 import { DisappearTimerButton2 } from "@/concord-v2/components/DisappearTimerButton2";
 import { FundView2 } from "@/concord-v2/components/FundView2";
+import { ProjectWorkspace2 } from "@/concord-v2/components/ProjectWorkspace2";
 import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
 import { InviteDialog2 } from "@/concord-v2/components/InviteDialog2";
 import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
@@ -674,7 +675,7 @@ export function ConcordV2Page() {
   // Which pane the main area shows: the selected channel's chat, the
   // community-wide "@ Mentions" list, or the "Threads" list. Selecting a
   // channel returns to chat.
-  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "audit" | "invites" | "banned" | "health">("channel");
+  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "project" | "audit" | "invites" | "banned" | "health">("channel");
   useEffect(() => {
     if (routeChannelId) setView("channel");
   }, [routeChannelId]);
@@ -1492,6 +1493,23 @@ export function ConcordV2Page() {
                 <span className="shrink-0 size-2 rounded-full bg-green-500" aria-label="Fundraiser linked" />
               ) : null}
             </button>
+            {folded?.metadata?.repo_naddr ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setView("project");
+                  onNavigate?.();
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 pl-3 pr-2 py-1.5 touch:py-3 text-sm transition-colors text-left clip-corner-lg",
+                  view === "project" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+                )}
+                aria-current={view === "project"}
+              >
+                <GitBranch className="size-4 shrink-0" />
+                <span className="truncate flex-1 min-w-0">Project</span>
+              </button>
+            ) : null}
           </>
         ) : undefined
       }
@@ -1612,6 +1630,11 @@ export function ConcordV2Page() {
                   <HandCoins className="size-5 text-muted-foreground shrink-0" />
                   <h1 className="font-semibold truncate leading-tight">Fund</h1>
                 </>
+              ) : view === "project" ? (
+                <>
+                  <GitBranch className="size-5 text-muted-foreground shrink-0" />
+                  <h1 className="font-semibold truncate leading-tight">Project</h1>
+                </>
               ) : view === "invites" ? (
                 <>
                   <LinkIcon className="size-5 text-muted-foreground shrink-0" />
@@ -1673,6 +1696,10 @@ export function ConcordV2Page() {
                       <ScrollText className="size-3 shrink-0" />
                       Audit log
                     </>
+                  ) : view === "fund" ? (
+                    <><HandCoins className="size-3 shrink-0" />Fund</>
+                  ) : view === "project" ? (
+                    <><GitBranch className="size-3 shrink-0" />Project</>
                   ) : view === "invites" ? (
                     <>
                       <LinkIcon className="size-3 shrink-0" />
@@ -1854,6 +1881,8 @@ export function ConcordV2Page() {
                   metadata={folded?.metadata}
                   canManage={canManageMetadata}
                 />
+              ) : view === "project" && folded?.metadata?.repo_naddr ? (
+                <ProjectWorkspace2 repoNaddr={folded.metadata.repo_naddr} />
               ) : (
                 <>
                   <MessageTimeline

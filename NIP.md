@@ -784,6 +784,28 @@ The `shape` field is added to the JSON content of a kind 0 event alongside stand
 
 ## Community NIP Specifications
 
+### Concord V2 metadata extension: NIP-34 project coordinate
+
+Concord V2 community metadata may contain two independent repository fields
+inside its encrypted metadata edition:
+
+| Field | Meaning |
+| --- | --- |
+| `repo` | Optional HTTPS landing or clone URL for human navigation and fundraiser presentation. |
+| `repo_naddr` | Optional canonical NIP-19 `naddr` for a kind-30617 NIP-34 repository announcement. |
+
+Clients MUST decode `repo_naddr`, require kind `30617`, and author-filter the
+repository query by the pubkey encoded in the pointer. Relay hints are hints,
+not authority. NIP-34 issues, patches, pull requests and status events remain
+public artifacts and evidence only; this metadata link grants them no Concord
+role or settlement authority. Loading the Project view contacts the public
+repository relays and therefore reveals the viewer's IP and request timing;
+clients SHOULD load it only after explicit navigation and SHOULD use an
+anonymous isolated transport when available. A funded contract must separately
+freeze its repository coordinate—mutable community metadata is discovery and
+presentation, not settlement identity. Unknown/invalid values are preserved during
+metadata round-tripping but MUST NOT trigger relay queries or external opens.
+
 The following specifications are maintained by their respective authors. 2140.wtf implements these kinds but does not own the specs. See each link for the full event structure, tags, and client behavior.
 
 ### Color Moments (Kind 3367)

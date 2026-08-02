@@ -115,6 +115,9 @@ export interface CommunityMetadata {
    * gitworkshop.dev NIP-34 repo or a GitHub link). Shown in the community
    * dialog and pre-fills fundraisers created for this community. */
   repo?: string;
+  /** Canonical NIP-34 kind-30617 repository coordinate. Kept separate from
+   * `repo`, which remains an HTTPS landing/clone link for humans and Fund. */
+  repo_naddr?: string;
   /** Linked ₿AO Fund campaign id — set by the owner/managers when they start
    * or import a fundraiser for this community. Members see it in the Fund
    * pane; only managers can change it. */
