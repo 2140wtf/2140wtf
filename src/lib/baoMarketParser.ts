@@ -176,6 +176,12 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
     type = "categorical";
   }
 
+  const rawPoolModel = String(
+    getTag('pool_model') || content.poolModel || '',
+  ).toLowerCase();
+  const poolModel: BaoMarket['poolModel'] =
+    rawPoolModel === 'smj' || rawPoolModel === 'amm' ? rawPoolModel : undefined;
+
   let endTime = 0;
   const rawEnd = getTag("end") || content.endTime;
   if (typeof rawEnd === "number") {
@@ -196,6 +202,7 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
     type,
     endTime,
     createdAt: event.created_at,
+    poolModel,
     outcomes,
     creatorPubkey: event.pubkey,
     rawEvent: event,
