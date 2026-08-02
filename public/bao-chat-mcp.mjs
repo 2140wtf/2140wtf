@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import process$1 from "node:process";
 import { homedir } from "node:os";
@@ -32998,6 +32998,8 @@ function decrypt(payload, conversationKey) {
 */
 const LABEL_CHANNEL = "concord/channel";
 const LABEL_CONTROL = "concord/control";
+const LABEL_VOICE_SIGNER = "concord/voice-signer";
+const LABEL_VOICE_MEDIA = "concord/voice-media";
 const LABEL_GRANT = "concord/grant";
 const LABEL_BANLIST = "concord/banlist";
 const LABEL_INVITE_LINKS = "concord/invite-links";
@@ -33102,6 +33104,30 @@ function controlGroupKey(communityRoot, communityId, epoch) {
 	assert32("communityRoot", communityRoot);
 	assert32("communityId", communityId);
 	return groupKeyCached(LABEL_CONTROL, communityRoot, communityId, toEpoch(epoch));
+}
+/**
+* A voice Channel's SFU room keypair (CORD-07 §1): `voice_key.pk` IS the SFU
+* room name and `voice_key.sk` signs token grants (§2). `secret`/`epoch` are
+* the same pair that addresses the Channel's Chat Plane — the community_root at
+* the root epoch for a Public Channel, the Channel's own key/epoch for a
+* Private one — so the room rolls exactly when the Channel's key does. The
+* `group_key` shape is reused only for its deterministic keypair; the pk is
+* never a stream address.
+*/
+function voiceGroupKey(secret, channelId, epoch) {
+	assert32("secret", secret);
+	assert32("channelId", channelId);
+	return groupKeyCached(LABEL_VOICE_SIGNER, secret, channelId, toEpoch(epoch));
+}
+/**
+* A voice Channel's raw 32-byte media-encryption root (CORD-07 §1). Never feeds
+* a cipher directly — every publisher's per-sender frame key derives from it
+* (see {@link voiceSenderKey}).
+*/
+function voiceMediaKey(secret, channelId, epoch) {
+	assert32("secret", secret);
+	assert32("channelId", channelId);
+	return hkdf32(secret, buildInfo(LABEL_VOICE_MEDIA, channelId, toEpoch(epoch)));
 }
 /** A member's Grant entity coordinate (the edition `eid`). */
 function grantLocator(communityId, memberXonly) {
@@ -33301,6 +33327,24 @@ const TAG_EPOCH = "epoch";
 /** The binding tags a Chat rumor MUST commit: `["channel", id]` + `["epoch", n]`. */
 function channelBindingTags(channelIdHex, epoch) {
 	return [[TAG_CHANNEL, channelIdHex], [TAG_EPOCH, epoch.toString()]];
+}
+/** Value of a tag required to appear AT MOST ONCE (binding must be unambiguous). */
+function uniqueTag(tags, name) {
+	let found;
+	for (const t of tags) if (t[0] === name) {
+		if (found !== void 0) throw new StreamError("binding-mismatch", `duplicate binding tag: ${name}`);
+		found = t[1];
+	}
+	return found;
+}
+/**
+* Enforce the Chat-plane binding: the rumor's committed channel + epoch must
+* strict-equal the coordinate whose key decrypted the wrap, or a keyholder
+* could splice one author's rumor into a context they never chose.
+*/
+function checkChannelBinding(opened, channelIdHex, epoch) {
+	if (uniqueTag(opened.tags, TAG_CHANNEL) !== channelIdHex) throw new StreamError("binding-mismatch", "channel-binding mismatch (splice)");
+	if (uniqueTag(opened.tags, TAG_EPOCH) !== epoch.toString()) throw new StreamError("binding-mismatch", "epoch-binding mismatch (splice)");
 }
 //#endregion
 //#region src/concord-v2/lib/version.ts
@@ -33638,6 +33682,40 @@ function canActOnPosition(roles, actorHex, ownerHex, targetPosition, permission)
 	if (ownerHex === actorHex) return true;
 	return hasPermission(roles, actorHex, permission) && outranks(roles, actorHex, ownerHex, targetPosition);
 }
+//#endregion
+//#region src/lib/sanitizeUrl.ts
+/**
+* Whether a URL points at a local-network address (loopback, RFC-1918 private,
+* link-local, `.local`/`.localhost`). Untrusted event data (custom-emoji URLs,
+* avatars, media) can carry a `http://localhost:…` or `http://192.168.x.x/…`
+* URL — usually a leaked dev instance — so anything that turns such a URL into
+* an `<img>`/`fetch` MUST refuse it, or every viewer who renders it gets the
+* browser's local-network access prompt.
+*/
+function isLocalNetworkUrl(raw) {
+	if (!raw) return false;
+	let host;
+	try {
+		host = new URL(raw).hostname.toLowerCase();
+	} catch {
+		return false;
+	}
+	const h = host.replace(/^\[|\]$/g, "");
+	if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true;
+	if (h === "::1" || h === "0.0.0.0") return true;
+	const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+	if (v4) {
+		const a = Number(v4[1]);
+		const b = Number(v4[2]);
+		if (a === 127 || a === 10 || a === 0) return true;
+		if (a === 192 && b === 168) return true;
+		if (a === 172 && b >= 16 && b <= 31) return true;
+		if (a === 169 && b === 254) return true;
+	}
+	if (/^f[cd][0-9a-f]*:/.test(h)) return true;
+	if (/^fe[89ab][0-9a-f]*:/.test(h)) return true;
+	return false;
+}
 /** Canonical relay URL for dedupe + display: lowercase scheme/host, no
 * trailing slash. `wss://relay.damus.io/` and `wss://relay.damus.io` are the
 * same relay; treating them as distinct strings seeded duplicate entries
@@ -33659,13 +33737,24 @@ function capRelays(relays, cap = 15) {
 	const out = [];
 	for (const r of relays) {
 		if (out.length >= cap) break;
-		if (typeof r !== "string" || !r) continue;
+		if (typeof r !== "string" || !r || !isSafeCommunityRelayUrl(r)) continue;
 		const canonical = canonicalRelayUrl(r);
 		if (seen.has(canonical)) continue;
 		seen.add(canonical);
 		out.push(canonical);
 	}
 	return out;
+}
+/** Community metadata is untrusted: never let it steer sockets to arbitrary
+* schemes, credential-bearing URLs, or local-network targets. */
+function isSafeCommunityRelayUrl(raw) {
+	try {
+		const url = new URL(raw);
+		if (url.username || url.password || url.hash) return false;
+		return url.protocol === "wss:" && !isLocalNetworkUrl(raw);
+	} catch {
+		return false;
+	}
 }
 /** Byte length of a string as UTF-8. */
 function utf8Len(s) {
@@ -33675,13 +33764,13 @@ function utf8Len(s) {
 function isImagePointer(v) {
 	if (!v || typeof v !== "object") return false;
 	const o = v;
-	return typeof o.url === "string" && typeof o.key === "string" && typeof o.nonce === "string" && typeof o.hash === "string";
+	return typeof o.url === "string" && typeof o.key === "string" && /^[0-9a-f]{64}$/i.test(o.key) && typeof o.nonce === "string" && /^[0-9a-f]{32}$/i.test(o.nonce) && typeof o.hash === "string" && /^[0-9a-f]{64}$/i.test(o.hash);
 }
 //#endregion
 //#region src/concord-v2/lib/control.ts
-/** The CURRENT control-plane stream key (where new editions publish). */
-function currentControlGroup(community) {
-	return controlGroupKey(community.root, community.id, community.rootEpoch);
+/** Every control-plane stream key across the community's held root epochs, newest first. */
+function controlGroups(community) {
+	return community.heldRoots.map((r) => controlGroupKey(r.key, community.id, r.epoch));
 }
 /**
 * Decode-once memo for opened+parsed control editions, keyed by wrap id. The
@@ -34160,6 +34249,110 @@ function foldOnce(editions, communityId, ownerHex, priorHeads, snapshotIds) {
 }
 "0".repeat(64);
 //#endregion
+//#region src/concord-v2/lib/invite.ts
+/**
+* The stock relay dictionary, generation 4: four primaries every client knows,
+* referenced by a single byte. Versioned — it grows without breaking older
+* links; both Vector and Soapbox ship it identically.
+*/
+const RELAY_DICTIONARY = {
+	1: "wss://jskitty.com/nostr",
+	2: "wss://asia.vectorapp.io/nostr",
+	3: "wss://relay.ditto.pub",
+	4: "wss://relay.dreamith.to"
+};
+[
+	1,
+	2,
+	3,
+	4
+].map((i) => RELAY_DICTIONARY[i]);
+new Map(Object.entries(RELAY_DICTIONARY).map(([id, url]) => [url, Number(id)]));
+//#endregion
+//#region src/concord-v2/lib/community.ts
+/**
+* Concord V2 community assembly — genesis (CORD-02 §1), the runtime channel
+* view (CORD-03), and the classifier the Add wizard uses to tell a V2 invite
+* from everything else.
+*/
+/**
+* Assemble the channels the member can actually read from the Control fold +
+* held keys:
+*
+*   - a PUBLIC channel derives its stream from the community_root per held
+*     root epoch (readable by every member, rotates with the base for free);
+*   - a PRIVATE channel needs its independent key from the member's bundle —
+*     lacking it, the channel is omitted (its ciphertext is unreadable anyway);
+*   - deleted channels are dropped from display (history stays decryptable to
+*     anyone who held the keys, but that's a future "archive" view).
+*
+* Ordered by name for a stable sidebar.
+*/
+function channelsView(community, folded) {
+	const out = [];
+	const seen = /* @__PURE__ */ new Set();
+	const privateKeysById = new Map(community.privateChannels.map((ch) => [bytesToHex$1(ch.id), ch]));
+	const voiceKeys = (secret, id, epoch) => ({
+		room: voiceGroupKey(secret, id, epoch),
+		mediaKey: voiceMediaKey(secret, id, epoch)
+	});
+	for (const def of folded?.channels.values() ?? []) {
+		if (def.deleted) continue;
+		seen.add(def.channelIdHex);
+		const id = hex32(def.channelIdHex);
+		if (!def.isPrivate) {
+			const streams = community.heldRoots.map((r) => ({
+				epoch: r.epoch,
+				group: channelGroupKey(r.key, id, r.epoch)
+			}));
+			out.push({
+				id,
+				idHex: def.channelIdHex,
+				name: def.name,
+				isPrivate: false,
+				voice: voiceKeys(community.root, id, community.rootEpoch),
+				streams,
+				current: streams[0]
+			});
+			continue;
+		}
+		const held = privateKeysById.get(def.channelIdHex);
+		if (!held) continue;
+		const stream = {
+			epoch: held.epoch,
+			group: channelGroupKey(held.key, id, held.epoch)
+		};
+		out.push({
+			id,
+			idHex: def.channelIdHex,
+			name: def.name,
+			isPrivate: true,
+			voice: voiceKeys(held.key, id, held.epoch),
+			streams: [stream],
+			current: stream
+		});
+	}
+	for (const held of community.privateChannels) {
+		const idHex = bytesToHex$1(held.id);
+		if (seen.has(idHex)) continue;
+		const stream = {
+			epoch: held.epoch,
+			group: channelGroupKey(held.key, held.id, held.epoch)
+		};
+		out.push({
+			id: held.id,
+			idHex,
+			name: held.name || idHex.slice(0, 8),
+			isPrivate: true,
+			voice: voiceKeys(held.key, held.id, held.epoch),
+			streams: [stream],
+			current: stream
+		});
+	}
+	out.sort((a, b) => a.name.localeCompare(b.name));
+	return out;
+}
+//#endregion
 //#region src/concord-v2/lib/orchestration.ts
 /**
 * Orchestration primitives (AGENT_CHAT_ORCHESTRATION.md §7/§14) — pure
@@ -34174,13 +34367,26 @@ function foldOnce(editions, communityId, ownerHex, priorHeads, snapshotIds) {
 *   manifest is coordination metadata, not community content).
 * - Task lifecycle: chat messages (sealed rumors inside a ₿AO — inner kind 9)
 *   tagged `["t", "orch-task"]` whose content starts with a verb:
-*     CLAIM <taskId> key=<idempotencyKey>
+*     CLAIM <taskId> key=<idempotencyKey> epoch=<fencingEpoch>
 *     PROGRESS <taskId> <one line>
 *     HANDOFF <taskId> @<agent> <state summary>   (receiver must ACK)
 *     ACK <taskId>
 *     DONE <taskId> <artifact refs>
 *     BLOCKED <taskId> <reason> <need>
 *   Machines parse the tags + first word; the rest stays human-readable.
+*
+* Fencing (mosaico daemon-design, adapted): every CLAIM carries a fencing
+* epoch — the claimant's view of how many times the task has changed hands,
+* plus one. A CLAIM whose epoch doesn't match current-epoch + 1 is a
+* stale-view claim and is IGNORED (never half-succeed on a stale read): the
+* loser re-resolves and retries at the right epoch. Two agents reclaiming the
+* same stale claim publish the same epoch; the tie-break picks one, and the
+* other detects the loss by re-resolving (`held` in chat-core) instead of
+* double-working. Legacy CLAIMs without `epoch=` still claim (mixed fleet),
+* and also bump the epoch. PROGRESS/DONE/BLOCKED stay claimant-scoped WITHOUT
+* an epoch: resolution folds in ms order, so a zombie's late verb lands while
+* someone else holds the claim and is ignored — same-author cross-epoch
+* confusion can't survive the fold.
 */
 const ORCH_TASK_TAG = "orch-task";
 const VERBS = [
@@ -34204,19 +34410,23 @@ function parseTaskMessage(content, tags) {
 	if (!VERBS.includes(verb)) return null;
 	const rest = (m[3] ?? "").trim();
 	const keyMatch = rest.match(/(?:^|\s)key=(\S+)/);
+	const epochMatch = rest.match(/(?:^|\s)epoch=(\d+)(?:\s|$)/);
 	return {
 		verb,
 		taskId: m[2],
 		rest,
-		...verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {}
+		...verb === "CLAIM" && keyMatch ? { idemKey: keyMatch[1] } : {},
+		...verb === "CLAIM" && epochMatch ? { epoch: Number(epochMatch[1]) } : {}
 	};
 }
 /**
 * Deterministic idempotency key for a claim: a retrying agent re-publishes
-* the SAME claim event instead of racing itself (§14).
+* the SAME claim event instead of racing itself (§14). The epoch salts the
+* key, so a re-claim after a stale takeover is a NEW key (not deduped against
+* the earlier claim) while a retry of the same epoch's claim stays idempotent.
 */
-function deriveClaimKey(orchId, taskId) {
-	return bytesToHex$1(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}`))).slice(0, 32);
+function deriveClaimKey(orchId, taskId, epoch = 1) {
+	return bytesToHex$1(sha256(new TextEncoder().encode(`bao-orch:claim:${orchId}:${taskId}:${epoch}`))).slice(0, 32);
 }
 /**
 * Resolve who owns each task right now. THE shared tie-break (§14):
@@ -34225,26 +34435,47 @@ function deriveClaimKey(orchId, taskId) {
 * but the next valid CLAIM takes the task (stale claims never win over a
 * fresh one). DONE/BLOCKED are terminal-state markers from the claimant only
 * (nobody can mark someone else's task done).
+*
+* Fencing: an epoch-bearing CLAIM is valid ONLY if its epoch is exactly
+* current-epoch + 1 (or 1 for a never-claimed task) — a mismatched CLAIM was
+* issued from a stale view and is ignored outright, so two concurrent
+* reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
+* the check but still bump the epoch.
+*
+* Delivery is at-least-once (a relay can resend a stored event on a new
+* subscription), so the SAME rumor id is processed once: a replayed legacy
+* CLAIM on an already-stale claim would otherwise re-take the task and bump
+* the epoch a second time, silently un-fencing every later CLAIM (found by
+* the seed-101 fuzz property: duplication must be a no-op).
 */
 function resolveClaims(messages, opts) {
 	const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 	const states = /* @__PURE__ */ new Map();
+	const delivered = /* @__PURE__ */ new Set();
 	for (const { id, author, ms, msg } of sorted) {
+		if (delivered.has(id)) continue;
+		delivered.add(id);
+		if (ms - opts.nowMs > 9e5) continue;
 		const cur = states.get(msg.taskId);
 		switch (msg.verb) {
-			case "CLAIM":
-				if (cur && !cur.stale && !cur.done) break;
+			case "CLAIM": {
+				if (cur && !cur.stale && !cur.done && !cur.released) break;
+				const nextEpoch = (cur?.epoch ?? 0) + 1;
+				if (msg.epoch !== void 0 && msg.epoch !== nextEpoch) break;
 				states.set(msg.taskId, {
 					taskId: msg.taskId,
 					claimant: author,
 					claimId: id,
 					claimMs: ms,
 					lastProgressMs: ms,
+					epoch: nextEpoch,
 					done: false,
 					blocked: false,
+					released: false,
 					stale: opts.nowMs - ms > opts.ttlMs
 				});
 				break;
+			}
 			case "PROGRESS":
 				if (cur && cur.claimant === author && !cur.done) {
 					cur.lastProgressMs = ms;
@@ -34265,12 +34496,36 @@ function resolveClaims(messages, opts) {
 					cur.lastProgressMs = ms;
 				}
 				break;
-			case "HANDOFF": break;
+			case "HANDOFF":
+				if (cur && cur.claimant === author && !cur.done) {
+					cur.released = true;
+					cur.lastProgressMs = ms;
+				}
+				break;
 			case "ACK": break;
 		}
 	}
 	for (const s of states.values()) if (!s.done && opts.nowMs - s.lastProgressMs > opts.ttlMs) s.stale = true;
 	return states;
+}
+/**
+* Executor-side fence check (mosaico: validate before acting, not only at
+* claim time). May this author post this verb, given the resolved state?
+*
+* - CLAIM: always allowed to ATTEMPT — the fence arbitrates at resolve.
+* - PROGRESS/DONE/BLOCKED while someone ELSE holds the claim: refused. The
+*   resolver would ignore the zombie's verb anyway, but the refusal tells the
+*   AGENT it lost — otherwise it posts DONE and walks away believing it
+*   finished work it no longer owns. Own claim (even stale) may still be
+*   refreshed or marked: staleness is a lease lapse, not a loss.
+* - HANDOFF while someone else holds the claim: refused (only the claimant
+*   can release). ACK carries no claim semantics, always allowed.
+*/
+function mayPostVerb(cur, author, verb) {
+	if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED" || verb === "HANDOFF") {
+		if (cur && cur.claimant !== author) return false;
+	}
+	return true;
 }
 /**
 * Client-side mention detection (the sealed-stack interrupt): a message
@@ -34306,7 +34561,43 @@ function statePath(name) {
 function loadState(name) {
 	const path = statePath(name);
 	if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
-	return JSON.parse(readFileSync(path, "utf8"));
+	const state = JSON.parse(readFileSync(path, "utf8"));
+	if ((state.protocol_version ?? 1) > 1) throw new Error(`Identity "${name}" was written by protocol v${state.protocol_version} but this binary speaks v1 — re-fetch bao-agent.mjs (never half-run a stale binary).`);
+	return state;
+}
+/**
+* Advisory lockfile around state read-modify-write ops (invite, sweep):
+* two concurrent CLI processes would otherwise each read the old file and
+* lose the other's write — the mosaico multi-writer lesson at file level.
+* Locks whose holder died are reclaimed after 30s by mtime.
+*
+* `lockSuffix` selects the lock: the default ".lock" guards the state file
+* itself, while keyed sends use a PER-KEY suffix (".send-<hash>") so two
+* processes racing the same idempotency key serialize their
+* check-then-publish WITHOUT blocking unrelated sends or state ops.
+*/
+async function withStateLock(name, fn, lockSuffix = ".lock") {
+	const lock = `${statePath(name)}${lockSuffix}`;
+	const deadline = Date.now() + 1e4;
+	mkdirSync(STATE_DIR, { recursive: true });
+	for (;;) try {
+		closeSync(openSync(lock, "wx"));
+		break;
+	} catch (err) {
+		if (err.code !== "EEXIST") throw err;
+		try {
+			if (Date.now() - statSync(lock).mtimeMs > 3e4) unlinkSync(lock);
+		} catch {}
+		if (Date.now() > deadline) throw new Error(`State for "${name}" is locked by another process (${lockSuffix}) — retry shortly.`);
+		await new Promise((r) => setTimeout(r, 100));
+	}
+	try {
+		return await fn();
+	} finally {
+		try {
+			unlinkSync(lock);
+		} catch {}
+	}
 }
 function communityOf(c, privateChannels) {
 	const root = hexToBytes$1(c.community_root);
@@ -34357,103 +34648,173 @@ async function publishAll(relays, event, label) {
 async function queryAll(relays, filter) {
 	return getPool().querySync(relays, filter, { maxWait: 8e3 });
 }
-/** Resolve #general: owner's stored id, else fold the control plane. */
-async function generalChannel(state) {
-	if (state.community.general_channel_id) return {
-		idHex: state.community.general_channel_id,
-		id: hexToBytes$1(state.community.general_channel_id)
-	};
-	const community = communityOf(state.community, state.private_channels);
-	const control = currentControlGroup(community);
-	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
-		kinds: [KIND_WRAP],
-		authors: [control.pk]
-	}), [control]), community.id, community.owner);
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted && def.name === "general") return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	throw new Error("No public channel found in the control fold.");
-}
 /** Public channels from the control fold + this identity's private channels. */
 async function listChannels(state) {
+	return (await availableChannels(state)).map((channel) => ({
+		id: channel.idHex,
+		name: channel.name,
+		private: channel.isPrivate,
+		epoch: Number(channel.current.epoch)
+	}));
+}
+async function availableChannels(state) {
 	const community = communityOf(state.community, state.private_channels);
-	const control = currentControlGroup(community);
-	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
+	const controls = controlGroups(community);
+	return channelsView(community, foldControlState(openControlWraps(await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [control.pk]
-	}), [control]), community.id, community.owner);
-	const out = [];
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) out.push({
-		id: def.channelIdHex,
-		name: def.name,
-		private: false
-	});
-	for (const ch of state.private_channels) out.push({
-		id: ch.id,
-		name: ch.name,
-		private: true
-	});
-	return out;
+		authors: controls.map((control) => control.pk)
+	}), controls), community.id, community.owner));
+}
+/** Resolve a channel by exact id or case-insensitive exact name. */
+async function resolveChannel(state, selector) {
+	const savedGeneral = state.community.general_channel_id?.toLowerCase();
+	const requested = selector?.trim();
+	if (savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral)) {
+		const community = communityOf(state.community, state.private_channels);
+		const id = hexToBytes$1(savedGeneral);
+		const streams = community.heldRoots.map((root) => ({
+			epoch: root.epoch,
+			group: channelGroupKey(root.key, id, root.epoch)
+		}));
+		return {
+			id,
+			idHex: savedGeneral,
+			name: "general",
+			isPrivate: false,
+			streams,
+			current: streams[0],
+			voice: {
+				room: voiceGroupKey(community.root, id, community.rootEpoch),
+				mediaKey: voiceMediaKey(community.root, id, community.rootEpoch)
+			}
+		};
+	}
+	const channels = await availableChannels(state);
+	let matches;
+	if (selector) {
+		const needle = selector.trim();
+		matches = /^[0-9a-f]{64}$/i.test(needle) ? channels.filter((channel) => channel.idHex === needle.toLowerCase()) : channels.filter((channel) => channel.name.toLowerCase() === needle.toLowerCase());
+	} else {
+		const preferred = state.community.general_channel_id?.toLowerCase();
+		matches = preferred ? channels.filter((channel) => channel.idHex === preferred) : [];
+		if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate && channel.name.toLowerCase() === "general");
+		if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate).slice(0, 1);
+	}
+	if (matches.length === 1) return matches[0];
+	if (matches.length > 1) throw new Error(`Channel name ${JSON.stringify(selector)} is ambiguous; use its 64-hex id.`);
+	const available = channels.map((channel) => `${channel.name} (${channel.idHex})`).join(", ");
+	throw new Error(`Channel ${JSON.stringify(selector ?? "general")} not found.${available ? ` Available: ${available}` : ""}`);
 }
 /** Everything a channel operation needs, resolved once. */
-async function channelContext(state) {
+async function channelContext(state, selector) {
 	const sk = hexToBytes$1(state.sk);
-	const pubkey = getPublicKey(sk);
-	const signer = signerOf(sk);
-	const community = communityOf(state.community, state.private_channels);
-	const channel = await generalChannel(state);
 	return {
 		sk,
-		pubkey,
-		signer,
-		community,
-		channel,
-		group: channelGroupKey(community.root, channel.id, 0n)
+		pubkey: getPublicKey(sk),
+		signer: signerOf(sk),
+		community: communityOf(state.community, state.private_channels),
+		channel: await resolveChannel(state, selector)
 	};
 }
 /** Decrypted #general history (the relay only ever sees ciphertext). */
-async function channelMessages(state) {
-	const { community, group } = await channelContext(state);
+async function channelMessages(state, selector) {
+	const { community, channel } = await channelContext(state, selector);
+	const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
 	const wraps = await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [group.pk]
+		authors: [...streams.keys()]
 	});
 	const messages = [];
-	for (const wrap of wraps) try {
-		const opened = openWrap(wrap, group);
-		if (opened.kind !== 9) continue;
-		messages.push({
-			id: opened.rumorId,
-			author: opened.author,
-			ms: opened.ms,
-			content: opened.content,
-			tags: opened.tags
-		});
-	} catch {}
+	const seenWraps = /* @__PURE__ */ new Set();
+	for (const wrap of wraps) {
+		if (seenWraps.has(wrap.id)) continue;
+		seenWraps.add(wrap.id);
+		const stream = streams.get(wrap.pubkey);
+		if (!stream) continue;
+		try {
+			const opened = openWrap(wrap, stream.group);
+			if (opened.sealKind !== 20013) continue;
+			checkChannelBinding(opened, channel.idHex, stream.epoch);
+			if (opened.kind !== 9) continue;
+			messages.push({
+				id: opened.rumorId,
+				author: opened.author,
+				ms: opened.ms,
+				content: opened.content,
+				tags: opened.tags
+			});
+		} catch {}
+	}
 	messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-	return messages;
+	const seenKeys = /* @__PURE__ */ new Set();
+	return messages.filter((m) => {
+		const d = m.tags.find((t) => t[0] === "d")?.[1];
+		if (d === void 0) return true;
+		const k = `${m.author}:${d}`;
+		if (seenKeys.has(k)) return false;
+		seenKeys.add(k);
+		return true;
+	});
 }
 /**
 * Post to #general. Idempotent when `idemKey` is given: the key rides as a
 * ["d", key] tag on the rumor, and a retry first scans our own history — if
 * the key already landed, we report deduped instead of double-posting
 * (AGENT_CHAT_ORCHESTRATION.md §14: machines retry, humans shouldn't see it).
+*
+* Deliberately NOT a durable outbox (mosaico's submit_intents): both
+* front-ends are interactive request/response, so a crash before publish
+* surfaces to the operator and a crash after publish is healed by the d-tag
+* retry. Revisit if agents start unattended loops or money-adjacent verbs —
+* at that point intents must survive the process.
 */
+/**
+* In-flight keyed sends serialize PER PROCESS: the idempotency scan below is
+* check-then-publish and not atomic, and concurrent callers in one process
+* (parallel MCP tool calls) would otherwise both scan before either lands and
+* double-post (found live in the round-7 MCP stress). The waiter re-scans
+* after the first send resolves and dedupes against it.
+*
+* The PER-PROCESS map alone leaves a CLI×CLI hole: two processes retrying the
+* same key both scan before either publishes and double-post (round 10). So a
+* keyed send additionally takes a per-key lockfile — the check-then-publish is
+* then atomic across processes for that key. A contender that waits out the
+* 10s deadline FAILS CLOSED with "locked by another process" instead of
+* double-posting; the read-side (author, d-tag) dedupe remains as belt-and-
+* braces for lock-free writers (older builds, other front-ends).
+*/
+const inflightKeyedSends = /* @__PURE__ */ new Map();
+/** Per-key lockfile suffix for cross-process keyed-send serialization. */
+function sendLockSuffix(idemKey) {
+	return `.send-${bytesToHex$1(sha256(new TextEncoder().encode(idemKey))).slice(0, 16)}.lock`;
+}
 async function sendChannelMessage(state, text, opts = {}) {
-	const { pubkey, signer, community, channel, group } = await channelContext(state);
 	if (opts.idemKey) {
-		const dupe = (await channelMessages(state)).find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey));
+		const prior = inflightKeyedSends.get(opts.idemKey);
+		if (prior) await prior.catch(() => {});
+	}
+	const run = opts.idemKey ? withStateLock(getPublicKey(hexToBytes$1(state.sk)), () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey)) : sendChannelMessageInner(state, text, opts);
+	if (!opts.idemKey) return run;
+	inflightKeyedSends.set(opts.idemKey, run);
+	try {
+		return await run;
+	} finally {
+		if (inflightKeyedSends.get(opts.idemKey) === run) inflightKeyedSends.delete(opts.idemKey);
+	}
+}
+async function sendChannelMessageInner(state, text, opts = {}) {
+	const textBytes = new TextEncoder().encode(text).length;
+	if (textBytes > 4e4) throw new Error(`Message too large: ${textBytes} bytes (max 40,000 — the sealed wrap must fit NIP-44's 65,535-byte plaintext cap)`);
+	const { pubkey, signer, community, channel } = await channelContext(state, opts.channel);
+	const group = channel.current.group;
+	if (opts.idemKey) {
+		const dupe = (await channelMessages(state, opts.channel)).find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey));
 		if (dupe) return {
 			rumorId: dupe.id,
 			deduped: true
 		};
 	}
-	const tags = [...channelBindingTags(channel.idHex, 0n), ...opts.extraTags ?? []];
+	const tags = [...channelBindingTags(channel.idHex, channel.current.epoch), ...opts.extraTags ?? []];
 	if (opts.idemKey) tags.push(["d", opts.idemKey]);
 	for (const match of text.match(/npub1[02-9ac-hj-np-z]{20,}/g) ?? []) try {
 		const decoded = decode(match);
@@ -34467,7 +34828,7 @@ async function sendChannelMessage(state, text, opts = {}) {
 		ms: Date.now()
 	});
 	const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer), group);
-	await publishAll(community.relays, wrap, `message to #general`);
+	await publishAll(community.relays, wrap, `message to #${channel.name}`);
 	return {
 		rumorId: rumor.id,
 		deduped: false
@@ -34482,14 +34843,15 @@ async function sendChannelMessage(state, text, opts = {}) {
 * an error. Long-lived callers (MCP) must NOT close the shared pool here.
 */
 async function waitForInterrupt(identityName, state, opts) {
-	const { pubkey, community, group } = await channelContext(state);
+	const { pubkey, community, channel } = await channelContext(state, opts.channel);
+	const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
 	const myNpub = npubEncode(pubkey);
 	const seen = /* @__PURE__ */ new Set();
 	for (const w of await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [group.pk]
+		authors: [...streams.keys()]
 	})) seen.add(w.id);
-	console.error(`listening on #general of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`);
+	console.error(`listening on #${channel.name} of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`);
 	return new Promise((resolve) => {
 		let sub = null;
 		const finish = (msg) => {
@@ -34500,14 +34862,18 @@ async function waitForInterrupt(identityName, state, opts) {
 		const timer = setTimeout(() => finish(null), opts.timeoutSec * 1e3);
 		sub = getPool().subscribeMany(community.relays, {
 			kinds: [KIND_WRAP],
-			authors: [group.pk],
+			authors: [...streams.keys()],
 			since: Math.floor(Date.now() / 1e3) - 30
 		}, { onevent(wrap) {
 			if (seen.has(wrap.id)) return;
 			seen.add(wrap.id);
 			let opened;
 			try {
-				opened = openWrap(wrap, group);
+				const stream = streams.get(wrap.pubkey);
+				if (!stream) return;
+				opened = openWrap(wrap, stream.group);
+				if (opened.sealKind !== 20013) return;
+				checkChannelBinding(opened, channel.idHex, stream.epoch);
 			} catch {
 				return;
 			}
@@ -34531,26 +34897,83 @@ async function waitForInterrupt(identityName, state, opts) {
 		} });
 	});
 }
-/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
-const CLAIM_TTL_MS = 1800 * 1e3;
+/** A claim with no PROGRESS from its claimant for this long is reclaimable.
+*  BAO_CLAIM_TTL_MS overrides for live tests against a local relay. */
+const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 1800 * 1e3);
+/**
+* Wait this long before DECLARING a claim held, then re-resolve. A claim that
+* appears to win on a PARTIAL view — a rival's earlier-ms claim still in
+* flight — flips to held=false on this confirmation pass instead of letting
+* both racers believe they won (read-your-writes is not read-their-writes).
+* BAO_CLAIM_SETTLE_MS overrides for live tests.
+*/
+const CLAIM_SETTLE_MS = Number(process.env.BAO_CLAIM_SETTLE_MS ?? 1500);
+/**
+* Fail-closed (mosaico daemon-design: "an unavailable control channel fails
+* closed"). An empty claim history means one of two very different things —
+* "no claims yet" or "the relays are down and we can't see the claims". Only
+* the first may proceed; the second must throw, or an agent would read
+* silence as claimable and double-work a live claim.
+*
+* Probes ACTIVELY (ensureRelay), not via listConnectionStatus: the status map
+* is keyed by normalized URL and only reflects past connections, so a passive
+* read both misses keys and can't run before the first query.
+*/
+async function assertRelayReachable(relays) {
+	if ((await Promise.allSettled(relays.map((r) => getPool().ensureRelay(r, { connectionTimeout: 2500 })))).filter((p) => p.status === "fulfilled").length === 0) throw new Error(`cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`);
+}
 async function orchVerbPost(state, verb, taskId, text, orchId) {
-	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
-	let content = `${verb} ${taskId}`;
-	let idemKey;
+	if (/\s/.test(taskId)) throw new Error(`Task id must not contain whitespace: ${JSON.stringify(taskId)}`);
 	if (verb === "CLAIM") {
-		const key = deriveClaimKey(orchId, taskId);
-		content += ` key=${key}`;
-		idemKey = key;
+		const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+		const cur = (await orchStates(state, orchId)).get(taskId);
+		if (cur && !cur.stale && !cur.done && !cur.released) return {
+			rumorId: cur.claimant === myPubkey ? cur.claimId : "",
+			deduped: false,
+			held: cur.claimant === myPubkey,
+			epoch: cur.epoch
+		};
+		const epoch = (cur?.epoch ?? 0) + 1;
+		const key = deriveClaimKey(orchId, taskId, epoch);
+		let content = `CLAIM ${taskId} key=${key} epoch=${epoch}`;
+		if (text) content += ` ${text}`;
+		const sent = await sendChannelMessage(state, content, {
+			idemKey: key,
+			extraTags: [["t", ORCH_TASK_TAG], ["o", orchId]]
+		});
+		const holdsUs = (s) => !!s && s.claimant === myPubkey && s.epoch === epoch;
+		let now = (await orchStates(state, orchId)).get(taskId);
+		if (holdsUs(now) || !now) {
+			await new Promise((r) => setTimeout(r, CLAIM_SETTLE_MS));
+			now = (await orchStates(state, orchId)).get(taskId);
+		}
+		if (!now) return {
+			...sent,
+			held: null,
+			epoch
+		};
+		return {
+			...sent,
+			held: holdsUs(now),
+			epoch
+		};
 	}
-	if (text) content += ` ${text}`;
-	return sendChannelMessage(state, content, {
-		idemKey,
-		extraTags
-	});
+	const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+	const cur = (await orchStates(state, orchId)).get(taskId);
+	if (!mayPostVerb(cur, myPubkey, verb)) return {
+		rumorId: "",
+		deduped: false,
+		held: false,
+		epoch: cur?.epoch
+	};
+	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
+	return sendChannelMessage(state, `${verb} ${taskId}${text ? ` ${text}` : ""}`, { extraTags });
 }
 async function orchStates(state, orchId) {
+	await assertRelayReachable(state.community.relays);
 	const inputs = [];
-	for (const m of await channelMessages(state)) {
+	const messages = await channelMessages(state);
+	for (const m of messages) {
 		const msg = parseTaskMessage(m.content, m.tags);
 		if (!msg) continue;
 		const oTags = m.tags.filter((t) => t[0] === "o").map((t) => t[1]);
@@ -34637,15 +35060,21 @@ server.registerTool("list_channels", {
 	});
 });
 server.registerTool("read_messages", {
-	description: "Read recent messages from the community's #general channel (decrypted client-side; the relay only stores ciphertext). Returns newest-last with author npubs and millisecond timestamps.",
-	inputSchema: { limit: number().int().min(1).max(200).default(50).describe("Max messages to return (from the end of the timeline)") }
-}, async ({ limit }) => {
+	description: "Read recent messages from a community channel (decrypted client-side; the relay only stores ciphertext). Omit channel for #general; otherwise pass an exact name or channel id.",
+	inputSchema: {
+		limit: number().int().min(1).max(200).default(50).describe("Max messages to return (from the end of the timeline)"),
+		channel: string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general")
+	}
+}, async ({ limit, channel }) => {
 	const state = identityState();
-	const messages = (await channelMessages(state)).slice(-limit);
-	audit("read_messages", { limit }, `${messages.length} message(s)`);
+	const messages = (await channelMessages(state, channel)).slice(-limit);
+	audit("read_messages", {
+		limit,
+		channel
+	}, `${messages.length} message(s)`);
 	return jsonResult({
 		community: state.community.name,
-		channel: "general",
+		channel: channel ?? "general",
 		messages: messages.map((m) => ({
 			id: m.id,
 			author_npub: npubEncode(m.author),
@@ -34656,43 +35085,53 @@ server.registerTool("read_messages", {
 	});
 });
 server.registerTool("send_message", {
-	description: "Post a message to #general. Pass an idempotency `key` whenever the call might be retried: a retry with the same key is deduped (returns deduped:true) instead of double-posting. npub1 tokens in the text automatically become mention p-tags.",
+	description: "Post to a community channel. Omit channel for #general. Pass an idempotency `key` whenever the call might be retried.",
 	inputSchema: {
 		text: string().min(1).max(2e4).describe("Message text (markdown is fine)"),
-		key: string().max(128).optional().describe("Idempotency key — retries with the same key dedupe")
+		key: string().max(128).optional().describe("Idempotency key — retries with the same key dedupe"),
+		channel: string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general")
 	}
-}, async ({ text, key }) => {
-	const { rumorId, deduped } = await sendChannelMessage(identityState(), text, { idemKey: key });
+}, async ({ text, key, channel }) => {
+	const { rumorId, deduped } = await sendChannelMessage(identityState(), text, {
+		idemKey: key,
+		channel
+	});
 	audit("send_message", {
 		key,
+		channel,
 		len: text.length
 	}, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
 	return jsonResult({
 		rumor_id: rumorId,
-		deduped
+		deduped,
+		channel: channel ?? "general"
 	});
 });
 server.registerTool("wait_for_message", {
-	description: "Block until a NEW message arrives in #general that mentions this identity (p-tag, npub, or @name), or any new message with mention_only=false. A timeout is NOT an error: it returns {timeout:true} so the caller can decide to keep waiting or do other work. Max 300 seconds.",
+	description: "Block until a NEW message arrives in a selected channel and mentions this identity, or any new message with mention_only=false. Omit channel for #general.",
 	inputSchema: {
 		timeout_sec: number().int().min(1).max(300).default(120).describe("Seconds to wait before returning the timeout sentinel"),
-		mention_only: boolean().default(true).describe("true = only messages mentioning me; false = any new message")
+		mention_only: boolean().default(true).describe("true = only messages mentioning me; false = any new message"),
+		channel: string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general")
 	}
-}, async ({ timeout_sec, mention_only }) => {
+}, async ({ timeout_sec, mention_only, channel }) => {
 	const hit = await waitForInterrupt(IDENTITY, identityState(), {
 		timeoutSec: timeout_sec,
-		mentionsOnly: mention_only
+		mentionsOnly: mention_only,
+		channel
 	});
 	if (!hit) {
 		audit("wait_for_message", {
 			timeout_sec,
-			mention_only
+			mention_only,
+			channel
 		}, "timeout");
 		return jsonResult({ timeout: true });
 	}
 	audit("wait_for_message", {
 		timeout_sec,
-		mention_only
+		mention_only,
+		channel
 	}, `hit ${hit.id.slice(0, 12)}`);
 	return jsonResult({
 		timeout: false,
@@ -34747,8 +35186,8 @@ server.registerTool("set_profile", {
 	});
 });
 server.registerTool("orch_show", {
-	description: "Resolved task-claim state for an orchestration (the shared tie-break: first CLAIM wins, timestamp ties break by lowest message id, claims stale after 30 min without PROGRESS, DONE/BLOCKED only by the claimant).",
-	inputSchema: { orch: string().max(64).default("cards").describe("Orchestration id (the room's coordination scope)") }
+	description: "Resolved task-claim state for an orchestration (the shared tie-break: first CLAIM wins, timestamp ties break by lowest message id, claims stale after 30 min without PROGRESS, DONE/BLOCKED only by the claimant). Each task carries a fencing epoch that increments on every change of hands — only act on a task while you are the claimant at the current epoch. Fails CLOSED when no relay is reachable (silence is never read as claimable).",
+	inputSchema: { orch: string().max(64).regex(/^\S*$/, "orch must not contain whitespace").default("cards").describe("Orchestration id (the room's coordination scope)") }
 }, async ({ orch }) => {
 	const states = await orchStates(identityState(), orch);
 	audit("orch_show", { orch }, `${states.size} task(s)`);
@@ -34762,7 +35201,7 @@ server.registerTool("orch_show", {
 	});
 });
 server.registerTool("orch_verb", {
-	description: "Post a task-lifecycle verb to the orchestration: claim a task (idempotent — a retry re-publishes the same claim), report progress (refreshes staleness), or mark done/blocked/ack/handoff. Content stays human-readable; the machine contract rides in tags.",
+	description: "Post a task-lifecycle verb to the orchestration. claim is fenced and idempotent: it resolves current state, claims at epoch+1, re-resolves, and returns held (true = you own the task at `epoch` — only then do the work; false = lost the race, do NOT work it; null = not visible yet, re-check with orch_show). progress/done/blocked are validated against the fence BEFORE posting: if another claimant holds the task the verb is refused with held=false (a zombie's DONE changes nothing on the wire — the refusal is what tells you that you lost). Content stays human-readable; the machine contract rides in tags.",
 	inputSchema: {
 		verb: _enum([
 			"claim",
@@ -34772,20 +35211,24 @@ server.registerTool("orch_verb", {
 			"ack",
 			"handoff"
 		]),
-		task_id: string().min(1).max(128),
+		task_id: string().min(1).max(128).regex(/^\S+$/, "task_id must not contain whitespace"),
 		text: string().max(2e3).default("").describe("Extra human-readable payload after the task id"),
-		orch: string().max(64).default("cards")
+		orch: string().max(64).regex(/^\S*$/, "orch must not contain whitespace").default("cards")
 	}
 }, async ({ verb, task_id, text, orch }) => {
-	const { rumorId, deduped } = await orchVerbPost(identityState(), verb.toUpperCase(), task_id, text, orch);
+	const result = await orchVerbPost(identityState(), verb.toUpperCase(), task_id, text, orch);
 	audit("orch_verb", {
 		verb,
 		task_id,
 		orch
-	}, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
+	}, result.deduped ? "deduped" : `sent ${result.rumorId.slice(0, 12)}`);
 	return jsonResult({
-		rumor_id: rumorId,
-		deduped
+		rumor_id: result.rumorId,
+		deduped: result.deduped,
+		...result.held !== void 0 ? {
+			held: result.held,
+			epoch: result.epoch
+		} : {}
 	});
 });
 async function main() {
