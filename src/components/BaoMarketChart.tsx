@@ -8,6 +8,7 @@ import { useBaoSmjHistory } from '@/hooks/useBaoSmjHistory';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { hslStringToHex } from '@/lib/colorUtils';
+import { normalizeBaoPriceHistory } from '@/lib/baoChartData';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
 const TIME_RANGES: PriceHistoryRange[] = ['1H', '1D', '1W', '1M', 'ALL'];
@@ -74,7 +75,8 @@ function computeOutcomeData(
   let areaData: ChartPoint[];
 
   if (historyPoints && historyPoints.length >= 2) {
-    areaData = historyPoints.map((p) => ({ time: p.time, value: p.price * 100 }));
+    areaData = normalizeBaoPriceHistory(historyPoints)
+      .map((p) => ({ time: p.time, value: p.price * 100 }));
   } else if (mirroredValues && mirroredValues.length >= 2) {
     // Binary NO derived from real YES history (parimutuel prices sum to 1).
     const bucketCount = mirroredValues.length;
