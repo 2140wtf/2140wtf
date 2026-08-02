@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   fetchVerificationStatsMock: vi.fn(),
   fetchVerificationModelsMock: vi.fn(),
   releaseMock: vi.fn(),
-  claimMock: vi.fn(),
   toastMock: vi.fn(),
 }));
 
@@ -30,7 +29,6 @@ vi.mock('@/lib/baoFundraising', async (importOriginal) => {
     fetchVerificationStats: mocks.fetchVerificationStatsMock,
     fetchVerificationModels: mocks.fetchVerificationModelsMock,
     releaseMilestone: mocks.releaseMock,
-    claimStream: mocks.claimMock,
   };
 });
 
@@ -52,7 +50,7 @@ vi.mock('@/contexts/LayoutContext', () => ({
 
 // The create dialog needs the Nostr publish stack; it is irrelevant here.
 vi.mock('@/components/bao-fund/CreateCampaignDialog', () => ({
-  CreateCampaignDialog: () => null,
+  CreateCampaignDialog: ({ open }: { open: boolean }) => open ? <div>Campaign creation form</div> : null,
 }));
 
 // Child widgets with their own data dependencies — the page tests assert the
@@ -166,6 +164,21 @@ describe('ContributeDialog', () => {
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(2));
 
     expect(idempotencyKeyOf(1)).not.toBe(idempotencyKeyOf(0));
+  });
+
+  it('blocks a campaign owner before recording a contribution', async () => {
+    const ownedFundraiser = { ...fundraiserA, owner_pubkey: 'user-pubkey' };
+    renderWithClient(
+      <ContributeDialog fundraiser={ownedFundraiser} onOpenChange={() => {}} onContributed={() => {}} />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+
+    await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Contribution failed',
+      description: 'Campaign owners cannot fund their own project.',
+    })));
+    expect(mocks.contributeMock).not.toHaveBeenCalled();
   });
 
   it('does not paint a previous campaign\'s payment instructions when the response lands after the dialog was closed', async () => {
@@ -370,13 +383,12 @@ describe('BaoFundingPage — campaign card accessibility', () => {
     expect(screen.queryByText('Run agent check')).not.toBeInTheDocument();
   });
 
-  it('puts campaign creation behind the clearly scoped client-side agent check', async () => {
+  it('opens campaign creation directly for human, agent, or mixed teams', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Create a campaign \(agents\)/ }));
-    expect(await screen.findByRole('heading', { name: 'Create an agent campaign' })).toBeInTheDocument();
-    expect(screen.getByText('Agent check required to create')).toBeInTheDocument();
-    expect(screen.getByText(/not identity verification or secure bao\.markets authorization/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /Create a campaign/ }));
+    expect(await screen.findByText('Campaign creation form')).toBeInTheDocument();
+    expect(screen.queryByText('Agent check required to create')).not.toBeInTheDocument();
   });
 
   it('renders embedded repository metadata as a review action instead of description prose', async () => {
