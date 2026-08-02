@@ -281,12 +281,12 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
 
         {/* Unmissable demo warning: the Cashu mint is real software, but it
             issues ₿AO testnet (signet) sats — nothing here touches mainnet. */}
-        <div className="rounded-lg border-2 border-amber-500/60 bg-amber-500/10 px-4 py-3 space-y-1.5">
-          <p className="flex items-center gap-2 text-sm font-bold text-amber-800 dark:text-amber-400">
-            <AlertTriangle className="size-4 shrink-0" />
+        <div className="rounded-lg border-2 border-amber-500/60 bg-card px-4 py-3 space-y-1.5">
+          <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
             DEMO — ₿AO testnet, not Bitcoin mainnet
           </p>
-          <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-300/90">
+          <p className="text-xs leading-relaxed text-foreground">
             Cashu here runs on a real mint, but that mint issues <span className="font-semibold">₿AO testnet (signet) sats</span> — not Bitcoin mainnet.
             Cashu from mainnet must not be used here — claim <span className="font-semibold">free test sats</span> from the{' '}
             <button type="button" onClick={() => openUrl('https://bao.markets')} className="font-semibold underline cursor-pointer">₿AO faucet at bao.markets</button>{' '}
