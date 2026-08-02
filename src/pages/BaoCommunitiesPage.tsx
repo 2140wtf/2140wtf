@@ -115,11 +115,12 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   // relay the candidates don't know about, so unticking it drops it from the
   // list again.
   const relayRows = useMemo(() => {
-    const rows: string[] = [];
-    for (const url of [...(candidates ?? []), ...picked]) {
-      if (!rows.includes(url)) rows.push(url);
+    const rows = new Map<string, "dm" | "app" | "fallback" | "custom">();
+    for (const candidate of candidates ?? []) rows.set(candidate.url, candidate.source);
+    for (const url of picked) {
+      if (!rows.has(url)) rows.set(url, "custom");
     }
-    return rows;
+    return [...rows].map(([url, source]) => ({ url, source }));
   }, [candidates, picked]);
 
   const toggleRelay = (url: string, on: boolean) =>
@@ -229,8 +230,8 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 messages, member list, and community metadata stay sealed — relays
                 only ever hold ciphertext. What every relay you add CAN see is
                 traffic shape (timing and volume) and direct-invite handoffs
-                (a direct invite p-tags the invitee once; anonymous link joins
-                don't). For most communities the everyday app relays are a fine
+                (a direct invite p-tags the invitee once; links avoid that recipient
+                tag but are not anonymous). For most communities the everyday app relays are a fine
                 home; only a super privacy-focused group benefits from trimming
                 down to a single relay you control, ideally with NIP-42 read
                 auth — and preferring invite links over direct invites. Nothing
@@ -239,7 +240,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               </p>
 
               <div className="space-y-1.5 pt-1">
-                {relayRows.map((url) => (
+                {relayRows.map(({ url, source }) => (
                   <label
                     key={url}
                     className="flex cursor-pointer items-center gap-3 rounded-md bg-background/40 px-3 py-2.5"
@@ -252,6 +253,9 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     />
                     <div className="flex-1 min-w-0">
                       <RelayIdentity url={url} />
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {source === "dm" ? "DM inbox relay · capability unverified" : source === "app" ? "App relay" : source === "fallback" ? "Interop fallback" : "Custom relay"}
+                      </span>
                     </div>
                   </label>
                 ))}
@@ -295,7 +299,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     size="sm"
                     className="text-muted-foreground -mr-2"
                     disabled={busy}
-                    onClick={() => setPicked((cur) => [...new Set([...cur, ...candidates])])}
+                    onClick={() => setPicked((cur) => [...new Set([...cur, ...candidates.map((candidate) => candidate.url)])])}
                   >
                     Select all
                   </Button>

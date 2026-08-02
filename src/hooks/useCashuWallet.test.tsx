@@ -1483,7 +1483,7 @@ describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
     expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b', 'secret-c']);
   });
 
-  it('refuses to remove a custom mint that still holds a balance', async () => {
+  it('requires an exact balance confirmation before removing a funded custom mint', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     const { encKey } = await setupWallet(seedPhrase);
 
@@ -1496,13 +1496,19 @@ describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
     act(() => { result.current.addCustomMint('Test', mintUrl); });
     await waitFor(() => expect(result.current.allMints.some((m) => m.url === mintUrl)).toBe(true));
 
-    act(() => { result.current.removeCustomMint(mintUrl); });
-    await waitFor(() => expect(result.current.error).toContain('Mint still holds 130 sats'));
+    let removalResult: Awaited<ReturnType<typeof result.current.removeCustomMint>> | undefined;
+    await act(async () => { removalResult = await result.current.removeCustomMint(mintUrl); });
+    expect(removalResult).toEqual({ status: 'confirmation-required', balance: 130 });
 
     // The mint and its ecash survive.
     expect(result.current.allMints.some((m) => m.url === mintUrl)).toBe(true);
     const stored = (await getProofsForMint(mintUrl, encKey)) as Array<{ secret: string }>;
     expect(stored.map((p) => p.secret).sort()).toEqual(['secret-a', 'secret-b', 'secret-c']);
+
+    await act(async () => { removalResult = await result.current.removeCustomMint(mintUrl, 130); });
+    expect(removalResult).toEqual({ status: 'removed' });
+    expect(result.current.allMints.some((m) => m.url === mintUrl)).toBe(false);
+    expect(await getProofsForMint(mintUrl, encKey)).toEqual([]);
   });
 
   it('removes a custom mint with a zero balance and cleans up its storage', async () => {
@@ -1519,9 +1525,25 @@ describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
     act(() => { result.current.addCustomMint('Empty', emptyMint); });
     await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(true));
 
-    act(() => { result.current.removeCustomMint(emptyMint); });
+    await act(async () => { expect(await result.current.removeCustomMint(emptyMint)).toEqual({ status: 'removed' }); });
     await waitFor(() => expect(result.current.allMints.some((m) => m.url === emptyMint)).toBe(false));
     expect(result.current.error).toBe('');
+  });
+
+  it('allows a zero-balance bundled default mint to be removed from the wallet list', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const bundledMint = 'https://bundled-empty.example.com';
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Bundled', url: bundledMint }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    await act(async () => { expect(await result.current.removeCustomMint(bundledMint)).toEqual({ status: 'removed' }); });
+    await waitFor(() => expect(result.current.allMints).toEqual([]));
+    expect(localStorage.getItem('freedomid_removed_default_mints')).toContain(bundledMint);
   });
 
   it('poll resolves a pending BOLT12 melt via the bolt12 endpoint and removes journaled inputs', async () => {

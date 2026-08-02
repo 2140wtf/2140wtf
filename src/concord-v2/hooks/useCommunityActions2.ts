@@ -17,7 +17,6 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
 import { APP_RELAYS } from "@/lib/platform";
-import { APP_CURATED_FEED_RELAYS } from "@/lib/appRelays";
 import { preferPortableRelays, unusableRelaysReason } from "@/lib/relayUsability";
 import { toJoinMaterial, rehydrateCommunity, type CommunityListEntry, type JoinMaterial } from "@/concord-v2/lib/communityList";
 import { mintCommunity } from "@/concord-v2/lib/community";
@@ -37,7 +36,7 @@ import {
   type ParsedInviteLink,
 } from "@/concord-v2/lib/invite";
 import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
-import { capRelays, type CommunityV2 } from "@/concord-v2/lib/types";
+import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
 import { concordClient, ephemeralRelayClient } from "@/concord-v2/lib/concordTransport";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
@@ -221,35 +220,43 @@ export function inviteRefOf(invite: ParsedInviteLink): string {
 }
 
 /**
- * The curated-feed relay set, offered as extra community-home candidates in
- * the create dialog's advanced relay menu. These are the large public relays
- * the feed already uses, so they are known write-open homes where the genesis
- * gift wrap (kind 1059) lands. Portable-filtered so a stray non-`wss://`
- * entry can never lock https members out (#47). Consumed from
- * `@/lib/appRelays` — the relay set itself is owned by the feed config.
- */
-export const FEED_RELAY_CANDIDATES: string[] = preferPortableRelays(APP_CURATED_FEED_RELAYS);
-
-/**
- * The default home-relay set for a NEW community: the creator's app relays,
- * the curated-feed relay candidates, and the CORD stock set (the wss://
- * interop relays every CORD client shares — jskitty, asia.vectorapp, ditto,
- * dreamith) as the reliable base, then the creator's NIP-17 DM relays. A
- * creator's inbox relays alone can be a poor community home: an auth-gated
- * or DM-only relay rejects the genesis gift wrap (kind 1059), and if that's
- * the whole set the create strands with "No relay accepted the change."
- * Leading with known write-open relays guarantees the genesis lands.
- * Portable-filtered so a stray `ws://` dev relay can't lock https members
- * out (#47), deduped, and capped to the recommended community relay count.
+ * Privacy-minimal home-relay suggestion for a new community. Prefer only the
+ * creator's NIP-17 inbox relays; otherwise use their configured app relays.
+ * Stock interop relays are a final programmatic fallback when neither exists.
+ * The create UI still requires the creator to explicitly select every relay.
  */
 export function defaultCreateRelays(appRelays: string[], dmRelays: string[]): string[] {
-  return capRelays(preferPortableRelays([...appRelays, ...FEED_RELAY_CANDIDATES, ...STOCK_RELAYS, ...dmRelays]));
+  const dm = preferPortableRelays(dmRelays);
+  if (dm.length > 0) return capRelays(dm);
+  const app = preferPortableRelays(appRelays);
+  return capRelays(app.length > 0 ? app : preferPortableRelays(STOCK_RELAYS));
+}
+
+export interface CreateRelayCandidate {
+  url: string;
+  source: "dm" | "app" | "fallback";
+}
+
+/** Explicit-picker choices: private inbox relays first, then configured app relays. */
+export function createRelayCandidates(appRelays: string[], dmRelays: string[]): CreateRelayCandidate[] {
+  const dm = preferPortableRelays(dmRelays);
+  const app = preferPortableRelays(appRelays);
+  const distinctApp = app.filter((url) => !dm.includes(url));
+  const candidates = dm.length > 0 && distinctApp.length > 0
+    ? [...dm.slice(0, MAX_COMMUNITY_RELAYS - 1), distinctApp[0], ...distinctApp.slice(1)]
+    : [...dm, ...app];
+  const urls = capRelays(candidates.length > 0 ? candidates : preferPortableRelays(STOCK_RELAYS));
+  const dmSet = new Set(capRelays(dm));
+  const appSet = new Set(capRelays(app));
+  return urls.map((url) => ({
+    url,
+    source: dmSet.has(url) ? "dm" : appSet.has(url) ? "app" : "fallback",
+  }));
 }
 
 /**
- * The candidate relays the advanced create menu pre-selects: the same set
- * {@link defaultCreateRelays} the create path would pick on its own, resolved
- * for display so the user can pare it down or add to it before minting. Gated
+ * Privacy-minimal candidate relays for the create menu. Nothing is preselected;
+ * the creator must choose each relay before minting. Gated
  * behind `enabled` so a user who never opens the advanced menu pays no DM-relay
  * lookup.
  */
@@ -258,13 +265,13 @@ export function useCreateRelayCandidates2(enabled = true) {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const appRelays = config.appRelays.length > 0 ? config.appRelays : APP_RELAYS;
-  return useQuery<string[]>({
+  return useQuery<CreateRelayCandidate[]>({
     queryKey: ["concord2", "create-relays", user?.pubkey ?? null, appRelays],
     enabled: enabled && Boolean(user),
     staleTime: 60_000,
     queryFn: async () => {
       const dm = user ? await fetchCreatorDmRelays(nostr, user.pubkey).catch(() => []) : [];
-      return defaultCreateRelays(appRelays, dm);
+      return createRelayCandidates(appRelays, dm);
     },
   });
 }
@@ -301,8 +308,9 @@ export function useCommunityActions2() {
       // the app relays UNIONED with the creator's NIP-17 DM relays: inbox
       // relays are curated for sealed, privacy-expecting traffic like Concord's,
       // but a creator whose only DM relays are auth-gated or DM-only will have
-      // the genesis gift wrap rejected everywhere, so always including the app
-      // relays guarantees a write-open home. Prefer the wss:// subset: a stray
+      // the genesis gift wrap rejected everywhere. The UI normally supplies an
+      // explicit selection; non-UI callers receive the privacy-minimal DM/app
+      // fallback rather than a broad public relay union. Prefer the wss:// subset: a stray
       // ws:// dev relay sealed into the bundle is permanently unreachable for
       // every member on a secure origin, however reachable it is for the
       // creator (#47).
