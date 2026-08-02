@@ -38,6 +38,9 @@ describe('sanitizePlausibleRequest', () => {
 
   it('detects private routes nested inside diagnostic payloads', () => {
     expect(containsPrivateRoute({ breadcrumbs: [{ data: { url: '/BAO/C/community/channel' } }] })).toBe(true);
+    expect(containsPrivateRoute({ exception: { message: 'GET https://2140.wtf/bao/c/SECRET failed' } })).toBe(true);
+    expect(containsPrivateRoute({ breadcrumbs: [{ message: 'Navigated to /bao/invite/naddr1secret' }] })).toBe(true);
+    expect(containsPrivateRoute({ spans: [{ description: 'route=https%3A%2F%2F2140.wtf%2Finvite%2Fnaddr1secret' }] })).toBe(true);
     expect(containsPrivateRoute({ transaction: '/market', request: { url: 'https://2140.wtf/market' } })).toBe(false);
   });
 });
