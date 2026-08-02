@@ -943,8 +943,8 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
 
         {instructions ? (
           <div className="space-y-3">
-            <div className="rounded-md border-2 border-amber-500/70 bg-amber-500/10 p-3 text-xs space-y-1">
-              <p className="font-semibold text-amber-600 dark:text-amber-400">⚠️ DO NOT PAY — demo payment instructions ({String(instructions.kind)})</p>
+            <div className="rounded-md border-2 border-amber-500/70 bg-card p-3 text-xs space-y-1 text-foreground">
+              <p className="font-semibold">⚠️ DO NOT PAY — demo payment instructions ({String(instructions.kind)})</p>
               <p className="text-muted-foreground">
                 This is what the settlement rail WILL return once it leaves demo. Real sats sent to it now are lost.
               </p>

@@ -1301,8 +1301,8 @@ function BackupKeySection() {
       </div>
 
       {showKey && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800 animate-in fade-in slide-in-from-top-1 duration-200">
-          <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
+        <div className="rounded-lg border border-amber-500/50 bg-card p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <p className="text-xs text-foreground leading-relaxed">
             NEVER share your secret key with anyone. Avoid screenshotting it or pasting it anywhere except a password manager. If shared, others will be able to access your account.
           </p>
         </div>
