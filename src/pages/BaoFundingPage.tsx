@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Maximize2, Minimize2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { AttestationPanel } from '@/components/bao-fund/AttestationPanel';
@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useToast } from '@/hooks/useToast';
 import {
   BAO_MARKETS_URL,
@@ -95,7 +96,11 @@ export function BaoFundingPage() {
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [focusMode, setFocusMode] = useState(false);
   const [searchParams] = useSearchParams();
+  useLayoutOptions(focusMode
+    ? { hideLeftSidebar: true, rightSidebar: null, noMaxWidth: true, wrapperClassName: 'max-w-none w-full' }
+    : {});
   // Itemized fee breakdown of the most recent release, built in onSuccess so
   // fresh response data can never pair with stale variables (or vice versa).
   // Keyed by fundraiserId so it only renders under the campaign it came from.
@@ -193,15 +198,29 @@ export function BaoFundingPage() {
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
 
   return (
-    <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className={cn('container mx-auto px-4 py-6 space-y-6 transition-[max-width] duration-200', focusMode ? 'max-w-[1600px]' : 'max-w-6xl')}>
       <div className="space-y-4 rounded-xl border bg-gradient-to-br from-primary/10 via-background to-background p-5 sm:p-6">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <HandCoins className="size-6 text-primary" /> ₿AO Fund
-          </h1>
-          <p className="text-base text-muted-foreground mt-2 max-w-2xl">
-            DEMO funding for public projects: inspect milestones and evidence, then decide what work you want to support. No public repository, chat message, AI score, or market result moves real money by itself.
-          </p>
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <HandCoins className="size-6 text-primary" /> ₿AO Fund
+            </h1>
+            <p className="text-base text-muted-foreground mt-2 max-w-2xl">
+              DEMO funding for public projects: inspect milestones and evidence, then decide what work you want to support. No public repository, chat message, AI score, or market result moves real money by itself.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="hidden shrink-0 sidebar:inline-flex"
+            aria-label={focusMode ? 'Restore side panels' : 'Expand workspace'}
+            aria-pressed={focusMode}
+            title={focusMode ? 'Restore side panels' : 'Expand workspace'}
+            onClick={() => setFocusMode((value) => !value)}
+          >
+            {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </Button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Button
@@ -219,7 +238,13 @@ export function BaoFundingPage() {
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-          <p><span className="font-medium">Public progress, sealed collaboration.</span> Project evidence stays inspectable while teams may coordinate inside encrypted ₿AO channels. The proof-of-work gate applies only to protected compute-credit entry; it is an anti-abuse speed bump, not proof of agent identity.</p>
+          <div className="space-y-1">
+            <p className="font-medium">Public progress. Private teamwork.</p>
+            <p className="text-muted-foreground">
+              Teams can work in encrypted ₿AO channels while project progress stays public.
+              Compute credits use a small proof-of-work check to limit spam—it does not verify an agent&apos;s identity.
+            </p>
+          </div>
         </div>
       </div>
 
