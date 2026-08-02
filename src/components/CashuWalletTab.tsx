@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   ArrowDownLeft,
@@ -50,6 +50,7 @@ interface DepositQuote {
 }
 
 export function CashuWalletTab() {
+  const mintingQuoteRef = useRef<string | null>(null);
   const { toast } = useToast();
   const wallet = useCashuWalletContext();
   const { user } = useCurrentUser();
@@ -171,10 +172,41 @@ export function CashuWalletTab() {
 
   const handleMintInvoice = async () => {
     if (!invoiceQuote) return;
-    await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount, invoiceQuote.method);
-    setInvoiceQuote(null);
-    setInvoiceAmount('');
+    if (mintingQuoteRef.current === invoiceQuote.quoteId) return;
+    mintingQuoteRef.current = invoiceQuote.quoteId;
+    try {
+      const issued = await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount, invoiceQuote.method);
+      if (issued) {
+        setInvoiceQuote(null);
+        setInvoiceAmount('');
+      }
+    } finally {
+      if (mintingQuoteRef.current === invoiceQuote.quoteId) mintingQuoteRef.current = null;
+    }
   };
+
+  // NUT-17: supported mints can advance the deposit as soon as Lightning
+  // settles. The button stays available as a polling fallback for older mints
+  // and WebViews where the WebSocket cannot connect.
+  useEffect(() => {
+    if (!invoiceQuote || invoiceQuote.method !== 'bolt11' || typeof wallet.watchMintQuote !== 'function') return;
+    let active = true;
+    let cancel = () => {};
+    void wallet.watchMintQuote(invoiceQuote.quoteId, () => {
+      if (!active) return;
+      void handleMintInvoice();
+    }).then((stop) => {
+      if (active) cancel = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      cancel();
+    };
+  // The quote id identifies this subscription; recreating it for unrelated
+  // wallet state changes can register duplicate callbacks.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceQuote?.quoteId, invoiceQuote?.method]);
 
   const handleSendToken = async () => {
     const amount = parseInt(sendAmount, 10);

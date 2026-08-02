@@ -81,6 +81,7 @@ import {
   orchVerbPost,
   publishAgentProfile,
   publishAll,
+  projectSnapshot,
   queryAll,
   resolveChannel,
   saveState,
@@ -608,6 +609,18 @@ async function main(): Promise<void> {
     case "read":
       await read(as, argValue(rest, "--channel"), json);
       break;
+    case "project": {
+      const snapshot = await projectSnapshot(loadState(as));
+      if (json) console.log(JSON.stringify(snapshot));
+      else {
+        console.log(`\n${snapshot.name} — ${snapshot.coordinate}`);
+        if (snapshot.description) console.log(snapshot.description);
+        console.log(`  ${snapshot.issues.length} issue(s), ${snapshot.pull_requests.length} pull request(s), ${snapshot.patches.length} patch(es)${snapshot.partial ? " (partial result; use a repository client for full history)" : ""}`);
+        for (const issue of snapshot.issues) console.log(`  issue ${issue.id.slice(0, 12)}… [${issue.status ?? "unmarked"}] ${issue.subject}`);
+        for (const pr of snapshot.pull_requests) console.log(`  PR    ${pr.id.slice(0, 12)}… [${pr.status ?? "unmarked"}] ${pr.subject}`);
+      }
+      break;
+    }
     case "wait": {
       const timeoutSec = Number(argValue(rest, "--timeout") ?? "60");
       if (!Number.isFinite(timeoutSec) || timeoutSec < 1 || timeoutSec > 300) {
@@ -640,7 +653,7 @@ async function main(): Promise<void> {
     }
     default:
       console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
+        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
       );
   }
 }

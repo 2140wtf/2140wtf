@@ -6,7 +6,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
-import { verifyEvent, nip19 } from 'nostr-tools';
+import { generateSecretKey, verifyEvent, nip19 } from 'nostr-tools';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
@@ -82,6 +82,7 @@ import { createMintFetch } from '@/lib/cashu/cashuFetch';
 import { stringToBase64 } from '@/lib/cashu/base64';
 import { type CashuBackupPayload } from '@/lib/cashu/cashuBackup';
 import { BAO_MARKETS_RELAY } from '@/lib/baoRelayMarkets';
+import { buildNut27MintListEvent, restoreNut27MintList } from '@/lib/cashu/nut27';
 
 export interface CashuWalletState {
   wallet: CashuWallet | null;
@@ -141,6 +142,13 @@ export interface CashuWalletActions {
   calculateAllBalances: () => Promise<void>;
   receiveToken: (tokenStr: string, privkey?: string) => Promise<number>;
   sendToken: (amount: number, memo?: string, recipientPubkey?: string, mintUrlOverride?: string) => Promise<string | null>;
+  sendTokenToOutbox: (
+    amount: number,
+    memo: string,
+    recipientPubkey: string | undefined,
+    mintUrlOverride: string | undefined,
+    outbox: { key: string; metadata?: Record<string, string> },
+  ) => Promise<string | null>;
   /**
    * True when the most recent sendToken failure may have committed at the
    * mint (timeout, dropped response, or post-commit validation). Callers
@@ -163,7 +171,9 @@ export interface CashuWalletActions {
   getWalletP2pkPubkey: () => string | null;
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   requestBolt12Offer: (amount: number, description?: string) => Promise<Bolt12MintQuoteResponse | null>;
-  mintFromQuote: (quoteId: string, amount: number, method?: 'bolt11' | 'bolt12') => Promise<void>;
+  mintFromQuote: (quoteId: string, amount: number, method?: 'bolt11' | 'bolt12') => Promise<boolean>;
+  /** NUT-17 live quote updates. Returns a no-op when the mint lacks support. */
+  watchMintQuote: (quoteId: string, onPaid: () => void) => Promise<() => void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
   payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
   sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<NutzapSendResult>;
@@ -932,6 +942,17 @@ export function useCashuWallet(
             );
             if (!nip60RestoredRef.current) {
               await restoreFromNip60();
+              // NUT-27 is deliberately separate from the richer NIP-60/DPCS
+              // proof backup: it restores only interoperable mint URLs.
+              const restoredMintUrls = await restoreNut27MintList(seedPhraseRef.current, nip60SyncRef.current);
+              if (restoredMintUrls.length > 0) {
+                const existing = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
+                const restored = restoredMintUrls.map((url) => ({ name: new URL(url).hostname, url, custom: true }));
+                const merged = dedupeByKey([...existing, ...restored], (m) => safeNormalizeMintUrl(m.url));
+                await storageRef.current.saveCustomMints(merged, key);
+                setCustomMints(merged);
+                allMintsRef.current = dedupeByKey([...defaultMints, ...merged], (m) => safeNormalizeMintUrl(m.url));
+              }
               nip60RestoredRef.current = true;
             }
             await syncNip60WalletConfig();
@@ -1199,7 +1220,10 @@ export function useCashuWallet(
         const now = Date.now();
         let dirty = false;
         const updated = txs.map((t) => {
-          if (t.status === 'pending' && (t.type === 'mint' || t.type === 'melt')) {
+          // A mint quote may have been paid just before its invoice expiry.
+          // Never hide/expire it based on local wall-clock alone; querying the
+          // mint is required before declaring those paid sats unrecoverable.
+          if (t.status === 'pending' && t.type === 'melt') {
             const expired = typeof t.expiresAt === 'number' && t.expiresAt > 0 ? now > t.expiresAt : now - t.createdAt > STALE_MS;
             if (expired) {
               dirty = true;
@@ -1469,6 +1493,14 @@ export function useCashuWallet(
 
     try {
       const mints = allMintsRef.current.map((m) => m.url);
+      if (seedPhraseRef.current) {
+        try {
+          const nut27Event = await buildNut27MintListEvent(seedPhraseRef.current, mints, config.clientName ?? '2140.wtf');
+          await sync.publish(nut27Event);
+        } catch (error) {
+          devLog.warn('NUT-27 mint-list backup failed; NIP-60 sync will continue:', error);
+        }
+      }
       const payload = buildWalletConfigPayload(key.privkey, mints);
       const baoConfig = baoWalletConfigRef.current;
       const configs = baoConfig ? [payload, baoConfig] : payload;
@@ -1483,7 +1515,7 @@ export function useCashuWallet(
     } catch (e) {
       devLog.error('NIP-60 wallet config sync failed:', e);
     }
-  }, [getClientTag, options?.publishWalletConfig]);
+  }, [config.clientName, getClientTag, options?.publishWalletConfig]);
 
   const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
     // Gated by the "Receive Nutzaps" publish preference (default OFF) — the
@@ -2389,7 +2421,14 @@ export function useCashuWallet(
     return null;
   };
 
-  const sendToken = useCallback(async (amount: number, memo = '', recipientPubkey?: string, mintUrlOverride?: string, escrowLock?: MultisigEscrowLockRequest): Promise<string | null> => {
+  const sendToken = useCallback(async (
+    amount: number,
+    memo = '',
+    recipientPubkey?: string,
+    mintUrlOverride?: string,
+    escrowLock?: MultisigEscrowLockRequest,
+    deliveryOutbox?: { key: string; metadata?: Record<string, string> },
+  ): Promise<string | null> => {
     lastSendAmbiguousRef.current = false;
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
@@ -2571,7 +2610,17 @@ export function useCashuWallet(
           } catch { /* best effort */ }
           throw new Error('Failed to encode token — your proofs have been saved for recovery');
         }
-        // Encoding succeeded — clear any prior send-recovery for this mint.
+        // For automatic delivery, persist the only encoded token copy before
+        // clearing proof recovery. React state/effects run too late to cover a
+        // process kill immediately after this function resolves.
+        if (deliveryOutbox) {
+          localStorage.setItem(deliveryOutbox.key, JSON.stringify({
+            token: tokenStr,
+            ...(deliveryOutbox.metadata ?? {}),
+            dmState: 'failed',
+          }));
+        }
+        // Encoding and any requested durable handoff succeeded.
         storageRef.current.clearSendRecovery(normalizedMint);
 
         // Record the transaction while still holding the proof lock. Both locks
@@ -2654,6 +2703,14 @@ export function useCashuWallet(
     }
   }, [wallet, mintUrl, getOrCreateWallet, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint]);
 
+  const sendTokenToOutbox = useCallback((
+    amount: number,
+    memo: string,
+    recipientPubkey: string | undefined,
+    mintUrlOverride: string | undefined,
+    outbox: { key: string; metadata?: Record<string, string> },
+  ) => sendToken(amount, memo, recipientPubkey, mintUrlOverride, undefined, outbox), [sendToken]);
+
   const sendLockedToken = useCallback(async (amount: number, recipientPubkey: string, memo = '', mintUrlOverride?: string): Promise<string | null> => {
     // Accept x-only (64) and compressed (66) pubkeys — kind-10019 info events
     // advertise both forms. sendToken does the final normalization/locking.
@@ -2718,8 +2775,23 @@ export function useCashuWallet(
     try {
       setLoading(true);
       setError('');
-      const quote = await withTimeout(wallet.createMintQuote(amount, description), 30000, 'Mint quote creation');
-      if (mountedRef.current) setSuccessTimed('Invoice created. Pay it to receive sats.', 4000);
+      // Prefer NUT-20 so knowing a paid quote id is not enough to steal its
+      // issuance. Older mints remain usable through the unlocked fallback.
+      const quotePrivateKey = generateSecretKey();
+      const quotePubkey = bytesToHex(secp256k1.getPublicKey(quotePrivateKey, true));
+      const supportsLockedQuotes = (await wallet.lazyGetMintInfo()).isSupported(20).supported;
+      const quote = await withTimeout(
+        supportsLockedQuotes
+          ? wallet.createLockedMintQuote(amount, quotePubkey, description)
+          : wallet.createMintQuote(amount, description),
+        30000,
+        'Mint quote creation',
+      );
+      if (supportsLockedQuotes) {
+        if (quote.pubkey !== quotePubkey || quote.amount !== amount || quote.unit !== 'sat') {
+          throw new Error('Mint returned a mismatched protected quote');
+        }
+      }
 
       // Record the pending invoice transaction under the tx lock. There is no
       // proof update here, so the tx lock alone is sufficient for atomicity.
@@ -2733,15 +2805,17 @@ export function useCashuWallet(
             status: 'pending',
             quoteId: quote.quote,
             paymentRequest: quote.request,
+            quotePrivateKey: supportsLockedQuotes ? bytesToHex(quotePrivateKey) : undefined,
             expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
           }, encKey || undefined, legacyEncKeyRef.current ?? undefined);
         });
         await refreshTransactions();
       } catch (e) {
         devLog.error('Failed to record invoice transaction:', e);
-        if (mountedRef.current) setError('Invoice created but transaction record failed');
+        throw new Error('Invoice created but its recovery key could not be saved; do not pay it');
       }
 
+      if (mountedRef.current) setSuccessTimed('Invoice created. Pay it to receive sats.', 4000);
       return quote;
     } catch (err: any) {
       if (mountedRef.current) setError(`Failed to create invoice: ${err.message}`);
@@ -2751,6 +2825,23 @@ export function useCashuWallet(
       await triggerBackup();
     }
   }, [wallet, mintUrl, triggerBackup, refreshTransactions]);
+
+  const watchMintQuote = useCallback(async (quoteId: string, onPaid: () => void): Promise<() => void> => {
+    if (!wallet || !quoteId) return () => {};
+    try {
+      const support = (await wallet.lazyGetMintInfo()).isSupported(17);
+      const supportsMintQuotes = support.supported && (support.params ?? []).some((p) =>
+        p.method === 'bolt11' && p.unit === 'sat' && p.commands.includes('bolt11_mint_quote'),
+      );
+      if (!supportsMintQuotes) return () => {};
+      return await wallet.onMintQuotePaid(quoteId, () => onPaid(), (error) => {
+        devLog.warn('NUT-17 mint quote subscription failed; manual confirmation remains available:', error);
+      });
+    } catch (error) {
+      devLog.warn('NUT-17 unavailable; manual confirmation remains available:', error);
+      return () => {};
+    }
+  }, [wallet]);
 
   const requestBolt12Offer = useCallback(async (amount: number, description = '2140.wtf Cashu deposit'): Promise<Bolt12MintQuoteResponse | null> => {
     const err = validateAmount(amount);
@@ -2794,18 +2885,18 @@ export function useCashuWallet(
     }
   }, [wallet, mintUrl, refreshTransactions, triggerBackup]);
 
-  const mintFromQuote = useCallback(async (quoteId: string, amount: number, method: 'bolt11' | 'bolt12' = 'bolt11') => {
+  const mintFromQuote = useCallback(async (quoteId: string, amount: number, method: 'bolt11' | 'bolt12' = 'bolt11'): Promise<boolean> => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
-    if (err) { setError(err); return; }
+    if (err) { setError(err); return false; }
     if (!quoteId || typeof quoteId !== 'string') {
       setError('Invalid quote ID');
-      return;
+      return false;
     }
     if (!wallet || !encKey || !bip39Seed) {
       setError('Wallet not initialized');
-      return;
+      return false;
     }
     const release = await acquireMutex(walletOpsMutexRef);
     try {
@@ -2845,12 +2936,11 @@ export function useCashuWallet(
         const bolt12Available = checkedBolt12 ? checkedBolt12.amount_paid - checkedBolt12.amount_issued : 0;
         const mintAmount = checkedBolt12 ? bolt12Available : amount;
         const quoteState = checkedBolt12 ? (bolt12Available > 0 ? 'PAID' : 'UNPAID') : (quoteCheck as MintQuoteResponse)?.state;
-        if (quoteCheck && typeof quoteCheck.expiry === 'number' && quoteCheck.expiry > 0 && Date.now() > quoteCheck.expiry * 1000) {
+        if (quoteState === 'UNPAID' && quoteCheck && typeof quoteCheck.expiry === 'number' && quoteCheck.expiry > 0 && Date.now() > quoteCheck.expiry * 1000) {
           await markPendingMint('expired');
           throw new Error('Mint quote has expired. Create a new invoice.');
         }
         if (quoteState === 'UNPAID') {
-          await markPendingMint('failed');
           throw new Error(`${checkedBolt12 ? 'Offer' : 'Invoice'} not yet paid. Pay it first, then try again.`);
         }
         if (!quoteCheck || (quoteState !== 'PAID' && quoteState !== 'ISSUED')) {
@@ -2921,10 +3011,18 @@ export function useCashuWallet(
           // between the mint issuing outputs and our commit is recoverable
           // via the restore path above.
           await storageRef.current.writePendingMint(normalizedMint, { quoteId, counterStart, amount: mintAmount, timestamp: Date.now() }, encKey);
+          const pendingTransactions = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+          const quoteTransaction = pendingTransactions.find((t) => t.type === 'mint' && t.quoteId === quoteId);
+          const lockedQuotePrivateKey = quoteTransaction?.quotePrivateKey;
           newProofs = await withTimeout(
             checkedBolt12
               ? wallet.mintProofsBolt12(mintAmount, checkedBolt12, bytesToHex(nip60WalletKeyRef.current!.privkey), { counter: counterStart })
-              : wallet.mintProofs(mintAmount, quoteId, { counter: counterStart }),
+              : typeof (quoteCheck as MintQuoteResponse).pubkey === 'string' && lockedQuotePrivateKey
+                ? wallet.mintProofs(mintAmount, quoteCheck as MintQuoteResponse, {
+                    counter: counterStart,
+                    privateKey: lockedQuotePrivateKey,
+                  })
+                : wallet.mintProofs(mintAmount, quoteId, { counter: counterStart }),
             60000,
             'Mint proofs',
             () => setTimeout(() => reconcileProofRecoveryRef.current(), 0),
@@ -3013,8 +3111,10 @@ export function useCashuWallet(
       await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'in', amount);
 
       if (mountedRef.current) setSuccessTimed(`${amount} sats minted successfully!`);
+      return true;
     } catch (err: any) {
       if (mountedRef.current) setError(`Mint failed: ${err.message}`);
+      return false;
     } finally {
       release();
       if (mountedRef.current) setLoading(false);
@@ -4458,6 +4558,7 @@ export function useCashuWallet(
     calculateAllBalances,
     receiveToken,
     sendToken,
+    sendTokenToOutbox,
     wasLastSendAmbiguous,
     sendLockedToken,
     sendMultisigLockedToken,
@@ -4467,6 +4568,7 @@ export function useCashuWallet(
     requestInvoice,
     requestBolt12Offer,
     mintFromQuote,
+    watchMintQuote,
     payInvoice,
     payBolt12,
     sendNutzap,

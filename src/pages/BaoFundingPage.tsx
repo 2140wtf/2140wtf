@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, Sparkles, User, Users, Waves } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, CircleDollarSign, HandCoins, Loader2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { AttestationPanel } from '@/components/bao-fund/AttestationPanel';
@@ -51,6 +51,7 @@ import {
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 function formatSats(n: number): string {
@@ -109,6 +110,7 @@ export function BaoFundingPage() {
   // Stable idempotency key per milestone: a retry after an ambiguous network
   // failure replays server-side instead of paying out twice. Rotated on success.
   const releaseKeysRef = useRef<Map<string, string>>(new Map());
+  const projectsRef = useRef<HTMLDivElement | null>(null);
 
   // Deep links (e.g. from a pet's upkeep card):
   //   /bao-fund?campaign=<id>      → preselect/expand that campaign
@@ -192,20 +194,33 @@ export function BaoFundingPage() {
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="space-y-4 rounded-xl border bg-gradient-to-br from-primary/10 via-background to-background p-5 sm:p-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
             <HandCoins className="size-6 text-primary" /> ₿AO Fund
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Milestones are prediction markets. Funds unlock when the crowd says the work landed — or stream to the treasury over time.
+          <p className="text-base text-muted-foreground mt-2 max-w-2xl">
+            DEMO funding for public projects: inspect milestones and evidence, then decide what work you want to support. No public repository, chat message, AI score, or market result moves real money by itself.
           </p>
         </div>
-        {user && (
-          <Button onClick={() => setCreateOpen(true)} className="gap-1.5 shrink-0">
-            <Plus className="size-4" /> New raise
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Button
+            size="lg"
+            className="h-auto min-h-14 justify-start gap-3 px-4 text-left"
+            onClick={() => projectsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            <CircleDollarSign className="size-5 shrink-0" />
+            <span><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
           </Button>
-        )}
+          <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start gap-3 px-4 text-left" onClick={() => setCreateOpen(true)} disabled={!user}>
+            <Plus className="size-5 shrink-0" />
+            <span><span className="block font-semibold">Create a project</span><span className="block text-xs font-normal text-muted-foreground">{user ? 'Define milestones and funding rules' : 'Log in to create a project'}</span></span>
+          </Button>
+        </div>
+        <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+          <p><span className="font-medium">Public progress, sealed collaboration.</span> Project evidence stays inspectable while teams may coordinate inside encrypted ₿AO channels. The proof-of-work gate applies only to protected compute-credit entry; it is an anti-abuse speed bump, not proof of agent identity.</p>
+        </div>
       </div>
 
       <ResearchBetaAlert />
@@ -219,7 +234,7 @@ export function BaoFundingPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="campaigns" className="space-y-4 mt-4">
+        <TabsContent value="campaigns" className="space-y-4 mt-4" ref={projectsRef}>
           {/* DEMO banner — scoped to the Campaigns tab */}
           <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
             <p className="font-semibold flex items-center gap-1.5">
@@ -247,7 +262,14 @@ export function BaoFundingPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-xl font-semibold">Projects</h2>
+              <p className="text-sm text-muted-foreground">Select a project to see its milestones, evidence, funding, and access rules.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap" aria-label="Filter projects by category">
             {CATEGORY_FILTERS.map((c) => (
               <Button
                 key={c.id}
@@ -380,6 +402,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   const author = useAuthor(f.owner_pubkey);
   const metadata = author.data?.metadata;
   const displayName = metadata?.name ?? genUserName(f.owner_pubkey);
+  const profileImage = sanitizeUrl(metadata?.picture);
   const pct = fundingProgressPct(Number(f.raised_sats), Number(f.goal_sats));
   const format = f.format ?? 'milestones';
   const contentId = `campaign-${f.id}-details`;
@@ -420,7 +443,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
             <CardDescription className="mt-1 flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1.5 text-xs">
                 <Avatar className="size-4">
-                  <AvatarImage src={metadata?.picture} alt={displayName} />
+                  <AvatarImage src={profileImage} alt={displayName} />
                   <AvatarFallback className="text-[8px]">{displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 {displayName}
@@ -493,14 +516,14 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                             >
                               Score milestone
                             </Button>
-                            {(m.market_resolution === 'yes' || !m.market_id) && (
+                            {m.market_id && m.market_resolution === 'yes' && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 disabled={releasePending}
                                 onClick={() => onRelease(m)}
                               >
-                                {releasePending ? <Loader2 className="size-3.5 animate-spin" /> : `Release ${formatSats(Number(m.amount_sats))} sats`}
+                                {releasePending ? <Loader2 className="size-3.5 animate-spin" /> : `Record demo release · ${formatSats(Number(m.amount_sats))} sats`}
                               </Button>
                             )}
                           </div>
@@ -509,6 +532,9 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
                           <p className="text-[11px] text-muted-foreground text-right">
                             Funded — waiting for the market to resolve YES.
                           </p>
+                        )}
+                        {m.status === 'unlocked' && !m.market_id && (
+                          <p className="text-[11px] text-muted-foreground text-right">Legacy milestone has no release market; demo release is disabled.</p>
                         )}
                       </div>
                     );
@@ -709,6 +735,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
 
   const mutation = useMutation({
     mutationFn: () => {
+      if (!user) throw new Error('Log in to fund this project');
       if (!idemKeyRef.current || idemKeyRef.current.fundraiserId !== fundraiser!.id) {
         idemKeyRef.current = { fundraiserId: fundraiser!.id, key: crypto.randomUUID() };
       }

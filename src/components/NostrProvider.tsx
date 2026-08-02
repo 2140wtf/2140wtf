@@ -364,6 +364,12 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   useEffect(() => {
     if (prevPubkeyRef.current !== currentLogin?.pubkey) {
       prevPubkeyRef.current = currentLogin?.pubkey;
+      // NIP-42 authorization belongs to a WebSocket, not merely our local
+      // caches. Reusing that socket after logout/account switch lets a relay
+      // permanently correlate both identities (and their stream keys).
+      // Closing forces the next operation onto a fresh authorization set.
+      pool.current?.close();
+      openRelaysRef.current.clear();
       _resetStreamAuthRegistry();
       // The signed user-AUTH cache is identity-bound: without this, a relay
       // re-issuing the identical challenge string after an account switch
