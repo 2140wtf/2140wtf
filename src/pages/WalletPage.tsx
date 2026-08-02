@@ -20,6 +20,7 @@ import { ArkWalletTab } from '@/components/ArkWalletTab';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { LightningWalletTab } from '@/components/LightningWalletTab';
 import { ComingSoonTab } from '@/components/ComingSoonTab';
+import { ResearchBetaAlert } from '@/components/ResearchBetaAlert';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
@@ -53,7 +54,8 @@ export function WalletPage() {
           <LoginArea className="max-w-60" />
         </div>
       ) : (
-        <div className="px-4 pt-6 pb-4 max-w-sm mx-auto">
+        <div className="px-4 pt-6 pb-4 max-w-sm mx-auto space-y-4">
+          <ResearchBetaAlert />
           <Tabs defaultValue="cashu" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
