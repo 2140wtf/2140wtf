@@ -29,13 +29,13 @@ import {
   type GroupKey,
 } from "@/concord-v2/lib/derive";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
-import { registerStreamKeys } from "@/concord-v2/lib/streamAuth";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { logSync } from "@/lib/syncLog";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
-/** Minimal relay-capable client the mirror needs (test seam). */
+/** Minimal relay-capable client the mirror needs (test seam). Production
+ * callers provide one community-scoped Concord client for both reads/writes. */
 export interface MirrorNostr {
   relay(url: string): {
     query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
@@ -207,10 +207,6 @@ export async function mirrorHistoryToRelays(
   opts?: { onProgress?: (p: MirrorProgress) => void; signal?: AbortSignal },
 ): Promise<MirrorReport> {
   const groups = mirrorGroups(community);
-  // The new relays may NIP-42 auth-gate: scope our stream keys to them so the
-  // pool can answer their challenges before/while the EVENTs land.
-  registerStreamKeys(groups, targetRelays);
-
   const sources = community.relays.filter((url) => !targetRelays.includes(url));
   const authors = groups.map((g) => g.pk);
   const wraps = new Map<string, NostrEvent>();

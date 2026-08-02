@@ -10,6 +10,8 @@ import {
   unwrapDirectInvite,
 } from "@/concord-v2/lib/directInvite";
 import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
+import { controlGroups } from "@/concord-v2/lib/control";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 import { agentGateOf, grindJoinRumor } from "@/concord-v2/lib/agentGate";
 import {
   advanceInviteInboxCursor,
@@ -221,7 +223,6 @@ export function useDirectInvites2() {
  * already a member); only a fresh join announces.
  */
 export function useAcceptDirectInvite2() {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: updateList } = useUpdateCommunityList2();
   const queryClient = useQueryClient();
@@ -243,7 +244,10 @@ export function useAcceptDirectInvite2() {
       if (!invite.catchUp) {
         const community = rehydrateCommunity(entry);
         if (community) {
-          const folded = await fetchControlFold(nostr, community);
+          const folded = await fetchControlFold(
+            concordClient(community.idHex, controlGroups(community)),
+            community,
+          );
           if (folded.banned.has(user.pubkey)) throw new BannedFromCommunityError();
           gateDifficulty = agentGateOf(folded.metadata)?.difficulty;
         }
@@ -266,9 +270,12 @@ export function useAcceptDirectInvite2() {
           const rumor = gateDifficulty
             ? grindJoinRumor(user.pubkey, Date.now(), gateDifficulty, attribution)
             : buildJoinRumor(user.pubkey, Date.now(), attribution);
-          const wrap = await sealGuestbook(rumor, currentGuestbookGroup(community), user.signer);
+          const group = currentGuestbookGroup(community);
+          const wrap = await sealGuestbook(rumor, group, user.signer);
           await Promise.allSettled(
-            community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+            community.relays.map((url) =>
+              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            ),
           );
         })().catch(() => undefined);
       }

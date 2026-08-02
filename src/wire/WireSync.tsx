@@ -1,5 +1,4 @@
 import { App as CapacitorApp } from "@capacitor/app";
-import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -10,17 +9,16 @@ import { channelsView } from "@/concord-v2/lib/community";
 import { liveEntries, rehydrateCommunity } from "@/concord-v2/lib/communityList";
 import { controlGroups } from "@/concord-v2/lib/control";
 import { openPlaneWrapsChunked } from "@/concord-v2/lib/planeSync";
+import { concordClient, concordTransport } from "@/concord-v2/lib/concordTransport";
 import { ackPendingWraps, peekPendingWraps, writeOpened, writeRumors } from "@/concord-v2/lib/rumorStore";
-import { registerStreamKeys, streamAuthGeneration } from "@/concord-v2/lib/streamAuth";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useEventStore } from "@/hooks/useEventStore";
 import { readFolded } from "@/lib/foldedCache";
 import { BaoNotification, isNativeRuntime } from "@/lib/nativeNotifications";
-import { onRelayReopened } from "@/lib/relayReopen";
 import { logSync } from "@/lib/syncLog";
 import { emitWireScopes } from "@/wire/bus";
 import { ingestWireEvents } from "@/wire/ingest";
-import { buildWireSpec, stampRoundSince, type WireSpec } from "@/wire/spec";
+import { buildWireSpec, changedWireCommunities, stampRoundSince, wireCommunityScopes, type WireSpec } from "@/wire/spec";
 
 import type { FoldedControl } from "@/concord-v2/lib/control";
 import type { GroupKey } from "@/concord-v2/lib/derive";
@@ -75,16 +73,16 @@ const WATCHDOG_TICK_MS = 5_000;
  */
 const REPLAY_BATCH_MAX = 200;
 
-function cursorKey(owner: string, relay: string): string {
+function cursorKey(owner: string, communityIdHex: string, relay: string): string {
   // Keyed per account: a relay-only cursor shared across accounts lets
   // account B resume from where account A got to and permanently skip every
   // message in between.
-  return `2140:wire-cursor:${owner}:${relay}`;
+  return `2140:wire-cursor:${owner}:${communityIdHex}:${relay}`;
 }
 
-function readCursor(owner: string, relay: string): number | undefined {
+function readCursor(owner: string, communityIdHex: string, relay: string): number | undefined {
   try {
-    const raw = localStorage.getItem(cursorKey(owner, relay));
+    const raw = localStorage.getItem(cursorKey(owner, communityIdHex, relay));
     const n = raw ? Number(raw) : NaN;
     return Number.isFinite(n) && n > 0 ? n : undefined;
   } catch {
@@ -92,7 +90,7 @@ function readCursor(owner: string, relay: string): number | undefined {
   }
 }
 
-function writeCursor(owner: string, relay: string, createdAt: number): void {
+function writeCursor(owner: string, communityIdHex: string, relay: string, createdAt: number): void {
   try {
     // Clamp against the local clock: an event stamped in the future (a
     // member's skewed clock, a hostile timestamp) must not drag the cursor
@@ -103,8 +101,8 @@ function writeCursor(owner: string, relay: string, createdAt: number): void {
     // self-heals instead of wedging forever.
     const now = Math.floor(Date.now() / 1000);
     const next = Math.min(createdAt, now);
-    const prev = Math.min(readCursor(owner, relay) ?? 0, now);
-    if (next > prev) localStorage.setItem(cursorKey(owner, relay), String(next));
+    const prev = Math.min(readCursor(owner, communityIdHex, relay) ?? 0, now);
+    if (next > prev) localStorage.setItem(cursorKey(owner, communityIdHex, relay), String(next));
   } catch {
     // localStorage unavailable — resume from the fresh lookback next launch.
   }
@@ -113,9 +111,9 @@ function writeCursor(owner: string, relay: string, createdAt: number): void {
 /**
  * Concord V2 channels for EVERY live community in the membership list, with
  * their stream GroupKeys (rehydrated bundle + persisted control-fold snapshot,
- * local reads only). Registers every stream key for NIP-42 stream auth so the
- * wire's kind-1059 REQs pass auth-gating relays. Keeps the full ChannelV2
- * (the wire decrypts; the native service can't).
+ * local reads only). Keeps the full ChannelV2 (the wire decrypts; the native
+ * service can't). Relay authorization is owned by each community-isolated
+ * transport session, never by the shared application pool.
  */
 function useWireConcord2Channels(): Array<{ relays: string[]; channel: ChannelV2; communityIdHex: string }> {
   const { data } = useCommunityList2();
@@ -139,26 +137,19 @@ function useWireConcord2Channels(): Array<{ relays: string[]; channel: ChannelV2
     refetchInterval: 2 * 60_000,
     refetchIntervalInBackground: false,
     queryFn: async () => {
-      // Account-switch guard: the registry is reset synchronously on switch,
-      // but this queryFn's IndexedDB reads may resolve AFTER that reset —
-      // registering then would re-admit the previous account's stream keys
-      // into the new session. Bail if the generation moved under us.
-      const generation = streamAuthGeneration();
+      // Account-switch guard: an IndexedDB read may resolve after transport
+      // reset. Do not return the previous account's channel material then.
+      const generation = concordTransport.generation();
       const out: Array<{ relays: string[]; channel: ChannelV2; communityIdHex: string }> = [];
       for (const entry of entries) {
         const community = rehydrateCommunity(entry);
         if (!community || community.relays.length === 0) continue;
-        const keys: GroupKey[] = [];
         const folded = await readFolded<FoldedControl>(controlFoldKey(community.idHex));
         for (const channel of channelsView(community, folded)) {
           if (channel.streams.length === 0) continue;
           out.push({ relays: community.relays, channel, communityIdHex: community.idHex });
-          keys.push(...channel.streams.map((s) => s.group));
         }
-        if (streamAuthGeneration() !== generation) return out;
-        // Scoped per community, so a relay's NIP-42 challenge only signs the
-        // stream keys it actually hosts (see streamAuth.ts).
-        registerStreamKeys(keys, community.relays);
+        if (concordTransport.generation() !== generation) return [];
       }
       return out;
     },
@@ -178,8 +169,8 @@ function useWireConcord2Channels(): Array<{ relays: string[]; channel: ChannelV2
  * channel edition land LIVE for a non-open community, so a member added to a
  * new channel sees it appear in the sidebar without waiting for the slow
  * background control-plane sweep (or for the first message to be posted).
- * Every control stream key is registered for NIP-42 so the wire's kind-1059
- * control REQs pass auth-gating relays.
+ * Each standing subscription creates a community-isolated relay session with
+ * exactly these control keys.
  */
 function useWireConcord2Control(): Array<{ relays: string[]; idHex: string; groups: GroupKey[] }> {
   const { data } = useCommunityList2();
@@ -193,9 +184,6 @@ function useWireConcord2Control(): Array<{ relays: string[]; idHex: string; grou
       const groups = controlGroups(community);
       if (groups.length === 0) continue;
       out.push({ relays: community.relays, idHex: community.idHex, groups });
-      // Scoped per community: a relay's NIP-42 challenge only signs the control
-      // stream keys it actually hosts (see streamAuth.ts).
-      registerStreamKeys(groups, community.relays);
     }
     return out;
   }, [entries]);
@@ -206,9 +194,9 @@ function useWireConcord2Control(): Array<{ relays: string[]; idHex: string; grou
  *
  *   - builds the wire spec (minimal relays + filters — the same information
  *     the APK's persistent notification service is configured with);
- *   - web: holds ONE subscription per relay through the relay pool (which
- *     handles NIP-42 AUTH — user key + Concord V2 stream keys), resuming from
- *     a persisted per-relay cursor so time offline is replayed;
+ *   - web: holds one subscription per community + relay through isolated
+ *     stream-only NIP-42 sessions, resuming from a per-account, per-community,
+ *     per-relay cursor so time offline is replayed;
  *   - APK: bridges the native service's buffered/live events into the same
  *     ingest path;
  *   - drains V2 wraps the native service parked while the WebView was down.
@@ -223,7 +211,6 @@ function useWireConcord2Control(): Array<{ relays: string[]; idHex: string; grou
  * here carries ONLY the Concord V2 planes.
  */
 export function WireSync() {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const eventStore = useEventStore();
   const concord2 = useWireConcord2Channels();
@@ -237,6 +224,32 @@ export function WireSync() {
       }),
     [concord2, concord2Control],
   );
+
+  // Membership is the lifetime boundary for isolated sockets. Closing a
+  // removed community immediately drops its relay connection and zeroizes
+  // the transport-owned stream secrets; otherwise a quiet, departed
+  // community could remain linkable until logout or page teardown.
+  const activeCommunityScopes = useMemo(() => wireCommunityScopes(spec.subs), [spec.sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const activeCommunitySig = [...activeCommunityScopes]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, scope]) => `${id}:${scope}`)
+    .join("|");
+  const previousCommunityScopes = useRef<Map<string, string>>(new Map());
+  const latestCommunityScopes = useRef(activeCommunityScopes);
+  latestCommunityScopes.current = activeCommunityScopes;
+  useEffect(() => {
+    for (const communityId of changedWireCommunities(previousCommunityScopes.current, activeCommunityScopes)) {
+      // Relay/key removal cannot retract an identity from an already
+      // authenticated WebSocket. Rotate the whole community boundary so
+      // provisional, removed-epoch, and departed-channel identities are
+      // zeroized and never re-AUTHenticated.
+      concordTransport.closeCommunity(communityId);
+    }
+    previousCommunityScopes.current = new Map(activeCommunityScopes);
+  }, [activeCommunitySig]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    for (const communityId of latestCommunityScopes.current.keys()) concordTransport.closeCommunity(communityId);
+  }, []);
 
   // The ingest path reads the spec lazily so long-lived subscriptions always
   // decrypt/scope with the latest keys without resubscribing.
@@ -264,7 +277,7 @@ export function WireSync() {
     // skips any backoff sleep, so the loop re-REQs immediately. Driven by the
     // socket-reopen signal below.
     const bumps = new Map<string, () => void>();
-    const offReopen = onRelayReopened((url) => bumps.get(url)?.());
+    const reopenUnsubscribers: Array<() => void> = [];
 
     // A backgrounded browser tab has its timers throttled and its sockets
     // idled by the engine, so the watchdog's re-REQ (30s/90s) stretches to
@@ -279,7 +292,10 @@ export function WireSync() {
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    for (const { relay, filters } of spec.subs) {
+    for (const { communityIdHex, relay, filters, groups } of spec.subs) {
+      const isolatedKey = `${communityIdHex}|${relay}`;
+      const session = concordClient(communityIdHex, groups).relay(relay);
+      reopenUnsubscribers.push(session.onReopen(() => bumps.get(isolatedKey)?.()));
       void (async () => {
         // Resubscribe with backoff for the effect's lifetime. NRelay1 keeps
         // the SOCKET alive across drops, but a relay-initiated CLOSED (an
@@ -313,7 +329,7 @@ export function WireSync() {
           // Recompute the resume point each round: the cursor advanced with
           // everything the previous round ingested.
           const now = Math.floor(Date.now() / 1000);
-          const cursor = readCursor(owner, relay);
+          const cursor = readCursor(owner, communityIdHex, relay);
           const floor = now - MAX_CURSOR_AGE_SECONDS;
           const since = Math.max(
             cursor !== undefined ? cursor - CURSOR_OVERLAP_SECONDS : now - FRESH_LOOKBACK_SECONDS,
@@ -329,7 +345,7 @@ export function WireSync() {
           //   - a socket reopen bumps the round immediately (see relayReopen).
           const round = new AbortController();
           const roundSignal = AbortSignal.any([controller.signal, round.signal]);
-          bumps.set(relay, () => {
+          bumps.set(isolatedKey, () => {
             logSync("wire", `${relay}: socket reopened — restarting round`);
             round.abort();
             wakeSleep?.();
@@ -367,11 +383,11 @@ export function WireSync() {
             replay = [];
             await ingestWireEvents(sinksRef.current, batch, { live: false });
             ingested += batch.length;
-            writeCursor(owner, relay, Math.max(...batch.map((e) => e.created_at)));
+            writeCursor(owner, communityIdHex, relay, Math.max(...batch.map((e) => e.created_at)));
           };
           try {
             try {
-              for await (const msg of nostr.relay(relay).req(
+              for await (const msg of session.req(
                 stampRoundSince(filters, since, now),
                 { signal: roundSignal },
               )) {
@@ -387,7 +403,7 @@ export function WireSync() {
                   if (eosed) {
                     await ingestWireEvents(sinksRef.current, [event], { live: true });
                     ingested += 1;
-                    writeCursor(owner, relay, event.created_at);
+                    writeCursor(owner, communityIdHex, relay, event.created_at);
                   } else {
                     replay.push(event);
                     if (replay.length >= REPLAY_BATCH_MAX) await flushReplay();
@@ -424,12 +440,12 @@ export function WireSync() {
     }
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      offReopen();
+      reopenUnsubscribers.forEach((unsubscribe) => unsubscribe());
       controller.abort();
     };
     // Resubscribe only when the actual subscription set changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nostr, user?.pubkey, spec.sig]);
+  }, [user?.pubkey, spec.sig]);
 
   // ── APK bridge: the persistent service is a funnel into the same ingest ──
   // Phase 1: `BaoNotification` is a stub (see lib/nativeNotifications.ts) —

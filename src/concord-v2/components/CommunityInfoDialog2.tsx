@@ -37,7 +37,8 @@ import { toast } from "@/hooks/useToast";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { encryptImageBlob } from "@/concord-v2/lib/image";
 import { sanitizeUrl } from "@/lib/sanitizeUrl";
-import { mirrorHistoryToRelays, type MirrorProgress } from "@/concord-v2/lib/relayMirror";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
+import { mirrorGroups, mirrorHistoryToRelays, type MirrorProgress } from "@/concord-v2/lib/relayMirror";
 import {
   MAX_COMMUNITY_RELAYS,
   type ChannelV2,
@@ -859,7 +860,8 @@ function RelaysSection({
       let rejectedNote: string | undefined;
       if (added.length > 0) {
         setBusy({ phase: "fetch", relay: "", done: 0, total: 0 });
-        const report = await mirrorHistoryToRelays(nostr, community, added, {
+        const mirrorClient = concordClient(community.idHex, mirrorGroups(community));
+        const report = await mirrorHistoryToRelays(mirrorClient, community, added, {
           onProgress: (p) => setBusy(p),
         });
         const rejected = [...report.perRelay.entries()].filter(([, r]) => r.rejected > 0);

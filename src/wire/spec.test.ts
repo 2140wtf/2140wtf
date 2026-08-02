@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWireSpec, MAX_WRAP_BACKDATE_SECS, stampRoundSince } from "./spec";
+import { buildWireSpec, changedWireCommunities, MAX_WRAP_BACKDATE_SECS, stampRoundSince, wireCommunityScopes } from "./spec";
 
 import type { GroupKey } from "@/concord-v2/lib/derive";
 import type { ChannelV2 } from "@/concord-v2/lib/types";
@@ -24,7 +24,7 @@ function v2Channel(idByte: number, pks: string[]): ChannelV2 {
 }
 
 describe("buildWireSpec", () => {
-  it("merges Concord V2 stream authors per community relay and maps pk → channel", () => {
+  it("keeps communities on distinct sessions even when they share a relay", () => {
     const chanA = v2Channel(1, ["pkA1", "pkA2"]);
     const chanB = v2Channel(2, ["pkB1"]);
 
@@ -35,10 +35,9 @@ describe("buildWireSpec", () => {
       ],
     });
 
-    expect(spec.subs).toHaveLength(1);
-    expect(spec.subs[0].filters).toEqual([
-      { kinds: [1059], authors: ["pkA1", "pkA2", "pkB1"] },
-    ]);
+    expect(spec.subs).toHaveLength(2);
+    expect(spec.subs.find((sub) => sub.communityIdHex === "commA")?.filters).toEqual([{ kinds: [1059], authors: ["pkA1", "pkA2"] }]);
+    expect(spec.subs.find((sub) => sub.communityIdHex === "commB")?.filters).toEqual([{ kinds: [1059], authors: ["pkB1"] }]);
     expect(spec.v2ByPk.get("pkA2")).toBe(chanA);
     expect(spec.v2ByPk.get("pkB1")).toBe(chanB);
     expect(spec.v2CommunityByChannel.get(chanA.idHex)).toBe("commA");
@@ -84,7 +83,7 @@ describe("buildWireSpec", () => {
   it("keeps chat-wrap and control-wrap filters separate on the same relay", () => {
     const chanA = v2Channel(1, ["pkA1"]);
     const spec = buildWireSpec({
-      concord2: [{ relays: ["wss://c.relay"], channel: chanA, communityIdHex: "commA" }],
+      concord2: [{ relays: ["wss://c.relay"], channel: chanA, communityIdHex: "a".repeat(64) }],
       concord2Control: [
         { relays: ["wss://c.relay"], idHex: "a".repeat(64), groups: [{ pk: "ctlA1" } as unknown as GroupKey] },
       ],
@@ -120,6 +119,38 @@ describe("buildWireSpec", () => {
       ],
     });
     expect(a.sig).toBe(b.sig);
+  });
+});
+
+describe("wire community lifecycle", () => {
+  const sub = (communityIdHex: string, relay: string, pks: string[]) => ({
+    communityIdHex,
+    relay,
+    filters: [{ kinds: [1059], authors: pks }],
+    groups: pks.map((pk) => ({ pk } as GroupKey)),
+  });
+
+  it("rotates only boundaries whose membership, relay, or exact keyset changed", () => {
+    const previous = wireCommunityScopes([
+      sub("a", "wss://one", ["a1", "a2"]),
+      sub("b", "wss://one", ["b1"]),
+      sub("gone", "wss://one", ["g1"]),
+    ]);
+    const current = wireCommunityScopes([
+      sub("a", "wss://one", ["a2"]), // key shrink
+      sub("b", "wss://one", ["b1"]), // unchanged
+      sub("joined", "wss://two", ["j1"]),
+    ]);
+    expect(changedWireCommunities(previous, current)).toEqual(["a", "gone", "joined"]);
+  });
+
+  it("rotates on relay removal even when stream keys are unchanged", () => {
+    const previous = wireCommunityScopes([
+      sub("a", "wss://one", ["a1"]),
+      sub("a", "wss://two", ["a1"]),
+    ]);
+    const current = wireCommunityScopes([sub("a", "wss://one", ["a1"])]);
+    expect(changedWireCommunities(previous, current)).toEqual(["a"]);
   });
 });
 

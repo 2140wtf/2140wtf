@@ -75,10 +75,14 @@ export interface WireInputs {
 
 /** One relay's standing subscription. */
 export interface WireSub {
+  /** Local isolation owner. Never merge subscriptions across this boundary. */
+  communityIdHex: string;
   /** Normalized relay URL. */
   relay: string;
   /** Filters to hold open (the manager stamps `since`). */
   filters: NostrFilter[];
+  /** Secret stream identities authorized on this community-only session. */
+  groups: GroupKey[];
 }
 
 export interface WireSpec {
@@ -93,43 +97,68 @@ export interface WireSpec {
   sig: string;
 }
 
+/** Public, secret-free fingerprint of each community's active relay/key
+ * boundary. A changed fingerprint requires socket rotation because relay AUTH
+ * identities cannot be removed from a live WebSocket. */
+export function wireCommunityScopes(subs: readonly WireSub[]): Map<string, string> {
+  const parts = new Map<string, Set<string>>();
+  for (const sub of subs) {
+    const values = parts.get(sub.communityIdHex) ?? new Set<string>();
+    values.add(`relay:${sub.relay}`);
+    for (const group of sub.groups) values.add(`key:${group.pk}`);
+    parts.set(sub.communityIdHex, values);
+  }
+  return new Map([...parts].map(([id, values]) => [id, [...values].sort().join(",")]));
+}
+
+export function changedWireCommunities(
+  previous: ReadonlyMap<string, string>,
+  current: ReadonlyMap<string, string>,
+): string[] {
+  const changed = new Set<string>();
+  for (const [id, scope] of current) if (previous.get(id) !== scope) changed.add(id);
+  for (const [id, scope] of previous) if (current.get(id) !== scope) changed.add(id);
+  return [...changed].sort();
+}
+
 /**
  * Build the wire's per-relay subscription spec.
  *
  * Concord V2 is relay-per-community: each community relay gets one
  * `authors`-scoped kind-1059 filter covering the channel streams it hosts
- * (plus a second for the control streams). NIP-42 AUTH for the stream keys
- * is handled by the stream-auth registry grafted into the app's
- * NostrProvider (see concord-v2/lib/streamAuth.ts), which matters on relays
- * that gate kind-1059 REQs by `authors`.
+ * (plus a second for the control streams). Each resulting subscription owns
+ * a community-isolated relay session whose NIP-42 AUTH contains only that
+ * community's derived stream identities.
  */
 export function buildWireSpec(inputs: WireInputs): WireSpec {
-  const byRelay = new Map<string, NostrFilter[]>();
-  const add = (url: string, filter: NostrFilter) => {
+  const bySession = new Map<string, { communityIdHex: string; relay: string; filters: NostrFilter[] }>();
+  const add = (communityIdHex: string, url: string, filter: NostrFilter) => {
     const relay = normalizeRelayUrl(url);
     if (!relay) return;
-    const list = byRelay.get(relay);
-    if (list) list.push(filter);
-    else byRelay.set(relay, [filter]);
+    const key = `${communityIdHex}|${relay}`;
+    const session = bySession.get(key);
+    if (session) session.filters.push(filter);
+    else bySession.set(key, { communityIdHex, relay, filters: [filter] });
   };
 
   // ── Concord V2: merged wrap-author filter per community relay ────────────
   const v2ByPk = new Map<string, ChannelV2>();
   const v2CommunityByChannel = new Map<string, string>();
-  const pksByRelay = new Map<string, Set<string>>();
+  const pksBySession = new Map<string, { communityIdHex: string; relay: string; pks: Set<string> }>();
   for (const { relays, channel, communityIdHex } of inputs.concord2) {
     for (const s of channel.streams) v2ByPk.set(s.group.pk, channel);
     v2CommunityByChannel.set(channel.idHex, communityIdHex);
     for (const url of relays) {
       const relay = normalizeRelayUrl(url);
       if (!relay) continue;
-      let set = pksByRelay.get(relay);
-      if (!set) pksByRelay.set(relay, (set = new Set()));
-      for (const s of channel.streams) set.add(s.group.pk);
+      const key = `${communityIdHex}|${relay}`;
+      let session = pksBySession.get(key);
+      if (!session) pksBySession.set(key, (session = { communityIdHex, relay, pks: new Set() }));
+      for (const s of channel.streams) session.pks.add(s.group.pk);
     }
   }
-  for (const [relay, pks] of pksByRelay) {
-    add(relay, { kinds: [KIND_WRAP], authors: [...pks].sort() });
+  for (const { communityIdHex, relay, pks } of pksBySession.values()) {
+    add(communityIdHex, relay, { kinds: [KIND_WRAP], authors: [...pks].sort() });
   }
 
   // ── Concord V2 CONTROL: merged control-author filter per community relay ──
@@ -137,24 +166,29 @@ export function buildWireSpec(inputs: WireInputs): WireSpec {
   // control-stream keys (not any channel's) and wake the fold rather than a
   // chat timeline (see ingest.ts).
   const v2CtlByPk = new Map<string, { idHex: string; groups: GroupKey[] }>();
-  const ctlPksByRelay = new Map<string, Set<string>>();
+  const ctlPksBySession = new Map<string, { communityIdHex: string; relay: string; pks: Set<string> }>();
   for (const { relays, idHex, groups } of inputs.concord2Control ?? []) {
     for (const g of groups) v2CtlByPk.set(g.pk, { idHex, groups });
     for (const url of relays) {
       const relay = normalizeRelayUrl(url);
       if (!relay) continue;
-      let set = ctlPksByRelay.get(relay);
-      if (!set) ctlPksByRelay.set(relay, (set = new Set()));
-      for (const g of groups) set.add(g.pk);
+      const key = `${idHex}|${relay}`;
+      let session = ctlPksBySession.get(key);
+      if (!session) ctlPksBySession.set(key, (session = { communityIdHex: idHex, relay, pks: new Set() }));
+      for (const g of groups) session.pks.add(g.pk);
     }
   }
-  for (const [relay, pks] of ctlPksByRelay) {
-    add(relay, { kinds: [KIND_WRAP], authors: [...pks].sort() });
+  for (const { communityIdHex, relay, pks } of ctlPksBySession.values()) {
+    add(communityIdHex, relay, { kinds: [KIND_WRAP], authors: [...pks].sort() });
   }
 
-  const subs: WireSub[] = [...byRelay.entries()]
-    .map(([relay, filters]) => ({ relay, filters }))
-    .sort((a, b) => (a.relay < b.relay ? -1 : 1));
+  const keyByPk = new Map<string, GroupKey>();
+  for (const { channel } of inputs.concord2) for (const stream of channel.streams) keyByPk.set(stream.group.pk, stream.group);
+  for (const { groups } of inputs.concord2Control ?? []) for (const group of groups) keyByPk.set(group.pk, group);
+  const subs: WireSub[] = [...bySession.values()]
+    .map((session) => ({ ...session, groups: [...new Set(session.filters.flatMap((filter) => filter.authors ?? []))].map((pk) => keyByPk.get(pk)).filter((group): group is GroupKey => !!group) }))
+    .sort((a, b) => `${a.communityIdHex}|${a.relay}`.localeCompare(`${b.communityIdHex}|${b.relay}`));
 
-  return { subs, v2ByPk, v2CommunityByChannel, v2CtlByPk, sig: JSON.stringify(subs) };
+  const sig = JSON.stringify(subs.map(({ communityIdHex, relay, filters }) => ({ communityIdHex, relay, filters })));
+  return { subs, v2ByPk, v2CommunityByChannel, v2CtlByPk, sig };
 }
