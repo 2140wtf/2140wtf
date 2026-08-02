@@ -19,9 +19,10 @@ import { SimplePool } from "nostr-tools/pool";
 import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
-import { currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
-import { channelGroupKey, type GroupKey } from "@/concord-v2/lib/derive";
-import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type StreamSigner } from "@/concord-v2/lib/stream";
+import { controlGroups, currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
+import { channelsView } from "@/concord-v2/lib/community";
+import { channelGroupKey, voiceGroupKey, voiceMediaKey } from "@/concord-v2/lib/derive";
+import { buildRumor, channelBindingTags, checkChannelBinding, openWrap, sealRumor, wrapSeal, type StreamSigner } from "@/concord-v2/lib/stream";
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import {
   deriveClaimKey,
@@ -34,7 +35,7 @@ import {
   type ClaimState,
   type OrchVerb,
 } from "@/concord-v2/lib/orchestration";
-import type { CommunityV2 } from "@/concord-v2/lib/types";
+import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
 import type { NostrEvent } from "nostr-tools/pure";
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -236,17 +237,62 @@ export async function generalChannel(state: State): Promise<{ idHex: string; id:
 /** Public channels from the control fold + this identity's private channels. */
 export async function listChannels(
   state: State,
-): Promise<{ id: string; name: string; private: boolean }[]> {
+): Promise<{ id: string; name: string; private: boolean; epoch: number }[]> {
+  const channels = await availableChannels(state);
+  return channels.map((channel) => ({
+    id: channel.idHex,
+    name: channel.name,
+    private: channel.isPrivate,
+    epoch: Number(channel.current.epoch),
+  }));
+}
+
+async function availableChannels(state: State): Promise<ChannelV2[]> {
   const community = communityOf(state.community, state.private_channels);
-  const control = currentControlGroup(community);
-  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
-  const folded = foldControlState(openControlWraps(wraps, [control]), community.id, community.owner);
-  const out: { id: string; name: string; private: boolean }[] = [];
-  for (const def of folded.channels.values()) {
-    if (!def.isPrivate && !def.deleted) out.push({ id: def.channelIdHex, name: def.name, private: false });
+  const controls = controlGroups(community);
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: controls.map((control) => control.pk) });
+  const folded = foldControlState(openControlWraps(wraps, controls), community.id, community.owner);
+  return channelsView(community, folded);
+}
+
+/** Resolve a channel by exact id or case-insensitive exact name. */
+export async function resolveChannel(state: State, selector?: string): Promise<ChannelV2> {
+  const savedGeneral = state.community.general_channel_id?.toLowerCase();
+  const requested = selector?.trim();
+  if (savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral)) {
+    const community = communityOf(state.community, state.private_channels);
+    const id = hexToBytes(savedGeneral);
+    const streams = community.heldRoots.map((root) => ({ epoch: root.epoch, group: channelGroupKey(root.key, id, root.epoch) }));
+    return {
+      id,
+      idHex: savedGeneral,
+      name: "general",
+      isPrivate: false,
+      streams,
+      current: streams[0],
+      voice: {
+        room: voiceGroupKey(community.root, id, community.rootEpoch),
+        mediaKey: voiceMediaKey(community.root, id, community.rootEpoch),
+      },
+    };
   }
-  for (const ch of state.private_channels) out.push({ id: ch.id, name: ch.name, private: true });
-  return out;
+  const channels = await availableChannels(state);
+  let matches: ChannelV2[];
+  if (selector) {
+    const needle = selector.trim();
+    matches = /^[0-9a-f]{64}$/i.test(needle)
+      ? channels.filter((channel) => channel.idHex === needle.toLowerCase())
+      : channels.filter((channel) => channel.name.toLowerCase() === needle.toLowerCase());
+  } else {
+    const preferred = state.community.general_channel_id?.toLowerCase();
+    matches = preferred ? channels.filter((channel) => channel.idHex === preferred) : [];
+    if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate && channel.name.toLowerCase() === "general");
+    if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate).slice(0, 1);
+  }
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) throw new Error(`Channel name ${JSON.stringify(selector)} is ambiguous; use its 64-hex id.`);
+  const available = channels.map((channel) => `${channel.name} (${channel.idHex})`).join(", ");
+  throw new Error(`Channel ${JSON.stringify(selector ?? "general")} not found.${available ? ` Available: ${available}` : ""}`);
 }
 
 export interface ChannelMessage {
@@ -258,31 +304,37 @@ export interface ChannelMessage {
 }
 
 /** Everything a channel operation needs, resolved once. */
-export async function channelContext(state: State): Promise<{
+export async function channelContext(state: State, selector?: string): Promise<{
   sk: Uint8Array;
   pubkey: string;
   signer: StreamSigner;
   community: CommunityV2;
-  channel: { idHex: string; id: Uint8Array };
-  group: GroupKey;
+  channel: ChannelV2;
 }> {
   const sk = hexToBytes(state.sk);
   const pubkey = getPublicKey(sk);
   const signer = signerOf(sk);
   const community = communityOf(state.community, state.private_channels);
-  const channel = await generalChannel(state);
-  const group = channelGroupKey(community.root, channel.id, 0n);
-  return { sk, pubkey, signer, community, channel, group };
+  const channel = await resolveChannel(state, selector);
+  return { sk, pubkey, signer, community, channel };
 }
 
 /** Decrypted #general history (the relay only ever sees ciphertext). */
-export async function channelMessages(state: State): Promise<ChannelMessage[]> {
-  const { community, group } = await channelContext(state);
-  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] });
+export async function channelMessages(state: State, selector?: string): Promise<ChannelMessage[]> {
+  const { community, channel } = await channelContext(state, selector);
+  const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [...streams.keys()] });
   const messages: ChannelMessage[] = [];
+  const seenWraps = new Set<string>();
   for (const wrap of wraps) {
+    if (seenWraps.has(wrap.id)) continue;
+    seenWraps.add(wrap.id);
+    const stream = streams.get(wrap.pubkey);
+    if (!stream) continue;
     try {
-      const opened = openWrap(wrap, group);
+      const opened = openWrap(wrap, stream.group);
+      if (opened.sealKind !== KIND_SEAL_ENCRYPTED) continue;
+      checkChannelBinding(opened, channel.idHex, stream.epoch);
       if (opened.kind !== KIND_MESSAGE) continue;
       messages.push({ id: opened.rumorId, author: opened.author, ms: opened.ms, content: opened.content, tags: opened.tags });
     } catch {
@@ -342,14 +394,14 @@ function sendLockSuffix(idemKey: string): string {
 export async function sendChannelMessage(
   state: State,
   text: string,
-  opts: { idemKey?: string; extraTags?: string[][] } = {},
+  opts: { idemKey?: string; extraTags?: string[][]; channel?: string } = {},
 ): Promise<{ rumorId: string; deduped: boolean }> {
   if (opts.idemKey) {
     const prior = inflightKeyedSends.get(opts.idemKey);
     if (prior) await prior.catch(() => {}); // a failed send frees the key either way
   }
   const run = opts.idemKey
-    ? withStateLock(state.name, () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey))
+    ? withStateLock(getPublicKey(hexToBytes(state.sk)), () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey))
     : sendChannelMessageInner(state, text, opts);
   if (!opts.idemKey) return run;
   inflightKeyedSends.set(opts.idemKey, run);
@@ -363,7 +415,7 @@ export async function sendChannelMessage(
 async function sendChannelMessageInner(
   state: State,
   text: string,
-  opts: { idemKey?: string; extraTags?: string[][] } = {},
+  opts: { idemKey?: string; extraTags?: string[][]; channel?: string } = {},
 ): Promise<{ rumorId: string; deduped: boolean }> {
   // Size guard BEFORE building anything: the rumor is nip44-encrypted into a
   // seal, the seal JSON is nip44-encrypted again into the wrap, and NIP-44
@@ -379,16 +431,17 @@ async function sendChannelMessageInner(
   if (textBytes > 40_000) {
     throw new Error(`Message too large: ${textBytes} bytes (max 40,000 — the sealed wrap must fit NIP-44's 65,535-byte plaintext cap)`);
   }
-  const { pubkey, signer, community, channel, group } = await channelContext(state);
+  const { pubkey, signer, community, channel } = await channelContext(state, opts.channel);
+  const group = channel.current.group;
 
   if (opts.idemKey) {
-    const dupe = (await channelMessages(state)).find(
+    const dupe = (await channelMessages(state, opts.channel)).find(
       (m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey),
     );
     if (dupe) return { rumorId: dupe.id, deduped: true };
   }
 
-  const tags = [...channelBindingTags(channel.idHex, 0n), ...(opts.extraTags ?? [])];
+  const tags = [...channelBindingTags(channel.idHex, channel.current.epoch), ...(opts.extraTags ?? [])];
   if (opts.idemKey) tags.push(["d", opts.idemKey]);
   // Mention p-tags: npub1 tokens in the text become real p-tags so the
   // receiver's mention scan has a trustworthy signal (content is only a hint).
@@ -404,7 +457,7 @@ async function sendChannelMessageInner(
   const rumor = buildRumor({ kind: KIND_MESSAGE, content: text, tags, pubkey, ms: Date.now() });
   const seal = await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer);
   const wrap = wrapSeal(seal, group);
-  await publishAll(community.relays, wrap, `message to #general`);
+  await publishAll(community.relays, wrap, `message to #${channel.name}`);
   return { rumorId: rumor.id, deduped: false };
 }
 
@@ -419,17 +472,18 @@ async function sendChannelMessageInner(
 export async function waitForInterrupt(
   identityName: string,
   state: State,
-  opts: { timeoutSec: number; mentionsOnly: boolean },
+  opts: { timeoutSec: number; mentionsOnly: boolean; channel?: string },
 ): Promise<ChannelMessage | null> {
-  const { pubkey, community, group } = await channelContext(state);
+  const { pubkey, community, channel } = await channelContext(state, opts.channel);
+  const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
   const myNpub = nip19.npubEncode(pubkey);
 
   // Snapshot: history isn't an interrupt — only wraps arriving after we
   // subscribe count. (Track wrap ids; the rumor ids aren't on the wire.)
   const seen = new Set<string>();
-  for (const w of await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [group.pk] })) seen.add(w.id);
+  for (const w of await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [...streams.keys()] })) seen.add(w.id);
   console.error(
-    `listening on #general of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`,
+    `listening on #${channel.name} of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`,
   );
 
   return new Promise<ChannelMessage | null>((resolve) => {
@@ -442,14 +496,18 @@ export async function waitForInterrupt(
     const timer = setTimeout(() => finish(null), opts.timeoutSec * 1000);
     sub = getPool().subscribeMany(
       community.relays,
-      { kinds: [KIND_WRAP], authors: [group.pk], since: Math.floor(Date.now() / 1000) - 30 },
+      { kinds: [KIND_WRAP], authors: [...streams.keys()], since: Math.floor(Date.now() / 1000) - 30 },
       {
         onevent(wrap) {
           if (seen.has(wrap.id)) return;
           seen.add(wrap.id);
           let opened: ReturnType<typeof openWrap>;
           try {
-            opened = openWrap(wrap, group);
+            const stream = streams.get(wrap.pubkey);
+            if (!stream) return;
+            opened = openWrap(wrap, stream.group);
+            if (opened.sealKind !== KIND_SEAL_ENCRYPTED) return;
+            checkChannelBinding(opened, channel.idHex, stream.epoch);
           } catch {
             return;
           }

@@ -102,18 +102,19 @@ server.registerTool(
   "read_messages",
   {
     description:
-      "Read recent messages from the community's #general channel (decrypted client-side; the relay only stores ciphertext). Returns newest-last with author npubs and millisecond timestamps.",
+      "Read recent messages from a community channel (decrypted client-side; the relay only stores ciphertext). Omit channel for #general; otherwise pass an exact name or channel id.",
     inputSchema: {
       limit: z.number().int().min(1).max(200).default(50).describe("Max messages to return (from the end of the timeline)"),
+      channel: z.string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general"),
     },
   },
-  async ({ limit }) => {
+  async ({ limit, channel }) => {
     const state = identityState();
-    const messages = (await channelMessages(state)).slice(-limit);
-    audit("read_messages", { limit }, `${messages.length} message(s)`);
+    const messages = (await channelMessages(state, channel)).slice(-limit);
+    audit("read_messages", { limit, channel }, `${messages.length} message(s)`);
     return jsonResult({
       community: state.community.name,
-      channel: "general",
+      channel: channel ?? "general",
       messages: messages.map((m) => ({
         id: m.id,
         author_npub: nip19.npubEncode(m.author),
@@ -129,17 +130,18 @@ server.registerTool(
   "send_message",
   {
     description:
-      "Post a message to #general. Pass an idempotency `key` whenever the call might be retried: a retry with the same key is deduped (returns deduped:true) instead of double-posting. npub1 tokens in the text automatically become mention p-tags.",
+      "Post to a community channel. Omit channel for #general. Pass an idempotency `key` whenever the call might be retried.",
     inputSchema: {
       text: z.string().min(1).max(20000).describe("Message text (markdown is fine)"),
       key: z.string().max(128).optional().describe("Idempotency key — retries with the same key dedupe"),
+      channel: z.string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general"),
     },
   },
-  async ({ text, key }) => {
+  async ({ text, key, channel }) => {
     const state = identityState();
-    const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey: key });
-    audit("send_message", { key, len: text.length }, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
-    return jsonResult({ rumor_id: rumorId, deduped });
+    const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey: key, channel });
+    audit("send_message", { key, channel, len: text.length }, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
+    return jsonResult({ rumor_id: rumorId, deduped, channel: channel ?? "general" });
   },
 );
 
@@ -147,20 +149,21 @@ server.registerTool(
   "wait_for_message",
   {
     description:
-      "Block until a NEW message arrives in #general that mentions this identity (p-tag, npub, or @name), or any new message with mention_only=false. A timeout is NOT an error: it returns {timeout:true} so the caller can decide to keep waiting or do other work. Max 300 seconds.",
+      "Block until a NEW message arrives in a selected channel and mentions this identity, or any new message with mention_only=false. Omit channel for #general.",
     inputSchema: {
       timeout_sec: z.number().int().min(1).max(300).default(120).describe("Seconds to wait before returning the timeout sentinel"),
       mention_only: z.boolean().default(true).describe("true = only messages mentioning me; false = any new message"),
+      channel: z.string().trim().min(1).max(128).optional().describe("Exact channel name or 64-hex channel id; defaults to general"),
     },
   },
-  async ({ timeout_sec, mention_only }) => {
+  async ({ timeout_sec, mention_only, channel }) => {
     const state = identityState();
-    const hit = await waitForInterrupt(IDENTITY, state, { timeoutSec: timeout_sec, mentionsOnly: mention_only });
+    const hit = await waitForInterrupt(IDENTITY, state, { timeoutSec: timeout_sec, mentionsOnly: mention_only, channel });
     if (!hit) {
-      audit("wait_for_message", { timeout_sec, mention_only }, "timeout");
+      audit("wait_for_message", { timeout_sec, mention_only, channel }, "timeout");
       return jsonResult({ timeout: true });
     }
-    audit("wait_for_message", { timeout_sec, mention_only }, `hit ${hit.id.slice(0, 12)}`);
+    audit("wait_for_message", { timeout_sec, mention_only, channel }, `hit ${hit.id.slice(0, 12)}`);
     return jsonResult({
       timeout: false,
       id: hit.id,
