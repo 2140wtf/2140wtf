@@ -9,6 +9,8 @@ export interface BaoMarketOutcome {
   id: string;
   label: string;
   probability: number;
+  /** Total traded volume for this outcome, when supplied by the markets API. */
+  volumeSats?: number;
 }
 
 export interface BaoMarket {
@@ -24,6 +26,12 @@ export interface BaoMarket {
   poolModel?: 'smj' | 'amm';
   /** Payment rails the market accepts (API-sourced; htclc/spark/liquid/cashu/l1/ecash). */
   paymentRails?: string[];
+  /** All-time market volume reported by the API. Undefined for relay-only definitions. */
+  totalVolumeSats?: number;
+  /** Number of completed trades reported by the API. Undefined for relay-only definitions. */
+  tradeCount?: number;
+  /** Current liquidity reported by the API. Undefined when the API omits it. */
+  liquiditySats?: number;
   outcomes: BaoMarketOutcome[];
   creatorPubkey: string;
   /** Winning outcome id when the API reports the market as resolved (API-sourced only). */

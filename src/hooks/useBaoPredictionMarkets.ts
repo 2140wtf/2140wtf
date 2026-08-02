@@ -37,11 +37,14 @@ async function fetchApiMarkets(category: string, status: 'active' | 'all', signa
 
     let hasMore = false;
     for (const res of responses) {
-      const json = (await res.json()) as { data?: ApiMarket[]; has_more?: boolean };
+      const json = (await res.json()) as {
+        data?: ApiMarket[];
+        pagination?: { has_more?: boolean };
+      };
       for (const m of json.data ?? []) {
         if (!byId.has(m.id)) byId.set(m.id, apiMarketToBaoMarket(m));
       }
-      hasMore = hasMore || json.has_more === true;
+      hasMore = hasMore || json.pagination?.has_more === true;
     }
     if (!hasMore) break;
   }
