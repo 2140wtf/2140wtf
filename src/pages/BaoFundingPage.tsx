@@ -4,7 +4,6 @@ import { ArrowRight, Bot, ChevronDown, ChevronUp, CircleDollarSign, Code2, HandC
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AttestationPanel } from '@/components/bao-fund/AttestationPanel';
-import { AgentGateCheck } from '@/components/bao-fund/AgentGateCheck';
 import { ComputeCreditsTab } from '@/components/bao-fund/ComputeCreditsTab';
 import { CreateCampaignDialog } from '@/components/bao-fund/CreateCampaignDialog';
 import { MilestoneMarketWidget } from '@/components/bao-fund/MilestoneMarketWidget';
@@ -34,7 +33,6 @@ import {
   BAO_RAILS,
   BAO_RAIL_LABELS,
   baoApiBase,
-  claimStream,
   contributeToFundraiser,
   DEFAULT_VERIFICATION_MODEL,
   fetchFundraiser,
@@ -109,7 +107,6 @@ export function BaoFundingPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createGateOpen, setCreateGateOpen] = useState(false);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -136,12 +133,11 @@ export function BaoFundingPage() {
 
   // Deep links (e.g. from a pet's upkeep card):
   //   /bao-fund?campaign=<id>      → preselect/expand that campaign
-  //   /bao-fund?create=1&title=…   → DO NOT auto-open the create dialog (user
-  //   lands on the funding page directly; they can open the dialog manually).
+  //   /bao-fund?create=1&title=…   → open the campaign form with URL defaults.
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
-    if (searchParams.get('create') === '1') setCreateGateOpen(true);
+    if (searchParams.get('create') === '1') setCreateOpen(true);
   }, [searchParams, user]);
 
   const listQuery = useQuery({
@@ -199,15 +195,6 @@ export function BaoFundingPage() {
     releaseMutation.mutate({ fundraiserId, milestoneId });
   };
 
-  const claimMutation = useMutation({
-    mutationFn: (fundraiserId: string) => claimStream(user!.signer, fundraiserId),
-    onSuccess: (data) => {
-      toast({ title: 'Stream claimed (DEMO)', description: `${formatSats(data.claimable_sats)} sats recorded.` });
-      invalidate();
-    },
-    onError: (e) => toast({ title: 'Claim failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
-  });
-
   const allFundraisers = listQuery.data ?? [];
   const fundraisers = categoryFilter === 'all'
     ? allFundraisers
@@ -249,9 +236,9 @@ export function BaoFundingPage() {
             <CircleDollarSign className="size-5 shrink-0" />
             <span className="min-w-0"><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
           </Button>
-          <Button size="lg" variant="outline" className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left" onClick={() => setCreateGateOpen(true)}>
+          <Button size="lg" variant="outline" className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left" onClick={() => setCreateOpen(true)}>
             <Plus className="size-5 shrink-0" />
-            <span className="min-w-0"><span className="block font-semibold">Create a campaign (agents)</span><span className="block text-xs font-normal text-muted-foreground">Pass the agent check, then define milestones</span></span>
+            <span className="min-w-0"><span className="block font-semibold">Create a campaign</span><span className="block text-xs font-normal text-muted-foreground">For human, agent, or mixed teams</span></span>
           </Button>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
@@ -271,7 +258,7 @@ export function BaoFundingPage() {
       <section className="space-y-4" aria-labelledby="funding-flow-title">
         <div>
           <h2 id="funding-flow-title" className="text-2xl font-semibold">From an idea to a funded ₿AO</h2>
-          <p className="mt-1 text-muted-foreground">Projects are public to inspect and fund. The app asks campaign creators to complete its client-side agent proof-of-work check first.</p>
+          <p className="mt-1 text-muted-foreground">Projects are public to inspect and fund. Human, agent, and mixed teams can define transparent milestones and evidence.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
           {[
@@ -299,8 +286,8 @@ export function BaoFundingPage() {
           <AccordionItem value="how">
             <AccordionTrigger className="text-left">How does access work?</AccordionTrigger>
             <AccordionContent className="space-y-2 text-muted-foreground">
-              <p><strong className="text-foreground">Donors:</strong> log in, open any project, and fund it. The agent proof-of-work check never gates donations.</p>
-              <p><strong className="text-foreground">Campaign creators:</strong> pass the machine-friendly check before this app opens the creation form. It limits casual UI spam; bao.markets currently enforces its own signed-request quotas, so this local check is not server authorization and does not prove an account is genuinely autonomous.</p>
+              <p><strong className="text-foreground">Donors:</strong> log in, open any project, and fund it.</p>
+              <p><strong className="text-foreground">Campaign creators:</strong> human, agent, and mixed teams can open the creation form and define public milestones. The bao.markets API separately enforces signed-request quotas.</p>
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="where" className="border-b-0">
@@ -315,7 +302,10 @@ export function BaoFundingPage() {
 
       <Tabs defaultValue="campaigns">
         <TabsList className="w-full">
-          <TabsTrigger value="campaigns" className="flex-1">Campaigns</TabsTrigger>
+          <TabsTrigger value="campaigns" className="flex-1 gap-1.5">
+            Campaigns
+            <Badge variant="outline" className="px-1 py-0 text-[10px]">DEMO · SIGNET</Badge>
+          </TabsTrigger>
           <TabsTrigger value="compute" className="flex-1 gap-1.5">
             Compute credits
             <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-500 border-green-500/40">REAL</Badge>
@@ -337,7 +327,7 @@ export function BaoFundingPage() {
             <div className="mt-2 rounded-md bg-background/60 px-3 py-2">
               <p className="font-medium">How to get demo sats for testing</p>
               <ol className="list-decimal pl-4 mt-1 space-y-0.5 text-muted-foreground text-xs">
-                <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed. This app shows a local agent check first; bao.markets separately enforces signed-request rate limits.</li>
+                <li>Creating a campaign or market is <span className="text-foreground font-medium">free</span> — no sats needed. The bao.markets API separately enforces signed-request rate limits.</li>
                 <li>
                   To contribute or trade, claim <span className="text-foreground font-medium">21,400 free demo sats per rail every 24h</span> on{' '}
                   <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
@@ -386,7 +376,7 @@ export function BaoFundingPage() {
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
                 {allFundraisers.length === 0
-                  ? 'No fundraising campaigns yet. Campaign creators start with the client-side agent check above.'
+                  ? 'No fundraising campaigns yet. Create one to define its public milestones and evidence.'
                   : 'No campaigns in this category.'}
               </CardContent>
             </Card>
@@ -407,8 +397,6 @@ export function BaoFundingPage() {
                   releasePending={releaseMutation.isPending}
                   releaseInfo={releaseInfo && releaseInfo.fundraiserId === f.id ? releaseInfo : null}
                   onScore={(milestone, model) => detail && setScoreTarget({ fundraiser: detail.fundraiser, milestone, model })}
-                  onClaim={() => claimMutation.mutate(f.id)}
-                  claimPending={claimMutation.isPending}
                 />
               ))}
             </div>
@@ -427,25 +415,6 @@ export function BaoFundingPage() {
         initialTitle={searchParams.get('title') ?? undefined}
         initialRepo={searchParams.get('repo') ?? undefined}
       />
-      <Dialog open={createGateOpen} onOpenChange={setCreateGateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create an agent campaign</DialogTitle>
-            <DialogDescription>Donating is open to everyone. Only campaign creation uses this anti-spam agent check.</DialogDescription>
-          </DialogHeader>
-          <AgentGateCheck
-            title="Agent check required to create"
-            description="Complete the local proof-of-work challenge to unlock the creation form in this app. It is a machine-friendly UI anti-spam gate—not identity verification or secure bao.markets authorization."
-          >
-            <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
-              <p className="text-sm">Check passed. You can now define the public project, repository, milestones, and funding rules.</p>
-              <Button className="w-full" onClick={() => { setCreateGateOpen(false); setCreateOpen(true); }}>
-                Continue to campaign form
-              </Button>
-            </div>
-          </AgentGateCheck>
-        </DialogContent>
-      </Dialog>
       <ContributeDialog
         fundraiser={contributeTarget}
         onOpenChange={(open) => !open && setContributeTarget(null)}
@@ -489,7 +458,7 @@ export function BaoFundingPage() {
 
 // ── Campaign card ────────────────────────────────────────────────────────────
 
-function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading, isOwner, isLoggedIn, onContribute, onRelease, releasePending, releaseInfo, onScore, onClaim, claimPending }: {
+function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading, isOwner, isLoggedIn, onContribute, onRelease, releasePending, releaseInfo, onScore }: {
   fundraiser: BaoFundraiser;
   expanded: boolean;
   onToggle: () => void;
@@ -503,8 +472,6 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
   /** Fee breakdown of the just-released milestone, if any. */
   releaseInfo: { milestoneId: string; milestone_amount_sats?: number; verification_fee_msats?: number; released_sats?: number } | null;
   onScore: (milestone: BaoMilestone, model: string) => void;
-  onClaim: () => void;
-  claimPending: boolean;
 }) {
   const author = useAuthor(f.owner_pubkey);
   const metadata = author.data?.metadata;
@@ -591,12 +558,14 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
 
       {f.status === 'open' && (
         <div className="border-t px-6 py-3">
-          {isLoggedIn ? (
+          {isOwner ? (
+            <p className="text-center text-sm text-muted-foreground">Campaign owners cannot fund their own project.</p>
+          ) : isLoggedIn ? (
             <Button className="w-full gap-1.5" onClick={onContribute}>
               <CircleDollarSign className="size-4" /> Fund this project (demo)
             </Button>
           ) : (
-            <p className="text-center text-sm text-muted-foreground">Log in to fund this project. Donors do not need the agent check.</p>
+            <p className="text-center text-sm text-muted-foreground">Log in to fund this project.</p>
           )}
         </div>
       )}
@@ -626,9 +595,6 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               {format === 'stream' ? (
                 <StreamBar
                   fundraiser={detail.fundraiser}
-                  isOwner={isOwner}
-                  onClaim={onClaim}
-                  isClaiming={claimPending}
                 />
               ) : (
                 <div className="space-y-2">
@@ -869,6 +835,9 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const mutation = useMutation({
     mutationFn: () => {
       if (!user) throw new Error('Log in to fund this project');
+      if (fundraiser?.owner_pubkey.toLowerCase() === user.pubkey.toLowerCase()) {
+        throw new Error('Campaign owners cannot fund their own project.');
+      }
       if (!idemKeyRef.current || idemKeyRef.current.fundraiserId !== fundraiser!.id) {
         idemKeyRef.current = { fundraiserId: fundraiser!.id, key: crypto.randomUUID() };
       }
