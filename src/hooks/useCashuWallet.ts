@@ -2205,19 +2205,27 @@ export function useCashuWallet(
           devLog.error('Token entry missing mint URL:', entry);
           continue;
         }
-        const normalized = safeNormalizeMintUrl(entry.mintUrl);
+        // bao.markets may encode tokens with its API proxy URL while this app
+        // talks to the direct mint URL. Both paths address the same backend;
+        // canonicalize before wallet creation and storage so redemption does
+        // not split one balance in two.
+        const normalized = safeNormalizeMintUrl(resolveMintAlias(entry.mintUrl));
         const existing = grouped.get(normalized);
         if (existing) {
           existing.proofs.push(...entry.proofs);
         } else {
-          grouped.set(normalized, { mintUrl: entry.mintUrl, proofs: [...entry.proofs] });
+          grouped.set(normalized, { mintUrl: normalized, proofs: [...entry.proofs] });
         }
       }
 
       // Load any prior partial-receive progress so we can skip mints that
       // already succeeded and avoid an infinite retry loop.
       const existingPending = await storageRef.current.loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
-      const succeededMintUrls = new Set(existingPending?.succeededMintUrls ?? []);
+      const succeededMintUrls = new Set(
+        (existingPending?.succeededMintUrls ?? []).map((url) =>
+          safeNormalizeMintUrl(resolveMintAlias(url)),
+        ),
+      );
       const groupedEntries = Array.from(grouped.values());
       const pendingMintUrls = groupedEntries.map((e) => safeNormalizeMintUrl(e.mintUrl)).filter(Boolean);
       const pendingAmount = groupedEntries.reduce((sum, e) => sum + sumProofAmounts(e.proofs), 0);
@@ -4343,7 +4351,9 @@ export function useCashuWallet(
           const seed = bip39Seed;
           for (const entry of payload.proofs) {
             if (entry && typeof entry.mintUrl === 'string' && entry.mintUrl.length > 0 && isAllowedMintUrl(entry.mintUrl, allMintsRef.current.map((m) => m.url)) && Array.isArray(entry.proofs) && entry.proofs.length > 0) {
-              const normalized = safeNormalizeMintUrl(entry.mintUrl);
+              // Fold known aliases before restoring, matching direct receive
+              // and cross-app NIP-60 restore behavior.
+              const normalized = safeNormalizeMintUrl(resolveMintAlias(entry.mintUrl));
               const existing = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
               let incoming = sanitizeProofs(entry.proofs);
               if (seed) {

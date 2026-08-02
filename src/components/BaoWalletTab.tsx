@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -39,13 +39,18 @@ import { totalBaoApiBalance, type BaoWalletBalances } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
-import type { MintQuoteResponse } from '@cashu/cashu-ts';
 import type { Transaction } from '@/lib/cashu/storage';
 
 interface BaoWalletTabProps {
   seedPhrase: string;
   user: { pubkey: string; signer: NostrSigner };
   relayUrls: string[];
+}
+
+interface BaoMintQuote {
+  quoteId: string;
+  request: string;
+  amount: number;
 }
 
 type WalletRailId =
@@ -372,7 +377,9 @@ function LightningPanel({
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('receive');
   const [invoiceAmount, setInvoiceAmount] = useState('');
-  const [invoiceQuote, setInvoiceQuote] = useState<MintQuoteResponse | null>(null);
+  const [invoiceQuote, setInvoiceQuote] = useState<BaoMintQuote | null>(null);
+  const [dismissedQuoteId, setDismissedQuoteId] = useState<string | null>(null);
+  const mintingQuoteRef = useRef<string | null>(null);
   const [payInvoiceStr, setPayInvoiceStr] = useState('');
   const [paying, setPaying] = useState(false);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
@@ -384,8 +391,60 @@ function LightningPanel({
       return;
     }
     const quote = await wallet.requestInvoice(amount, '₿AO Lightning invoice');
-    if (quote) setInvoiceQuote(quote);
+    if (quote) {
+      setDismissedQuoteId(null);
+      setInvoiceQuote({ quoteId: quote.quote, request: quote.request, amount });
+    }
   };
+
+  const handleMintInvoice = async () => {
+    if (!invoiceQuote || mintingQuoteRef.current === invoiceQuote.quoteId) return;
+    mintingQuoteRef.current = invoiceQuote.quoteId;
+    try {
+      const issued = await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount);
+      if (issued) {
+        setInvoiceQuote(null);
+        setInvoiceAmount('');
+      }
+    } finally {
+      if (mintingQuoteRef.current === invoiceQuote.quoteId) mintingQuoteRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (invoiceQuote) return;
+    const pending = [...wallet.transactions].reverse().find((transaction) =>
+      transaction.type === 'mint'
+      && transaction.status === 'pending'
+      && safeNormalizeMintUrl(transaction.mintUrl) === safeNormalizeMintUrl(wallet.mintUrl)
+      && typeof transaction.quoteId === 'string'
+      && typeof transaction.paymentRequest === 'string'
+      && transaction.quoteId !== dismissedQuoteId
+      && transaction.bolt12 !== true,
+    );
+    if (!pending?.quoteId || !pending.paymentRequest) return;
+    setInvoiceAmount(String(pending.amount));
+    setInvoiceQuote({ quoteId: pending.quoteId, request: pending.paymentRequest, amount: pending.amount });
+  }, [dismissedQuoteId, invoiceQuote, wallet.mintUrl, wallet.transactions]);
+
+  useEffect(() => {
+    if (!invoiceQuote) return;
+    let active = true;
+    let cancel = () => {};
+    void wallet.watchMintQuote(invoiceQuote.quoteId, () => {
+      if (active) void handleMintInvoice();
+    }).then((stop) => {
+      if (active) cancel = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      cancel();
+    };
+    // The quote id identifies the subscription; wallet state changes must not
+    // register duplicate callbacks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceQuote?.quoteId]);
 
   const handlePayInvoice = async () => {
     const invoice = payInvoiceStr.trim();
@@ -466,7 +525,13 @@ function LightningPanel({
                 )}
                 {copiedInvoice ? 'Copied' : 'Copy invoice'}
               </Button>
-              <Button variant='ghost' size='sm' onClick={() => setInvoiceQuote(null)}>
+              <Button size='sm' onClick={handleMintInvoice} disabled={wallet.loading}>
+                Confirm payment
+              </Button>
+              <Button variant='ghost' size='sm' onClick={() => {
+                setDismissedQuoteId(invoiceQuote.quoteId);
+                setInvoiceQuote(null);
+              }}>
                 Cancel
               </Button>
             </div>
@@ -512,7 +577,9 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
   const [generatedToken, setGeneratedToken] = useState('');
   const [copiedToken, setCopiedToken] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState('');
-  const [invoiceQuote, setInvoiceQuote] = useState<MintQuoteResponse | null>(null);
+  const [invoiceQuote, setInvoiceQuote] = useState<BaoMintQuote | null>(null);
+  const [dismissedQuoteId, setDismissedQuoteId] = useState<string | null>(null);
+  const mintingQuoteRef = useRef<string | null>(null);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
 
   const handleReceive = async () => {
@@ -538,17 +605,58 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
       return;
     }
     const quote = await wallet.requestInvoice(amount, '₿AO Cashu deposit');
-    if (quote) setInvoiceQuote(quote);
+    if (quote) {
+      setDismissedQuoteId(null);
+      setInvoiceQuote({ quoteId: quote.quote, request: quote.request, amount });
+    }
   };
 
   const handleMint = async () => {
-    if (!invoiceQuote) return;
-    const issued = await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
-    if (issued) {
-      setInvoiceQuote(null);
-      setInvoiceAmount('');
+    if (!invoiceQuote || mintingQuoteRef.current === invoiceQuote.quoteId) return;
+    mintingQuoteRef.current = invoiceQuote.quoteId;
+    try {
+      const issued = await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount);
+      if (issued) {
+        setInvoiceQuote(null);
+        setInvoiceAmount('');
+      }
+    } finally {
+      if (mintingQuoteRef.current === invoiceQuote.quoteId) mintingQuoteRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (invoiceQuote) return;
+    const pending = [...wallet.transactions].reverse().find((transaction) =>
+      transaction.type === 'mint'
+      && transaction.status === 'pending'
+      && safeNormalizeMintUrl(transaction.mintUrl) === safeNormalizeMintUrl(wallet.mintUrl)
+      && typeof transaction.quoteId === 'string'
+      && typeof transaction.paymentRequest === 'string'
+      && transaction.quoteId !== dismissedQuoteId
+      && transaction.bolt12 !== true,
+    );
+    if (!pending?.quoteId || !pending.paymentRequest) return;
+    setInvoiceAmount(String(pending.amount));
+    setInvoiceQuote({ quoteId: pending.quoteId, request: pending.paymentRequest, amount: pending.amount });
+  }, [dismissedQuoteId, invoiceQuote, wallet.mintUrl, wallet.transactions]);
+
+  useEffect(() => {
+    if (!invoiceQuote) return;
+    let active = true;
+    let cancel = () => {};
+    void wallet.watchMintQuote(invoiceQuote.quoteId, () => {
+      if (active) void handleMint();
+    }).then((stop) => {
+      if (active) cancel = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceQuote?.quoteId]);
 
   const copyToClipboard = async (text: string, setCopied: (v: boolean) => void) => {
     try {
@@ -685,7 +793,10 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
                 <Button size='sm' onClick={handleMint} disabled={wallet.loading}>
                   Confirm payment
                 </Button>
-                <Button variant='ghost' size='sm' onClick={() => setInvoiceQuote(null)}>
+                <Button variant='ghost' size='sm' onClick={() => {
+                  setDismissedQuoteId(invoiceQuote.quoteId);
+                  setInvoiceQuote(null);
+                }}>
                   Cancel
                 </Button>
               </div>
