@@ -5,6 +5,8 @@ import {
   communityOf,
   migrateSavedCommunityAccess,
   migrateState,
+  statePath,
+  validateIdentityName,
   type SavedCommunity,
   type State,
 } from "./chat-core";
@@ -138,4 +140,16 @@ describe("headless agent access-state migration", () => {
     ]);
     expect(runtime.refounder).toBe(hex("e"));
   });
+});
+
+describe("headless identity paths", () => {
+  it("accepts portable slugs and keeps the path under the state directory", () => {
+    expect(validateIdentityName("agent-01.work")).toBe("agent-01.work");
+    expect(statePath("agent-01.work")).toMatch(/\.concord-live\/agent-01\.work\.json$/);
+  });
+
+  it.each(["../escape", "/tmp/escape", "a/b", "a\\b", ".", "", " agent", "éclair"])(
+    "rejects unsafe identity name %j",
+    (name) => expect(() => statePath(name)).toThrow(/Identity name/),
+  );
 });

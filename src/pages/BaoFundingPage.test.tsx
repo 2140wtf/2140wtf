@@ -275,6 +275,8 @@ const unlockedMilestone: BaoMilestone = {
   unlocked_at: '2026-07-01T00:00:00Z',
   released_at: null,
   payout_reference: null,
+  market_id: 'market-1',
+  market_resolution: 'yes',
 };
 
 const verificationRow = (partial: Record<string, unknown>) => ({
@@ -406,7 +408,7 @@ describe('BaoFundingPage — milestone release', () => {
     renderPage();
     await expandCampaign();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Release 10,000 sats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record demo release · 10,000 sats' }));
     // Nothing fires before the explicit confirmation.
     expect(mocks.releaseMock).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole('button', { name: 'Release payout (demo)' }));
@@ -435,13 +437,13 @@ describe('BaoFundingPage — milestone release', () => {
     renderPage();
     await expandCampaign();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Release 10,000 sats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record demo release · 10,000 sats' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Release payout (demo)' }));
     await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Release failed' }),
     ));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Release 10,000 sats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record demo release · 10,000 sats' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Release payout (demo)' }));
     await waitFor(() => expect(mocks.releaseMock).toHaveBeenCalledTimes(2));
 

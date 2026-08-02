@@ -4,7 +4,7 @@ import process$1 from "node:process";
 import { homedir } from "node:os";
 //#region \0rolldown/runtime.js
 var __create = Object.create;
-var __defProp = Object.defineProperty;
+var __defProp$1 = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
@@ -13,24 +13,24 @@ var __esmMin = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod), cb = null), mod.exports);
 var __exportAll = (all, no_symbols) => {
 	let target = {};
-	for (var name in all) __defProp(target, name, {
+	for (var name in all) __defProp$1(target, name, {
 		get: all[name],
 		enumerable: true
 	});
-	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
+	if (!no_symbols) __defProp$1(target, Symbol.toStringTag, { value: "Module" });
 	return target;
 };
 var __copyProps = (to, from, except, desc) => {
 	if (from && typeof from === "object" || typeof from === "function") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
 		key = keys[i];
-		if (!__hasOwnProp.call(to, key) && key !== except) __defProp(to, key, {
+		if (!__hasOwnProp.call(to, key) && key !== except) __defProp$1(to, key, {
 			get: ((k) => from[k]).bind(null, key),
 			enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
 		});
 	}
 	return to;
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", {
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(isNodeMode || !mod || !mod.__esModule ? __defProp$1(target, "default", {
 	value: mod,
 	enumerable: true
 }) : target, mod));
@@ -132,7 +132,7 @@ const getParsedType = (data) => {
 };
 //#endregion
 //#region node_modules/zod/v3/ZodError.js
-const ZodIssueCode = util.arrayToEnum([
+const ZodIssueCode$1 = util.arrayToEnum([
 	"invalid_type",
 	"invalid_literal",
 	"custom",
@@ -234,35 +234,35 @@ ZodError.create = (issues) => {
 const errorMap = (issue, _ctx) => {
 	let message;
 	switch (issue.code) {
-		case ZodIssueCode.invalid_type:
+		case ZodIssueCode$1.invalid_type:
 			if (issue.received === ZodParsedType.undefined) message = "Required";
 			else message = `Expected ${issue.expected}, received ${issue.received}`;
 			break;
-		case ZodIssueCode.invalid_literal:
+		case ZodIssueCode$1.invalid_literal:
 			message = `Invalid literal value, expected ${JSON.stringify(issue.expected, util.jsonStringifyReplacer)}`;
 			break;
-		case ZodIssueCode.unrecognized_keys:
+		case ZodIssueCode$1.unrecognized_keys:
 			message = `Unrecognized key(s) in object: ${util.joinValues(issue.keys, ", ")}`;
 			break;
-		case ZodIssueCode.invalid_union:
+		case ZodIssueCode$1.invalid_union:
 			message = `Invalid input`;
 			break;
-		case ZodIssueCode.invalid_union_discriminator:
+		case ZodIssueCode$1.invalid_union_discriminator:
 			message = `Invalid discriminator value. Expected ${util.joinValues(issue.options)}`;
 			break;
-		case ZodIssueCode.invalid_enum_value:
+		case ZodIssueCode$1.invalid_enum_value:
 			message = `Invalid enum value. Expected ${util.joinValues(issue.options)}, received '${issue.received}'`;
 			break;
-		case ZodIssueCode.invalid_arguments:
+		case ZodIssueCode$1.invalid_arguments:
 			message = `Invalid function arguments`;
 			break;
-		case ZodIssueCode.invalid_return_type:
+		case ZodIssueCode$1.invalid_return_type:
 			message = `Invalid function return type`;
 			break;
-		case ZodIssueCode.invalid_date:
+		case ZodIssueCode$1.invalid_date:
 			message = `Invalid date`;
 			break;
-		case ZodIssueCode.invalid_string:
+		case ZodIssueCode$1.invalid_string:
 			if (typeof issue.validation === "object") if ("includes" in issue.validation) {
 				message = `Invalid input: must include "${issue.validation.includes}"`;
 				if (typeof issue.validation.position === "number") message = `${message} at one or more positions greater than or equal to ${issue.validation.position}`;
@@ -272,7 +272,7 @@ const errorMap = (issue, _ctx) => {
 			else if (issue.validation !== "regex") message = `Invalid ${issue.validation}`;
 			else message = "Invalid";
 			break;
-		case ZodIssueCode.too_small:
+		case ZodIssueCode$1.too_small:
 			if (issue.type === "array") message = `Array must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `more than`} ${issue.minimum} element(s)`;
 			else if (issue.type === "string") message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
 			else if (issue.type === "number") message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
@@ -280,7 +280,7 @@ const errorMap = (issue, _ctx) => {
 			else if (issue.type === "date") message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
 			else message = "Invalid input";
 			break;
-		case ZodIssueCode.too_big:
+		case ZodIssueCode$1.too_big:
 			if (issue.type === "array") message = `Array must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `less than`} ${issue.maximum} element(s)`;
 			else if (issue.type === "string") message = `String must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `under`} ${issue.maximum} character(s)`;
 			else if (issue.type === "number") message = `Number must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
@@ -288,16 +288,16 @@ const errorMap = (issue, _ctx) => {
 			else if (issue.type === "date") message = `Date must be ${issue.exact ? `exactly` : issue.inclusive ? `smaller than or equal to` : `smaller than`} ${new Date(Number(issue.maximum))}`;
 			else message = "Invalid input";
 			break;
-		case ZodIssueCode.custom:
+		case ZodIssueCode$1.custom:
 			message = `Invalid input`;
 			break;
-		case ZodIssueCode.invalid_intersection_types:
+		case ZodIssueCode$1.invalid_intersection_types:
 			message = `Intersection results could not be merged`;
 			break;
-		case ZodIssueCode.not_multiple_of:
+		case ZodIssueCode$1.not_multiple_of:
 			message = `Number must be a multiple of ${issue.multipleOf}`;
 			break;
-		case ZodIssueCode.not_finite:
+		case ZodIssueCode$1.not_finite:
 			message = "Number must be finite";
 			break;
 		default:
@@ -414,7 +414,7 @@ const OK = (value) => ({
 });
 const isAborted = (x) => x.status === "aborted";
 const isDirty = (x) => x.status === "dirty";
-const isValid = (x) => x.status === "valid";
+const isValid$1 = (x) => x.status === "valid";
 const isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 //#endregion
 //#region node_modules/zod/v3/helpers/errorUtil.js
@@ -440,7 +440,7 @@ var ParseInputLazyPath = class {
 	}
 };
 const handleResult = (ctx, result) => {
-	if (isValid(result)) return {
+	if (isValid$1(result)) return {
 		success: true,
 		data: result.value
 	};
@@ -558,7 +558,7 @@ var ZodType$1 = class {
 				path: [],
 				parent: ctx
 			});
-			return isValid(result) ? { value: result.value } : { issues: ctx.common.issues };
+			return isValid$1(result) ? { value: result.value } : { issues: ctx.common.issues };
 		} catch (err) {
 			if (err?.message?.toLowerCase()?.includes("encountered")) this["~standard"].async = true;
 			ctx.common = {
@@ -570,7 +570,7 @@ var ZodType$1 = class {
 			data,
 			path: [],
 			parent: ctx
-		}).then((result) => isValid(result) ? { value: result.value } : { issues: ctx.common.issues });
+		}).then((result) => isValid$1(result) ? { value: result.value } : { issues: ctx.common.issues });
 	}
 	async parseAsync(data, params) {
 		const result = await this.safeParseAsync(data, params);
@@ -606,7 +606,7 @@ var ZodType$1 = class {
 		return this._refinement((val, ctx) => {
 			const result = check(val);
 			const setError = () => ctx.addIssue({
-				code: ZodIssueCode.custom,
+				code: ZodIssueCode$1.custom,
 				...getIssueProperties(val)
 			});
 			if (typeof Promise !== "undefined" && result instanceof Promise) return result.then((data) => {
@@ -632,7 +632,7 @@ var ZodType$1 = class {
 	_refinement(refinement) {
 		return new ZodEffects({
 			schema: this,
-			typeName: ZodFirstPartyTypeKind.ZodEffects,
+			typeName: ZodFirstPartyTypeKind$1.ZodEffects,
 			effect: {
 				type: "refinement",
 				refinement
@@ -701,7 +701,7 @@ var ZodType$1 = class {
 		return new ZodEffects({
 			...processCreateParams(this._def),
 			schema: this,
-			typeName: ZodFirstPartyTypeKind.ZodEffects,
+			typeName: ZodFirstPartyTypeKind$1.ZodEffects,
 			effect: {
 				type: "transform",
 				transform
@@ -714,12 +714,12 @@ var ZodType$1 = class {
 			...processCreateParams(this._def),
 			innerType: this,
 			defaultValue: defaultValueFunc,
-			typeName: ZodFirstPartyTypeKind.ZodDefault
+			typeName: ZodFirstPartyTypeKind$1.ZodDefault
 		});
 	}
 	brand() {
 		return new ZodBranded({
-			typeName: ZodFirstPartyTypeKind.ZodBranded,
+			typeName: ZodFirstPartyTypeKind$1.ZodBranded,
 			type: this,
 			...processCreateParams(this._def)
 		});
@@ -730,7 +730,7 @@ var ZodType$1 = class {
 			...processCreateParams(this._def),
 			innerType: this,
 			catchValue: catchValueFunc,
-			typeName: ZodFirstPartyTypeKind.ZodCatch
+			typeName: ZodFirstPartyTypeKind$1.ZodCatch
 		});
 	}
 	describe(description) {
@@ -821,7 +821,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.string) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.string,
 				received: ctx.parsedType
 			});
@@ -833,7 +833,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (input.data.length < check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					minimum: check.value,
 					type: "string",
 					inclusive: true,
@@ -846,7 +846,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (input.data.length > check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					maximum: check.value,
 					type: "string",
 					inclusive: true,
@@ -861,7 +861,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (tooBig || tooSmall) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				if (tooBig) addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					maximum: check.value,
 					type: "string",
 					inclusive: true,
@@ -869,7 +869,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 					message: check.message
 				});
 				else if (tooSmall) addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					minimum: check.value,
 					type: "string",
 					inclusive: true,
@@ -883,7 +883,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "email",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -894,7 +894,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "emoji",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -904,7 +904,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "uuid",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -914,7 +914,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "nanoid",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -924,7 +924,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "cuid",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -934,7 +934,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "cuid2",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -944,7 +944,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "ulid",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -955,7 +955,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			ctx = this._getOrReturnCtx(input, ctx);
 			addIssueToContext(ctx, {
 				validation: "url",
-				code: ZodIssueCode.invalid_string,
+				code: ZodIssueCode$1.invalid_string,
 				message: check.message
 			});
 			status.dirty();
@@ -966,7 +966,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "regex",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -976,7 +976,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!input.data.includes(check.value, check.position)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: {
 						includes: check.value,
 						position: check.position
@@ -991,7 +991,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!input.data.startsWith(check.value)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: { startsWith: check.value },
 					message: check.message
 				});
@@ -1001,7 +1001,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!input.data.endsWith(check.value)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: { endsWith: check.value },
 					message: check.message
 				});
@@ -1011,7 +1011,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!datetimeRegex(check).test(input.data)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: "datetime",
 					message: check.message
 				});
@@ -1021,7 +1021,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!dateRegex.test(input.data)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: "date",
 					message: check.message
 				});
@@ -1031,7 +1031,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 			if (!timeRegex(check).test(input.data)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					validation: "time",
 					message: check.message
 				});
@@ -1042,7 +1042,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "duration",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1052,7 +1052,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "ip",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1062,7 +1062,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "jwt",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1072,7 +1072,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "cidr",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1082,7 +1082,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "base64",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1092,7 +1092,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
 					validation: "base64url",
-					code: ZodIssueCode.invalid_string,
+					code: ZodIssueCode$1.invalid_string,
 					message: check.message
 				});
 				status.dirty();
@@ -1106,7 +1106,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 	_regex(regex, validation, message) {
 		return this.refinement((data) => regex.test(data), {
 			validation,
-			code: ZodIssueCode.invalid_string,
+			code: ZodIssueCode$1.invalid_string,
 			...errorUtil.errToObj(message)
 		});
 	}
@@ -1374,7 +1374,7 @@ var ZodString$1 = class ZodString$1 extends ZodType$1 {
 ZodString$1.create = (params) => {
 	return new ZodString$1({
 		checks: [],
-		typeName: ZodFirstPartyTypeKind.ZodString,
+		typeName: ZodFirstPartyTypeKind$1.ZodString,
 		coerce: params?.coerce ?? false,
 		...processCreateParams(params)
 	});
@@ -1397,7 +1397,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.number) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.number,
 				received: ctx.parsedType
 			});
@@ -1409,7 +1409,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 			if (!util.isInteger(input.data)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.invalid_type,
+					code: ZodIssueCode$1.invalid_type,
 					expected: "integer",
 					received: "float",
 					message: check.message
@@ -1420,7 +1420,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 			if (check.inclusive ? input.data < check.value : input.data <= check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					minimum: check.value,
 					type: "number",
 					inclusive: check.inclusive,
@@ -1433,7 +1433,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 			if (check.inclusive ? input.data > check.value : input.data >= check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					maximum: check.value,
 					type: "number",
 					inclusive: check.inclusive,
@@ -1446,7 +1446,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 			if (floatSafeRemainder$1(input.data, check.value) !== 0) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.not_multiple_of,
+					code: ZodIssueCode$1.not_multiple_of,
 					multipleOf: check.value,
 					message: check.message
 				});
@@ -1456,7 +1456,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 			if (!Number.isFinite(input.data)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.not_finite,
+					code: ZodIssueCode$1.not_finite,
 					message: check.message
 				});
 				status.dirty();
@@ -1592,7 +1592,7 @@ var ZodNumber$1 = class ZodNumber$1 extends ZodType$1 {
 ZodNumber$1.create = (params) => {
 	return new ZodNumber$1({
 		checks: [],
-		typeName: ZodFirstPartyTypeKind.ZodNumber,
+		typeName: ZodFirstPartyTypeKind$1.ZodNumber,
 		coerce: params?.coerce || false,
 		...processCreateParams(params)
 	});
@@ -1616,7 +1616,7 @@ var ZodBigInt = class ZodBigInt extends ZodType$1 {
 			if (check.inclusive ? input.data < check.value : input.data <= check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					type: "bigint",
 					minimum: check.value,
 					inclusive: check.inclusive,
@@ -1628,7 +1628,7 @@ var ZodBigInt = class ZodBigInt extends ZodType$1 {
 			if (check.inclusive ? input.data > check.value : input.data >= check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					type: "bigint",
 					maximum: check.value,
 					inclusive: check.inclusive,
@@ -1640,7 +1640,7 @@ var ZodBigInt = class ZodBigInt extends ZodType$1 {
 			if (input.data % check.value !== BigInt(0)) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.not_multiple_of,
+					code: ZodIssueCode$1.not_multiple_of,
 					multipleOf: check.value,
 					message: check.message
 				});
@@ -1655,7 +1655,7 @@ var ZodBigInt = class ZodBigInt extends ZodType$1 {
 	_getInvalidInput(input) {
 		const ctx = this._getOrReturnCtx(input);
 		addIssueToContext(ctx, {
-			code: ZodIssueCode.invalid_type,
+			code: ZodIssueCode$1.invalid_type,
 			expected: ZodParsedType.bigint,
 			received: ctx.parsedType
 		});
@@ -1747,7 +1747,7 @@ var ZodBigInt = class ZodBigInt extends ZodType$1 {
 ZodBigInt.create = (params) => {
 	return new ZodBigInt({
 		checks: [],
-		typeName: ZodFirstPartyTypeKind.ZodBigInt,
+		typeName: ZodFirstPartyTypeKind$1.ZodBigInt,
 		coerce: params?.coerce ?? false,
 		...processCreateParams(params)
 	});
@@ -1758,7 +1758,7 @@ var ZodBoolean$1 = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.boolean) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.boolean,
 				received: ctx.parsedType
 			});
@@ -1769,7 +1769,7 @@ var ZodBoolean$1 = class extends ZodType$1 {
 };
 ZodBoolean$1.create = (params) => {
 	return new ZodBoolean$1({
-		typeName: ZodFirstPartyTypeKind.ZodBoolean,
+		typeName: ZodFirstPartyTypeKind$1.ZodBoolean,
 		coerce: params?.coerce || false,
 		...processCreateParams(params)
 	});
@@ -1780,14 +1780,14 @@ var ZodDate = class ZodDate extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.date) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.date,
 				received: ctx.parsedType
 			});
 			return INVALID;
 		}
 		if (Number.isNaN(input.data.getTime())) {
-			addIssueToContext(this._getOrReturnCtx(input), { code: ZodIssueCode.invalid_date });
+			addIssueToContext(this._getOrReturnCtx(input), { code: ZodIssueCode$1.invalid_date });
 			return INVALID;
 		}
 		const status = new ParseStatus();
@@ -1796,7 +1796,7 @@ var ZodDate = class ZodDate extends ZodType$1 {
 			if (input.data.getTime() < check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					message: check.message,
 					inclusive: true,
 					exact: false,
@@ -1809,7 +1809,7 @@ var ZodDate = class ZodDate extends ZodType$1 {
 			if (input.data.getTime() > check.value) {
 				ctx = this._getOrReturnCtx(input, ctx);
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					message: check.message,
 					inclusive: true,
 					exact: false,
@@ -1863,7 +1863,7 @@ ZodDate.create = (params) => {
 	return new ZodDate({
 		checks: [],
 		coerce: params?.coerce || false,
-		typeName: ZodFirstPartyTypeKind.ZodDate,
+		typeName: ZodFirstPartyTypeKind$1.ZodDate,
 		...processCreateParams(params)
 	});
 };
@@ -1872,7 +1872,7 @@ var ZodSymbol = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.symbol) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.symbol,
 				received: ctx.parsedType
 			});
@@ -1883,7 +1883,7 @@ var ZodSymbol = class extends ZodType$1 {
 };
 ZodSymbol.create = (params) => {
 	return new ZodSymbol({
-		typeName: ZodFirstPartyTypeKind.ZodSymbol,
+		typeName: ZodFirstPartyTypeKind$1.ZodSymbol,
 		...processCreateParams(params)
 	});
 };
@@ -1892,7 +1892,7 @@ var ZodUndefined = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.undefined) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.undefined,
 				received: ctx.parsedType
 			});
@@ -1903,7 +1903,7 @@ var ZodUndefined = class extends ZodType$1 {
 };
 ZodUndefined.create = (params) => {
 	return new ZodUndefined({
-		typeName: ZodFirstPartyTypeKind.ZodUndefined,
+		typeName: ZodFirstPartyTypeKind$1.ZodUndefined,
 		...processCreateParams(params)
 	});
 };
@@ -1912,7 +1912,7 @@ var ZodNull$1 = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.null) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.null,
 				received: ctx.parsedType
 			});
@@ -1923,7 +1923,7 @@ var ZodNull$1 = class extends ZodType$1 {
 };
 ZodNull$1.create = (params) => {
 	return new ZodNull$1({
-		typeName: ZodFirstPartyTypeKind.ZodNull,
+		typeName: ZodFirstPartyTypeKind$1.ZodNull,
 		...processCreateParams(params)
 	});
 };
@@ -1938,7 +1938,7 @@ var ZodAny = class extends ZodType$1 {
 };
 ZodAny.create = (params) => {
 	return new ZodAny({
-		typeName: ZodFirstPartyTypeKind.ZodAny,
+		typeName: ZodFirstPartyTypeKind$1.ZodAny,
 		...processCreateParams(params)
 	});
 };
@@ -1953,7 +1953,7 @@ var ZodUnknown$1 = class extends ZodType$1 {
 };
 ZodUnknown$1.create = (params) => {
 	return new ZodUnknown$1({
-		typeName: ZodFirstPartyTypeKind.ZodUnknown,
+		typeName: ZodFirstPartyTypeKind$1.ZodUnknown,
 		...processCreateParams(params)
 	});
 };
@@ -1961,7 +1961,7 @@ var ZodNever$1 = class extends ZodType$1 {
 	_parse(input) {
 		const ctx = this._getOrReturnCtx(input);
 		addIssueToContext(ctx, {
-			code: ZodIssueCode.invalid_type,
+			code: ZodIssueCode$1.invalid_type,
 			expected: ZodParsedType.never,
 			received: ctx.parsedType
 		});
@@ -1970,7 +1970,7 @@ var ZodNever$1 = class extends ZodType$1 {
 };
 ZodNever$1.create = (params) => {
 	return new ZodNever$1({
-		typeName: ZodFirstPartyTypeKind.ZodNever,
+		typeName: ZodFirstPartyTypeKind$1.ZodNever,
 		...processCreateParams(params)
 	});
 };
@@ -1979,7 +1979,7 @@ var ZodVoid = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.undefined) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.void,
 				received: ctx.parsedType
 			});
@@ -1990,7 +1990,7 @@ var ZodVoid = class extends ZodType$1 {
 };
 ZodVoid.create = (params) => {
 	return new ZodVoid({
-		typeName: ZodFirstPartyTypeKind.ZodVoid,
+		typeName: ZodFirstPartyTypeKind$1.ZodVoid,
 		...processCreateParams(params)
 	});
 };
@@ -2000,7 +2000,7 @@ var ZodArray$1 = class ZodArray$1 extends ZodType$1 {
 		const def = this._def;
 		if (ctx.parsedType !== ZodParsedType.array) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.array,
 				received: ctx.parsedType
 			});
@@ -2011,7 +2011,7 @@ var ZodArray$1 = class ZodArray$1 extends ZodType$1 {
 			const tooSmall = ctx.data.length < def.exactLength.value;
 			if (tooBig || tooSmall) {
 				addIssueToContext(ctx, {
-					code: tooBig ? ZodIssueCode.too_big : ZodIssueCode.too_small,
+					code: tooBig ? ZodIssueCode$1.too_big : ZodIssueCode$1.too_small,
 					minimum: tooSmall ? def.exactLength.value : void 0,
 					maximum: tooBig ? def.exactLength.value : void 0,
 					type: "array",
@@ -2025,7 +2025,7 @@ var ZodArray$1 = class ZodArray$1 extends ZodType$1 {
 		if (def.minLength !== null) {
 			if (ctx.data.length < def.minLength.value) {
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					minimum: def.minLength.value,
 					type: "array",
 					inclusive: true,
@@ -2038,7 +2038,7 @@ var ZodArray$1 = class ZodArray$1 extends ZodType$1 {
 		if (def.maxLength !== null) {
 			if (ctx.data.length > def.maxLength.value) {
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					maximum: def.maxLength.value,
 					type: "array",
 					inclusive: true,
@@ -2098,7 +2098,7 @@ ZodArray$1.create = (schema, params) => {
 		minLength: null,
 		maxLength: null,
 		exactLength: null,
-		typeName: ZodFirstPartyTypeKind.ZodArray,
+		typeName: ZodFirstPartyTypeKind$1.ZodArray,
 		...processCreateParams(params)
 	});
 };
@@ -2119,7 +2119,7 @@ function deepPartialify(schema) {
 	});
 	else if (schema instanceof ZodOptional$1) return ZodOptional$1.create(deepPartialify(schema.unwrap()));
 	else if (schema instanceof ZodNullable$1) return ZodNullable$1.create(deepPartialify(schema.unwrap()));
-	else if (schema instanceof ZodTuple) return ZodTuple.create(schema.items.map((item) => deepPartialify(item)));
+	else if (schema instanceof ZodTuple$1) return ZodTuple$1.create(schema.items.map((item) => deepPartialify(item)));
 	else return schema;
 }
 var ZodObject$1 = class ZodObject$1 extends ZodType$1 {
@@ -2150,7 +2150,7 @@ var ZodObject$1 = class ZodObject$1 extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.object) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.object,
 				received: ctx.parsedType
 			});
@@ -2190,7 +2190,7 @@ var ZodObject$1 = class ZodObject$1 extends ZodType$1 {
 			else if (unknownKeys === "strict") {
 				if (extraKeys.length > 0) {
 					addIssueToContext(ctx, {
-						code: ZodIssueCode.unrecognized_keys,
+						code: ZodIssueCode$1.unrecognized_keys,
 						keys: extraKeys
 					});
 					status.dirty();
@@ -2276,7 +2276,7 @@ var ZodObject$1 = class ZodObject$1 extends ZodType$1 {
 				...this._def.shape(),
 				...merging._def.shape()
 			}),
-			typeName: ZodFirstPartyTypeKind.ZodObject
+			typeName: ZodFirstPartyTypeKind$1.ZodObject
 		});
 	}
 	setKey(key, schema) {
@@ -2344,7 +2344,7 @@ ZodObject$1.create = (shape, params) => {
 		shape: () => shape,
 		unknownKeys: "strip",
 		catchall: ZodNever$1.create(),
-		typeName: ZodFirstPartyTypeKind.ZodObject,
+		typeName: ZodFirstPartyTypeKind$1.ZodObject,
 		...processCreateParams(params)
 	});
 };
@@ -2353,7 +2353,7 @@ ZodObject$1.strictCreate = (shape, params) => {
 		shape: () => shape,
 		unknownKeys: "strict",
 		catchall: ZodNever$1.create(),
-		typeName: ZodFirstPartyTypeKind.ZodObject,
+		typeName: ZodFirstPartyTypeKind$1.ZodObject,
 		...processCreateParams(params)
 	});
 };
@@ -2362,7 +2362,7 @@ ZodObject$1.lazycreate = (shape, params) => {
 		shape,
 		unknownKeys: "strip",
 		catchall: ZodNever$1.create(),
-		typeName: ZodFirstPartyTypeKind.ZodObject,
+		typeName: ZodFirstPartyTypeKind$1.ZodObject,
 		...processCreateParams(params)
 	});
 };
@@ -2378,7 +2378,7 @@ var ZodUnion$1 = class extends ZodType$1 {
 			}
 			const unionErrors = results.map((result) => new ZodError(result.ctx.common.issues));
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_union,
+				code: ZodIssueCode$1.invalid_union,
 				unionErrors
 			});
 			return INVALID;
@@ -2431,7 +2431,7 @@ var ZodUnion$1 = class extends ZodType$1 {
 			}
 			const unionErrors = issues.map((issues) => new ZodError(issues));
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_union,
+				code: ZodIssueCode$1.invalid_union,
 				unionErrors
 			});
 			return INVALID;
@@ -2444,7 +2444,7 @@ var ZodUnion$1 = class extends ZodType$1 {
 ZodUnion$1.create = (types, params) => {
 	return new ZodUnion$1({
 		options: types,
-		typeName: ZodFirstPartyTypeKind.ZodUnion,
+		typeName: ZodFirstPartyTypeKind$1.ZodUnion,
 		...processCreateParams(params)
 	});
 };
@@ -2469,7 +2469,7 @@ var ZodDiscriminatedUnion$1 = class ZodDiscriminatedUnion$1 extends ZodType$1 {
 		const { ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.object) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.object,
 				received: ctx.parsedType
 			});
@@ -2480,7 +2480,7 @@ var ZodDiscriminatedUnion$1 = class ZodDiscriminatedUnion$1 extends ZodType$1 {
 		const option = this.optionsMap.get(discriminatorValue);
 		if (!option) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_union_discriminator,
+				code: ZodIssueCode$1.invalid_union_discriminator,
 				options: Array.from(this.optionsMap.keys()),
 				path: [discriminator]
 			});
@@ -2525,7 +2525,7 @@ var ZodDiscriminatedUnion$1 = class ZodDiscriminatedUnion$1 extends ZodType$1 {
 			}
 		}
 		return new ZodDiscriminatedUnion$1({
-			typeName: ZodFirstPartyTypeKind.ZodDiscriminatedUnion,
+			typeName: ZodFirstPartyTypeKind$1.ZodDiscriminatedUnion,
 			discriminator,
 			options,
 			optionsMap,
@@ -2583,7 +2583,7 @@ var ZodIntersection$1 = class extends ZodType$1 {
 			if (isAborted(parsedLeft) || isAborted(parsedRight)) return INVALID;
 			const merged = mergeValues$1(parsedLeft.value, parsedRight.value);
 			if (!merged.valid) {
-				addIssueToContext(ctx, { code: ZodIssueCode.invalid_intersection_types });
+				addIssueToContext(ctx, { code: ZodIssueCode$1.invalid_intersection_types });
 				return INVALID;
 			}
 			if (isDirty(parsedLeft) || isDirty(parsedRight)) status.dirty();
@@ -2616,16 +2616,16 @@ ZodIntersection$1.create = (left, right, params) => {
 	return new ZodIntersection$1({
 		left,
 		right,
-		typeName: ZodFirstPartyTypeKind.ZodIntersection,
+		typeName: ZodFirstPartyTypeKind$1.ZodIntersection,
 		...processCreateParams(params)
 	});
 };
-var ZodTuple = class ZodTuple extends ZodType$1 {
+var ZodTuple$1 = class ZodTuple$1 extends ZodType$1 {
 	_parse(input) {
 		const { status, ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.array) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.array,
 				received: ctx.parsedType
 			});
@@ -2633,7 +2633,7 @@ var ZodTuple = class ZodTuple extends ZodType$1 {
 		}
 		if (ctx.data.length < this._def.items.length) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.too_small,
+				code: ZodIssueCode$1.too_small,
 				minimum: this._def.items.length,
 				inclusive: true,
 				exact: false,
@@ -2643,7 +2643,7 @@ var ZodTuple = class ZodTuple extends ZodType$1 {
 		}
 		if (!this._def.rest && ctx.data.length > this._def.items.length) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.too_big,
+				code: ZodIssueCode$1.too_big,
 				maximum: this._def.items.length,
 				inclusive: true,
 				exact: false,
@@ -2665,17 +2665,17 @@ var ZodTuple = class ZodTuple extends ZodType$1 {
 		return this._def.items;
 	}
 	rest(rest) {
-		return new ZodTuple({
+		return new ZodTuple$1({
 			...this._def,
 			rest
 		});
 	}
 };
-ZodTuple.create = (schemas, params) => {
+ZodTuple$1.create = (schemas, params) => {
 	if (!Array.isArray(schemas)) throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
-	return new ZodTuple({
+	return new ZodTuple$1({
 		items: schemas,
-		typeName: ZodFirstPartyTypeKind.ZodTuple,
+		typeName: ZodFirstPartyTypeKind$1.ZodTuple,
 		rest: null,
 		...processCreateParams(params)
 	});
@@ -2691,7 +2691,7 @@ var ZodRecord$1 = class ZodRecord$1 extends ZodType$1 {
 		const { status, ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.object) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.object,
 				received: ctx.parsedType
 			});
@@ -2715,13 +2715,13 @@ var ZodRecord$1 = class ZodRecord$1 extends ZodType$1 {
 		if (second instanceof ZodType$1) return new ZodRecord$1({
 			keyType: first,
 			valueType: second,
-			typeName: ZodFirstPartyTypeKind.ZodRecord,
+			typeName: ZodFirstPartyTypeKind$1.ZodRecord,
 			...processCreateParams(third)
 		});
 		return new ZodRecord$1({
 			keyType: ZodString$1.create(),
 			valueType: first,
-			typeName: ZodFirstPartyTypeKind.ZodRecord,
+			typeName: ZodFirstPartyTypeKind$1.ZodRecord,
 			...processCreateParams(second)
 		});
 	}
@@ -2737,7 +2737,7 @@ var ZodMap = class extends ZodType$1 {
 		const { status, ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.map) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.map,
 				received: ctx.parsedType
 			});
@@ -2786,7 +2786,7 @@ ZodMap.create = (keyType, valueType, params) => {
 	return new ZodMap({
 		valueType,
 		keyType,
-		typeName: ZodFirstPartyTypeKind.ZodMap,
+		typeName: ZodFirstPartyTypeKind$1.ZodMap,
 		...processCreateParams(params)
 	});
 };
@@ -2795,7 +2795,7 @@ var ZodSet = class ZodSet extends ZodType$1 {
 		const { status, ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.set) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.set,
 				received: ctx.parsedType
 			});
@@ -2805,7 +2805,7 @@ var ZodSet = class ZodSet extends ZodType$1 {
 		if (def.minSize !== null) {
 			if (ctx.data.size < def.minSize.value) {
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_small,
+					code: ZodIssueCode$1.too_small,
 					minimum: def.minSize.value,
 					type: "set",
 					inclusive: true,
@@ -2818,7 +2818,7 @@ var ZodSet = class ZodSet extends ZodType$1 {
 		if (def.maxSize !== null) {
 			if (ctx.data.size > def.maxSize.value) {
 				addIssueToContext(ctx, {
-					code: ZodIssueCode.too_big,
+					code: ZodIssueCode$1.too_big,
 					maximum: def.maxSize.value,
 					type: "set",
 					inclusive: true,
@@ -2875,7 +2875,7 @@ ZodSet.create = (valueType, params) => {
 		valueType,
 		minSize: null,
 		maxSize: null,
-		typeName: ZodFirstPartyTypeKind.ZodSet,
+		typeName: ZodFirstPartyTypeKind$1.ZodSet,
 		...processCreateParams(params)
 	});
 };
@@ -2888,7 +2888,7 @@ var ZodFunction = class ZodFunction extends ZodType$1 {
 		const { ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.function) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.function,
 				received: ctx.parsedType
 			});
@@ -2905,7 +2905,7 @@ var ZodFunction = class ZodFunction extends ZodType$1 {
 					errorMap
 				].filter((x) => !!x),
 				issueData: {
-					code: ZodIssueCode.invalid_arguments,
+					code: ZodIssueCode$1.invalid_arguments,
 					argumentsError: error
 				}
 			});
@@ -2921,7 +2921,7 @@ var ZodFunction = class ZodFunction extends ZodType$1 {
 					errorMap
 				].filter((x) => !!x),
 				issueData: {
-					code: ZodIssueCode.invalid_return_type,
+					code: ZodIssueCode$1.invalid_return_type,
 					returnTypeError: error
 				}
 			});
@@ -2963,7 +2963,7 @@ var ZodFunction = class ZodFunction extends ZodType$1 {
 	args(...items) {
 		return new ZodFunction({
 			...this._def,
-			args: ZodTuple.create(items).rest(ZodUnknown$1.create())
+			args: ZodTuple$1.create(items).rest(ZodUnknown$1.create())
 		});
 	}
 	returns(returnType) {
@@ -2980,9 +2980,9 @@ var ZodFunction = class ZodFunction extends ZodType$1 {
 	}
 	static create(args, returns, params) {
 		return new ZodFunction({
-			args: args ? args : ZodTuple.create([]).rest(ZodUnknown$1.create()),
+			args: args ? args : ZodTuple$1.create([]).rest(ZodUnknown$1.create()),
 			returns: returns || ZodUnknown$1.create(),
-			typeName: ZodFirstPartyTypeKind.ZodFunction,
+			typeName: ZodFirstPartyTypeKind$1.ZodFunction,
 			...processCreateParams(params)
 		});
 	}
@@ -3003,7 +3003,7 @@ var ZodLazy = class extends ZodType$1 {
 ZodLazy.create = (getter, params) => {
 	return new ZodLazy({
 		getter,
-		typeName: ZodFirstPartyTypeKind.ZodLazy,
+		typeName: ZodFirstPartyTypeKind$1.ZodLazy,
 		...processCreateParams(params)
 	});
 };
@@ -3013,7 +3013,7 @@ var ZodLiteral$1 = class extends ZodType$1 {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
 				received: ctx.data,
-				code: ZodIssueCode.invalid_literal,
+				code: ZodIssueCode$1.invalid_literal,
 				expected: this._def.value
 			});
 			return INVALID;
@@ -3030,14 +3030,14 @@ var ZodLiteral$1 = class extends ZodType$1 {
 ZodLiteral$1.create = (value, params) => {
 	return new ZodLiteral$1({
 		value,
-		typeName: ZodFirstPartyTypeKind.ZodLiteral,
+		typeName: ZodFirstPartyTypeKind$1.ZodLiteral,
 		...processCreateParams(params)
 	});
 };
 function createZodEnum(values, params) {
 	return new ZodEnum$1({
 		values,
-		typeName: ZodFirstPartyTypeKind.ZodEnum,
+		typeName: ZodFirstPartyTypeKind$1.ZodEnum,
 		...processCreateParams(params)
 	});
 }
@@ -3049,7 +3049,7 @@ var ZodEnum$1 = class ZodEnum$1 extends ZodType$1 {
 			addIssueToContext(ctx, {
 				expected: util.joinValues(expectedValues),
 				received: ctx.parsedType,
-				code: ZodIssueCode.invalid_type
+				code: ZodIssueCode$1.invalid_type
 			});
 			return INVALID;
 		}
@@ -3059,7 +3059,7 @@ var ZodEnum$1 = class ZodEnum$1 extends ZodType$1 {
 			const expectedValues = this._def.values;
 			addIssueToContext(ctx, {
 				received: ctx.data,
-				code: ZodIssueCode.invalid_enum_value,
+				code: ZodIssueCode$1.invalid_enum_value,
 				options: expectedValues
 			});
 			return INVALID;
@@ -3107,7 +3107,7 @@ var ZodNativeEnum = class extends ZodType$1 {
 			addIssueToContext(ctx, {
 				expected: util.joinValues(expectedValues),
 				received: ctx.parsedType,
-				code: ZodIssueCode.invalid_type
+				code: ZodIssueCode$1.invalid_type
 			});
 			return INVALID;
 		}
@@ -3116,7 +3116,7 @@ var ZodNativeEnum = class extends ZodType$1 {
 			const expectedValues = util.objectValues(nativeEnumValues);
 			addIssueToContext(ctx, {
 				received: ctx.data,
-				code: ZodIssueCode.invalid_enum_value,
+				code: ZodIssueCode$1.invalid_enum_value,
 				options: expectedValues
 			});
 			return INVALID;
@@ -3130,7 +3130,7 @@ var ZodNativeEnum = class extends ZodType$1 {
 ZodNativeEnum.create = (values, params) => {
 	return new ZodNativeEnum({
 		values,
-		typeName: ZodFirstPartyTypeKind.ZodNativeEnum,
+		typeName: ZodFirstPartyTypeKind$1.ZodNativeEnum,
 		...processCreateParams(params)
 	});
 };
@@ -3142,7 +3142,7 @@ var ZodPromise = class extends ZodType$1 {
 		const { ctx } = this._processInputParams(input);
 		if (ctx.parsedType !== ZodParsedType.promise && ctx.common.async === false) {
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.promise,
 				received: ctx.parsedType
 			});
@@ -3159,7 +3159,7 @@ var ZodPromise = class extends ZodType$1 {
 ZodPromise.create = (schema, params) => {
 	return new ZodPromise({
 		type: schema,
-		typeName: ZodFirstPartyTypeKind.ZodPromise,
+		typeName: ZodFirstPartyTypeKind$1.ZodPromise,
 		...processCreateParams(params)
 	});
 };
@@ -3168,7 +3168,7 @@ var ZodEffects = class extends ZodType$1 {
 		return this._def.schema;
 	}
 	sourceType() {
-		return this._def.schema._def.typeName === ZodFirstPartyTypeKind.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
+		return this._def.schema._def.typeName === ZodFirstPartyTypeKind$1.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
 	}
 	_parse(input) {
 		const { status, ctx } = this._processInputParams(input);
@@ -3252,7 +3252,7 @@ var ZodEffects = class extends ZodType$1 {
 				path: ctx.path,
 				parent: ctx
 			});
-			if (!isValid(base)) return INVALID;
+			if (!isValid$1(base)) return INVALID;
 			const result = effect.transform(base.value, checkCtx);
 			if (result instanceof Promise) throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
 			return {
@@ -3264,7 +3264,7 @@ var ZodEffects = class extends ZodType$1 {
 			path: ctx.path,
 			parent: ctx
 		}).then((base) => {
-			if (!isValid(base)) return INVALID;
+			if (!isValid$1(base)) return INVALID;
 			return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
 				status: status.value,
 				value: result
@@ -3276,7 +3276,7 @@ var ZodEffects = class extends ZodType$1 {
 ZodEffects.create = (schema, effect, params) => {
 	return new ZodEffects({
 		schema,
-		typeName: ZodFirstPartyTypeKind.ZodEffects,
+		typeName: ZodFirstPartyTypeKind$1.ZodEffects,
 		effect,
 		...processCreateParams(params)
 	});
@@ -3288,7 +3288,7 @@ ZodEffects.createWithPreprocess = (preprocess, schema, params) => {
 			type: "preprocess",
 			transform: preprocess
 		},
-		typeName: ZodFirstPartyTypeKind.ZodEffects,
+		typeName: ZodFirstPartyTypeKind$1.ZodEffects,
 		...processCreateParams(params)
 	});
 };
@@ -3304,7 +3304,7 @@ var ZodOptional$1 = class extends ZodType$1 {
 ZodOptional$1.create = (type, params) => {
 	return new ZodOptional$1({
 		innerType: type,
-		typeName: ZodFirstPartyTypeKind.ZodOptional,
+		typeName: ZodFirstPartyTypeKind$1.ZodOptional,
 		...processCreateParams(params)
 	});
 };
@@ -3320,7 +3320,7 @@ var ZodNullable$1 = class extends ZodType$1 {
 ZodNullable$1.create = (type, params) => {
 	return new ZodNullable$1({
 		innerType: type,
-		typeName: ZodFirstPartyTypeKind.ZodNullable,
+		typeName: ZodFirstPartyTypeKind$1.ZodNullable,
 		...processCreateParams(params)
 	});
 };
@@ -3342,7 +3342,7 @@ var ZodDefault$1 = class extends ZodType$1 {
 ZodDefault$1.create = (type, params) => {
 	return new ZodDefault$1({
 		innerType: type,
-		typeName: ZodFirstPartyTypeKind.ZodDefault,
+		typeName: ZodFirstPartyTypeKind$1.ZodDefault,
 		defaultValue: typeof params.default === "function" ? params.default : () => params.default,
 		...processCreateParams(params)
 	});
@@ -3390,7 +3390,7 @@ var ZodCatch$1 = class extends ZodType$1 {
 ZodCatch$1.create = (type, params) => {
 	return new ZodCatch$1({
 		innerType: type,
-		typeName: ZodFirstPartyTypeKind.ZodCatch,
+		typeName: ZodFirstPartyTypeKind$1.ZodCatch,
 		catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
 		...processCreateParams(params)
 	});
@@ -3400,7 +3400,7 @@ var ZodNaN = class extends ZodType$1 {
 		if (this._getType(input) !== ZodParsedType.nan) {
 			const ctx = this._getOrReturnCtx(input);
 			addIssueToContext(ctx, {
-				code: ZodIssueCode.invalid_type,
+				code: ZodIssueCode$1.invalid_type,
 				expected: ZodParsedType.nan,
 				received: ctx.parsedType
 			});
@@ -3414,7 +3414,7 @@ var ZodNaN = class extends ZodType$1 {
 };
 ZodNaN.create = (params) => {
 	return new ZodNaN({
-		typeName: ZodFirstPartyTypeKind.ZodNaN,
+		typeName: ZodFirstPartyTypeKind$1.ZodNaN,
 		...processCreateParams(params)
 	});
 };
@@ -3477,7 +3477,7 @@ var ZodPipeline = class ZodPipeline extends ZodType$1 {
 		return new ZodPipeline({
 			in: a,
 			out: b,
-			typeName: ZodFirstPartyTypeKind.ZodPipeline
+			typeName: ZodFirstPartyTypeKind$1.ZodPipeline
 		});
 	}
 };
@@ -3485,7 +3485,7 @@ var ZodReadonly$1 = class extends ZodType$1 {
 	_parse(input) {
 		const result = this._def.innerType._parse(input);
 		const freeze = (data) => {
-			if (isValid(data)) data.value = Object.freeze(data.value);
+			if (isValid$1(data)) data.value = Object.freeze(data.value);
 			return data;
 		};
 		return isAsync(result) ? result.then((data) => freeze(data)) : freeze(result);
@@ -3497,12 +3497,12 @@ var ZodReadonly$1 = class extends ZodType$1 {
 ZodReadonly$1.create = (type, params) => {
 	return new ZodReadonly$1({
 		innerType: type,
-		typeName: ZodFirstPartyTypeKind.ZodReadonly,
+		typeName: ZodFirstPartyTypeKind$1.ZodReadonly,
 		...processCreateParams(params)
 	});
 };
 ZodObject$1.lazycreate;
-var ZodFirstPartyTypeKind;
+var ZodFirstPartyTypeKind$1;
 (function(ZodFirstPartyTypeKind) {
 	ZodFirstPartyTypeKind["ZodString"] = "ZodString";
 	ZodFirstPartyTypeKind["ZodNumber"] = "ZodNumber";
@@ -3540,7 +3540,7 @@ var ZodFirstPartyTypeKind;
 	ZodFirstPartyTypeKind["ZodBranded"] = "ZodBranded";
 	ZodFirstPartyTypeKind["ZodPipeline"] = "ZodPipeline";
 	ZodFirstPartyTypeKind["ZodReadonly"] = "ZodReadonly";
-})(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
+})(ZodFirstPartyTypeKind$1 || (ZodFirstPartyTypeKind$1 = {}));
 ZodString$1.create;
 ZodNumber$1.create;
 ZodNaN.create;
@@ -3560,7 +3560,7 @@ ZodObject$1.strictCreate;
 ZodUnion$1.create;
 ZodDiscriminatedUnion$1.create;
 ZodIntersection$1.create;
-ZodTuple.create;
+ZodTuple$1.create;
 ZodRecord$1.create;
 ZodMap.create;
 ZodSet.create;
@@ -3578,6 +3578,8 @@ ZodPipeline.create;
 //#endregion
 //#region node_modules/zod/v4/core/core.js
 var _a$1;
+/** A special constant with type `never` */
+const NEVER = /*@__PURE__*/ Object.freeze({ status: "aborted" });
 function $constructor(name, initializer, params) {
 	function init(inst, def) {
 		if (!inst._zod) Object.defineProperty(inst, "_zod", {
@@ -4025,7 +4027,7 @@ const _parse = (_Err) => (schema, value, _ctx, _params) => {
 	}
 	return result.value;
 };
-const parse$1 = /* @__PURE__*/ _parse($ZodRealError);
+const parse$2 = /* @__PURE__*/ _parse($ZodRealError);
 const _parseAsync = (_Err) => async (schema, value, _ctx, params) => {
 	const ctx = _ctx ? {
 		..._ctx,
@@ -4147,7 +4149,7 @@ const uuid = (version) => {
 	return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 /** Practical email validation */
-const email = /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
+const email$1 = /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
 const _emoji$1 = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
 function emoji() {
 	return new RegExp(_emoji$1, "u");
@@ -4717,7 +4719,7 @@ const $ZodUUID = /*@__PURE__*/ $constructor("$ZodUUID", (inst, def) => {
 	$ZodStringFormat.init(inst, def);
 });
 const $ZodEmail = /*@__PURE__*/ $constructor("$ZodEmail", (inst, def) => {
-	def.pattern ?? (def.pattern = email);
+	def.pattern ?? (def.pattern = email$1);
 	$ZodStringFormat.init(inst, def);
 });
 const $ZodURL = /*@__PURE__*/ $constructor("$ZodURL", (inst, def) => {
@@ -5216,7 +5218,7 @@ const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) =>
             })));
           }
         }
-        
+
         if (${id}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
@@ -5224,7 +5226,7 @@ const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k}] = ${id}.value;
         }
-        
+
       `);
 			else if (!isOptionalIn) doc.write(`
         const ${id}_present = ${k} in input;
@@ -5259,7 +5261,7 @@ const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) =>
             path: iss.path ? [${k}, ...iss.path] : [${k}]
           })));
         }
-        
+
         if (${id}.value === undefined) {
           if (${k} in input) {
             newResult[${k}] = undefined;
@@ -5267,7 +5269,7 @@ const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) =>
         } else {
           newResult[${k}] = ${id}.value;
         }
-        
+
       `);
 		}
 		doc.write(`payload.value = newResult;`);
@@ -5511,6 +5513,98 @@ function handleIntersectionResults(result, left, right) {
 	if (!merged.valid) throw new Error(`Unmergable intersection. Error path: ${JSON.stringify(merged.mergeErrorPath)}`);
 	result.value = merged.data;
 	return result;
+}
+const $ZodTuple = /*@__PURE__*/ $constructor("$ZodTuple", (inst, def) => {
+	$ZodType.init(inst, def);
+	const items = def.items;
+	inst._zod.parse = (payload, ctx) => {
+		const input = payload.value;
+		if (!Array.isArray(input)) {
+			payload.issues.push({
+				input,
+				inst,
+				expected: "tuple",
+				code: "invalid_type"
+			});
+			return payload;
+		}
+		payload.value = [];
+		const proms = [];
+		const optinStart = getTupleOptStart(items, "optin");
+		const optoutStart = getTupleOptStart(items, "optout");
+		if (!def.rest) {
+			if (input.length < optinStart) {
+				payload.issues.push({
+					code: "too_small",
+					minimum: optinStart,
+					inclusive: true,
+					input,
+					inst,
+					origin: "array"
+				});
+				return payload;
+			}
+			if (input.length > items.length) payload.issues.push({
+				code: "too_big",
+				maximum: items.length,
+				inclusive: true,
+				input,
+				inst,
+				origin: "array"
+			});
+		}
+		const itemResults = new Array(items.length);
+		for (let i = 0; i < items.length; i++) {
+			const r = items[i]._zod.run({
+				value: input[i],
+				issues: []
+			}, ctx);
+			if (r instanceof Promise) proms.push(r.then((rr) => {
+				itemResults[i] = rr;
+			}));
+			else itemResults[i] = r;
+		}
+		if (def.rest) {
+			let i = items.length - 1;
+			const rest = input.slice(items.length);
+			for (const el of rest) {
+				i++;
+				const result = def.rest._zod.run({
+					value: el,
+					issues: []
+				}, ctx);
+				if (result instanceof Promise) proms.push(result.then((r) => handleTupleResult(r, payload, i)));
+				else handleTupleResult(result, payload, i);
+			}
+		}
+		if (proms.length) return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input, optoutStart));
+		return handleTupleResults(itemResults, payload, items, input, optoutStart);
+	};
+});
+function getTupleOptStart(items, key) {
+	for (let i = items.length - 1; i >= 0; i--) if (items[i]._zod[key] !== "optional") return i + 1;
+	return 0;
+}
+function handleTupleResult(result, final, index) {
+	if (result.issues.length) final.issues.push(...prefixIssues(index, result.issues));
+	final.value[index] = result.value;
+}
+function handleTupleResults(itemResults, final, items, input, optoutStart) {
+	for (let i = 0; i < items.length; i++) {
+		const r = itemResults[i];
+		const isPresent = i < input.length;
+		if (r.issues.length) {
+			if (!isPresent && i >= optoutStart) {
+				final.value.length = i;
+				break;
+			}
+			final.issues.push(...prefixIssues(i, r.issues));
+		}
+		final.value[i] = r.value;
+	}
+	for (let i = final.value.length - 1; i >= input.length; i--) if (items[i]._zod.optout === "optional" && final.value[i] === void 0) final.value.length = i;
+	else break;
+	return final;
 }
 const $ZodRecord = /*@__PURE__*/ $constructor("$ZodRecord", (inst, def) => {
 	$ZodType.init(inst, def);
@@ -7210,7 +7304,7 @@ const ZodMiniType = /*@__PURE__*/ $constructor("ZodMiniType", (inst, def) => {
 	$ZodType.init(inst, def);
 	inst.def = def;
 	inst.type = def.type;
-	inst.parse = (data, params) => parse$1(inst, data, params, { callee: inst.parse });
+	inst.parse = (data, params) => parse$2(inst, data, params, { callee: inst.parse });
 	inst.safeParse = (data, params) => safeParse$2(inst, data, params);
 	inst.parseAsync = async (data, params) => parseAsync$1(inst, data, params, { callee: inst.parseAsync });
 	inst.safeParseAsync = async (data, params) => safeParseAsync$2(inst, data, params);
@@ -7423,12 +7517,12 @@ const initializer = (inst, issues) => {
 const ZodRealError = /*@__PURE__*/ $constructor("ZodError", initializer, { Parent: Error });
 //#endregion
 //#region node_modules/zod/v4/classic/parse.js
-const parse = /* @__PURE__ */ _parse(ZodRealError);
+const parse$1 = /* @__PURE__ */ _parse(ZodRealError);
 const parseAsync = /* @__PURE__ */ _parseAsync(ZodRealError);
 const safeParse = /* @__PURE__ */ _safeParse(ZodRealError);
 const safeParseAsync = /* @__PURE__ */ _safeParseAsync(ZodRealError);
 const encode = /* @__PURE__ */ _encode(ZodRealError);
-const decode$1 = /* @__PURE__ */ _decode(ZodRealError);
+const decode$2 = /* @__PURE__ */ _decode(ZodRealError);
 const encodeAsync = /* @__PURE__ */ _encodeAsync(ZodRealError);
 const decodeAsync = /* @__PURE__ */ _decodeAsync(ZodRealError);
 const safeEncode = /* @__PURE__ */ _safeEncode(ZodRealError);
@@ -7483,13 +7577,13 @@ const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
 	inst.def = def;
 	inst.type = def.type;
 	Object.defineProperty(inst, "_def", { value: def });
-	inst.parse = (data, params) => parse(inst, data, params, { callee: inst.parse });
+	inst.parse = (data, params) => parse$1(inst, data, params, { callee: inst.parse });
 	inst.safeParse = (data, params) => safeParse(inst, data, params);
 	inst.parseAsync = async (data, params) => parseAsync(inst, data, params, { callee: inst.parseAsync });
 	inst.safeParseAsync = async (data, params) => safeParseAsync(inst, data, params);
 	inst.spa = inst.safeParseAsync;
 	inst.encode = (data, params) => encode(inst, data, params);
-	inst.decode = (data, params) => decode$1(inst, data, params);
+	inst.decode = (data, params) => decode$2(inst, data, params);
 	inst.encodeAsync = async (data, params) => encodeAsync(inst, data, params);
 	inst.decodeAsync = async (data, params) => decodeAsync(inst, data, params);
 	inst.safeEncode = (data, params) => safeEncode(inst, data, params);
@@ -7697,6 +7791,9 @@ const ZodEmail = /*@__PURE__*/ $constructor("ZodEmail", (inst, def) => {
 	$ZodEmail.init(inst, def);
 	ZodStringFormat.init(inst, def);
 });
+function email(params) {
+	return /* @__PURE__ */ _email(ZodEmail, params);
+}
 const ZodGUID = /*@__PURE__*/ $constructor("ZodGUID", (inst, def) => {
 	$ZodGUID.init(inst, def);
 	ZodStringFormat.init(inst, def);
@@ -7709,6 +7806,9 @@ const ZodURL = /*@__PURE__*/ $constructor("ZodURL", (inst, def) => {
 	$ZodURL.init(inst, def);
 	ZodStringFormat.init(inst, def);
 });
+function url(params) {
+	return /* @__PURE__ */ _url(ZodURL, params);
+}
 const ZodEmoji = /*@__PURE__*/ $constructor("ZodEmoji", (inst, def) => {
 	$ZodEmoji.init(inst, def);
 	ZodStringFormat.init(inst, def);
@@ -8016,6 +8116,24 @@ function intersection(left, right) {
 		right
 	});
 }
+const ZodTuple = /*@__PURE__*/ $constructor("ZodTuple", (inst, def) => {
+	$ZodTuple.init(inst, def);
+	ZodType.init(inst, def);
+	inst._zod.processJSONSchema = (ctx, json, params) => tupleProcessor(inst, ctx, json, params);
+	inst.rest = (rest) => inst.clone({
+		...inst._zod.def,
+		rest
+	});
+});
+function tuple(items, _paramsOrRest, _params) {
+	const hasRest = _paramsOrRest instanceof $ZodType;
+	return new ZodTuple({
+		type: "tuple",
+		items,
+		rest: hasRest ? _paramsOrRest : null,
+		...normalizeParams(hasRest ? _params : _paramsOrRest)
+	});
+}
 const ZodRecord = /*@__PURE__*/ $constructor("ZodRecord", (inst, def) => {
 	$ZodRecord.init(inst, def);
 	ZodType.init(inst, def);
@@ -8271,6 +8389,25 @@ function preprocess(fn, schema) {
 	});
 }
 //#endregion
+//#region node_modules/zod/v4/classic/compat.js
+/** @deprecated Use the raw string literal codes instead, e.g. "invalid_type". */
+const ZodIssueCode = {
+	invalid_type: "invalid_type",
+	too_big: "too_big",
+	too_small: "too_small",
+	invalid_format: "invalid_format",
+	not_multiple_of: "not_multiple_of",
+	unrecognized_keys: "unrecognized_keys",
+	invalid_union: "invalid_union",
+	invalid_key: "invalid_key",
+	invalid_element: "invalid_element",
+	invalid_value: "invalid_value",
+	custom: "custom"
+};
+/** @deprecated Do not use. Stub definition, only included for zod-to-json-schema compatibility. */
+var ZodFirstPartyTypeKind;
+ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {});
+//#endregion
 //#region node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
 const LATEST_PROTOCOL_VERSION = "2025-11-25";
 const SUPPORTED_PROTOCOL_VERSIONS = [
@@ -8324,7 +8461,7 @@ const RequestMetaSchema = looseObject({
 /**
 * Common params for any request.
 */
-const BaseRequestParamsSchema = object({ 
+const BaseRequestParamsSchema = object({
 /**
 * See [General fields: `_meta`](/specification/draft/basic/index#meta) for notes on `_meta` usage.
 */
@@ -8332,7 +8469,7 @@ _meta: RequestMetaSchema.optional() });
 /**
 * Common params for any task-augmented request.
 */
-const TaskAugmentedRequestParamsSchema = BaseRequestParamsSchema.extend({ 
+const TaskAugmentedRequestParamsSchema = BaseRequestParamsSchema.extend({
 /**
 * If specified, the caller is requesting task-augmented execution for this request.
 * The request will return a CreateTaskResult immediately, and the actual result can be
@@ -8353,7 +8490,7 @@ const RequestSchema = object({
 	method: string(),
 	params: BaseRequestParamsSchema.loose().optional()
 });
-const NotificationsParamsSchema = object({ 
+const NotificationsParamsSchema = object({
 /**
 * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
 * for notes on _meta usage.
@@ -8363,7 +8500,7 @@ const NotificationSchema = object({
 	method: string(),
 	params: NotificationsParamsSchema.loose().optional()
 });
-const ResultSchema = looseObject({ 
+const ResultSchema = looseObject({
 /**
 * See [MCP specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/47339c03c143bb4ec01a26e721a1b8fe66634ebe/docs/specification/draft/basic/index.mdx#general-fields)
 * for notes on _meta usage.
@@ -8487,7 +8624,7 @@ const CancelledNotificationSchema = NotificationSchema.extend({
 * Base schema to add `icons` property.
 *
 */
-const IconsSchema = object({ 
+const IconsSchema = object({
 /**
 * Optional set of sized icons that the client can display in a user interface.
 *
@@ -8610,7 +8747,7 @@ const ServerTasksCapabilitySchema = looseObject({
 	/**
 	* Capabilities for task creation on specific request types.
 	*/
-	requests: looseObject({ 
+	requests: looseObject({
 	/**
 	* Task support for tool requests.
 	*/
@@ -8645,7 +8782,7 @@ const ClientCapabilitiesSchema = object({
 	/**
 	* Present if the client supports listing roots.
 	*/
-	roots: object({ 
+	roots: object({
 	/**
 	* Whether the client supports issuing notifications for changes to the roots list.
 	*/
@@ -8693,7 +8830,7 @@ const ServerCapabilitiesSchema = object({
 	/**
 	* Present if the server offers any prompt templates.
 	*/
-	prompts: object({ 
+	prompts: object({
 	/**
 	* Whether this server supports issuing notifications for changes to the prompt list.
 	*/
@@ -8714,7 +8851,7 @@ listChanged: boolean().optional() }).optional(),
 	/**
 	* Present if the server offers any tools to call.
 	*/
-	tools: object({ 
+	tools: object({
 	/**
 	* Whether this server supports issuing notifications for changes to the tool list.
 	*/
@@ -8790,14 +8927,14 @@ const ProgressNotificationSchema = NotificationSchema.extend({
 	method: literal("notifications/progress"),
 	params: ProgressNotificationParamsSchema
 });
-const PaginatedRequestParamsSchema = BaseRequestParamsSchema.extend({ 
+const PaginatedRequestParamsSchema = BaseRequestParamsSchema.extend({
 /**
 * An opaque token representing the current pagination position.
 * If provided, the server should return results starting after this cursor.
 */
 cursor: CursorSchema.optional() });
 const PaginatedRequestSchema = RequestSchema.extend({ params: PaginatedRequestParamsSchema.optional() });
-const PaginatedResultSchema = ResultSchema.extend({ 
+const PaginatedResultSchema = ResultSchema.extend({
 /**
 * An opaque token representing the pagination position after the last returned result.
 * If present, there may be more results available.
@@ -8909,7 +9046,7 @@ const ResourceContentsSchema = object({
 	*/
 	_meta: record(string(), unknown()).optional()
 });
-const TextResourceContentsSchema = ResourceContentsSchema.extend({ 
+const TextResourceContentsSchema = ResourceContentsSchema.extend({
 /**
 * The text of the item. This must only be set if the item can actually be represented as text (not binary data).
 */
@@ -8927,7 +9064,7 @@ const Base64Schema = string().refine((val) => {
 		return false;
 	}
 }, { message: "Invalid Base64 string" });
-const BlobResourceContentsSchema = ResourceContentsSchema.extend({ 
+const BlobResourceContentsSchema = ResourceContentsSchema.extend({
 /**
 * A base64-encoded string representing the binary data of the item.
 */
@@ -9035,7 +9172,7 @@ const ListResourceTemplatesRequestSchema = PaginatedRequestSchema.extend({ metho
 * The server's response to a resources/templates/list request from the client.
 */
 const ListResourceTemplatesResultSchema = PaginatedResultSchema.extend({ resourceTemplates: array(ResourceTemplateSchema) });
-const ResourceRequestParamsSchema = BaseRequestParamsSchema.extend({ 
+const ResourceRequestParamsSchema = BaseRequestParamsSchema.extend({
 /**
 * The URI of the resource to read. The URI can use any protocol; it is up to the server how to interpret it.
 *
@@ -9083,7 +9220,7 @@ const UnsubscribeRequestSchema = RequestSchema.extend({
 /**
 * Parameters for a `notifications/resources/updated` notification.
 */
-const ResourceUpdatedNotificationParamsSchema = NotificationsParamsSchema.extend({ 
+const ResourceUpdatedNotificationParamsSchema = NotificationsParamsSchema.extend({
 /**
 * The URI of the resource that has been updated. This might be a sub-resource of the one that the client actually subscribed to.
 */
@@ -9354,7 +9491,7 @@ const ToolAnnotationsSchema = object({
 /**
 * Execution-related properties for a tool.
 */
-const ToolExecutionSchema = object({ 
+const ToolExecutionSchema = object({
 /**
 * Indicates the tool's preference for task-augmented execution.
 * - "required": Clients MUST invoke the tool as a task
@@ -9516,7 +9653,7 @@ const LoggingLevelSchema = _enum([
 /**
 * Parameters for a `logging/setLevel` request.
 */
-const SetLevelRequestParamsSchema = BaseRequestParamsSchema.extend({ 
+const SetLevelRequestParamsSchema = BaseRequestParamsSchema.extend({
 /**
 * The level of logging that the client wants to receive from the server. The server should send all logs at this level and higher (i.e., more severe) to the client as notifications/logging/message.
 */
@@ -9559,7 +9696,7 @@ const ModelPreferencesSchema = object({
 	/**
 	* Optional hints to use for model selection.
 	*/
-	hints: array(object({ 
+	hints: array(object({
 	/**
 	* A hint for a model name.
 	*/
@@ -9580,7 +9717,7 @@ name: string().optional() })).optional(),
 /**
 * Controls tool usage behavior in sampling requests.
 */
-const ToolChoiceSchema = object({ 
+const ToolChoiceSchema = object({
 /**
 * Controls when tools are used:
 * - "auto": Model decides whether to use tools (default)
@@ -9917,7 +10054,7 @@ const ElicitRequestSchema = RequestSchema.extend({
 *
 * @category notifications/elicitation/complete
 */
-const ElicitationCompleteNotificationParamsSchema = NotificationsParamsSchema.extend({ 
+const ElicitationCompleteNotificationParamsSchema = NotificationsParamsSchema.extend({
 /**
 * The ID of the elicitation that completed.
 */
@@ -9997,7 +10134,7 @@ const CompleteRequestParamsSchema = BaseRequestParamsSchema.extend({
 		*/
 		value: string()
 	}),
-	context: object({ 
+	context: object({
 	/**
 	* Previously-resolved variables in a URI template or prompt.
 	*/
@@ -10283,7 +10420,7 @@ function parseAnyDef(refs) {
 //#region node_modules/zod-to-json-schema/dist/esm/parsers/array.js
 function parseArrayDef(def, refs) {
 	const res = { type: "array" };
-	if (def.type?._def && def.type?._def?.typeName !== ZodFirstPartyTypeKind.ZodAny) res.items = parseDef(def.type._def, {
+	if (def.type?._def && def.type?._def?.typeName !== ZodFirstPartyTypeKind$1.ZodAny) res.items = parseDef(def.type._def, {
 		...refs,
 		currentPath: [...refs.currentPath, "items"]
 	});
@@ -10727,7 +10864,7 @@ function stringifyRegExpWithFlags(regex, refs) {
 //#region node_modules/zod-to-json-schema/dist/esm/parsers/record.js
 function parseRecordDef(def, refs) {
 	if (refs.target === "openAi") console.warn("Warning: OpenAI may not support records in schemas! Try an array of key-value pairs instead.");
-	if (refs.target === "openApi3" && def.keyType?._def.typeName === ZodFirstPartyTypeKind.ZodEnum) return {
+	if (refs.target === "openApi3" && def.keyType?._def.typeName === ZodFirstPartyTypeKind$1.ZodEnum) return {
 		type: "object",
 		required: def.keyType._def.values,
 		properties: def.keyType._def.values.reduce((acc, key) => ({
@@ -10751,17 +10888,17 @@ function parseRecordDef(def, refs) {
 		}) ?? refs.allowedAdditionalProperties
 	};
 	if (refs.target === "openApi3") return schema;
-	if (def.keyType?._def.typeName === ZodFirstPartyTypeKind.ZodString && def.keyType._def.checks?.length) {
+	if (def.keyType?._def.typeName === ZodFirstPartyTypeKind$1.ZodString && def.keyType._def.checks?.length) {
 		const { type, ...keyType } = parseStringDef(def.keyType._def, refs);
 		return {
 			...schema,
 			propertyNames: keyType
 		};
-	} else if (def.keyType?._def.typeName === ZodFirstPartyTypeKind.ZodEnum) return {
+	} else if (def.keyType?._def.typeName === ZodFirstPartyTypeKind$1.ZodEnum) return {
 		...schema,
 		propertyNames: { enum: def.keyType._def.values }
 	};
-	else if (def.keyType?._def.typeName === ZodFirstPartyTypeKind.ZodBranded && def.keyType._def.type._def.typeName === ZodFirstPartyTypeKind.ZodString && def.keyType._def.type._def.checks?.length) {
+	else if (def.keyType?._def.typeName === ZodFirstPartyTypeKind$1.ZodBranded && def.keyType._def.type._def.typeName === ZodFirstPartyTypeKind$1.ZodString && def.keyType._def.type._def.checks?.length) {
 		const { type, ...keyType } = parseBrandedDef(def.keyType._def, refs);
 		return {
 			...schema,
@@ -11125,42 +11262,42 @@ const parseReadonlyDef = (def, refs) => {
 //#region node_modules/zod-to-json-schema/dist/esm/selectParser.js
 const selectParser = (def, typeName, refs) => {
 	switch (typeName) {
-		case ZodFirstPartyTypeKind.ZodString: return parseStringDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodNumber: return parseNumberDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodObject: return parseObjectDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodBigInt: return parseBigintDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodBoolean: return parseBooleanDef();
-		case ZodFirstPartyTypeKind.ZodDate: return parseDateDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodUndefined: return parseUndefinedDef(refs);
-		case ZodFirstPartyTypeKind.ZodNull: return parseNullDef(refs);
-		case ZodFirstPartyTypeKind.ZodArray: return parseArrayDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodUnion:
-		case ZodFirstPartyTypeKind.ZodDiscriminatedUnion: return parseUnionDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodIntersection: return parseIntersectionDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodTuple: return parseTupleDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodRecord: return parseRecordDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodLiteral: return parseLiteralDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodEnum: return parseEnumDef(def);
-		case ZodFirstPartyTypeKind.ZodNativeEnum: return parseNativeEnumDef(def);
-		case ZodFirstPartyTypeKind.ZodNullable: return parseNullableDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodOptional: return parseOptionalDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodMap: return parseMapDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodSet: return parseSetDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodLazy: return () => def.getter()._def;
-		case ZodFirstPartyTypeKind.ZodPromise: return parsePromiseDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodNaN:
-		case ZodFirstPartyTypeKind.ZodNever: return parseNeverDef(refs);
-		case ZodFirstPartyTypeKind.ZodEffects: return parseEffectsDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodAny: return parseAnyDef(refs);
-		case ZodFirstPartyTypeKind.ZodUnknown: return parseUnknownDef(refs);
-		case ZodFirstPartyTypeKind.ZodDefault: return parseDefaultDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodBranded: return parseBrandedDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodReadonly: return parseReadonlyDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodCatch: return parseCatchDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodPipeline: return parsePipelineDef(def, refs);
-		case ZodFirstPartyTypeKind.ZodFunction:
-		case ZodFirstPartyTypeKind.ZodVoid:
-		case ZodFirstPartyTypeKind.ZodSymbol: return;
+		case ZodFirstPartyTypeKind$1.ZodString: return parseStringDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodNumber: return parseNumberDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodObject: return parseObjectDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodBigInt: return parseBigintDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodBoolean: return parseBooleanDef();
+		case ZodFirstPartyTypeKind$1.ZodDate: return parseDateDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodUndefined: return parseUndefinedDef(refs);
+		case ZodFirstPartyTypeKind$1.ZodNull: return parseNullDef(refs);
+		case ZodFirstPartyTypeKind$1.ZodArray: return parseArrayDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodUnion:
+		case ZodFirstPartyTypeKind$1.ZodDiscriminatedUnion: return parseUnionDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodIntersection: return parseIntersectionDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodTuple: return parseTupleDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodRecord: return parseRecordDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodLiteral: return parseLiteralDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodEnum: return parseEnumDef(def);
+		case ZodFirstPartyTypeKind$1.ZodNativeEnum: return parseNativeEnumDef(def);
+		case ZodFirstPartyTypeKind$1.ZodNullable: return parseNullableDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodOptional: return parseOptionalDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodMap: return parseMapDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodSet: return parseSetDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodLazy: return () => def.getter()._def;
+		case ZodFirstPartyTypeKind$1.ZodPromise: return parsePromiseDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodNaN:
+		case ZodFirstPartyTypeKind$1.ZodNever: return parseNeverDef(refs);
+		case ZodFirstPartyTypeKind$1.ZodEffects: return parseEffectsDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodAny: return parseAnyDef(refs);
+		case ZodFirstPartyTypeKind$1.ZodUnknown: return parseUnknownDef(refs);
+		case ZodFirstPartyTypeKind$1.ZodDefault: return parseDefaultDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodBranded: return parseBrandedDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodReadonly: return parseReadonlyDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodCatch: return parseCatchDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodPipeline: return parsePipelineDef(def, refs);
+		case ZodFirstPartyTypeKind$1.ZodFunction:
+		case ZodFirstPartyTypeKind$1.ZodVoid:
+		case ZodFirstPartyTypeKind$1.ZodSymbol: return;
 		default: return ((_) => void 0)(typeName);
 	}
 };
@@ -27370,18 +27507,18 @@ var init_secp256k1 = __esmMin((() => {
 //#endregion
 //#region node_modules/nostr-tools/lib/esm/pure.js
 var pure_exports = /* @__PURE__ */ __exportAll({
-	finalizeEvent: () => finalizeEvent,
-	generateSecretKey: () => generateSecretKey,
-	getEventHash: () => getEventHash$1,
-	getPublicKey: () => getPublicKey,
-	serializeEvent: () => serializeEvent$1,
+	finalizeEvent: () => finalizeEvent$1,
+	generateSecretKey: () => generateSecretKey$1,
+	getEventHash: () => getEventHash$2,
+	getPublicKey: () => getPublicKey$1,
+	serializeEvent: () => serializeEvent$2,
 	sortEvents: () => sortEvents,
-	validateEvent: () => validateEvent$1,
-	verifiedSymbol: () => verifiedSymbol$1,
-	verifyEvent: () => verifyEvent$1
+	validateEvent: () => validateEvent$2,
+	verifiedSymbol: () => verifiedSymbol$2,
+	verifyEvent: () => verifyEvent$2
 });
-function validateEvent$1(event) {
-	if (!isRecord$1(event)) return false;
+function validateEvent$2(event) {
+	if (!isRecord$2(event)) return false;
 	if (typeof event.kind !== "number") return false;
 	if (typeof event.content !== "string") return false;
 	if (typeof event.created_at !== "number") return false;
@@ -27401,8 +27538,8 @@ function sortEvents(events) {
 		return a.id.localeCompare(b.id);
 	});
 }
-function serializeEvent$1(evt) {
-	if (!validateEvent$1(evt)) throw new Error("can't serialize event with wrong or missing properties");
+function serializeEvent$2(evt) {
+	if (!validateEvent$2(evt)) throw new Error("can't serialize event with wrong or missing properties");
 	return JSON.stringify([
 		0,
 		evt.pubkey,
@@ -27412,19 +27549,19 @@ function serializeEvent$1(evt) {
 		evt.content
 	]);
 }
-function getEventHash$1(event) {
-	return bytesToHex$2(sha256$1(utf8Encoder$3.encode(serializeEvent$1(event))));
+function getEventHash$2(event) {
+	return bytesToHex$2(sha256$1(utf8Encoder$4.encode(serializeEvent$2(event))));
 }
-var verifiedSymbol$1, isRecord$1, utf8Encoder$3, JS$1, i$1, generateSecretKey, getPublicKey, finalizeEvent, verifyEvent$1;
+var verifiedSymbol$2, isRecord$2, utf8Encoder$4, JS$2, i$2, generateSecretKey$1, getPublicKey$1, finalizeEvent$1, verifyEvent$2;
 var init_pure = __esmMin((() => {
 	init_secp256k1();
 	init_utils$1();
 	init_sha2();
-	verifiedSymbol$1 = Symbol("verified");
-	isRecord$1 = (obj) => obj instanceof Object;
+	verifiedSymbol$2 = Symbol("verified");
+	isRecord$2 = (obj) => obj instanceof Object;
 	new TextDecoder("utf-8");
-	utf8Encoder$3 = new TextEncoder();
-	JS$1 = class {
+	utf8Encoder$4 = new TextEncoder();
+	JS$2 = class {
 		generateSecretKey() {
 			return schnorr$1.utils.randomSecretKey();
 		}
@@ -27434,33 +27571,33 @@ var init_pure = __esmMin((() => {
 		finalizeEvent(t, secretKey) {
 			const event = t;
 			event.pubkey = bytesToHex$2(schnorr$1.getPublicKey(secretKey));
-			event.id = getEventHash$1(event);
-			event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash$1(event)), secretKey));
-			event[verifiedSymbol$1] = true;
+			event.id = getEventHash$2(event);
+			event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash$2(event)), secretKey));
+			event[verifiedSymbol$2] = true;
 			return event;
 		}
 		verifyEvent(event) {
-			if (typeof event[verifiedSymbol$1] === "boolean") return event[verifiedSymbol$1];
+			if (typeof event[verifiedSymbol$2] === "boolean") return event[verifiedSymbol$2];
 			try {
-				const hash = getEventHash$1(event);
+				const hash = getEventHash$2(event);
 				if (hash !== event.id) {
-					event[verifiedSymbol$1] = false;
+					event[verifiedSymbol$2] = false;
 					return false;
 				}
 				const valid = schnorr$1.verify(hexToBytes$2(event.sig), hexToBytes$2(hash), hexToBytes$2(event.pubkey));
-				event[verifiedSymbol$1] = valid;
+				event[verifiedSymbol$2] = valid;
 				return valid;
 			} catch (err) {
-				event[verifiedSymbol$1] = false;
+				event[verifiedSymbol$2] = false;
 				return false;
 			}
 		}
 	};
-	i$1 = new JS$1();
-	generateSecretKey = i$1.generateSecretKey;
-	getPublicKey = i$1.getPublicKey;
-	finalizeEvent = i$1.finalizeEvent;
-	verifyEvent$1 = i$1.verifyEvent;
+	i$2 = new JS$2();
+	generateSecretKey$1 = i$2.generateSecretKey;
+	getPublicKey$1 = i$2.getPublicKey;
+	finalizeEvent$1 = i$2.finalizeEvent;
+	verifyEvent$2 = i$2.verifyEvent;
 }));
 //#endregion
 //#region node_modules/nostr-tools/node_modules/@scure/base/index.js
@@ -27800,27 +27937,27 @@ genBech32("bech32m");
 //#endregion
 //#region node_modules/nostr-tools/lib/esm/nip19.js
 init_utils$1();
-var utf8Decoder$1 = new TextDecoder("utf-8");
+var utf8Decoder$2 = new TextDecoder("utf-8");
 new TextEncoder();
-var Bech32MaxSize = 5e3;
-function decode(code) {
-	let { prefix, words } = bech32.decode(code, Bech32MaxSize);
+var Bech32MaxSize$1 = 5e3;
+function decode$1(code) {
+	let { prefix, words } = bech32.decode(code, Bech32MaxSize$1);
 	let data = new Uint8Array(bech32.fromWords(words));
 	switch (prefix) {
 		case "nprofile": {
-			let tlv = parseTLV(data);
+			let tlv = parseTLV$1(data);
 			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for nprofile");
 			if (tlv[0][0].length !== 32) throw new Error("TLV 0 should be 32 bytes");
 			return {
 				type: "nprofile",
 				data: {
 					pubkey: bytesToHex$2(tlv[0][0]),
-					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$1.decode(d)) : []
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$2.decode(d)) : []
 				}
 			};
 		}
 		case "nevent": {
-			let tlv = parseTLV(data);
+			let tlv = parseTLV$1(data);
 			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for nevent");
 			if (tlv[0][0].length !== 32) throw new Error("TLV 0 should be 32 bytes");
 			if (tlv[2] && tlv[2][0].length !== 32) throw new Error("TLV 2 should be 32 bytes");
@@ -27829,14 +27966,14 @@ function decode(code) {
 				type: "nevent",
 				data: {
 					id: bytesToHex$2(tlv[0][0]),
-					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$1.decode(d)) : [],
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$2.decode(d)) : [],
 					author: tlv[2]?.[0] ? bytesToHex$2(tlv[2][0]) : void 0,
 					kind: tlv[3]?.[0] ? parseInt(bytesToHex$2(tlv[3][0]), 16) : void 0
 				}
 			};
 		}
 		case "naddr": {
-			let tlv = parseTLV(data);
+			let tlv = parseTLV$1(data);
 			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for naddr");
 			if (!tlv[2]?.[0]) throw new Error("missing TLV 2 for naddr");
 			if (tlv[2][0].length !== 32) throw new Error("TLV 2 should be 32 bytes");
@@ -27845,10 +27982,10 @@ function decode(code) {
 			return {
 				type: "naddr",
 				data: {
-					identifier: utf8Decoder$1.decode(tlv[0][0]),
+					identifier: utf8Decoder$2.decode(tlv[0][0]),
 					pubkey: bytesToHex$2(tlv[2][0]),
 					kind: parseInt(bytesToHex$2(tlv[3][0]), 16),
-					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$1.decode(d)) : []
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder$2.decode(d)) : []
 				}
 			};
 		}
@@ -27864,7 +28001,7 @@ function decode(code) {
 		default: throw new Error(`unknown prefix ${prefix}`);
 	}
 }
-function parseTLV(data) {
+function parseTLV$1(data) {
 	let result = {};
 	let rest = data;
 	while (rest.length > 0) {
@@ -27878,15 +28015,15 @@ function parseTLV(data) {
 	}
 	return result;
 }
-function npubEncode(hex) {
-	return encodeBytes("npub", hexToBytes$2(hex));
+function npubEncode$1(hex) {
+	return encodeBytes$1("npub", hexToBytes$2(hex));
 }
-function encodeBech32(prefix, data) {
+function encodeBech32$1(prefix, data) {
 	let words = bech32.toWords(data);
-	return bech32.encode(prefix, words, Bech32MaxSize);
+	return bech32.encode(prefix, words, Bech32MaxSize$1);
 }
-function encodeBytes(prefix, bytes) {
-	return encodeBech32(prefix, bytes);
+function encodeBytes$1(prefix, bytes) {
+	return encodeBech32$1(prefix, bytes);
 }
 //#endregion
 //#region node_modules/@noble/hashes/utils.js
@@ -28228,10 +28365,10 @@ const oidNist = (suffix) => ({ oid: Uint8Array.from([
 init_secp256k1();
 init_utils$1();
 init_sha2();
-var verifiedSymbol = Symbol("verified");
-var isRecord = (obj) => obj instanceof Object;
-function validateEvent(event) {
-	if (!isRecord(event)) return false;
+var verifiedSymbol$1 = Symbol("verified");
+var isRecord$1 = (obj) => obj instanceof Object;
+function validateEvent$1(event) {
+	if (!isRecord$1(event)) return false;
 	if (typeof event.kind !== "number") return false;
 	if (typeof event.content !== "string") return false;
 	if (typeof event.created_at !== "number") return false;
@@ -28246,8 +28383,8 @@ function validateEvent(event) {
 	return true;
 }
 new TextDecoder("utf-8");
-var utf8Encoder$1 = new TextEncoder();
-function normalizeURL(url) {
+var utf8Encoder$2 = new TextEncoder();
+function normalizeURL$1(url) {
 	try {
 		if (url.indexOf("://") === -1) url = "wss://" + url;
 		let p = new URL(url);
@@ -28263,7 +28400,7 @@ function normalizeURL(url) {
 		throw new Error(`Invalid URL: ${url}`);
 	}
 }
-var JS = class {
+var JS$1 = class {
 	generateSecretKey() {
 		return schnorr$1.utils.randomSecretKey();
 	}
@@ -28273,30 +28410,30 @@ var JS = class {
 	finalizeEvent(t, secretKey) {
 		const event = t;
 		event.pubkey = bytesToHex$2(schnorr$1.getPublicKey(secretKey));
-		event.id = getEventHash(event);
-		event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash(event)), secretKey));
-		event[verifiedSymbol] = true;
+		event.id = getEventHash$1(event);
+		event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash$1(event)), secretKey));
+		event[verifiedSymbol$1] = true;
 		return event;
 	}
 	verifyEvent(event) {
-		if (typeof event[verifiedSymbol] === "boolean") return event[verifiedSymbol];
+		if (typeof event[verifiedSymbol$1] === "boolean") return event[verifiedSymbol$1];
 		try {
-			const hash = getEventHash(event);
+			const hash = getEventHash$1(event);
 			if (hash !== event.id) {
-				event[verifiedSymbol] = false;
+				event[verifiedSymbol$1] = false;
 				return false;
 			}
 			const valid = schnorr$1.verify(hexToBytes$2(event.sig), hexToBytes$2(hash), hexToBytes$2(event.pubkey));
-			event[verifiedSymbol] = valid;
+			event[verifiedSymbol$1] = valid;
 			return valid;
 		} catch (err) {
-			event[verifiedSymbol] = false;
+			event[verifiedSymbol$1] = false;
 			return false;
 		}
 	}
 };
-function serializeEvent(evt) {
-	if (!validateEvent(evt)) throw new Error("can't serialize event with wrong or missing properties");
+function serializeEvent$1(evt) {
+	if (!validateEvent$1(evt)) throw new Error("can't serialize event with wrong or missing properties");
 	return JSON.stringify([
 		0,
 		evt.pubkey,
@@ -28306,15 +28443,15 @@ function serializeEvent(evt) {
 		evt.content
 	]);
 }
-function getEventHash(event) {
-	return bytesToHex$2(sha256$1(utf8Encoder$1.encode(serializeEvent(event))));
+function getEventHash$1(event) {
+	return bytesToHex$2(sha256$1(utf8Encoder$2.encode(serializeEvent$1(event))));
 }
-var i = new JS();
-i.generateSecretKey;
-i.getPublicKey;
-i.finalizeEvent;
-var verifyEvent = i.verifyEvent;
-var ClientAuth = 22242;
+var i$1 = new JS$1();
+i$1.generateSecretKey;
+i$1.getPublicKey;
+i$1.finalizeEvent;
+var verifyEvent$1 = i$1.verifyEvent;
+var ClientAuth$1 = 22242;
 function matchFilter(filter, event) {
 	if (filter.ids && filter.ids.indexOf(event.id) === -1) return false;
 	if (filter.kinds && filter.kinds.indexOf(event.kind) === -1) return false;
@@ -28331,13 +28468,13 @@ function matchFilters(filters, event) {
 	for (let i2 = 0; i2 < filters.length; i2++) if (matchFilter(filters[i2], event)) return true;
 	return false;
 }
-function getHex64(json, field) {
+function getHex64$1(json, field) {
 	let len = field.length + 3;
 	let idx = json.indexOf(`"${field}":`) + len;
 	let s = json.slice(idx).indexOf(`"`) + idx + 1;
 	return json.slice(s, s + 64);
 }
-function getSubscriptionId(json) {
+function getSubscriptionId$1(json) {
 	let idx = json.slice(0, 22).indexOf(`"EVENT"`);
 	if (idx === -1) return null;
 	let pstart = json.slice(idx + 7 + 1).indexOf(`"`);
@@ -28348,9 +28485,9 @@ function getSubscriptionId(json) {
 	let end = start + 1 + pend;
 	return json.slice(start + 1, end);
 }
-function makeAuthEvent(relayURL, challenge) {
+function makeAuthEvent$1(relayURL, challenge) {
 	return {
-		kind: ClientAuth,
+		kind: ClientAuth$1,
 		created_at: Math.floor(Date.now() / 1e3),
 		tags: [["relay", relayURL], ["challenge", challenge]],
 		content: ""
@@ -28400,7 +28537,7 @@ var AbstractRelay = class {
 	verifyEvent;
 	_WebSocket;
 	constructor(url, opts) {
-		this.url = normalizeURL(url);
+		this.url = normalizeURL$1(url);
 		this.verifyEvent = opts.verifyEvent;
 		this._WebSocket = opts.websocketImplementation || WebSocket;
 		this.enablePing = opts.enablePing;
@@ -28551,7 +28688,7 @@ var AbstractRelay = class {
 		if (this.authPromise) return this.authPromise;
 		this.authPromise = new Promise(async (resolve, reject) => {
 			try {
-				let evt = await signAuthEvent(makeAuthEvent(this.url, challenge));
+				let evt = await signAuthEvent(makeAuthEvent$1(this.url, challenge));
 				let timeout = setTimeout(() => {
 					let ep = this.openEventPublishes.get(evt.id);
 					if (ep) {
@@ -28641,11 +28778,11 @@ var AbstractRelay = class {
 	_onmessage(ev) {
 		const json = ev.data;
 		if (!json) return;
-		const subid = getSubscriptionId(json);
+		const subid = getSubscriptionId$1(json);
 		if (subid) {
 			const so = this.openSubs.get(subid);
 			if (!so) return;
-			const id = getHex64(json, "id");
+			const id = getHex64$1(json, "id");
 			const alreadyHave = so.alreadyHaveEvent?.(id);
 			so.receivedEvent?.(this, id);
 			if (alreadyHave) return;
@@ -28779,7 +28916,7 @@ var Subscription = class {
 	}
 };
 var alwaysTrue = (t) => {
-	t[verifiedSymbol] = true;
+	t[verifiedSymbol$1] = true;
 	return true;
 };
 var AbstractSimplePool = class {
@@ -28808,7 +28945,7 @@ var AbstractSimplePool = class {
 		this.maxWaitForConnection = opts.maxWaitForConnection || 3e3;
 	}
 	async ensureRelay(url, params) {
-		url = normalizeURL(url);
+		url = normalizeURL$1(url);
 		let relay = this.relays.get(url);
 		if (!relay) {
 			relay = new AbstractRelay(url, {
@@ -28838,7 +28975,7 @@ var AbstractSimplePool = class {
 		return relay;
 	}
 	close(relays) {
-		relays.map(normalizeURL).forEach((url) => {
+		relays.map(normalizeURL$1).forEach((url) => {
 			this.relays.get(url)?.close();
 			this.relays.delete(url);
 		});
@@ -28847,7 +28984,7 @@ var AbstractSimplePool = class {
 		const request = [];
 		const uniqUrls = [];
 		for (let i2 = 0; i2 < relays.length; i2++) {
-			const url = normalizeURL(relays[i2]);
+			const url = normalizeURL$1(relays[i2]);
 			if (!request.find((r) => r.url === url)) {
 				if (uniqUrls.indexOf(url) === -1) {
 					uniqUrls.push(url);
@@ -28995,7 +29132,7 @@ var AbstractSimplePool = class {
 		return events[0] || null;
 	}
 	publish(relays, event, params) {
-		return relays.map(normalizeURL).map(async (url, i2, arr) => {
+		return relays.map(normalizeURL$1).map(async (url, i2, arr) => {
 			if (arr.indexOf(url) !== i2) return Promise.reject("duplicate url");
 			if (this.allowConnectingToRelay?.(url, ["write", event]) === false) return Promise.reject("connection skipped by allowConnectingToRelay");
 			let r;
@@ -29046,15 +29183,15 @@ var AbstractSimplePool = class {
 		return prunedUrls;
 	}
 };
-var _WebSocket;
+var _WebSocket$1;
 try {
-	_WebSocket = WebSocket;
+	_WebSocket$1 = WebSocket;
 } catch {}
 var SimplePool = class extends AbstractSimplePool {
 	constructor(options) {
 		super({
-			verifyEvent,
-			websocketImplementation: _WebSocket,
+			verifyEvent: verifyEvent$1,
+			websocketImplementation: _WebSocket$1,
 			maxWaitForConnection: 3e3,
 			...options
 		});
@@ -32287,6 +32424,22 @@ function u32(arr) {
 function clean(...arrays) {
 	for (let i = 0; i < arrays.length; i++) arrays[i].fill(0);
 }
+/** Is current platform little-endian? Most are. Big-Endian platform: IBM */
+const isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+/**
+* Checks if two U8A use same underlying buffer and overlaps.
+* This is invalid and can corrupt data.
+*/
+function overlapBytes(a, b) {
+	return a.buffer === b.buffer && a.byteOffset < b.byteOffset + b.byteLength && b.byteOffset < a.byteOffset + a.byteLength;
+}
+/**
+* If input and output overlap and input starts before output, we will overwrite end of input before
+* we start processing it, so this is not supported for most ciphers (except chacha/salse, which designed with this)
+*/
+function complexOverlapBytes(input, output) {
+	if (overlapBytes(input, output) && input.byteOffset < output.byteOffset) throw new Error("complex overlap of input and output is not supported");
+}
 function checkOpts(defaults, opts) {
 	if (opts == null || typeof opts !== "object") throw new Error("options must be defined");
 	return Object.assign(defaults, opts);
@@ -32297,6 +32450,60 @@ function equalBytes(a, b) {
 	let diff = 0;
 	for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
 	return diff === 0;
+}
+/**
+* Wraps a cipher: validates args, ensures encrypt() can only be called once.
+* @__NO_SIDE_EFFECTS__
+*/
+const wrapCipher = (params, constructor) => {
+	function wrappedCipher(key, ...args) {
+		abytes(key, void 0, "key");
+		if (!isLE) throw new Error("Non little-endian hardware is not yet supported");
+		if (params.nonceLength !== void 0) {
+			const nonce = args[0];
+			abytes(nonce, params.varSizeNonce ? void 0 : params.nonceLength, "nonce");
+		}
+		const tagl = params.tagLength;
+		if (tagl && args[1] !== void 0) abytes(args[1], void 0, "AAD");
+		const cipher = constructor(key, ...args);
+		const checkOutput = (fnLength, output) => {
+			if (output !== void 0) {
+				if (fnLength !== 2) throw new Error("cipher output not supported");
+				abytes(output, void 0, "output");
+			}
+		};
+		let called = false;
+		return {
+			encrypt(data, output) {
+				if (called) throw new Error("cannot encrypt() twice with same key + nonce");
+				called = true;
+				abytes(data);
+				checkOutput(cipher.encrypt.length, output);
+				return cipher.encrypt(data, output);
+			},
+			decrypt(data, output) {
+				abytes(data);
+				if (tagl && data.length < tagl) throw new Error("\"ciphertext\" expected length bigger than tagLength=" + tagl);
+				checkOutput(cipher.decrypt.length, output);
+				return cipher.decrypt(data, output);
+			}
+		};
+	}
+	Object.assign(wrappedCipher, params);
+	return wrappedCipher;
+};
+/**
+* By default, returns u8a of length.
+* When out is available, it checks it for validity and uses it.
+*/
+function getOutput(expectedLength, out, onlyAligned = true) {
+	if (out === void 0) return new Uint8Array(expectedLength);
+	if (out.length !== expectedLength) throw new Error("\"output\" expected Uint8Array of length " + expectedLength + ", got: " + out.length);
+	if (onlyAligned && !isAligned32$1(out)) throw new Error("invalid output, must be aligned");
+	return out;
+}
+function isAligned32$1(bytes) {
+	return bytes.byteOffset % 4 === 0;
 }
 function copyBytes(bytes) {
 	return Uint8Array.from(bytes);
@@ -32886,15 +33093,15 @@ init_secp256k1();
 init_hmac();
 init_sha2();
 init_utils$1();
-var utf8Decoder = new TextDecoder("utf-8");
-var utf8Encoder = new TextEncoder();
-var minPlaintextSize = 1;
-var maxPlaintextSize = 4294967295;
-var extendedPrefixThreshold = 65536;
-function getConversationKey(privkeyA, pubkeyB) {
-	return extract(sha256$1, secp256k1$1.getSharedSecret(privkeyA, hexToBytes$2("02" + pubkeyB)).subarray(1, 33), utf8Encoder.encode("nip44-v2"));
+var utf8Decoder$1 = new TextDecoder("utf-8");
+var utf8Encoder$1 = new TextEncoder();
+var minPlaintextSize$1 = 1;
+var maxPlaintextSize$1 = 4294967295;
+var extendedPrefixThreshold$1 = 65536;
+function getConversationKey$1(privkeyA, pubkeyB) {
+	return extract(sha256$1, secp256k1$1.getSharedSecret(privkeyA, hexToBytes$2("02" + pubkeyB)).subarray(1, 33), utf8Encoder$1.encode("nip44-v2"));
 }
-function getMessageKeys(conversationKey, nonce) {
+function getMessageKeys$1(conversationKey, nonce) {
 	const keys = expand(sha256$1, conversationKey, nonce, 76);
 	return {
 		chacha_key: keys.subarray(0, 32),
@@ -32902,53 +33109,53 @@ function getMessageKeys(conversationKey, nonce) {
 		hmac_key: keys.subarray(44, 76)
 	};
 }
-function calcPaddedLen(len) {
+function calcPaddedLen$1(len) {
 	if (!Number.isSafeInteger(len) || len < 1) throw new Error("expected positive integer");
 	if (len <= 32) return 32;
 	const nextPower = 2 ** (Math.floor(Math.log2(len - 1)) + 1);
 	const chunk = nextPower <= 256 ? 32 : nextPower / 8;
 	return chunk * (Math.floor((len - 1) / chunk) + 1);
 }
-function writeU16BE(num) {
-	if (!Number.isSafeInteger(num) || num < minPlaintextSize || num > 65535) throw new Error("invalid plaintext size: must be between 1 and 65535 bytes");
+function writeU16BE$1(num) {
+	if (!Number.isSafeInteger(num) || num < minPlaintextSize$1 || num > 65535) throw new Error("invalid plaintext size: must be between 1 and 65535 bytes");
 	const arr = new Uint8Array(2);
 	new DataView(arr.buffer).setUint16(0, num, false);
 	return arr;
 }
-function writeU32BE(num) {
-	if (!Number.isSafeInteger(num) || num < extendedPrefixThreshold || num > maxPlaintextSize) throw new Error("invalid plaintext size: must be between 65536 and 4294967295 bytes");
+function writeU32BE$1(num) {
+	if (!Number.isSafeInteger(num) || num < extendedPrefixThreshold$1 || num > maxPlaintextSize$1) throw new Error("invalid plaintext size: must be between 65536 and 4294967295 bytes");
 	const arr = new Uint8Array(4);
 	new DataView(arr.buffer).setUint32(0, num, false);
 	return arr;
 }
-function pad(plaintext) {
-	const unpadded = utf8Encoder.encode(plaintext);
+function pad$1(plaintext) {
+	const unpadded = utf8Encoder$1.encode(plaintext);
 	const unpaddedLen = unpadded.length;
-	if (unpaddedLen < minPlaintextSize || unpaddedLen > maxPlaintextSize) throw new Error("invalid plaintext size: must be between 1 and 4294967295 bytes");
-	return concatBytes$2(unpaddedLen >= extendedPrefixThreshold ? concatBytes$2(new Uint8Array([0, 0]), writeU32BE(unpaddedLen)) : writeU16BE(unpaddedLen), unpadded, new Uint8Array(calcPaddedLen(unpaddedLen) - unpaddedLen));
+	if (unpaddedLen < minPlaintextSize$1 || unpaddedLen > maxPlaintextSize$1) throw new Error("invalid plaintext size: must be between 1 and 4294967295 bytes");
+	return concatBytes$2(unpaddedLen >= extendedPrefixThreshold$1 ? concatBytes$2(new Uint8Array([0, 0]), writeU32BE$1(unpaddedLen)) : writeU16BE$1(unpaddedLen), unpadded, new Uint8Array(calcPaddedLen$1(unpaddedLen) - unpaddedLen));
 }
-function unpad(padded) {
+function unpad$1(padded) {
 	const dv = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
 	const firstTwo = dv.getUint16(0);
 	let unpaddedLen;
 	let prefixLen;
 	if (firstTwo === 0) {
 		unpaddedLen = dv.getUint32(2);
-		if (unpaddedLen < extendedPrefixThreshold) throw new Error("invalid padding");
+		if (unpaddedLen < extendedPrefixThreshold$1) throw new Error("invalid padding");
 		prefixLen = 6;
 	} else {
 		unpaddedLen = firstTwo;
 		prefixLen = 2;
 	}
 	const unpadded = padded.subarray(prefixLen, prefixLen + unpaddedLen);
-	if (unpaddedLen < minPlaintextSize || unpaddedLen > maxPlaintextSize || unpadded.length !== unpaddedLen || padded.length !== prefixLen + calcPaddedLen(unpaddedLen)) throw new Error("invalid padding");
-	return utf8Decoder.decode(unpadded);
+	if (unpaddedLen < minPlaintextSize$1 || unpaddedLen > maxPlaintextSize$1 || unpadded.length !== unpaddedLen || padded.length !== prefixLen + calcPaddedLen$1(unpaddedLen)) throw new Error("invalid padding");
+	return utf8Decoder$1.decode(unpadded);
 }
-function hmacAad(key, message, aad) {
+function hmacAad$1(key, message, aad) {
 	if (aad.length !== 32) throw new Error("AAD associated data must be 32 bytes");
 	return hmac$1(sha256$1, key, concatBytes$2(aad, message));
 }
-function decodePayload(payload) {
+function decodePayload$1(payload) {
 	if (typeof payload !== "string") throw new Error("payload must be a valid string");
 	const plen = payload.length;
 	if (plen < 132) throw new Error("invalid payload length: " + plen);
@@ -32969,17 +33176,17 @@ function decodePayload(payload) {
 		mac: data.subarray(-32)
 	};
 }
-function encrypt(plaintext, conversationKey, nonce = randomBytes$2(32)) {
-	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys(conversationKey, nonce);
-	const ciphertext = chacha20(chacha_key, chacha_nonce, pad(plaintext));
-	const mac = hmacAad(hmac_key, ciphertext, nonce);
+function encrypt$2(plaintext, conversationKey, nonce = randomBytes$2(32)) {
+	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys$1(conversationKey, nonce);
+	const ciphertext = chacha20(chacha_key, chacha_nonce, pad$1(plaintext));
+	const mac = hmacAad$1(hmac_key, ciphertext, nonce);
 	return base64.encode(concatBytes$2(new Uint8Array([2]), nonce, ciphertext, mac));
 }
-function decrypt(payload, conversationKey) {
-	const { nonce, ciphertext, mac } = decodePayload(payload);
-	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys(conversationKey, nonce);
-	if (!equalBytes(hmacAad(hmac_key, ciphertext, nonce), mac)) throw new Error("invalid MAC");
-	return unpad(chacha20(chacha_key, chacha_nonce, ciphertext));
+function decrypt$2(payload, conversationKey) {
+	const { nonce, ciphertext, mac } = decodePayload$1(payload);
+	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys$1(conversationKey, nonce);
+	if (!equalBytes(hmacAad$1(hmac_key, ciphertext, nonce), mac)) throw new Error("invalid MAC");
+	return unpad$1(chacha20(chacha_key, chacha_nonce, ciphertext));
 }
 //#endregion
 //#region src/concord-v2/lib/derive.ts
@@ -33062,7 +33269,7 @@ function groupKey(label, secret, id, epoch) {
 	return {
 		sk,
 		pk,
-		convKey: getConversationKey(sk, pk)
+		convKey: getConversationKey$1(sk, pk)
 	};
 }
 /**
@@ -33194,7 +33401,7 @@ var StreamError = class extends Error {
 const TAG_MS = "ms";
 function encryptChecked(convKey, plaintext) {
 	if (new TextEncoder().encode(plaintext).length > 65535) throw new StreamError("oversize", "plaintext exceeds the NIP-44 65,535-byte cap");
-	return encrypt(plaintext, convKey);
+	return encrypt$2(plaintext, convKey);
 }
 /**
 * Build an unsigned rumor. `ms` is the full send time in epoch-milliseconds:
@@ -33220,7 +33427,7 @@ function buildRumor(opts) {
 	};
 	return {
 		...unsigned,
-		id: getEventHash$1(unsigned)
+		id: getEventHash$2(unsigned)
 	};
 }
 /**
@@ -33246,9 +33453,9 @@ async function sealRumor(rumor, sealKind, stream, signer) {
 * `ephemeralSk` if you want to NIP-09-delete the wrap later.
 */
 function wrapSeal(seal, stream, opts) {
-	const tags = [["p", getPublicKey(opts?.ephemeralSk ?? generateSecretKey())]];
+	const tags = [["p", getPublicKey$1(opts?.ephemeralSk ?? generateSecretKey$1())]];
 	if (opts?.expirationAtSecs) tags.push(["expiration", String(opts.expirationAtSecs)]);
-	return finalizeEvent({
+	return finalizeEvent$1({
 		kind: opts?.ephemeral ? KIND_WRAP_EPHEMERAL : KIND_WRAP,
 		content: encryptChecked(stream.convKey, JSON.stringify(seal)),
 		tags,
@@ -33286,21 +33493,21 @@ function openWrap(wrap, stream) {
 	if (wrap.pubkey !== stream.pk) throw new StreamError("author-mismatch", "wrap author is not this stream's address");
 	let seal;
 	try {
-		seal = JSON.parse(decrypt(wrap.content, stream.convKey));
+		seal = JSON.parse(decrypt$2(wrap.content, stream.convKey));
 	} catch (e) {
 		throw new StreamError("decrypt", `wrap decrypt: ${e instanceof Error ? e.message : e}`);
 	}
 	if (seal.kind !== 20013 && seal.kind !== 20014) throw new StreamError("bad-seal-kind", `unknown seal kind ${seal.kind}`);
-	if (!verifyEvent$1(seal)) throw new StreamError("bad-seal-signature", "seal signature invalid");
+	if (!verifyEvent$2(seal)) throw new StreamError("bad-seal-signature", "seal signature invalid");
 	let rumor;
 	try {
-		const json = seal.kind === 20013 ? decrypt(seal.content, stream.convKey) : seal.content;
+		const json = seal.kind === 20013 ? decrypt$2(seal.content, stream.convKey) : seal.content;
 		rumor = JSON.parse(json);
 	} catch (e) {
 		throw new StreamError(seal.kind === 20013 ? "decrypt" : "parse", `rumor recover: ${e instanceof Error ? e.message : e}`);
 	}
 	if (rumor.pubkey !== seal.pubkey) throw new StreamError("author-mismatch", "rumor author does not match the seal's signer");
-	const expectedId = getEventHash$1({
+	const expectedId = getEventHash$2({
 		kind: rumor.kind,
 		content: rumor.content,
 		tags: rumor.tags,
@@ -34139,6 +34346,7 @@ function foldOnce(editions, communityId, ownerHex, priorHeads, snapshotIds) {
 				const parsed = JSON.parse(p.content);
 				if (typeof parsed.name !== "string" || utf8Len(parsed.name) > 64) return false;
 				if (parsed.description !== void 0 && (typeof parsed.description !== "string" || utf8Len(parsed.description) > 1e4)) return false;
+				if (parsed.repo_naddr !== void 0 && (typeof parsed.repo_naddr !== "string" || utf8Len(parsed.repo_naddr) > 2048)) return false;
 				return true;
 			} catch {
 				return false;
@@ -34248,6 +34456,3017 @@ function foldOnce(editions, communityId, ownerHex, priorHeads, snapshotIds) {
 	};
 }
 "0".repeat(64);
+//#endregion
+//#region node_modules/@noble/ciphers/aes.js
+const BLOCK_SIZE = 16;
+const POLY = 283;
+function validateKeyLength(key) {
+	if (![
+		16,
+		24,
+		32
+	].includes(key.length)) throw new Error("\"aes key\" expected Uint8Array of length 16/24/32, got length=" + key.length);
+}
+function mul2(n) {
+	return n << 1 ^ POLY & -(n >> 7);
+}
+function mul(a, b) {
+	let res = 0;
+	for (; b > 0; b >>= 1) {
+		res ^= a & -(b & 1);
+		a = mul2(a);
+	}
+	return res;
+}
+const sbox = /* @__PURE__ */ (() => {
+	const t = new Uint8Array(256);
+	for (let i = 0, x = 1; i < 256; i++, x ^= mul2(x)) t[i] = x;
+	const box = new Uint8Array(256);
+	box[0] = 99;
+	for (let i = 0; i < 255; i++) {
+		let x = t[255 - i];
+		x |= x << 8;
+		box[t[i]] = (x ^ x >> 4 ^ x >> 5 ^ x >> 6 ^ x >> 7 ^ 99) & 255;
+	}
+	clean(t);
+	return box;
+})();
+const invSbox = /* @__PURE__ */ sbox.map((_, j) => sbox.indexOf(j));
+const rotr32_8 = (n) => n << 24 | n >>> 8;
+const rotl32_8 = (n) => n << 8 | n >>> 24;
+function genTtable(sbox, fn) {
+	if (sbox.length !== 256) throw new Error("Wrong sbox length");
+	const T0 = new Uint32Array(256).map((_, j) => fn(sbox[j]));
+	const T1 = T0.map(rotl32_8);
+	const T2 = T1.map(rotl32_8);
+	const T3 = T2.map(rotl32_8);
+	const T01 = new Uint32Array(256 * 256);
+	const T23 = new Uint32Array(256 * 256);
+	const sbox2 = new Uint16Array(256 * 256);
+	for (let i = 0; i < 256; i++) for (let j = 0; j < 256; j++) {
+		const idx = i * 256 + j;
+		T01[idx] = T0[i] ^ T1[j];
+		T23[idx] = T2[i] ^ T3[j];
+		sbox2[idx] = sbox[i] << 8 | sbox[j];
+	}
+	return {
+		sbox,
+		sbox2,
+		T0,
+		T1,
+		T2,
+		T3,
+		T01,
+		T23
+	};
+}
+const tableEncoding = /* @__PURE__ */ genTtable(sbox, (s) => mul(s, 3) << 24 | s << 16 | s << 8 | mul(s, 2));
+const tableDecoding = /* @__PURE__ */ genTtable(invSbox, (s) => mul(s, 11) << 24 | mul(s, 13) << 16 | mul(s, 9) << 8 | mul(s, 14));
+const xPowers = /* @__PURE__ */ (() => {
+	const p = new Uint8Array(16);
+	for (let i = 0, x = 1; i < 16; i++, x = mul2(x)) p[i] = x;
+	return p;
+})();
+/** Key expansion used in CTR. */
+function expandKeyLE(key) {
+	abytes(key);
+	const len = key.length;
+	validateKeyLength(key);
+	const { sbox2 } = tableEncoding;
+	const toClean = [];
+	if (!isAligned32$1(key)) toClean.push(key = copyBytes(key));
+	const k32 = u32(key);
+	const Nk = k32.length;
+	const subByte = (n) => applySbox(sbox2, n, n, n, n);
+	const xk = new Uint32Array(len + 28);
+	xk.set(k32);
+	for (let i = Nk; i < xk.length; i++) {
+		let t = xk[i - 1];
+		if (i % Nk === 0) t = subByte(rotr32_8(t)) ^ xPowers[i / Nk - 1];
+		else if (Nk > 6 && i % Nk === 4) t = subByte(t);
+		xk[i] = xk[i - Nk] ^ t;
+	}
+	clean(...toClean);
+	return xk;
+}
+function expandKeyDecLE(key) {
+	const encKey = expandKeyLE(key);
+	const xk = encKey.slice();
+	const Nk = encKey.length;
+	const { sbox2 } = tableEncoding;
+	const { T0, T1, T2, T3 } = tableDecoding;
+	for (let i = 0; i < Nk; i += 4) for (let j = 0; j < 4; j++) xk[i + j] = encKey[Nk - i - 4 + j];
+	clean(encKey);
+	for (let i = 4; i < Nk - 4; i++) {
+		const x = xk[i];
+		const w = applySbox(sbox2, x, x, x, x);
+		xk[i] = T0[w & 255] ^ T1[w >>> 8 & 255] ^ T2[w >>> 16 & 255] ^ T3[w >>> 24];
+	}
+	return xk;
+}
+function apply0123(T01, T23, s0, s1, s2, s3) {
+	return T01[s0 << 8 & 65280 | s1 >>> 8 & 255] ^ T23[s2 >>> 8 & 65280 | s3 >>> 24 & 255];
+}
+function applySbox(sbox2, s0, s1, s2, s3) {
+	return sbox2[s0 & 255 | s1 & 65280] | sbox2[s2 >>> 16 & 255 | s3 >>> 16 & 65280] << 16;
+}
+function encrypt$1(xk, s0, s1, s2, s3) {
+	const { sbox2, T01, T23 } = tableEncoding;
+	let k = 0;
+	s0 ^= xk[k++], s1 ^= xk[k++], s2 ^= xk[k++], s3 ^= xk[k++];
+	const rounds = xk.length / 4 - 2;
+	for (let i = 0; i < rounds; i++) {
+		const t0 = xk[k++] ^ apply0123(T01, T23, s0, s1, s2, s3);
+		const t1 = xk[k++] ^ apply0123(T01, T23, s1, s2, s3, s0);
+		const t2 = xk[k++] ^ apply0123(T01, T23, s2, s3, s0, s1);
+		const t3 = xk[k++] ^ apply0123(T01, T23, s3, s0, s1, s2);
+		s0 = t0, s1 = t1, s2 = t2, s3 = t3;
+	}
+	return {
+		s0: xk[k++] ^ applySbox(sbox2, s0, s1, s2, s3),
+		s1: xk[k++] ^ applySbox(sbox2, s1, s2, s3, s0),
+		s2: xk[k++] ^ applySbox(sbox2, s2, s3, s0, s1),
+		s3: xk[k++] ^ applySbox(sbox2, s3, s0, s1, s2)
+	};
+}
+function decrypt$1(xk, s0, s1, s2, s3) {
+	const { sbox2, T01, T23 } = tableDecoding;
+	let k = 0;
+	s0 ^= xk[k++], s1 ^= xk[k++], s2 ^= xk[k++], s3 ^= xk[k++];
+	const rounds = xk.length / 4 - 2;
+	for (let i = 0; i < rounds; i++) {
+		const t0 = xk[k++] ^ apply0123(T01, T23, s0, s3, s2, s1);
+		const t1 = xk[k++] ^ apply0123(T01, T23, s1, s0, s3, s2);
+		const t2 = xk[k++] ^ apply0123(T01, T23, s2, s1, s0, s3);
+		const t3 = xk[k++] ^ apply0123(T01, T23, s3, s2, s1, s0);
+		s0 = t0, s1 = t1, s2 = t2, s3 = t3;
+	}
+	return {
+		s0: xk[k++] ^ applySbox(sbox2, s0, s3, s2, s1),
+		s1: xk[k++] ^ applySbox(sbox2, s1, s0, s3, s2),
+		s2: xk[k++] ^ applySbox(sbox2, s2, s1, s0, s3),
+		s3: xk[k++] ^ applySbox(sbox2, s3, s2, s1, s0)
+	};
+}
+function validateBlockDecrypt(data) {
+	abytes(data);
+	if (data.length % BLOCK_SIZE !== 0) throw new Error("aes-(cbc/ecb).decrypt ciphertext should consist of blocks with size 16");
+}
+function validateBlockEncrypt(plaintext, pcks5, dst) {
+	abytes(plaintext);
+	let outLen = plaintext.length;
+	const remaining = outLen % BLOCK_SIZE;
+	if (!pcks5 && remaining !== 0) throw new Error("aec/(cbc-ecb): unpadded plaintext with disabled padding");
+	if (!isAligned32$1(plaintext)) plaintext = copyBytes(plaintext);
+	const b = u32(plaintext);
+	if (pcks5) {
+		let left = BLOCK_SIZE - remaining;
+		if (!left) left = BLOCK_SIZE;
+		outLen = outLen + left;
+	}
+	dst = getOutput(outLen, dst);
+	complexOverlapBytes(plaintext, dst);
+	return {
+		b,
+		o: u32(dst),
+		out: dst
+	};
+}
+function validatePCKS(data, pcks5) {
+	if (!pcks5) return data;
+	const len = data.length;
+	if (!len) throw new Error("aes/pcks5: empty ciphertext not allowed");
+	const lastByte = data[len - 1];
+	if (lastByte <= 0 || lastByte > 16) throw new Error("aes/pcks5: wrong padding");
+	const out = data.subarray(0, -lastByte);
+	for (let i = 0; i < lastByte; i++) if (data[len - i - 1] !== lastByte) throw new Error("aes/pcks5: wrong padding");
+	return out;
+}
+function padPCKS(left) {
+	const tmp = new Uint8Array(16);
+	const tmp32 = u32(tmp);
+	tmp.set(left);
+	const paddingByte = BLOCK_SIZE - left.length;
+	for (let i = BLOCK_SIZE - paddingByte; i < BLOCK_SIZE; i++) tmp[i] = paddingByte;
+	return tmp32;
+}
+/**
+* **CBC** (Cipher Block Chaining): Each plaintext block is XORed with the
+* previous block of ciphertext before encryption.
+* Hard to use: requires proper padding and an IV. Unauthenticated: needs MAC.
+*/
+const cbc = /* @__PURE__ */ wrapCipher({
+	blockSize: 16,
+	nonceLength: 16
+}, function aescbc(key, iv, opts = {}) {
+	const pcks5 = !opts.disablePadding;
+	return {
+		encrypt(plaintext, dst) {
+			const xk = expandKeyLE(key);
+			const { b, o, out: _out } = validateBlockEncrypt(plaintext, pcks5, dst);
+			let _iv = iv;
+			const toClean = [xk];
+			if (!isAligned32$1(_iv)) toClean.push(_iv = copyBytes(_iv));
+			const n32 = u32(_iv);
+			let s0 = n32[0], s1 = n32[1], s2 = n32[2], s3 = n32[3];
+			let i = 0;
+			for (; i + 4 <= b.length;) {
+				s0 ^= b[i + 0], s1 ^= b[i + 1], s2 ^= b[i + 2], s3 ^= b[i + 3];
+				({s0, s1, s2, s3} = encrypt$1(xk, s0, s1, s2, s3));
+				o[i++] = s0, o[i++] = s1, o[i++] = s2, o[i++] = s3;
+			}
+			if (pcks5) {
+				const tmp32 = padPCKS(plaintext.subarray(i * 4));
+				s0 ^= tmp32[0], s1 ^= tmp32[1], s2 ^= tmp32[2], s3 ^= tmp32[3];
+				({s0, s1, s2, s3} = encrypt$1(xk, s0, s1, s2, s3));
+				o[i++] = s0, o[i++] = s1, o[i++] = s2, o[i++] = s3;
+			}
+			clean(...toClean);
+			return _out;
+		},
+		decrypt(ciphertext, dst) {
+			validateBlockDecrypt(ciphertext);
+			const xk = expandKeyDecLE(key);
+			let _iv = iv;
+			const toClean = [xk];
+			if (!isAligned32$1(_iv)) toClean.push(_iv = copyBytes(_iv));
+			const n32 = u32(_iv);
+			dst = getOutput(ciphertext.length, dst);
+			if (!isAligned32$1(ciphertext)) toClean.push(ciphertext = copyBytes(ciphertext));
+			complexOverlapBytes(ciphertext, dst);
+			const b = u32(ciphertext);
+			const o = u32(dst);
+			let s0 = n32[0], s1 = n32[1], s2 = n32[2], s3 = n32[3];
+			for (let i = 0; i + 4 <= b.length;) {
+				const ps0 = s0, ps1 = s1, ps2 = s2, ps3 = s3;
+				s0 = b[i + 0], s1 = b[i + 1], s2 = b[i + 2], s3 = b[i + 3];
+				const { s0: o0, s1: o1, s2: o2, s3: o3 } = decrypt$1(xk, s0, s1, s2, s3);
+				o[i++] = o0 ^ ps0, o[i++] = o1 ^ ps1, o[i++] = o2 ^ ps2, o[i++] = o3 ^ ps3;
+			}
+			clean(...toClean);
+			return validatePCKS(dst, pcks5);
+		}
+	};
+});
+function isBytes32(a) {
+	return a instanceof Uint32Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint32Array";
+}
+function encryptBlock(xk, block) {
+	abytes(block, 16, "block");
+	if (!isBytes32(xk)) throw new Error("_encryptBlock accepts result of expandKeyLE");
+	const b32 = u32(block);
+	let { s0, s1, s2, s3 } = encrypt$1(xk, b32[0], b32[1], b32[2], b32[3]);
+	b32[0] = s0, b32[1] = s1, b32[2] = s2, b32[3] = s3;
+	return block;
+}
+/**
+* Left-shift by one bit and conditionally XOR with 0x87:
+* ```
+* if MSB(L) is equal to 0
+* then    K1 := L << 1;
+* else    K1 := (L << 1) XOR const_Rb;
+* ```
+*
+* Specs: [RFC 4493, Section 2.3](https://www.rfc-editor.org/rfc/rfc4493.html#section-2.3),
+*        [RFC 5297 Section 2.3](https://datatracker.ietf.org/doc/html/rfc5297.html#section-2.3)
+*
+* @returns modified `block` (for chaining)
+*/
+function dbl(block) {
+	let carry = 0;
+	for (let i = BLOCK_SIZE - 1; i >= 0; i--) {
+		const newCarry = (block[i] & 128) >>> 7;
+		block[i] = block[i] << 1 | carry;
+		carry = newCarry;
+	}
+	if (carry) block[BLOCK_SIZE - 1] ^= 135;
+	return block;
+}
+/**
+* `a XOR b`, running in-site on `a`.
+* @param a left operand and output
+* @param b right operand
+* @returns `a` (for chaining)
+*/
+function xorBlock(a, b) {
+	if (a.length !== b.length) throw new Error("xorBlock: blocks must have same length");
+	for (let i = 0; i < a.length; i++) a[i] = a[i] ^ b[i];
+	return a;
+}
+/**
+* Internal CMAC class.
+*/
+var _CMAC = class {
+	buffer;
+	destroyed;
+	k1;
+	k2;
+	xk;
+	constructor(key) {
+		abytes(key);
+		validateKeyLength(key);
+		this.xk = expandKeyLE(key);
+		this.buffer = new Uint8Array(0);
+		this.destroyed = false;
+		const L = new Uint8Array(BLOCK_SIZE);
+		encryptBlock(this.xk, L);
+		this.k1 = dbl(L);
+		this.k2 = dbl(new Uint8Array(this.k1));
+	}
+	update(data) {
+		const { destroyed, buffer } = this;
+		if (destroyed) throw new Error("CMAC instance was destroyed");
+		abytes(data);
+		const newBuffer = new Uint8Array(buffer.length + data.length);
+		newBuffer.set(buffer);
+		newBuffer.set(data, buffer.length);
+		this.buffer = newBuffer;
+		return this;
+	}
+	digest() {
+		if (this.destroyed) throw new Error("CMAC instance was destroyed");
+		const { buffer } = this;
+		const msgLen = buffer.length;
+		let n = Math.ceil(msgLen / BLOCK_SIZE);
+		let flag;
+		if (n === 0) {
+			n = 1;
+			flag = false;
+		} else flag = msgLen % BLOCK_SIZE === 0;
+		const lastBlockStart = (n - 1) * BLOCK_SIZE;
+		const lastBlockData = buffer.subarray(lastBlockStart);
+		let m_last;
+		if (flag) m_last = xorBlock(new Uint8Array(lastBlockData), this.k1);
+		else {
+			const padded = new Uint8Array(BLOCK_SIZE);
+			padded.set(lastBlockData);
+			padded[lastBlockData.length] = 128;
+			m_last = xorBlock(padded, this.k2);
+		}
+		let x = new Uint8Array(BLOCK_SIZE);
+		for (let i = 0; i < n - 1; i++) {
+			xorBlock(x, buffer.subarray(i * BLOCK_SIZE, (i + 1) * BLOCK_SIZE));
+			encryptBlock(this.xk, x);
+		}
+		xorBlock(x, m_last);
+		encryptBlock(this.xk, x);
+		clean(m_last);
+		return x;
+	}
+	destroy() {
+		const { buffer, destroyed, xk, k1, k2 } = this;
+		if (destroyed) return;
+		this.destroyed = true;
+		clean(buffer, xk, k1, k2);
+	}
+};
+/**
+* AES-CMAC (Cipher-based Message Authentication Code).
+* Specs: [RFC 4493](https://www.rfc-editor.org/rfc/rfc4493.html).
+*/
+const cmac = (key, message) => new _CMAC(key).update(message).digest();
+cmac.create = (key) => new _CMAC(key);
+//#endregion
+//#region node_modules/nostr-tools/lib/esm/index.js
+init_secp256k1();
+init_utils$1();
+init_sha2();
+init_hmac();
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+	for (var name in all) __defProp(target, name, {
+		get: all[name],
+		enumerable: true
+	});
+};
+var verifiedSymbol = Symbol("verified");
+var isRecord = (obj) => obj instanceof Object;
+function validateEvent(event) {
+	if (!isRecord(event)) return false;
+	if (typeof event.kind !== "number") return false;
+	if (typeof event.content !== "string") return false;
+	if (typeof event.created_at !== "number") return false;
+	if (typeof event.pubkey !== "string") return false;
+	if (!event.pubkey.match(/^[a-f0-9]{64}$/)) return false;
+	if (!Array.isArray(event.tags)) return false;
+	for (let i2 = 0; i2 < event.tags.length; i2++) {
+		let tag = event.tags[i2];
+		if (!Array.isArray(tag)) return false;
+		for (let j = 0; j < tag.length; j++) if (typeof tag[j] !== "string") return false;
+	}
+	return true;
+}
+__export({}, {
+	binarySearch: () => binarySearch,
+	bytesToHex: () => bytesToHex$2,
+	hexToBytes: () => hexToBytes$2,
+	insertEventIntoAscendingList: () => insertEventIntoAscendingList,
+	insertEventIntoDescendingList: () => insertEventIntoDescendingList,
+	mergeReverseSortedLists: () => mergeReverseSortedLists,
+	normalizeURL: () => normalizeURL,
+	utf8Decoder: () => utf8Decoder,
+	utf8Encoder: () => utf8Encoder
+});
+var utf8Decoder = new TextDecoder("utf-8");
+var utf8Encoder = new TextEncoder();
+function normalizeURL(url) {
+	try {
+		if (url.indexOf("://") === -1) url = "wss://" + url;
+		let p = new URL(url);
+		if (p.protocol === "http:") p.protocol = "ws:";
+		else if (p.protocol === "https:") p.protocol = "wss:";
+		p.pathname = p.pathname.replace(/\/+/g, "/");
+		if (p.pathname.endsWith("/")) p.pathname = p.pathname.slice(0, -1);
+		if (p.port === "80" && p.protocol === "ws:" || p.port === "443" && p.protocol === "wss:") p.port = "";
+		p.searchParams.sort();
+		p.hash = "";
+		return p.toString();
+	} catch (e) {
+		throw new Error(`Invalid URL: ${url}`);
+	}
+}
+function insertEventIntoDescendingList(sortedArray, event) {
+	const [idx, found] = binarySearch(sortedArray, (b) => {
+		if (event.id === b.id) return 0;
+		if (event.created_at === b.created_at) return -1;
+		return b.created_at - event.created_at;
+	});
+	if (!found) sortedArray.splice(idx, 0, event);
+	return sortedArray;
+}
+function insertEventIntoAscendingList(sortedArray, event) {
+	const [idx, found] = binarySearch(sortedArray, (b) => {
+		if (event.id === b.id) return 0;
+		if (event.created_at === b.created_at) return -1;
+		return event.created_at - b.created_at;
+	});
+	if (!found) sortedArray.splice(idx, 0, event);
+	return sortedArray;
+}
+function binarySearch(arr, compare) {
+	let start = 0;
+	let end = arr.length - 1;
+	while (start <= end) {
+		const mid = Math.floor((start + end) / 2);
+		const cmp = compare(arr[mid]);
+		if (cmp === 0) return [mid, true];
+		if (cmp < 0) end = mid - 1;
+		else start = mid + 1;
+	}
+	return [start, false];
+}
+function mergeReverseSortedLists(list1, list2) {
+	const result = new Array(list1.length + list2.length);
+	result.length = 0;
+	let i1 = 0;
+	let i2 = 0;
+	let sameTimestampIds = [];
+	while (i1 < list1.length && i2 < list2.length) {
+		let next;
+		if (list1[i1]?.created_at > list2[i2]?.created_at) {
+			next = list1[i1];
+			i1++;
+		} else {
+			next = list2[i2];
+			i2++;
+		}
+		if (result.length > 0 && result[result.length - 1].created_at === next.created_at) {
+			if (sameTimestampIds.includes(next.id)) continue;
+		} else sameTimestampIds.length = 0;
+		result.push(next);
+		sameTimestampIds.push(next.id);
+	}
+	while (i1 < list1.length) {
+		const next = list1[i1];
+		i1++;
+		if (result.length > 0 && result[result.length - 1].created_at === next.created_at) {
+			if (sameTimestampIds.includes(next.id)) continue;
+		} else sameTimestampIds.length = 0;
+		result.push(next);
+		sameTimestampIds.push(next.id);
+	}
+	while (i2 < list2.length) {
+		const next = list2[i2];
+		i2++;
+		if (result.length > 0 && result[result.length - 1].created_at === next.created_at) {
+			if (sameTimestampIds.includes(next.id)) continue;
+		} else sameTimestampIds.length = 0;
+		result.push(next);
+		sameTimestampIds.push(next.id);
+	}
+	return result;
+}
+var JS = class {
+	generateSecretKey() {
+		return schnorr$1.utils.randomSecretKey();
+	}
+	getPublicKey(secretKey) {
+		return bytesToHex$2(schnorr$1.getPublicKey(secretKey));
+	}
+	finalizeEvent(t, secretKey) {
+		const event = t;
+		event.pubkey = bytesToHex$2(schnorr$1.getPublicKey(secretKey));
+		event.id = getEventHash(event);
+		event.sig = bytesToHex$2(schnorr$1.sign(hexToBytes$2(getEventHash(event)), secretKey));
+		event[verifiedSymbol] = true;
+		return event;
+	}
+	verifyEvent(event) {
+		if (typeof event[verifiedSymbol] === "boolean") return event[verifiedSymbol];
+		try {
+			const hash = getEventHash(event);
+			if (hash !== event.id) {
+				event[verifiedSymbol] = false;
+				return false;
+			}
+			const valid = schnorr$1.verify(hexToBytes$2(event.sig), hexToBytes$2(hash), hexToBytes$2(event.pubkey));
+			event[verifiedSymbol] = valid;
+			return valid;
+		} catch (err) {
+			event[verifiedSymbol] = false;
+			return false;
+		}
+	}
+};
+function serializeEvent(evt) {
+	if (!validateEvent(evt)) throw new Error("can't serialize event with wrong or missing properties");
+	return JSON.stringify([
+		0,
+		evt.pubkey,
+		evt.created_at,
+		evt.kind,
+		evt.tags,
+		evt.content
+	]);
+}
+function getEventHash(event) {
+	return bytesToHex$2(sha256$1(utf8Encoder.encode(serializeEvent(event))));
+}
+var i = new JS();
+var generateSecretKey = i.generateSecretKey;
+var getPublicKey = i.getPublicKey;
+var finalizeEvent = i.finalizeEvent;
+var verifyEvent = i.verifyEvent;
+__export({}, {
+	Application: () => Application,
+	BadgeAward: () => BadgeAward,
+	BadgeDefinition: () => BadgeDefinition,
+	BlockedRelaysList: () => BlockedRelaysList,
+	BlossomServerList: () => BlossomServerList,
+	BookmarkList: () => BookmarkList,
+	Bookmarksets: () => Bookmarksets,
+	Calendar: () => Calendar,
+	CalendarEventRSVP: () => CalendarEventRSVP,
+	ChannelCreation: () => ChannelCreation,
+	ChannelHideMessage: () => ChannelHideMessage,
+	ChannelMessage: () => ChannelMessage,
+	ChannelMetadata: () => ChannelMetadata,
+	ChannelMuteUser: () => ChannelMuteUser,
+	ChatMessage: () => ChatMessage,
+	ClassifiedListing: () => ClassifiedListing,
+	ClientAuth: () => ClientAuth,
+	Comment: () => Comment,
+	CommunitiesList: () => CommunitiesList,
+	CommunityDefinition: () => CommunityDefinition,
+	CommunityPostApproval: () => CommunityPostApproval,
+	Contacts: () => Contacts,
+	CreateOrUpdateProduct: () => CreateOrUpdateProduct,
+	CreateOrUpdateStall: () => CreateOrUpdateStall,
+	Curationsets: () => Curationsets,
+	Date: () => Date2,
+	DirectMessageRelaysList: () => DirectMessageRelaysList,
+	DraftClassifiedListing: () => DraftClassifiedListing,
+	DraftLong: () => DraftLong,
+	Emojisets: () => Emojisets,
+	EncryptedDirectMessage: () => EncryptedDirectMessage,
+	EventDeletion: () => EventDeletion,
+	FavoriteRelays: () => FavoriteRelays,
+	FileMessage: () => FileMessage,
+	FileMetadata: () => FileMetadata,
+	FileServerPreference: () => FileServerPreference,
+	Followsets: () => Followsets,
+	ForumThread: () => ForumThread,
+	GenericRepost: () => GenericRepost,
+	Genericlists: () => Genericlists,
+	GiftWrap: () => GiftWrap,
+	GroupMetadata: () => GroupMetadata,
+	HTTPAuth: () => HTTPAuth,
+	Handlerinformation: () => Handlerinformation,
+	Handlerrecommendation: () => Handlerrecommendation,
+	Highlights: () => Highlights,
+	InterestsList: () => InterestsList,
+	Interestsets: () => Interestsets,
+	JobFeedback: () => JobFeedback,
+	JobRequest: () => JobRequest,
+	JobResult: () => JobResult,
+	Label: () => Label,
+	LightningPubRPC: () => LightningPubRPC,
+	LiveChatMessage: () => LiveChatMessage,
+	LiveEvent: () => LiveEvent,
+	LongFormArticle: () => LongFormArticle,
+	Metadata: () => Metadata,
+	Mutelist: () => Mutelist,
+	NWCWalletInfo: () => NWCWalletInfo,
+	NWCWalletRequest: () => NWCWalletRequest,
+	NWCWalletResponse: () => NWCWalletResponse,
+	NormalVideo: () => NormalVideo,
+	NostrConnect: () => NostrConnect,
+	OpenTimestamps: () => OpenTimestamps,
+	Photo: () => Photo,
+	Pinlist: () => Pinlist,
+	Poll: () => Poll,
+	PollResponse: () => PollResponse,
+	PrivateDirectMessage: () => PrivateDirectMessage,
+	ProblemTracker: () => ProblemTracker,
+	ProfileBadges: () => ProfileBadges,
+	PublicChatsList: () => PublicChatsList,
+	Reaction: () => Reaction,
+	RecommendRelay: () => RecommendRelay,
+	RelayList: () => RelayList,
+	RelayReview: () => RelayReview,
+	Relaysets: () => Relaysets,
+	Report: () => Report,
+	Reporting: () => Reporting,
+	Repost: () => Repost,
+	Seal: () => Seal,
+	SearchRelaysList: () => SearchRelaysList,
+	ShortTextNote: () => ShortTextNote,
+	ShortVideo: () => ShortVideo,
+	Time: () => Time,
+	UserEmojiList: () => UserEmojiList,
+	UserStatuses: () => UserStatuses,
+	Voice: () => Voice,
+	VoiceComment: () => VoiceComment,
+	Zap: () => Zap,
+	ZapGoal: () => ZapGoal,
+	ZapRequest: () => ZapRequest,
+	classifyKind: () => classifyKind,
+	isAddressableKind: () => isAddressableKind,
+	isEphemeralKind: () => isEphemeralKind,
+	isKind: () => isKind,
+	isRegularKind: () => isRegularKind,
+	isReplaceableKind: () => isReplaceableKind
+});
+function isRegularKind(kind) {
+	return kind < 1e4 && kind !== 0 && kind !== 3;
+}
+function isReplaceableKind(kind) {
+	return kind === 0 || kind === 3 || 1e4 <= kind && kind < 2e4;
+}
+function isEphemeralKind(kind) {
+	return 2e4 <= kind && kind < 3e4;
+}
+function isAddressableKind(kind) {
+	return 3e4 <= kind && kind < 4e4;
+}
+function classifyKind(kind) {
+	if (isRegularKind(kind)) return "regular";
+	if (isReplaceableKind(kind)) return "replaceable";
+	if (isEphemeralKind(kind)) return "ephemeral";
+	if (isAddressableKind(kind)) return "parameterized";
+	return "unknown";
+}
+function isKind(event, kind) {
+	const kindAsArray = kind instanceof Array ? kind : [kind];
+	return validateEvent(event) && kindAsArray.includes(event.kind) || false;
+}
+var Metadata = 0;
+var ShortTextNote = 1;
+var RecommendRelay = 2;
+var Contacts = 3;
+var EncryptedDirectMessage = 4;
+var EventDeletion = 5;
+var Repost = 6;
+var Reaction = 7;
+var BadgeAward = 8;
+var ChatMessage = 9;
+var ForumThread = 11;
+var Seal = 13;
+var PrivateDirectMessage = 14;
+var FileMessage = 15;
+var GenericRepost = 16;
+var Photo = 20;
+var NormalVideo = 21;
+var ShortVideo = 22;
+var ChannelCreation = 40;
+var ChannelMetadata = 41;
+var ChannelMessage = 42;
+var ChannelHideMessage = 43;
+var ChannelMuteUser = 44;
+var OpenTimestamps = 1040;
+var GiftWrap = 1059;
+var Poll = 1068;
+var FileMetadata = 1063;
+var Comment = 1111;
+var LiveChatMessage = 1311;
+var Voice = 1222;
+var VoiceComment = 1244;
+var ProblemTracker = 1971;
+var Report = 1984;
+var Reporting = 1984;
+var Label = 1985;
+var CommunityPostApproval = 4550;
+var JobRequest = 5999;
+var JobResult = 6999;
+var JobFeedback = 7e3;
+var ZapGoal = 9041;
+var ZapRequest = 9734;
+var Zap = 9735;
+var Highlights = 9802;
+var PollResponse = 1018;
+var Mutelist = 1e4;
+var Pinlist = 10001;
+var RelayList = 10002;
+var BookmarkList = 10003;
+var CommunitiesList = 10004;
+var PublicChatsList = 10005;
+var BlockedRelaysList = 10006;
+var SearchRelaysList = 10007;
+var FavoriteRelays = 10012;
+var InterestsList = 10015;
+var UserEmojiList = 10030;
+var DirectMessageRelaysList = 10050;
+var FileServerPreference = 10096;
+var BlossomServerList = 10063;
+var NWCWalletInfo = 13194;
+var LightningPubRPC = 21e3;
+var ClientAuth = 22242;
+var NWCWalletRequest = 23194;
+var NWCWalletResponse = 23195;
+var NostrConnect = 24133;
+var HTTPAuth = 27235;
+var Followsets = 3e4;
+var Genericlists = 30001;
+var Relaysets = 30002;
+var Bookmarksets = 30003;
+var Curationsets = 30004;
+var ProfileBadges = 30008;
+var BadgeDefinition = 30009;
+var Interestsets = 30015;
+var CreateOrUpdateStall = 30017;
+var CreateOrUpdateProduct = 30018;
+var LongFormArticle = 30023;
+var DraftLong = 30024;
+var Emojisets = 30030;
+var Application = 30078;
+var LiveEvent = 30311;
+var UserStatuses = 30315;
+var ClassifiedListing = 30402;
+var DraftClassifiedListing = 30403;
+var Date2 = 31922;
+var Time = 31923;
+var Calendar = 31924;
+var CalendarEventRSVP = 31925;
+var RelayReview = 31987;
+var Handlerrecommendation = 31989;
+var Handlerinformation = 31990;
+var CommunityDefinition = 34550;
+var GroupMetadata = 39e3;
+__export({}, {
+	getHex64: () => getHex64,
+	getInt: () => getInt,
+	getSubscriptionId: () => getSubscriptionId,
+	matchEventId: () => matchEventId,
+	matchEventKind: () => matchEventKind,
+	matchEventPubkey: () => matchEventPubkey
+});
+function getHex64(json, field) {
+	let len = field.length + 3;
+	let idx = json.indexOf(`"${field}":`) + len;
+	let s = json.slice(idx).indexOf(`"`) + idx + 1;
+	return json.slice(s, s + 64);
+}
+function getInt(json, field) {
+	let len = field.length;
+	let idx = json.indexOf(`"${field}":`) + len + 3;
+	let sliced = json.slice(idx);
+	let end = Math.min(sliced.indexOf(","), sliced.indexOf("}"));
+	return parseInt(sliced.slice(0, end), 10);
+}
+function getSubscriptionId(json) {
+	let idx = json.slice(0, 22).indexOf(`"EVENT"`);
+	if (idx === -1) return null;
+	let pstart = json.slice(idx + 7 + 1).indexOf(`"`);
+	if (pstart === -1) return null;
+	let start = idx + 7 + 1 + pstart;
+	let pend = json.slice(start + 1, 80).indexOf(`"`);
+	if (pend === -1) return null;
+	let end = start + 1 + pend;
+	return json.slice(start + 1, end);
+}
+function matchEventId(json, id) {
+	return id === getHex64(json, "id");
+}
+function matchEventPubkey(json, pubkey) {
+	return pubkey === getHex64(json, "pubkey");
+}
+function matchEventKind(json, kind) {
+	return kind === getInt(json, "kind");
+}
+__export({}, { makeAuthEvent: () => makeAuthEvent });
+function makeAuthEvent(relayURL, challenge) {
+	return {
+		kind: ClientAuth,
+		created_at: Math.floor(Date.now() / 1e3),
+		tags: [["relay", relayURL], ["challenge", challenge]],
+		content: ""
+	};
+}
+var nip19_exports = {};
+__export(nip19_exports, {
+	BECH32_REGEX: () => BECH32_REGEX,
+	Bech32MaxSize: () => Bech32MaxSize,
+	NostrTypeGuard: () => NostrTypeGuard,
+	decode: () => decode,
+	decodeNostrURI: () => decodeNostrURI,
+	encodeBytes: () => encodeBytes,
+	naddrEncode: () => naddrEncode,
+	neventEncode: () => neventEncode,
+	noteEncode: () => noteEncode,
+	nprofileEncode: () => nprofileEncode,
+	npubEncode: () => npubEncode,
+	nsecEncode: () => nsecEncode
+});
+var NostrTypeGuard = {
+	isNProfile: (value) => /^nprofile1[a-z\d]+$/.test(value || ""),
+	isNEvent: (value) => /^nevent1[a-z\d]+$/.test(value || ""),
+	isNAddr: (value) => /^naddr1[a-z\d]+$/.test(value || ""),
+	isNSec: (value) => /^nsec1[a-z\d]{58}$/.test(value || ""),
+	isNPub: (value) => /^npub1[a-z\d]{58}$/.test(value || ""),
+	isNote: (value) => /^note1[a-z\d]+$/.test(value || ""),
+	isNcryptsec: (value) => /^ncryptsec1[a-z\d]+$/.test(value || "")
+};
+var Bech32MaxSize = 5e3;
+var BECH32_REGEX = /[\x21-\x7E]{1,83}1[023456789acdefghjklmnpqrstuvwxyz]{6,}/;
+function integerToUint8Array(number) {
+	const uint8Array = new Uint8Array(4);
+	uint8Array[0] = number >> 24 & 255;
+	uint8Array[1] = number >> 16 & 255;
+	uint8Array[2] = number >> 8 & 255;
+	uint8Array[3] = number & 255;
+	return uint8Array;
+}
+function decodeNostrURI(nip19code) {
+	try {
+		if (nip19code.startsWith("nostr:")) nip19code = nip19code.substring(6);
+		return decode(nip19code);
+	} catch (_err) {
+		return {
+			type: "invalid",
+			data: null
+		};
+	}
+}
+function decode(code) {
+	let { prefix, words } = bech32.decode(code, Bech32MaxSize);
+	let data = new Uint8Array(bech32.fromWords(words));
+	switch (prefix) {
+		case "nprofile": {
+			let tlv = parseTLV(data);
+			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for nprofile");
+			if (tlv[0][0].length !== 32) throw new Error("TLV 0 should be 32 bytes");
+			return {
+				type: "nprofile",
+				data: {
+					pubkey: bytesToHex$2(tlv[0][0]),
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : []
+				}
+			};
+		}
+		case "nevent": {
+			let tlv = parseTLV(data);
+			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for nevent");
+			if (tlv[0][0].length !== 32) throw new Error("TLV 0 should be 32 bytes");
+			if (tlv[2] && tlv[2][0].length !== 32) throw new Error("TLV 2 should be 32 bytes");
+			if (tlv[3] && tlv[3][0].length !== 4) throw new Error("TLV 3 should be 4 bytes");
+			return {
+				type: "nevent",
+				data: {
+					id: bytesToHex$2(tlv[0][0]),
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : [],
+					author: tlv[2]?.[0] ? bytesToHex$2(tlv[2][0]) : void 0,
+					kind: tlv[3]?.[0] ? parseInt(bytesToHex$2(tlv[3][0]), 16) : void 0
+				}
+			};
+		}
+		case "naddr": {
+			let tlv = parseTLV(data);
+			if (!tlv[0]?.[0]) throw new Error("missing TLV 0 for naddr");
+			if (!tlv[2]?.[0]) throw new Error("missing TLV 2 for naddr");
+			if (tlv[2][0].length !== 32) throw new Error("TLV 2 should be 32 bytes");
+			if (!tlv[3]?.[0]) throw new Error("missing TLV 3 for naddr");
+			if (tlv[3][0].length !== 4) throw new Error("TLV 3 should be 4 bytes");
+			return {
+				type: "naddr",
+				data: {
+					identifier: utf8Decoder.decode(tlv[0][0]),
+					pubkey: bytesToHex$2(tlv[2][0]),
+					kind: parseInt(bytesToHex$2(tlv[3][0]), 16),
+					relays: tlv[1] ? tlv[1].map((d) => utf8Decoder.decode(d)) : []
+				}
+			};
+		}
+		case "nsec": return {
+			type: prefix,
+			data
+		};
+		case "npub":
+		case "note": return {
+			type: prefix,
+			data: bytesToHex$2(data)
+		};
+		default: throw new Error(`unknown prefix ${prefix}`);
+	}
+}
+function parseTLV(data) {
+	let result = {};
+	let rest = data;
+	while (rest.length > 0) {
+		let t = rest[0];
+		let l = rest[1];
+		let v = rest.slice(2, 2 + l);
+		rest = rest.slice(2 + l);
+		if (v.length < l) throw new Error(`not enough data to read on TLV ${t}`);
+		result[t] = result[t] || [];
+		result[t].push(v);
+	}
+	return result;
+}
+function nsecEncode(key) {
+	return encodeBytes("nsec", key);
+}
+function npubEncode(hex) {
+	return encodeBytes("npub", hexToBytes$2(hex));
+}
+function noteEncode(hex) {
+	return encodeBytes("note", hexToBytes$2(hex));
+}
+function encodeBech32(prefix, data) {
+	let words = bech32.toWords(data);
+	return bech32.encode(prefix, words, Bech32MaxSize);
+}
+function encodeBytes(prefix, bytes) {
+	return encodeBech32(prefix, bytes);
+}
+function nprofileEncode(profile) {
+	return encodeBech32("nprofile", encodeTLV({
+		0: [hexToBytes$2(profile.pubkey)],
+		1: (profile.relays || []).map((url) => utf8Encoder.encode(url))
+	}));
+}
+function neventEncode(event) {
+	let kindArray;
+	if (event.kind !== void 0) kindArray = integerToUint8Array(event.kind);
+	return encodeBech32("nevent", encodeTLV({
+		0: [hexToBytes$2(event.id)],
+		1: (event.relays || []).map((url) => utf8Encoder.encode(url)),
+		2: event.author ? [hexToBytes$2(event.author)] : [],
+		3: kindArray ? [new Uint8Array(kindArray)] : []
+	}));
+}
+function naddrEncode(addr) {
+	let kind = /* @__PURE__ */ new ArrayBuffer(4);
+	new DataView(kind).setUint32(0, addr.kind, false);
+	return encodeBech32("naddr", encodeTLV({
+		0: [utf8Encoder.encode(addr.identifier)],
+		1: (addr.relays || []).map((url) => utf8Encoder.encode(url)),
+		2: [hexToBytes$2(addr.pubkey)],
+		3: [new Uint8Array(kind)]
+	}));
+}
+function encodeTLV(tlv) {
+	let entries = [];
+	Object.entries(tlv).reverse().forEach(([t, vs]) => {
+		vs.forEach((v) => {
+			let entry = new Uint8Array(v.length + 2);
+			entry.set([parseInt(t)], 0);
+			entry.set([v.length], 1);
+			entry.set(v, 2);
+			entries.push(entry);
+		});
+	});
+	return concatBytes$2(...entries);
+}
+__export({}, {
+	decrypt: () => decrypt,
+	encrypt: () => encrypt
+});
+function encrypt(secretKey, pubkey, text) {
+	const privkey = secretKey instanceof Uint8Array ? secretKey : hexToBytes$2(secretKey);
+	const normalizedKey = getNormalizedX(secp256k1$1.getSharedSecret(privkey, hexToBytes$2("02" + pubkey)));
+	let iv = Uint8Array.from(randomBytes$2(16));
+	let plaintext = utf8Encoder.encode(text);
+	let ciphertext = cbc(normalizedKey, iv).encrypt(plaintext);
+	return `${base64.encode(new Uint8Array(ciphertext))}?iv=${base64.encode(new Uint8Array(iv.buffer))}`;
+}
+function decrypt(secretKey, pubkey, data) {
+	const privkey = secretKey instanceof Uint8Array ? secretKey : hexToBytes$2(secretKey);
+	let [ctb64, ivb64] = data.split("?iv=");
+	let normalizedKey = getNormalizedX(secp256k1$1.getSharedSecret(privkey, hexToBytes$2("02" + pubkey)));
+	let iv = base64.decode(ivb64);
+	let ciphertext = base64.decode(ctb64);
+	let plaintext = cbc(normalizedKey, iv).decrypt(ciphertext);
+	return utf8Decoder.decode(plaintext);
+}
+function getNormalizedX(key) {
+	return key.slice(1, 33);
+}
+__export({}, {
+	NIP05_REGEX: () => NIP05_REGEX,
+	isNip05: () => isNip05,
+	isValid: () => isValid,
+	queryProfile: () => queryProfile,
+	searchDomain: () => searchDomain,
+	useFetchImplementation: () => useFetchImplementation
+});
+var NIP05_REGEX = /^(?:([\w.+-]+)@)?([\w_-]+(\.[\w_-]+)+)$/;
+var isNip05 = (value) => NIP05_REGEX.test(value || "");
+var _fetch;
+try {
+	_fetch = fetch;
+} catch (_) {}
+function useFetchImplementation(fetchImplementation) {
+	_fetch = fetchImplementation;
+}
+async function searchDomain(domain, query = "") {
+	try {
+		const url = `https://${domain}/.well-known/nostr.json?name=${query}`;
+		const res = await _fetch(url, { redirect: "manual" });
+		if (res.status !== 200) throw Error("Wrong response code");
+		return (await res.json()).names;
+	} catch (_) {
+		return {};
+	}
+}
+async function queryProfile(fullname) {
+	const match = fullname.match(NIP05_REGEX);
+	if (!match) return null;
+	const [, name = "_", domain] = match;
+	try {
+		const url = `https://${domain}/.well-known/nostr.json?name=${name}`;
+		const res = await _fetch(url, { redirect: "manual" });
+		if (res.status !== 200) throw Error("Wrong response code");
+		const json = await res.json();
+		const pubkey = json.names[name];
+		return pubkey ? {
+			pubkey,
+			relays: json.relays?.[pubkey]
+		} : null;
+	} catch (_e) {
+		return null;
+	}
+}
+async function isValid(pubkey, nip05) {
+	const res = await queryProfile(nip05);
+	return res ? res.pubkey === pubkey : false;
+}
+__export({}, { parse: () => parse });
+function parse(event) {
+	const result = {
+		reply: void 0,
+		root: void 0,
+		mentions: [],
+		profiles: [],
+		quotes: []
+	};
+	let maybeParent;
+	let maybeRoot;
+	for (let i2 = event.tags.length - 1; i2 >= 0; i2--) {
+		const tag = event.tags[i2];
+		if (tag[0] === "e" && tag[1]) {
+			const [_, eTagEventId, eTagRelayUrl, eTagMarker, eTagAuthor] = tag;
+			const eventPointer = {
+				id: eTagEventId,
+				relays: eTagRelayUrl ? [eTagRelayUrl] : [],
+				author: eTagAuthor
+			};
+			if (eTagMarker === "root") {
+				result.root = eventPointer;
+				continue;
+			}
+			if (eTagMarker === "reply") {
+				result.reply = eventPointer;
+				continue;
+			}
+			if (eTagMarker === "mention") {
+				result.mentions.push(eventPointer);
+				continue;
+			}
+			if (!maybeParent) maybeParent = eventPointer;
+			else maybeRoot = eventPointer;
+			result.mentions.push(eventPointer);
+			continue;
+		}
+		if (tag[0] === "q" && tag[1]) {
+			const [_, eTagEventId, eTagRelayUrl] = tag;
+			result.quotes.push({
+				id: eTagEventId,
+				relays: eTagRelayUrl ? [eTagRelayUrl] : []
+			});
+		}
+		if (tag[0] === "p" && tag[1]) {
+			result.profiles.push({
+				pubkey: tag[1],
+				relays: tag[2] ? [tag[2]] : []
+			});
+			continue;
+		}
+	}
+	if (!result.root) result.root = maybeRoot || maybeParent || result.reply;
+	if (!result.reply) result.reply = maybeParent || result.root;
+	[result.reply, result.root].forEach((ref) => {
+		if (!ref) return;
+		let idx = result.mentions.indexOf(ref);
+		if (idx !== -1) result.mentions.splice(idx, 1);
+		if (ref.author) {
+			let author = result.profiles.find((p) => p.pubkey === ref.author);
+			if (author && author.relays) {
+				if (!ref.relays) ref.relays = [];
+				author.relays.forEach((url) => {
+					if (ref.relays?.indexOf(url) === -1) ref.relays.push(url);
+				});
+				author.relays = ref.relays;
+			}
+		}
+	});
+	result.mentions.forEach((ref) => {
+		if (ref.author) {
+			let author = result.profiles.find((p) => p.pubkey === ref.author);
+			if (author && author.relays) {
+				if (!ref.relays) ref.relays = [];
+				author.relays.forEach((url) => {
+					if (ref.relays.indexOf(url) === -1) ref.relays.push(url);
+				});
+				author.relays = ref.relays;
+			}
+		}
+	});
+	return result;
+}
+__export({}, {
+	fetchRelayInformation: () => fetchRelayInformation,
+	useFetchImplementation: () => useFetchImplementation2
+});
+function useFetchImplementation2(fetchImplementation) {}
+async function fetchRelayInformation(url) {
+	return await (await fetch(url.replace("ws://", "http://").replace("wss://", "https://"), { headers: { Accept: "application/nostr+json" } })).json();
+}
+__export({}, {
+	getPow: () => getPow,
+	minePow: () => minePow
+});
+function getPow(hex) {
+	let count = 0;
+	for (let i2 = 0; i2 < 64; i2 += 8) {
+		const nibble = parseInt(hex.substring(i2, i2 + 8), 16);
+		if (nibble === 0) count += 32;
+		else {
+			count += Math.clz32(nibble);
+			break;
+		}
+	}
+	return count;
+}
+function getPowFromBytes(hash) {
+	let count = 0;
+	for (let i2 = 0; i2 < hash.length; i2++) {
+		const byte = hash[i2];
+		if (byte === 0) count += 8;
+		else {
+			count += Math.clz32(byte) - 24;
+			break;
+		}
+	}
+	return count;
+}
+function minePow(unsigned, difficulty) {
+	let count = 0;
+	const event = unsigned;
+	const tag = [
+		"nonce",
+		count.toString(),
+		difficulty.toString()
+	];
+	event.tags.push(tag);
+	while (true) {
+		const now2 = Math.floor((/* @__PURE__ */ new Date()).getTime() / 1e3);
+		if (now2 !== event.created_at) {
+			count = 0;
+			event.created_at = now2;
+		}
+		tag[1] = (++count).toString();
+		const hash = sha256$1(utf8Encoder.encode(JSON.stringify([
+			0,
+			event.pubkey,
+			event.created_at,
+			event.kind,
+			event.tags,
+			event.content
+		])));
+		if (getPowFromBytes(hash) >= difficulty) {
+			event.id = bytesToHex$2(hash);
+			break;
+		}
+	}
+	return event;
+}
+__export({}, {
+	unwrapEvent: () => unwrapEvent2,
+	unwrapManyEvents: () => unwrapManyEvents2,
+	wrapEvent: () => wrapEvent2,
+	wrapManyEvents: () => wrapManyEvents2
+});
+__export({}, {
+	createRumor: () => createRumor,
+	createSeal: () => createSeal,
+	createWrap: () => createWrap,
+	unwrapEvent: () => unwrapEvent,
+	unwrapManyEvents: () => unwrapManyEvents,
+	wrapEvent: () => wrapEvent,
+	wrapManyEvents: () => wrapManyEvents
+});
+__export({}, {
+	decrypt: () => decrypt2,
+	encrypt: () => encrypt2,
+	getConversationKey: () => getConversationKey,
+	v2: () => v2
+});
+var minPlaintextSize = 1;
+var maxPlaintextSize = 4294967295;
+var extendedPrefixThreshold = 65536;
+function getConversationKey(privkeyA, pubkeyB) {
+	return extract(sha256$1, secp256k1$1.getSharedSecret(privkeyA, hexToBytes$2("02" + pubkeyB)).subarray(1, 33), utf8Encoder.encode("nip44-v2"));
+}
+function getMessageKeys(conversationKey, nonce) {
+	const keys = expand(sha256$1, conversationKey, nonce, 76);
+	return {
+		chacha_key: keys.subarray(0, 32),
+		chacha_nonce: keys.subarray(32, 44),
+		hmac_key: keys.subarray(44, 76)
+	};
+}
+function calcPaddedLen(len) {
+	if (!Number.isSafeInteger(len) || len < 1) throw new Error("expected positive integer");
+	if (len <= 32) return 32;
+	const nextPower = 2 ** (Math.floor(Math.log2(len - 1)) + 1);
+	const chunk = nextPower <= 256 ? 32 : nextPower / 8;
+	return chunk * (Math.floor((len - 1) / chunk) + 1);
+}
+function writeU16BE(num) {
+	if (!Number.isSafeInteger(num) || num < minPlaintextSize || num > 65535) throw new Error("invalid plaintext size: must be between 1 and 65535 bytes");
+	const arr = new Uint8Array(2);
+	new DataView(arr.buffer).setUint16(0, num, false);
+	return arr;
+}
+function writeU32BE(num) {
+	if (!Number.isSafeInteger(num) || num < extendedPrefixThreshold || num > maxPlaintextSize) throw new Error("invalid plaintext size: must be between 65536 and 4294967295 bytes");
+	const arr = new Uint8Array(4);
+	new DataView(arr.buffer).setUint32(0, num, false);
+	return arr;
+}
+function pad(plaintext) {
+	const unpadded = utf8Encoder.encode(plaintext);
+	const unpaddedLen = unpadded.length;
+	if (unpaddedLen < minPlaintextSize || unpaddedLen > maxPlaintextSize) throw new Error("invalid plaintext size: must be between 1 and 4294967295 bytes");
+	return concatBytes$2(unpaddedLen >= extendedPrefixThreshold ? concatBytes$2(new Uint8Array([0, 0]), writeU32BE(unpaddedLen)) : writeU16BE(unpaddedLen), unpadded, new Uint8Array(calcPaddedLen(unpaddedLen) - unpaddedLen));
+}
+function unpad(padded) {
+	const dv = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
+	const firstTwo = dv.getUint16(0);
+	let unpaddedLen;
+	let prefixLen;
+	if (firstTwo === 0) {
+		unpaddedLen = dv.getUint32(2);
+		if (unpaddedLen < extendedPrefixThreshold) throw new Error("invalid padding");
+		prefixLen = 6;
+	} else {
+		unpaddedLen = firstTwo;
+		prefixLen = 2;
+	}
+	const unpadded = padded.subarray(prefixLen, prefixLen + unpaddedLen);
+	if (unpaddedLen < minPlaintextSize || unpaddedLen > maxPlaintextSize || unpadded.length !== unpaddedLen || padded.length !== prefixLen + calcPaddedLen(unpaddedLen)) throw new Error("invalid padding");
+	return utf8Decoder.decode(unpadded);
+}
+function hmacAad(key, message, aad) {
+	if (aad.length !== 32) throw new Error("AAD associated data must be 32 bytes");
+	return hmac$1(sha256$1, key, concatBytes$2(aad, message));
+}
+function decodePayload(payload) {
+	if (typeof payload !== "string") throw new Error("payload must be a valid string");
+	const plen = payload.length;
+	if (plen < 132) throw new Error("invalid payload length: " + plen);
+	if (payload[0] === "#") throw new Error("unknown encryption version");
+	let data;
+	try {
+		data = base64.decode(payload);
+	} catch (error) {
+		throw new Error("invalid base64: " + error.message);
+	}
+	const dlen = data.length;
+	if (dlen < 99) throw new Error("invalid data length: " + dlen);
+	const vers = data[0];
+	if (vers !== 2) throw new Error("unknown encryption version " + vers);
+	return {
+		nonce: data.subarray(1, 33),
+		ciphertext: data.subarray(33, -32),
+		mac: data.subarray(-32)
+	};
+}
+function encrypt2(plaintext, conversationKey, nonce = randomBytes$2(32)) {
+	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys(conversationKey, nonce);
+	const ciphertext = chacha20(chacha_key, chacha_nonce, pad(plaintext));
+	const mac = hmacAad(hmac_key, ciphertext, nonce);
+	return base64.encode(concatBytes$2(new Uint8Array([2]), nonce, ciphertext, mac));
+}
+function decrypt2(payload, conversationKey) {
+	const { nonce, ciphertext, mac } = decodePayload(payload);
+	const { chacha_key, chacha_nonce, hmac_key } = getMessageKeys(conversationKey, nonce);
+	if (!equalBytes(hmacAad(hmac_key, ciphertext, nonce), mac)) throw new Error("invalid MAC");
+	return unpad(chacha20(chacha_key, chacha_nonce, ciphertext));
+}
+var v2 = {
+	utils: {
+		getConversationKey,
+		calcPaddedLen,
+		pad,
+		unpad
+	},
+	encrypt: encrypt2,
+	decrypt: decrypt2
+};
+var TWO_DAYS = 2880 * 60;
+var now = () => Math.round(Date.now() / 1e3);
+var randomNow = () => Math.round(now() - Math.random() * TWO_DAYS);
+var nip44ConversationKey = (privateKey, publicKey) => getConversationKey(privateKey, publicKey);
+var nip44Encrypt = (data, privateKey, publicKey) => encrypt2(JSON.stringify(data), nip44ConversationKey(privateKey, publicKey));
+var nip44Decrypt = (data, privateKey) => JSON.parse(decrypt2(data.content, nip44ConversationKey(privateKey, data.pubkey)));
+function createRumor(event, privateKey) {
+	const rumor = {
+		created_at: now(),
+		content: "",
+		tags: [],
+		...event,
+		pubkey: getPublicKey(privateKey)
+	};
+	rumor.id = getEventHash(rumor);
+	return rumor;
+}
+function createSeal(rumor, privateKey, recipientPublicKey) {
+	return finalizeEvent({
+		kind: Seal,
+		content: nip44Encrypt(rumor, privateKey, recipientPublicKey),
+		created_at: randomNow(),
+		tags: []
+	}, privateKey);
+}
+function createWrap(seal, recipientPublicKey) {
+	const randomKey = generateSecretKey();
+	return finalizeEvent({
+		kind: GiftWrap,
+		content: nip44Encrypt(seal, randomKey, recipientPublicKey),
+		created_at: randomNow(),
+		tags: [["p", recipientPublicKey]]
+	}, randomKey);
+}
+function wrapEvent(event, senderPrivateKey, recipientPublicKey) {
+	return createWrap(createSeal(createRumor(event, senderPrivateKey), senderPrivateKey, recipientPublicKey), recipientPublicKey);
+}
+function wrapManyEvents(event, senderPrivateKey, recipientsPublicKeys) {
+	if (!recipientsPublicKeys || recipientsPublicKeys.length === 0) throw new Error("At least one recipient is required.");
+	const wrappeds = [wrapEvent(event, senderPrivateKey, getPublicKey(senderPrivateKey))];
+	recipientsPublicKeys.forEach((recipientPublicKey) => {
+		wrappeds.push(wrapEvent(event, senderPrivateKey, recipientPublicKey));
+	});
+	return wrappeds;
+}
+function unwrapEvent(wrap, recipientPrivateKey) {
+	return nip44Decrypt(nip44Decrypt(wrap, recipientPrivateKey), recipientPrivateKey);
+}
+function unwrapManyEvents(wrappedEvents, recipientPrivateKey) {
+	let unwrappedEvents = [];
+	wrappedEvents.forEach((e) => {
+		unwrappedEvents.push(unwrapEvent(e, recipientPrivateKey));
+	});
+	unwrappedEvents.sort((a, b) => a.created_at - b.created_at);
+	return unwrappedEvents;
+}
+function createEvent(recipients, message, conversationTitle, replyTo) {
+	const baseEvent = {
+		created_at: Math.ceil(Date.now() / 1e3),
+		kind: PrivateDirectMessage,
+		tags: [],
+		content: message
+	};
+	(Array.isArray(recipients) ? recipients : [recipients]).forEach(({ publicKey, relayUrl }) => {
+		baseEvent.tags.push(relayUrl ? [
+			"p",
+			publicKey,
+			relayUrl
+		] : ["p", publicKey]);
+	});
+	if (replyTo) baseEvent.tags.push([
+		"e",
+		replyTo.eventId,
+		replyTo.relayUrl || "",
+		"reply"
+	]);
+	if (conversationTitle) baseEvent.tags.push(["subject", conversationTitle]);
+	return baseEvent;
+}
+function wrapEvent2(senderPrivateKey, recipient, message, conversationTitle, replyTo) {
+	return wrapEvent(createEvent(recipient, message, conversationTitle, replyTo), senderPrivateKey, recipient.publicKey);
+}
+function wrapManyEvents2(senderPrivateKey, recipients, message, conversationTitle, replyTo) {
+	if (!recipients || recipients.length === 0) throw new Error("At least one recipient is required.");
+	return [{ publicKey: getPublicKey(senderPrivateKey) }, ...recipients].map((recipient) => wrapEvent2(senderPrivateKey, recipient, message, conversationTitle, replyTo));
+}
+var unwrapEvent2 = unwrapEvent;
+var unwrapManyEvents2 = unwrapManyEvents;
+__export({}, {
+	finishRepostEvent: () => finishRepostEvent,
+	getRepostedEvent: () => getRepostedEvent,
+	getRepostedEventPointer: () => getRepostedEventPointer
+});
+function finishRepostEvent(t, reposted, relayUrl, privateKey) {
+	let kind;
+	const tags = [
+		...t.tags ?? [],
+		[
+			"e",
+			reposted.id,
+			relayUrl
+		],
+		["p", reposted.pubkey]
+	];
+	if (reposted.kind === ShortTextNote) kind = Repost;
+	else {
+		kind = GenericRepost;
+		tags.push(["k", String(reposted.kind)]);
+	}
+	return finalizeEvent({
+		kind,
+		tags,
+		content: t.content === "" || reposted.tags?.find((tag) => tag[0] === "-") ? "" : JSON.stringify(reposted),
+		created_at: t.created_at
+	}, privateKey);
+}
+function getRepostedEventPointer(event) {
+	if (![Repost, GenericRepost].includes(event.kind)) return;
+	let lastETag;
+	let lastPTag;
+	for (let i2 = event.tags.length - 1; i2 >= 0 && (lastETag === void 0 || lastPTag === void 0); i2--) {
+		const tag = event.tags[i2];
+		if (tag.length >= 2) {
+			if (tag[0] === "e" && lastETag === void 0) lastETag = tag;
+			else if (tag[0] === "p" && lastPTag === void 0) lastPTag = tag;
+		}
+	}
+	if (lastETag === void 0) return;
+	return {
+		id: lastETag[1],
+		relays: [lastETag[2], lastPTag?.[2]].filter((x) => typeof x === "string"),
+		author: lastPTag?.[1]
+	};
+}
+function getRepostedEvent(event, { skipVerification } = {}) {
+	const pointer = getRepostedEventPointer(event);
+	if (pointer === void 0 || event.content === "") return;
+	let repostedEvent;
+	try {
+		repostedEvent = JSON.parse(event.content);
+	} catch (error) {
+		return;
+	}
+	if (repostedEvent.id !== pointer.id) return;
+	if (!skipVerification && !verifyEvent(repostedEvent)) return;
+	return repostedEvent;
+}
+__export({}, {
+	NOSTR_URI_REGEX: () => NOSTR_URI_REGEX,
+	parse: () => parse2,
+	test: () => test
+});
+var NOSTR_URI_REGEX = new RegExp(`nostr:(${BECH32_REGEX.source})`);
+function test(value) {
+	return typeof value === "string" && new RegExp(`^${NOSTR_URI_REGEX.source}$`).test(value);
+}
+function parse2(uri) {
+	const match = uri.match(new RegExp(`^${NOSTR_URI_REGEX.source}$`));
+	if (!match) throw new Error(`Invalid Nostr URI: ${uri}`);
+	return {
+		uri: match[0],
+		value: match[1],
+		decoded: decode(match[1])
+	};
+}
+__export({}, { parse: () => parse3 });
+function parseKind(kind) {
+	if (!kind) return void 0;
+	return /^\d+$/.test(kind) ? parseInt(kind, 10) : kind;
+}
+function parseAddressPointer(value, relayUrl) {
+	const idx = value.indexOf(":");
+	const idx2 = value.indexOf(":", idx + 1);
+	if (idx === -1 || idx2 === -1) return void 0;
+	const kind = parseInt(value.slice(0, idx), 10);
+	if (Number.isNaN(kind)) return void 0;
+	return {
+		kind,
+		pubkey: value.slice(idx + 1, idx2),
+		identifier: value.slice(idx2 + 1),
+		relays: relayUrl ? [relayUrl] : []
+	};
+}
+function parsePointer(tag) {
+	switch (tag[0]) {
+		case "E":
+		case "e":
+			if (!tag[1]) return void 0;
+			return {
+				id: tag[1],
+				relays: tag[2] ? [tag[2]] : [],
+				author: tag[3]
+			};
+		case "A":
+		case "a":
+			if (!tag[1]) return void 0;
+			return parseAddressPointer(tag[1], tag[2]);
+		case "I":
+		case "i":
+			if (!tag[1]) return void 0;
+			return {
+				value: tag[1],
+				hint: tag[2]
+			};
+	}
+}
+function parseQuote(tag) {
+	if (!tag[1]) return void 0;
+	if (tag[1].includes(":")) return parseAddressPointer(tag[1], tag[2]);
+	return {
+		id: tag[1],
+		relays: tag[2] ? [tag[2]] : [],
+		author: tag[3]
+	};
+}
+function choosePointer(candidates) {
+	return candidates.findLast((candidate) => candidate.tagName === "A" || candidate.tagName === "a")?.pointer || candidates.findLast((candidate) => candidate.tagName === "I" || candidate.tagName === "i")?.pointer || candidates.findLast((candidate) => candidate.tagName === "E" || candidate.tagName === "e")?.pointer;
+}
+function inheritRelayHints(pointer, profiles) {
+	if (!pointer || !("id" in pointer) || !pointer.author) return;
+	const author = profiles.find((profile) => profile.pubkey === pointer.author);
+	if (!author || !author.relays) return;
+	if (!pointer.relays) pointer.relays = [];
+	author.relays.forEach((url) => {
+		if (pointer.relays.indexOf(url) === -1) pointer.relays.push(url);
+	});
+	author.relays = pointer.relays;
+}
+function parse3(event) {
+	const result = {
+		root: void 0,
+		rootKind: void 0,
+		reply: void 0,
+		replyKind: void 0,
+		mentions: [],
+		quotes: [],
+		profiles: []
+	};
+	const rootCandidates = [];
+	const replyCandidates = [];
+	for (const tag of event.tags) {
+		if ((tag[0] === "E" || tag[0] === "A" || tag[0] === "I") && tag[1]) {
+			const pointer = parsePointer(tag);
+			if (pointer) rootCandidates.push({
+				tagName: tag[0],
+				pointer
+			});
+			continue;
+		}
+		if ((tag[0] === "e" || tag[0] === "a" || tag[0] === "i") && tag[1]) {
+			const pointer = parsePointer(tag);
+			if (pointer) replyCandidates.push({
+				tagName: tag[0],
+				pointer
+			});
+			continue;
+		}
+		if (tag[0] === "K") {
+			result.rootKind = parseKind(tag[1]);
+			continue;
+		}
+		if (tag[0] === "k") {
+			result.replyKind = parseKind(tag[1]);
+			continue;
+		}
+		if (tag[0] === "q") {
+			const pointer = parseQuote(tag);
+			if (pointer) result.quotes.push(pointer);
+			continue;
+		}
+		if ((tag[0] === "P" || tag[0] === "p") && tag[1]) result.profiles.push({
+			pubkey: tag[1],
+			relays: tag[2] ? [tag[2]] : []
+		});
+	}
+	result.root = choosePointer(rootCandidates);
+	result.reply = choosePointer(replyCandidates);
+	inheritRelayHints(result.root, result.profiles);
+	inheritRelayHints(result.reply, result.profiles);
+	result.quotes.forEach((pointer) => inheritRelayHints(pointer, result.profiles));
+	return result;
+}
+__export({}, {
+	finishReactionEvent: () => finishReactionEvent,
+	getReactedEventPointer: () => getReactedEventPointer
+});
+function finishReactionEvent(t, reacted, privateKey) {
+	const inheritedTags = reacted.tags.filter((tag) => tag.length >= 2 && (tag[0] === "e" || tag[0] === "p"));
+	return finalizeEvent({
+		...t,
+		kind: Reaction,
+		tags: [
+			...t.tags ?? [],
+			...inheritedTags,
+			["e", reacted.id],
+			["p", reacted.pubkey]
+		],
+		content: t.content ?? "+"
+	}, privateKey);
+}
+function getReactedEventPointer(event) {
+	if (event.kind !== Reaction) return;
+	let lastETag;
+	let lastPTag;
+	for (let i2 = event.tags.length - 1; i2 >= 0 && (lastETag === void 0 || lastPTag === void 0); i2--) {
+		const tag = event.tags[i2];
+		if (tag.length >= 2) {
+			if (tag[0] === "e" && lastETag === void 0) lastETag = tag;
+			else if (tag[0] === "p" && lastPTag === void 0) lastPTag = tag;
+		}
+	}
+	if (lastETag === void 0 || lastPTag === void 0) return;
+	return {
+		id: lastETag[1],
+		relays: [lastETag[2], lastPTag[2]].filter((x) => x !== void 0),
+		author: lastPTag[1]
+	};
+}
+__export({}, { parse: () => parse4 });
+var noCharacter = /\W/m;
+var noURLCharacter = /[^\w\/] |[^\w\/]$|$|,| /m;
+var MAX_HASHTAG_LENGTH = 42;
+function* parse4(content) {
+	let emojis = [];
+	if (typeof content !== "string") {
+		for (let i2 = 0; i2 < content.tags.length; i2++) {
+			const tag = content.tags[i2];
+			if (tag[0] === "emoji" && tag.length >= 3) emojis.push({
+				type: "emoji",
+				shortcode: tag[1],
+				url: tag[2]
+			});
+		}
+		content = content.content;
+	}
+	const max = content.length;
+	let prevIndex = 0;
+	let index = 0;
+	mainloop: while (index < max) {
+		const u = content.indexOf(":", index);
+		const h = content.indexOf("#", index);
+		if (u === -1 && h === -1) break mainloop;
+		if (u === -1 || h >= 0 && h < u) {
+			if (h === 0 || content[h - 1].match(noCharacter)) {
+				const m = content.slice(h + 1, h + MAX_HASHTAG_LENGTH).match(noCharacter);
+				const end = m ? h + 1 + m.index : max;
+				yield {
+					type: "text",
+					text: content.slice(prevIndex, h)
+				};
+				yield {
+					type: "hashtag",
+					value: content.slice(h + 1, end)
+				};
+				index = end;
+				prevIndex = index;
+				continue mainloop;
+			}
+			index = h + 1;
+			continue mainloop;
+		}
+		if (content.slice(u - 5, u) === "nostr") {
+			const m = content.slice(u + 60).match(noCharacter);
+			const end = m ? u + 60 + m.index : max;
+			try {
+				let pointer;
+				let { data, type } = decode(content.slice(u + 1, end));
+				switch (type) {
+					case "npub":
+						pointer = { pubkey: data };
+						break;
+					case "note":
+						pointer = { id: data };
+						break;
+					case "nsec":
+						index = end + 1;
+						continue;
+					default: pointer = data;
+				}
+				if (prevIndex !== u - 5) yield {
+					type: "text",
+					text: content.slice(prevIndex, u - 5)
+				};
+				yield {
+					type: "reference",
+					pointer
+				};
+				index = end;
+				prevIndex = index;
+				continue mainloop;
+			} catch (_err) {
+				index = u + 1;
+				continue mainloop;
+			}
+		} else if (content.slice(u - 5, u) === "https" || content.slice(u - 4, u) === "http") {
+			const m = content.slice(u + 4).match(noURLCharacter);
+			const end = m ? u + 4 + m.index : max;
+			const prefixLen = content[u - 1] === "s" ? 5 : 4;
+			try {
+				let url = new URL(content.slice(u - prefixLen, end));
+				if (url.hostname.indexOf(".") === -1) throw new Error("invalid url");
+				if (prevIndex !== u - prefixLen) yield {
+					type: "text",
+					text: content.slice(prevIndex, u - prefixLen)
+				};
+				if (/\.(png|jpe?g|gif|webp|heic|svg)$/i.test(url.pathname)) {
+					yield {
+						type: "image",
+						url: url.toString()
+					};
+					index = end;
+					prevIndex = index;
+					continue mainloop;
+				}
+				if (/\.(mp4|avi|webm|mkv|mov)$/i.test(url.pathname)) {
+					yield {
+						type: "video",
+						url: url.toString()
+					};
+					index = end;
+					prevIndex = index;
+					continue mainloop;
+				}
+				if (/\.(mp3|aac|ogg|opus|wav|flac)$/i.test(url.pathname)) {
+					yield {
+						type: "audio",
+						url: url.toString()
+					};
+					index = end;
+					prevIndex = index;
+					continue mainloop;
+				}
+				yield {
+					type: "url",
+					url: url.toString()
+				};
+				index = end;
+				prevIndex = index;
+				continue mainloop;
+			} catch (_err) {
+				index = end + 1;
+				continue mainloop;
+			}
+		} else if (content.slice(u - 3, u) === "wss" || content.slice(u - 2, u) === "ws") {
+			const m = content.slice(u + 4).match(noURLCharacter);
+			const end = m ? u + 4 + m.index : max;
+			const prefixLen = content[u - 1] === "s" ? 3 : 2;
+			try {
+				let url = new URL(content.slice(u - prefixLen, end));
+				if (url.hostname.indexOf(".") === -1) throw new Error("invalid ws url");
+				if (prevIndex !== u - prefixLen) yield {
+					type: "text",
+					text: content.slice(prevIndex, u - prefixLen)
+				};
+				yield {
+					type: "relay",
+					url: url.toString()
+				};
+				index = end;
+				prevIndex = index;
+				continue mainloop;
+			} catch (_err) {
+				index = end + 1;
+				continue mainloop;
+			}
+		} else {
+			for (let e = 0; e < emojis.length; e++) {
+				const emoji = emojis[e];
+				if (content[u + emoji.shortcode.length + 1] === ":" && content.slice(u + 1, u + emoji.shortcode.length + 1) === emoji.shortcode) {
+					if (prevIndex !== u) yield {
+						type: "text",
+						text: content.slice(prevIndex, u)
+					};
+					yield emoji;
+					index = u + emoji.shortcode.length + 2;
+					prevIndex = index;
+					continue mainloop;
+				}
+			}
+			index = u + 1;
+			continue mainloop;
+		}
+	}
+	if (prevIndex !== max) yield {
+		type: "text",
+		text: content.slice(prevIndex)
+	};
+}
+__export({}, {
+	channelCreateEvent: () => channelCreateEvent,
+	channelHideMessageEvent: () => channelHideMessageEvent,
+	channelMessageEvent: () => channelMessageEvent,
+	channelMetadataEvent: () => channelMetadataEvent,
+	channelMuteUserEvent: () => channelMuteUserEvent
+});
+var channelCreateEvent = (t, privateKey) => {
+	let content;
+	if (typeof t.content === "object") content = JSON.stringify(t.content);
+	else if (typeof t.content === "string") content = t.content;
+	else return;
+	return finalizeEvent({
+		kind: ChannelCreation,
+		tags: [...t.tags ?? []],
+		content,
+		created_at: t.created_at
+	}, privateKey);
+};
+var channelMetadataEvent = (t, privateKey) => {
+	let content;
+	if (typeof t.content === "object") content = JSON.stringify(t.content);
+	else if (typeof t.content === "string") content = t.content;
+	else return;
+	return finalizeEvent({
+		kind: ChannelMetadata,
+		tags: [["e", t.channel_create_event_id], ...t.tags ?? []],
+		content,
+		created_at: t.created_at
+	}, privateKey);
+};
+var channelMessageEvent = (t, privateKey) => {
+	const tags = [[
+		"e",
+		t.channel_create_event_id,
+		t.relay_url,
+		"root"
+	]];
+	if (t.reply_to_channel_message_event_id) tags.push([
+		"e",
+		t.reply_to_channel_message_event_id,
+		t.relay_url,
+		"reply"
+	]);
+	return finalizeEvent({
+		kind: ChannelMessage,
+		tags: [...tags, ...t.tags ?? []],
+		content: t.content,
+		created_at: t.created_at
+	}, privateKey);
+};
+var channelHideMessageEvent = (t, privateKey) => {
+	let content;
+	if (typeof t.content === "object") content = JSON.stringify(t.content);
+	else if (typeof t.content === "string") content = t.content;
+	else return;
+	return finalizeEvent({
+		kind: ChannelHideMessage,
+		tags: [["e", t.channel_message_event_id], ...t.tags ?? []],
+		content,
+		created_at: t.created_at
+	}, privateKey);
+};
+var channelMuteUserEvent = (t, privateKey) => {
+	let content;
+	if (typeof t.content === "object") content = JSON.stringify(t.content);
+	else if (typeof t.content === "string") content = t.content;
+	else return;
+	return finalizeEvent({
+		kind: ChannelMuteUser,
+		tags: [["p", t.pubkey_to_mute], ...t.tags ?? []],
+		content,
+		created_at: t.created_at
+	}, privateKey);
+};
+__export({}, {
+	EMOJI_SHORTCODE_REGEX: () => EMOJI_SHORTCODE_REGEX,
+	matchAll: () => matchAll,
+	regex: () => regex,
+	replaceAll: () => replaceAll
+});
+var EMOJI_SHORTCODE_REGEX = /:(\w+):/;
+var regex = () => new RegExp(`\\B${EMOJI_SHORTCODE_REGEX.source}\\B`, "g");
+function* matchAll(content) {
+	const matches = content.matchAll(regex());
+	for (const match of matches) try {
+		const [shortcode, name] = match;
+		yield {
+			shortcode,
+			name,
+			start: match.index,
+			end: match.index + shortcode.length
+		};
+	} catch (_e) {}
+}
+function replaceAll(content, replacer) {
+	return content.replaceAll(regex(), (shortcode, name) => {
+		return replacer({
+			shortcode,
+			name
+		});
+	});
+}
+__export({}, {
+	useFetchImplementation: () => useFetchImplementation3,
+	validateGithub: () => validateGithub
+});
+var _fetch3;
+try {
+	_fetch3 = fetch;
+} catch {}
+function useFetchImplementation3(fetchImplementation) {
+	_fetch3 = fetchImplementation;
+}
+async function validateGithub(pubkey, username, proof) {
+	try {
+		return await (await _fetch3(`https://gist.github.com/${username}/${proof}/raw`)).text() === `Verifying that I control the following Nostr public key: ${pubkey}`;
+	} catch (_) {
+		return false;
+	}
+}
+__export({}, {
+	makeNwcRequestEvent: () => makeNwcRequestEvent,
+	parseConnectionString: () => parseConnectionString
+});
+function parseConnectionString(connectionString) {
+	const { host, pathname, searchParams } = new URL(connectionString);
+	const pubkey = pathname || host;
+	const relays = searchParams.getAll("relay");
+	const secret = searchParams.get("secret");
+	if (!pubkey || relays.length === 0 || !secret) throw new Error("invalid connection string");
+	return {
+		pubkey,
+		relay: relays[0],
+		relays,
+		secret
+	};
+}
+async function makeNwcRequestEvent(pubkey, secretKey, invoice) {
+	const encryptedContent = encrypt(secretKey, pubkey, JSON.stringify({
+		method: "pay_invoice",
+		params: { invoice }
+	}));
+	return finalizeEvent({
+		kind: NWCWalletRequest,
+		created_at: Math.round(Date.now() / 1e3),
+		content: encryptedContent,
+		tags: [["p", pubkey]]
+	}, secretKey);
+}
+__export({}, { normalizeIdentifier: () => normalizeIdentifier });
+function normalizeIdentifier(name) {
+	name = name.trim().toLowerCase();
+	name = name.normalize("NFKC");
+	return Array.from(name).map((char) => {
+		if (/\p{Letter}/u.test(char) || /\p{Number}/u.test(char)) return char;
+		return "-";
+	}).join("");
+}
+__export({}, {
+	getSatoshisAmountFromBolt11: () => getSatoshisAmountFromBolt11,
+	getZapEndpoint: () => getZapEndpoint,
+	makeZapReceipt: () => makeZapReceipt,
+	makeZapRequest: () => makeZapRequest,
+	useFetchImplementation: () => useFetchImplementation4,
+	validateZapRequest: () => validateZapRequest
+});
+var _fetch4;
+try {
+	_fetch4 = fetch;
+} catch {}
+function useFetchImplementation4(fetchImplementation) {
+	_fetch4 = fetchImplementation;
+}
+async function getZapEndpoint(metadata) {
+	try {
+		let lnurl = "";
+		let { lud06, lud16 } = JSON.parse(metadata.content);
+		if (lud16) {
+			let [name, domain] = lud16.split("@");
+			lnurl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+		} else if (lud06) {
+			let { words } = bech32.decode(lud06, 1e3);
+			let data = bech32.fromWords(words);
+			lnurl = utf8Decoder.decode(data);
+		} else return null;
+		let body = await (await _fetch4(lnurl)).json();
+		if (body.allowsNostr && body.nostrPubkey) return body.callback;
+	} catch (err) {}
+	return null;
+}
+function makeZapRequest(params) {
+	let zr = {
+		kind: 9734,
+		created_at: Math.round(Date.now() / 1e3),
+		content: params.comment || "",
+		tags: [
+			["p", "pubkey" in params ? params.pubkey : params.event.pubkey],
+			["amount", params.amount.toString()],
+			["relays", ...params.relays]
+		]
+	};
+	if ("event" in params) {
+		zr.tags.push(["e", params.event.id]);
+		if (isReplaceableKind(params.event.kind)) {
+			const a = ["a", `${params.event.kind}:${params.event.pubkey}:`];
+			zr.tags.push(a);
+		} else if (isAddressableKind(params.event.kind)) {
+			let d = params.event.tags.find(([t, v]) => t === "d" && v);
+			if (!d) throw new Error("d tag not found or is empty");
+			const a = ["a", `${params.event.kind}:${params.event.pubkey}:${d[1]}`];
+			zr.tags.push(a);
+		}
+		zr.tags.push(["k", params.event.kind.toString()]);
+	}
+	return zr;
+}
+function validateZapRequest(zapRequestString) {
+	let zapRequest;
+	try {
+		zapRequest = JSON.parse(zapRequestString);
+	} catch (err) {
+		return "Invalid zap request JSON.";
+	}
+	if (!validateEvent(zapRequest)) return "Zap request is not a valid Nostr event.";
+	if (!verifyEvent(zapRequest)) return "Invalid signature on zap request.";
+	let p = zapRequest.tags.find(([t, v]) => t === "p" && v);
+	if (!p) return "Zap request doesn't have a 'p' tag.";
+	if (!p[1].match(/^[a-f0-9]{64}$/)) return "Zap request 'p' tag is not valid hex.";
+	let e = zapRequest.tags.find(([t, v]) => t === "e" && v);
+	if (e && !e[1].match(/^[a-f0-9]{64}$/)) return "Zap request 'e' tag is not valid hex.";
+	if (!zapRequest.tags.find(([t, v]) => t === "relays" && v)) return "Zap request doesn't have a 'relays' tag.";
+	return null;
+}
+function makeZapReceipt({ zapRequest, preimage, bolt11, paidAt }) {
+	let zr = JSON.parse(zapRequest);
+	let tagsFromZapRequest = zr.tags.filter(([t]) => t === "e" || t === "p" || t === "a");
+	let zap = {
+		kind: 9735,
+		created_at: Math.round(paidAt.getTime() / 1e3),
+		content: "",
+		tags: [
+			...tagsFromZapRequest,
+			["P", zr.pubkey],
+			["bolt11", bolt11],
+			["description", zapRequest]
+		]
+	};
+	if (preimage) zap.tags.push(["preimage", preimage]);
+	return zap;
+}
+function getSatoshisAmountFromBolt11(bolt11) {
+	if (bolt11.length < 50) return 0;
+	bolt11 = bolt11.substring(0, 50);
+	const idx = bolt11.lastIndexOf("1");
+	if (idx === -1) return 0;
+	const hrp = bolt11.substring(0, idx);
+	if (!hrp.startsWith("lnbc")) return 0;
+	const amount = hrp.substring(4);
+	if (amount.length < 1) return 0;
+	const char = amount[amount.length - 1];
+	const digit = char.charCodeAt(0) - "0".charCodeAt(0);
+	const isDigit = digit >= 0 && digit <= 9;
+	let cutPoint = amount.length - 1;
+	if (isDigit) cutPoint++;
+	if (cutPoint < 1) return 0;
+	const num = parseInt(amount.substring(0, cutPoint));
+	switch (char) {
+		case "m": return num * 1e5;
+		case "u": return num * 100;
+		case "n": return num / 10;
+		case "p": return num / 1e4;
+		default: return num * 1e8;
+	}
+}
+__export({}, {
+	Negentropy: () => Negentropy,
+	NegentropyStorageVector: () => NegentropyStorageVector,
+	NegentropySync: () => NegentropySync
+});
+var PROTOCOL_VERSION$1 = 97;
+var ID_SIZE = 32;
+var FINGERPRINT_SIZE = 16;
+var Mode = {
+	Skip: 0,
+	Fingerprint: 1,
+	IdList: 2
+};
+var WrappedBuffer = class {
+	_raw;
+	length;
+	constructor(buffer) {
+		if (typeof buffer === "number") {
+			this._raw = new Uint8Array(buffer);
+			this.length = 0;
+		} else if (buffer instanceof Uint8Array) {
+			this._raw = new Uint8Array(buffer);
+			this.length = buffer.length;
+		} else {
+			this._raw = new Uint8Array(512);
+			this.length = 0;
+		}
+	}
+	unwrap() {
+		return this._raw.subarray(0, this.length);
+	}
+	get capacity() {
+		return this._raw.byteLength;
+	}
+	extend(buf) {
+		if (buf instanceof WrappedBuffer) buf = buf.unwrap();
+		if (typeof buf.length !== "number") throw Error("bad length");
+		const targetSize = buf.length + this.length;
+		if (this.capacity < targetSize) {
+			const oldRaw = this._raw;
+			const newCapacity = Math.max(this.capacity * 2, targetSize);
+			this._raw = new Uint8Array(newCapacity);
+			this._raw.set(oldRaw);
+		}
+		this._raw.set(buf, this.length);
+		this.length += buf.length;
+	}
+	shift() {
+		const first = this._raw[0];
+		this._raw = this._raw.subarray(1);
+		this.length--;
+		return first;
+	}
+	shiftN(n = 1) {
+		const firstSubarray = this._raw.subarray(0, n);
+		this._raw = this._raw.subarray(n);
+		this.length -= n;
+		return firstSubarray;
+	}
+};
+function decodeVarInt(buf) {
+	let res = 0;
+	while (1) {
+		if (buf.length === 0) throw Error("parse ends prematurely");
+		let byte = buf.shift();
+		res = res << 7 | byte & 127;
+		if ((byte & 128) === 0) break;
+	}
+	return res;
+}
+function encodeVarInt(n) {
+	if (n === 0) return new WrappedBuffer(new Uint8Array([0]));
+	let o = [];
+	while (n !== 0) {
+		o.push(n & 127);
+		n >>>= 7;
+	}
+	o.reverse();
+	for (let i2 = 0; i2 < o.length - 1; i2++) o[i2] |= 128;
+	return new WrappedBuffer(new Uint8Array(o));
+}
+function getByte(buf) {
+	return getBytes(buf, 1)[0];
+}
+function getBytes(buf, n) {
+	if (buf.length < n) throw Error("parse ends prematurely");
+	return buf.shiftN(n);
+}
+var Accumulator = class {
+	buf;
+	constructor() {
+		this.setToZero();
+	}
+	setToZero() {
+		this.buf = new Uint8Array(ID_SIZE);
+	}
+	add(otherBuf) {
+		let currCarry = 0, nextCarry = 0;
+		let p = new DataView(this.buf.buffer);
+		let po = new DataView(otherBuf.buffer);
+		for (let i2 = 0; i2 < 8; i2++) {
+			let offset = i2 * 4;
+			let orig = p.getUint32(offset, true);
+			let otherV = po.getUint32(offset, true);
+			let next = orig;
+			next += currCarry;
+			next += otherV;
+			if (next > 4294967295) nextCarry = 1;
+			p.setUint32(offset, next & 4294967295, true);
+			currCarry = nextCarry;
+			nextCarry = 0;
+		}
+	}
+	negate() {
+		let p = new DataView(this.buf.buffer);
+		for (let i2 = 0; i2 < 8; i2++) {
+			let offset = i2 * 4;
+			p.setUint32(offset, ~p.getUint32(offset, true));
+		}
+		let one = new Uint8Array(ID_SIZE);
+		one[0] = 1;
+		this.add(one);
+	}
+	getFingerprint(n) {
+		let input = new WrappedBuffer();
+		input.extend(this.buf);
+		input.extend(encodeVarInt(n));
+		return sha256$1(input.unwrap()).subarray(0, FINGERPRINT_SIZE);
+	}
+};
+var NegentropyStorageVector = class {
+	items;
+	sealed;
+	constructor() {
+		this.items = [];
+		this.sealed = false;
+	}
+	insert(timestamp, id) {
+		if (this.sealed) throw Error("already sealed");
+		const idb = hexToBytes$2(id);
+		if (idb.byteLength !== ID_SIZE) throw Error("bad id size for added item");
+		this.items.push({
+			timestamp,
+			id: idb
+		});
+	}
+	seal() {
+		if (this.sealed) throw Error("already sealed");
+		this.sealed = true;
+		this.items.sort(itemCompare);
+		for (let i2 = 1; i2 < this.items.length; i2++) if (itemCompare(this.items[i2 - 1], this.items[i2]) === 0) throw Error("duplicate item inserted");
+	}
+	unseal() {
+		this.sealed = false;
+	}
+	size() {
+		this._checkSealed();
+		return this.items.length;
+	}
+	getItem(i2) {
+		this._checkSealed();
+		if (i2 >= this.items.length) throw Error("out of range");
+		return this.items[i2];
+	}
+	iterate(begin, end, cb) {
+		this._checkSealed();
+		this._checkBounds(begin, end);
+		for (let i2 = begin; i2 < end; ++i2) if (!cb(this.items[i2], i2)) break;
+	}
+	findLowerBound(begin, end, bound) {
+		this._checkSealed();
+		this._checkBounds(begin, end);
+		return this._binarySearch(this.items, begin, end, (a) => itemCompare(a, bound) < 0);
+	}
+	fingerprint(begin, end) {
+		let out = new Accumulator();
+		out.setToZero();
+		this.iterate(begin, end, (item) => {
+			out.add(item.id);
+			return true;
+		});
+		return out.getFingerprint(end - begin);
+	}
+	_checkSealed() {
+		if (!this.sealed) throw Error("not sealed");
+	}
+	_checkBounds(begin, end) {
+		if (begin > end || end > this.items.length) throw Error("bad range");
+	}
+	_binarySearch(arr, first, last, cmp) {
+		let count = last - first;
+		while (count > 0) {
+			let it = first;
+			let step = Math.floor(count / 2);
+			it += step;
+			if (cmp(arr[it])) {
+				first = ++it;
+				count -= step + 1;
+			} else count = step;
+		}
+		return first;
+	}
+};
+var Negentropy = class {
+	storage;
+	frameSizeLimit;
+	lastTimestampIn;
+	lastTimestampOut;
+	constructor(storage, frameSizeLimit = 6e4) {
+		if (frameSizeLimit < 4096) throw Error("frameSizeLimit too small");
+		this.storage = storage;
+		this.frameSizeLimit = frameSizeLimit;
+		this.lastTimestampIn = 0;
+		this.lastTimestampOut = 0;
+	}
+	_bound(timestamp, id) {
+		return {
+			timestamp,
+			id: id || new Uint8Array(0)
+		};
+	}
+	initiate() {
+		let output = new WrappedBuffer();
+		output.extend(new Uint8Array([PROTOCOL_VERSION$1]));
+		this.splitRange(0, this.storage.size(), this._bound(Number.MAX_VALUE), output);
+		return bytesToHex$2(output.unwrap());
+	}
+	reconcile(queryMsg, onhave, onneed) {
+		const query = new WrappedBuffer(hexToBytes$2(queryMsg));
+		this.lastTimestampIn = this.lastTimestampOut = 0;
+		let fullOutput = new WrappedBuffer();
+		fullOutput.extend(new Uint8Array([PROTOCOL_VERSION$1]));
+		let protocolVersion = getByte(query);
+		if (protocolVersion < 96 || protocolVersion > 111) throw Error("invalid negentropy protocol version byte");
+		if (protocolVersion !== PROTOCOL_VERSION$1) throw Error("unsupported negentropy protocol version requested: " + (protocolVersion - 96));
+		let storageSize = this.storage.size();
+		let prevBound = this._bound(0);
+		let prevIndex = 0;
+		let skip = false;
+		while (query.length !== 0) {
+			let o = new WrappedBuffer();
+			let doSkip = () => {
+				if (skip) {
+					skip = false;
+					o.extend(this.encodeBound(prevBound));
+					o.extend(encodeVarInt(Mode.Skip));
+				}
+			};
+			let currBound = this.decodeBound(query);
+			let mode = decodeVarInt(query);
+			let lower = prevIndex;
+			let upper = this.storage.findLowerBound(prevIndex, storageSize, currBound);
+			if (mode === Mode.Skip) skip = true;
+			else if (mode === Mode.Fingerprint) if (compareUint8Array(getBytes(query, FINGERPRINT_SIZE), this.storage.fingerprint(lower, upper)) !== 0) {
+				doSkip();
+				this.splitRange(lower, upper, currBound, o);
+			} else skip = true;
+			else if (mode === Mode.IdList) {
+				let numIds = decodeVarInt(query);
+				let theirElems = {};
+				for (let i2 = 0; i2 < numIds; i2++) {
+					let e = getBytes(query, ID_SIZE);
+					theirElems[bytesToHex$2(e)] = e;
+				}
+				skip = true;
+				this.storage.iterate(lower, upper, (item) => {
+					let k = item.id;
+					const id = bytesToHex$2(k);
+					if (!theirElems[id]) onhave?.(id);
+					else delete theirElems[bytesToHex$2(k)];
+					return true;
+				});
+				if (onneed) for (let v of Object.values(theirElems)) onneed(bytesToHex$2(v));
+			} else throw Error("unexpected mode");
+			if (this.exceededFrameSizeLimit(fullOutput.length + o.length)) {
+				let remainingFingerprint = this.storage.fingerprint(upper, storageSize);
+				fullOutput.extend(this.encodeBound(this._bound(Number.MAX_VALUE)));
+				fullOutput.extend(encodeVarInt(Mode.Fingerprint));
+				fullOutput.extend(remainingFingerprint);
+				break;
+			} else fullOutput.extend(o);
+			prevIndex = upper;
+			prevBound = currBound;
+		}
+		return fullOutput.length === 1 ? null : bytesToHex$2(fullOutput.unwrap());
+	}
+	splitRange(lower, upper, upperBound, o) {
+		let numElems = upper - lower;
+		let buckets = 16;
+		if (numElems < buckets * 2) {
+			o.extend(this.encodeBound(upperBound));
+			o.extend(encodeVarInt(Mode.IdList));
+			o.extend(encodeVarInt(numElems));
+			this.storage.iterate(lower, upper, (item) => {
+				o.extend(item.id);
+				return true;
+			});
+		} else {
+			let itemsPerBucket = Math.floor(numElems / buckets);
+			let bucketsWithExtra = numElems % buckets;
+			let curr = lower;
+			for (let i2 = 0; i2 < buckets; i2++) {
+				let bucketSize = itemsPerBucket + (i2 < bucketsWithExtra ? 1 : 0);
+				let ourFingerprint = this.storage.fingerprint(curr, curr + bucketSize);
+				curr += bucketSize;
+				let nextBound;
+				if (curr === upper) nextBound = upperBound;
+				else {
+					let prevItem;
+					let currItem;
+					this.storage.iterate(curr - 1, curr + 1, (item, index) => {
+						if (index === curr - 1) prevItem = item;
+						else currItem = item;
+						return true;
+					});
+					nextBound = this.getMinimalBound(prevItem, currItem);
+				}
+				o.extend(this.encodeBound(nextBound));
+				o.extend(encodeVarInt(Mode.Fingerprint));
+				o.extend(ourFingerprint);
+			}
+		}
+	}
+	exceededFrameSizeLimit(n) {
+		return n > this.frameSizeLimit - 200;
+	}
+	decodeTimestampIn(encoded) {
+		let timestamp = decodeVarInt(encoded);
+		timestamp = timestamp === 0 ? Number.MAX_VALUE : timestamp - 1;
+		if (this.lastTimestampIn === Number.MAX_VALUE || timestamp === Number.MAX_VALUE) {
+			this.lastTimestampIn = Number.MAX_VALUE;
+			return Number.MAX_VALUE;
+		}
+		timestamp += this.lastTimestampIn;
+		this.lastTimestampIn = timestamp;
+		return timestamp;
+	}
+	decodeBound(encoded) {
+		let timestamp = this.decodeTimestampIn(encoded);
+		let len = decodeVarInt(encoded);
+		if (len > ID_SIZE) throw Error("bound key too long");
+		return {
+			timestamp,
+			id: getBytes(encoded, len)
+		};
+	}
+	encodeTimestampOut(timestamp) {
+		if (timestamp === Number.MAX_VALUE) {
+			this.lastTimestampOut = Number.MAX_VALUE;
+			return encodeVarInt(0);
+		}
+		let temp = timestamp;
+		timestamp -= this.lastTimestampOut;
+		this.lastTimestampOut = temp;
+		return encodeVarInt(timestamp + 1);
+	}
+	encodeBound(key) {
+		let output = new WrappedBuffer();
+		output.extend(this.encodeTimestampOut(key.timestamp));
+		output.extend(encodeVarInt(key.id.length));
+		output.extend(key.id);
+		return output;
+	}
+	getMinimalBound(prev, curr) {
+		if (curr.timestamp !== prev.timestamp) return this._bound(curr.timestamp);
+		else {
+			let sharedPrefixBytes = 0;
+			let currKey = curr.id;
+			let prevKey = prev.id;
+			for (let i2 = 0; i2 < ID_SIZE; i2++) {
+				if (currKey[i2] !== prevKey[i2]) break;
+				sharedPrefixBytes++;
+			}
+			return this._bound(curr.timestamp, curr.id.subarray(0, sharedPrefixBytes + 1));
+		}
+	}
+};
+function compareUint8Array(a, b) {
+	for (let i2 = 0; i2 < a.byteLength; i2++) {
+		if (a[i2] < b[i2]) return -1;
+		if (a[i2] > b[i2]) return 1;
+	}
+	if (a.byteLength > b.byteLength) return 1;
+	if (a.byteLength < b.byteLength) return -1;
+	return 0;
+}
+function itemCompare(a, b) {
+	if (a.timestamp === b.timestamp) return compareUint8Array(a.id, b.id);
+	return a.timestamp - b.timestamp;
+}
+var NegentropySync = class {
+	relay;
+	storage;
+	neg;
+	filter;
+	subscription;
+	onhave;
+	onneed;
+	constructor(relay, storage, filter, params = {}) {
+		this.relay = relay;
+		this.storage = storage;
+		this.neg = new Negentropy(storage);
+		this.onhave = params.onhave;
+		this.onneed = params.onneed;
+		this.filter = filter;
+		this.subscription = this.relay.prepareSubscription([{}], { label: params.label || "negentropy" });
+		this.subscription.oncustom = (data) => {
+			switch (data[0]) {
+				case "NEG-MSG":
+					if (data.length < 3) console.warn(`got invalid NEG-MSG from ${this.relay.url}: ${data}`);
+					try {
+						const response = this.neg.reconcile(data[2], this.onhave, this.onneed);
+						if (response) this.relay.send(`["NEG-MSG", "${this.subscription.id}", "${response}"]`);
+						else {
+							this.close();
+							params.onclose?.();
+						}
+					} catch (error) {
+						console.error("negentropy reconcile error:", error);
+						params?.onclose?.(`reconcile error: ${error}`);
+					}
+					break;
+				case "NEG-CLOSE": {
+					const reason = data[2];
+					console.warn("negentropy error:", reason);
+					params.onclose?.(reason);
+					break;
+				}
+				case "NEG-ERR": params.onclose?.();
+			}
+		};
+	}
+	async start() {
+		const initMsg = this.neg.initiate();
+		this.relay.send(`["NEG-OPEN","${this.subscription.id}",${JSON.stringify(this.filter)},"${initMsg}"]`);
+	}
+	close() {
+		this.relay.send(`["NEG-CLOSE","${this.subscription.id}"]`);
+		this.subscription.close();
+	}
+};
+__export({}, {
+	getToken: () => getToken,
+	hashPayload: () => hashPayload,
+	unpackEventFromToken: () => unpackEventFromToken,
+	validateEvent: () => validateEvent2,
+	validateEventKind: () => validateEventKind,
+	validateEventMethodTag: () => validateEventMethodTag,
+	validateEventPayloadTag: () => validateEventPayloadTag,
+	validateEventTimestamp: () => validateEventTimestamp,
+	validateEventUrlTag: () => validateEventUrlTag,
+	validateToken: () => validateToken
+});
+var _authorizationScheme = "Nostr ";
+async function getToken(loginUrl, httpMethod, sign, includeAuthorizationScheme = false, payload) {
+	const event = {
+		kind: HTTPAuth,
+		tags: [["u", loginUrl], ["method", httpMethod]],
+		created_at: Math.round((/* @__PURE__ */ new Date()).getTime() / 1e3),
+		content: ""
+	};
+	if (payload) event.tags.push(["payload", hashPayload(payload)]);
+	const signedEvent = await sign(event);
+	return (includeAuthorizationScheme ? _authorizationScheme : "") + base64.encode(utf8Encoder.encode(JSON.stringify(signedEvent)));
+}
+async function validateToken(token, url, method) {
+	return await validateEvent2(await unpackEventFromToken(token).catch((error) => {
+		throw error;
+	}), url, method).catch((error) => {
+		throw error;
+	});
+}
+async function unpackEventFromToken(token) {
+	if (!token) throw new Error("Missing token");
+	token = token.replace(_authorizationScheme, "");
+	const eventB64 = utf8Decoder.decode(base64.decode(token));
+	if (!eventB64 || eventB64.length === 0 || !eventB64.startsWith("{")) throw new Error("Invalid token");
+	return JSON.parse(eventB64);
+}
+function validateEventTimestamp(event) {
+	if (!event.created_at) return false;
+	return Math.round((/* @__PURE__ */ new Date()).getTime() / 1e3) - event.created_at < 60;
+}
+function validateEventKind(event) {
+	return event.kind === HTTPAuth;
+}
+function validateEventUrlTag(event, url) {
+	const urlTag = event.tags.find((t) => t[0] === "u");
+	if (!urlTag) return false;
+	return urlTag.length > 0 && urlTag[1] === url;
+}
+function validateEventMethodTag(event, method) {
+	const methodTag = event.tags.find((t) => t[0] === "method");
+	if (!methodTag) return false;
+	return methodTag.length > 0 && methodTag[1].toLowerCase() === method.toLowerCase();
+}
+function hashPayload(payload) {
+	return bytesToHex$2(sha256$1(utf8Encoder.encode(JSON.stringify(payload))));
+}
+function validateEventPayloadTag(event, payload) {
+	const payloadTag = event.tags.find((t) => t[0] === "payload");
+	if (!payloadTag) return false;
+	const payloadHash = hashPayload(payload);
+	return payloadTag.length > 0 && payloadTag[1] === payloadHash;
+}
+async function validateEvent2(event, url, method, body) {
+	if (!verifyEvent(event)) throw new Error("Invalid nostr event, signature invalid");
+	if (!validateEventKind(event)) throw new Error("Invalid nostr event, kind invalid");
+	if (!validateEventTimestamp(event)) throw new Error("Invalid nostr event, created_at timestamp invalid");
+	if (!validateEventUrlTag(event, url)) throw new Error("Invalid nostr event, url tag invalid");
+	if (!validateEventMethodTag(event, method)) throw new Error("Invalid nostr event, method tag invalid");
+	if (Boolean(body) && typeof body === "object" && Object.keys(body).length > 0) {
+		if (!validateEventPayloadTag(event, body)) throw new Error("Invalid nostr event, payload tag does not match request body hash");
+	}
+	return true;
+}
+//#endregion
+//#region node_modules/@nostrify/nostrify/dist/NSchema.js
+var NSchema = class NSchema {
+	/** Schema to validate Nostr hex IDs such as event IDs and pubkeys. */
+	static id() {
+		return string().regex(/^[0-9a-f]{64}$/);
+	}
+	/** Nostr event schema. */
+	static event() {
+		return object({
+			id: NSchema.id(),
+			kind: number().int().nonnegative().max(65535),
+			pubkey: NSchema.id(),
+			tags: string().array().array(),
+			content: string(),
+			created_at: number().int().nonnegative(),
+			sig: string()
+		});
+	}
+	/**
+	* Nostr filter schema.
+	*
+	* Only NIP-01 keys (`ids`, `authors`, `kinds`, `since`, `until`, `limit`,
+	* `search`) and `#`-prefixed tag filters are accepted. Any other keys will
+	* cause parsing to fail; callers should strip application-specific fields
+	* (e.g. `seenOn`) before validating.
+	*/
+	static filter() {
+		const knownKeys = [
+			"ids",
+			"authors",
+			"kinds",
+			"since",
+			"until",
+			"limit",
+			"search"
+		];
+		return object({
+			kinds: number().int().nonnegative().max(65535).array().optional(),
+			ids: NSchema.id().array().optional(),
+			authors: NSchema.id().array().optional(),
+			since: number().int().nonnegative().optional(),
+			until: number().int().nonnegative().optional(),
+			limit: number().int().nonnegative().optional(),
+			search: string().optional()
+		}).catchall(string().array()).superRefine((value, ctx) => {
+			for (const key of Object.keys(value)) {
+				if (knownKeys.includes(key)) continue;
+				if (key.startsWith("#") && key.length >= 2) continue;
+				ctx.addIssue({
+					code: "custom",
+					message: `Unrecognized filter key: "${key}"`,
+					path: [key]
+				});
+			}
+		}).transform((value) => value);
+	}
+	/**
+	* Bech32 string.
+	* @see https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki#bech32
+	*/
+	static bech32(prefix) {
+		return string().regex(/^[\x21-\x7E]{1,83}1[023456789acdefghjklmnpqrstuvwxyz]{6,}$/).refine((value) => prefix ? value.startsWith(`${prefix}1`) : true, prefix ? { message: `Expected bech32 prefix "${prefix}1"` } : void 0);
+	}
+	/** WebSocket URL starting with `ws://` or `wss://`. */
+	static relayUrl() {
+		return url().regex(/^wss?:\/\//);
+	}
+	/** NIP-01 `EVENT` message from client to relay. */
+	static clientEVENT() {
+		return tuple([literal("EVENT"), NSchema.event()]);
+	}
+	/** NIP-01 `REQ` message from client to relay. */
+	static clientREQ() {
+		return tuple([literal("REQ"), string()]).rest(NSchema.filter());
+	}
+	/** NIP-45 `COUNT` message from client to relay. */
+	static clientCOUNT() {
+		return tuple([literal("COUNT"), string()]).rest(NSchema.filter());
+	}
+	/** NIP-01 `CLOSE` message from client to relay. */
+	static clientCLOSE() {
+		return tuple([literal("CLOSE"), string()]);
+	}
+	/** NIP-42 `AUTH` message from client to relay. */
+	static clientAUTH() {
+		return tuple([literal("AUTH"), NSchema.event()]);
+	}
+	/** NIP-01 message from client to relay. */
+	static clientMsg() {
+		return union([
+			NSchema.clientEVENT(),
+			NSchema.clientREQ(),
+			NSchema.clientCOUNT(),
+			NSchema.clientCLOSE(),
+			NSchema.clientAUTH()
+		]);
+	}
+	/** NIP-01 `EVENT` message from relay to client. */
+	static relayEVENT() {
+		return tuple([
+			literal("EVENT"),
+			string(),
+			NSchema.event()
+		]);
+	}
+	/** NIP-01 `OK` message from relay to client. */
+	static relayOK() {
+		return tuple([
+			literal("OK"),
+			NSchema.id(),
+			boolean(),
+			string()
+		]);
+	}
+	/** NIP-01 `EOSE` message from relay to client. */
+	static relayEOSE() {
+		return tuple([literal("EOSE"), string()]);
+	}
+	/** NIP-01 `NOTICE` message from relay to client. */
+	static relayNOTICE() {
+		return tuple([literal("NOTICE"), string()]);
+	}
+	/** NIP-01 `CLOSED` message from relay to client. */
+	static relayCLOSED() {
+		return tuple([
+			literal("CLOSED"),
+			string(),
+			string()
+		]);
+	}
+	/** NIP-42 `AUTH` message from relay to client. */
+	static relayAUTH() {
+		return tuple([literal("AUTH"), string()]);
+	}
+	/** NIP-45 `COUNT` message from relay to client. */
+	static relayCOUNT() {
+		return tuple([
+			literal("COUNT"),
+			string(),
+			object({
+				count: number().int().nonnegative(),
+				approximate: boolean().optional()
+			})
+		]);
+	}
+	/** NIP-01 message from relay to client. */
+	static relayMsg() {
+		return union([
+			NSchema.relayEVENT(),
+			NSchema.relayOK(),
+			NSchema.relayEOSE(),
+			NSchema.relayNOTICE(),
+			NSchema.relayCLOSED(),
+			NSchema.relayAUTH(),
+			NSchema.relayCOUNT()
+		]);
+	}
+	/** Kind 0 content schema. */
+	static metadata() {
+		return looseObject({
+			about: string().optional().catch(void 0),
+			banner: url().optional().catch(void 0),
+			bot: boolean().optional().catch(void 0),
+			display_name: string().optional().catch(void 0),
+			lud06: NSchema.bech32("lnurl").optional().catch(void 0),
+			lud16: email().optional().catch(void 0),
+			name: string().optional().catch(void 0),
+			nip05: email().optional().catch(void 0),
+			picture: url().optional().catch(void 0),
+			website: url().optional().catch(void 0)
+		});
+	}
+	/** NIP-11 Relay Information Document schema. */
+	static relayInfo() {
+		return looseObject({
+			name: string().optional().catch(void 0),
+			description: string().optional().catch(void 0),
+			banner: string().optional().catch(void 0),
+			icon: string().optional().catch(void 0),
+			pubkey: NSchema.id().optional().catch(void 0),
+			self: NSchema.id().optional().catch(void 0),
+			contact: string().optional().catch(void 0),
+			supported_nips: number().int().nonnegative().array().optional().catch(void 0),
+			software: string().optional().catch(void 0),
+			version: string().optional().catch(void 0),
+			terms_of_service: string().optional().catch(void 0),
+			limitation: looseObject({
+				max_message_length: number().int().nonnegative().optional().catch(void 0),
+				max_subscriptions: number().int().nonnegative().optional().catch(void 0),
+				max_filters: number().int().nonnegative().optional().catch(void 0),
+				max_limit: number().int().nonnegative().optional().catch(void 0),
+				max_subid_length: number().int().nonnegative().optional().catch(void 0),
+				max_event_tags: number().int().nonnegative().optional().catch(void 0),
+				max_content_length: number().int().nonnegative().optional().catch(void 0),
+				min_pow_difficulty: number().int().nonnegative().optional().catch(void 0),
+				auth_required: boolean().optional().catch(void 0),
+				payment_required: boolean().optional().catch(void 0),
+				restricted_writes: boolean().optional().catch(void 0),
+				created_at_lower_limit: number().int().nonnegative().optional().catch(void 0),
+				created_at_upper_limit: number().int().nonnegative().optional().catch(void 0),
+				default_limit: number().int().nonnegative().optional().catch(void 0)
+			}).optional().catch(void 0),
+			retention: array(object({
+				time: number().int().nullable(),
+				count: number().int().nonnegative().optional(),
+				kinds: number().int().nonnegative().array().optional()
+			})).optional().catch(void 0),
+			relay_countries: string().array().optional().catch(void 0),
+			language_tags: string().array().optional().catch(void 0),
+			tags: string().array().optional().catch(void 0),
+			posting_policy: string().optional().catch(void 0),
+			payments_url: string().optional().catch(void 0),
+			fees: record(string(), array(object({
+				amount: number(),
+				unit: string(),
+				period: number().int().nonnegative().optional(),
+				kinds: number().int().nonnegative().array().optional()
+			}))).optional().catch(void 0)
+		});
+	}
+	/** NIP-46 request content schema. */
+	static connectRequest() {
+		return object({
+			id: string(),
+			method: string(),
+			params: string().array()
+		});
+	}
+	/** NIP-46 response content schema. */
+	static connectResponse() {
+		return object({
+			id: string(),
+			result: string(),
+			error: string().optional()
+		});
+	}
+	/**
+	* Helper schema to parse a JSON string. It should then be piped into another schema. For example:
+	*
+	* ```ts
+	* const event = NSchema.json().pipe(NSchema.event()).parse(data);
+	* ```
+	*/
+	static json() {
+		return string().transform((value, ctx) => {
+			try {
+				return JSON.parse(value);
+			} catch {
+				ctx.addIssue({
+					code: ZodIssueCode.custom,
+					message: "Invalid JSON"
+				});
+				return NEVER;
+			}
+		});
+	}
+};
+//#endregion
+//#region src/lib/nostrId.ts
+/**
+* Canonical validator for 32-byte Nostr identifiers — pubkeys and event ids.
+*
+* Backed by Nostrify's {@link NSchema.id} so the rest of the stack inherits
+* any future tightening upstream (e.g. case rules or whitespace handling).
+*
+* Use this **at the parse layer** whenever a pubkey or event id is extracted
+* from untrusted event content (tag values, JSON-parsed content, URL params)
+* before it reaches `nip19.*Encode`, `nostr.query` filters, or React route
+* params. Malformed hex of the wrong length throws "padded hex string
+* expected" from `@noble/hashes` deep inside `nip19`, which crashes the
+* rendering subtree.
+*
+* Returns a type guard narrowing to {@link HexId} — the false branch retains
+* the input's original type, so existing `string` callers keep working.
+*
+* Prefer the {@link tryNpubEncode}/{@link tryNeventEncode}/{@link tryNaddrEncode}
+* wrappers from `@/lib/safeNip19` for non-throwing encodes at the render site.
+*/
+function isNostrId(value) {
+	return idSchema.safeParse(value).success;
+}
+const idSchema = NSchema.id();
+//#endregion
+//#region src/lib/nip34Project.ts
+init_pure();
+const NIP34_REPOSITORY_KIND = 30617;
+const NIP34_PATCH_KIND = 1617;
+const NIP34_PULL_REQUEST_KIND = 1618;
+const NIP34_ISSUE_KIND = 1621;
+const NIP34_STATUS_KINDS = [
+	1630,
+	1631,
+	1632,
+	1633
+];
+const MAX_REPO_IDENTIFIER_BYTES = 256;
+function singleTag(event, name) {
+	const values = event.tags.filter(([tag]) => tag === name);
+	return values.length === 1 ? values[0][1] : void 0;
+}
+/** Decode and canonicalize an addressable NIP-34 repository pointer. */
+function parseRepoNaddr(raw) {
+	if (typeof raw !== "string" || utf8Len(raw) > 2048) return void 0;
+	const value = raw.trim();
+	if (!value) return void 0;
+	try {
+		const decoded = nip19_exports.decode(value);
+		if (decoded.type !== "naddr" || decoded.data.kind !== 30617) return void 0;
+		const owner = decoded.data.pubkey.toLowerCase();
+		const identifier = decoded.data.identifier;
+		if (!isNostrId(owner) || !identifier || utf8Len(identifier) > MAX_REPO_IDENTIFIER_BYTES) return void 0;
+		const relays = capRelays(decoded.data.relays ?? []);
+		return {
+			owner,
+			identifier,
+			relays,
+			coordinate: `${NIP34_REPOSITORY_KIND}:${owner}:${identifier}`,
+			naddr: nip19_exports.naddrEncode({
+				kind: NIP34_REPOSITORY_KIND,
+				pubkey: owner,
+				identifier,
+				relays
+			})
+		};
+	} catch {
+		return;
+	}
+}
+/** Strictly validate the repository announcement named by a trusted pointer. */
+function parseRepositoryEvent(event, pointer) {
+	if (event.kind !== 30617 || event.pubkey !== pointer.owner || singleTag(event, "d") !== pointer.identifier || !verifyEvent$2(event)) return void 0;
+	return event;
+}
+/** NIP-34 uses one `maintainers` tag whose remaining values are pubkeys. */
+function repositoryMaintainers(event, pointer) {
+	const maintainers = new Set([pointer.owner]);
+	for (const tag of event.tags.filter(([name]) => name === "maintainers")) for (const pubkey of tag.slice(1)) {
+		if (maintainers.size >= 100) return maintainers;
+		if (isNostrId(pubkey)) maintainers.add(pubkey.toLowerCase());
+	}
+	return maintainers;
+}
+/** Artifact relays declared by the repository announcement. */
+function repositoryRelays(event) {
+	return capRelays(event.tags.filter(([name]) => name === "relays").flatMap((tag) => tag.slice(1)));
+}
+function parseProjectArtifact(event, pointer) {
+	if (![
+		1617,
+		1618,
+		1621
+	].includes(event.kind) || !verifyEvent$2(event)) return;
+	const repoTags = event.tags.filter(([name]) => name === "a");
+	if (repoTags.length !== 1 || repoTags[0][1] !== pointer.coordinate) return void 0;
+	const subject = event.tags.find(([name]) => name === "subject")?.[1]?.trim() || (event.kind === 1621 ? "Untitled issue" : event.kind === 1618 ? "Pull request" : "Patch");
+	return {
+		event,
+		kind: event.kind,
+		subject,
+		labels: event.tags.filter(([name, value]) => name === "t" && !!value).map(([, value]) => value),
+		statusRoot: event.kind !== 1617 || event.tags.some(([name, value]) => name === "t" && value === "root")
+	};
+}
+const STATUS_NAMES = {
+	1630: "open",
+	1631: "applied",
+	1632: "closed",
+	1633: "draft"
+};
+/** Accept only a status rooted in one loaded artifact and signed by an
+* authority NIP-34 recognizes: its author or a declared maintainer. */
+function parseAuthoritativeStatus(event, artifacts, maintainers) {
+	if (!NIP34_STATUS_KINDS.includes(event.kind) || !verifyEvent$2(event)) return void 0;
+	const roots = event.tags.filter(([name, id, , marker]) => name === "e" && marker === "root" && isNostrId(id));
+	if (roots.length !== 1) return void 0;
+	const targetId = roots[0][1].toLowerCase();
+	const target = artifacts.get(targetId);
+	if (!target?.statusRoot || !maintainers.has(event.pubkey) && event.pubkey !== target.event.pubkey) return void 0;
+	return {
+		event,
+		targetId,
+		status: STATUS_NAMES[event.kind]
+	};
+}
+/** Latest valid status per artifact; event id breaks equal-time relay order. */
+function latestProjectStatuses(statuses) {
+	const latest = /* @__PURE__ */ new Map();
+	for (const status of statuses) {
+		const prior = latest.get(status.targetId);
+		if (!prior || status.event.created_at > prior.event.created_at || status.event.created_at === prior.event.created_at && status.event.id > prior.event.id) latest.set(status.targetId, status);
+	}
+	return latest;
+}
 //#endregion
 //#region src/concord-v2/lib/invite.ts
 /**
@@ -34555,8 +37774,13 @@ function mentionsMe(opts) {
 */
 init_pure();
 const STATE_DIR = join(homedir(), ".concord-live");
+/** Keep identity-controlled filenames inside STATE_DIR. */
+function validateIdentityName(name) {
+	if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) throw new Error("Identity name must be 1–64 ASCII letters, digits, dots, underscores, or dashes, starting with a letter or digit.");
+	return name;
+}
 function statePath(name) {
-	return join(STATE_DIR, `${name}.json`);
+	return join(STATE_DIR, `${validateIdentityName(name)}.json`);
 }
 function loadState(name) {
 	const path = statePath(name);
@@ -34572,13 +37796,14 @@ function validEpoch(value) {
 /**
 * Upgrade and canonicalize the access portion of an on-disk identity without
 * mutating the parsed object. Pre-retained-root states remain readable: their
-* current root becomes the sole held root at runtime and `joined_at=0` makes a
-* future exclusion check fail closed (every observed rekey may concern them).
+* current root becomes the sole held root at runtime. An unknown legacy join
+* time stays unknown so a future watcher cannot mistake old history for a kick.
 */
 function migrateSavedCommunityAccess(community) {
 	if (!validEpoch(community.root_epoch)) throw new Error("Saved community root_epoch must be a non-negative safe integer.");
 	if (!HEX_32.test(community.community_root)) throw new Error("Saved community_root must be 32-byte hex.");
 	const currentKey = community.community_root.toLowerCase();
+	if (community.joined_at !== void 0 && !validEpoch(community.joined_at)) throw new Error("Saved community joined_at must be a non-negative safe millisecond timestamp.");
 	const roots = /* @__PURE__ */ new Map();
 	for (const held of community.held_roots ?? []) {
 		if (!validEpoch(held.epoch) || !HEX_32.test(held.key)) throw new Error("Saved community retained roots must contain a non-negative safe epoch and 32-byte hex key.");
@@ -34599,7 +37824,7 @@ function migrateSavedCommunityAccess(community) {
 			epoch,
 			key
 		})),
-		joined_at: validEpoch(community.joined_at ?? 0) ? community.joined_at ?? 0 : 0,
+		...community.joined_at !== void 0 ? { joined_at: community.joined_at } : {},
 		...community.refounder && HEX_32.test(community.refounder) ? { refounder: community.refounder.toLowerCase() } : { refounder: void 0 }
 	};
 }
@@ -34699,6 +37924,73 @@ async function publishAll(relays, event, label) {
 async function queryAll(relays, filter) {
 	return getPool().querySync(relays, filter, { maxWait: 8e3 });
 }
+/** Fold current encrypted control metadata. No public project relay is touched. */
+async function communityMetadata(state) {
+	const community = communityOf(state.community, state.private_channels);
+	const controls = controlGroups(community);
+	return foldControlState(openControlWraps(await queryAll(community.relays, {
+		kinds: [KIND_WRAP],
+		authors: controls.map((control) => control.pk)
+	}), controls), community.id, community.owner).metadata;
+}
+/**
+* Read the public NIP-34 projection explicitly linked from sealed metadata.
+* Calling this reveals interest in the repository to its hinted relays; chat
+* and orchestration commands never call it implicitly.
+*/
+async function projectSnapshot(state) {
+	const pointer = parseRepoNaddr((await communityMetadata(state))?.repo_naddr);
+	if (!pointer) throw new Error("This community has no valid NIP-34 project attached.");
+	const discoveryRelays = pointer.relays.length ? pointer.relays : state.community.relays;
+	const repository = (await queryAll(discoveryRelays, {
+		kinds: [30617],
+		authors: [pointer.owner],
+		"#d": [pointer.identifier],
+		limit: 10
+	})).map((event) => parseRepositoryEvent(event, pointer)).filter((event) => !!event).sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id))[0];
+	if (!repository) throw new Error("The attached NIP-34 repository announcement was not found or failed validation.");
+	const maintainers = repositoryMaintainers(repository, pointer);
+	const relays = repositoryRelays(repository);
+	const sourceRelays = relays.length ? relays : discoveryRelays;
+	const events = await queryAll(sourceRelays, {
+		kinds: [
+			NIP34_ISSUE_KIND,
+			NIP34_PATCH_KIND,
+			NIP34_PULL_REQUEST_KIND
+		],
+		"#a": [pointer.coordinate],
+		limit: 300
+	});
+	const artifacts = events.map((event) => parseProjectArtifact(event, pointer)).filter((item) => !!item);
+	const byId = new Map(artifacts.map((item) => [item.event.id, item]));
+	const roots = artifacts.filter((item) => item.statusRoot);
+	const statuses = latestProjectStatuses((roots.length ? await queryAll(sourceRelays, {
+		kinds: [...NIP34_STATUS_KINDS],
+		authors: [...new Set([...maintainers, ...roots.map((item) => item.event.pubkey)])],
+		"#e": roots.map((item) => item.event.id),
+		limit: Math.min(500, Math.max(1, roots.length * 4))
+	}) : []).map((event) => parseAuthoritativeStatus(event, byId, maintainers)).filter((status) => !!status));
+	const serialize = (kind) => artifacts.filter((item) => item.kind === kind).map((item) => ({
+		id: item.event.id,
+		author: item.event.pubkey,
+		subject: item.subject,
+		labels: item.labels,
+		status: statuses.get(item.event.id)?.status,
+		created_at: item.event.created_at
+	})).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+	return {
+		coordinate: pointer.coordinate,
+		naddr: pointer.naddr,
+		name: repository.tags.find(([name]) => name === "name")?.[1] || pointer.identifier,
+		description: repository.tags.find(([name]) => name === "description")?.[1],
+		maintainers: [...maintainers],
+		relays: sourceRelays,
+		issues: serialize(NIP34_ISSUE_KIND),
+		pull_requests: serialize(NIP34_PULL_REQUEST_KIND),
+		patches: serialize(NIP34_PATCH_KIND),
+		partial: events.length >= 300
+	};
+}
 /** Public channels from the control fold + this identity's private channels. */
 async function listChannels(state) {
 	return (await availableChannels(state)).map((channel) => ({
@@ -34720,7 +38012,12 @@ async function availableChannels(state) {
 async function resolveChannel(state, selector) {
 	const savedGeneral = state.community.general_channel_id?.toLowerCase();
 	const requested = selector?.trim();
-	if (savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral)) {
+	const savedGeneralRequested = !!savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral);
+	let channels;
+	try {
+		channels = await availableChannels(state);
+	} catch (error) {
+		if (!savedGeneralRequested) throw error;
 		const community = communityOf(state.community, state.private_channels);
 		const id = hexToBytes$1(savedGeneral);
 		const streams = community.heldRoots.map((root) => ({
@@ -34740,7 +38037,6 @@ async function resolveChannel(state, selector) {
 			}
 		};
 	}
-	const channels = await availableChannels(state);
 	let matches;
 	if (selector) {
 		const needle = selector.trim();
@@ -34761,7 +38057,7 @@ async function channelContext(state, selector) {
 	const sk = hexToBytes$1(state.sk);
 	return {
 		sk,
-		pubkey: getPublicKey(sk),
+		pubkey: getPublicKey$1(sk),
 		signer: signerOf(sk),
 		community: communityOf(state.community, state.private_channels),
 		channel: await resolveChannel(state, selector)
@@ -34844,7 +38140,7 @@ async function sendChannelMessage(state, text, opts = {}) {
 		const prior = inflightKeyedSends.get(opts.idemKey);
 		if (prior) await prior.catch(() => {});
 	}
-	const run = opts.idemKey ? withStateLock(getPublicKey(hexToBytes$1(state.sk)), () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey)) : sendChannelMessageInner(state, text, opts);
+	const run = opts.idemKey ? withStateLock(getPublicKey$1(hexToBytes$1(state.sk)), () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey)) : sendChannelMessageInner(state, text, opts);
 	if (!opts.idemKey) return run;
 	inflightKeyedSends.set(opts.idemKey, run);
 	try {
@@ -34868,7 +38164,7 @@ async function sendChannelMessageInner(state, text, opts = {}) {
 	const tags = [...channelBindingTags(channel.idHex, channel.current.epoch), ...opts.extraTags ?? []];
 	if (opts.idemKey) tags.push(["d", opts.idemKey]);
 	for (const match of text.match(/npub1[02-9ac-hj-np-z]{20,}/g) ?? []) try {
-		const decoded = decode(match);
+		const decoded = decode$1(match);
 		if (decoded.type === "npub") tags.push(["p", decoded.data]);
 	} catch {}
 	const rumor = buildRumor({
@@ -34896,7 +38192,7 @@ async function sendChannelMessageInner(state, text, opts = {}) {
 async function waitForInterrupt(identityName, state, opts) {
 	const { pubkey, community, channel } = await channelContext(state, opts.channel);
 	const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
-	const myNpub = npubEncode(pubkey);
+	const myNpub = npubEncode$1(pubkey);
 	const seen = /* @__PURE__ */ new Set();
 	for (const w of await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
@@ -34976,7 +38272,7 @@ async function assertRelayReachable(relays) {
 async function orchVerbPost(state, verb, taskId, text, orchId) {
 	if (/\s/.test(taskId)) throw new Error(`Task id must not contain whitespace: ${JSON.stringify(taskId)}`);
 	if (verb === "CLAIM") {
-		const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+		const myPubkey = getPublicKey$1(hexToBytes$1(state.sk));
 		const cur = (await orchStates(state, orchId)).get(taskId);
 		if (cur && !cur.stale && !cur.done && !cur.released) return {
 			rumorId: cur.claimant === myPubkey ? cur.claimId : "",
@@ -35009,7 +38305,7 @@ async function orchVerbPost(state, verb, taskId, text, orchId) {
 			epoch
 		};
 	}
-	const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+	const myPubkey = getPublicKey$1(hexToBytes$1(state.sk));
 	const cur = (await orchStates(state, orchId)).get(taskId);
 	if (!mayPostVerb(cur, myPubkey, verb)) return {
 		rumorId: "",
@@ -35071,7 +38367,7 @@ async function orchStates(state, orchId) {
 * Or from a repo clone: npm run mcp
 */
 init_pure();
-const IDENTITY = process.env.BAO_AGENT_IDENTITY ?? "owner";
+const IDENTITY = validateIdentityName(process.env.BAO_AGENT_IDENTITY ?? "owner");
 /** JSONL audit log — one line per tool call (AGENT_CHAT_ORCHESTRATION.md §15). */
 function audit(tool, args, summary) {
 	try {
@@ -35110,6 +38406,14 @@ server.registerTool("list_channels", {
 		channels
 	});
 });
+server.registerTool("get_project", {
+	description: "Read the public NIP-34 repository attached to this sealed community, including verified issues, pull requests, patches, and authoritative status signals. This explicitly contacts the repository relays and may reveal interest in that public project.",
+	inputSchema: {}
+}, async () => {
+	const snapshot = await projectSnapshot(identityState());
+	audit("get_project", {}, `${snapshot.coordinate}: ${snapshot.issues.length} issue(s), ${snapshot.pull_requests.length} PR(s)`);
+	return jsonResult(snapshot);
+});
 server.registerTool("read_messages", {
 	description: "Read recent messages from a community channel (decrypted client-side; the relay only stores ciphertext). Omit channel for #general; otherwise pass an exact name or channel id.",
 	inputSchema: {
@@ -35128,7 +38432,7 @@ server.registerTool("read_messages", {
 		channel: channel ?? "general",
 		messages: messages.map((m) => ({
 			id: m.id,
-			author_npub: npubEncode(m.author),
+			author_npub: npubEncode$1(m.author),
 			ms: m.ms,
 			content: m.content,
 			tags: m.tags
@@ -35187,7 +38491,7 @@ server.registerTool("wait_for_message", {
 	return jsonResult({
 		timeout: false,
 		id: hit.id,
-		author_npub: npubEncode(hit.author),
+		author_npub: npubEncode$1(hit.author),
 		ms: hit.ms,
 		content: hit.content,
 		tags: hit.tags
@@ -35198,11 +38502,11 @@ server.registerTool("get_profile", {
 	inputSchema: {}
 }, async () => {
 	const state = identityState();
-	const pubkey = getPublicKey(hexToBytes$1(state.sk));
+	const pubkey = getPublicKey$1(hexToBytes$1(state.sk));
 	audit("get_profile", {}, IDENTITY);
 	return jsonResult({
 		identity: IDENTITY,
-		npub: npubEncode(pubkey),
+		npub: npubEncode$1(pubkey),
 		pubkey,
 		role: state.role,
 		community: state.community.name,
@@ -35247,7 +38551,7 @@ server.registerTool("orch_show", {
 		ttl_ms: CLAIM_TTL_MS,
 		tasks: [...states.values()].map((s) => ({
 			...s,
-			claimant_npub: npubEncode(s.claimant)
+			claimant_npub: npubEncode$1(s.claimant)
 		}))
 	});
 });
@@ -35284,7 +38588,7 @@ server.registerTool("orch_verb", {
 });
 async function main() {
 	const state = identityState();
-	const npub = npubEncode(getPublicKey(hexToBytes$1(state.sk)));
+	const npub = npubEncode$1(getPublicKey$1(hexToBytes$1(state.sk)));
 	console.error(`bao-chat-mcp: identity "${IDENTITY}" (${npub.slice(0, 20)}…) in "${state.community.name}" — stdio up`);
 	audit("boot", {}, `${IDENTITY} in ${state.community.name}`);
 	await server.connect(new StdioServerTransport());

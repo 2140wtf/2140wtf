@@ -20,6 +20,20 @@ import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import { controlGroups, currentControlGroup, foldControlState, openControlWraps } from "@/concord-v2/lib/control";
+import {
+  NIP34_ISSUE_KIND,
+  NIP34_PATCH_KIND,
+  NIP34_PULL_REQUEST_KIND,
+  NIP34_STATUS_KINDS,
+  latestProjectStatuses,
+  parseAuthoritativeStatus,
+  parseProjectArtifact,
+  parseRepoNaddr,
+  parseRepositoryEvent,
+  repositoryMaintainers,
+  repositoryRelays,
+  type Nip34Artifact,
+} from "@/lib/nip34Project";
 import { channelsView } from "@/concord-v2/lib/community";
 import { channelGroupKey, voiceGroupKey, voiceMediaKey } from "@/concord-v2/lib/derive";
 import { buildRumor, channelBindingTags, checkChannelBinding, openWrap, sealRumor, wrapSeal, type StreamSigner } from "@/concord-v2/lib/stream";
@@ -35,7 +49,7 @@ import {
   type ClaimState,
   type OrchVerb,
 } from "@/concord-v2/lib/orchestration";
-import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
+import type { ChannelV2, CommunityMetadata, CommunityV2 } from "@/concord-v2/lib/types";
 import type { NostrEvent } from "nostr-tools/pure";
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -87,8 +101,16 @@ export interface State {
  */
 export const PROTOCOL_VERSION = 1;
 
+/** Keep identity-controlled filenames inside STATE_DIR. */
+export function validateIdentityName(name: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
+    throw new Error("Identity name must be 1–64 ASCII letters, digits, dots, underscores, or dashes, starting with a letter or digit.");
+  }
+  return name;
+}
+
 export function statePath(name: string): string {
-  return join(STATE_DIR, `${name}.json`);
+  return join(STATE_DIR, `${validateIdentityName(name)}.json`);
 }
 
 export function loadState(name: string): State {
@@ -326,6 +348,86 @@ export async function publishAll(relays: string[], event: NostrEvent, label: str
 
 export async function queryAll(relays: string[], filter: Record<string, unknown>): Promise<NostrEvent[]> {
   return getPool().querySync(relays, filter as never, { maxWait: 8000 }) as Promise<NostrEvent[]>;
+}
+
+/** Fold current encrypted control metadata. No public project relay is touched. */
+export async function communityMetadata(state: State): Promise<CommunityMetadata | undefined> {
+  const community = communityOf(state.community, state.private_channels);
+  const controls = controlGroups(community);
+  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: controls.map((control) => control.pk) });
+  return foldControlState(openControlWraps(wraps, controls), community.id, community.owner).metadata;
+}
+
+export interface AgentProjectSnapshot {
+  coordinate: string;
+  naddr: string;
+  name: string;
+  description?: string;
+  maintainers: string[];
+  relays: string[];
+  issues: Array<{ id: string; author: string; subject: string; labels: string[]; status?: string; created_at: number }>;
+  pull_requests: Array<{ id: string; author: string; subject: string; labels: string[]; status?: string; created_at: number }>;
+  patches: Array<{ id: string; author: string; subject: string; labels: string[]; status?: string; created_at: number }>;
+  partial: boolean;
+}
+
+/**
+ * Read the public NIP-34 projection explicitly linked from sealed metadata.
+ * Calling this reveals interest in the repository to its hinted relays; chat
+ * and orchestration commands never call it implicitly.
+ */
+export async function projectSnapshot(state: State): Promise<AgentProjectSnapshot> {
+  const metadata = await communityMetadata(state);
+  const pointer = parseRepoNaddr(metadata?.repo_naddr);
+  if (!pointer) throw new Error("This community has no valid NIP-34 project attached.");
+  const discoveryRelays = pointer.relays.length ? pointer.relays : state.community.relays;
+  const repoEvents = await queryAll(discoveryRelays, {
+    kinds: [30617], authors: [pointer.owner], "#d": [pointer.identifier], limit: 10,
+  });
+  const repository = repoEvents
+    .map((event) => parseRepositoryEvent(event, pointer))
+    .filter((event): event is NostrEvent => !!event)
+    .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id))[0];
+  if (!repository) throw new Error("The attached NIP-34 repository announcement was not found or failed validation.");
+
+  const maintainers = repositoryMaintainers(repository, pointer);
+  const relays = repositoryRelays(repository);
+  const sourceRelays = relays.length ? relays : discoveryRelays;
+  const events = await queryAll(sourceRelays, {
+    kinds: [NIP34_ISSUE_KIND, NIP34_PATCH_KIND, NIP34_PULL_REQUEST_KIND], "#a": [pointer.coordinate], limit: 300,
+  });
+  const artifacts = events.map((event) => parseProjectArtifact(event, pointer)).filter((item): item is Nip34Artifact => !!item);
+  const byId = new Map(artifacts.map((item) => [item.event.id, item]));
+  const roots = artifacts.filter((item) => item.statusRoot);
+  const statusEvents = roots.length ? await queryAll(sourceRelays, {
+    kinds: [...NIP34_STATUS_KINDS],
+    authors: [...new Set([...maintainers, ...roots.map((item) => item.event.pubkey)])],
+    "#e": roots.map((item) => item.event.id),
+    limit: Math.min(500, Math.max(1, roots.length * 4)),
+  }) : [];
+  const statuses = latestProjectStatuses(statusEvents
+    .map((event) => parseAuthoritativeStatus(event, byId, maintainers))
+    .filter((status): status is NonNullable<typeof status> => !!status));
+  const serialize = (kind: number) => artifacts.filter((item) => item.kind === kind).map((item) => ({
+    id: item.event.id,
+    author: item.event.pubkey,
+    subject: item.subject,
+    labels: item.labels,
+    status: statuses.get(item.event.id)?.status,
+    created_at: item.event.created_at,
+  })).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+  return {
+    coordinate: pointer.coordinate,
+    naddr: pointer.naddr,
+    name: repository.tags.find(([name]) => name === "name")?.[1] || pointer.identifier,
+    description: repository.tags.find(([name]) => name === "description")?.[1],
+    maintainers: [...maintainers],
+    relays: sourceRelays,
+    issues: serialize(NIP34_ISSUE_KIND),
+    pull_requests: serialize(NIP34_PULL_REQUEST_KIND),
+    patches: serialize(NIP34_PATCH_KIND),
+    partial: events.length >= 300,
+  };
 }
 
 // ── Channels ─────────────────────────────────────────────────────────────────

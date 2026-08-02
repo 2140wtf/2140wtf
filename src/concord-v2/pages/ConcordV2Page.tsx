@@ -83,6 +83,7 @@ import { cn, pickDefaultChannel } from "@/lib/utils";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { shortTimeAgo } from "@/lib/formatTime";
 import { partitionMembersByWot } from "@/lib/wotFilter";
+import { parseRepoNaddr } from "@/lib/nip34Project";
 
 import { authorsByRecency, threadSummary } from "@/components/chat/transport";
 import type { ChatMsg, ChatTransport, MessageReactions, MessageZaps, SendStatus, ZapPayment } from "@/components/chat/transport";
@@ -591,6 +592,7 @@ export function ConcordV2Page() {
 
   const baseCommunity = useCommunity2(communityId);
   const { data: folded } = useControlFold2(baseCommunity);
+  const projectPointer = useMemo(() => parseRepoNaddr(folded?.metadata?.repo_naddr), [folded?.metadata?.repo_naddr]);
   // Overlay the folded, owner-controlled metadata onto the bundle preview.
   const community = useMemo<CommunityV2 | undefined>(() => {
     if (!baseCommunity) return undefined;
@@ -1493,7 +1495,7 @@ export function ConcordV2Page() {
                 <span className="shrink-0 size-2 rounded-full bg-green-500" aria-label="Fundraiser linked" />
               ) : null}
             </button>
-            {folded?.metadata?.repo_naddr ? (
+            {projectPointer ? (
               <button
                 type="button"
                 onClick={() => {
@@ -1881,8 +1883,8 @@ export function ConcordV2Page() {
                   metadata={folded?.metadata}
                   canManage={canManageMetadata}
                 />
-              ) : view === "project" && folded?.metadata?.repo_naddr ? (
-                <ProjectWorkspace2 repoNaddr={folded.metadata.repo_naddr} />
+              ) : view === "project" && projectPointer ? (
+                <ProjectWorkspace2 repoNaddr={projectPointer.naddr} fundId={folded?.metadata?.fund_id} communityName={folded?.metadata?.name || community?.name || "Project"} repoUrl={folded?.metadata?.repo} />
               ) : (
                 <>
                   <MessageTimeline

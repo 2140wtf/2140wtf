@@ -44,17 +44,19 @@ import {
   loadState,
   orchStates,
   orchVerbPost,
+  projectSnapshot,
   publishAll,
   sendChannelMessage,
   waitForInterrupt,
   CLAIM_TTL_MS,
   type State,
+  validateIdentityName,
 } from "./chat-core";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 
 // ── Identity + audit log ─────────────────────────────────────────────────────
 
-const IDENTITY = process.env.BAO_AGENT_IDENTITY ?? "owner";
+const IDENTITY = validateIdentityName(process.env.BAO_AGENT_IDENTITY ?? "owner");
 
 /** JSONL audit log — one line per tool call (AGENT_CHAT_ORCHESTRATION.md §15). */
 function audit(tool: string, args: Record<string, unknown>, summary: string): void {
@@ -95,6 +97,20 @@ server.registerTool(
     const channels = await listChannels(state);
     audit("list_channels", {}, `${channels.length} channel(s)`);
     return jsonResult({ community: state.community.name, channels });
+  },
+);
+
+server.registerTool(
+  "get_project",
+  {
+    description:
+      "Read the public NIP-34 repository attached to this sealed community, including verified issues, pull requests, patches, and authoritative status signals. This explicitly contacts the repository relays and may reveal interest in that public project.",
+    inputSchema: {},
+  },
+  async () => {
+    const snapshot = await projectSnapshot(identityState());
+    audit("get_project", {}, `${snapshot.coordinate}: ${snapshot.issues.length} issue(s), ${snapshot.pull_requests.length} PR(s)`);
+    return jsonResult(snapshot);
   },
 );
 

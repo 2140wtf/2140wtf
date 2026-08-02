@@ -53,7 +53,7 @@ interface MilestoneDraft {
 
 /** Every milestone is a public market — the API rejects thin descriptions. */
 const MILESTONE_DESCRIPTION_MIN = 50;
-/** Project description must give an agent enough context to scope the work. */
+/** Project description must give a collaborator enough context to scope the work. */
 const PROJECT_DESCRIPTION_MIN = 120;
 /** Delivery criteria becomes the market question — it must be unambiguous. */
 const CRITERIA_MIN = 20;
@@ -64,6 +64,7 @@ const CRITERIA_MIN = 20;
  * Agents resolving milestone work MUST find the code there.
  */
 const REPO_LINE_PREFIX = 'Repository: ';
+const WORK_TYPE_LINE_PREFIX = 'Work-Type: ';
 
 /** Accept https git hosting links — GitHub, GitLab, or ngit (git over Nostr). */
 function isValidRepoUrl(value: string): boolean {
@@ -99,6 +100,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const [title, setTitle] = useState(initialTitle ?? '');
   const [description, setDescription] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
+  const [workType, setWorkType] = useState<'software' | 'general'>('software');
   const [runnerType, setRunnerType] = useState<'agent' | 'human' | 'agent_human'>('agent_human');
   const [rail, setRail] = useState<BaoRail>('lightning');
   const [subcategory, setSubcategory] = useState('');
@@ -131,6 +133,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     setTitle('');
     setDescription('');
     setRepoUrl('');
+    setWorkType('software');
     setMilestones([emptyMilestone()]);
     // Also reset the options — leaving rail/subcategory/format behind silently
     // creates the next campaign with the previous one's stream format or rail.
@@ -154,7 +157,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const mutation = useMutation({
     mutationFn: () => {
       const now = Math.floor(Date.now() / 1000);
-      const fullDescription = `${REPO_LINE_PREFIX}${repoUrl.trim()}\n\n${description.trim()}`;
+      const repositoryLine = repoUrl.trim() ? `\n${REPO_LINE_PREFIX}${repoUrl.trim()}` : '';
+      const fullDescription = `${WORK_TYPE_LINE_PREFIX}${workType}${repositoryLine}\n\n${description.trim()}`;
       const input: CreateFundraiserInput = format === 'stream'
         ? {
           title: title.trim(),
@@ -208,7 +212,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
 
   const valid =
     title.trim().length > 0 &&
-    isValidRepoUrl(repoUrl.trim()) &&
+    (workType === 'general' || isValidRepoUrl(repoUrl.trim())) &&
     description.trim().length >= PROJECT_DESCRIPTION_MIN &&
     goal >= 1000 &&
     (format !== 'stream' || (parseInt(streamDays, 10) || 0) >= 1) &&
@@ -228,7 +232,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
   const missing = useMemo(() => {
     const out: string[] = [];
     if (!title.trim()) out.push('Add a project title');
-    if (!isValidRepoUrl(repoUrl.trim())) out.push('Add the repository URL (https://…)');
+    if (workType === 'software' && !isValidRepoUrl(repoUrl.trim())) out.push('Add the repository URL (https://…)');
     if (description.trim().length < PROJECT_DESCRIPTION_MIN) {
       out.push(`Description needs ${PROJECT_DESCRIPTION_MIN}+ characters (now ${description.trim().length})`);
     }
@@ -252,7 +256,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
       });
     }
     return out;
-  }, [title, repoUrl, description, goal, format, milestones, streamDays]);
+  }, [title, repoUrl, workType, description, goal, format, milestones, streamDays]);
 
   const patchMilestone = (i: number, patch: Partial<MilestoneDraft>) =>
     setMilestones((ms) => ms.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -312,16 +316,25 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="fr-repo">Repository (required)</Label>
+            <Label>Project type</Label>
+            <Select value={workType} onValueChange={(value) => setWorkType(value as typeof workType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="software">Software / open source</SelectItem><SelectItem value="general">General / art / research / community</SelectItem></SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">General projects use their milestone evidence plan instead of requiring a code repository.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="fr-repo">Repository {workType === 'software' ? '(required)' : '(optional)'}</Label>
             <Input
               id="fr-repo"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="https://github.com/you/project — GitHub, GitLab or ngit"
+              placeholder={workType === 'software' ? "https://github.com/you/project — GitHub, GitLab or ngit" : "Optional supporting repository or evidence site"}
               inputMode="url"
             />
             <p className="text-[11px] text-muted-foreground">
-              Where the code lives. Agents resolving milestones will look here first.
+              {workType === 'software' ? 'Where the code lives. Use an immutable commit in milestone evidence.' : 'Optional for non-code work; describe the evidence and review method in each milestone.'}
             </p>
             {repoUrl.trim().length > 0 && !isValidRepoUrl(repoUrl.trim()) && (
               <p className="text-[11px] text-amber-500">Enter a full https:// link to the repo.</p>
@@ -335,7 +348,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              placeholder={`What will the funds build, who runs it, and why now? Write for agents and humans (min ${PROJECT_DESCRIPTION_MIN} chars).`}
+              placeholder={`What will the funds create, who runs it, and why now? Write for agents and humans (min ${PROJECT_DESCRIPTION_MIN} chars).`}
             />
             {description.trim().length > 0 && description.trim().length < PROJECT_DESCRIPTION_MIN && (
               <p className="text-[11px] text-amber-500">
@@ -344,7 +357,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Run by</Label>
               <Select value={runnerType} onValueChange={(v) => setRunnerType(v as typeof runnerType)}>
