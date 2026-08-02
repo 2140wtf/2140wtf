@@ -46,6 +46,10 @@ vi.mock('@/hooks/useAuthor', () => ({
   useAuthor: () => ({ data: undefined }),
 }));
 
+vi.mock('@/contexts/LayoutContext', () => ({
+  useLayoutOptions: vi.fn(),
+}));
+
 // The create dialog needs the Nostr publish stack; it is irrelevant here.
 vi.mock('@/components/bao-fund/CreateCampaignDialog', () => ({
   CreateCampaignDialog: () => null,
