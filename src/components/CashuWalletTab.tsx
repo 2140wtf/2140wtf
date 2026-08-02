@@ -6,6 +6,7 @@ import {
   Check,
   CloudDownload,
   Copy,
+  Camera,
   Landmark,
   RefreshCw,
   Shield,
@@ -17,6 +18,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SatsPresetPills } from '@/components/SatsPresetPills';
+import { CashuTokenQr } from '@/components/CashuTokenQr';
+import { QrScannerDialog } from '@/components/QrScannerDialog';
 import {
   Dialog,
   DialogContent,
@@ -57,6 +60,7 @@ export function CashuWalletTab() {
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = wallet;
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [depositMethod, setDepositMethod] = useState<'bolt11' | 'bolt12'>('bolt11');
   const [invoiceQuote, setInvoiceQuote] = useState<DepositQuote | null>(null);
@@ -432,10 +436,16 @@ export function CashuWalletTab() {
                     onChange={(e) => setReceiveTokenStr(e.target.value)}
                     rows={4}
                   />
-                  <Button onClick={handleReceiveToken} disabled={!receiveTokenStr.trim() || wallet.loading}>
-                    <ArrowDownLeft className='size-4 mr-1.5' />
-                    Receive token
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={handleReceiveToken} disabled={!receiveTokenStr.trim() || wallet.loading}>
+                      <ArrowDownLeft className='size-4 mr-1.5' />
+                      Receive token
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
+                      <Camera className="size-4 mr-1.5" />
+                      Scan QR
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value='invoice' className='space-y-4'>
@@ -534,9 +544,7 @@ export function CashuWalletTab() {
                   </div>
                   {generatedToken && (
                     <div className='space-y-4 flex flex-col items-center pt-2'>
-                      <div className='rounded-xl bg-white p-4 shadow-sm'>
-                        <QRCodeSVG value={generatedToken} size={200} level='M' />
-                      </div>
+                      <CashuTokenQr token={generatedToken} size={200} />
                       <p className='text-xs text-amber-600 dark:text-amber-500 text-center max-w-xs'>
                         This token IS the money — your wallet is already debited. It is stored in
                         this browser until you dismiss it; copy it before leaving this page.
@@ -640,6 +648,15 @@ export function CashuWalletTab() {
           </Card>
         </TabsContent>
       </Tabs>
+      <QrScannerDialog
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        title="Scan Cashu token"
+        onScan={(token) => {
+          setReceiveTokenStr(token);
+          setScannerOpen(false);
+        }}
+      />
 
       {/* Transactions */}
       {wallet.transactions.length > 0 && (

@@ -80,6 +80,7 @@
     "@milkdown/prose": "^7.20.0",
     "@milkdown/react": "^7.20.0",
     "@milkdown/utils": "^7.20.0",
+    "@ngraveio/bc-ur": "^1.1.13",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
     "@nostrify/indexeddb": "^0.1.0",
