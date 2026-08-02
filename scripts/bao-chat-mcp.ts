@@ -58,13 +58,13 @@ import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 
 const IDENTITY = validateIdentityName(process.env.BAO_AGENT_IDENTITY ?? "owner");
 
-/** JSONL audit log — one line per tool call (AGENT_CHAT_ORCHESTRATION.md §15). */
-function audit(tool: string, args: Record<string, unknown>, summary: string): void {
+/** Privacy-minimal JSONL audit: operation and coarse outcomes, never content or identifiers. */
+function audit(tool: string, metrics: Record<string, number | boolean> = {}): void {
   try {
     mkdirSync(STATE_DIR, { recursive: true });
     appendFileSync(
       join(STATE_DIR, `audit-${IDENTITY}.jsonl`),
-      JSON.stringify({ ts: new Date().toISOString(), tool, args, summary }) + "\n",
+      JSON.stringify({ ts: new Date().toISOString(), tool, metrics }) + "\n",
       { mode: 0o600 },
     );
   } catch {
@@ -95,7 +95,7 @@ server.registerTool(
   async () => {
     const state = identityState();
     const channels = await listChannels(state);
-    audit("list_channels", {}, `${channels.length} channel(s)`);
+    audit("list_channels", { count: channels.length });
     return jsonResult({ community: state.community.name, channels });
   },
 );
@@ -109,7 +109,7 @@ server.registerTool(
   },
   async () => {
     const snapshot = await projectSnapshot(identityState());
-    audit("get_project", {}, `${snapshot.coordinate}: ${snapshot.issues.length} issue(s), ${snapshot.pull_requests.length} PR(s)`);
+    audit("get_project", { issues: snapshot.issues.length, pull_requests: snapshot.pull_requests.length });
     return jsonResult(snapshot);
   },
 );
@@ -127,7 +127,7 @@ server.registerTool(
   async ({ limit, channel }) => {
     const state = identityState();
     const messages = (await channelMessages(state, channel)).slice(-limit);
-    audit("read_messages", { limit, channel }, `${messages.length} message(s)`);
+    audit("read_messages", { limit, channel_selected: channel !== undefined, count: messages.length });
     return jsonResult({
       community: state.community.name,
       channel: channel ?? "general",
@@ -156,7 +156,7 @@ server.registerTool(
   async ({ text, key, channel }) => {
     const state = identityState();
     const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey: key, channel });
-    audit("send_message", { key, channel, len: text.length }, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
+    audit("send_message", { length: text.length, channel_selected: channel !== undefined, deduped });
     return jsonResult({ rumor_id: rumorId, deduped, channel: channel ?? "general" });
   },
 );
@@ -176,10 +176,10 @@ server.registerTool(
     const state = identityState();
     const hit = await waitForInterrupt(IDENTITY, state, { timeoutSec: timeout_sec, mentionsOnly: mention_only, channel });
     if (!hit) {
-      audit("wait_for_message", { timeout_sec, mention_only, channel }, "timeout");
+      audit("wait_for_message", { timeout_seconds: timeout_sec, mention_only, channel_selected: channel !== undefined, hit: false });
       return jsonResult({ timeout: true });
     }
-    audit("wait_for_message", { timeout_sec, mention_only, channel }, `hit ${hit.id.slice(0, 12)}`);
+    audit("wait_for_message", { timeout_seconds: timeout_sec, mention_only, channel_selected: channel !== undefined, hit: true });
     return jsonResult({
       timeout: false,
       id: hit.id,
@@ -200,7 +200,7 @@ server.registerTool(
   async () => {
     const state = identityState();
     const pubkey = getPublicKey(hexToBytes(state.sk));
-    audit("get_profile", {}, IDENTITY);
+    audit("get_profile");
     return jsonResult({
       identity: IDENTITY,
       npub: nip19.npubEncode(pubkey),
@@ -216,7 +216,7 @@ server.registerTool(
   "set_profile",
   {
     description:
-      "Publish a Nostr kind-0 profile for this identity to the community's relays (bot:true marks it as an agent per the orchestration conventions).",
+      "Publicly publish a Nostr kind-0 profile to the community relays. This explicit action can correlate the identity with private community activity.",
     inputSchema: {
       display_name: z.string().max(64).optional(),
       about: z.string().max(500).optional(),
@@ -236,7 +236,7 @@ server.registerTool(
       sk,
     );
     await publishAll(state.community.relays, event, "kind-0 profile");
-    audit("set_profile", { display_name }, event.id.slice(0, 12));
+    audit("set_profile", { has_display_name: display_name !== undefined, has_about: about !== undefined });
     return jsonResult({ published: true, event_id: event.id });
   },
 );
@@ -253,7 +253,7 @@ server.registerTool(
   async ({ orch }) => {
     const state = identityState();
     const states = await orchStates(state, orch);
-    audit("orch_show", { orch }, `${states.size} task(s)`);
+    audit("orch_show", { count: states.size });
     return jsonResult({
       orch,
       ttl_ms: CLAIM_TTL_MS,
@@ -280,7 +280,7 @@ server.registerTool(
   async ({ verb, task_id, text, orch }) => {
     const state = identityState();
     const result = await orchVerbPost(state, verb.toUpperCase() as OrchVerb, task_id, text, orch);
-    audit("orch_verb", { verb, task_id, orch }, result.deduped ? "deduped" : `sent ${result.rumorId.slice(0, 12)}`);
+    audit("orch_verb", { deduped: result.deduped, held: result.held === true });
     return jsonResult({
       rumor_id: result.rumorId,
       deduped: result.deduped,
@@ -296,7 +296,7 @@ async function main(): Promise<void> {
   const state = identityState();
   const npub = nip19.npubEncode(getPublicKey(hexToBytes(state.sk)));
   console.error(`bao-chat-mcp: identity "${IDENTITY}" (${npub.slice(0, 20)}…) in "${state.community.name}" — stdio up`);
-  audit("boot", {}, `${IDENTITY} in ${state.community.name}`);
+  audit("boot");
   await server.connect(new StdioServerTransport());
 }
 
