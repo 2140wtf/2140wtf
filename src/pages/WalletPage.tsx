@@ -1,4 +1,5 @@
-import { Wallet, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Wallet, RefreshCw, AlertTriangle, Landmark } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { useState } from 'react';
 
@@ -21,6 +22,8 @@ import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { LightningWalletTab } from '@/components/LightningWalletTab';
 import { ComingSoonTab } from '@/components/ComingSoonTab';
 import { ResearchBetaAlert } from '@/components/ResearchBetaAlert';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DEFAULT_MINTS, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
@@ -158,7 +161,25 @@ export function WalletPage() {
                   Your signer does not support NIP-44, which is required for Cashu backup encryption.
                 </div>
               ) : cashuWallet.seedAvailable && cashuWallet.seedPhrase ? (
-                <CashuWalletTab />
+                cashuWallet.isNewWallet
+                  && cashuWallet.totalBalance === 0
+                  && !cashuWallet.allMints.some((mint) => !DEFAULT_MINTS.some((legacy) => safeNormalizeMintUrl(legacy.url) === safeNormalizeMintUrl(mint.url))) ? (
+                  <Card className="border-dashed">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Landmark className="size-5 text-primary" /> Choose your Cashu mint
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        A mint holds the Lightning backing for your ecash. Choose a currently reachable community mint and review its operator and audit information before depositing.
+                      </p>
+                      <Button className="w-full" asChild>
+                        <Link to="/mints">Discover live mints</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : <CashuWalletTab />
               ) : (
                 <div className="py-12 flex flex-col items-center gap-4 text-center">
                   <p className="text-sm text-muted-foreground">

@@ -44,7 +44,7 @@ function NutBadge({ nut }: { nut: number }) {
   );
 }
 
-function MintInfoPanel({ url }: { url: string }) {
+export function MintInfoPanel({ url }: { url: string }) {
   const { data, isLoading, error } = useMintInfo(url);
   const audit = useMintAuditInfo(url);
 
@@ -283,6 +283,7 @@ function MintCard({
   onReview: (option: SmartMintOption) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const health = useMintInfo(option.url);
   const { announcement, recommendations, hasBalance } = option;
   const avgRating =
     recommendations.length > 0
@@ -313,16 +314,19 @@ function MintCard({
             <Button
               size="sm"
               variant={isAdded ? 'secondary' : 'default'}
-              disabled={isAdded}
+              disabled={isAdded || health.isLoading || health.isError}
               onClick={() => onAdd(option.url)}
               className="gap-1"
             >
               {isAdded ? <Check className="size-4" /> : <Plus className="size-4" />}
-              {isAdded ? 'Added' : 'Add'}
+              {isAdded ? 'Added' : health.isLoading ? 'Checking…' : health.isError ? 'Offline' : 'Add'}
             </Button>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2">
+          <Badge variant="outline" className={health.isError ? 'text-destructive border-destructive/40' : health.isLoading ? '' : 'text-green-600 border-green-500/40 dark:text-green-400'}>
+            {health.isLoading ? 'checking mint' : health.isError ? 'unreachable' : 'online'}
+          </Badge>
           {announcement?.network === 'mainnet' && (
             <Badge variant="secondary" className="gap-1 text-xs">
               <ShieldCheck className="size-3" />
@@ -358,10 +362,15 @@ function MintCard({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <Button variant="ghost" size="sm" className="gap-1 -ml-2 h-8" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          {expanded ? 'Hide details' : 'Show details'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="gap-1 -ml-2 h-8" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            {expanded ? 'Hide details' : 'Show details'}
+          </Button>
+          <Button variant="link" size="sm" className="h-8" asChild>
+            <Link to={`/mints/details?url=${encodeURIComponent(option.url)}`}>Full details</Link>
+          </Button>
+        </div>
         {expanded && <MintInfoPanel url={option.url} />}
       </CardContent>
     </Card>
