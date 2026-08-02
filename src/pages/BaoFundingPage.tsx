@@ -8,6 +8,7 @@ import { ComputeCreditsTab } from '@/components/bao-fund/ComputeCreditsTab';
 import { CreateCampaignDialog } from '@/components/bao-fund/CreateCampaignDialog';
 import { MilestoneMarketWidget } from '@/components/bao-fund/MilestoneMarketWidget';
 import { StreamBar } from '@/components/bao-fund/StreamBar';
+import { ResearchBetaAlert } from '@/components/ResearchBetaAlert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -206,6 +207,8 @@ export function BaoFundingPage() {
           </Button>
         )}
       </div>
+
+      <ResearchBetaAlert />
 
       <Tabs defaultValue="campaigns">
         <TabsList className="w-full">
