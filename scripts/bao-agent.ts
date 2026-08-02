@@ -2,7 +2,7 @@
  * Headless Concord V2 (₿AO) driver — the agent API entry (see AGENTS.md).
  *
  * A Claude session (or any agent) can create a ₿AO, mint invite links, join
- * via one, and read/post in #general — no GUI, straight onto the relays.
+ * via one, and read/post in any channel — no GUI, straight onto the relays.
  * State lives in ~/.concord-live/<name>.json (OUTSIDE the repo: it holds a
  * private key) so an identity survives reboots and later sessions can re-enter.
  *
@@ -19,10 +19,10 @@
  *   join <invite-url> [--as name]        join with a FRESH key, saves member state
  *                                        (grinds the agent_gate PoW + checks
  *                                        single-use spend automatically)
- *   say <text> [--key K] [--as name]     post to #general (--key = idempotent:
+ *   say <text> [--channel C] [--key K]   post to a channel (default #general;
  *                                        a retry with the same key dedupes)
- *   read [--json] [--as name]            print #general timeline + member list
- *   wait [--timeout S] [--all] [--json]  interrupt: first NEW message mentioning
+ *   read [--channel C] [--json]          print a channel timeline + member list
+ *   wait [--channel C] [--timeout S]     interrupt: first NEW message mentioning
  *                                        me (default) or any new message (--all).
  *                                        Exit 0 = message, 2 = timeout.
  *   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
@@ -82,6 +82,7 @@ import {
   publishAgentProfile,
   publishAll,
   queryAll,
+  resolveChannel,
   saveState,
   sendChannelMessage,
   signerOf,
@@ -163,6 +164,8 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
       owner_salt: bytesToHex(community.ownerSalt),
       community_root: bytesToHex(community.root),
       root_epoch: Number(community.rootEpoch),
+      held_roots: [],
+      joined_at: Date.now(),
       name: communityName,
       relays: community.relays,
       general_channel_id: bytesToHex(generalChannelId),
@@ -297,9 +300,10 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   }
 
   const attribution = { creator: bundle.creator_npub ?? "", ...(bundle.label ? { label: bundle.label } : {}), commitment };
+  const joinedAt = Date.now();
   const rumor = gate
-    ? grindJoinRumor(pubkey, Date.now(), gate.difficulty, attribution)
-    : buildJoinRumor(pubkey, Date.now(), attribution);
+    ? grindJoinRumor(pubkey, joinedAt, gate.difficulty, attribution)
+    : buildJoinRumor(pubkey, joinedAt, attribution);
   await publishAll(
     community.relays,
     await sealGuestbook(rumor, currentGuestbookGroup(community), signer),
@@ -348,6 +352,8 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
       owner_salt: bundle.owner_salt,
       community_root: bundle.community_root,
       root_epoch: bundle.root_epoch,
+      held_roots: [],
+      joined_at: Date.now(),
       name: bundle.name,
       relays: bundle.relays,
     },
@@ -363,20 +369,22 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   console.log(`State: ${statePath(name)}`);
 }
 
-async function say(name: string, text: string, idemKey: string | undefined, json: boolean): Promise<void> {
+async function say(name: string, text: string, idemKey: string | undefined, channelSelector: string | undefined, json: boolean): Promise<void> {
   const state = loadState(name);
-  const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey });
+  const channel = await resolveChannel(state, channelSelector);
+  const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey, channel: channel.idHex });
   if (json) {
-    console.log(JSON.stringify({ rumor_id: rumorId, deduped }));
+    console.log(JSON.stringify({ rumor_id: rumorId, deduped, channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) } }));
   } else if (deduped) {
     console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
   }
 }
 
-async function read(name: string, json: boolean): Promise<void> {
+async function read(name: string, channelSelector: string | undefined, json: boolean): Promise<void> {
   const state = loadState(name);
   const community = communityOf(state.community, state.private_channels);
-  const messages = await channelMessages(state);
+  const channel = await resolveChannel(state, channelSelector);
+  const messages = await channelMessages(state, channel.idHex);
 
   // Member list from the guestbook.
   const gb = currentGuestbookGroup(community);
@@ -396,7 +404,7 @@ async function read(name: string, json: boolean): Promise<void> {
       JSON.stringify(
         {
           community: community.name,
-          channel: "general",
+          channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) },
           channels: await listChannels(state),
           messages: messages.map((m) => ({
             id: m.id,
@@ -415,7 +423,7 @@ async function read(name: string, json: boolean): Promise<void> {
     return;
   }
 
-  console.log(`\n#general — ${messages.length} message(s):`);
+  console.log(`\n#${channel.name} — ${messages.length} message(s):`);
   for (const m of messages) {
     const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
     console.log(`  [${time}] ${nip19.npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
@@ -471,19 +479,20 @@ async function read(name: string, json: boolean): Promise<void> {
 
 async function waitMode(
   name: string,
-  opts: { timeoutSec: number; mentionsOnly: boolean; json: boolean },
+  opts: { timeoutSec: number; mentionsOnly: boolean; channel?: string; json: boolean },
 ): Promise<void> {
   const state = loadState(name);
-  const hit = await waitForInterrupt(name, state, opts);
+  const channel = await resolveChannel(state, opts.channel);
+  const hit = await waitForInterrupt(name, state, { ...opts, channel: channel.idHex });
   if (!hit) {
-    if (opts.json) console.log(JSON.stringify({ timeout: true }));
+    if (opts.json) console.log(JSON.stringify({ timeout: true, channel: { id: channel.idHex, name: channel.name } }));
     else console.log("(timeout — no matching message)");
     process.exitCode = 2;
     return;
   }
   if (opts.json) {
     console.log(
-      JSON.stringify({ timeout: false, id: hit.id, author: hit.author, author_npub: nip19.npubEncode(hit.author), ms: hit.ms, content: hit.content, tags: hit.tags }),
+      JSON.stringify({ timeout: false, channel: { id: channel.idHex, name: channel.name }, id: hit.id, author: hit.author, author_npub: nip19.npubEncode(hit.author), ms: hit.ms, content: hit.content, tags: hit.tags }),
     );
   } else {
     const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
@@ -555,7 +564,7 @@ function argValue(args: string[], flag: string): string | undefined {
 }
 
 /** Flags whose NEXT token is a value (not a positional arg). */
-const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label"];
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel"];
 
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args: string[]): string[] {
@@ -593,18 +602,18 @@ async function main(): Promise<void> {
     case "say": {
       const text = positionalArgs(rest).join(" ");
       if (!text) throw new Error("say needs text");
-      await say(as, text, argValue(rest, "--key"), json);
+      await say(as, text, argValue(rest, "--key"), argValue(rest, "--channel"), json);
       break;
     }
     case "read":
-      await read(as, json);
+      await read(as, argValue(rest, "--channel"), json);
       break;
     case "wait": {
       const timeoutSec = Number(argValue(rest, "--timeout") ?? "60");
       if (!Number.isFinite(timeoutSec) || timeoutSec < 1 || timeoutSec > 300) {
         throw new Error("--timeout must be 1..300 seconds");
       }
-      await waitMode(as, { timeoutSec, mentionsOnly: !rest.includes("--all"), json });
+      await waitMode(as, { timeoutSec, mentionsOnly: !rest.includes("--all"), channel: argValue(rest, "--channel"), json });
       break;
     }
     case "orch": {
@@ -631,7 +640,7 @@ async function main(): Promise<void> {
     }
     default:
       console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--key K] | read [--json] | wait [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
+        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
       );
   }
 }

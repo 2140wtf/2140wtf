@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 //#region \0rolldown/runtime.js
@@ -7249,6 +7249,8 @@ function decrypt(payload, conversationKey) {
 const LABEL_CHANNEL = "concord/channel";
 const LABEL_CONTROL = "concord/control";
 const LABEL_GUESTBOOK = "concord/guestbook";
+const LABEL_VOICE_SIGNER = "concord/voice-signer";
+const LABEL_VOICE_MEDIA = "concord/voice-media";
 const LABEL_GRANT = "concord/grant";
 const LABEL_BANLIST = "concord/banlist";
 const LABEL_INVITE_LINKS = "concord/invite-links";
@@ -7367,6 +7369,30 @@ function guestbookGroupKey(communityRoot, communityId, epoch) {
 	assert32("communityId", communityId);
 	return groupKeyCached(LABEL_GUESTBOOK, communityRoot, communityId, toEpoch(epoch));
 }
+/**
+* A voice Channel's SFU room keypair (CORD-07 §1): `voice_key.pk` IS the SFU
+* room name and `voice_key.sk` signs token grants (§2). `secret`/`epoch` are
+* the same pair that addresses the Channel's Chat Plane — the community_root at
+* the root epoch for a Public Channel, the Channel's own key/epoch for a
+* Private one — so the room rolls exactly when the Channel's key does. The
+* `group_key` shape is reused only for its deterministic keypair; the pk is
+* never a stream address.
+*/
+function voiceGroupKey(secret, channelId, epoch) {
+	assert32("secret", secret);
+	assert32("channelId", channelId);
+	return groupKeyCached(LABEL_VOICE_SIGNER, secret, channelId, toEpoch(epoch));
+}
+/**
+* A voice Channel's raw 32-byte media-encryption root (CORD-07 §1). Never feeds
+* a cipher directly — every publisher's per-sender frame key derives from it
+* (see {@link voiceSenderKey}).
+*/
+function voiceMediaKey(secret, channelId, epoch) {
+	assert32("secret", secret);
+	assert32("channelId", channelId);
+	return hkdf32(secret, buildInfo(LABEL_VOICE_MEDIA, channelId, toEpoch(epoch)));
+}
 /** A member's Grant entity coordinate (the edition `eid`). */
 function grantLocator(communityId, memberXonly) {
 	assert32("communityId", communityId);
@@ -7435,6 +7461,40 @@ const KIND_JOIN_LEAVE = 3306;
 const KIND_CONTROL = 3308;
 /** Public invite bundle: addressable, signed by the per-link keypair, empty `d`. */
 const KIND_INVITE_BUNDLE = 33301;
+//#endregion
+//#region src/lib/sanitizeUrl.ts
+/**
+* Whether a URL points at a local-network address (loopback, RFC-1918 private,
+* link-local, `.local`/`.localhost`). Untrusted event data (custom-emoji URLs,
+* avatars, media) can carry a `http://localhost:…` or `http://192.168.x.x/…`
+* URL — usually a leaked dev instance — so anything that turns such a URL into
+* an `<img>`/`fetch` MUST refuse it, or every viewer who renders it gets the
+* browser's local-network access prompt.
+*/
+function isLocalNetworkUrl(raw) {
+	if (!raw) return false;
+	let host;
+	try {
+		host = new URL(raw).hostname.toLowerCase();
+	} catch {
+		return false;
+	}
+	const h = host.replace(/^\[|\]$/g, "");
+	if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return true;
+	if (h === "::1" || h === "0.0.0.0") return true;
+	const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+	if (v4) {
+		const a = Number(v4[1]);
+		const b = Number(v4[2]);
+		if (a === 127 || a === 10 || a === 0) return true;
+		if (a === 192 && b === 168) return true;
+		if (a === 172 && b >= 16 && b <= 31) return true;
+		if (a === 169 && b === 254) return true;
+	}
+	if (/^f[cd][0-9a-f]*:/.test(h)) return true;
+	if (/^fe[89ab][0-9a-f]*:/.test(h)) return true;
+	return false;
+}
 /** Community description cap: 10,000 bytes of UTF-8 (CORD-02 §6). */
 const DESCRIPTION_MAX_BYTES = 1e4;
 /** Canonical relay URL for dedupe + display: lowercase scheme/host, no
@@ -7458,13 +7518,24 @@ function capRelays(relays, cap = 15) {
 	const out = [];
 	for (const r of relays) {
 		if (out.length >= cap) break;
-		if (typeof r !== "string" || !r) continue;
+		if (typeof r !== "string" || !r || !isSafeCommunityRelayUrl(r)) continue;
 		const canonical = canonicalRelayUrl(r);
 		if (seen.has(canonical)) continue;
 		seen.add(canonical);
 		out.push(canonical);
 	}
 	return out;
+}
+/** Community metadata is untrusted: never let it steer sockets to arbitrary
+* schemes, credential-bearing URLs, or local-network targets. */
+function isSafeCommunityRelayUrl(raw) {
+	try {
+		const url = new URL(raw);
+		if (url.username || url.password || url.hash) return false;
+		return url.protocol === "wss:" && !isLocalNetworkUrl(raw);
+	} catch {
+		return false;
+	}
 }
 /** Byte length of a string as UTF-8. */
 function utf8Len(s) {
@@ -7474,7 +7545,7 @@ function utf8Len(s) {
 function isImagePointer(v) {
 	if (!v || typeof v !== "object") return false;
 	const o = v;
-	return typeof o.url === "string" && typeof o.key === "string" && typeof o.nonce === "string" && typeof o.hash === "string";
+	return typeof o.url === "string" && typeof o.key === "string" && /^[0-9a-f]{64}$/i.test(o.key) && typeof o.nonce === "string" && /^[0-9a-f]{32}$/i.test(o.nonce) && typeof o.hash === "string" && /^[0-9a-f]{64}$/i.test(o.hash);
 }
 var InviteError = class extends Error {
 	code;
@@ -7792,6 +7863,83 @@ function mintCommunity(name, ownerPubkeyHex, relays) {
 		generalChannelId
 	};
 }
+/**
+* Assemble the channels the member can actually read from the Control fold +
+* held keys:
+*
+*   - a PUBLIC channel derives its stream from the community_root per held
+*     root epoch (readable by every member, rotates with the base for free);
+*   - a PRIVATE channel needs its independent key from the member's bundle —
+*     lacking it, the channel is omitted (its ciphertext is unreadable anyway);
+*   - deleted channels are dropped from display (history stays decryptable to
+*     anyone who held the keys, but that's a future "archive" view).
+*
+* Ordered by name for a stable sidebar.
+*/
+function channelsView(community, folded) {
+	const out = [];
+	const seen = /* @__PURE__ */ new Set();
+	const privateKeysById = new Map(community.privateChannels.map((ch) => [bytesToHex$1(ch.id), ch]));
+	const voiceKeys = (secret, id, epoch) => ({
+		room: voiceGroupKey(secret, id, epoch),
+		mediaKey: voiceMediaKey(secret, id, epoch)
+	});
+	for (const def of folded?.channels.values() ?? []) {
+		if (def.deleted) continue;
+		seen.add(def.channelIdHex);
+		const id = hex32(def.channelIdHex);
+		if (!def.isPrivate) {
+			const streams = community.heldRoots.map((r) => ({
+				epoch: r.epoch,
+				group: channelGroupKey(r.key, id, r.epoch)
+			}));
+			out.push({
+				id,
+				idHex: def.channelIdHex,
+				name: def.name,
+				isPrivate: false,
+				voice: voiceKeys(community.root, id, community.rootEpoch),
+				streams,
+				current: streams[0]
+			});
+			continue;
+		}
+		const held = privateKeysById.get(def.channelIdHex);
+		if (!held) continue;
+		const stream = {
+			epoch: held.epoch,
+			group: channelGroupKey(held.key, id, held.epoch)
+		};
+		out.push({
+			id,
+			idHex: def.channelIdHex,
+			name: def.name,
+			isPrivate: true,
+			voice: voiceKeys(held.key, id, held.epoch),
+			streams: [stream],
+			current: stream
+		});
+	}
+	for (const held of community.privateChannels) {
+		const idHex = bytesToHex$1(held.id);
+		if (seen.has(idHex)) continue;
+		const stream = {
+			epoch: held.epoch,
+			group: channelGroupKey(held.key, held.id, held.epoch)
+		};
+		out.push({
+			id: held.id,
+			idHex,
+			name: held.name || idHex.slice(0, 8),
+			isPrivate: true,
+			voice: voiceKeys(held.key, held.id, held.epoch),
+			streams: [stream],
+			current: stream
+		});
+	}
+	out.sort((a, b) => a.name.localeCompare(b.name));
+	return out;
+}
 //#endregion
 //#region src/concord-v2/lib/stream.ts
 /**
@@ -7957,6 +8105,24 @@ const TAG_EPOCH = "epoch";
 /** The binding tags a Chat rumor MUST commit: `["channel", id]` + `["epoch", n]`. */
 function channelBindingTags(channelIdHex, epoch) {
 	return [[TAG_CHANNEL, channelIdHex], [TAG_EPOCH, epoch.toString()]];
+}
+/** Value of a tag required to appear AT MOST ONCE (binding must be unambiguous). */
+function uniqueTag(tags, name) {
+	let found;
+	for (const t of tags) if (t[0] === name) {
+		if (found !== void 0) throw new StreamError("binding-mismatch", `duplicate binding tag: ${name}`);
+		found = t[1];
+	}
+	return found;
+}
+/**
+* Enforce the Chat-plane binding: the rumor's committed channel + epoch must
+* strict-equal the coordinate whose key decrypted the wrap, or a keyholder
+* could splice one author's rumor into a context they never chose.
+*/
+function checkChannelBinding(opened, channelIdHex, epoch) {
+	if (uniqueTag(opened.tags, TAG_CHANNEL) !== channelIdHex) throw new StreamError("binding-mismatch", "channel-binding mismatch (splice)");
+	if (uniqueTag(opened.tags, TAG_EPOCH) !== epoch.toString()) throw new StreamError("binding-mismatch", "epoch-binding mismatch (splice)");
 }
 //#endregion
 //#region src/concord-v2/lib/version.ts
@@ -8322,6 +8488,10 @@ function canActOnPosition(roles, actorHex, ownerHex, targetPosition, permission)
 }
 //#endregion
 //#region src/concord-v2/lib/control.ts
+/** Every control-plane stream key across the community's held root epochs, newest first. */
+function controlGroups(community) {
+	return community.heldRoots.map((r) => controlGroupKey(r.key, community.id, r.epoch));
+}
 /** The CURRENT control-plane stream key (where new editions publish). */
 function currentControlGroup(community) {
 	return controlGroupKey(community.root, community.id, community.rootEpoch);
@@ -8887,6 +9057,17 @@ function meetsJoinPow(rumorIdHex, difficulty) {
 	return countLeadingZeroBits(rumorIdHex) >= difficulty;
 }
 /**
+* Attempt budget for a grind: 2^(d+4) = 16× the expected work, so a VALID
+* gate fails only with probability e^-16 (~1e-7). A flat cap breaks the
+* contract at the top of the legal range — 2^26 attempts vs difficulty 26-28
+* means a legitimate gate is refused 37-78% of the time (expected work is
+* 2^d). Difficulty is already range-checked by agentGateOf (≤28), so the
+* budget is ≤ 2^32 — slow by the owner's own choice, never an infinite hang.
+*/
+function powAttemptBudget(difficulty) {
+	return 2 ** (difficulty + 4);
+}
+/**
 * Grind a Join rumor until its id carries the required PoW. The send time
 * stays fresh; a NIP-13 `nonce` tag (with the committed difficulty) varies.
 */
@@ -8902,7 +9083,7 @@ function grindJoinRumor(pubkey, ms, difficulty, attribution) {
 		baseTags.push(tag);
 	}
 	for (let counter = 0;; counter++) {
-		if (counter > 1 << 26) throw new Error(`proof-of-work grind exceeded safety cap at difficulty ${difficulty}`);
+		if (counter > powAttemptBudget(difficulty)) throw new Error(`proof-of-work grind exhausted the attempt budget at difficulty ${difficulty}`);
 		const rumor = buildRumor({
 			kind: KIND_JOIN_LEAVE,
 			content: "join",
@@ -9922,15 +10103,25 @@ function deriveClaimKey(orchId, taskId, epoch = 1) {
 * issued from a stale view and is ignored outright, so two concurrent
 * reclaimers can never both believe they won. Epoch-less legacy CLAIMs skip
 * the check but still bump the epoch.
+*
+* Delivery is at-least-once (a relay can resend a stored event on a new
+* subscription), so the SAME rumor id is processed once: a replayed legacy
+* CLAIM on an already-stale claim would otherwise re-take the task and bump
+* the epoch a second time, silently un-fencing every later CLAIM (found by
+* the seed-101 fuzz property: duplication must be a no-op).
 */
 function resolveClaims(messages, opts) {
 	const sorted = [...messages].sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 	const states = /* @__PURE__ */ new Map();
+	const delivered = /* @__PURE__ */ new Set();
 	for (const { id, author, ms, msg } of sorted) {
+		if (delivered.has(id)) continue;
+		delivered.add(id);
+		if (ms - opts.nowMs > 9e5) continue;
 		const cur = states.get(msg.taskId);
 		switch (msg.verb) {
 			case "CLAIM": {
-				if (cur && !cur.stale && !cur.done) break;
+				if (cur && !cur.stale && !cur.done && !cur.released) break;
 				const nextEpoch = (cur?.epoch ?? 0) + 1;
 				if (msg.epoch !== void 0 && msg.epoch !== nextEpoch) break;
 				states.set(msg.taskId, {
@@ -9942,6 +10133,7 @@ function resolveClaims(messages, opts) {
 					epoch: nextEpoch,
 					done: false,
 					blocked: false,
+					released: false,
 					stale: opts.nowMs - ms > opts.ttlMs
 				});
 				break;
@@ -9966,12 +10158,36 @@ function resolveClaims(messages, opts) {
 					cur.lastProgressMs = ms;
 				}
 				break;
-			case "HANDOFF": break;
+			case "HANDOFF":
+				if (cur && cur.claimant === author && !cur.done) {
+					cur.released = true;
+					cur.lastProgressMs = ms;
+				}
+				break;
 			case "ACK": break;
 		}
 	}
 	for (const s of states.values()) if (!s.done && opts.nowMs - s.lastProgressMs > opts.ttlMs) s.stale = true;
 	return states;
+}
+/**
+* Executor-side fence check (mosaico: validate before acting, not only at
+* claim time). May this author post this verb, given the resolved state?
+*
+* - CLAIM: always allowed to ATTEMPT — the fence arbitrates at resolve.
+* - PROGRESS/DONE/BLOCKED while someone ELSE holds the claim: refused. The
+*   resolver would ignore the zombie's verb anyway, but the refusal tells the
+*   AGENT it lost — otherwise it posts DONE and walks away believing it
+*   finished work it no longer owns. Own claim (even stale) may still be
+*   refreshed or marked: staleness is a lease lapse, not a loss.
+* - HANDOFF while someone else holds the claim: refused (only the claimant
+*   can release). ACK carries no claim semantics, always allowed.
+*/
+function mayPostVerb(cur, author, verb) {
+	if (verb === "PROGRESS" || verb === "DONE" || verb === "BLOCKED" || verb === "HANDOFF") {
+		if (cur && cur.claimant !== author) return false;
+	}
+	return true;
 }
 /**
 * Client-side mention detection (the sealed-stack interrupt): a message
@@ -10009,33 +10225,126 @@ function loadState(name) {
 	if (!existsSync(path)) throw new Error(`No identity "${name}" — expected ${path}`);
 	const state = JSON.parse(readFileSync(path, "utf8"));
 	if ((state.protocol_version ?? 1) > 1) throw new Error(`Identity "${name}" was written by protocol v${state.protocol_version} but this binary speaks v1 — re-fetch bao-agent.mjs (never half-run a stale binary).`);
-	return state;
+	return migrateState(state);
 }
+const HEX_32 = /^[0-9a-f]{64}$/i;
+function validEpoch(value) {
+	return Number.isSafeInteger(value) && value >= 0;
+}
+/**
+* Upgrade and canonicalize the access portion of an on-disk identity without
+* mutating the parsed object. Pre-retained-root states remain readable: their
+* current root becomes the sole held root at runtime and `joined_at=0` makes a
+* future exclusion check fail closed (every observed rekey may concern them).
+*/
+function migrateSavedCommunityAccess(community) {
+	if (!validEpoch(community.root_epoch)) throw new Error("Saved community root_epoch must be a non-negative safe integer.");
+	if (!HEX_32.test(community.community_root)) throw new Error("Saved community_root must be 32-byte hex.");
+	const currentKey = community.community_root.toLowerCase();
+	const roots = /* @__PURE__ */ new Map();
+	for (const held of community.held_roots ?? []) {
+		if (!validEpoch(held.epoch) || !HEX_32.test(held.key)) throw new Error("Saved community retained roots must contain a non-negative safe epoch and 32-byte hex key.");
+		if (held.epoch > community.root_epoch) throw new Error(`Saved community retained root epoch ${held.epoch} is newer than current epoch ${community.root_epoch}.`);
+		if (held.epoch === community.root_epoch) {
+			if (held.key.toLowerCase() !== currentKey) throw new Error("Saved community has conflicting keys for its current root epoch.");
+			continue;
+		}
+		const key = held.key.toLowerCase();
+		const prior = roots.get(held.epoch);
+		if (prior !== void 0 && prior !== key) throw new Error(`Saved community has conflicting keys for retained root epoch ${held.epoch}.`);
+		roots.set(held.epoch, key);
+	}
+	return {
+		...community,
+		community_root: currentKey,
+		held_roots: [...roots].sort(([a], [b]) => b - a).map(([epoch, key]) => ({
+			epoch,
+			key
+		})),
+		joined_at: validEpoch(community.joined_at ?? 0) ? community.joined_at ?? 0 : 0,
+		...community.refounder && HEX_32.test(community.refounder) ? { refounder: community.refounder.toLowerCase() } : { refounder: void 0 }
+	};
+}
+/** Pure whole-state migration used by loadState and tests. */
+function migrateState(state) {
+	return {
+		...state,
+		community: migrateSavedCommunityAccess(state.community)
+	};
+}
+/**
+* Atomic write: crash mid-write must never leave a truncated state file —
+* it holds the hex private key, and losing it orphans the identity (mosaico
+* daemon-design, adopted as-is). tmp + rename is atomic on POSIX same-dir.
+*/
 function saveState(name, state) {
 	mkdirSync(STATE_DIR, { recursive: true });
-	writeFileSync(statePath(name), JSON.stringify(state, null, 2), { mode: 384 });
+	const path = statePath(name);
+	const tmp = `${path}.tmp`;
+	writeFileSync(tmp, JSON.stringify(migrateState(state), null, 2), { mode: 384 });
+	renameSync(tmp, path);
+}
+/**
+* Advisory lockfile around state read-modify-write ops (invite, sweep):
+* two concurrent CLI processes would otherwise each read the old file and
+* lose the other's write — the mosaico multi-writer lesson at file level.
+* Locks whose holder died are reclaimed after 30s by mtime.
+*
+* `lockSuffix` selects the lock: the default ".lock" guards the state file
+* itself, while keyed sends use a PER-KEY suffix (".send-<hash>") so two
+* processes racing the same idempotency key serialize their
+* check-then-publish WITHOUT blocking unrelated sends or state ops.
+*/
+async function withStateLock(name, fn, lockSuffix = ".lock") {
+	const lock = `${statePath(name)}${lockSuffix}`;
+	const deadline = Date.now() + 1e4;
+	mkdirSync(STATE_DIR, { recursive: true });
+	for (;;) try {
+		closeSync(openSync(lock, "wx"));
+		break;
+	} catch (err) {
+		if (err.code !== "EEXIST") throw err;
+		try {
+			if (Date.now() - statSync(lock).mtimeMs > 3e4) unlinkSync(lock);
+		} catch {}
+		if (Date.now() > deadline) throw new Error(`State for "${name}" is locked by another process (${lockSuffix}) — retry shortly.`);
+		await new Promise((r) => setTimeout(r, 100));
+	}
+	try {
+		return await fn();
+	} finally {
+		try {
+			unlinkSync(lock);
+		} catch {}
+	}
 }
 function communityOf(c, privateChannels) {
-	const root = hexToBytes$1(c.community_root);
+	const saved = migrateSavedCommunityAccess(c);
+	const root = hexToBytes$1(saved.community_root);
+	const heldRoots = [{
+		epoch: BigInt(saved.root_epoch),
+		key: root
+	}, ...(saved.held_roots ?? []).map((held) => ({
+		epoch: BigInt(held.epoch),
+		key: hexToBytes$1(held.key)
+	}))];
 	return {
-		id: hexToBytes$1(c.id),
-		idHex: c.id,
-		owner: c.owner,
-		ownerSalt: hexToBytes$1(c.owner_salt),
+		id: hexToBytes$1(saved.id),
+		idHex: saved.id,
+		owner: saved.owner,
+		ownerSalt: hexToBytes$1(saved.owner_salt),
 		root,
-		rootEpoch: BigInt(c.root_epoch),
-		heldRoots: [{
-			epoch: BigInt(c.root_epoch),
-			key: root
-		}],
+		rootEpoch: BigInt(saved.root_epoch),
+		heldRoots,
 		privateChannels: privateChannels.map((ch) => ({
 			id: hexToBytes$1(ch.id),
 			key: hexToBytes$1(ch.key),
 			epoch: BigInt(ch.epoch),
 			name: ch.name
 		})),
-		relays: c.relays,
-		name: c.name
+		relays: saved.relays,
+		name: saved.name,
+		refounder: saved.refounder
 	};
 }
 let pool = null;
@@ -10067,86 +10376,113 @@ async function publishAll(relays, event, label) {
 async function queryAll(relays, filter) {
 	return getPool().querySync(relays, filter, { maxWait: 8e3 });
 }
-/** Resolve #general: owner's stored id, else fold the control plane. */
-async function generalChannel(state) {
-	if (state.community.general_channel_id) return {
-		idHex: state.community.general_channel_id,
-		id: hexToBytes$1(state.community.general_channel_id)
-	};
-	const community = communityOf(state.community, state.private_channels);
-	const control = currentControlGroup(community);
-	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
-		kinds: [KIND_WRAP],
-		authors: [control.pk]
-	}), [control]), community.id, community.owner);
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted && def.name === "general") return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) return {
-		idHex: def.channelIdHex,
-		id: hexToBytes$1(def.channelIdHex)
-	};
-	throw new Error("No public channel found in the control fold.");
-}
 /** Public channels from the control fold + this identity's private channels. */
 async function listChannels(state) {
+	return (await availableChannels(state)).map((channel) => ({
+		id: channel.idHex,
+		name: channel.name,
+		private: channel.isPrivate,
+		epoch: Number(channel.current.epoch)
+	}));
+}
+async function availableChannels(state) {
 	const community = communityOf(state.community, state.private_channels);
-	const control = currentControlGroup(community);
-	const folded = foldControlState(openControlWraps(await queryAll(community.relays, {
+	const controls = controlGroups(community);
+	return channelsView(community, foldControlState(openControlWraps(await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [control.pk]
-	}), [control]), community.id, community.owner);
-	const out = [];
-	for (const def of folded.channels.values()) if (!def.isPrivate && !def.deleted) out.push({
-		id: def.channelIdHex,
-		name: def.name,
-		private: false
-	});
-	for (const ch of state.private_channels) out.push({
-		id: ch.id,
-		name: ch.name,
-		private: true
-	});
-	return out;
+		authors: controls.map((control) => control.pk)
+	}), controls), community.id, community.owner));
+}
+/** Resolve a channel by exact id or case-insensitive exact name. */
+async function resolveChannel(state, selector) {
+	const savedGeneral = state.community.general_channel_id?.toLowerCase();
+	const requested = selector?.trim();
+	if (savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral)) {
+		const community = communityOf(state.community, state.private_channels);
+		const id = hexToBytes$1(savedGeneral);
+		const streams = community.heldRoots.map((root) => ({
+			epoch: root.epoch,
+			group: channelGroupKey(root.key, id, root.epoch)
+		}));
+		return {
+			id,
+			idHex: savedGeneral,
+			name: "general",
+			isPrivate: false,
+			streams,
+			current: streams[0],
+			voice: {
+				room: voiceGroupKey(community.root, id, community.rootEpoch),
+				mediaKey: voiceMediaKey(community.root, id, community.rootEpoch)
+			}
+		};
+	}
+	const channels = await availableChannels(state);
+	let matches;
+	if (selector) {
+		const needle = selector.trim();
+		matches = /^[0-9a-f]{64}$/i.test(needle) ? channels.filter((channel) => channel.idHex === needle.toLowerCase()) : channels.filter((channel) => channel.name.toLowerCase() === needle.toLowerCase());
+	} else {
+		const preferred = state.community.general_channel_id?.toLowerCase();
+		matches = preferred ? channels.filter((channel) => channel.idHex === preferred) : [];
+		if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate && channel.name.toLowerCase() === "general");
+		if (matches.length === 0) matches = channels.filter((channel) => !channel.isPrivate).slice(0, 1);
+	}
+	if (matches.length === 1) return matches[0];
+	if (matches.length > 1) throw new Error(`Channel name ${JSON.stringify(selector)} is ambiguous; use its 64-hex id.`);
+	const available = channels.map((channel) => `${channel.name} (${channel.idHex})`).join(", ");
+	throw new Error(`Channel ${JSON.stringify(selector ?? "general")} not found.${available ? ` Available: ${available}` : ""}`);
 }
 /** Everything a channel operation needs, resolved once. */
-async function channelContext(state) {
+async function channelContext(state, selector) {
 	const sk = hexToBytes$1(state.sk);
-	const pubkey = getPublicKey(sk);
-	const signer = signerOf(sk);
-	const community = communityOf(state.community, state.private_channels);
-	const channel = await generalChannel(state);
 	return {
 		sk,
-		pubkey,
-		signer,
-		community,
-		channel,
-		group: channelGroupKey(community.root, channel.id, 0n)
+		pubkey: getPublicKey(sk),
+		signer: signerOf(sk),
+		community: communityOf(state.community, state.private_channels),
+		channel: await resolveChannel(state, selector)
 	};
 }
 /** Decrypted #general history (the relay only ever sees ciphertext). */
-async function channelMessages(state) {
-	const { community, group } = await channelContext(state);
+async function channelMessages(state, selector) {
+	const { community, channel } = await channelContext(state, selector);
+	const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
 	const wraps = await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [group.pk]
+		authors: [...streams.keys()]
 	});
 	const messages = [];
-	for (const wrap of wraps) try {
-		const opened = openWrap(wrap, group);
-		if (opened.kind !== 9) continue;
-		messages.push({
-			id: opened.rumorId,
-			author: opened.author,
-			ms: opened.ms,
-			content: opened.content,
-			tags: opened.tags
-		});
-	} catch {}
+	const seenWraps = /* @__PURE__ */ new Set();
+	for (const wrap of wraps) {
+		if (seenWraps.has(wrap.id)) continue;
+		seenWraps.add(wrap.id);
+		const stream = streams.get(wrap.pubkey);
+		if (!stream) continue;
+		try {
+			const opened = openWrap(wrap, stream.group);
+			if (opened.sealKind !== 20013) continue;
+			checkChannelBinding(opened, channel.idHex, stream.epoch);
+			if (opened.kind !== 9) continue;
+			messages.push({
+				id: opened.rumorId,
+				author: opened.author,
+				ms: opened.ms,
+				content: opened.content,
+				tags: opened.tags
+			});
+		} catch {}
+	}
 	messages.sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-	return messages;
+	const seenKeys = /* @__PURE__ */ new Set();
+	return messages.filter((m) => {
+		const d = m.tags.find((t) => t[0] === "d")?.[1];
+		if (d === void 0) return true;
+		const k = `${m.author}:${d}`;
+		if (seenKeys.has(k)) return false;
+		seenKeys.add(k);
+		return true;
+	});
 }
 /**
 * Post to #general. Idempotent when `idemKey` is given: the key rides as a
@@ -10160,16 +10496,53 @@ async function channelMessages(state) {
 * retry. Revisit if agents start unattended loops or money-adjacent verbs —
 * at that point intents must survive the process.
 */
+/**
+* In-flight keyed sends serialize PER PROCESS: the idempotency scan below is
+* check-then-publish and not atomic, and concurrent callers in one process
+* (parallel MCP tool calls) would otherwise both scan before either lands and
+* double-post (found live in the round-7 MCP stress). The waiter re-scans
+* after the first send resolves and dedupes against it.
+*
+* The PER-PROCESS map alone leaves a CLI×CLI hole: two processes retrying the
+* same key both scan before either publishes and double-post (round 10). So a
+* keyed send additionally takes a per-key lockfile — the check-then-publish is
+* then atomic across processes for that key. A contender that waits out the
+* 10s deadline FAILS CLOSED with "locked by another process" instead of
+* double-posting; the read-side (author, d-tag) dedupe remains as belt-and-
+* braces for lock-free writers (older builds, other front-ends).
+*/
+const inflightKeyedSends = /* @__PURE__ */ new Map();
+/** Per-key lockfile suffix for cross-process keyed-send serialization. */
+function sendLockSuffix(idemKey) {
+	return `.send-${bytesToHex$1(sha256(new TextEncoder().encode(idemKey))).slice(0, 16)}.lock`;
+}
 async function sendChannelMessage(state, text, opts = {}) {
-	const { pubkey, signer, community, channel, group } = await channelContext(state);
 	if (opts.idemKey) {
-		const dupe = (await channelMessages(state)).find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey));
+		const prior = inflightKeyedSends.get(opts.idemKey);
+		if (prior) await prior.catch(() => {});
+	}
+	const run = opts.idemKey ? withStateLock(getPublicKey(hexToBytes$1(state.sk)), () => sendChannelMessageInner(state, text, opts), sendLockSuffix(opts.idemKey)) : sendChannelMessageInner(state, text, opts);
+	if (!opts.idemKey) return run;
+	inflightKeyedSends.set(opts.idemKey, run);
+	try {
+		return await run;
+	} finally {
+		if (inflightKeyedSends.get(opts.idemKey) === run) inflightKeyedSends.delete(opts.idemKey);
+	}
+}
+async function sendChannelMessageInner(state, text, opts = {}) {
+	const textBytes = new TextEncoder().encode(text).length;
+	if (textBytes > 4e4) throw new Error(`Message too large: ${textBytes} bytes (max 40,000 — the sealed wrap must fit NIP-44's 65,535-byte plaintext cap)`);
+	const { pubkey, signer, community, channel } = await channelContext(state, opts.channel);
+	const group = channel.current.group;
+	if (opts.idemKey) {
+		const dupe = (await channelMessages(state, opts.channel)).find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === opts.idemKey));
 		if (dupe) return {
 			rumorId: dupe.id,
 			deduped: true
 		};
 	}
-	const tags = [...channelBindingTags(channel.idHex, 0n), ...opts.extraTags ?? []];
+	const tags = [...channelBindingTags(channel.idHex, channel.current.epoch), ...opts.extraTags ?? []];
 	if (opts.idemKey) tags.push(["d", opts.idemKey]);
 	for (const match of text.match(/npub1[02-9ac-hj-np-z]{20,}/g) ?? []) try {
 		const decoded = decode(match);
@@ -10183,7 +10556,7 @@ async function sendChannelMessage(state, text, opts = {}) {
 		ms: Date.now()
 	});
 	const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer), group);
-	await publishAll(community.relays, wrap, `message to #general`);
+	await publishAll(community.relays, wrap, `message to #${channel.name}`);
 	return {
 		rumorId: rumor.id,
 		deduped: false
@@ -10198,14 +10571,15 @@ async function sendChannelMessage(state, text, opts = {}) {
 * an error. Long-lived callers (MCP) must NOT close the shared pool here.
 */
 async function waitForInterrupt(identityName, state, opts) {
-	const { pubkey, community, group } = await channelContext(state);
+	const { pubkey, community, channel } = await channelContext(state, opts.channel);
+	const streams = new Map(channel.streams.map((stream) => [stream.group.pk, stream]));
 	const myNpub = npubEncode(pubkey);
 	const seen = /* @__PURE__ */ new Set();
 	for (const w of await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
-		authors: [group.pk]
+		authors: [...streams.keys()]
 	})) seen.add(w.id);
-	console.error(`listening on #general of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`);
+	console.error(`listening on #${channel.name} of "${community.name}" (timeout ${opts.timeoutSec}s${opts.mentionsOnly ? ", mentions only" : ""})…`);
 	return new Promise((resolve) => {
 		let sub = null;
 		const finish = (msg) => {
@@ -10216,14 +10590,18 @@ async function waitForInterrupt(identityName, state, opts) {
 		const timer = setTimeout(() => finish(null), opts.timeoutSec * 1e3);
 		sub = getPool().subscribeMany(community.relays, {
 			kinds: [KIND_WRAP],
-			authors: [group.pk],
+			authors: [...streams.keys()],
 			since: Math.floor(Date.now() / 1e3) - 30
 		}, { onevent(wrap) {
 			if (seen.has(wrap.id)) return;
 			seen.add(wrap.id);
 			let opened;
 			try {
-				opened = openWrap(wrap, group);
+				const stream = streams.get(wrap.pubkey);
+				if (!stream) return;
+				opened = openWrap(wrap, stream.group);
+				if (opened.sealKind !== 20013) return;
+				checkChannelBinding(opened, channel.idHex, stream.epoch);
 			} catch {
 				return;
 			}
@@ -10265,24 +10643,37 @@ async function publishAgentProfile(sk, name, relays) {
 		created_at: Math.floor(Date.now() / 1e3)
 	}, sk), "kind-0 profile (name)");
 }
-/** A claim with no PROGRESS from its claimant for this long is reclaimable. */
-const CLAIM_TTL_MS = 1800 * 1e3;
+/** A claim with no PROGRESS from its claimant for this long is reclaimable.
+*  BAO_CLAIM_TTL_MS overrides for live tests against a local relay. */
+const CLAIM_TTL_MS = Number(process.env.BAO_CLAIM_TTL_MS ?? 1800 * 1e3);
+/**
+* Wait this long before DECLARING a claim held, then re-resolve. A claim that
+* appears to win on a PARTIAL view — a rival's earlier-ms claim still in
+* flight — flips to held=false on this confirmation pass instead of letting
+* both racers believe they won (read-your-writes is not read-their-writes).
+* BAO_CLAIM_SETTLE_MS overrides for live tests.
+*/
+const CLAIM_SETTLE_MS = Number(process.env.BAO_CLAIM_SETTLE_MS ?? 1500);
 /**
 * Fail-closed (mosaico daemon-design: "an unavailable control channel fails
 * closed"). An empty claim history means one of two very different things —
 * "no claims yet" or "the relays are down and we can't see the claims". Only
-* the first may resolve to an empty map; the second must throw, or an agent
-* would read silence as claimable and double-work a live claim.
+* the first may proceed; the second must throw, or an agent would read
+* silence as claimable and double-work a live claim.
+*
+* Probes ACTIVELY (ensureRelay), not via listConnectionStatus: the status map
+* is keyed by normalized URL and only reflects past connections, so a passive
+* read both misses keys and can't run before the first query.
 */
-function assertRelayReachable(relays) {
-	const status = getPool().listConnectionStatus();
-	if (relays.filter((r) => status.get(r) === true).length === 0) throw new Error(`cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`);
+async function assertRelayReachable(relays) {
+	if ((await Promise.allSettled(relays.map((r) => getPool().ensureRelay(r, { connectionTimeout: 2500 })))).filter((p) => p.status === "fulfilled").length === 0) throw new Error(`cannot resolve claims: 0/${relays.length} relays reachable — refusing to treat silence as claimable (fail-closed). Retry when a relay answers.`);
 }
 async function orchVerbPost(state, verb, taskId, text, orchId) {
+	if (/\s/.test(taskId)) throw new Error(`Task id must not contain whitespace: ${JSON.stringify(taskId)}`);
 	if (verb === "CLAIM") {
 		const myPubkey = getPublicKey(hexToBytes$1(state.sk));
 		const cur = (await orchStates(state, orchId)).get(taskId);
-		if (cur && !cur.stale && !cur.done) return {
+		if (cur && !cur.stale && !cur.done && !cur.released) return {
 			rumorId: cur.claimant === myPubkey ? cur.claimId : "",
 			deduped: false,
 			held: cur.claimant === myPubkey,
@@ -10296,7 +10687,12 @@ async function orchVerbPost(state, verb, taskId, text, orchId) {
 			idemKey: key,
 			extraTags: [["t", ORCH_TASK_TAG], ["o", orchId]]
 		});
-		const now = (await orchStates(state, orchId)).get(taskId);
+		const holdsUs = (s) => !!s && s.claimant === myPubkey && s.epoch === epoch;
+		let now = (await orchStates(state, orchId)).get(taskId);
+		if (holdsUs(now) || !now) {
+			await new Promise((r) => setTimeout(r, CLAIM_SETTLE_MS));
+			now = (await orchStates(state, orchId)).get(taskId);
+		}
 		if (!now) return {
 			...sent,
 			held: null,
@@ -10304,14 +10700,23 @@ async function orchVerbPost(state, verb, taskId, text, orchId) {
 		};
 		return {
 			...sent,
-			held: now.claimant === myPubkey && now.epoch === epoch,
+			held: holdsUs(now),
 			epoch
 		};
 	}
+	const myPubkey = getPublicKey(hexToBytes$1(state.sk));
+	const cur = (await orchStates(state, orchId)).get(taskId);
+	if (!mayPostVerb(cur, myPubkey, verb)) return {
+		rumorId: "",
+		deduped: false,
+		held: false,
+		epoch: cur?.epoch
+	};
 	const extraTags = [["t", ORCH_TASK_TAG], ["o", orchId]];
 	return sendChannelMessage(state, `${verb} ${taskId}${text ? ` ${text}` : ""}`, { extraTags });
 }
 async function orchStates(state, orchId) {
+	await assertRelayReachable(state.community.relays);
 	const inputs = [];
 	const messages = await channelMessages(state);
 	for (const m of messages) {
@@ -10326,7 +10731,6 @@ async function orchStates(state, orchId) {
 			msg
 		});
 	}
-	if (messages.length === 0) assertRelayReachable(state.community.relays);
 	return resolveClaims(inputs, {
 		ttlMs: CLAIM_TTL_MS,
 		nowMs: Date.now()
@@ -10338,7 +10742,7 @@ async function orchStates(state, orchId) {
 * Headless Concord V2 (₿AO) driver — the agent API entry (see AGENTS.md).
 *
 * A Claude session (or any agent) can create a ₿AO, mint invite links, join
-* via one, and read/post in #general — no GUI, straight onto the relays.
+* via one, and read/post in any channel — no GUI, straight onto the relays.
 * State lives in ~/.concord-live/<name>.json (OUTSIDE the repo: it holds a
 * private key) so an identity survives reboots and later sessions can re-enter.
 *
@@ -10355,10 +10759,10 @@ async function orchStates(state, orchId) {
 *   join <invite-url> [--as name]        join with a FRESH key, saves member state
 *                                        (grinds the agent_gate PoW + checks
 *                                        single-use spend automatically)
-*   say <text> [--key K] [--as name]     post to #general (--key = idempotent:
+*   say <text> [--channel C] [--key K]   post to a channel (default #general;
 *                                        a retry with the same key dedupes)
-*   read [--json] [--as name]            print #general timeline + member list
-*   wait [--timeout S] [--all] [--json]  interrupt: first NEW message mentioning
+*   read [--channel C] [--json]          print a channel timeline + member list
+*   wait [--channel C] [--timeout S]     interrupt: first NEW message mentioning
 *                                        me (default) or any new message (--all).
 *                                        Exit 0 = message, 2 = timeout.
 *   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
@@ -10368,7 +10772,7 @@ async function orchStates(state, orchId) {
 * Exit codes: 0 ok · 1 error · 2 timeout/no-result (Buzz-style discipline).
 */
 init_pure();
-const HOME_RELAYS = ["wss://relay.bao.network"];
+const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.bao.network").split(",");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 async function create(name, communityName, agentOnly) {
 	if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use invite/say/read.`);
@@ -10405,6 +10809,8 @@ async function create(name, communityName, agentOnly) {
 			owner_salt: bytesToHex$1(community.ownerSalt),
 			community_root: bytesToHex$1(community.root),
 			root_epoch: Number(community.rootEpoch),
+			held_roots: [],
+			joined_at: Date.now(),
 			name: communityName,
 			relays: community.relays,
 			general_channel_id: bytesToHex$1(generalChannelId)
@@ -10420,56 +10826,66 @@ async function create(name, communityName, agentOnly) {
 	await invite(name);
 }
 async function invite(name, label, singleUse = false) {
-	const state = loadState(name);
-	if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
-	const sk = hexToBytes$1(state.sk);
-	const pubkey = getPublicKey(sk);
-	const signer = signerOf(sk);
-	const community = communityOf(state.community, state.private_channels);
-	const token = mintToken();
-	const link = mintLinkSigner();
-	const bundleEvent = buildBundleEvent({
-		community_id: community.idHex,
-		owner: community.owner,
-		owner_salt: bytesToHex$1(community.ownerSalt),
-		community_root: bytesToHex$1(community.root),
-		root_epoch: Number(community.rootEpoch),
-		channels: [],
-		relays: community.relays,
-		name: community.name,
-		creator_npub: pubkey,
-		...label ? { label } : {},
-		...singleUse ? { max_uses: 1 } : {}
-	}, token, link.sk);
-	await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
-	state.registry_version += 1;
-	await publishAll(community.relays, await sealEdition(buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
-		actorPubkey: pubkey,
-		version: BigInt(state.registry_version)
-	}), currentControlGroup(community), signer), "invite registry edition");
-	const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
-	state.invites.push({
-		token: bytesToHex$1(token),
-		link_sk: bytesToHex$1(link.sk),
-		link_pk: link.pk,
-		url: urls[0],
-		created_at: Math.floor(Date.now() / 1e3),
-		...singleUse ? { max_uses: 1 } : {}
+	await withStateLock(name, async () => {
+		const state = loadState(name);
+		if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
+		const sk = hexToBytes$1(state.sk);
+		const pubkey = getPublicKey(sk);
+		const signer = signerOf(sk);
+		const community = communityOf(state.community, state.private_channels);
+		const token = mintToken();
+		const link = mintLinkSigner();
+		const bundleEvent = buildBundleEvent({
+			community_id: community.idHex,
+			owner: community.owner,
+			owner_salt: bytesToHex$1(community.ownerSalt),
+			community_root: bytesToHex$1(community.root),
+			root_epoch: Number(community.rootEpoch),
+			held_roots: community.heldRoots.filter((root) => root.epoch !== community.rootEpoch).map((root) => ({
+				epoch: Number(root.epoch),
+				key: bytesToHex$1(root.key)
+			})),
+			...community.refounder ? { refounder: community.refounder } : {},
+			channels: [],
+			relays: community.relays,
+			name: community.name,
+			creator_npub: pubkey,
+			...label ? { label } : {},
+			...singleUse ? { max_uses: 1 } : {}
+		}, token, link.sk);
+		await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
+		state.registry_version += 1;
+		await publishAll(community.relays, await sealEdition(buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
+			actorPubkey: pubkey,
+			version: BigInt(state.registry_version)
+		}), currentControlGroup(community), signer), "invite registry edition");
+		const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
+		state.invites.push({
+			token: bytesToHex$1(token),
+			link_sk: bytesToHex$1(link.sk),
+			link_pk: link.pk,
+			url: urls[0],
+			created_at: Math.floor(Date.now() / 1e3),
+			...singleUse ? { max_uses: 1 } : {}
+		});
+		saveState(name, state);
+		console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
+		for (const url of urls) console.log(`  ${url}`);
 	});
-	saveState(name, state);
-	console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
-	for (const url of urls) console.log(`  ${url}`);
 }
 async function joinBao(name, inviteUrl) {
 	if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use say/read.`);
 	const parsed = parseInviteLink(inviteUrl.trim());
 	if (!parsed) throw new Error("Not a recognizable invite link.");
-	const newest = (await queryAll(parsed.bootstrapRelays, {
+	const events = await queryAll(parsed.bootstrapRelays, {
 		kinds: [KIND_INVITE_BUNDLE],
 		authors: [parsed.linkSigner],
-		"#d": [""],
-		limit: 1
-	})).sort((a, b) => b.created_at - a.created_at)[0];
+		"#d": [""]
+	});
+	const ts = (e) => e.created_at;
+	const maxTs = events.reduce((m, e) => Math.max(m, ts(e)), 0);
+	const atMax = events.filter((e) => ts(e) === maxTs);
+	const newest = atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === "9")) ?? atMax[0];
 	if (!newest) throw new Error("Couldn't find that invite on its relays.");
 	const bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
 	const sk = generateSecretKey();
@@ -10481,6 +10897,9 @@ async function joinBao(name, inviteUrl) {
 		owner_salt: bundle.owner_salt,
 		community_root: bundle.community_root,
 		root_epoch: bundle.root_epoch,
+		held_roots: bundle.held_roots ?? [],
+		joined_at: Date.now(),
+		...bundle.refounder ? { refounder: bundle.refounder } : {},
 		name: bundle.name,
 		relays: bundle.relays
 	}, bundle.channels);
@@ -10503,8 +10922,33 @@ async function joinBao(name, inviteUrl) {
 		...bundle.label ? { label: bundle.label } : {},
 		commitment
 	};
-	const rumor = gate ? grindJoinRumor(pubkey, Date.now(), gate.difficulty, attribution) : buildJoinRumor(pubkey, Date.now(), attribution);
+	const joinedAt = Date.now();
+	const rumor = gate ? grindJoinRumor(pubkey, joinedAt, gate.difficulty, attribution) : buildJoinRumor(pubkey, joinedAt, attribution);
 	await publishAll(community.relays, await sealGuestbook(rumor, currentGuestbookGroup(community), signer), gate ? `guestbook join (pow ≥ ${gate.difficulty})` : "guestbook join");
+	if (bundle.max_uses === 1) {
+		const gb = currentGuestbookGroup(community);
+		const myMs = resolveMs(rumor.created_at, rumor.tags);
+		const earlierJoinWins = async () => {
+			const rival = openGuestbookOpened(openGuestbookWraps(await queryAll(community.relays, {
+				kinds: [KIND_WRAP],
+				authors: [gb.pk]
+			}), [gb])).filter((ev) => joinCommitmentOf(ev) === commitment).map((ev) => ({
+				ms: ev.ms,
+				id: ev.rumorId
+			})).sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+			return rival !== void 0 && (rival.ms < myMs || rival.ms === myMs && rival.id < rumor.id);
+		};
+		let lost = await earlierJoinWins();
+		if (!lost) {
+			await new Promise((r) => setTimeout(r, 1500));
+			lost = await earlierJoinWins();
+		}
+		if (lost) {
+			console.error("  ✗ That single-use link was spent by a CONCURRENT join (earlier Join on the guestbook) — you are NOT a member. Ask for a fresh link.");
+			process.exitCode = 2;
+			return;
+		}
+	}
 	saveState(name, {
 		sk: bytesToHex$1(sk),
 		role: "member",
@@ -10514,6 +10958,9 @@ async function joinBao(name, inviteUrl) {
 			owner_salt: bundle.owner_salt,
 			community_root: bundle.community_root,
 			root_epoch: bundle.root_epoch,
+			held_roots: bundle.held_roots ?? [],
+			joined_at: joinedAt,
+			...bundle.refounder ? { refounder: bundle.refounder } : {},
 			name: bundle.name,
 			relays: bundle.relays
 		},
@@ -10526,18 +10973,30 @@ async function joinBao(name, inviteUrl) {
 	console.log(`\nJoined "${bundle.name}" as "${name}": ${npubEncode(pubkey)}`);
 	console.log(`State: ${statePath(name)}`);
 }
-async function say(name, text, idemKey, json) {
-	const { rumorId, deduped } = await sendChannelMessage(loadState(name), text, { idemKey });
+async function say(name, text, idemKey, channelSelector, json) {
+	const state = loadState(name);
+	const channel = await resolveChannel(state, channelSelector);
+	const { rumorId, deduped } = await sendChannelMessage(state, text, {
+		idemKey,
+		channel: channel.idHex
+	});
 	if (json) console.log(JSON.stringify({
 		rumor_id: rumorId,
-		deduped
+		deduped,
+		channel: {
+			id: channel.idHex,
+			name: channel.name,
+			private: channel.isPrivate,
+			epoch: Number(channel.current.epoch)
+		}
 	}));
 	else if (deduped) console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
 }
-async function read(name, json) {
+async function read(name, channelSelector, json) {
 	const state = loadState(name);
 	const community = communityOf(state.community, state.private_channels);
-	const messages = await channelMessages(state);
+	const channel = await resolveChannel(state, channelSelector);
+	const messages = await channelMessages(state, channel.idHex);
 	const gb = currentGuestbookGroup(community);
 	const gbWraps = await queryAll(community.relays, {
 		kinds: [KIND_WRAP],
@@ -10551,7 +11010,12 @@ async function read(name, json) {
 	if (json) {
 		console.log(JSON.stringify({
 			community: community.name,
-			channel: "general",
+			channel: {
+				id: channel.idHex,
+				name: channel.name,
+				private: channel.isPrivate,
+				epoch: Number(channel.current.epoch)
+			},
 			channels: await listChannels(state),
 			messages: messages.map((m) => ({
 				id: m.id,
@@ -10569,51 +11033,59 @@ async function read(name, json) {
 		}, null, 2));
 		return;
 	}
-	console.log(`\n#general — ${messages.length} message(s):`);
+	console.log(`\n#${channel.name} — ${messages.length} message(s):`);
 	for (const m of messages) {
 		const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
 		console.log(`  [${time}] ${npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
 	}
 	console.log(`\nMembers (${[...members.values()].filter((s) => s === "join").length}):`);
 	for (const [pk, status] of members) console.log(`  ${npubEncode(pk)} — ${status}`);
-	if (state.role === "owner") {
+	if (state.role === "owner") await withStateLock(name, async () => {
+		const fresh = loadState(name);
 		const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
-		const remaining = [];
-		for (const inv of state.invites) {
-			if (inv.max_uses !== 1) {
-				remaining.push(inv);
-				continue;
-			}
-			if (!singleUseLinkUsed(opened, inviteCommitment(hexToBytes$1(inv.token)))) {
-				remaining.push(inv);
-				continue;
-			}
-			const sk = hexToBytes$1(state.sk);
-			const signer = signerOf(sk);
+		const spent = fresh.invites.filter((inv) => inv.max_uses === 1 && singleUseLinkUsed(opened, inviteCommitment(hexToBytes$1(inv.token))));
+		if (spent.length === 0) return;
+		const remaining = fresh.invites.filter((inv) => !spent.includes(inv));
+		const sk = hexToBytes$1(fresh.sk);
+		const signer = signerOf(sk);
+		for (const inv of spent) {
 			await publishAll(community.relays, buildRevocationEvent(hexToBytes$1(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
-			state.registry_version += 1;
-			await publishAll(community.relays, await sealEdition(buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
-				actorPubkey: getPublicKey(sk),
-				version: BigInt(state.registry_version)
-			}), currentControlGroup(community), signer), "invite registry edition");
 			console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
 		}
-		if (remaining.length !== state.invites.length) {
-			state.invites = remaining;
-			saveState(name, state);
-		}
-	}
+		fresh.registry_version += 1;
+		await publishAll(community.relays, await sealEdition(buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
+			actorPubkey: getPublicKey(sk),
+			version: BigInt(fresh.registry_version)
+		}), currentControlGroup(community), signer), "invite registry edition");
+		fresh.invites = remaining;
+		saveState(name, fresh);
+	});
 }
 async function waitMode(name, opts) {
-	const hit = await waitForInterrupt(name, loadState(name), opts);
+	const state = loadState(name);
+	const channel = await resolveChannel(state, opts.channel);
+	const hit = await waitForInterrupt(name, state, {
+		...opts,
+		channel: channel.idHex
+	});
 	if (!hit) {
-		if (opts.json) console.log(JSON.stringify({ timeout: true }));
+		if (opts.json) console.log(JSON.stringify({
+			timeout: true,
+			channel: {
+				id: channel.idHex,
+				name: channel.name
+			}
+		}));
 		else console.log("(timeout — no matching message)");
 		process.exitCode = 2;
 		return;
 	}
 	if (opts.json) console.log(JSON.stringify({
 		timeout: false,
+		channel: {
+			id: channel.idHex,
+			name: channel.name
+		},
 		id: hit.id,
 		author: hit.author,
 		author_npub: npubEncode(hit.author),
@@ -10639,6 +11111,11 @@ async function orchVerb(name, verb, taskId, text, orchId) {
 		}
 		return;
 	}
+	if (held === false) {
+		console.log(`  ✗ ${verb} ${taskId} refused — task held by another claimant (epoch ${epoch}). Do NOT work this task.`);
+		process.exitCode = 2;
+		return;
+	}
 	if (deduped) console.log(`  ⓘ ${verb} ${taskId} already posted — deduped`);
 }
 async function orchShow(name, orchId, json) {
@@ -10661,7 +11138,7 @@ async function orchShow(name, orchId, json) {
 	}
 	console.log(`\norch "${orchId}" — ${states.size} task(s):`);
 	for (const s of states.values()) {
-		const status = s.done ? "DONE" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
+		const status = s.done ? "DONE" : s.released ? "HANDED OFF (reclaimable)" : s.blocked ? "BLOCKED" : s.stale ? "STALE (reclaimable)" : "claimed";
 		console.log(`  ${s.taskId}: ${status} — ${npubEncode(s.claimant).slice(0, 16)}… (epoch ${s.epoch}, claim ${s.claimId.slice(0, 8)}…, last activity ${new Date(s.lastProgressMs).toISOString()})`);
 	}
 }
@@ -10676,7 +11153,8 @@ const VALUE_FLAGS = [
 	"--orch",
 	"--timeout",
 	"--name",
-	"--label"
+	"--label",
+	"--channel"
 ];
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args) {
@@ -10712,11 +11190,11 @@ async function main() {
 		case "say": {
 			const text = positionalArgs(rest).join(" ");
 			if (!text) throw new Error("say needs text");
-			await say(as, text, argValue(rest, "--key"), json);
+			await say(as, text, argValue(rest, "--key"), argValue(rest, "--channel"), json);
 			break;
 		}
 		case "read":
-			await read(as, json);
+			await read(as, argValue(rest, "--channel"), json);
 			break;
 		case "wait": {
 			const timeoutSec = Number(argValue(rest, "--timeout") ?? "60");
@@ -10724,6 +11202,7 @@ async function main() {
 			await waitMode(as, {
 				timeoutSec,
 				mentionsOnly: !rest.includes("--all"),
+				channel: argValue(rest, "--channel"),
 				json
 			});
 			break;
@@ -10755,7 +11234,7 @@ async function main() {
 			console.log(`${as}: ${npubEncode(getPublicKey(hexToBytes$1(state.sk)))} (${state.role} of ${state.community.name})`);
 			break;
 		}
-		default: console.log("modes: create [--agent-only] | invite | join <url> | say <text> [--key K] | read [--json] | wait [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]");
+		default: console.log("modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]");
 	}
 }
 main().catch((err) => {

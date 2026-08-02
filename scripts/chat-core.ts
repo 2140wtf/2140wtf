@@ -48,6 +48,12 @@ export interface SavedCommunity {
   owner_salt: string; // hex
   community_root: string; // hex
   root_epoch: number;
+  /** Retained prior root epochs, newest first. The current root is excluded. */
+  held_roots?: Array<{ epoch: number; key: string }>;
+  /** Local membership start in milliseconds; needed to distinguish a kick from a pre-join rekey. */
+  joined_at?: number;
+  /** Pubkey whose accepted Refounding minted the current root epoch. */
+  refounder?: string;
   name: string;
   relays: string[];
   general_channel_id?: string; // hex — owner only; members resolve via control fold
@@ -94,7 +100,109 @@ export function loadState(name: string): State {
       `Identity "${name}" was written by protocol v${state.protocol_version} but this binary speaks v${PROTOCOL_VERSION} — re-fetch bao-agent.mjs (never half-run a stale binary).`,
     );
   }
-  return state;
+  return migrateState(state);
+}
+
+const HEX_32 = /^[0-9a-f]{64}$/i;
+
+function validEpoch(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+/**
+ * Upgrade and canonicalize the access portion of an on-disk identity without
+ * mutating the parsed object. Pre-retained-root states remain readable: their
+ * current root becomes the sole held root at runtime. An unknown legacy join
+ * time stays unknown so a future watcher cannot mistake old history for a kick.
+ */
+export function migrateSavedCommunityAccess(community: SavedCommunity): SavedCommunity {
+  if (!validEpoch(community.root_epoch)) throw new Error("Saved community root_epoch must be a non-negative safe integer.");
+  if (!HEX_32.test(community.community_root)) throw new Error("Saved community_root must be 32-byte hex.");
+
+  const currentKey = community.community_root.toLowerCase();
+  if (community.joined_at !== undefined && !validEpoch(community.joined_at)) {
+    throw new Error("Saved community joined_at must be a non-negative safe millisecond timestamp.");
+  }
+  const roots = new Map<number, string>();
+  for (const held of community.held_roots ?? []) {
+    if (!validEpoch(held.epoch) || !HEX_32.test(held.key)) {
+      throw new Error("Saved community retained roots must contain a non-negative safe epoch and 32-byte hex key.");
+    }
+    if (held.epoch > community.root_epoch) {
+      throw new Error(`Saved community retained root epoch ${held.epoch} is newer than current epoch ${community.root_epoch}.`);
+    }
+    if (held.epoch === community.root_epoch) {
+      if (held.key.toLowerCase() !== currentKey) throw new Error("Saved community has conflicting keys for its current root epoch.");
+      continue;
+    }
+    const key = held.key.toLowerCase();
+    const prior = roots.get(held.epoch);
+    if (prior !== undefined && prior !== key) throw new Error(`Saved community has conflicting keys for retained root epoch ${held.epoch}.`);
+    roots.set(held.epoch, key);
+  }
+
+  return {
+    ...community,
+    community_root: currentKey,
+    held_roots: [...roots]
+      .sort(([a], [b]) => b - a)
+      .map(([epoch, key]) => ({ epoch, key })),
+    ...(community.joined_at !== undefined ? { joined_at: community.joined_at } : {}),
+    ...(community.refounder && HEX_32.test(community.refounder)
+      ? { refounder: community.refounder.toLowerCase() }
+      : { refounder: undefined }),
+  };
+}
+
+/** Pure whole-state migration used by loadState and tests. */
+export function migrateState(state: State): State {
+  return { ...state, community: migrateSavedCommunityAccess(state.community) };
+}
+
+export interface RootAccessUpdate {
+  community_root: string;
+  root_epoch: number;
+  /** Roots supplied by the update, excluding or including current (both accepted). */
+  held_roots?: Array<{ epoch: number; key: string }>;
+  refounder?: string;
+}
+
+/**
+ * Adopt a strictly newer, already-authenticated root update while retaining
+ * every readable historical root. Stale updates are harmless no-ops; same-
+ * epoch key disagreement fails closed instead of making local state depend on
+ * relay delivery order. Network code must authenticate/decrypt the update
+ * before calling this helper.
+ */
+export function adoptRootAccess(state: State, update: RootAccessUpdate): State {
+  const migrated = migrateState(state);
+  const current = migrated.community;
+  if (!validEpoch(update.root_epoch)) throw new Error("Root access update epoch must be a non-negative safe integer.");
+  if (!HEX_32.test(update.community_root)) throw new Error("Root access update key must be 32-byte hex.");
+  const nextKey = update.community_root.toLowerCase();
+  if (update.root_epoch < current.root_epoch) return migrated;
+  if (update.root_epoch === current.root_epoch) {
+    if (nextKey !== current.community_root) throw new Error(`Conflicting root access update at epoch ${update.root_epoch}.`);
+    const community = migrateSavedCommunityAccess({
+      ...current,
+      held_roots: [...(current.held_roots ?? []), ...(update.held_roots ?? [])],
+      refounder: current.refounder ?? update.refounder,
+    });
+    return { ...migrated, community };
+  }
+
+  const community = migrateSavedCommunityAccess({
+    ...current,
+    community_root: nextKey,
+    root_epoch: update.root_epoch,
+    held_roots: [
+      { epoch: current.root_epoch, key: current.community_root },
+      ...(current.held_roots ?? []),
+      ...(update.held_roots ?? []),
+    ],
+    refounder: update.refounder,
+  });
+  return { ...migrated, community };
 }
 
 /**
@@ -106,7 +214,7 @@ export function saveState(name: string, state: State): void {
   mkdirSync(STATE_DIR, { recursive: true });
   const path = statePath(name);
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
+  writeFileSync(tmp, JSON.stringify(migrateState(state), null, 2), { mode: 0o600 });
   renameSync(tmp, path); // keeps the 0o600 inode; atomic on POSIX same-dir
 }
 
@@ -155,23 +263,29 @@ export async function withStateLock<T>(name: string, fn: () => Promise<T>, lockS
 }
 
 export function communityOf(c: SavedCommunity, privateChannels: State["private_channels"]): CommunityV2 {
-  const root = hexToBytes(c.community_root);
+  const saved = migrateSavedCommunityAccess(c);
+  const root = hexToBytes(saved.community_root);
+  const heldRoots = [
+    { epoch: BigInt(saved.root_epoch), key: root },
+    ...(saved.held_roots ?? []).map((held) => ({ epoch: BigInt(held.epoch), key: hexToBytes(held.key) })),
+  ];
   return {
-    id: hexToBytes(c.id),
-    idHex: c.id,
-    owner: c.owner,
-    ownerSalt: hexToBytes(c.owner_salt),
+    id: hexToBytes(saved.id),
+    idHex: saved.id,
+    owner: saved.owner,
+    ownerSalt: hexToBytes(saved.owner_salt),
     root,
-    rootEpoch: BigInt(c.root_epoch),
-    heldRoots: [{ epoch: BigInt(c.root_epoch), key: root }],
+    rootEpoch: BigInt(saved.root_epoch),
+    heldRoots,
     privateChannels: privateChannels.map((ch) => ({
       id: hexToBytes(ch.id),
       key: hexToBytes(ch.key),
       epoch: BigInt(ch.epoch),
       name: ch.name,
     })),
-    relays: c.relays,
-    name: c.name,
+    relays: saved.relays,
+    name: saved.name,
+    refounder: saved.refounder,
   };
 }
 
@@ -259,13 +373,21 @@ async function availableChannels(state: State): Promise<ChannelV2[]> {
 export async function resolveChannel(state: State, selector?: string): Promise<ChannelV2> {
   const savedGeneral = state.community.general_channel_id?.toLowerCase();
   const requested = selector?.trim();
-  if (savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral)) {
+  const savedGeneralRequested = !!savedGeneral && (!requested || requested.toLowerCase() === "general" || requested.toLowerCase() === savedGeneral);
+  let channels: ChannelV2[];
+  try {
+    channels = await availableChannels(state);
+  } catch (error) {
+    // The founder knows the immutable genesis channel id. Use it only when
+    // the control query itself failed; an authoritative fold that deletes or
+    // converts the channel must win over this liveness fallback.
+    if (!savedGeneralRequested) throw error;
     const community = communityOf(state.community, state.private_channels);
-    const id = hexToBytes(savedGeneral);
+    const id = hexToBytes(savedGeneral!);
     const streams = community.heldRoots.map((root) => ({ epoch: root.epoch, group: channelGroupKey(root.key, id, root.epoch) }));
     return {
       id,
-      idHex: savedGeneral,
+      idHex: savedGeneral!,
       name: "general",
       isPrivate: false,
       streams,
@@ -276,7 +398,6 @@ export async function resolveChannel(state: State, selector?: string): Promise<C
       },
     };
   }
-  const channels = await availableChannels(state);
   let matches: ChannelV2[];
   if (selector) {
     const needle = selector.trim();
