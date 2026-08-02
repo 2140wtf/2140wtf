@@ -47,6 +47,11 @@ export interface LayoutOptions {
    */
   hideLeftSidebar?: boolean;
   /**
+   * If true, keeps the desktop left navigation visible as its compact icon rail.
+   * Unlike `hideLeftSidebar`, users retain navigation while the page gains space.
+   */
+  collapseLeftSidebar?: boolean;
+  /**
    * If true, all decorative arcs are replaced with plain rectangles on the
    * mobile top bar, bottom nav, and sub-header. Use for immersive pages
    * (e.g. full-screen video feeds) where curved chrome interferes with
@@ -72,7 +77,7 @@ const LAYOUT_KEYS: (keyof LayoutOptions)[] = [
   'showFAB', 'fabKind', 'fabHref', 'onFabClick', 'fabIcon',
   'wrapperClassName', 'rightSidebar', 'scrollContainer',
   'noOverscroll', 'noMaxWidth', 'hasSubHeader', 'noArcs',
-  'hideTopBar', 'hideBottomNav', 'hideLeftSidebar',
+    'hideTopBar', 'hideBottomNav', 'hideLeftSidebar', 'collapseLeftSidebar',
 ];
 
 /** Shallow-compare two LayoutOptions objects. */
