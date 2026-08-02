@@ -9,6 +9,7 @@ import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlan
 import { useCommunityRumors } from "@/concord-v2/hooks/useCommunityRumors";
 import { useMembers2 } from "@/concord-v2/hooks/useGuestbook2";
 import { useInviteActions2 } from "@/concord-v2/hooks/useInvites2";
+import { DIRECT_INVITE_DISCLOSURE } from "@/concord-v2/lib/directInvite";
 import { KIND_COMMENT, KIND_MESSAGE } from "@/concord-v2/lib/kinds";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { useAuthor } from "@/hooks/useAuthor";
@@ -163,7 +164,7 @@ function MemberHealthRow({
   const handleHeal = async () => {
     if (
       !confirm(
-        "Send current keys using an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, the Concord invite type, timing, and size. They cannot see this community or the keys inside the encrypted event.",
+        DIRECT_INVITE_DISCLOSURE,
       )
     ) {
       return;

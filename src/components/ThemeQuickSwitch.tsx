@@ -1,22 +1,27 @@
+import { Palette } from 'lucide-react';
+
 import { useAppearanceModes } from '@/hooks/useAppearanceModes';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 /** Top-bar color switch: segmented on desktop and one-button cycling on mobile. */
 export function ThemeQuickSwitch({ compact = false }: { compact?: boolean }) {
   const modes = useAppearanceModes();
+  const { theme, customTheme } = useTheme();
 
   if (compact) {
     const currentIndex = modes.findIndex((mode) => mode.active);
-    const current = modes[currentIndex] ?? modes[0];
-    const next = modes[(currentIndex + 1 + modes.length) % modes.length];
-    const Icon = current.icon;
+    const current = modes[currentIndex];
+    const next = current ? modes[(currentIndex + 1) % modes.length] : modes[0];
+    const Icon = current?.icon ?? Palette;
+    const currentLabel = current?.label ?? (theme === 'system' ? 'System' : customTheme?.title ?? 'Custom');
 
     return (
       <button
         type="button"
         onClick={next.onSelect}
-        aria-label={`Color mode: ${current.label}; switch to ${next.label}`}
-        title={`Color mode: ${current.label}; switch to ${next.label}`}
+        aria-label={`Color mode: ${currentLabel}; switch to ${next.label}`}
+        title={`Color mode: ${currentLabel}; switch to ${next.label}`}
         className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Icon className="size-4" />

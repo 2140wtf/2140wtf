@@ -128,7 +128,7 @@ hold everything membership is: id, root, epoch, channels, relays.
 
 A direct npub invite uses a standard recipient-addressed gift wrap. Its outer
 `p` and `k=3313` tags reveal the recipient, Concord invite type, timing, size,
-and expiry to inbox relays; the inviter and community remain encrypted. A link
+and expiry when set to inbox relays; the inviter and community remain encrypted. A link
 avoids pre-publishing a recipient but is a bearer capability, not anonymous.
 
 **Joining.** Publish a kind-3306 `join` rumor (your npub, current ms) sealed
