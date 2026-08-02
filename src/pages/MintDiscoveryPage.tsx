@@ -27,11 +27,13 @@ import { useToast } from '@/hooks/useToast';
 import {
   useMintDiscovery,
   useMintInfo,
+  useMintAuditInfo,
   useSmartMintSelection,
   usePublishMintRecommendation,
   type SmartMintOption,
 } from '@/hooks/useMintDiscovery';
 import { safeNormalizeMintUrl } from '@/lib/cashu/cashu';
+import { openUrl } from '@/lib/downloadFile';
 import { useQueryClient } from '@tanstack/react-query';
 
 function NutBadge({ nut }: { nut: number }) {
@@ -44,6 +46,7 @@ function NutBadge({ nut }: { nut: number }) {
 
 function MintInfoPanel({ url }: { url: string }) {
   const { data, isLoading, error } = useMintInfo(url);
+  const audit = useMintAuditInfo(url);
 
   if (isLoading) {
     return (
@@ -59,16 +62,56 @@ function MintInfoPanel({ url }: { url: string }) {
     return <p className="text-sm text-destructive pt-2">Could not load mint info.</p>;
   }
 
-  const info = data as { name?: string; description?: string; version?: string; nuts?: Record<string, unknown> };
+  const info = data as {
+    name?: string;
+    description?: string;
+    description_long?: string;
+    version?: string;
+    motd?: string;
+    contact?: Array<{ method?: string; info?: string }>;
+    nuts?: Record<string, { methods?: Array<{ method?: string; unit?: string }> }>;
+  };
   const supportedNuts = Object.keys(info.nuts ?? {})
     .map((k) => Number(k))
     .filter((n) => Number.isInteger(n) && n > 0);
+  const contacts = Array.isArray(info.contact)
+    ? info.contact.filter((contact) => typeof contact?.method === 'string' && typeof contact?.info === 'string').slice(0, 8)
+    : [];
+  const units = [...new Set(
+    Object.values(info.nuts ?? {}).flatMap((nut) => nut.methods ?? []).map((method) => method.unit).filter((unit): unit is string => typeof unit === 'string'),
+  )];
+  const methods = [...new Set(
+    Object.values(info.nuts ?? {}).flatMap((nut) => nut.methods ?? []).map((method) => method.method).filter((method): method is string => typeof method === 'string'),
+  )];
 
   return (
     <div className="space-y-2 pt-2">
       {info.name && <p className="font-semibold text-sm">{info.name}</p>}
+      {info.motd && (
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 px-3 py-2">
+          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Mint message</p>
+          <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap break-words">{info.motd}</p>
+        </div>
+      )}
       {info.description && <p className="text-sm text-muted-foreground">{info.description}</p>}
+      {info.description_long && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{info.description_long}</p>}
       {info.version && <p className="text-xs text-muted-foreground font-mono">v{info.version}</p>}
+      {(units.length > 0 || methods.length > 0) && (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          {units.length > 0 && <><dt className="text-muted-foreground">Currencies</dt><dd>{units.map((unit) => unit.toUpperCase()).join(', ')}</dd></>}
+          {methods.length > 0 && <><dt className="text-muted-foreground">Payments</dt><dd>{methods.map((method) => method.toUpperCase()).join(', ')}</dd></>}
+        </dl>
+      )}
+      {contacts.length > 0 && (
+        <div className="space-y-1 border-t pt-2">
+          <p className="text-xs font-medium">Contact</p>
+          {contacts.map((contact, index) => (
+            <p key={`${contact.method}-${index}`} className="text-xs break-all">
+              <span className="text-muted-foreground">{contact.method}:</span> {contact.info}
+            </p>
+          ))}
+        </div>
+      )}
       {supportedNuts.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1">
           {supportedNuts.slice(0, 12).map((nut) => (
@@ -76,6 +119,44 @@ function MintInfoPanel({ url }: { url: string }) {
           ))}
         </div>
       )}
+      <div className="space-y-2 border-t pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium">Independent audit</p>
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openUrl('https://audit.8333.space')}>
+            audit.8333.space
+          </Button>
+        </div>
+        {audit.isLoading && <Skeleton className="h-16 w-full" />}
+        {!audit.isLoading && audit.data === null && (
+          <p className="text-xs text-muted-foreground">This mint has not been observed by the auditor yet.</p>
+        )}
+        {audit.error && (
+          <p className="text-xs text-muted-foreground">Audit information is temporarily unavailable.</p>
+        )}
+        {audit.data && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-secondary/50 p-3">
+                <p className="text-xs text-muted-foreground">Success rate</p>
+                <p className="text-xl font-semibold">{audit.data.successRate}%</p>
+                <p className="text-[11px] text-muted-foreground">{audit.data.successfulSwaps} of {audit.data.swaps.length} swaps</p>
+              </div>
+              <div className="rounded-lg bg-secondary/50 p-3">
+                <p className="text-xs text-muted-foreground">Average time</p>
+                <p className="text-xl font-semibold">
+                  {audit.data.averageTimeMs === null ? 'N/A' : audit.data.averageTimeMs < 10_000
+                    ? `${Math.round(audit.data.averageTimeMs)} ms`
+                    : `${(audit.data.averageTimeMs / 1000).toFixed(1)} s`}
+                </p>
+                <p className="text-[11px] text-muted-foreground">Successful swaps</p>
+              </div>
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Third-party observations are informational and do not guarantee safety, solvency, or trustworthiness.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
