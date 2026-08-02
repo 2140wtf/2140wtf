@@ -198,11 +198,16 @@ const CHAT_KINDS = [5, 7, 9, 1111, 3302, 8333, 9735];
  */
 export async function queryChannelRumors(
   channelIdHex: string,
-  opts: { limit: number; before?: number; signal?: AbortSignal },
+  opts: { streamPks: string[]; limit: number; before?: number; signal?: AbortSignal },
 ): Promise<OpenedChat[]> {
-  const filter: { kinds: number[]; "#channel": string[]; limit: number; until?: number } = {
+  if (opts.streamPks.length === 0) return [];
+  const filter: { kinds: number[]; "#channel": string[]; "#stream": string[]; limit: number; until?: number } = {
     kinds: CHAT_KINDS,
     "#channel": [channelIdHex],
+    // The channel id is stable across rekeys and accounts. Authorize every
+    // decrypted-cache read with the stream addresses this account currently
+    // holds, so an epoch-only late joiner cannot see older cached plaintext.
+    "#stream": opts.streamPks,
     limit: opts.limit,
   };
   if (opts.before !== undefined) filter.until = opts.before - 1;
@@ -225,16 +230,18 @@ export async function queryChannelRumors(
  * Channels with no cached rumors are omitted from the result map.
  */
 export async function queryRumorsByChannel(
-  channelIdsHex: string[],
+  channels: Array<{ idHex: string; streamPks: string[] }>,
   opts: { perChannel: number; signal?: AbortSignal },
 ): Promise<Map<string, OpenedChat[]>> {
   const out = new Map<string, OpenedChat[]>();
-  if (channelIdsHex.length === 0) return out;
+  const authorized = channels.filter((channel) => channel.streamPks.length > 0);
+  if (authorized.length === 0) return out;
 
   const events = await rumorStore().query(
-    channelIdsHex.map((idHex) => ({
+    authorized.map(({ idHex, streamPks }) => ({
       kinds: CHAT_KINDS,
       "#channel": [idHex],
+      "#stream": streamPks,
       limit: opts.perChannel,
     })),
     { signal: opts.signal },
@@ -267,26 +274,36 @@ export async function queryRumorsByChannel(
  * deep, in one cheap transaction.
  */
 export async function queryMentionRumors(
-  channelIdsHex: string[],
+  channels: Array<{ idHex: string; streamPks: string[] }>,
   pubkey: string,
   opts: { limit: number; signal?: AbortSignal },
 ): Promise<OpenedChat[]> {
-  if (channelIdsHex.length === 0 || !pubkey) return [];
-  const filter = {
-    kinds: [9, 1111],
-    "#p": [pubkey],
-    "#channel": channelIdsHex,
-    limit: opts.limit,
-  };
-  const events = await rumorStore().query([filter], { signal: opts.signal });
-  return events.map((ev) =>
-    storedToOpenedChat(ev, ev.tags.find((t) => t[0] === "channel")?.[1] ?? ""),
+  const authorized = channels.filter((channel) => channel.streamPks.length > 0);
+  if (authorized.length === 0 || !pubkey) return [];
+  const events = await rumorStore().query(
+    authorized.map(({ idHex, streamPks }) => ({
+      kinds: [9, 1111],
+      "#p": [pubkey],
+      "#channel": [idHex],
+      "#stream": streamPks,
+      limit: opts.limit,
+    })),
+    { signal: opts.signal },
   );
+  return events
+    .map((ev) => storedToOpenedChat(ev, ev.tags.find((t) => t[0] === "channel")?.[1] ?? ""))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, opts.limit);
 }
 
 /** How many chat rumors are cached for a channel. */
-export async function countChannelRumors(channelIdHex: string): Promise<number> {
-  const { count } = await rumorStore().count([{ kinds: CHAT_KINDS, "#channel": [channelIdHex] }]);
+export async function countChannelRumors(channelIdHex: string, streamPks: string[]): Promise<number> {
+  if (streamPks.length === 0) return 0;
+  const { count } = await rumorStore().count([{
+    kinds: CHAT_KINDS,
+    "#channel": [channelIdHex],
+    "#stream": streamPks,
+  }]);
   return count;
 }
 

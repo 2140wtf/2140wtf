@@ -70,9 +70,6 @@ export function useConcord2Threads(channels: ChannelV2[]): {
   const pubkey = user?.pubkey;
   const queryClient = useQueryClient();
 
-  const channelSig = channels.map((c) => c.idHex).join(",");
-  const channelIds = useMemo(() => channels.map((c) => c.idHex), [channelSig]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const { data: readMap = {} } = useQuery<Concord2ThreadReadMap>({
     queryKey: threadReadMapKey(pubkey),
     queryFn: () => loadConcord2ThreadReadState(pubkey!),
@@ -80,7 +77,7 @@ export function useConcord2Threads(channels: ChannelV2[]): {
     staleTime: Infinity,
   });
 
-  const { byChannel: rumorsByChannel, isLoading } = useCommunityRumors(channelIds);
+  const { byChannel: rumorsByChannel, isLoading } = useCommunityRumors(channels);
 
   // Bucket each channel's folded rumors into the threads the user is in. Pure
   // computation over the shared scan — no store, no readMap dependency (that is
