@@ -144,6 +144,86 @@ export function useMintInfo(url: string | undefined) {
   });
 }
 
+interface MintAuditRecord {
+  id: number;
+  balance: number;
+  sumDonations: number;
+  state: string;
+}
+
+interface MintAuditSwap {
+  state: string;
+  timeTaken: number;
+}
+
+export interface MintAuditSummary {
+  mint: MintAuditRecord;
+  swaps: MintAuditSwap[];
+  successfulSwaps: number;
+  successRate: number;
+  averageTimeMs: number | null;
+}
+
+/** Fetch independent reliability observations from audit.8333.space. */
+export function useMintAuditInfo(url: string | undefined) {
+  return useQuery({
+    queryKey: ['cashu-mint-audit', url],
+    queryFn: async ({ signal }): Promise<MintAuditSummary | null> => {
+      if (!url) return null;
+      const mintResponse = await fetch(
+        `https://api.audit.8333.space/mints/url?url=${encodeURIComponent(url)}`,
+        { signal },
+      );
+      if (mintResponse.status === 404) return null;
+      if (!mintResponse.ok) throw new Error(`Auditor returned ${mintResponse.status}`);
+      const rawMint: unknown = await mintResponse.json();
+      if (!rawMint || typeof rawMint !== 'object') throw new Error('Auditor returned invalid mint data');
+      const mintData = rawMint as Record<string, unknown>;
+      const id = Number(mintData.id);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Auditor returned an invalid mint ID');
+      const mint: MintAuditRecord = {
+        id,
+        balance: Math.max(0, Number(mintData.balance) || 0),
+        sumDonations: Math.max(0, Number(mintData.sum_donations) || 0),
+        state: typeof mintData.state === 'string' ? mintData.state.slice(0, 80) : 'unknown',
+      };
+
+      const swapsResponse = await fetch(
+        `https://api.audit.8333.space/swaps/mint/${id}?skip=0&limit=100`,
+        { signal },
+      );
+      if (!swapsResponse.ok) throw new Error(`Auditor swaps returned ${swapsResponse.status}`);
+      const rawSwaps: unknown = await swapsResponse.json();
+      if (!Array.isArray(rawSwaps)) throw new Error('Auditor returned invalid swap data');
+      const swaps = rawSwaps.flatMap((raw): MintAuditSwap[] => {
+        if (!raw || typeof raw !== 'object') return [];
+        const row = raw as Record<string, unknown>;
+        const timeTaken = Number(row.time_taken);
+        return [{
+          state: typeof row.state === 'string' ? row.state.slice(0, 40) : '',
+          timeTaken: Number.isFinite(timeTaken) && timeTaken >= 0 ? timeTaken : 0,
+        }];
+      });
+      const successful = swaps.filter((swap) => swap.state === 'OK');
+      const timed = successful.filter((swap) => swap.timeTaken > 0);
+
+      return {
+        mint,
+        swaps,
+        successfulSwaps: successful.length,
+        successRate: swaps.length > 0 ? Math.round((successful.length / swaps.length) * 100) : 0,
+        averageTimeMs: timed.length > 0
+          ? timed.reduce((sum, swap) => sum + swap.timeTaken, 0) / timed.length
+          : null,
+      };
+    },
+    enabled: !!url,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+}
+
 function supportsNut(announcement: CashuMintAnnouncement | undefined, nut: number): boolean {
   return announcement ? announcement.nuts.includes(nut) : false;
 }
