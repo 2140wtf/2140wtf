@@ -287,10 +287,10 @@ export function AdvancedSettings() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label htmlFor="sentry-enabled" className="text-sm font-medium">
-                    Share error reports
+                    Share error and performance diagnostics
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Help improve this app by automatically sending crash and error reports.
+                    Send sanitized crash reports and sampled performance diagnostics. Private ₿AO and invite routes are excluded.
                   </p>
                 </div>
                 <Switch

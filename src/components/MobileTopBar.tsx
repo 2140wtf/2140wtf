@@ -4,6 +4,7 @@ import { AppLogo } from '@/components/AppLogo';
 import { BarsStaggeredIcon } from '@/components/icons/BarsStaggeredIcon';
 import { ArcBackground } from '@/components/ArcBackground';
 import { useNavHidden } from '@/contexts/LayoutContext';
+import { ThemeQuickSwitch } from '@/components/ThemeQuickSwitch';
 
 interface MobileTopBarProps {
   onAvatarClick: () => void;
@@ -50,8 +51,10 @@ export function MobileTopBar({ onAvatarClick, hasSubHeader }: MobileTopBarProps)
             </Link>
           </div>
 
-          {/* Right: spacer for symmetry */}
-          <div className="w-7 shrink-0" />
+          {/* Right: color mode switch (Bright → Dark → Hacker) */}
+          <div className="flex w-7 shrink-0 items-center justify-center">
+            <ThemeQuickSwitch compact />
+          </div>
         </div>
       </div>
     </header>
