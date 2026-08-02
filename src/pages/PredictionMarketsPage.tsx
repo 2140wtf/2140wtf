@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { BarChart3, Box, Info, Plus, RefreshCw, Search } from "lucide-react";
 import { useSeoMeta } from "@unhead/react";
 import { useSearchParams } from "react-router-dom";
@@ -30,6 +30,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
 import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { useBaoSmjOdds, withSmjOdds } from "@/hooks/useBaoSmjOdds";
+import { useUrlSelectedBaoMarket } from "@/hooks/useUrlSelectedBaoMarket";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
 import { MarketMiniSparkline } from "@/components/MarketMiniSparkline";
 import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
@@ -74,14 +75,14 @@ function formatCompactNumber(value: number): string {
 
 /** Rail id → chip label/color (bao.markets card chips). */
 const RAIL_CHIPS: Record<string, { label: string; className: string }> = {
-  htlc: { label: '⚡', className: 'border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200' },
-  spark: { label: 'SPARK', className: 'border-yellow-500/40 bg-yellow-500/10 text-yellow-900 dark:text-yellow-200' },
-  cashu: { label: 'CASHU', className: 'border-green-500/40 bg-green-500/10 text-green-950 dark:text-green-200' },
-  liquid: { label: 'LIQUID', className: 'border-sky-500/40 bg-sky-500/10 text-sky-950 dark:text-sky-200' },
-  l1: { label: '₿', className: 'border-orange-500/40 bg-orange-500/10 text-orange-950 dark:text-orange-200' },
-  onchain: { label: '₿', className: 'border-orange-500/40 bg-orange-500/10 text-orange-950 dark:text-orange-200' },
-  ecash: { label: 'FEDIMINT', className: 'border-violet-500/40 bg-violet-500/10 text-violet-950 dark:text-violet-200' },
-  fedimint: { label: 'FEDIMINT', className: 'border-violet-500/40 bg-violet-500/10 text-violet-950 dark:text-violet-200' },
+  htlc: { label: '⚡', className: 'border-amber-500/60 bg-amber-500/15 text-foreground' },
+  spark: { label: 'SPARK', className: 'border-yellow-500/60 bg-yellow-500/15 text-foreground' },
+  cashu: { label: 'CASHU', className: 'border-green-500/60 bg-green-500/15 text-foreground' },
+  liquid: { label: 'LIQUID', className: 'border-sky-500/60 bg-sky-500/15 text-foreground' },
+  l1: { label: '₿', className: 'border-orange-500/60 bg-orange-500/15 text-foreground' },
+  onchain: { label: '₿', className: 'border-orange-500/60 bg-orange-500/15 text-foreground' },
+  ecash: { label: 'FEDIMINT', className: 'border-violet-500/60 bg-violet-500/15 text-foreground' },
+  fedimint: { label: 'FEDIMINT', className: 'border-violet-500/60 bg-violet-500/15 text-foreground' },
 };
 
 function RailChips({ rails }: { rails?: string[] }) {
@@ -353,11 +354,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
     return items;
   }, [activeMarkets, search, sort, category]);
 
-  useEffect(() => {
-    if (!selectedMarketId || marketsWithOdds.length === 0) return;
-    const market = marketsWithOdds.find((m) => m.marketId === selectedMarketId);
-    if (market) setSelectedMarket(market);
-  }, [selectedMarketId, marketsWithOdds]);
+  useUrlSelectedBaoMarket(
+    selectedMarketId,
+    marketsWithOdds,
+    selectedMarket?.marketId,
+    setSelectedMarket,
+  );
 
   const gridItems = useMemo(() => {
     if (isLoading) {
@@ -437,6 +439,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
               setSelectedMarket(market);
               setInitialOutcome(position?.outcome_id ?? null);
             } else if (position) {
+              setInitialOutcome(position.outcome_id ?? null);
               setSearchParams((prev) => {
                 const next = new URLSearchParams(prev);
                 next.set('market', position.market_id);
