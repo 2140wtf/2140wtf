@@ -392,7 +392,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
       </CardHeader>
       <CardContent className="space-y-3">
         {user && !nutzapsAdEnabled && (
-          <div className="flex items-start gap-2.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+          <div className="flex items-start gap-2.5 rounded-md border border-amber-500/50 bg-card px-3 py-2.5 text-foreground">
             <Zap className="size-4 shrink-0 mt-0.5 text-amber-500" />
             <div className="space-y-1.5">
               <p className="text-xs leading-relaxed">
@@ -401,7 +401,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 gap-1 text-[11px] border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                className="h-7 gap-1 border-amber-500/50 text-[11px] text-foreground hover:bg-muted"
                 onClick={() => {
                   setPublishFeatureEnabled('nutzaps', true);
                   toast({ title: 'Nutzap receiver ad enabled', description: 'Your wallet publishes it right away.' });
@@ -784,8 +784,8 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                 Agent confirmed receipt — discard copy
               </Button>
               {receiptFailed && (
-                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2.5 py-2">
-                  <p className="text-[11px] text-amber-950 dark:text-amber-200">
+                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/50 bg-card px-2.5 py-2">
+                  <p className="text-[11px] text-foreground">
                     Receipt not published — the request may still show as open. The token above is safe; keep it until the agent confirms.
                   </p>
                   <Button
@@ -1307,13 +1307,13 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
               className={cn('font-mono text-xs')}
             />
             {identitySweep && (
-              <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
-                <p className="text-[11px] text-amber-950 dark:text-amber-200">
+              <div className="rounded-md border border-amber-500/50 bg-card p-3 space-y-2">
+                <p className="text-[11px] text-foreground">
                   This token is locked to a key this wallet doesn't hold. It may be your Nostr identity key (legacy tokens) or a wallet key from another app/device (the funder locks to whatever your latest kind-10019 advertises). Paste the matching private key to sweep it — it never leaves this device.
                 </p>
                 {lockHints.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-[10px] font-medium text-amber-900 dark:text-amber-300">Locked to pubkey{lockHints.length > 1 ? 's' : ''}:</p>
+                    <p className="text-[10px] font-medium text-foreground">Locked to pubkey{lockHints.length > 1 ? 's' : ''}:</p>
                     {lockHints.map((l) => (
                       <code key={l} className="block text-[10px] break-all rounded bg-background/60 px-2 py-1">{l}</code>
                     ))}
