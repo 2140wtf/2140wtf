@@ -214,13 +214,13 @@ const SignupDialog: React.FC<SignupDialogProps> = ({ isOpen, onClose }) => {
               </Button>
 
               <div className='mx-auto max-w-sm'>
-                <div className='p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800'>
+                <div className='rounded-lg border border-amber-500/50 bg-card p-3'>
                   <div className='flex items-center gap-2 mb-1'>
-                    <span className='text-xs font-semibold text-amber-800 dark:text-amber-200'>
+                    <span className='text-xs font-semibold text-foreground'>
                       Important Warning
                     </span>
                   </div>
-                  <p className='text-xs text-amber-900 dark:text-amber-300'>
+                  <p className='text-xs text-foreground'>
                     This key is your primary and only means of accessing your account. Store it safely and securely.
                   </p>
                 </div>

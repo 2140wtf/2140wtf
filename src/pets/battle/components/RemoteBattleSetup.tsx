@@ -429,8 +429,8 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                 </div>
               )}
               {insufficientForDeposit && !escrowReady && (
-                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-card p-3">
+                  <p className="text-xs text-foreground">
                     Insufficient balance — this battle stakes {requiredDepositSats.toLocaleString()} sats but your wallet has {walletBalanceSats.toLocaleString()}. Top up your Cashu wallet and the deposit is sent automatically.
                   </p>
                   {remote.role === 'host' && (
@@ -441,8 +441,8 @@ export function RemoteBattleSetup({ ownerPubkey: _ownerPubkey, onBack, className
                 </div>
               )}
               {depositError && !escrowReady && (
-                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
-                  <p className="text-xs text-amber-600 dark:text-amber-400">{depositError}</p>
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-card p-3">
+                  <p className="text-xs text-foreground">{depositError}</p>
                   <Button
                     size="sm" variant="outline" className="gap-1.5"
                     disabled={isDepositing}
