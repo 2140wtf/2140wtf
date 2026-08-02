@@ -76,7 +76,11 @@ function MainLayoutInner() {
       <MobileDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
 
       {/* Main layout - three column on desktop */}
-      <div className={cn("flex justify-center mx-auto max-w-[1200px]", wrapperClassName)}>
+      <div className={cn(
+        "flex justify-center mx-auto max-w-[1200px]",
+        leftCollapsed && rightCollapsed && "max-w-none w-full",
+        wrapperClassName,
+      )}>
         {/* Desktop left sidebar - hidden below sidebar breakpoint or when requested */}
         {!hideLeftSidebar && (
           <LeftSidebar collapsed={leftCollapsed} onToggleCollapse={() => setLeftCollapsed((v) => !v)} />
@@ -107,7 +111,8 @@ function MainLayoutInner() {
                   // descendants keep working.
                   "relative z-0 flex-1 min-w-0 overflow-x-clip sidebar:border-l sidebar:border-r border-border bg-background/85",
                   !hideTopBar && "-mt-mobile-bar",
-                  !noMaxWidth && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
+                  !noMaxWidth && !(leftCollapsed && rightCollapsed)
+                    && (leftCollapsed ? "sidebar:max-w-[860px]" : "sidebar:max-w-[600px]"),
                   !noOverscroll && "pb-overscroll",
                 )}
               >
