@@ -475,7 +475,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               </span>
               <RunnerBadge type={f.runner_type} />
               {format === 'stream' && (
-                <Badge variant="secondary" className="gap-1"><Waves className="size-3" /> Stream</Badge>
+                <Badge variant="secondary" className="gap-1"><Waves className="size-3" /> Time release</Badge>
               )}
               <Badge variant={f.status === 'open' ? 'outline' : 'default'} className="capitalize">{f.status}</Badge>
               {f.category && <Badge variant="outline" className="capitalize">{f.category === 'daos' || f.category === 'baos' ? '₿AOs' : f.category}</Badge>}
@@ -489,7 +489,13 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
         {f.description && !expanded && (
           <p className="text-sm text-muted-foreground line-clamp-2 mt-2">{f.description}</p>
         )}
-        <Progress value={pct} className="h-2 mt-2" />
+        <div className="mt-3 space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium">Funding progress</span>
+            <span className="font-semibold tabular-nums">{pct}%</span>
+          </div>
+          <Progress value={pct} className="h-3 border border-primary/20 bg-primary/10" />
+        </div>
         <div className="flex items-center justify-center gap-1 pt-1.5 text-[11px] text-muted-foreground">
           {expanded ? (<>Show less <ChevronUp className="size-3.5" /></>) : (<>Read more <ChevronDown className="size-3.5" /></>)}
         </div>
