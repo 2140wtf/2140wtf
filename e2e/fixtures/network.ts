@@ -11,6 +11,46 @@ export interface AttachOptions {
   tolerateRelayErrors?: boolean;
 }
 
+/**
+ * Keep browser acceptance tests read-only: external GET/HEAD requests may load
+ * public fixtures, but HTTP mutations and relay sockets never leave the test
+ * process. Install before the first navigation.
+ */
+export async function installReadOnlyNetworkGuard(page: Page): Promise<void> {
+  await page.routeWebSocket(/^wss?:\/\//, (socket) => {
+    const url = new URL(socket.url());
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      socket.connectToServer();
+      return;
+    }
+    socket.onMessage((raw) => {
+      if (typeof raw !== 'string') return;
+      try {
+        const message = JSON.parse(raw) as unknown[];
+        if (message[0] === 'REQ' && typeof message[1] === 'string') {
+          socket.send(JSON.stringify(['EOSE', message[1]]));
+        } else if ((message[0] === 'EVENT' || message[0] === 'AUTH') && message[1] && typeof message[1] === 'object') {
+          const event = message[1] as { id?: unknown };
+          if (typeof event.id === 'string') socket.send(JSON.stringify(['OK', event.id, true, 'accepted by read-only test relay']));
+        }
+      } catch {
+        // Ignore malformed frames in the read-only relay double.
+      }
+    });
+  });
+  await page.route(/^https?:\/\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    const isRead = ['GET', 'HEAD', 'OPTIONS'].includes(request.method());
+    if (isLocal || isRead) {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ status: 204, body: '' });
+  });
+}
+
 const IGNORED_CONSOLE_PATTERNS = [
   /React Router Future Flag Warning/,
   /Download the React DevTools/,
