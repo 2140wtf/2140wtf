@@ -19,12 +19,16 @@ export interface UseBtcPriceResult {
  * then falls back to public exchange APIs (Coinbase, Kraken,
  * Blockchain.info, CoinGecko).
  */
-export function useBtcPrice(enabled = true): UseBtcPriceResult {
+export function useBtcPrice(enabled = true, currency = 'usd'): UseBtcPriceResult {
   const { config } = useAppContext();
+  const normalizedCurrency = currency.trim().toLowerCase();
+  const rateCurrency = new Set(['usd', 'eur', 'gbp', 'jpy', 'cad', 'aud', 'ars', 'brl', 'mxn']).has(normalizedCurrency)
+    ? normalizedCurrency
+    : 'usd';
 
   const { data: btcPrice, isLoading } = useQuery({
-    queryKey: ['btc-price', config.esploraApis],
-    queryFn: ({ signal }) => fetchBtcPrice(config.esploraApis, signal),
+    queryKey: ['btc-price', config.esploraApis, rateCurrency],
+    queryFn: ({ signal }) => fetchBtcPrice(config.esploraApis, signal, rateCurrency),
     // Prices move; refresh every minute and treat values as fresh for 60s.
     refetchInterval: 60_000,
     staleTime: 60_000,
