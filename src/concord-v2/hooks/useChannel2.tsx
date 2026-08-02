@@ -37,8 +37,12 @@ import { useWireScopes } from "@/wire/useWireScopes";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
-/** Query key for a channel's RAW opened-event set (all chat-plane kinds). */
-export const channelKey = (channelIdHex: string | null) => ["concord2", "channel", channelIdHex] as const;
+/** Query key for one account's authorized RAW opened-event set. */
+export const channelKey = (
+  pubkey: string | undefined,
+  channelIdHex: string | null,
+  streamPks: string[],
+) => ["concord2", "channel", pubkey ?? null, channelIdHex, [...streamPks].sort().join(",")] as const;
 const statusKey = (channelIdHex: string | null) => ["concord2", "msg-status", channelIdHex] as const;
 const deletedKey = (channelIdHex: string | null) => ["concord2", "msg-deleted", channelIdHex] as const;
 
@@ -228,12 +232,30 @@ export function useChatModeration2(community: CommunityV2 | undefined): ChatMode
  * resume where it left off instead of re-paging the newest window.
  */
 export function useChannelTimeline2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined) {
+  const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const moderation = useChatModeration2(community);
 
   const channelIdHex = channel?.idHex ?? null;
+  const streamSig = channel?.streams.map((s) => s.group.pk).sort().join(",") ?? "";
+  const streamPks = useMemo(() => (streamSig ? streamSig.split(",") : []), [streamSig]);
   const epochSig = channel?.streams.map((s) => s.epoch.toString()).join(",") ?? "";
-  const queryKey = channelKey(channelIdHex);
+  const queryKey = useMemo(
+    () => channelKey(user?.pubkey, channelIdHex, streamPks),
+    [user?.pubkey, channelIdHex, streamPks],
+  );
+
+  // Account switches must not leave another account's decrypted timeline hot
+  // in React Query. The key already prevents reuse; this also evicts the old
+  // plaintext promptly instead of waiting for cache GC.
+  useEffect(() => {
+    queryClient.removeQueries({
+      predicate: (candidate) =>
+        candidate.queryKey[0] === "concord2" &&
+        candidate.queryKey[1] === "channel" &&
+        candidate.queryKey[2] !== (user?.pubkey ?? null),
+    });
+  }, [queryClient, user?.pubkey]);
 
   const windowLimitRef = useRef(WINDOW_SIZE);
   const [hasMore, setHasMore] = useState(true);
@@ -307,7 +329,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
     const c = cursor.current.get(channelIdHex);
     if (c) c.exhausted = false;
     void clearChannelExhausted(channelIdHex);
-    queryClient.invalidateQueries({ queryKey: channelKey(channelIdHex) });
+    queryClient.invalidateQueries({ queryKey });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epochSig]);
 
@@ -328,13 +350,13 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
       scopes.has(`c2:${channelIdHex}`) ||
       (channel?.streams.some((s) => scopes.has(`c2park:${s.group.pk}`)) ?? false);
     if (mine) {
-      void queryClient.invalidateQueries({ queryKey: channelKey(channelIdHex) });
+      void queryClient.invalidateQueries({ queryKey });
     }
   });
 
   const query = useQuery<OpenedChat[]>({
     queryKey,
-    enabled: Boolean(community && channel),
+    enabled: Boolean(user && community && channel),
     staleTime: 10_000,
     // Keep the previous render's messages painted ONLY when they belong to
     // THIS channel (the previous query has the same key), never the outgoing
@@ -374,6 +396,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
 
       const composeFromStore = async (extra?: OpenedChat[]): Promise<OpenedChat[]> => {
         const rumors = await queryChannelRumors(channelIdHex!, {
+          streamPks,
           limit: windowLimitRef.current,
           signal,
         });
@@ -542,7 +565,10 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
       // If the rumor cache still has more than the current window, just widen
       // the window (a re-read, no network, no decrypt). Otherwise the cache is
       // exhausted, so page deeper history from the relays directly.
-      const inCache = await queryChannelRumors(channelIdHex!, { limit: windowLimitRef.current + 1 });
+      const inCache = await queryChannelRumors(channelIdHex!, {
+        streamPks,
+        limit: windowLimitRef.current + 1,
+      });
       const localHasMore = inCache.length > windowLimitRef.current;
 
       windowLimitRef.current += WINDOW_SIZE;
@@ -587,7 +613,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [hasMore, isLoadingOlder, query, community, channel, channelIdHex, queryClient, queryKey]);
+  }, [hasMore, isLoadingOlder, query, community, channel, channelIdHex, streamPks, queryClient, queryKey]);
 
   // The folded view (moderation + edits + reaction tallies), plus the
   // optimistic-delete overlay.
@@ -664,6 +690,11 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const channelIdHex = channel?.idHex ?? null;
+  const streamSig = channel?.streams.map((stream) => stream.group.pk).sort().join(",") ?? "";
+  const queryKey = useMemo(
+    () => channelKey(user?.pubkey, channelIdHex, streamSig ? streamSig.split(",") : []),
+    [user?.pubkey, channelIdHex, streamSig],
+  );
   const { setStatus } = useSendStatusMap(statusKey(channelIdHex));
   // Capture the revocable capability before the potentially slow real-user
   // seal signature. Logout/leave during a bunker round-trip then makes the
@@ -790,7 +821,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
         epoch: channel.current.epoch,
       };
       if (isVisible) {
-        queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old) => upsert(old, [opened]));
+        queryClient.setQueryData<OpenedChat[]>(queryKey, (old) => upsert(old, [opened]));
         setStatus(rumor.id, "pending");
       }
 
@@ -812,7 +843,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
       const wrap = wrapSeal(seal, channel.current.group, expiresAtSecs ? { expirationAtSecs: expiresAtSecs } : undefined);
 
       const sealed: OpenedChat = { ...opened, seal, wrapId: wrap.id, streamPk: wrap.pubkey };
-      queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old) => upsert(old, [sealed]));
+      queryClient.setQueryData<OpenedChat[]>(queryKey, (old) => upsert(old, [sealed]));
       // Persist to the rumor cache so a refresh mid-flight keeps the message
       // (and a self-delete removes its target via the store's NIP-09).
       writeRumors([sealed]);
@@ -836,6 +867,11 @@ export function useMessageActions2(community: CommunityV2 | undefined, channel: 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const channelIdHex = channel?.idHex ?? null;
+  const streamSig = channel?.streams.map((stream) => stream.group.pk).sort().join(",") ?? "";
+  const queryKey = useMemo(
+    () => channelKey(user?.pubkey, channelIdHex, streamSig ? streamSig.split(",") : []),
+    [user?.pubkey, channelIdHex, streamSig],
+  );
   const { setStatus } = useSendStatusMap(statusKey(channelIdHex));
   const { mutateAsync: send } = useSendMessage2(community, channel);
   // Pending delete publishes, keyed by rumor id so Undo can cancel them.
@@ -852,7 +888,7 @@ export function useMessageActions2(community: CommunityV2 | undefined, channel: 
   const retry = useCallback(
     (id: string) => {
       if (!user || !community || !channel) return;
-      const raw = queryClient.getQueryData<OpenedChat[]>(channelKey(channelIdHex)) ?? [];
+      const raw = queryClient.getQueryData<OpenedChat[]>(queryKey) ?? [];
       const msg = raw.find((m) => m.rumorId === id);
       if (!msg) return;
       setStatus(id, "pending");
@@ -864,7 +900,7 @@ export function useMessageActions2(community: CommunityV2 | undefined, channel: 
       const threadTags = isComment
         ? msg.tags.filter(([n]) => n !== "channel" && n !== "epoch")
         : undefined;
-      queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old = []) =>
+      queryClient.setQueryData<OpenedChat[]>(queryKey, (old = []) =>
         old.filter((m) => m.rumorId !== id),
       );
       setStatus(id, undefined);
@@ -874,17 +910,17 @@ export function useMessageActions2(community: CommunityV2 | undefined, channel: 
         extraTags: threadTags,
       }).catch(() => undefined);
     },
-    [user, community, channel, channelIdHex, queryClient, setStatus, send],
+    [user, community, channel, queryKey, queryClient, setStatus, send],
   );
 
   const discard = useCallback(
     (id: string) => {
-      queryClient.setQueryData<OpenedChat[]>(channelKey(channelIdHex), (old = []) =>
+      queryClient.setQueryData<OpenedChat[]>(queryKey, (old = []) =>
         old.filter((m) => m.rumorId !== id),
       );
       setStatus(id, undefined);
     },
-    [queryClient, channelIdHex, setStatus],
+    [queryClient, queryKey, setStatus],
   );
 
   /** Optimistic delete with an undo window: hide now, publish after 5s. */
