@@ -7,9 +7,10 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import type { BaoPosition } from '@/lib/baoWalletApi';
 import { cn } from '@/lib/utils';
 import type { BaoMarket } from '@/lib/baoMarketParser';
+import { formatPositionPercentage } from '@/lib/baoPositionFormat';
 
 function formatSats(n: number): string {
-  return n.toLocaleString();
+  return Number.isFinite(n) ? n.toLocaleString() : '—';
 }
 
 interface MyTradesSectionProps {
@@ -72,9 +73,9 @@ export function MyTradesSection({ onOpenMarket }: MyTradesSectionProps) {
 function PositionRow({ position, onOpen }: { position: BaoPosition; onOpen: () => void }) {
   const pnl = position.unrealized_pnl;
   const isSmj = (position as { pool_model?: string }).pool_model === 'smj';
-  const pnlPositive = pnl >= 0;
-  const entryPct = Math.round(position.avg_price * 100);
-  const currentPct = position.current_price !== undefined ? Math.round(position.current_price * 100) : undefined;
+  const pnlPositive = Number.isFinite(pnl) && pnl >= 0;
+  const entryPct = formatPositionPercentage(position.avg_price);
+  const currentPct = formatPositionPercentage(position.current_price);
 
   return (
     <Button
@@ -88,8 +89,8 @@ function PositionRow({ position, onOpen }: { position: BaoPosition; onOpen: () =
         </p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
           {isSmj && <span className="font-medium text-primary">SMJ pool · </span>}
-          {position.outcome_id} · {formatSats(position.size)} sats @ {entryPct}%
-          {currentPct !== undefined && ` → ${currentPct}%`}
+          {position.outcome_id} · {formatSats(position.size)} sats @ {entryPct}
+          {` → ${currentPct}`}
         </p>
       </div>
       <span

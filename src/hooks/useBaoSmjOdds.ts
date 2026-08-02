@@ -16,12 +16,17 @@ interface SmjDetailResponse {
   };
 }
 
+export interface SmjLiveMarket {
+  odds: Record<string, number>;
+  totalPoolSats: number;
+}
+
 /**
  * Fetch real parimutuel odds for one SMJ market: pool share per outcome
  * label (lowercased), computed from live pool_sats. Returns null when the
  * market isn't SMJ or the pool is empty (fresh market — 50/50 stands).
  */
-async function fetchSmjOdds(marketId: string): Promise<Record<string, number> | null> {
+async function fetchSmjOdds(marketId: string): Promise<SmjLiveMarket | null> {
   const res = await fetch(`${SMJ_API_BASE}/smj/${encodeURIComponent(marketId)}`);
   if (!res.ok) return null;
   const json = (await res.json()) as SmjDetailResponse;
@@ -33,7 +38,12 @@ async function fetchSmjOdds(marketId: string): Promise<Record<string, number> | 
   for (const opt of options) {
     if (opt.label) odds[opt.label.toLowerCase()] = opt.pool_sats / total;
   }
-  return Object.keys(odds).length > 0 ? odds : null;
+  return Object.keys(odds).length > 0
+    ? {
+        odds,
+        totalPoolSats: total,
+      }
+    : null;
 }
 
 /**
@@ -42,7 +52,7 @@ async function fetchSmjOdds(marketId: string): Promise<Record<string, number> | 
  * /smj/:id endpoint carries the real pool distribution (e.g. 0/100 after
  * the first bet), so cards and dialogs show actual odds.
  */
-export function useBaoSmjOdds(marketIds: string[]): Record<string, Record<string, number>> {
+export function useBaoSmjOdds(marketIds: string[]): Record<string, SmjLiveMarket> {
   const results = useQueries({
     queries: marketIds.map((id) => ({
       queryKey: ['bao-smj-odds', id],
@@ -52,7 +62,7 @@ export function useBaoSmjOdds(marketIds: string[]): Record<string, Record<string
     })),
   });
 
-  const map: Record<string, Record<string, number>> = {};
+  const map: Record<string, SmjLiveMarket> = {};
   marketIds.forEach((id, i) => {
     const data = results[i]?.data;
     if (data) map[id] = data;
@@ -61,17 +71,25 @@ export function useBaoSmjOdds(marketIds: string[]): Record<string, Record<string
 }
 
 /** Apply SMJ odds to a market's outcomes (returns the input unchanged when no odds are known). */
-export function withSmjOdds<T extends { outcomes: { label: string; probability: number }[] }>(
+export function withSmjOdds<T extends {
+  marketId?: string;
+  outcomes: { label: string; probability: number }[];
+  oddsAvailable?: boolean;
+  totalVolumeSats?: number;
+  tradeCount?: number;
+}>(
   market: T,
-  oddsMap: Record<string, Record<string, number>>,
+  liveMarkets: Record<string, SmjLiveMarket>,
 ): T {
-  const odds = oddsMap[(market as { marketId?: string }).marketId ?? ''];
-  if (!odds) return market;
+  const live = liveMarkets[market.marketId ?? ''];
+  if (!live) return market;
   return {
     ...market,
+    oddsAvailable: true,
+    totalVolumeSats: live.totalPoolSats,
     outcomes: market.outcomes.map((o) => ({
       ...o,
-      probability: odds[o.label.toLowerCase()] ?? o.probability,
+      probability: live.odds[o.label.toLowerCase()] ?? o.probability,
     })),
   };
 }
