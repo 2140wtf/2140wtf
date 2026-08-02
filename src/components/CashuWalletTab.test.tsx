@@ -6,6 +6,8 @@ import { CashuWalletTab } from './CashuWalletTab';
 
 const mocks = vi.hoisted(() => ({
   sendTokenMock: vi.fn(),
+  mintFromQuoteMock: vi.fn(),
+  transactions: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@/hooks/useCashuWalletContext', () => ({
@@ -23,7 +25,8 @@ vi.mock('@/hooks/useCashuWalletContext', () => ({
     backupStatus: 'idle',
     receiveToken: vi.fn(),
     requestInvoice: vi.fn(),
-    mintFromQuote: vi.fn(),
+    requestBolt12Offer: vi.fn(),
+    mintFromQuote: mocks.mintFromQuoteMock,
     sendToken: mocks.sendTokenMock,
     payInvoice: vi.fn(async () => ({ success: true })),
     sendNutzap: vi.fn(),
@@ -32,7 +35,7 @@ vi.mock('@/hooks/useCashuWalletContext', () => ({
     removeCustomMint: vi.fn(),
     fetchBackup: vi.fn(),
     restoreFromBackup: vi.fn(),
-    transactions: [],
+    transactions: mocks.transactions,
     seedPhrase: 'test seed phrase',
   }),
 }));
@@ -48,6 +51,7 @@ describe('CashuWalletTab send token persistence', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.sendTokenMock.mockResolvedValue('cashuBtesttoken');
+    mocks.transactions = [];
   });
 
   afterEach(() => {
@@ -87,5 +91,29 @@ describe('CashuWalletTab send token persistence', () => {
 
     expect(screen.queryByText('cashuBtesttoken')).not.toBeInTheDocument();
     expect(localStorage.getItem(OUTBOX_KEY)).toBe(JSON.stringify(''));
+  });
+
+  it('restores a pending BOLT12 deposit offer after remount and confirms through the BOLT12 endpoint', async () => {
+    mocks.transactions = [{
+      id: 'pending-offer',
+      type: 'mint',
+      amount: 21,
+      memo: 'BOLT12 deposit',
+      mintUrl: 'https://mint.example',
+      status: 'pending',
+      createdAt: Date.now(),
+      quoteId: 'bolt12-quote',
+      paymentRequest: 'lno1restored-offer',
+      bolt12: true,
+    }];
+    render(<MemoryRouter><CashuWalletTab /></MemoryRouter>);
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Receive' }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Lightning invoice' }));
+
+    await screen.findByText('lno1restored-offer');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm payment' }));
+
+    expect(mocks.mintFromQuoteMock).toHaveBeenCalledWith('bolt12-quote', 21, 'bolt12');
   });
 });

@@ -846,6 +846,8 @@ export interface Transaction {
   /** True for BOLT12 (offer) melts — the pending-melt poll must use the
    *  bolt12 quote endpoint; the bolt11 endpoint can never resolve them. */
   bolt12?: boolean;
+  /** Payment request needed to restore an open mint quote after reload. */
+  paymentRequest?: string;
 }
 
 export interface StoredMint {
@@ -1099,6 +1101,7 @@ export function isValidTransaction(t: unknown, _namespace?: string): t is Transa
     typeof tx.status !== 'string' ||
     !['pending', 'completed', 'failed', 'expired'].includes(tx.status) ||
     (tx.quoteId !== undefined && (typeof tx.quoteId !== 'string' || tx.quoteId.length > 1000)) ||
+    (tx.paymentRequest !== undefined && (typeof tx.paymentRequest !== 'string' || tx.paymentRequest.length > 10000)) ||
     typeof tx.createdAt !== 'number' ||
     !Number.isFinite(tx.createdAt) ||
     !Number.isInteger(tx.createdAt) ||
