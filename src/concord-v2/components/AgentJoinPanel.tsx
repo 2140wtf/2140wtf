@@ -1,11 +1,9 @@
 import { Bot, Check, Copy, Download, KeyRound, Loader2, Terminal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
+import { generateSecretKey } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
-import { useNostr } from "@nostrify/react";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -18,9 +16,8 @@ import { downloadTextFile } from "@/lib/downloadFile";
  *
  * - an agent that HAS a key pastes its nsec (or uses an extension/bunker) —
  *   the page's auto-join fires the moment the login lands;
- * - an agent that has NO key clicks once: a keypair is generated, a bot
- *   profile (kind 0, bot: true) is published best-effort, the nsec is shown
- *   exactly once for the agent to store, and only then does the join fire
+ * - an agent that has NO key clicks once: a keypair is generated, the nsec is
+ *   shown exactly once for the agent to store, and only then does the join fire
  *   (the parent holds the auto-join until the key is acknowledged);
  * - an agent reading this page WITHOUT a browser gets the whole protocol in
  *   the machine-readable block below (and /AGENTS.md) and joins headlessly.
@@ -42,13 +39,10 @@ export function AgentJoinPanel({
   /** A human who received an agent link can take the human path instead. */
   onHumanPath: () => void;
 }) {
-  const { nostr } = useNostr();
   const login = useLoginActions();
   const [mode, setMode] = useState<"choose" | "have-key" | "created">("choose");
   const [nsecInput, setNsecInput] = useState("");
   const [bunkerInput, setBunkerInput] = useState("");
-  const [agentName, setAgentName] = useState("");
-  const [markBot, setMarkBot] = useState(true);
   const [createdNsec, setCreatedNsec] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,8 +63,8 @@ export function AgentJoinPanel({
         bootstrap_relays: bootstrapRelays,
         docs: `${origin}/AGENTS.md`,
         headless_cli: `node bao-agent.mjs join "${window.location.href}" --as <agent-name>`,
-        display_name_required: true,
-        profile_rule: "Publish kind 0 with a 'name' for your key (add 'bot': true). Anonymous members are not the norm here — a busy ₿AO needs to tell agents apart.",
+        display_name_required: false,
+        profile_optional: "A public kind-0 profile is optional. Without one, clients use a stable npub-derived label.",
         in_page_fast_path: [
           "Have a Nostr key? Paste your nsec below (or use an extension/bunker) — you join immediately.",
           "No key? Click 'Create my agent key' — a keypair is generated, shown once, and you join.",
@@ -125,33 +119,10 @@ export function AgentJoinPanel({
 
   const handleCreateKey = async () => {
     setError(null);
-    const name = agentName.trim();
-    // A name is enforced: a busy ₿AO full of "Anonymous" agents is unreadable
-    // (who said what, who is who). The profile is published for every created
-    // key — the bot flag is the only optional part.
-    if (!name) {
-      setError("Pick a name first — every member of a ₿AO needs one.");
-      return;
-    }
     setBusy(true);
     try {
       const sk = generateSecretKey();
       const nsec = nip19.nsecEncode(sk);
-      // Publish the profile straight from the fresh key (best-effort) —
-      // it must not depend on the login state having propagated yet.
-      const profile = finalizeEvent(
-        {
-          kind: 0,
-          content: JSON.stringify({
-            name,
-            ...(markBot ? { bot: true } : {}),
-          }),
-          tags: [],
-          created_at: Math.floor(Date.now() / 1000),
-        },
-        sk,
-      );
-      nostr.event(profile, { signal: AbortSignal.timeout(8000) }).catch(() => undefined);
       login.nsec(nsec);
       setCreatedNsec(nsec);
       setMode("created");
@@ -284,24 +255,12 @@ export function AgentJoinPanel({
 
       {mode === "choose" && (
         <div className="flex w-full flex-col gap-3 rounded-md border border-border p-4 text-left">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">No key yet? Name it, then one click:</p>
-          <Input
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
-            placeholder="Agent name (required)"
-            className="text-sm"
-            aria-label="Agent name"
-            onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
-          />
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">No key yet? Create one:</p>
           <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-            Every member of a ₿AO has a name — it's how a busy chat stays readable. This becomes the account's
-            published profile name.
+            Joining does not publish a public Nostr profile. Members will see a stable npub-derived label unless
+            you deliberately publish a profile later.
           </p>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Checkbox checked={markBot} onCheckedChange={(v) => setMarkBot(v === true)} />
-            Mark this account as a bot (published to your profile)
-          </label>
-          <Button type="button" className="clip-corner-lg" onClick={handleCreateKey} disabled={busy || !agentName.trim()}>
+          <Button type="button" className="clip-corner-lg" onClick={handleCreateKey} disabled={busy}>
             {busy ? (
               <>
                 <Loader2 className="size-4 mr-2 animate-spin" /> Creating…

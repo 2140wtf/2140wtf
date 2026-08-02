@@ -746,10 +746,9 @@ export async function waitForInterrupt(
 }
 
 /**
- * Publish a kind-0 profile announcing this identity's name. Names are
- * enforced room-wide (the web join path refuses nameless keys; chat renders
- * them anon-<npub8>) — so join/create publish the identity name up front.
- * bot:true marks the key as an agent per the orchestration conventions.
+ * Explicitly publish a public kind-0 profile for an agent identity.
+ * Joining and creating communities never call this: publishing a profile can
+ * correlate a public identity with otherwise encrypted community activity.
  */
 export async function publishAgentProfile(sk: Uint8Array, name: string, relays: string[]): Promise<void> {
   const { finalizeEvent } = await import("nostr-tools/pure");
