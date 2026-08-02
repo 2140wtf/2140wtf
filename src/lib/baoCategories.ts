@@ -27,6 +27,11 @@ export const BAO_CATEGORIES = [
   { id: 'markets', label: 'Markets' },
   { id: 'data', label: 'Data & Oracles' },
   { id: 'education', label: 'Education' },
+  { id: 'art', label: 'Art' },
+  { id: 'community', label: 'Community' },
+  { id: 'research', label: 'Research' },
+  { id: 'environment', label: 'Environment & Fishing' },
+  { id: 'mutual-aid', label: 'Mutual aid' },
   { id: 'other', label: 'Other' },
 ] as const;
 
