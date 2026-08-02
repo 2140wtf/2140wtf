@@ -24,7 +24,7 @@ import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 export interface MintDiscoveryOptions {
   /** When true, search all relays without filtering by follows. Default false. */
   global?: boolean;
-  /** Limit for each event kind. Default 200. */
+  /** Limit for each event kind. Default 5000 to match Cashu.me discovery. */
   limit?: number;
 }
 
@@ -41,7 +41,7 @@ export interface SmartMintOption {
   score: number;
 }
 
-const DEFAULT_LIMIT = 200;
+const DEFAULT_LIMIT = 5000;
 
 type NostrQuery = (filters: NostrFilter[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]>;
 

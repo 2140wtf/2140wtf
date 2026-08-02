@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Landmark, Globe, Users, Star, Plus, Check, ChevronDown, ChevronUp, ShieldCheck, Pencil } from 'lucide-react';
+import { Landmark, Globe, Users, Star, Plus, Check, ChevronDown, ChevronUp, ShieldCheck, Pencil, Search, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -291,13 +292,32 @@ export function MintDiscoveryPage() {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const wallet = useCashuWalletContext();
-  const [global, setGlobal] = useState(false);
+  const [global, setGlobal] = useState(true);
+  const [search, setSearch] = useState('');
   const [reviewing, setReviewing] = useState<SmartMintOption | null>(null);
 
   const discovery = useMintDiscovery({ global });
   const userMintUrls = wallet.allMints.map((m) => m.url);
   const ranked = useSmartMintSelection(discovery.data, userMintUrls);
   const addedUrls = new Set(userMintUrls.map((u) => u.toLowerCase()));
+  const normalizedSearch = search.trim().toLowerCase();
+  const searchedMintUrl = safeNormalizeMintUrl(search);
+  const filtered = normalizedSearch
+    ? ranked.filter((option) => {
+        const metadata = option.announcement?.metadata;
+        const searchable = [
+          option.url,
+          typeof metadata?.name === 'string' ? metadata.name : '',
+          typeof metadata?.description === 'string' ? metadata.description : '',
+          option.announcement?.network ?? '',
+          ...option.announcement?.nuts.map((nut) => `nut-${nut}`) ?? [],
+        ];
+        return searchable.some((value) => value.toLowerCase().includes(normalizedSearch));
+      })
+    : ranked;
+  const searchResults = searchedMintUrl && !filtered.some((option) => option.url.toLowerCase() === searchedMintUrl.toLowerCase())
+    ? [{ url: searchedMintUrl, announcement: undefined, recommendations: [], hasBalance: addedUrls.has(searchedMintUrl.toLowerCase()), score: 0 }, ...filtered]
+    : filtered;
 
   useSeoMeta({
     title: `Mint Discovery | ${config.appName}`,
@@ -334,6 +354,35 @@ export function MintDiscoveryPage() {
       <PageHeader title="Mint Discovery" icon={<Landmark className="size-5" />} backTo="/wallet" />
 
       <div className="px-4 py-4 max-w-2xl mx-auto space-y-4">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by mint name, URL, network, or NUT…"
+            aria-label="Search Cashu mints"
+            className="pl-9 pr-10"
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 size-8 -translate-y-1/2"
+              onClick={() => setSearch('')}
+              aria-label="Clear mint search"
+            >
+              <X className="size-4" />
+            </Button>
+          )}
+          {searchedMintUrl && !ranked.some((option) => option.url.toLowerCase() === searchedMintUrl.toLowerCase()) && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              This URL is not in the community results. Check its mint details before adding it.
+            </p>
+          )}
+        </div>
+
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <p className="text-sm font-medium">Discovery scope</p>
@@ -369,19 +418,21 @@ export function MintDiscoveryPage() {
           </div>
         )}
 
-        {!discovery.isLoading && ranked.length === 0 && (
+        {!discovery.isLoading && searchResults.length === 0 && (
           <Card className="border-dashed">
             <CardContent className="py-12 px-8 text-center">
               <p className="text-muted-foreground max-w-sm mx-auto">
-                No Cashu mints found. Try switching to global discovery or check your relay connections.
+                {normalizedSearch
+                  ? 'No mints match that search. Paste a full HTTPS mint URL to inspect and add it.'
+                  : 'No Cashu mints found. Try switching to global discovery or check your relay connections.'}
               </p>
             </CardContent>
           </Card>
         )}
 
-        {ranked.length > 0 && (
+        {searchResults.length > 0 && (
           <div className="space-y-4">
-            {ranked.map((option) => (
+            {searchResults.map((option) => (
               <MintCard
                 key={option.url}
                 option={option}
