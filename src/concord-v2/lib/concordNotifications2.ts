@@ -28,7 +28,8 @@ export interface Concord2Stream {
  * display names / ids for the notification and its deep link
  * (/bao/c/<communityId>/<channelId>). The native service filters
  * `{kinds:[1059], authors:[…pk]}` and opens wrap → seal → rumor with the
- * supplied conversation key to show "<sender>: <preview>".
+ * supplied conversation key. Any future native UI must default to generic
+ * lock-screen text; sender, room, and content previews require explicit opt-in.
  */
 export interface Concord2Sub {
   relays: string[];

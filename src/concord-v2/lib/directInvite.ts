@@ -36,6 +36,9 @@ import { validateBundle, type InviteBundle } from "@/concord-v2/lib/invite";
 import { KIND_DIRECT_INVITE, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import type { GroupKey } from "@/concord-v2/lib/derive";
 
+export const DIRECT_INVITE_DISCLOSURE =
+  "Send current keys using an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, the Concord invite type, timing, size, and expiry when set. They cannot see the community or keys inside the encrypted event, but may correlate the publishing connection and timing.";
+
 /** The standard NIP-59 seal kind (classic giftwrap — not a CORD-01 seal). */
 export const KIND_NIP59_SEAL = 13;
 
