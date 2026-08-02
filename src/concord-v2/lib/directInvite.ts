@@ -29,7 +29,7 @@
  */
 
 import { getConversationKey, encrypt as nip44Encrypt } from "nostr-tools/nip44";
-import { finalizeEvent, generateSecretKey } from "nostr-tools/pure";
+import { finalizeEvent, generateSecretKey, verifyEvent } from "nostr-tools/pure";
 import type { EventTemplate, NostrEvent } from "nostr-tools/pure";
 
 import { validateBundle, type InviteBundle } from "@/concord-v2/lib/invite";
@@ -151,7 +151,7 @@ export async function unwrapDirectInvite(
   try {
     // Layer 1: decrypt the wrap with the ephemeral wrap author's pubkey → seal.
     const seal = JSON.parse(await signer.nip44.decrypt(giftWrap.pubkey, giftWrap.content)) as NostrEvent;
-    if (seal.kind !== KIND_NIP59_SEAL) return undefined;
+    if (seal.kind !== KIND_NIP59_SEAL || !verifyEvent(seal)) return undefined;
 
     // Layer 2: decrypt the seal with the seal author's pubkey → rumor.
     const rumor = JSON.parse(await signer.nip44.decrypt(seal.pubkey, seal.content)) as DirectInviteRumor;
