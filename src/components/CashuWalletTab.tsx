@@ -42,7 +42,11 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
-import type { MintQuoteResponse } from '@cashu/cashu-ts';
+import type { Bolt12MintQuoteResponse, MintQuoteResponse } from '@cashu/cashu-ts';
+
+type DepositQuote =
+  | { method: 'bolt11'; quote: MintQuoteResponse }
+  | { method: 'bolt12'; quote: Bolt12MintQuoteResponse };
 
 export function CashuWalletTab() {
   const { toast } = useToast();
@@ -52,7 +56,8 @@ export function CashuWalletTab() {
 
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [invoiceAmount, setInvoiceAmount] = useState('');
-  const [invoiceQuote, setInvoiceQuote] = useState<MintQuoteResponse | null>(null);
+  const [depositMethod, setDepositMethod] = useState<'bolt11' | 'bolt12'>('bolt11');
+  const [invoiceQuote, setInvoiceQuote] = useState<DepositQuote | null>(null);
 
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
@@ -111,6 +116,14 @@ export function CashuWalletTab() {
     );
   }, [wallet.allMints]);
 
+  const supportsBolt12Mint = Array.isArray(wallet.mintInfo?.nuts?.['4']?.methods)
+    && wallet.mintInfo.nuts['4'].methods.some((method: { method?: unknown; unit?: unknown }) => method.method === 'bolt12' && method.unit === 'sat');
+
+  useEffect(() => {
+    if (!supportsBolt12Mint && depositMethod === 'bolt12') setDepositMethod('bolt11');
+    setInvoiceQuote(null);
+  }, [wallet.mintUrl, supportsBolt12Mint, depositMethod]);
+
   const handleReceiveToken = async () => {
     if (!receiveTokenStr.trim()) return;
     await wallet.receiveToken(receiveTokenStr.trim());
@@ -123,13 +136,24 @@ export function CashuWalletTab() {
       toast({ variant: 'destructive', title: 'Invalid amount', description: 'Enter a positive number of sats.' });
       return;
     }
-    const quote = await wallet.requestInvoice(amount, '2140.wtf Cashu deposit');
-    if (quote) setInvoiceQuote(quote);
+    if (depositMethod === 'bolt12') {
+      const quote = await wallet.requestBolt12Offer(amount, '2140.wtf Cashu deposit');
+      if (quote) setInvoiceQuote({ method: 'bolt12', quote });
+    } else {
+      const quote = await wallet.requestInvoice(amount, '2140.wtf Cashu deposit');
+      if (quote) setInvoiceQuote({ method: 'bolt11', quote });
+    }
   };
 
   const handleMintInvoice = async () => {
     if (!invoiceQuote) return;
-    await wallet.mintFromQuote(invoiceQuote.quote, invoiceQuote.amount);
+    const quote = invoiceQuote.quote;
+    const amount = quote.amount ?? parseInt(invoiceAmount, 10);
+    if (invoiceQuote.method === 'bolt12') {
+      await wallet.mintFromQuote(quote.quote, amount, invoiceQuote.quote);
+    } else {
+      await wallet.mintFromQuote(quote.quote, amount);
+    }
     setInvoiceQuote(null);
     setInvoiceAmount('');
   };
@@ -367,6 +391,16 @@ export function CashuWalletTab() {
                 <TabsContent value='invoice' className='space-y-4'>
                   {!invoiceQuote ? (
                     <div className='space-y-2'>
+                      {supportsBolt12Mint && (
+                        <div className='grid grid-cols-2 gap-2' role='group' aria-label='Lightning deposit method'>
+                          <Button type='button' size='sm' variant={depositMethod === 'bolt11' ? 'default' : 'outline'} onClick={() => setDepositMethod('bolt11')}>
+                            BOLT11 invoice
+                          </Button>
+                          <Button type='button' size='sm' variant={depositMethod === 'bolt12' ? 'default' : 'outline'} onClick={() => setDepositMethod('bolt12')}>
+                            BOLT12 offer
+                          </Button>
+                        </div>
+                      )}
                       <div className='flex gap-2'>
                         <Input
                           type='number'
@@ -375,7 +409,7 @@ export function CashuWalletTab() {
                           onChange={(e) => setInvoiceAmount(e.target.value)}
                         />
                         <Button onClick={handleCreateInvoice} disabled={wallet.loading}>
-                          Create invoice
+                          Create {depositMethod === 'bolt12' ? 'offer' : 'invoice'}
                         </Button>
                       </div>
                       <SatsPresetPills value={invoiceAmount} onSelect={(s) => setInvoiceAmount(String(s))} />
@@ -383,19 +417,19 @@ export function CashuWalletTab() {
                   ) : (
                     <div className='space-y-4 flex flex-col items-center'>
                       <div className='rounded-xl bg-white p-4 shadow-sm'>
-                        <QRCodeSVG value={invoiceQuote.request} size={200} level='M' />
+                        <QRCodeSVG value={invoiceQuote.quote.request} size={200} level='M' />
                       </div>
                       <p className='text-xs text-muted-foreground text-center break-all max-w-xs'>
-                        {invoiceQuote.request}
+                        {invoiceQuote.quote.request}
                       </p>
                       <div className='flex gap-2'>
                         <Button
                           variant='outline'
                           size='sm'
-                          onClick={() => copyToClipboard(invoiceQuote.request, setCopiedInvoice)}
+                          onClick={() => copyToClipboard(invoiceQuote.quote.request, setCopiedInvoice)}
                         >
                           {copiedInvoice ? <Check className='size-3.5 mr-1.5' /> : <Copy className='size-3.5 mr-1.5' />}
-                          {copiedInvoice ? 'Copied' : 'Copy invoice'}
+                          {copiedInvoice ? 'Copied' : `Copy ${invoiceQuote.method === 'bolt12' ? 'offer' : 'invoice'}`}
                         </Button>
                         <Button size='sm' onClick={handleMintInvoice} disabled={wallet.loading}>
                           Confirm payment
