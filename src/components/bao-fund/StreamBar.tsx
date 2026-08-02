@@ -45,15 +45,15 @@ export function StreamBar({ fundraiser, isOwner, onClaim, isClaiming }: {
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-      <div className="w-full space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 lg:w-1/4 lg:min-w-72">
+      <div className="w-full space-y-2 rounded-lg border border-green-500/30 bg-green-500/5 p-3 lg:w-1/4 lg:min-w-72">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold flex items-center gap-1.5">
-            <Waves className="size-4 text-amber-500" /> Time release
+            <Waves className="size-4 text-green-500" /> Time release
           </h3>
           <span className="text-sm font-semibold tabular-nums">{elapsedPct !== null ? `${elapsedPct}%` : '—'}</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Time release progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={elapsedPct ?? 0}>
-          <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${elapsedPct ?? 0}%` }} />
+          <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${elapsedPct ?? 0}%` }} />
         </div>
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="font-medium tabular-nums">{remainingLabel}</span>
