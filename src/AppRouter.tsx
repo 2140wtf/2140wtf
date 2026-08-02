@@ -351,7 +351,8 @@ export function AppRouter() {
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/bao/chat" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/baocommunity" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/chat" element={<Navigate to="/bao/baocommunity" replace />} />
               <Route path="/bao/c/:communityId" element={<ConcordV2Page />} />
               <Route path="/bao/c/:communityId/:channelId" element={<ConcordV2Page />} />
               <Route path="/bao/invite/:naddr" element={<InviteV2Page />} />

@@ -153,7 +153,7 @@ export function InviteV2Page() {
               read, and post over the relays without a GUI.
             </p>
             <Button asChild>
-              <Link to="/bao/chat">Back to communities</Link>
+              <Link to="/bao/baocommunity">Back to communities</Link>
             </Button>
           </>
         ) : (
@@ -161,7 +161,7 @@ export function InviteV2Page() {
             <h1 className="text-2xl font-bold">{banned ? "You’re banned" : "Invite link didn’t work"}</h1>
             <p className="max-w-md text-muted-foreground">{error}</p>
             <Button asChild>
-              <Link to="/bao/chat">Back to communities</Link>
+              <Link to="/bao/baocommunity">Back to communities</Link>
             </Button>
           </>
         )
