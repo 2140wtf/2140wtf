@@ -88,8 +88,8 @@ export function MintInfoPanel({ url }: { url: string }) {
     <div className="space-y-2 pt-2">
       {info.name && <p className="font-semibold text-sm">{info.name}</p>}
       {info.motd && (
-        <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 px-3 py-2">
-          <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Mint message</p>
+        <div className="rounded-lg border border-amber-500/50 bg-card px-3 py-2">
+          <p className="text-xs font-medium text-foreground">Mint message</p>
           <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap break-words">{info.motd}</p>
         </div>
       )}

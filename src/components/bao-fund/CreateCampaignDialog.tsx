@@ -517,9 +517,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           )}
 
           {quotaBlocked && (
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-0.5">
-              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Anti-spam limit reached</p>
-              <p className="text-[11px] text-amber-950 dark:text-amber-200">
+            <div className="rounded-md border border-amber-500/50 bg-card px-3 py-2 space-y-0.5">
+              <p className="text-[11px] font-semibold text-foreground">Anti-spam limit reached</p>
+              <p className="text-[11px] text-foreground">
                 Campaign creation is limited to {quota?.limit_hour}/hour and {quota?.limit_day}/day per key
                 {quota ? ` (you: ${quota.used_hour} this hour, ${quota.used_day} today)` : ''}.
                 Try again in ~{quotaRetryMin} minute{quotaRetryMin === 1 ? '' : 's'} — nothing was published.
@@ -528,9 +528,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           )}
 
           {missing.length > 0 && !quotaBlocked && (title.trim().length > 0 || description.trim().length > 0) && (
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 space-y-1">
-              <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Before you can create:</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-950 dark:text-amber-200">
+            <div className="rounded-md border border-amber-500/50 bg-card px-3 py-2 space-y-1">
+              <p className="text-[11px] font-semibold text-foreground">Before you can create:</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-foreground">
                 {missing.slice(0, 5).map((item) => <li key={item}>{item}</li>)}
                 {missing.length > 5 && <li>…and {missing.length - 5} more</li>}
               </ul>

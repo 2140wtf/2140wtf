@@ -145,7 +145,7 @@ export function AttestationPanel({ fundraiser, milestone, isOwner }: {
   if (!hasActivity && !canSubmitProof && !canTimeoutObject) return null;
 
   return (
-    <div className="rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 px-3 py-2 space-y-2">
+    <div className="rounded-md border border-dashed border-amber-500/50 bg-card px-3 py-2 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium flex items-center gap-1.5">
           <Vote className="size-3.5 text-amber-600 dark:text-amber-400" />
@@ -428,7 +428,7 @@ function ObjectionDialog({ open, onOpenChange, milestone, proofEventId, pending,
         </DialogHeader>
         <div className="space-y-4">
           {!proofEventId && (
-            <p className="text-xs rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-amber-600 dark:text-amber-400">
+            <p className="rounded-md border border-amber-500/50 bg-card px-3 py-2 text-xs text-foreground">
               No proof was submitted before the deadline — this is a timeout objection.
             </p>
           )}
