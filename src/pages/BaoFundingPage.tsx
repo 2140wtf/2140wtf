@@ -577,7 +577,11 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
             <span className="font-medium">Funding progress</span>
             <span className="font-semibold tabular-nums">{pct}%</span>
           </div>
-          <Progress value={pct} className="h-3 border border-primary/20 bg-primary/10" />
+          <Progress
+            value={pct}
+            className="h-3 border border-amber-500/30 bg-amber-500/10"
+            indicatorClassName="bg-amber-500"
+          />
         </div>
         <div className="flex items-center justify-center gap-1 pt-1.5 text-[11px] text-muted-foreground">
           {expanded ? (<>Show less <ChevronUp className="size-3.5" /></>) : (<>Read more <ChevronDown className="size-3.5" /></>)}
