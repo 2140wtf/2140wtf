@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { nip19 } from 'nostr-tools';
 import { injectTestLogin } from '../fixtures/login';
-import { NetworkMonitor } from '../fixtures/network';
+import { installReadOnlyNetworkGuard, NetworkMonitor } from '../fixtures/network';
 
 const DEFAULT_TIMEOUT = 20_000;
 
@@ -11,6 +11,8 @@ function attachMonitor(page: import('@playwright/test').Page): NetworkMonitor {
   return monitor;
 }
 
+test.beforeEach(async ({ page }) => installReadOnlyNetworkGuard(page));
+
 test.describe('smoke', () => {
   test('home feed loads without critical errors', async ({ page }) => {
     const monitor = attachMonitor(page);
@@ -18,7 +20,7 @@ test.describe('smoke', () => {
     await page.goto('/', { waitUntil: 'load' });
 
     // Wait for the logged-in feed chrome.
-    await expect(page.getByRole('button', { name: 'Follows' })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    await expect(page.getByRole('button', { name: 'Follows', exact: true })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     // The feed may contain notes or an empty state depending on relay data.
     const noteLike = page.locator('article, [class*="note"], [data-feed-item]').first();
@@ -67,15 +69,19 @@ test.describe('smoke', () => {
     await injectTestLogin(page);
     await page.goto('/prediction-markets', { waitUntil: 'load' });
 
-    await page.getByText('Will Bitcoin reach $150K').first().click();
+    const marketCard = page.locator('[data-market-id]').filter({
+      has: page.getByRole('button', { name: 'Buy Yes', exact: true }),
+    }).first();
+    await expect(marketCard).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    await marketCard.getByRole('button', { name: 'Details' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     // The outcome pills render inside the chart card; wait for them to appear
     // after the lightweight-charts canvas has computed the sparklines.
     const chartCard = dialog.locator('.rounded-xl, [class*="rounded-xl"]').filter({ hasText: /Yes|No/ }).first();
-    await expect(chartCard.getByText(/Yes/)).toBeVisible({ timeout: DEFAULT_TIMEOUT });
-    await expect(chartCard.getByText(/No/)).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    await expect(chartCard.getByRole('button', { name: 'Yes', exact: true })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    await expect(chartCard.getByRole('button', { name: 'No', exact: true })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     monitor.assertNoFailures();
   });
