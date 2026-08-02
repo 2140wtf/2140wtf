@@ -8,7 +8,7 @@ Your content. Your vibe. Your rules. A fun, customizable [Nostr](https://nostr.c
 
 2140.wtf is an open-source, decentralized social media client built on the Nostr protocol. It's designed for people who want to have fun online without feeding the Big Tech machine. Express yourself with custom themes, Lightning payments, and an ever-growing set of content types -- all while owning your identity and data.
 
-Originally built by [Soapbox](https://soapbox.pub) as Ditto. Now developed as 2140.wtf.
+2140.wtf began with [Soapbox](https://soapbox.pub)'s open-source Ditto client. It has since taken a broader direction: a Nostr-native workspace combining social publishing with encrypted ₿AO communities, Bitcoin wallets, prediction markets, milestone funding, agent compute credits, games, and other interoperable experiences. It is now independently developed as 2140.wtf, while preserving clear credit to the Ditto foundation it grew from.
 
 > **Beta software:** 2140.wtf, ₿AO Markets, ₿AO Fund, Court, and NOSTR Pets
 > include active research and demo systems. ₿AO signet/test sats have no real
