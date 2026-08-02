@@ -38421,15 +38421,14 @@ async function orchStates(state, orchId) {
 */
 init_pure();
 const IDENTITY = validateIdentityName(process.env.BAO_AGENT_IDENTITY ?? "owner");
-/** JSONL audit log — one line per tool call (AGENT_CHAT_ORCHESTRATION.md §15). */
-function audit(tool, args, summary) {
+/** Privacy-minimal JSONL audit: operation and coarse outcomes, never content or identifiers. */
+function audit(tool, metrics = {}) {
 	try {
 		mkdirSync(STATE_DIR, { recursive: true });
 		appendFileSync(join(STATE_DIR, `audit-${IDENTITY}.jsonl`), JSON.stringify({
 			ts: (/* @__PURE__ */ new Date()).toISOString(),
 			tool,
-			args,
-			summary
+			metrics
 		}) + "\n", { mode: 384 });
 	} catch {}
 }
@@ -38453,7 +38452,7 @@ server.registerTool("list_channels", {
 }, async () => {
 	const state = identityState();
 	const channels = await listChannels(state);
-	audit("list_channels", {}, `${channels.length} channel(s)`);
+	audit("list_channels", { count: channels.length });
 	return jsonResult({
 		community: state.community.name,
 		channels
@@ -38464,7 +38463,10 @@ server.registerTool("get_project", {
 	inputSchema: {}
 }, async () => {
 	const snapshot = await projectSnapshot(identityState());
-	audit("get_project", {}, `${snapshot.coordinate}: ${snapshot.issues.length} issue(s), ${snapshot.pull_requests.length} PR(s)`);
+	audit("get_project", {
+		issues: snapshot.issues.length,
+		pull_requests: snapshot.pull_requests.length
+	});
 	return jsonResult(snapshot);
 });
 server.registerTool("read_messages", {
@@ -38478,8 +38480,9 @@ server.registerTool("read_messages", {
 	const messages = (await channelMessages(state, channel)).slice(-limit);
 	audit("read_messages", {
 		limit,
-		channel
-	}, `${messages.length} message(s)`);
+		channel_selected: channel !== void 0,
+		count: messages.length
+	});
 	return jsonResult({
 		community: state.community.name,
 		channel: channel ?? "general",
@@ -38505,10 +38508,10 @@ server.registerTool("send_message", {
 		channel
 	});
 	audit("send_message", {
-		key,
-		channel,
-		len: text.length
-	}, deduped ? "deduped" : `sent ${rumorId.slice(0, 12)}`);
+		length: text.length,
+		channel_selected: channel !== void 0,
+		deduped
+	});
 	return jsonResult({
 		rumor_id: rumorId,
 		deduped,
@@ -38530,17 +38533,19 @@ server.registerTool("wait_for_message", {
 	});
 	if (!hit) {
 		audit("wait_for_message", {
-			timeout_sec,
+			timeout_seconds: timeout_sec,
 			mention_only,
-			channel
-		}, "timeout");
+			channel_selected: channel !== void 0,
+			hit: false
+		});
 		return jsonResult({ timeout: true });
 	}
 	audit("wait_for_message", {
-		timeout_sec,
+		timeout_seconds: timeout_sec,
 		mention_only,
-		channel
-	}, `hit ${hit.id.slice(0, 12)}`);
+		channel_selected: channel !== void 0,
+		hit: true
+	});
 	return jsonResult({
 		timeout: false,
 		id: hit.id,
@@ -38556,7 +38561,7 @@ server.registerTool("get_profile", {
 }, async () => {
 	const state = identityState();
 	const pubkey = getPublicKey$1(hexToBytes$1(state.sk));
-	audit("get_profile", {}, IDENTITY);
+	audit("get_profile");
 	return jsonResult({
 		identity: IDENTITY,
 		npub: npubEncode$1(pubkey),
@@ -38567,7 +38572,7 @@ server.registerTool("get_profile", {
 	});
 });
 server.registerTool("set_profile", {
-	description: "Publish a Nostr kind-0 profile for this identity to the community's relays (bot:true marks it as an agent per the orchestration conventions).",
+	description: "Publicly publish a Nostr kind-0 profile to the community relays. This explicit action can correlate the identity with private community activity.",
 	inputSchema: {
 		display_name: string().max(64).optional(),
 		about: string().max(500).optional()
@@ -38587,7 +38592,10 @@ server.registerTool("set_profile", {
 		created_at: Math.floor(Date.now() / 1e3)
 	}, sk);
 	await publishAll(state.community.relays, event, "kind-0 profile");
-	audit("set_profile", { display_name }, event.id.slice(0, 12));
+	audit("set_profile", {
+		has_display_name: display_name !== void 0,
+		has_about: about !== void 0
+	});
 	return jsonResult({
 		published: true,
 		event_id: event.id
@@ -38598,7 +38606,7 @@ server.registerTool("orch_show", {
 	inputSchema: { orch: string().max(64).regex(/^\S*$/, "orch must not contain whitespace").default("cards").describe("Orchestration id (the room's coordination scope)") }
 }, async ({ orch }) => {
 	const states = await orchStates(identityState(), orch);
-	audit("orch_show", { orch }, `${states.size} task(s)`);
+	audit("orch_show", { count: states.size });
 	return jsonResult({
 		orch,
 		ttl_ms: CLAIM_TTL_MS,
@@ -38626,10 +38634,9 @@ server.registerTool("orch_verb", {
 }, async ({ verb, task_id, text, orch }) => {
 	const result = await orchVerbPost(identityState(), verb.toUpperCase(), task_id, text, orch);
 	audit("orch_verb", {
-		verb,
-		task_id,
-		orch
-	}, result.deduped ? "deduped" : `sent ${result.rumorId.slice(0, 12)}`);
+		deduped: result.deduped,
+		held: result.held === true
+	});
 	return jsonResult({
 		rumor_id: result.rumorId,
 		deduped: result.deduped,
@@ -38643,7 +38650,7 @@ async function main() {
 	const state = identityState();
 	const npub = npubEncode$1(getPublicKey$1(hexToBytes$1(state.sk)));
 	console.error(`bao-chat-mcp: identity "${IDENTITY}" (${npub.slice(0, 20)}…) in "${state.community.name}" — stdio up`);
-	audit("boot", {}, `${IDENTITY} in ${state.community.name}`);
+	audit("boot");
 	await server.connect(new StdioServerTransport());
 }
 main().catch((err) => {
