@@ -74,7 +74,7 @@ export function useBanSelfRemove2(community: CommunityV2 | undefined, onRemoved?
     updateList({ type: "remove", communityId: community.idHex })
       .then(() => {
         queryClient.removeQueries({ queryKey: ["concord2", key] });
-        toast({ title: "Removed from community", description: "You no longer have access to this community." });
+        toast({ title: "Removed from community", description: "This community was removed from this app’s community list." });
         onRemoved?.();
       })
       .catch(() => {
