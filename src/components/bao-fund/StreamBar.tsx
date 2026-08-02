@@ -1,7 +1,6 @@
-import { Loader2, Waves } from 'lucide-react';
+import { Waves } from 'lucide-react';
 import { baoApiDate } from "@/lib/baoFundraising";
 
-import { Button } from '@/components/ui/button';
 import type { BaoFundraiser } from '@/lib/baoFundraising';
 
 function formatSats(n: number): string {
@@ -10,19 +9,14 @@ function formatSats(n: number): string {
 
 /**
  * Time-lock stream bar: raised funds vest linearly between stream_start_at
- * and stream_end_at. Three segments — claimed / claimable / still locked.
- * The owner can claim the vested-but-unclaimed part (DEMO: recorded only).
+ * and stream_end_at. This is schedule information only: payouts remain gated
+ * by milestone acceptance and are never claimable merely because time passed.
  */
-export function StreamBar({ fundraiser, isOwner, onClaim, isClaiming }: {
+export function StreamBar({ fundraiser }: {
   fundraiser: BaoFundraiser;
-  isOwner: boolean;
-  onClaim: () => void;
-  isClaiming: boolean;
 }) {
   const raised = Number(fundraiser.raised_sats);
   const vested = Number(fundraiser.stream_vested_sats ?? 0);
-  const claimable = Number(fundraiser.stream_claimable_sats ?? 0);
-  const claimed = Number(fundraiser.claimed_sats ?? 0);
   const locked = Math.max(0, raised - vested);
 
   const start = baoApiDate(fundraiser.stream_start_at);
@@ -62,32 +56,23 @@ export function StreamBar({ fundraiser, isOwner, onClaim, isClaiming }: {
       </div>
 
       <div className="flex-1 space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-md border bg-muted/30 px-3 py-2">
-        <div>
+      <div className="flex flex-wrap gap-3 rounded-md border bg-muted/30 px-3 py-2">
+        <div className="min-w-32 flex-1">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rate</div>
           <div className="text-xs font-medium tabular-nums">{ratePerDay !== null ? `${formatSats(ratePerDay)} sats/day` : '—'}</div>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Released by time</div>
+        <div className="min-w-32 flex-1">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Scheduled by time</div>
           <div className="text-xs font-medium tabular-nums">{vestedPct}% · {formatSats(vested)} sats</div>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Available now</div>
-          <div className="text-xs font-medium tabular-nums">{formatSats(claimable)} sats</div>
-        </div>
-        <div>
+        <div className="min-w-32 flex-1">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Still locked</div>
           <div className="text-xs font-medium tabular-nums">{formatSats(locked)} sats</div>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">Claimed: <span className="text-foreground tabular-nums">{formatSats(claimed)} sats</span></span>
-        {isOwner && (
-          <Button size="sm" variant="outline" disabled={claimable <= 0 || isClaiming} onClick={onClaim}>
-            {isClaiming ? <Loader2 className="size-3.5 animate-spin" /> : `Claim ${formatSats(claimable)} sats`}
-          </Button>
-        )}
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Schedule progress does not authorize payout. Funds remain locked until the required milestone is accepted.
+      </p>
       </div>
     </div>
   );

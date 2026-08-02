@@ -9,7 +9,7 @@ export function ResearchBetaAlert({ className }: { className?: string }) {
       <Info className="size-4" />
       <AlertTitle className="text-amber-600 dark:text-amber-400">Active research projects — BETA</AlertTitle>
       <AlertDescription className="text-muted-foreground">
-        2140.wtf and ₿AO Fund are active research projects in beta. Use all technology at your own risk and do not use large amounts of money.
+        2140.wtf is an active research project in beta. Use all technology at your own risk and do not use large amounts of money.
       </AlertDescription>
     </Alert>
   );

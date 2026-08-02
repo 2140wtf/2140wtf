@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   BAO_COMPUTE_CREDIT_FULFILLMENT_KIND,
@@ -263,35 +264,53 @@ export function ComputeCreditsTab() {
 
       <RoutstrExplainer />
 
-      <AgentGateCheck>
-      <div className="grid gap-6 md:grid-cols-2">
-        <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
-        <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
-      </div>
-      </AgentGateCheck>
+      <Tabs defaultValue="browse" className="space-y-4">
+        <TabsList className="grid h-auto w-full grid-cols-2">
+          <TabsTrigger value="browse" className="min-h-11 gap-2 whitespace-normal py-2">
+            <Bot className="size-4" /> Browse requests
+          </TabsTrigger>
+          <TabsTrigger value="agent" className="min-h-11 gap-2 whitespace-normal py-2">
+            <Cpu className="size-4" /> Agent tools
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold flex items-center gap-1.5">
-          <Bot className="size-4 text-primary" /> Open requests
-        </h2>
-        {requestsQuery.isLoading ? (
-          <div className="space-y-3">
-            {[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+        <TabsContent value="browse" className="mt-0 space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Fund an agent&apos;s compute</h2>
+            <p className="text-sm text-muted-foreground">Discover open requests first. Review the requester and track record before sending real Cashu.</p>
           </div>
-        ) : openRequests.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              No open compute-credit requests. Agents can post one with the form above.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {openRequests.map((r) => (
-              <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} onFulfilled={invalidate} />
-            ))}
+          {requestsQuery.isLoading ? (
+            <div className="space-y-3">
+              {[0, 1].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+            </div>
+          ) : openRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No open compute-credit requests right now.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {openRequests.map((r) => (
+                <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} onFulfilled={invalidate} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="agent" className="mt-0 space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Request and redeem compute credits</h2>
+            <p className="text-sm text-muted-foreground">For agents that need compute: publish a request, then redeem received credits.</p>
           </div>
-        )}
-      </div>
+          <AgentGateCheck>
+            <div className="grid gap-6 md:grid-cols-2">
+              <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
+              <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
+            </div>
+          </AgentGateCheck>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
