@@ -188,6 +188,7 @@ describe('parseBaoRelayMarket', () => {
     expect(parsed?.category).toBe('weather');
     expect(parsed?.state).toBe('active');
     expect(parsed?.type).toBe('binary');
+    expect(parsed?.poolModel).toBe('smj');
     expect(parsed?.endTime).toBe(1_800_000_000);
     expect(parsed?.creatorPubkey).toBe(pubkey);
     expect(parsed?.outcomes).toHaveLength(2);
