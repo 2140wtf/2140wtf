@@ -1,4 +1,3 @@
-import { useNostr } from "@nostrify/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
@@ -15,7 +14,6 @@ import { parseRepoNaddr } from "@/lib/nip34Project";
  * (`custom`, vendor extensions) round-trip untouched (CORD-02 §6).
  */
 export function useMetadataActions2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { data: folded } = useControlFold2(community);
@@ -55,7 +53,6 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
 
       const head = folded?.heads.get(community.idHex);
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildMetadataEdition(community.id, next, {
@@ -83,7 +80,6 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
  * dropped network-wide.
  */
 export function useRoles2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const { data: folded, isLoading } = useControlFold2(community);
@@ -105,7 +101,6 @@ export function useRoles2(community: CommunityV2 | undefined) {
       if (!user || !community) throw new Error("Not ready.");
       const head = folded?.heads.get(role.roleId);
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildRoleEdition(role, {
@@ -126,7 +121,6 @@ export function useRoles2(community: CommunityV2 | undefined) {
       const head = grantHeadOf(member);
       const grant: MemberGrant = { member, roleIds };
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildGrantEdition(community.id, grant, {
@@ -172,7 +166,6 @@ export function useRoles2(community: CommunityV2 | undefined) {
         if (!roleId) {
           roleId = minted.roleId;
           await publishEdition2(
-            nostr,
             community,
             user.signer,
             buildRoleEdition(minted, {
@@ -187,7 +180,6 @@ export function useRoles2(community: CommunityV2 | undefined) {
       const head = grantHeadOf(member);
       const grant: MemberGrant = { member, roleIds: roleId ? [roleId] : [] };
       await publishEdition2(
-        nostr,
         community,
         user.signer,
         buildGrantEdition(community.id, grant, {

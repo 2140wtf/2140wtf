@@ -9,8 +9,8 @@
  * navigated into a room. This module runs that catch-up eagerly, in order:
  *
  *   1. rehydrate each live membership entry into a runtime community;
- *   2. register the plane stream keys (NIP-42) and sweep every community's
- *      control + guestbook planes (batched per relay via planeSync);
+ *   2. sweep every community's control + guestbook planes through its own
+ *      stream-only relay sessions;
  *   3. fold the control plane and PERSIST the fold snapshot, so channel lists
  *      and community names paint instantly when the app shows through;
  *   4. pull + decrypt the newest page of every channel into the rumor store,
@@ -29,9 +29,10 @@ import { controlGroups, foldControlState, openControlEditions } from "@/concord-
 import { guestbookGroups } from "@/concord-v2/lib/guestbook";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { openChatBatch } from "@/concord-v2/lib/chat";
-import { sweepControl, sweepGuestbook, whenAuthSettled } from "@/concord-v2/lib/planeSync";
+import { sweepControl, sweepGuestbook } from "@/concord-v2/lib/planeSync";
 import { queryByStreams, writeRumors } from "@/concord-v2/lib/rumorStore";
-import { registerStreamKeys, streamAuthGeneration } from "@/concord-v2/lib/streamAuth";
+import { ConcordTransport, concordTransport, type ConcordCapability } from "@/concord-v2/lib/concordTransport";
+import type { GroupKey } from "@/concord-v2/lib/derive";
 import { controlFoldKey } from "@/concord-v2/hooks/useControlPlane2";
 import { writeFolded } from "@/lib/foldedCache";
 import { beginSyncTask } from "@/lib/syncActivity";
@@ -43,9 +44,18 @@ import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
 /** Minimal relay-capable Nostr client the warm-up needs (batcher-backed). */
 interface NostrLike {
+  _concordScope: string;
+  _concordKeySig: string;
   relay(url: string): {
     query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
   };
+}
+
+type WarmupTransport = Pick<ConcordTransport, "capability" | "generation">;
+
+/** Bind the narrow plane/backfill client to exactly one community. */
+function scopedClient(capability: ConcordCapability, keys: readonly GroupKey[]): NostrLike {
+  return capability.client(keys);
 }
 
 /**
@@ -83,10 +93,15 @@ export interface WarmupResult {
  * per relay and run to completion on their own budget).
  */
 export async function warmupCommunities2(
-  nostr: NostrLike,
   entries: CommunityListEntry[],
-  opts: { signal?: AbortSignal; onProgress?: (done: number, total: number) => void } = {},
+  opts: {
+    signal?: AbortSignal;
+    onProgress?: (done: number, total: number) => void;
+    /** Injectable transport keeps the warm-up deterministic in unit tests. */
+    transport?: WarmupTransport;
+  } = {},
 ): Promise<WarmupResult> {
+  const transport = opts.transport ?? concordTransport;
   const communities: CommunityV2[] = [];
   for (const entry of entries) {
     const community = rehydrateCommunity(entry);
@@ -95,42 +110,44 @@ export async function warmupCommunities2(
   const result: WarmupResult = { communities: communities.length, channels: 0, messages: 0 };
   if (communities.length === 0) return result;
 
-  // Account-switch guard (see streamAuthGeneration): the warmup's awaited
-  // sweeps/reads may resolve after the switch-time registry reset — a late
-  // registration would re-admit the previous account's stream keys.
-  const generation = streamAuthGeneration();
+  // Account-switch guard: resetAccount closes every old session and advances
+  // this generation. Async work from the previous account must never create
+  // or widen a session after that boundary.
+  const generation = transport.generation();
+  const capabilities = new Map(communities.map((community) => [
+    community.idHex,
+    transport.capability(community.idHex),
+  ]));
 
   // Report on the sync-activity signal too: if the gate's time budget expires
   // before the warm-up finishes, the in-chat status bar carries the rest.
   const task = beginSyncTask("message history");
   try {
-    // ── Plane sweeps (control + guestbook), one batched REQ per relay ───────
-    // Keys must register BEFORE the sweeps so the relays' NIP-42 challenges
-    // cover them (planeSync's auth gate holds the REQs until the AUTHs ack).
-    for (const c of communities) {
-      registerStreamKeys([...controlGroups(c), ...guestbookGroups(c)], c.relays);
-    }
+    // ── Plane sweeps, isolated by community + relay ────────────────────────
     await Promise.all(
       communities.flatMap((c) => [
-        sweepControl(nostr, c).catch(() => []),
-        sweepGuestbook(nostr, c).catch(() => []),
+        sweepControl(scopedClient(capabilities.get(c.idHex)!, controlGroups(c)), c).catch(() => []),
+        sweepGuestbook(scopedClient(capabilities.get(c.idHex)!, guestbookGroups(c)), c).catch(() => []),
       ]),
     );
+    if (transport.generation() !== generation) return result;
 
     // ── Fold + persist snapshots; derive readable channels ──────────────────
     const jobs = new Map<CommunityV2, ChannelV2[]>();
     let totalChannels = 0;
     for (const c of communities) {
       try {
+        if (transport.generation() !== generation) return result;
         const stored = await queryByStreams(controlGroups(c).map((g) => g.pk));
+        if (transport.generation() !== generation) return result;
         const folded = foldControlState(openControlEditions(stored), c.id, c.owner);
         await writeFolded(controlFoldKey(c.idHex), folded);
+        if (transport.generation() !== generation) return result;
         emitWireScopes([`c2ctl:${c.idHex}`]);
         for (const channel of channelsView(c, folded)) {
           if (channel.streams.length === 0) continue;
           if (totalChannels >= MAX_WARMUP_CHANNELS) break;
-          if (streamAuthGeneration() !== generation) return result;
-          registerStreamKeys(channel.streams.map((s) => s.group), c.relays);
+          if (transport.generation() !== generation) return result;
           const list = jobs.get(c) ?? [];
           list.push(channel);
           jobs.set(c, list);
@@ -157,25 +174,25 @@ export async function warmupCommunities2(
         chunkJobs.push(
           (async () => {
             const groupsOf = () => chunk.flatMap((ch) => ch.streams.map((s) => s.group));
+            if (transport.generation() !== generation) return;
+            const client = scopedClient(capabilities.get(community.idHex)!, groupsOf());
             const filters: NostrFilter[] = chunk.map((ch) => ({
               kinds: [KIND_WRAP],
               authors: ch.streams.map((s) => s.group.pk),
               limit: WARMUP_PAGE,
             }));
             /**
-             * Pull one relay's pages for this chunk, gated on NIP-42. A
-             * kind-1059 REQ racing the stream AUTHs gets CLOSED and reads
-             * back as a clean empty page — which made the warm-up "finish"
-             * with zero messages on auth-gating relays. Hold until the relay
-             * has acked our AUTHs; if the first round still comes back empty
-             * (the REQ itself may have triggered a lazy challenge), wait for
-             * the acks and re-ask once before believing the emptiness.
+             * Pull one relay's pages for this chunk. NRelay1 handles the
+             * stream-only AUTH challenge inside the isolated session. A lazy
+             * challenge can still close the first REQ before all stream AUTH
+             * frames settle, so an empty/failing first attempt is re-issued
+             * with a fresh subscription after a short hold.
              */
             const pull = async (url: string): Promise<NostrEvent[]> => {
               for (let attempt = 1; attempt <= 2; attempt++) {
-                await whenAuthSettled(url, groupsOf);
+                if (transport.generation() !== generation) return [];
                 try {
-                  const events = await nostr.relay(url).query(filters, {
+                  const events = await client.relay(url).query(filters, {
                     signal: AbortSignal.any([
                       ...(opts.signal ? [opts.signal] : []),
                       AbortSignal.timeout(CHANNEL_TIMEOUT_MS),
@@ -191,6 +208,7 @@ export async function warmupCommunities2(
             };
             try {
               const wraps = (await Promise.all(community.relays.map(pull))).flat();
+              if (transport.generation() !== generation) return;
               // Demux by wrap author (each channel decrypts only its own),
               // deduped across relays by wrap id.
               const channelByPk = new Map<string, ChannelV2>();
@@ -207,7 +225,9 @@ export async function warmupCommunities2(
                 byChannel.set(ch, list);
               }
               for (const [ch, chWraps] of byChannel) {
+                if (transport.generation() !== generation) return;
                 const opened = await openChatBatch(chWraps, ch);
+                if (transport.generation() !== generation) return;
                 if (opened.length > 0) {
                   // writeRumors rings `c2:<channel>` on the wire bus once committed.
                   writeRumors(opened);
@@ -217,9 +237,11 @@ export async function warmupCommunities2(
             } catch {
               // Best-effort per chunk — the rooms backfill on open.
             } finally {
-              done += chunk.length;
-              opts.onProgress?.(done, totalChannels);
-              task.update({ detail: `${done}/${totalChannels} channels` });
+              if (transport.generation() === generation) {
+                done += chunk.length;
+                opts.onProgress?.(done, totalChannels);
+                task.update({ detail: `${done}/${totalChannels} channels` });
+              }
             }
           })(),
         );

@@ -75,6 +75,10 @@ const h = vi.hoisted(() => ({
 vi.mock("@nostrify/react", () => ({
   useNostr: () => ({ nostr: h.pool }),
 }));
+vi.mock("@/concord-v2/lib/concordTransport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/concord-v2/lib/concordTransport")>()),
+  concordClient: () => ({ ...(h.pool as object), _concordScope: "test", _concordKeySig: "test" }),
+}));
 vi.mock("@/hooks/useCurrentUser", () => ({
   useCurrentUser: () => ({ user: h.user }),
 }));

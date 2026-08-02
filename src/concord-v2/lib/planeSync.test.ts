@@ -433,6 +433,24 @@ describe("sweepRelayScopes — one REQ per relay, per-scope filters", () => {
     );
   });
 
+  it("does not co-batch scoped clients with different stream capabilities", async () => {
+    const owner = signer();
+    const community = communityOf(62, owner.pubkey);
+    const relay = new FakeRelay();
+    relay.delayMs = 100;
+    const base = poolOf({ [RELAY_A]: relay });
+    const controlClient = { ...base, _concordScope: community.idHex, _concordKeySig: "control" };
+    const guestbookClient = { ...base, _concordScope: community.idHex, _concordKeySig: "guestbook" };
+
+    await Promise.all([
+      sweepRelayScopes(controlClient, RELAY_A, [controlScope(community, RELAY_A)]),
+      sweepRelayScopes(guestbookClient, RELAY_A, [guestbookScope(community, RELAY_A)]),
+    ]);
+
+    expect(relay.calls, "each least-authority client must issue through its own capability").toHaveLength(2);
+    expect(relay.calls.every((filters) => filters.length === 1)).toBe(true);
+  });
+
   it("different planes of the same community are NOT deduped against each other", async () => {
     const owner = signer();
     const community = communityOf(64, owner.pubkey);

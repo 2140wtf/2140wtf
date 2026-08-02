@@ -1,13 +1,10 @@
-import { useNostr } from "@nostrify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 
 import { useCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { liveEntries, rehydrateCommunity } from "@/concord-v2/lib/communityList";
-import { onStreamKeysAdded } from "@/concord-v2/lib/streamAuth";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { syncControlPlane } from "@/lib/controlPlaneSync";
-import { logSync } from "@/lib/syncLog";
 
 /**
  * Sync the control plane of every Concord V2 community on pageload.
@@ -17,7 +14,6 @@ import { logSync } from "@/lib/syncLog";
  * of the ₿AO build.)
  */
 function useControlPlaneSync(): void {
-  const { nostr } = useNostr();
   const queryClient = useQueryClient();
 
   const { data: v2Data } = useCommunityList2();
@@ -57,36 +53,11 @@ function useControlPlaneSync(): void {
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
     queryFn: async () => {
-      await syncControlPlane(nostr, queryClient, v2);
+      await syncControlPlane(queryClient, v2);
       return sig;
     },
   });
 
-  // Re-sweep backstop: keys registered AFTER a sweep ran (a fold landing for
-  // a freshly-synced community) mean new plane addresses to read — sweep
-  // again. `lastRun` starts at mount so the first wave doesn't double-sweep —
-  // planeSync already holds the initial sweep for it.
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let lastRun = Date.now();
-    const MIN_INTERVAL_MS = 60_000;
-    /** Late keys auth on the live socket in ~an RTT; a short delay batches a wave. */
-    const RE_SWEEP_DELAY_MS = 2_000;
-    const unsubscribe = onStreamKeysAdded(() => {
-      if (timer !== undefined) return; // a backstop re-sweep is already scheduled
-      const wait = Math.max(RE_SWEEP_DELAY_MS, lastRun + MIN_INTERVAL_MS - Date.now());
-      timer = setTimeout(() => {
-        timer = undefined;
-        lastRun = Date.now();
-        logSync("sweep", "new stream keys registered — re-running the plane sweep");
-        queryClient.invalidateQueries({ queryKey: ["control-plane-sync"] });
-      }, wait);
-    });
-    return () => {
-      unsubscribe();
-      if (timer !== undefined) clearTimeout(timer);
-    };
-  }, [queryClient]);
 }
 
 /**

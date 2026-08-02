@@ -16,12 +16,15 @@ import { controlScope, guestbookScope, sweepRelayScopes, type PlaneScope } from 
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { logSync, sinceMs } from "@/lib/syncLog";
 import { emitWireScopes } from "@/wire/bus";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Minimal Nostr client shape (batcher-backed). */
 interface NostrLike {
+  _concordScope: string;
+  _concordKeySig: string;
   relay(url: string): {
     query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
   };
@@ -38,7 +41,6 @@ export interface ControlPlaneSyncResult {
  * re-asked next time.
  */
 export async function syncControlPlane(
-  nostr: NostrLike,
   queryClient: QueryClient,
   v2: CommunityV2[],
 ): Promise<ControlPlaneSyncResult> {
@@ -61,7 +63,6 @@ export async function syncControlPlane(
     };
   };
   let guestbookTouched = 0;
-  const byRelay = new Map<string, PlaneScope[]>();
   for (const c of v2) {
     const announceControl = once(() => {
       emitWireScopes([`c2ctl:${c.idHex}`]);
@@ -72,19 +73,17 @@ export async function syncControlPlane(
       queryClient.invalidateQueries({ queryKey: ["concord2", "guestbook", c.idHex] });
     });
     for (const url of c.relays) {
-      const scopes = byRelay.get(url) ?? [];
-      scopes.push(
+      const scopes: PlaneScope[] = [
         controlScope(c, url, () => {
           result.v2Touched.add(c.idHex);
           announceControl();
         }),
         guestbookScope(c, url, announceGuestbook),
-      );
-      byRelay.set(url, scopes);
+      ];
+      const groups = scopes.flatMap((scope) => scope.groups);
+      const scoped: NostrLike = concordClient(c.idHex, groups);
+      jobs.push(sweepRelayScopes(scoped, url, scopes));
     }
-  }
-  for (const [url, scopes] of byRelay) {
-    jobs.push(sweepRelayScopes(nostr, url, scopes));
   }
 
   await Promise.all(jobs);

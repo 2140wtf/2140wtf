@@ -1,4 +1,3 @@
-import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -22,6 +21,7 @@ import { queryByStreams } from "@/concord-v2/lib/rumorStore";
 import type { OpenedEvent } from "@/concord-v2/lib/stream";
 import { canActOnMember, Permissions } from "@/concord-v2/lib/roles";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 
 /**
  * The Guestbook Plane (CORD-02 §5): membership motion, coalesced flat.
@@ -29,7 +29,6 @@ import type { CommunityV2 } from "@/concord-v2/lib/types";
  * {@link sweepGuestbook}; wraps decrypted once into the opened-event cache.
  */
 export function useGuestbook2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { data: folded } = useControlFold2(community);
 
   const query = useQuery<OpenedEvent[]>({
@@ -38,7 +37,7 @@ export function useGuestbook2(community: CommunityV2 | undefined) {
     staleTime: 30_000,
     refetchInterval: 60_000,
     queryFn: async () => {
-      const fresh = await sweepGuestbook(nostr, community!);
+      const fresh = await sweepGuestbook(concordClient(community!.idHex, guestbookGroups(community!)), community!);
       const stored = await queryByStreams(guestbookGroups(community!).map((g) => g.pk));
       return mergeOpened(stored, fresh);
     },
@@ -91,7 +90,6 @@ export function useMembers2(
 
 /** Publish one guestbook rumor to the community relays. */
 export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
 
@@ -113,7 +111,7 @@ export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
             : buildKickRumor(user.pubkey, action.target, ms, action.vac);
       const wrap = await sealGuestbook(rumor, group, user.signer);
       const results = await Promise.allSettled(
-        community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+        community.relays.map((url) => concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error("No relay accepted the update.");

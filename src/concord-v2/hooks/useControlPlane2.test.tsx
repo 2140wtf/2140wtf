@@ -45,6 +45,10 @@ const h = vi.hoisted(() => ({ pool: undefined as unknown }));
 vi.mock("@nostrify/react", () => ({
   useNostr: () => ({ nostr: h.pool }),
 }));
+vi.mock("@/concord-v2/lib/concordTransport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/concord-v2/lib/concordTransport")>()),
+  concordClient: () => ({ ...(h.pool as object), _concordScope: "test", _concordKeySig: "test" }),
+}));
 vi.mock("@/concord-v2/hooks/useDeferredFold2", () => ({
   useDeferredFold: () => undefined,
 }));

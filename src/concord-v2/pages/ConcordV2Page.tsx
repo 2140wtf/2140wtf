@@ -75,7 +75,6 @@ import { useConcord2Unread, type Concord2Unread } from "@/concord-v2/hooks/useCo
 import { useConcord2Mentions } from "@/concord-v2/hooks/useConcord2Mentions";
 import { useConcord2Threads, type Concord2Thread } from "@/concord-v2/hooks/useConcord2Threads";
 import { useTyping2, useTypingPublisher2 } from "@/concord-v2/hooks/useTyping2";
-import { useRegisterChannelStreamKeys2 } from "@/concord-v2/hooks/useStreamAuth2";
 import { completeMemberlist } from "@/concord-v2/lib/guestbook";
 import { badgeOf, isAuthorized, Permissions } from "@/concord-v2/lib/roles";
 import type { ChannelV2, CommunityV2, ImagePointer } from "@/concord-v2/lib/types";
@@ -637,7 +636,6 @@ export function ConcordV2Page() {
 
   // Authenticate the connection as this community's per-channel stream keys
   // (control/guestbook/dissolved keys are registered app-wide in MainLayout).
-  useRegisterChannelStreamKeys2(communityId);
 
   // React to base-rekey rotations (adopt the new epoch, or discover removal).
   // `stranded`: a stale invite dropped us onto a superseded epoch with no wire
