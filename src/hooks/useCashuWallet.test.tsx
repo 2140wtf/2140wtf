@@ -614,7 +614,7 @@ describe('useCashuWallet payInvoice coin selection', () => {
     expect(result.current.error).toBe('');
   });
 
-  it('rejects payment when the melt fee reserve exceeds the selected proof fee', async () => {
+  it('allows a Lightning fee reserve that exceeds the unrelated Cashu input fee', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     await setupWallet(seedPhrase);
     const { result } = renderHook(
@@ -636,10 +636,9 @@ describe('useCashuWallet payInvoice coin selection', () => {
 
     const payResult = await act(async () => result.current.payInvoice('lnbc210n1pw'));
 
-    expect(payResult.success).toBe(false);
-    await waitFor(() =>
-      expect(result.current.error).toBe('Payment failed: Melt fee reserve (5) exceeds fee for selected proofs (0)'),
-    );
+    expect(payResult.success).toBe(true);
+    expect(wallet.meltProofs).toHaveBeenCalled();
+    expect(result.current.error).toBe('');
   });
 });
 

@@ -3039,18 +3039,11 @@ export function useCashuWallet(
           throw new Error(`Selected proofs insufficient: need ${totalNeeded}, selected ${inputAmount}`);
         }
 
-        // Validate the melt quote fee against the selected inputs.
-        let maxFeeForSelected = 0;
-        try {
-          maxFeeForSelected = wallet.getFeesForProofs(selectedProofs);
-        } catch {
-          maxFeeForSelected = Math.max(1, Math.floor(inputAmount * 0.001));
-        }
+        // The mint's melt fee reserve covers Lightning routing (and may also
+        // cover input fees). It is not comparable to getFeesForProofs(), which
+        // only calculates Cashu input fees. Bound it by the configured ppm cap.
         if (!isFeeWithinMaxPpm(feeReserve, inputAmount, MAX_MINT_FEE_PPM)) {
           throw new Error('Melt fee reserve exceeds maximum allowed for selected proofs');
-        }
-        if (feeReserve > maxFeeForSelected) {
-          throw new Error(`Melt fee reserve (${feeReserve}) exceeds fee for selected proofs (${maxFeeForSelected})`);
         }
 
         // Pre-write selected input proofs as crash recovery. If the app is killed after the mint
@@ -3132,7 +3125,7 @@ export function useCashuWallet(
             throw new Error('Mint returned invalid change: missing required amount');
           }
           const actualFee = inputAmount - changeAmount - quoteAmount;
-          if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
+          if (actualFee < 0 || actualFee > feeReserve || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
             throw new Error('Mint returned invalid melt fee');
           }
         } catch (postMeltErr) {
@@ -3404,17 +3397,11 @@ export function useCashuWallet(
           throw new Error(`Selected proofs insufficient: need ${totalNeeded}, selected ${inputAmount}`);
         }
 
-        let maxFeeForSelected = 0;
-        try {
-          maxFeeForSelected = wallet.getFeesForProofs(selectedProofs);
-        } catch {
-          maxFeeForSelected = Math.max(1, Math.floor(inputAmount * 0.001));
-        }
+        // The melt reserve is a Lightning-routing allowance, not the Cashu
+        // input fee returned by getFeesForProofs(). Enforce the wallet's ppm
+        // safety cap without comparing these unrelated fee categories.
         if (!isFeeWithinMaxPpm(feeReserve, inputAmount, MAX_MINT_FEE_PPM)) {
           throw new Error('Melt fee reserve exceeds maximum allowed for selected proofs');
-        }
-        if (feeReserve > maxFeeForSelected) {
-          throw new Error(`Melt fee reserve (${feeReserve}) exceeds fee for selected proofs (${maxFeeForSelected})`);
         }
 
         await storageRef.current.writeMeltInputRecovery(normalizedMint, selectedProofs, encKeyRef.current!);
@@ -3482,7 +3469,7 @@ export function useCashuWallet(
             throw new Error('Mint returned invalid change: missing required amount');
           }
           const actualFee = inputAmount - changeAmount - quoteAmount;
-          if (actualFee < 0 || actualFee > feeReserve || actualFee > maxFeeForSelected || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
+          if (actualFee < 0 || actualFee > feeReserve || !isFeeWithinMaxPpm(actualFee, inputAmount, MAX_MINT_FEE_PPM)) {
             throw new Error('Mint returned invalid BOLT12 melt fee');
           }
         } catch (postMeltErr) {
