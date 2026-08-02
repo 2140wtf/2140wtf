@@ -156,4 +156,7 @@ We welcome contributions but have high standards. Please read the full [Contribu
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[GNU AGPL-3.0-only](LICENSE). Commercial use is permitted, subject to the
+license's source-sharing and notice requirements. See [NOTICE](NOTICE),
+[third-party notices](THIRD_PARTY_NOTICES.md), and the
+[trademark policy](TRADEMARKS.md).
