@@ -14,10 +14,9 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { toast } from '@/hooks/useToast';
-import { openUrl } from '@/lib/downloadFile';
+import { downloadDataUrlFile } from '@/lib/downloadFile';
 import { cn } from '@/lib/utils';
 import type { PetsCompanion } from '@/pets/core/lib/pets';
-import { Capacitor } from '@capacitor/core';
 
 export interface PetsPhotoModalProps {
   open: boolean;
@@ -71,20 +70,10 @@ export function PetsPhotoModal({
     try {
       const dataUrl = await generateImage();
       if (!dataUrl) return;
-      const filename = `${companion.name.toLowerCase().replace(/\s+/g, '-')}-photo.png`;
+      const safeName = companion.name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'pet';
+      const filename = `${safeName.slice(0, 100)}-photo.png`;
 
-      if (Capacitor.isNativePlatform()) {
-        // On native, use the download utility which handles share sheet
-        const blob = dataUrlToFile(dataUrl, filename);
-        const url = URL.createObjectURL(blob);
-        await openUrl(url);
-        URL.revokeObjectURL(url);
-      } else {
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        link.click();
-      }
+      await downloadDataUrlFile(filename, dataUrl);
 
       toast({ title: 'Photo saved!' });
     } finally {

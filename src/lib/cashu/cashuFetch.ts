@@ -19,6 +19,34 @@ export type MintRequestOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 
+interface Nut19Policy {
+  ttl: number;
+  endpoints: Set<string>;
+}
+
+function readNut19Policy(value: unknown): Nut19Policy | null {
+  if (!value || typeof value !== 'object') return null;
+  const nuts = (value as { nuts?: unknown }).nuts;
+  if (!nuts || typeof nuts !== 'object') return null;
+  const nut19 = (nuts as Record<string, unknown>)['19'];
+  if (!nut19 || typeof nut19 !== 'object') return null;
+  const { ttl, cached_endpoints: cachedEndpoints } = nut19 as {
+    ttl?: unknown;
+    cached_endpoints?: unknown;
+  };
+  if (!Number.isSafeInteger(ttl) || (ttl as number) <= 0 || !Array.isArray(cachedEndpoints)) return null;
+  const endpoints = new Set<string>();
+  for (const entry of cachedEndpoints) {
+    if (!entry || typeof entry !== 'object') continue;
+    const method = (entry as { method?: unknown }).method;
+    const path = (entry as { path?: unknown }).path;
+    if (typeof method === 'string' && typeof path === 'string' && path.startsWith('/')) {
+      endpoints.add(`${method.toUpperCase()} ${path}`);
+    }
+  }
+  return endpoints.size > 0 ? { ttl: ttl as number, endpoints } : null;
+}
+
 function isAllowedMintEndpoint(endpoint: string, allowedUrls: string[]): boolean {
   if (!isAllowedMintUrl(endpoint)) return false;
   if (allowedUrls.length === 0) return true;
@@ -55,6 +83,8 @@ function isAllowedMintEndpoint(endpoint: string, allowedUrls: string[]): boolean
  * @param allowedUrls Known mint base URLs that requests are allowed to target.
  */
 export function createMintFetch(allowedUrls: string[]) {
+  let nut19Policy: Nut19Policy | null = null;
+
   return async function mintFetch<T>(options: MintRequestOptions): Promise<T> {
     const { endpoint, requestBody, headers, ...rest } = options;
 
@@ -63,30 +93,48 @@ export function createMintFetch(allowedUrls: string[]) {
     }
 
     const body = requestBody ? JSON.stringify(requestBody) : undefined;
-    // Per-request timeout prevents hung mint connections from leaking forever.
-    // Callers may pass their own signal via `rest.signal`.
-    const signal = rest.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
+    const method = (rest.method ?? 'GET').toUpperCase();
+    const endpointPath = new URL(endpoint).pathname;
+    const canReplay = () => nut19Policy !== null && [...nut19Policy.endpoints].some((cached) => {
+      const separator = cached.indexOf(' ');
+      const cachedMethod = cached.slice(0, separator);
+      const cachedPath = cached.slice(separator + 1);
+      return cachedMethod === method && (endpointPath === cachedPath || endpointPath.endsWith(cachedPath));
+    });
+    const requestHeaders = {
+      Accept: 'application/json, text/plain, */*',
+      ...(body ? { 'Content-Type': 'application/json' } : undefined),
+      ...headers,
+    };
 
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
+    const requestOnce = async (): Promise<Response> => fetch(endpoint, {
         ...rest,
-        method: rest.method ?? 'GET',
-        headers: {
-          Accept: 'application/json, text/plain, */*',
-          ...(body ? { 'Content-Type': 'application/json' } : undefined),
-          ...headers,
-        },
+        method,
+        headers: requestHeaders,
         body,
-        signal,
+        // A fresh timeout is required for the one allowed replay; a timed-out
+        // AbortSignal cannot be reused. Explicit caller signals stay singular.
+        signal: rest.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
         redirect: 'manual',
       });
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError') {
-        throw new Error('Mint request was aborted');
+
+    let replayed = false;
+    let response: Response;
+    for (;;) {
+      try {
+        response = await requestOnce();
+        break;
+      } catch (err: unknown) {
+        if (!replayed && !rest.signal && canReplay()) {
+          replayed = true;
+          continue;
+        }
+        if (err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError') {
+          throw new Error('Mint request was aborted');
+        }
+        devLog.warn('Mint network request failed:', endpoint, err);
+        throw new Error(err instanceof Error ? err.message : 'Network request failed');
       }
-      devLog.warn('Mint network request failed:', endpoint, err);
-      throw new Error(err instanceof Error ? err.message : 'Network request failed');
     }
 
     if (response.status >= 300 && response.status < 400) {
@@ -107,11 +155,27 @@ export function createMintFetch(allowedUrls: string[]) {
       throw new Error(detail);
     }
 
-    try {
-      return (await response.json()) as T;
-    } catch (err: unknown) {
-      devLog.warn('Mint returned non-JSON response:', endpoint, err);
-      throw new Error('Mint returned an invalid response');
+    for (;;) {
+      try {
+        const result = (await response.json()) as T;
+        const discovered = readNut19Policy(result);
+        if (discovered) nut19Policy = discovered;
+        return result;
+      } catch (err: unknown) {
+        if (!replayed && !rest.signal && canReplay()) {
+          replayed = true;
+          try {
+            response = await requestOnce();
+          } catch (retryErr: unknown) {
+            devLog.warn('Mint NUT-19 replay failed:', endpoint, retryErr);
+            throw new Error(retryErr instanceof Error ? retryErr.message : 'Network request failed');
+          }
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          continue;
+        }
+        devLog.warn('Mint returned non-JSON response:', endpoint, err);
+        throw new Error('Mint returned an invalid response');
+      }
     }
   };
 }

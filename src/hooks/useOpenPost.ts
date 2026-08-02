@@ -17,7 +17,7 @@ export function useOpenPost(path: string) {
     // No tabs exist inside a Capacitor WebView; window.open on native either
     // no-ops or resolves to a broken capacitor://localhost/… URL.
     if (Capacitor.isNativePlatform()) return;
-    window.open(path, '_blank');
+    window.open(path, '_blank', 'noopener,noreferrer');
   };
 
   return { onClick, onAuxClick };

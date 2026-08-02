@@ -134,6 +134,19 @@ describe("community-isolated Concord transport", () => {
     await expect(primary).resolves.toMatchObject({ kind: 22242 });
   });
 
+  it("accepts whitespace-formatted OK frames for secondary AUTH acknowledgements", async () => {
+    const h = harness(false);
+    const transport = new ConcordTransport(h.factory);
+    transport.relay(id("1"), "wss://relay.example", [group(1), group(2)]);
+    const primary = h.connections[0].auth("challenge-a");
+    await Promise.resolve();
+    const [, secondary] = JSON.parse(h.connections[0].frames[0]) as [string, import("@nostrify/nostrify").NostrEvent];
+    h.connections[0].emit("message", {
+      data: `  ${JSON.stringify(["OK", secondary.id, true, "accepted"])}  `,
+    });
+    await expect(primary).resolves.toMatchObject({ kind: 22242 });
+  });
+
   it("fails the handshake when a secondary stream identity is rejected", async () => {
     const h = harness(false);
     const transport = new ConcordTransport(h.factory);
@@ -174,6 +187,21 @@ describe("community-isolated Concord transport", () => {
     }])).toThrow(/Conflicting Concord key material/);
   });
 
+  it("rejects malformed and mismatched group key material before opening a relay", () => {
+    const h = harness();
+    const transport = new ConcordTransport(h.factory);
+    const valid = group(1);
+    expect(() => transport.relay(id("1"), "wss://relay.example", [{
+      ...valid,
+      pk: group(2).pk,
+    }])).toThrow(/invalid or mismatched/);
+    expect(() => transport.relay(id("1"), "wss://relay.example", [{
+      ...valid,
+      convKey: new Uint8Array(31),
+    }])).toThrow(/invalid or mismatched/);
+    expect(h.connections).toHaveLength(0);
+  });
+
   it("blocks cross-community filters and publishes before network I/O", async () => {
     const h = harness();
     const transport = new ConcordTransport(h.factory);
@@ -184,6 +212,15 @@ describe("community-isolated Concord transport", () => {
     expect(() => relay.query([{ kinds: [21059] }])).toThrow(/Cross-scope/);
     expect(() => relay.query([{ kinds: [39000], authors: [b.pk] }])).toThrow(/Cross-scope/);
     expect(() => relay.event({ id: id("a"), pubkey: b.pk, kind: 1059, created_at: 1, content: "", tags: [], sig: id("b") })).toThrow(/Cross-scope/);
+  });
+
+  it("blocks authorless filters for every kind on a scoped session", async () => {
+    const h = harness();
+    const transport = new ConcordTransport(h.factory);
+    const relay = transport.relay(id("1"), "wss://relay.example", [group(1)]);
+    expect(() => relay.query([{ kinds: [33301] }])).toThrow(/Cross-scope/);
+    expect(() => relay.req([{}])).toThrow(/Cross-scope/);
+    expect(h.connections[0].relay?.query).not.toHaveBeenCalled();
   });
 
   it("closes and replaces every old session on account switch", () => {

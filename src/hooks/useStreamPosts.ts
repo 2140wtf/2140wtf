@@ -12,6 +12,7 @@ import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
 import { IMAGE_URL_REGEX, VIDEO_URL_REGEX } from '@/lib/mediaUrls';
 import { nip19 } from 'nostr-tools';
 import { isNostrId } from '@/lib/nostrId';
+import { shouldReplaceNostrEvent } from '@/lib/replaceableEvent';
 
 interface StreamPostsOptions {
   includeReplies: boolean;
@@ -352,7 +353,7 @@ export function useStreamPosts(query: string, options: StreamPostsOptions) {
     // Addressable events (30000-39999) dedupe by pubkey+kind+d
     if (event.kind >= 30000 && event.kind < 40000) {
       const existing = eventMapRef.current.get(dedupeKey);
-      if (existing && existing.created_at >= event.created_at) return false;
+      if (existing && !shouldReplaceNostrEvent(existing, event)) return false;
       eventMapRef.current.set(dedupeKey, event);
     } else {
       if (eventMapRef.current.has(dedupeKey)) return false;
