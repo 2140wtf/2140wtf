@@ -163,9 +163,9 @@ export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoEx
       </div>
 
       {/* Demo notice */}
-      <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-        <AlertTriangle className="size-3.5 mt-0.5 shrink-0 text-amber-800 dark:text-amber-400" />
-        <p className="text-[11px] leading-relaxed text-amber-950 dark:text-amber-200">
+      <div className="flex items-start gap-2 rounded-md border border-amber-500/60 bg-card px-3 py-2 text-foreground">
+        <AlertTriangle className="size-3.5 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" />
+        <p className="text-[11px] leading-relaxed text-foreground">
           Demo Mode — using ₿AO Signet sats, not real Bitcoin.
         </p>
       </div>

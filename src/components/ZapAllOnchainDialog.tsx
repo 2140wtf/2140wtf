@@ -527,7 +527,7 @@ export function ZapAllOnchainDialog({
               {/* No-change dust warning: leftover below the dust limit will be
                   swallowed by the fee instead of returning as change. */}
               {noChangeDust && (
-                <Alert className="border-amber-500/40 bg-amber-500/5 text-amber-950 dark:text-amber-200 [&>svg]:text-amber-800 dark:[&>svg]:text-amber-400">
+                <Alert className="border-amber-500/50 bg-card text-foreground [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
                   <AlertTriangle className="size-4" />
                   <AlertDescription className="text-xs">
                     This zap leaves less than the dust limit, so there will be no
