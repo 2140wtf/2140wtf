@@ -589,24 +589,6 @@ export async function topUpVerificationBalance(
   return res.data.fundraiser;
 }
 
-export interface ClaimStreamResult {
-  demo?: boolean;
-  claimable_sats: number;
-  fundraiser: BaoFundraiser;
-}
-
-/** Claim vested sats from a stream-format fundraiser (owner only, DEMO recorded-only). */
-export async function claimStream(
-  signer: BaoApiSigner,
-  fundraiserId: string,
-): Promise<ClaimStreamResult> {
-  const res = await apiFetch<{ data: ClaimStreamResult }>(
-    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/claim`,
-    { method: 'POST', body: {}, signer },
-  );
-  return res.data;
-}
-
 // ─── Trading (Express Trade) ─────────────────────────────────────────────────
 
 export interface PlaceTradeInput {
