@@ -125,7 +125,7 @@ function InfoBody({
   const [uploading, setUploading] = useState<"icon" | "banner" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [editingField, setEditingField] = useState<"name" | "description" | "repo" | null>(null);
+  const [editingField, setEditingField] = useState<"name" | "description" | "repo" | "project" | null>(null);
 
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
@@ -150,11 +150,11 @@ function InfoBody({
     }
   };
 
-  const saveField = async (field: "name" | "description" | "repo", value: string) => {
+  const saveField = async (field: "name" | "description" | "repo" | "project", value: string) => {
     setError(null);
     try {
       await updateMetadata(
-        field === "name" ? { name: value } : field === "description" ? { description: value } : { repo: value },
+        field === "name" ? { name: value } : field === "description" ? { description: value } : field === "repo" ? { repo: value } : { repo_naddr: value },
       );
       setEditingField(null);
     } catch (e) {
@@ -370,6 +370,30 @@ function InfoBody({
             </Button>
           )
         )}
+
+        {/* A canonical NIP-34 coordinate unlocks the native Project workspace.
+            It remains encrypted inside Concord metadata; public repository
+            queries begin only after a member opens that workspace. */}
+        {editingField === "project" ? (
+          <InlineEdit
+            initial={metadata?.repo_naddr ?? ""}
+            saving={isUpdating}
+            multiline={false}
+            placeholder="naddr1… (kind 30617)"
+            onCancel={() => setEditingField(null)}
+            onSave={(v) => saveField("project", v)}
+          />
+        ) : metadata?.repo_naddr ? (
+          <div className="flex items-center gap-1.5 rounded-md bg-secondary/40 px-2 py-1.5">
+            <GitBranch className="size-4 shrink-0 text-primary" />
+            <span className="min-w-0 flex-1 truncate text-sm">Nostr-native project connected</span>
+            {canManageMetadata ? <Button type="button" size="icon" variant="ghost" className="size-6 shrink-0 text-muted-foreground" aria-label="Edit Nostr project" onClick={() => setEditingField("project")}><Pencil className="size-3" /></Button> : null}
+          </div>
+        ) : canManageMetadata ? (
+          <Button type="button" variant="ghost" className="w-full justify-start gap-1.5 text-muted-foreground" onClick={() => setEditingField("project")}>
+            <GitBranch className="size-3.5" /> Connect a Nostr-native project
+          </Button>
+        ) : null}
 
         {/* Fund this community — repo pre-fills the fundraiser. */}
         <div className="flex">

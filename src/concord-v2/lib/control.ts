@@ -801,6 +801,7 @@ function foldOnce(
         // name/description is malformed, not merely impolite.
         if (typeof parsed.name !== "string" || utf8Len(parsed.name) > NAME_MAX_BYTES) return false;
         if (parsed.description !== undefined && (typeof parsed.description !== "string" || utf8Len(parsed.description) > DESCRIPTION_MAX_BYTES)) return false;
+        if (parsed.repo_naddr !== undefined && (typeof parsed.repo_naddr !== "string" || utf8Len(parsed.repo_naddr) > 2048)) return false;
         return true;
       } catch {
         return false;
