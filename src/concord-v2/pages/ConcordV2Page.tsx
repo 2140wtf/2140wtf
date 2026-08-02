@@ -1218,6 +1218,12 @@ export function ConcordV2Page() {
   };
 
   const handleLeave = async () => {
+    const accepted = confirm(
+      dissolved
+        ? "Remove this community from your account? Downloaded history may remain on this device."
+        : "Leave this community? This removes it from your account and stops this app syncing it. It does not revoke keys already shared with you or erase downloaded history from this device.",
+    );
+    if (!accepted) return;
     try {
       await leave();
       navigateTo("/bao/baocommunity");
@@ -1256,10 +1262,12 @@ export function ConcordV2Page() {
 
   const runBan = async (target: string, onPhase: (phase: BanPhase) => void) => {
     const { rekeyed, publicBan } = await moderation.ban({ target, onPhase });
-    if (rekeyed || publicBan) {
-      toast({ title: "Member banned", description: "They are silenced for everyone in this community." });
+    if (rekeyed) {
+      toast({ title: "Member banned", description: "Member silenced; keys rotated. Previously shared history remains readable." });
+    } else if (publicBan) {
+      toast({ title: "Member banned", description: "Member silenced in compatible clients. Access keys were not rotated." });
     } else {
-      toast({ title: "Member banned", description: "Added to the banlist; key rotation didn't complete (you can retry)." });
+      toast({ title: "Member banned", description: "Member silenced; key rotation is pending and will retry." });
     }
   };
 
