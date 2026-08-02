@@ -156,6 +156,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
 
   const mutation = useMutation({
     mutationFn: () => {
+      if (!user) throw new Error('Log in before creating a campaign');
       const now = Math.floor(Date.now() / 1000);
       const repositoryLine = repoUrl.trim() ? `\n${REPO_LINE_PREFIX}${repoUrl.trim()}` : '';
       const fullDescription = `${WORK_TYPE_LINE_PREFIX}${workType}${repositoryLine}\n\n${description.trim()}`;
@@ -210,7 +211,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     onError: (e) => toast({ title: 'Create failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
-  const valid =
+  const valid = !!user &&
     title.trim().length > 0 &&
     (workType === 'general' || isValidRepoUrl(repoUrl.trim())) &&
     description.trim().length >= PROJECT_DESCRIPTION_MIN &&

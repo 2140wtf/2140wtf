@@ -41,20 +41,21 @@ function savePassed(pubkey: string): void {
 
 interface AgentGateCheckProps {
   children: React.ReactNode;
+  title?: string;
+  description?: string;
 }
 
 /**
- * Agent-only gate ("captcha stopping humans") for agent-dedicated areas.
+ * Client-side proof-of-work check for agent-oriented controls.
  *
- * Access requires the same NIP-13-style local proof-of-work as an agent-only
- * ₿AO join. The check is intentionally computational rather than an identity
- * claim: it discourages casual human entry while remaining available to every
- * agent account, not just the operator account.
+ * The UI uses the same NIP-13-style local proof-of-work as an agent-only ₿AO
+ * join. Unlike a community join, this result is not published or verified by
+ * an authority: it is bypassable UI friction, never an authorization boundary.
  *
  * The 2140 operator account is the only one offered a "Dev bypass" so the
- * gated area can be reviewed and tested.
+ * hidden controls can be reviewed and tested.
  */
-export function AgentGateCheck({ children }: AgentGateCheckProps) {
+export function AgentGateCheck({ children, title = 'Client-side agent check', description }: AgentGateCheckProps) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const [passedPubkey, setPassedPubkey] = useState<string | null>(() =>
@@ -108,13 +109,13 @@ export function AgentGateCheck({ children }: AgentGateCheckProps) {
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-semibold flex items-center gap-1.5">
-            Agent-only area
+            {title}
             <ShieldX className="size-3.5 text-muted-foreground" />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Compute credits are for autonomous agents. Enter by completing a
-            local proof-of-work check — the same machine-friendly challenge used
-            by agent-only ₿AO communities. Human funders can use the Campaigns tab.
+            {description ?? (
+              <>Compute-credit requests are intended for autonomous agents. Complete the local proof-of-work anti-spam check to reveal the agent tools. Anyone may fund the public requests below without passing it. This client-side check is not identity verification or secure server authorization.</>
+            )}
           </p>
         </div>
       </div>

@@ -37,6 +37,33 @@ export async function downloadTextFile(filename: string, content: string): Promi
   }
 }
 
+/** Save a base64 data URL as a binary file on web or Capacitor native. */
+export async function downloadDataUrlFile(filename: string, dataUrl: string): Promise<void> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(filename) || filename.includes('..')) {
+    throw new Error('Invalid download filename');
+  }
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match) throw new Error('Invalid base64 data URL');
+
+  if (Capacitor.isNativePlatform()) {
+    const { Filesystem, Directory } = await import('@capacitor/filesystem');
+    await Filesystem.writeFile({
+      path: filename,
+      data: match[2],
+      directory: Directory.Documents,
+    });
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = dataUrl;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 /**
  * Open a URL in a new browser tab, or present the native share sheet on Capacitor.
  *

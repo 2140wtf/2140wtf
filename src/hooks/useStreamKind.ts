@@ -1,6 +1,7 @@
 import { useNostr } from '@nostrify/react';
 import { useState, useEffect, useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { shouldReplaceNostrEvent } from '@/lib/replaceableEvent';
 
 /**
  * Generic streaming hook that fetches an initial batch of events for the given
@@ -61,7 +62,7 @@ export function useStreamKind(kind: number | number[]) {
 
       const key = dedupeKey(event);
       const existing = eventMap.get(key);
-      if (existing && existing.created_at >= event.created_at) return;
+      if (existing && !shouldReplaceNostrEvent(existing, event)) return;
 
       eventMap.set(key, event);
       setEvents(Array.from(eventMap.values()).sort((a, b) => b.created_at - a.created_at));
