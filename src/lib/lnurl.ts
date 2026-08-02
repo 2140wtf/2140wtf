@@ -19,6 +19,8 @@ export interface LnurlPayParams {
   commentAllowed: number;
   /** Provider supports NIP-57 zap requests (public receipts). */
   allowsNostr: boolean;
+  /** NIP-57 receipt signer advertised by the LNURL service. */
+  nostrPubkey?: string;
 }
 
 /** Require https (LUD-06 does too): a profile field must not be able to point
@@ -73,12 +75,16 @@ export async function resolveLnurlPay(
   if (data.tag !== "payRequest" || typeof data.callback !== "string" || !httpsOnly(data.callback)) {
     throw new Error("Recipient's lightning address doesn't accept payments.");
   }
+  const nostrPubkey = typeof data.nostrPubkey === "string" && /^[0-9a-f]{64}$/i.test(data.nostrPubkey)
+    ? data.nostrPubkey.toLowerCase()
+    : undefined;
   return {
     callback: data.callback,
     minSendable: typeof data.minSendable === "number" ? data.minSendable : 1000,
     maxSendable: typeof data.maxSendable === "number" ? data.maxSendable : Number.MAX_SAFE_INTEGER,
     commentAllowed: typeof data.commentAllowed === "number" ? data.commentAllowed : 0,
-    allowsNostr: data.allowsNostr === true && typeof data.nostrPubkey === "string",
+    allowsNostr: data.allowsNostr === true && !!nostrPubkey,
+    nostrPubkey,
   };
 }
 

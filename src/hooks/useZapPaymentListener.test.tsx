@@ -2,11 +2,13 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Event } from 'nostr-tools';
+import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 
 import { useZapPaymentListener } from './useZapPaymentListener';
 
 const mocks = vi.hoisted(() => ({
   reqMock: vi.fn(),
+  queryMock: vi.fn(),
   closeMock: vi.fn().mockResolvedValue(undefined),
   relayConstructor: vi.fn(),
 }));
@@ -18,33 +20,45 @@ vi.mock('@nostrify/nostrify', async (importOriginal) => {
     NRelay1: vi.fn(function (this: Record<string, unknown>, url: string) {
       mocks.relayConstructor(url);
       this.req = mocks.reqMock;
+      this.query = mocks.queryMock;
       this.close = mocks.closeMock;
     }),
   };
 });
 
+const payerKey = new Uint8Array(32).fill(1);
+const providerKey = new Uint8Array(32).fill(2);
+const targetPubkey = getPublicKey(new Uint8Array(32).fill(3));
+
 function makeTarget(kind = 1): Event {
   return {
     kind,
-    pubkey: 'target-pubkey',
+    pubkey: targetPubkey,
     content: 'hello',
     tags: [],
     created_at: 0,
-    id: 'target-id',
-    sig: 'sig',
+    id: 'a'.repeat(64),
+    sig: 'b'.repeat(128),
   };
 }
 
-function makeReceipt(tags: string[][]): NostrEvent {
-  return {
-    id: 'receipt-id',
-    kind: 9735,
-    pubkey: 'zapper-pubkey',
+function makeReceipt(tags: string[][], target = makeTarget(0)): NostrEvent {
+  const request = finalizeEvent({
+    kind: 9734,
     content: '',
-    tags,
+    tags: [
+      ['p', target.pubkey],
+      ...(target.kind === 0 ? [] : [['e', target.id]]),
+      ['amount', '21000'],
+    ],
     created_at: Math.floor(Date.now() / 1000),
-    sig: 'sig',
-  };
+  }, payerKey);
+  return finalizeEvent({
+    kind: 9735,
+    content: '',
+    tags: [...tags, ['description', JSON.stringify(request)]],
+    created_at: Math.floor(Date.now() / 1000),
+  }, providerKey);
 }
 
 describe('useZapPaymentListener', () => {
@@ -52,6 +66,7 @@ describe('useZapPaymentListener', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.queryMock.mockResolvedValue([]);
     mocks.reqMock.mockImplementation(async function* () { /* no events */ });
   });
 
@@ -68,8 +83,8 @@ describe('useZapPaymentListener', () => {
     const filters = mocks.reqMock.mock.calls[0][0] as Array<Record<string, unknown>>;
     expect(filters).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kinds: [9735], '#e': ['target-id'] }),
-        expect.objectContaining({ kinds: [9735], '#p': ['target-pubkey'] }),
+        expect.objectContaining({ kinds: [9735], '#e': ['a'.repeat(64)] }),
+        expect.objectContaining({ kinds: [9735], '#p': [targetPubkey] }),
       ]),
     );
   });
@@ -91,7 +106,7 @@ describe('useZapPaymentListener', () => {
     const onPaid = vi.fn();
     // A profile-zap receipt: no e tag at all, only p + bolt11.
     const receipt = makeReceipt([
-      ['p', 'target-pubkey'],
+      ['p', targetPubkey],
       ['bolt11', invoice.toUpperCase()], // case-insensitive match
     ]);
     mocks.reqMock.mockImplementation(async function* () {
@@ -103,13 +118,58 @@ describe('useZapPaymentListener', () => {
     await waitFor(() => expect(onPaid).toHaveBeenCalledTimes(1));
   });
 
+  it('catches a receipt published before the live subscription was ready', async () => {
+    const onPaid = vi.fn();
+    const receipt = makeReceipt([
+      ['p', targetPubkey],
+      ['bolt11', invoice],
+    ]);
+    mocks.queryMock.mockResolvedValue([receipt]);
+
+    renderHook(() => useZapPaymentListener(invoice, makeTarget(0), ['wss://relay.example.com'], onPaid));
+
+    await waitFor(() => expect(onPaid).toHaveBeenCalledTimes(1));
+    expect(mocks.queryMock).toHaveBeenCalled();
+  });
+
+  it('ignores an unsigned receipt that merely copies the visible invoice', async () => {
+    const onPaid = vi.fn();
+    const forged = {
+      ...JSON.parse(JSON.stringify(makeReceipt([['p', targetPubkey], ['bolt11', invoice]]))) as NostrEvent,
+      sig: '0'.repeat(128),
+    };
+    mocks.queryMock.mockResolvedValue([forged]);
+
+    renderHook(() => useZapPaymentListener(invoice, makeTarget(0), ['wss://relay.example.com'], onPaid));
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(onPaid).not.toHaveBeenCalled();
+  });
+
+  it('requires the LNURL-advertised provider to sign a purchase receipt', async () => {
+    const onPaid = vi.fn();
+    const receipt = makeReceipt([['p', targetPubkey], ['bolt11', invoice]]);
+    mocks.queryMock.mockResolvedValue([receipt]);
+
+    renderHook(() => useZapPaymentListener(
+      invoice,
+      makeTarget(0),
+      ['wss://relay.example.com'],
+      onPaid,
+      'f'.repeat(64),
+    ));
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(onPaid).not.toHaveBeenCalled();
+  });
+
   it('ignores receipts for a different invoice', async () => {
     const onPaid = vi.fn();
     const receipt = makeReceipt([
-      ['e', 'target-id'],
-      ['p', 'target-pubkey'],
+      ['e', 'a'.repeat(64)],
+      ['p', targetPubkey],
       ['bolt11', 'lnbc999n1someotherinvoice'],
-    ]);
+    ], makeTarget(1));
     mocks.reqMock.mockImplementation(async function* () {
       yield ['EVENT', '', receipt] as ['EVENT', string, NostrEvent];
     });
@@ -126,9 +186,9 @@ describe('useZapPaymentListener', () => {
     const onPaid = vi.fn();
     const target = makeTarget(1);
     const receipt1 = makeReceipt([
-      ['p', 'target-pubkey'],
+      ['p', targetPubkey],
       ['bolt11', invoice],
-    ]);
+    ], target);
     mocks.reqMock.mockImplementation(async function* () {
       yield ['EVENT', '', receipt1] as ['EVENT', string, NostrEvent];
     });
@@ -144,9 +204,9 @@ describe('useZapPaymentListener', () => {
     // A second zap with a new invoice must subscribe again and detect payment.
     const invoice2 = 'lnbc555n1psecondinvoice';
     const receipt2 = makeReceipt([
-      ['p', 'target-pubkey'],
+      ['p', targetPubkey],
       ['bolt11', invoice2],
-    ]);
+    ], target);
     mocks.reqMock.mockClear();
     mocks.reqMock.mockImplementation(async function* () {
       yield ['EVENT', '', receipt2] as ['EVENT', string, NostrEvent];
@@ -162,9 +222,9 @@ describe('useZapPaymentListener', () => {
     const onPaid = vi.fn();
     const target = makeTarget(1);
     const receipt = makeReceipt([
-      ['p', 'target-pubkey'],
+      ['p', targetPubkey],
       ['bolt11', invoice],
-    ]);
+    ], target);
     mocks.reqMock.mockImplementation(async function* () {
       yield ['EVENT', '', receipt] as ['EVENT', string, NostrEvent];
     });

@@ -14,20 +14,26 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
-import { ChevronLeft, Dices, Egg, Loader2 } from 'lucide-react';
+import { ChevronLeft, Check, Copy, Dices, Egg, ExternalLink, Loader2 } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
 import { fetchBlockHeight } from '@/lib/bitcoin';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
+import { bolt11Info } from '@/lib/zaps';
+import { fetchLnurlInvoice, resolveLnurlPay } from '@/lib/lnurl';
+import { openUrl } from '@/lib/downloadFile';
 
 import { PetsStageVisual } from '@/pets/ui/PetsStageVisual';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { QRCodeCanvas } from '@/components/ui/qrcode';
 import { fetchFreshNostrPetProfile } from '@/pets/core/lib/fetchFreshNostrPetProfile';
 import { useCurrentBlockHeight, isPetOldEnough, getStoredBirthBlockHeight } from '@/pets/core/lib/pets-life';
 
@@ -140,8 +146,18 @@ export function PetsHatchingCeremony({
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = usePetsNostrPublish();
   const { data: authorData } = useAuthor(user?.pubkey);
-  const { isBao: isBaoWalletMode, wallet: activeWallet } = usePetsWallet();
+  const { isBao: isBaoWalletMode } = usePetsWallet();
   const { config } = useAppContext();
+  const treasuryPubkey = useMemo(() => {
+    try {
+      if (!config.petsTreasuryNpub) return undefined;
+      const decoded = nip19.decode(config.petsTreasuryNpub);
+      return decoded.type === 'npub' ? decoded.data : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [config.petsTreasuryNpub]);
+  const { data: treasuryAuthor } = useAuthor(treasuryPubkey);
   const currentBlockHeight = useCurrentBlockHeight(config.esploraApis);
   // Prefer the exact birth_block tag written at egg creation (same as
   // PetsPage's room-egg gate and useStartIncubation); fall back to the
@@ -180,6 +196,10 @@ export function PetsHatchingCeremony({
   const [isRerolling, setIsRerolling] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [rerollCount, setRerollCount] = useState(0);
+  const [changeInvoice, setChangeInvoice] = useState<string | null>(null);
+  const [changeReceiptProvider, setChangeReceiptProvider] = useState<string | undefined>();
+  const [isPreparingChange, setIsPreparingChange] = useState(false);
+  const [invoiceCopied, setInvoiceCopied] = useState(false);
 
   // Refs
   const setupAttempted = useRef(false);
@@ -218,6 +238,39 @@ export function PetsHatchingCeremony({
   }, []);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  const treasuryTarget = useMemo<NostrEvent | undefined>(() => {
+    if (!treasuryPubkey) return undefined;
+    return treasuryAuthor?.event ?? {
+      kind: 0,
+      pubkey: treasuryPubkey,
+      created_at: 0,
+      id: '0'.repeat(64),
+      sig: '0'.repeat(128),
+      content: '',
+      tags: [],
+    };
+  }, [treasuryAuthor?.event, treasuryPubkey]);
+
+  const receiptRelays = useMemo(
+    () => config.relayMetadata.relays.map((relay) => relay.url),
+    [config.relayMetadata.relays],
+  );
+
+  const applyPaidPetChange = useCallback(() => {
+    if (!user?.pubkey || phase !== 'preview') return;
+    const fresh = breedCategory
+      ? generateEggPreviewForCategory(user.pubkey, breedCategory, name.trim() || 'Egg')
+      : generateEggPreview(user.pubkey, name.trim() || 'Egg');
+    setPreview(fresh);
+    previewRef.current = fresh;
+    setChangeInvoice(null);
+    setRerollCount((count) => count + 1);
+    notificationSuccess();
+    toast({ title: 'Payment received', description: 'Your new pet is ready.' });
+  }, [user?.pubkey, phase, breedCategory, name]);
+
+  useZapPaymentListener(changeInvoice, treasuryTarget, receiptRelays, applyPaidPetChange, changeReceiptProvider);
 
   // ── Companion visuals ──
   const eggCompanion = useMemo(
@@ -376,82 +429,60 @@ export function PetsHatchingCeremony({
     if (profile) profileRef.current = profile;
   }, [profile]);
 
-  // ── Preview phase: pay the reroll fee over the active rail ──
-  // Both modes pay the 2140 treasury by Cashu nutzap — demo over the BAO
-  // signet mint, mainnet over the user's real mint.
-  const payRerollFee = useCallback(async (): Promise<boolean> => {
-    if (!activeWallet) {
-      toast({
-        title: 'No wallet connected',
-        description: 'Set up your pets wallet in the Wallet tab before rerolling.',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    const treasuryNpub = config.petsTreasuryNpub;
-    if (!treasuryNpub) {
-      toast({
-        title: 'Reroll unavailable',
-        description: 'No treasury is configured to receive reroll payments.',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    const result = await activeWallet.sendNutzap(
-      PETS_PREVIEW_REROLL_SATS,
-      treasuryNpub,
-      activeWallet.mintUrl,
-      { memo: 'Pets egg reroll' },
-    );
-    if (result.status === 'pending') {
-      // The sats left the wallet but the nutzap event is queued for retry.
-      // Honor the payment — do NOT make the user pay again.
-      toast({
-        title: 'Payment sent',
-        description: 'The payment is being delivered — no need to pay again.',
-      });
-      return true;
-    }
-    if (result.status === 'unknown') {
-      // The mint may have committed — honor nothing, but do NOT invite a
-      // blind retry either: a second payment cannot be clawed back.
-      toast({
-        title: 'Payment outcome unknown',
-        description: 'The mint may still have processed it. Check your wallet balance before paying again.',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    if (result.status !== 'sent') {
-      toast({
-        title: 'Payment failed',
-        description: 'The reroll payment did not go through. Your egg was not changed.',
-        variant: 'destructive',
-      });
-      return false;
-    }
-    return true;
-  }, [activeWallet, config.petsTreasuryNpub]);
-
-  // ── Preview phase: pay and generate a fresh egg ──
+  // ── Preview phase: create a real NIP-57 profile zap invoice ──
   const handleReroll = useCallback(async () => {
-    if (!user?.pubkey || isRerolling || isCommitting) return;
-    setIsRerolling(true);
-    try {
-      const paid = await payRerollFee();
-      if (!paid || !mountedRef.current) return;
-
-      const fresh = breedCategory
-        ? generateEggPreviewForCategory(user.pubkey, breedCategory, 'Egg')
-        : generateEggPreview(user.pubkey, 'Egg');
-      setPreview(fresh);
-      previewRef.current = fresh;
-      setRerollCount((c) => c + 1);
-      impactLight();
-    } finally {
-      if (mountedRef.current) setIsRerolling(false);
+    if (!user?.pubkey || !user.signer || isRerolling || isCommitting || isPreparingChange) return;
+    if (!treasuryPubkey || !treasuryAuthor?.metadata) {
+      toast({
+        title: 'Change unavailable',
+        description: 'The Pets treasury Lightning profile could not be loaded.',
+        variant: 'destructive',
+      });
+      return;
     }
-  }, [user?.pubkey, breedCategory, isRerolling, isCommitting, payRerollFee]);
+    setIsRerolling(true);
+    setIsPreparingChange(true);
+    try {
+      const params = await resolveLnurlPay(treasuryAuthor.metadata);
+      if (!params.allowsNostr || !params.nostrPubkey) {
+        throw new Error('The Pets treasury does not support NIP-57 zap receipts.');
+      }
+      const amountMsats = PETS_PREVIEW_REROLL_SATS * 1000;
+      const zapRequest = await user.signer.signEvent({
+        kind: 9734,
+        content: 'Change this pet',
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['p', treasuryPubkey],
+          ['amount', String(amountMsats)],
+          ['relays', ...receiptRelays],
+        ],
+      });
+      const invoice = await fetchLnurlInvoice(params, {
+        amountMsats,
+        comment: 'Change this pet',
+        zapRequest: JSON.stringify(zapRequest),
+      });
+      if (bolt11Info(invoice).amountMsats !== amountMsats) {
+        throw new Error('The treasury returned an invoice for the wrong amount.');
+      }
+      if (!mountedRef.current) return;
+      setChangeReceiptProvider(params.nostrPubkey);
+      setChangeInvoice(invoice);
+      impactLight();
+    } catch (error) {
+      toast({
+        title: 'Could not create zap',
+        description: error instanceof Error ? error.message : 'Try again in a moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      if (mountedRef.current) {
+        setIsRerolling(false);
+        setIsPreparingChange(false);
+      }
+    }
+  }, [user, isRerolling, isCommitting, isPreparingChange, treasuryPubkey, treasuryAuthor?.metadata, receiptRelays]);
 
   // ── Preview phase: commit — publish the egg, grant starter sats, link has[] ──
   const commitToHatch = useCallback(async () => {
@@ -922,7 +953,7 @@ export function PetsHatchingCeremony({
   if (phase === 'preview') {
     return (
       <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 p-6 overflow-hidden select-none"
+        className="fixed inset-0 z-50 flex flex-col items-center justify-start gap-5 overflow-y-auto p-6 pt-16 select-none sm:justify-center sm:pt-6"
         style={{ background: 'radial-gradient(ellipse at center, #0a1a2a 0%, #081520 50%, #060f18 100%)' }}
       >
         {onExit && (
@@ -946,14 +977,14 @@ export function PetsHatchingCeremony({
         <div className="text-center space-y-1 relative">
           <h2 className="text-xl font-semibold text-white flex items-center justify-center gap-2">
             <Egg className="size-5" style={{ color: eggColor }} />
-            Your egg is ready
+            Meet your NOSTR PET
           </h2>
           <p className="text-sm text-muted-foreground max-w-xs">
-            This is the NOSTR PET waiting inside. Keep it for free, or reroll for a new one.
+            Name this pet and keep it for free. If it is not the right companion, pay a verified Lightning zap to change it.
           </p>
         </div>
 
-        {eggCompanion && (
+        {babyCompanion && (
           <div className="relative">
             <div
               className="absolute -inset-10 rounded-full blur-2xl"
@@ -962,20 +993,39 @@ export function PetsHatchingCeremony({
               }}
             />
             <PetsStageVisual
-              companion={eggCompanion}
+              companion={babyCompanion}
               size="lg"
               animated
               onEggClick={commitToHatch}
-              className="size-52 sm:size-60 relative"
+              className="relative size-[min(62vw,34vh)] sm:size-[min(18rem,38vh)]"
             />
           </div>
         )}
 
         <div className="flex flex-col items-center gap-3 relative w-full max-w-xs">
+          <Input
+            value={name}
+            onChange={(event) => {
+              const nextName = event.target.value;
+              setName(nextName);
+              const current = previewRef.current;
+              if (current) {
+                const named = { ...current, name: nextName };
+                setPreview(named);
+                previewRef.current = named;
+              }
+            }}
+            placeholder="Name your pet"
+            maxLength={32}
+            autoComplete="off"
+            enterKeyHint="done"
+            className="h-12 select-text rounded-full border-white/40 bg-black/25 text-center text-base text-white placeholder:text-white/60"
+            style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
+          />
           <Button
             size="lg"
             className="w-full"
-            disabled={isCommitting || isRerolling}
+            disabled={isCommitting || isRerolling || !!changeInvoice || !name.trim()}
             onClick={commitToHatch}
           >
             {isCommitting ? (
@@ -984,7 +1034,7 @@ export function PetsHatchingCeremony({
                 Creating your egg…
               </>
             ) : (
-              eggOnly ? 'Keep this egg — Free' : 'Hatch this egg — Free'
+              'Keep this pet — Free'
             )}
           </Button>
           <Button
@@ -992,24 +1042,56 @@ export function PetsHatchingCeremony({
             size="lg"
             className="w-full border-white/50 bg-transparent hover:bg-white/10"
             style={{ color: 'white' }}
-            disabled={isCommitting || isRerolling}
+            disabled={isCommitting || isRerolling || !!changeInvoice}
             onClick={handleReroll}
           >
             {isRerolling ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Rerolling…
+                Preparing zap…
               </>
             ) : (
               <>
                 <Dices className="size-4" />
-                Reroll — {PETS_PREVIEW_REROLL_SATS} sats
+                Change this pet — {PETS_PREVIEW_REROLL_SATS} sats
               </>
             )}
           </Button>
+          {changeInvoice && (
+            <div className="w-full space-y-3 rounded-xl border border-white/30 bg-black/40 p-4 text-center text-white backdrop-blur-md">
+              <p className="text-sm font-medium">Waiting for verified zap receipt…</p>
+              <div className="mx-auto w-fit rounded-lg bg-white p-2">
+                <QRCodeCanvas value={changeInvoice.toUpperCase()} size={176} level="M" className="block" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(changeInvoice);
+                    setInvoiceCopied(true);
+                    scheduleTimeout(() => setInvoiceCopied(false), 2_000);
+                  }}
+                >
+                  {invoiceCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                  {invoiceCopied ? 'Copied' : 'Copy'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                  onClick={() => void openUrl(`lightning:${changeInvoice}`)}
+                >
+                  <ExternalLink className="size-4" /> Pay
+                </Button>
+              </div>
+              <p className="text-xs text-white/70">The pet changes only after the treasury publishes a matching NIP-57 receipt.</p>
+            </div>
+          )}
           {rerollCount > 0 && (
             <p className="text-xs text-muted-foreground">
-              Rerolled {rerollCount} {rerollCount === 1 ? 'time' : 'times'}
+              Changed {rerollCount} {rerollCount === 1 ? 'time' : 'times'}
             </p>
           )}
         </div>
@@ -1152,7 +1234,7 @@ export function PetsHatchingCeremony({
       {/* ── Hatched baby pets with golden incandescence ── */}
       {showBaby && babyCompanion && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{ paddingBottom: '18%' }}
+          style={{ paddingBottom: phase === 'naming' ? '34%' : '18%' }}
         >
           {/* Rotating golden incandescence */}
           <div className={cn(
@@ -1311,7 +1393,11 @@ export function PetsHatchingCeremony({
               companion={babyCompanion}
               size="lg"
               animated
-              className="size-[30rem] sm:size-[36rem] md:size-[44rem]"
+              className={cn(
+                phase === 'naming'
+                  ? 'size-[min(68vw,42vh)] sm:size-[min(24rem,48vh)]'
+                  : 'size-[min(82vw,58vh)] sm:size-[min(32rem,62vh)] md:size-[min(38rem,66vh)]',
+              )}
             />
           </div>
         </div>
@@ -1361,7 +1447,7 @@ export function PetsHatchingCeremony({
       {/* ── Naming ── */}
       {phase === 'naming' && (
         <div
-          className="absolute inset-x-0 bottom-0 flex justify-center pb-28 sm:pb-36 px-8"
+          className="absolute inset-x-0 bottom-0 z-40 flex max-h-[48vh] justify-center overflow-y-auto px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 sm:px-8 sm:pb-12"
           // Tap anywhere while the question is typing to reveal the input
           // immediately (same affordance as the dialog lines above).
           onClick={!namingTypewriter.done ? () => namingTypewriter.complete() : undefined}
