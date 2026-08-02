@@ -220,9 +220,9 @@ function TxFlow({ tx, btcPrice }: { tx: TxDetail; btcPrice?: number }) {
 function TxInputRow({ input, btcPrice }: { input: TxInput; btcPrice?: number }) {
   if (input.isCoinbase) {
     return (
-      <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 px-3 py-2">
+      <div className="rounded-lg border border-amber-500/40 bg-card px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Coinbase</span>
+          <span className="text-xs font-medium text-foreground">Coinbase</span>
           <span className="text-xs font-mono">{formatBTC(input.value)} BTC</span>
         </div>
       </div>

@@ -264,10 +264,10 @@ export function PlayMusicModal({
             />
           )}
           {error && (
-            <div className="mt-4 p-3 rounded-lg bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
+            <div className="mt-4 rounded-lg border border-amber-500/50 bg-card p-3">
               <div className="flex items-start gap-2">
                 <AlertCircle className="size-4 text-amber-800 dark:text-amber-200 mt-0.5 shrink-0" />
-                <p className="text-sm text-amber-950 dark:text-amber-100">{error}</p>
+                <p className="text-sm text-foreground">{error}</p>
               </div>
             </div>
           )}

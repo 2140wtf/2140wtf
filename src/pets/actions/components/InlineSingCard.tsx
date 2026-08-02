@@ -374,7 +374,7 @@ export function InlineSingCard({
         {/* Error message */}
         {(recordingError || playbackError) && (
           <div className="px-3 pt-2">
-            <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-100 text-amber-950 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-800">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/50 bg-card p-2 text-foreground">
               <AlertCircle className="size-4 mt-0.5 shrink-0 text-amber-800 dark:text-amber-200" />
               <p className="text-xs">{recordingError || playbackError?.message}</p>
             </div>

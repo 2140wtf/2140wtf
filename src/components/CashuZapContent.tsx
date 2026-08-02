@@ -270,7 +270,7 @@ export function CashuZapContent({
   if (pendingDmToken) {
     return (
       <div className="grid gap-3 px-4 py-4 w-full overflow-hidden">
-        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+        <div className="rounded-lg border border-amber-500/50 bg-card p-3 space-y-2 text-foreground">
           <p className="text-sm font-medium flex items-center gap-1.5">
             <AlertTriangle className="size-4 text-amber-500" />
             Token created, DM not delivered
