@@ -248,17 +248,17 @@ function ChangelogEntryCard({ entry }: { entry: ChangelogEntry }) {
 /** Banner shown at the top of the changelog for untagged (pre-release) builds. */
 function PreReleaseBanner() {
   return (
-    <div className="rounded-2xl border border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 space-y-1.5">
+    <div className="rounded-2xl border border-dashed border-amber-500/50 bg-card px-4 py-3 space-y-1.5">
       <div className="flex items-center gap-2">
         <FlaskConical className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
-        <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Pre-release build</span>
+        <span className="text-sm font-medium text-foreground">Pre-release build</span>
         {commitSha && buildDate && (
-          <span className="ml-auto text-[11px] text-amber-600/70 dark:text-amber-400/70">
+          <span className="ml-auto text-[11px] text-muted-foreground">
             {formatDate(buildDate.split('T')[0])}
           </span>
         )}
       </div>
-      <p className="text-xs text-amber-700/80 dark:text-amber-400/70">
+      <p className="text-xs text-muted-foreground">
         This build contains changes not yet included in a release.{' '}
         View unreleased changes
       </p>

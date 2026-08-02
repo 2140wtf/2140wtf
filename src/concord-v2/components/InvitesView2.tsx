@@ -252,8 +252,8 @@ export function InvitesView({ community }: { community: CommunityV2 }) {
                   )}
                 </div>
                 {behind && (
-                  <div className="flex items-start gap-1.5 rounded bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="flex items-start gap-1.5 rounded border border-amber-500/50 bg-card px-2 py-1.5 text-[11px] text-foreground">
+                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
                     <span>
                       This link is on epoch {servedEpoch} — the community has since moved to epoch{" "}
                       {epoch}. Someone joining now could land on the old keys. It refreshes

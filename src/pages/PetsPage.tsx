@@ -2238,8 +2238,8 @@ function PetsDashboard({
     <DashboardShell>
       {/* Legacy Migration Notice */}
       {companion.isLegacy && (
-        <div className="mx-4 mt-2 sm:mx-6 px-4 py-3 rounded-lg bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800">
-          <p className="text-sm text-amber-950 dark:text-amber-100">
+        <div className="mx-4 mt-2 rounded-lg border border-amber-500/50 bg-card px-4 py-3 sm:mx-6">
+          <p className="text-sm text-foreground">
             This pet uses an older format. It will be automatically upgraded on your next interaction.
           </p>
         </div>
@@ -4451,5 +4451,4 @@ function CrumbBurst({ crumbX, crumbY, rewardX, rewardY }: {
 }
 
 // ─── Hatch Ceremony Overlay ───────────────────────────────────────────────────
-
 

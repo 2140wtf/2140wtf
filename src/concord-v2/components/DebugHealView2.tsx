@@ -103,7 +103,7 @@ export function DebugHealView({
       </p>
 
       {strandedCount > 0 ? (
-        <div className="flex items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+        <div className="flex items-center gap-2 rounded-md border border-amber-500/50 bg-card px-3 py-2 text-sm text-foreground">
           <TriangleAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           {strandedCount} member{strandedCount === 1 ? " was" : "s were"} last seen on an older epoch.
         </div>
