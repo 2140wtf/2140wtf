@@ -240,25 +240,31 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               </p>
 
               <div className="space-y-1.5 pt-1">
-                {relayRows.map(({ url, source }) => (
-                  <label
+                {relayRows.map(({ url, source }, index) => {
+                  const checkboxId = `community-relay-${index}`;
+                  return (
+                  <div
                     key={url}
                     className="flex cursor-pointer items-center gap-3 rounded-md bg-background/40 px-3 py-2.5"
                   >
                     <Checkbox
+                      id={checkboxId}
                       checked={picked.includes(url)}
                       onCheckedChange={(v) => toggleRelay(url, v === true)}
                       disabled={busy}
                       aria-label={`Use relay ${url}`}
                     />
                     <div className="flex-1 min-w-0">
-                      <RelayIdentity url={url} />
+                      <label htmlFor={checkboxId} className="block cursor-pointer">
+                        <RelayIdentity url={url} />
+                      </label>
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         {source === "dm" ? "DM inbox relay · capability unverified" : source === "app" ? "App relay" : source === "fallback" ? "Interop fallback" : "Custom relay"}
                       </span>
                     </div>
-                  </label>
-                ))}
+                  </div>
+                  );
+                })}
                 {relayRows.length === 0 && (
                   <p className="text-sm text-muted-foreground py-1">Loading relay suggestions…</p>
                 )}
