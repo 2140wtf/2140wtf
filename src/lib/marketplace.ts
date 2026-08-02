@@ -31,7 +31,7 @@ export function getListingPriceState(
     return { kind: 'ready', amountSats: sats, initialAmountSats: sats };
   }
 
-  if (currency === 'usd') {
+  if (['usd', 'eur', 'gbp', 'jpy', 'cad', 'aud', 'ars', 'brl', 'mxn'].includes(currency)) {
     if (!btcPrice) return { kind: 'loading' };
     const sats = Math.round((price.value / btcPrice) * 100_000_000);
     if (sats <= 0) return { kind: 'unsupported' };

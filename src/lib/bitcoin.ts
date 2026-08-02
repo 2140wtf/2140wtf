@@ -190,15 +190,6 @@ interface BtcPriceFallback {
 
 const BTC_PRICE_FALLBACKS: BtcPriceFallback[] = [
   {
-    name: 'coinbase',
-    url: 'https://api.coinbase.com/v2/exchange-rates?currency=BTC',
-    parse(data) {
-      const rates = (data as { data?: { rates?: Record<string, string> } })?.data?.rates;
-      const usd = rates?.USD;
-      return usd ? Number(usd) : undefined;
-    },
-  },
-  {
     name: 'kraken',
     url: 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD',
     parse(data) {
@@ -224,7 +215,37 @@ const BTC_PRICE_FALLBACKS: BtcPriceFallback[] = [
       return usd ? Number(usd) : undefined;
     },
   },
+  {
+    name: 'coinbase',
+    url: 'https://api.coinbase.com/v2/exchange-rates?currency=BTC',
+    parse(data) {
+      const rates = (data as { data?: { rates?: Record<string, string> } })?.data?.rates;
+      const usd = rates?.USD;
+      return usd ? Number(usd) : undefined;
+    },
+  },
 ];
+
+const FIAT_CURRENCIES = new Set(['usd', 'eur', 'gbp', 'jpy', 'cad', 'aud', 'ars', 'brl', 'mxn']);
+
+function normalizeCurrency(currency: string): string {
+  return currency.trim().toLowerCase();
+}
+
+async function fetchBtcFiatPrice(currency: string, signal?: AbortSignal): Promise<number> {
+  const normalized = normalizeCurrency(currency);
+  if (!FIAT_CURRENCIES.has(normalized)) throw new Error(`Unsupported fiat currency: ${currency}`);
+  if (normalized === 'usd') return fetchBtcPriceFromFallbacks(signal);
+
+  const data = await fetchJsonWithTimeout(
+    `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${encodeURIComponent(normalized)}`,
+    signal,
+    8_000,
+  );
+  const price = Number((data as { bitcoin?: Record<string, number> })?.bitcoin?.[normalized]);
+  if (!Number.isFinite(price) || price <= 0) throw new Error(`CoinGecko returned no BTC/${normalized} rate`);
+  return price;
+}
 
 async function fetchJsonWithTimeout(url: string, signal?: AbortSignal, timeoutMs = 10_000): Promise<unknown> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -262,7 +283,12 @@ async function fetchBtcPriceFromFallbacks(signal?: AbortSignal): Promise<number>
  * @param baseUrls   Ordered list of Esplora REST roots tried with failover.
  * @param signal     Optional abort signal (e.g. from TanStack Query).
  */
-export async function fetchBtcPrice(baseUrls: string[], signal?: AbortSignal): Promise<number> {
+export async function fetchBtcPrice(
+  baseUrls: string[],
+  signal?: AbortSignal,
+  currency = 'usd',
+): Promise<number> {
+  if (normalizeCurrency(currency) !== 'usd') return fetchBtcFiatPrice(currency, signal);
   try {
     const response = await esploraFetch(baseUrls, `/v1/prices`, {
       // /v1/prices is a mempool.space extension — 404 means "endpoint doesn't
@@ -1778,4 +1804,3 @@ export function buildUnsignedSilentPaymentPsbt(
 
   return { psbtHex, fee };
 }
-
