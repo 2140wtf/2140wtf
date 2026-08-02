@@ -39,13 +39,13 @@ export function PollCubeCard({ poll, title, theme = 'light', className }: PollCu
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
-      <div className="relative">
+      <div className="relative mx-auto w-full max-w-4xl">
         <HostedPollCube
           pollId={poll.id}
           title={displayTitle}
           event={poll}
           theme={theme}
-          className="aspect-square min-h-[420px] max-h-[80vh]"
+          className="aspect-square w-full min-h-[420px]"
           showVoteButton={false}
         />
         {overlayOpen && <PollCubeVoteOverlay event={poll} onClose={() => setOverlayOpen(false)} />}
