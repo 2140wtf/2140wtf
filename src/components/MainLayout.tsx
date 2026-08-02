@@ -52,7 +52,11 @@ function MainLayoutInner() {
     setLeftCollapsed(autoCollapseLeft);
   }, [autoCollapseLeft]);
 
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const autoCollapseRight = location.pathname.startsWith('/prediction-markets');
+  const [rightCollapsed, setRightCollapsed] = useState(autoCollapseRight);
+  useEffect(() => {
+    setRightCollapsed(autoCollapseRight);
+  }, [autoCollapseRight]);
 
   // ₿AO chat (Concord V2) rides auth-gated kind-1059 streams: authenticate
   // the connection as every live community's derived stream keys so its
