@@ -1,4 +1,5 @@
 import { redactSensitiveData } from '@/lib/redactSecrets';
+import { containsPrivateRoute, isPrivateRouteUrl } from '@/lib/plausiblePrivacy';
 
 /** Subset of the Sentry API surface we actually use. */
 interface SentryLike {
@@ -70,6 +71,11 @@ export async function initializeSentry(dsn: string): Promise<void> {
       release: import.meta.env.VERSION,
       // Censor sensitive data before sending to Sentry
       beforeSend(event) {
+        if ((typeof window !== 'undefined' && isPrivateRouteUrl(window.location.href)) || containsPrivateRoute(event)) return null;
+        return redactSensitiveData(event) as typeof event;
+      },
+      beforeSendTransaction(event) {
+        if ((typeof window !== 'undefined' && isPrivateRouteUrl(window.location.href)) || containsPrivateRoute(event)) return null;
         return redactSensitiveData(event) as typeof event;
       },
     });

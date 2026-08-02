@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizePlausibleRequest, type AnalyticsRequest } from './plausiblePrivacy';
+import { containsPrivateRoute, sanitizePlausibleRequest, type AnalyticsRequest } from './plausiblePrivacy';
 
 function payload(url: string): AnalyticsRequest {
   return {
@@ -16,6 +16,9 @@ describe('sanitizePlausibleRequest', () => {
     'https://2140.wtf/bao/c/community-id/channel-id',
     'https://2140.wtf/bao/invite/naddr1secret#bearer-token',
     'https://2140.wtf/invite/naddr1secret#bearer-token',
+    'https://2140.wtf/BAO/C/community-id/channel-id/thread/message-id',
+    'https://2140.wtf/Bao/Invite/naddr1secret',
+    'https://2140.wtf/Invite/naddr1secret',
   ])('suppresses analytics on private Concord routes: %s', (url) => {
     expect(sanitizePlausibleRequest(payload(url))).toBeNull();
   });
@@ -31,5 +34,10 @@ describe('sanitizePlausibleRequest', () => {
 
   it('drops malformed analytics URLs', () => {
     expect(sanitizePlausibleRequest(payload('not a URL'))).toBeNull();
+  });
+
+  it('detects private routes nested inside diagnostic payloads', () => {
+    expect(containsPrivateRoute({ breadcrumbs: [{ data: { url: '/BAO/C/community/channel' } }] })).toBe(true);
+    expect(containsPrivateRoute({ transaction: '/market', request: { url: 'https://2140.wtf/market' } })).toBe(false);
   });
 });

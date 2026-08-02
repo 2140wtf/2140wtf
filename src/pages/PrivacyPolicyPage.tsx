@@ -91,8 +91,9 @@ export function PrivacyPolicyPage() {
           <h2 className="text-base font-bold text-foreground">Analytics</h2>
           <p>
             {config.appName} may use privacy-friendly analytics (such as Plausible) to understand general usage
-            patterns. These analytics do not use cookies, do not track individual users, and do not collect
-            personal information.
+            patterns. When enabled, the service may receive sanitized public route paths, request timing, and
+            network metadata such as an IP address. Private ₿AO and invite routes, query strings, fragments,
+            and referrers are excluded from analytics.
           </p>
         </section>
 
@@ -104,6 +105,7 @@ export function PrivacyPolicyPage() {
             <li><strong>Blossom servers:</strong> For file uploads and media hosting</li>
             <li><strong>Lightning Network / NWC:</strong> For processing zap payments, if you choose to use them</li>
             <li><strong>NIP-05 providers:</strong> For verifying Nostr addresses</li>
+            <li><strong>Configured diagnostics provider (Sentry):</strong> For optional sanitized error and sampled performance reports; private ₿AO and invite routes are excluded</li>
           </ul>
           <p>
             Each of these services is operated independently and may have its own data handling practices.
