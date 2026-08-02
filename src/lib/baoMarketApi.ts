@@ -44,10 +44,11 @@ export interface ApiMarket {
   status: string;
   network: string;
   created_at: number;
-  end_date: number;
+  end_date: number | null;
   outcomes: ApiOutcome[];
   total_volume: number;
   trade_count: number;
+  liquidity?: number;
   nostr_event_id?: string;
   creator_pubkey: string;
   resolution?: string | null;
@@ -86,19 +87,27 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
       api.type === 'categorical' || api.type === 'scalar'
         ? api.type
         : 'binary',
-    endTime: api.end_date,
+    endTime: typeof api.end_date === 'number' && Number.isFinite(api.end_date) ? api.end_date : 0,
     createdAt: api.created_at,
     poolModel: api.smj || api.pool_model === 'smj' ? 'smj' : api.pool_model === 'amm' ? 'amm' : undefined,
     paymentRails: Array.isArray(api.payment_rails) ? api.payment_rails : undefined,
+    totalVolumeSats: finiteNonNegative(api.total_volume),
+    tradeCount: finiteNonNegative(api.trade_count),
+    liquiditySats: finiteNonNegative(api.liquidity),
     outcomes: api.outcomes.map((o) => ({
       id: o.id,
       label: o.label,
       probability: Number.isFinite(o.price) ? o.price : 0.5,
+      volumeSats: finiteNonNegative(o.volume),
     })),
     creatorPubkey: api.creator_pubkey,
     resolution: api.resolution ?? null,
     rawEvent: syntheticEvent,
   };
+}
+
+function finiteNonNegative(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 /**

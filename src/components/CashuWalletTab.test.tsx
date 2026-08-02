@@ -131,6 +131,21 @@ describe('CashuWalletTab mint management', () => {
 
   afterEach(() => cleanup());
 
+  it('keeps the add controls responsive and bounds the mint manager to the viewport', () => {
+    render(<MemoryRouter><CashuWalletTab /></MemoryRouter>);
+
+    const nameInput = screen.getByPlaceholderText('Mint name');
+    expect(nameInput.parentElement).toHaveClass('grid', 'sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_auto]');
+    expect(nameInput).toHaveClass('min-w-0');
+    expect(screen.getByPlaceholderText('https://mint.example.com')).toHaveClass('min-w-0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage mints' }));
+    expect(screen.getByRole('dialog', { name: 'Manage mints' })).toHaveClass(
+      'max-h-[calc(100dvh-2rem)]',
+      'overflow-y-auto',
+    );
+  });
+
   it('removes a zero-balance mint directly from the manager', async () => {
     render(<MemoryRouter><CashuWalletTab /></MemoryRouter>);
 

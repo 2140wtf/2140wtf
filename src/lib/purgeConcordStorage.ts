@@ -2,6 +2,7 @@ import { closeInviteInbox } from "@/concord-v2/lib/inviteInbox";
 import { closeRumorStores } from "@/concord-v2/lib/rumorStore";
 import { closeFoldedCache } from "@/lib/foldedCache";
 import { resetDecryptConsent } from "@/lib/decryptConsent";
+import type { QueryClient } from "@tanstack/react-query";
 
 /**
  * Purge the decrypted-at-rest ₿AO chat (Concord V2) stores on final logout.
@@ -86,12 +87,14 @@ async function purgeIndexedDB(): Promise<void> {
   await Promise.all(
     CONCORD_DB_NAMES.map(
       (name) =>
-        new Promise<void>((resolve) => {
+        new Promise<void>((resolve, reject) => {
           try {
             const req = indexedDB.deleteDatabase(name);
-            req.onsuccess = req.onerror = req.onblocked = () => resolve();
-          } catch {
-            resolve();
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error ?? new Error(`Couldn't delete ${name}.`));
+            req.onblocked = () => reject(new Error(`Couldn't delete ${name} because another tab still has it open.`));
+          } catch (error) {
+            reject(error);
           }
         }),
     ),
@@ -106,9 +109,9 @@ async function purgeCacheStorage(): Promise<void> {
 }
 
 /**
- * Wipe the decrypted Concord stores (see the module docstring). Best-effort:
- * individual deletions that fail (blocked by an OTHER tab, unavailable IDB)
- * don't abort the rest. Resets the in-memory decrypt-consent state too, so a
+ * Wipe the decrypted Concord stores (see the module docstring). A blocked or
+ * failed database deletion rejects so logout cannot silently claim success.
+ * Resets the in-memory decrypt-consent state too, so a
  * same-page next login re-asks rather than inheriting the previous account's
  * "always" choice.
  */
@@ -117,4 +120,12 @@ export async function purgeConcordStorage(): Promise<void> {
   purgeLocalStorage();
   await closeConcordStores();
   await Promise.all([purgeIndexedDB(), purgeCacheStorage()]);
+}
+
+/** Remove decrypted Concord material retained in TanStack Query memory. */
+export function clearConcordQueryMemory(queryClient: QueryClient): void {
+  queryClient.removeQueries({ predicate: (query) => {
+    const root = query.queryKey[0];
+    return root === "concord2" || root === "concord2-mentions" || root === "wire";
+  } });
 }

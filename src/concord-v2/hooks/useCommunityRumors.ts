@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryRumorsByChannel } from "@/concord-v2/lib/rumorStore";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useWireScopes } from "@/wire/useWireScopes";
 
 import type { OpenedChat } from "@/concord-v2/lib/chat";
+import type { ChannelV2 } from "@/concord-v2/lib/types";
 
 /**
  * How many newest rumors to read per channel for the community-wide derived
@@ -34,22 +36,37 @@ const PER_CHANNEL = 200;
  * the store; the read-dependent bits (is-unread, has-new) are derived downstream
  * as pure computation.
  */
-export function useCommunityRumors(channelIds: string[]): {
+export function useCommunityRumors(channels: ChannelV2[]): {
   byChannel: Map<string, OpenedChat[]>;
   isLoading: boolean;
 } {
+  const { user } = useCurrentUser();
   const queryClient = useQueryClient();
 
-  // Stable key + membership set (recomputed only when the set changes).
-  const channelSig = channelIds.join(",");
-  const idSet = useMemo(() => new Set(channelIds), [channelSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Include the authorized stream set: channel ids survive rekeys, while the
+  // plaintext this account may read does not.
+  const channelSig = channels
+    .map((channel) => `${channel.idHex}:${channel.streams.map((stream) => stream.group.pk).sort().join(".")}`)
+    .sort()
+    .join(",");
+  const authorizedChannels = useMemo(
+    () => channels.map((channel) => ({
+      idHex: channel.idHex,
+      streamPks: channel.streams.map((stream) => stream.group.pk),
+    })),
+    [channelSig], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const idSet = useMemo(() => new Set(authorizedChannels.map((channel) => channel.idHex)), [authorizedChannels]);
 
-  const queryKey = useMemo(() => ["concord2-community-rumors", channelSig] as const, [channelSig]);
+  const queryKey = useMemo(
+    () => ["concord2-community-rumors", user?.pubkey ?? null, channelSig] as const,
+    [user?.pubkey, channelSig],
+  );
 
   const { data, isLoading } = useQuery<Map<string, OpenedChat[]>>({
     queryKey,
-    queryFn: ({ signal }) => queryRumorsByChannel(channelIds, { perChannel: PER_CHANNEL, signal }),
-    enabled: channelIds.length > 0,
+    queryFn: ({ signal }) => queryRumorsByChannel(authorizedChannels, { perChannel: PER_CHANNEL, signal }),
+    enabled: Boolean(user && authorizedChannels.length > 0),
     // A cheap single transaction; the wire bus below is the live path, this is
     // just a backstop for a missed announcement.
     refetchInterval: 30_000,

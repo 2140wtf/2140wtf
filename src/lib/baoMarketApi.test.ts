@@ -33,12 +33,28 @@ describe('apiMarketToBaoMarket', () => {
     expect(m.createdAt).toBe(baseApiMarket.created_at);
     expect(m.creatorPubkey).toBe(baseApiMarket.creator_pubkey);
     expect(m.outcomes).toEqual([
-      { id: 'YES', label: 'Yes', probability: 0.62 },
-      { id: 'NO', label: 'No', probability: 0.38 },
+      { id: 'YES', label: 'Yes', probability: 0.62, volumeSats: 100 },
+      { id: 'NO', label: 'No', probability: 0.38, volumeSats: 50 },
     ]);
+    expect(m.totalVolumeSats).toBe(150);
+    expect(m.tradeCount).toBe(3);
     expect(m.resolution).toBeNull();
     // Without a nostr_event_id the raw event id falls back to the market id.
     expect(m.rawEvent.id).toBe(baseApiMarket.id);
+  });
+
+  it('normalizes nullable dates and rejects invalid metrics', () => {
+    const m = apiMarketToBaoMarket({
+      ...baseApiMarket,
+      end_date: null,
+      total_volume: Number.NaN,
+      trade_count: -1,
+      liquidity: 2140,
+    });
+    expect(m.endTime).toBe(0);
+    expect(m.totalVolumeSats).toBeUndefined();
+    expect(m.tradeCount).toBeUndefined();
+    expect(m.liquiditySats).toBe(2140);
   });
 
   it('prefers nostr_event_id for the raw event id and carries resolution', () => {

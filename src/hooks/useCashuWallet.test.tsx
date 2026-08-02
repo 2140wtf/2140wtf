@@ -1543,7 +1543,7 @@ describe('useCashuWallet hunt regressions: melt lifecycle (rounds 2-3)', () => {
 
     await act(async () => { expect(await result.current.removeCustomMint(bundledMint)).toEqual({ status: 'removed' }); });
     await waitFor(() => expect(result.current.allMints).toEqual([]));
-    expect(localStorage.getItem('freedomid_removed_default_mints')).toContain(bundledMint);
+    expect(localStorage.getItem('freedomid_removed_default_mints_anonymous')).toContain(bundledMint);
   });
 
   it('poll resolves a pending BOLT12 melt via the bolt12 endpoint and removes journaled inputs', async () => {
