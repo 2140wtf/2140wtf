@@ -105,6 +105,11 @@ export interface CashuWalletState {
   nutzaps: NostrEvent[];
 }
 
+export type RemoveMintResult =
+  | { status: 'removed' }
+  | { status: 'confirmation-required'; balance: number }
+  | { status: 'rejected' };
+
 /**
  * Result of a nutzap send:
  * - 'sent': the nutzap event was published — payment delivered.
@@ -139,7 +144,7 @@ const TREASURY_INFO_FALLBACK_RELAY = 'wss://relay.bao.network';
 export interface CashuWalletActions {
   setMintUrl: (url: string) => void;
   addCustomMint: (name: string, url: string) => void;
-  removeCustomMint: (url: string) => void;
+  removeCustomMint: (url: string, expectedBalance?: number) => Promise<RemoveMintResult>;
   handleSeedBackupConfirm: () => Promise<void>;
   calculateAllBalances: () => Promise<void>;
   receiveToken: (tokenStr: string, privkey?: string) => Promise<number>;
@@ -314,6 +319,15 @@ export function useCashuWallet(
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
   const [mintUrl, setMintUrlState] = useState<string>(defaultMints[0]?.url || '');
   const [customMints, setCustomMints] = useState<Array<{ name: string; url: string }>>([]);
+  const removedDefaultsKey = `${options?.storageNamespace ?? 'freedomid_'}removed_default_mints`;
+  const [removedDefaultMints, setRemovedDefaultMints] = useState<string[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(removedDefaultsKey) ?? '[]');
+      return Array.isArray(stored) ? stored.filter((url): url is string => typeof url === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [mintInfo, setMintInfo] = useState<any>(null);
   const [balances, setBalances] = useState<Record<string, number>>({});
@@ -409,6 +423,12 @@ export function useCashuWallet(
     if (!encKey) return;
     storageRef.current.saveCustomMints(customMints, encKey).catch((e) => devLog.error('Failed to persist custom mints:', e));
   }, [customMints]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(removedDefaultsKey, JSON.stringify(removedDefaultMints));
+    } catch { /* storage unavailable */ }
+  }, [removedDefaultMints, removedDefaultsKey]);
 
   /** Sum the amounts of a list of proofs, ignoring invalid entries. */
   const sumProofAmounts = (proofs: any[]): number =>
@@ -676,10 +696,13 @@ export function useCashuWallet(
    *  every other proof-store mutation. */
   const acquireReceiveTokenLock = async (): Promise<() => void> => acquireMutex(walletOpsMutexRef);
 
-  // Combine default + custom mints (deduplicated by URL)
+  // Combine visible defaults + custom mints (deduplicated by URL).
   const allMints = useMemo(
-    () => dedupeByKey([...defaultMints, ...customMints], (m) => safeNormalizeMintUrl(m.url)),
-    [customMints, defaultMints]
+    () => dedupeByKey([
+      ...defaultMints.filter((mint) => !removedDefaultMints.includes(safeNormalizeMintUrl(mint.url))),
+      ...customMints,
+    ], (m) => safeNormalizeMintUrl(m.url)),
+    [customMints, defaultMints, removedDefaultMints]
   );
   const allMintsRef = useRef(allMints);
   useEffect(() => { allMintsRef.current = allMints; }, [allMints]);
@@ -2049,6 +2072,10 @@ export function useCashuWallet(
       setError('Mint name too long (max 100 chars)');
       return;
     }
+    if (defaultMints.some((mint) => safeNormalizeMintUrl(mint.url) === normalized)) {
+      setRemovedDefaultMints((prev) => prev.filter((mintUrl) => mintUrl !== normalized));
+      return;
+    }
     setCustomMints((prev) => {
       const currentAll = [...defaultMints, ...prev];
       if (currentAll.some((m) => safeNormalizeMintUrl(m.url) === normalized)) return prev;
@@ -2057,46 +2084,38 @@ export function useCashuWallet(
     void triggerBackup();
   }, [triggerBackup, defaultMints]);
 
-  const removeCustomMint = useCallback((url: string) => {
+  const removeCustomMint = useCallback(async (url: string, expectedBalance?: number): Promise<RemoveMintResult> => {
     if (typeof url !== 'string') {
       setError('Invalid mint URL');
-      return;
+      return { status: 'rejected' };
     }
     const normalized = normalizeMintUrl(url);
     if (!normalized) {
       setError('Invalid mint URL');
-      return;
+      return { status: 'rejected' };
     }
-    // Guard: default mints cannot be "removed" — they live outside customMints
     const isDefault = defaultMints.some(m => safeNormalizeMintUrl(m.url) === normalized);
-    if (isDefault) {
-      devLog.warn('Cannot remove default mint:', normalized);
-      setError('Default mints cannot be removed');
-      return;
-    }
     // Guard: refuse to delete a mint that still holds ecash. Removing the mint
     // wipes its ENTIRE proof store below — with a balance that is silent,
     // unrecoverable money loss (the NIP-60 backup, if any, may be stale).
     const encKey = encKeyRef.current;
     if (!encKey) {
       setError('Wallet not initialized');
-      return;
+      return { status: 'rejected' };
     }
-    (async () => {
-      // Serialize with every in-flight wallet op: a receive/pending-receive
+    // Serialize with every in-flight wallet op: a receive/pending-receive
       // retry for this mint can hold a 0-balance store for up to 60s before
       // committing, and without the mutex its finishing write would silently
       // re-create a store for a mint already dropped from allMints — stranded
       // ecash that no balance/backup/reconcile pass ever iterates.
-      const release = await acquireMutex(walletOpsMutexRef);
-      try {
+    const release = await acquireMutex(walletOpsMutexRef);
+    try {
         // Re-check the balance INSIDE the mutex (the guard is meaningless as
         // a TOCTOU read outside any serialization).
         const storedProofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
         const storedBalance = sumProofAmounts(storedProofs);
-        if (storedBalance > 0) {
-          setError(`Mint still holds ${storedBalance} sats — spend or sweep them before removing it. Removing the mint deletes its ecash.`);
-          return;
+        if (storedBalance > 0 && expectedBalance !== storedBalance) {
+          return { status: 'confirmation-required', balance: storedBalance };
         }
         // Drop any pending-receive entries referencing this mint so the
         // background reconciler cannot resurrect an orphaned store after the
@@ -2117,7 +2136,11 @@ export function useCashuWallet(
             } catch { /* ignore malformed entries */ }
           }
         } catch { /* storage unavailable */ }
-        setCustomMints((prev) => prev.filter(m => safeNormalizeMintUrl(m.url) !== normalized));
+        if (isDefault) {
+          setRemovedDefaultMints((prev) => prev.includes(normalized) ? prev : [...prev, normalized]);
+        } else {
+          setCustomMints((prev) => prev.filter(m => safeNormalizeMintUrl(m.url) !== normalized));
+        }
         void triggerBackup();
         // Evict cached wallet for this mint
         walletCacheRef.current.delete(normalized);
@@ -2152,13 +2175,14 @@ export function useCashuWallet(
             setWallet(null);
           }
         }
+        return { status: 'removed' };
       } catch (e) {
         devLog.error('Failed to remove custom mint:', e);
         setError('Failed to remove mint');
+        return { status: 'rejected' };
       } finally {
         release();
       }
-    })();
   }, [mintUrl, allMints, triggerBackup, defaultMints]);
 
   const refreshTransactions = useCallback(async () => {
