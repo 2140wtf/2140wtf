@@ -12,6 +12,7 @@ import {
 import type { BtcShop } from '@/lib/btcmap/btcmap';
 import { safeUrl } from '@/lib/btcmap/discover';
 import { sanitizeTel, sanitizeEmail, isValidCoordinate, getTypeIcon } from '@/lib/btcmap/discover';
+import { openUrl } from '@/lib/downloadFile';
 
 export interface PopupShop extends BtcShop {
   distance?: string;
@@ -49,10 +50,12 @@ export default function ShopMapPopup({
   const facebook = safeUrl(shop.facebook || enriched?.facebook);
   const twitter = safeUrl(shop.twitter || enriched?.twitter);
 
-  const handleNavigate = () => {
+  const handleNavigate = async () => {
     if (!isValidCoordinate(shop.lat, shop.lon)) return;
     const url = `https://www.openstreetmap.org/directions?from=&to=${shop.lat},${shop.lon}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // openUrl bridges web + native (native presents the share sheet; window.open
+    // alone is blocked inside WKWebView).
+    await openUrl(url);
   };
 
   const handleShare = async () => {
