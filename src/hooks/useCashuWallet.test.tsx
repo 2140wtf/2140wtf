@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
-import { getEncodedToken, CashuWallet } from '@cashu/cashu-ts';
+import { getEncodedToken, CashuMint, CashuWallet } from '@cashu/cashu-ts';
 import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 
@@ -1889,6 +1889,8 @@ describe('useCashuWallet hunt regressions: removeCustomMint pending-receive clea
 describe('useCashuWallet hunt regressions: foreign-mint receive after swap', () => {
   const mintUrl = 'https://mint.example.com';
   const foreignMint = 'https://foreign.example.com';
+  const baoProxyMint = 'https://relay.bao.network/bao-api/v1/proxy/cashu';
+  const baoDirectMint = 'https://relay.bao.network/cashu';
 
   beforeEach(() => {
     localStorage.clear();
@@ -1940,6 +1942,45 @@ describe('useCashuWallet hunt regressions: foreign-mint receive after swap', () 
 
     const stored = (await getProofsForMint(foreignMint, encKey)) as Array<{ secret: string }>;
     expect(stored.map((p) => p.secret)).toEqual(['foreign-recv-1']);
+  });
+
+  it('redeems bao.markets proxy tokens against the canonical BAO mint', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const encoder = new TextEncoder();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.receive = vi.fn().mockResolvedValue([
+        { id: 'ks', amount: 21, secret: 'bao-recv-1', C: 'C-bao-1' },
+      ]);
+      w.getFeesForProofs = vi.fn().mockReturnValue(0);
+      w.checkProofsStates = vi.fn().mockImplementation(async (proofs: Array<{ secret: string }>) =>
+        proofs.map((p) => ({
+          Y: hashToCurve(encoder.encode(String(p.secret))).toHex(true),
+          state: 'UNSPENT',
+        })),
+      );
+      return w;
+    });
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+
+    const token = getEncodedToken({
+      mint: baoProxyMint,
+      proofs: [{ id: 'ks', amount: 21, secret: 'bao-input-1', C: 'C-bao-in' }],
+      unit: 'sat',
+    });
+    const received = await act(async () => result.current.receiveToken(token));
+
+    expect(received).toBe(21);
+    expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoDirectMint)).toBe(true);
+    expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoProxyMint)).toBe(false);
+    const stored = (await getProofsForMint(baoDirectMint, encKey)) as Array<{ secret: string }>;
+    expect(stored.map((p) => p.secret)).toEqual(['bao-recv-1']);
+    expect(await getProofsForMint(baoProxyMint, encKey)).toEqual([]);
   });
 });
 
