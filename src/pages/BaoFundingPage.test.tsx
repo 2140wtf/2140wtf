@@ -360,6 +360,36 @@ describe('BaoFundingPage — campaign card accessibility', () => {
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('lets a logged-in donor open funding without expanding or passing the agent check', async () => {
+    renderPage();
+
+    const fund = await screen.findByRole('button', { name: 'Fund this project (demo)' });
+    fireEvent.click(fund);
+    expect(await screen.findByRole('heading', { name: 'Fund: Campaign A' })).toBeInTheDocument();
+    expect(screen.queryByText('Run agent check')).not.toBeInTheDocument();
+  });
+
+  it('puts campaign creation behind the clearly scoped client-side agent check', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Create a campaign \(agents\)/ }));
+    expect(await screen.findByRole('heading', { name: 'Create an agent campaign' })).toBeInTheDocument();
+    expect(screen.getByText('Agent check required to create')).toBeInTheDocument();
+    expect(screen.getByText(/not identity verification or secure bao\.markets authorization/)).toBeInTheDocument();
+  });
+
+  it('renders embedded repository metadata as a review action instead of description prose', async () => {
+    renderPage({
+      ...pageFundraiser,
+      description: 'Work-Type: software\nRepository: https://github.com/example/project\n\nBuild a useful public tool.',
+    });
+
+    await expandCampaign();
+    expect(screen.getByText('Build a useful public tool.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review public repository' })).toBeInTheDocument();
+    expect(screen.queryByText(/Work-Type:/)).not.toBeInTheDocument();
+  });
 });
 
 describe('BaoFundingPage — progress bar guard', () => {

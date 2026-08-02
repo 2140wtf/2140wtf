@@ -55,7 +55,11 @@ export default function ShopMapPopup({
     const url = `https://www.openstreetmap.org/directions?from=&to=${shop.lat},${shop.lon}`;
     // openUrl bridges web + native (native presents the share sheet; window.open
     // alone is blocked inside WKWebView).
-    await openUrl(url);
+    await openUrl(url).catch(() => {});
+  };
+
+  const handleOpenExternal = (url: string) => {
+    void openUrl(url).catch(() => {});
   };
 
   const handleShare = async () => {
@@ -157,15 +161,16 @@ export default function ShopMapPopup({
             {website && (
               <div className="flex items-center gap-2.5">
                 <Link2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                <a
-                  href={website}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
                   className="text-xs text-primary hover:text-primary/80 underline truncate"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenExternal(website);
+                  }}
                 >
                   {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                </a>
+                </button>
               </div>
             )}
             {email && (
@@ -193,13 +198,13 @@ export default function ShopMapPopup({
         {(instagram || facebook || twitter) && (
           <div className="px-4 py-2 flex items-center gap-3 border-b border-border">
             {instagram && (
-              <a href={instagram} target="_blank" rel="noopener noreferrer" className="text-[10px] text-pink-500 hover:text-pink-400 underline">Instagram</a>
+              <button type="button" onClick={() => handleOpenExternal(instagram)} className="text-[10px] text-pink-500 hover:text-pink-400 underline">Instagram</button>
             )}
             {facebook && (
-              <a href={facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:text-blue-400 underline">Facebook</a>
+              <button type="button" onClick={() => handleOpenExternal(facebook)} className="text-[10px] text-blue-500 hover:text-blue-400 underline">Facebook</button>
             )}
             {twitter && (
-              <a href={twitter} target="_blank" rel="noopener noreferrer" className="text-[10px] text-sky-500 hover:text-sky-400 underline">Twitter</a>
+              <button type="button" onClick={() => handleOpenExternal(twitter)} className="text-[10px] text-sky-500 hover:text-sky-400 underline">Twitter</button>
             )}
           </div>
         )}
@@ -223,14 +228,14 @@ export default function ShopMapPopup({
             <Share2 className="w-3.5 h-3.5" />
           </button>
           {website && (
-            <a
-              href={website}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              aria-label="Open merchant website"
+              onClick={() => handleOpenExternal(website)}
               className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-border"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            </button>
           )}
         </div>
       </div>

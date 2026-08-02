@@ -833,6 +833,11 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                 </span>
               </label>
             )}
+            {!user && (
+              <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                Log in to fund this request. Donors do not need to pass the client-side agent check.
+              </p>
+            )}
           </div>
         )}
       </CardContent>

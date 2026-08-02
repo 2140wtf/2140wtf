@@ -151,6 +151,14 @@ describe('hdWallet', () => {
       0,
       5,
     ]);
+    expect(parseBip32Path('m/86h/0H/1')).toEqual([
+      86 + HARDENED_OFFSET,
+      0 + HARDENED_OFFSET,
+      1,
+    ]);
+    for (const invalid of ['', 'm/', 'm/1junk', 'm/-1', 'm/1.5', 'm/2147483648', 'm/999999999999999999999']) {
+      expect(() => parseBip32Path(invalid)).toThrow();
+    }
   });
 
   it('classifies receive and change paths', () => {

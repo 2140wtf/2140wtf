@@ -23,7 +23,16 @@ const mocks = vi.hoisted(() => ({
   swapCallCount: 0,
   meltCallCount: 0,
   mintProofsCallCount: 0,
+  wsCreateSubscription: vi.fn().mockReturnValue('subscription-id'),
+  wsCancelSubscription: vi.fn(),
   createMockWallet: (opts: { sendDelay?: number } = {}) => ({
+    mint: {
+      connectWebSocket: vi.fn().mockResolvedValue(undefined),
+      webSocketConnection: {
+        createSubscription: mocks.wsCreateSubscription,
+        cancelSubscription: mocks.wsCancelSubscription,
+      },
+    },
     loadMint: vi.fn().mockResolvedValue(undefined),
     getInfo: vi.fn().mockResolvedValue({ name: 'Test Mint', nuts: {} }),
     send: vi.fn().mockImplementation(async (amount: number, proofs: unknown[]) => {
@@ -67,16 +76,16 @@ const mocks = vi.hoisted(() => ({
     }),
     onMintQuotePaid: vi.fn(),
     checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', state: 'PAID' }),
-    createMintQuoteBolt12: vi.fn().mockResolvedValue({
+    createMintQuoteBolt12: vi.fn().mockImplementation(async (pubkey: string, opts: { amount: number }) => ({
       quote: 'bolt12-mint-quote',
       request: 'lno1offer',
-      amount: 21,
+      amount: opts.amount,
       unit: 'sat',
       expiry: null,
-      pubkey: `02${'1'.repeat(64)}`,
+      pubkey,
       amount_paid: 0,
       amount_issued: 0,
-    }),
+    })),
     checkMintQuoteBolt12: vi.fn().mockResolvedValue({
       quote: 'bolt12-mint-quote',
       request: 'lno1offer',
@@ -96,6 +105,14 @@ const mocks = vi.hoisted(() => ({
       return [{ id: 'ks', amount, secret: `bolt12-mint-secret-${callId}`, C: `C-bolt12-mint-${callId}` }];
     }),
     createMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
+    createMultiPathMeltQuote: vi.fn().mockImplementation(async (request: string, amountMsats: number) => ({
+      quote: `mpp-${amountMsats}`,
+      request,
+      amount: amountMsats / 1000,
+      fee_reserve: 1,
+      state: 'UNPAID',
+      unit: 'sat',
+    })),
     checkMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', state: 'PAID' }),
     createMeltQuoteBolt12: vi.fn().mockResolvedValue({ quote: 'bolt12-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
     checkMeltQuoteBolt12: vi.fn().mockResolvedValue({ quote: 'bolt12-quote-id', state: 'PAID' }),
@@ -520,6 +537,7 @@ describe('useCashuWallet mint URL policy', () => {
 
 describe('useCashuWallet mintFromQuote proof validation', () => {
   const mintUrl = 'https://mint.example.com';
+  const invoice2000 = 'lnbc20u1p3y0x3hpp5743k2g0fsqqxj7n8qzuhns5gmkk4djeejk3wkp64ppevgekvc0jsdqcve5kzar2v9nr5gpqd4hkuetesp5ez2g297jduwc20t6lmqlsg3man0vf2jfd8ar9fh8fhn2g8yttfkqxqy9gcqcqzys9qrsgqrzjqtx3k77yrrav9hye7zar2rtqlfkytl094dsp0ms5majzth6gt7ca6uhdkxl983uywgqqqqlgqqqvx5qqjqrzjqd98kxkpyw0l9tyy8r8q57k7zpy9zjmh6sez752wj6gcumqnj3yxzhdsmg6qq56utgqqqqqqqqqqqeqqjq7jd56882gtxhrjm03c93aacyfy306m4fq0tskf83c0nmet8zc2lxyyg3saz8x6vwcp26xnrlagf9semau3qm2glysp7sv95693fphvsp54l567';
 
   beforeEach(() => {
     localStorage.clear();
@@ -642,6 +660,78 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('prepares an exact NUT-15 plan across two advertising mints before spending', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const secondMint = 'https://mint-two.example.com';
+    await saveProofsForMint(mintUrl, [{ id: 'ks', amount: 1200, secret: 'mpp-a', C: 'C-mpp-a' }], encKey);
+    await saveProofsForMint(secondMint, [{ id: 'ks', amount: 1200, secret: 'mpp-b', C: 'C-mpp-b' }], encKey);
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const mock = mocks.createMockWallet();
+      mock.lazyGetMintInfo.mockResolvedValue({
+        isSupported: (nut: number) => nut === 15
+          ? { supported: true, params: [{ method: 'bolt11', unit: 'sat' }] }
+          : { supported: false },
+      });
+      return mock;
+    } as never);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [
+        { name: 'One', url: mintUrl },
+        { name: 'Two', url: secondMint },
+      ] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    await act(async () => result.current.calculateAllBalances());
+
+    const plan = await act(async () => result.current.prepareMultiPathPayment(invoice2000));
+
+    expect(plan).not.toBeNull();
+    expect(plan?.amountSats).toBe(2000);
+    expect(plan?.legs).toHaveLength(2);
+    expect(plan?.legs.reduce((sum, leg) => sum + leg.amountMsats, 0)).toBe(2_000_000);
+    expect(plan?.totalFeeReserveSats).toBe(2);
+  });
+
+  it('uses the NUT-17 BOLT12 mint-quote subscription when advertised', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    vi.mocked(wallet.lazyGetMintInfo).mockResolvedValue({
+      isSupported: (nut: number) => nut === 17
+        ? { supported: true, params: [{ method: 'bolt12', unit: 'sat', commands: ['bolt12_mint_quote'] }] }
+        : { supported: false },
+    } as Awaited<ReturnType<typeof wallet.lazyGetMintInfo>>);
+    const onPaid = vi.fn();
+
+    const stop = await act(async () => result.current.watchMintQuote('bolt12-live', onPaid, 'bolt12'));
+
+    expect(wallet.mint.connectWebSocket).toHaveBeenCalledOnce();
+    expect(mocks.wsCreateSubscription).toHaveBeenCalledWith(
+      { kind: 'bolt12_mint_quote', filters: ['bolt12-live'] },
+      expect.any(Function),
+      expect.any(Function),
+    );
+    const callback = mocks.wsCreateSubscription.mock.calls.at(-1)?.[1] as (quote: {
+      quote: string;
+      amount_paid: number;
+      amount_issued: number;
+    }) => void;
+    callback({ quote: 'bolt12-live', amount_paid: 21, amount_issued: 0 });
+    expect(onPaid).toHaveBeenCalledOnce();
+    stop();
+    expect(mocks.wsCancelSubscription).toHaveBeenCalledWith(
+      'subscription-id',
+      callback,
+      expect.any(Function),
+    );
+  });
+
   it('persists a BOLT12 offer and mints its paid amount through the BOLT12 endpoint', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     const encKey = await deriveEncryptionKey(seedPhrase);
@@ -651,6 +741,12 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     );
     await waitFor(() => expect(result.current.wallet).not.toBeNull());
     const wallet = result.current.wallet!;
+    vi.mocked(wallet.checkProofsStates).mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((proof) => ({
+        Y: hashToCurve(new TextEncoder().encode(proof.secret)).toHex(true),
+        state: 'UNSPENT',
+      })) as never,
+    );
 
     const quote = await act(async () => result.current.requestBolt12Offer(21));
     expect(quote?.request).toBe('lno1offer');
@@ -659,7 +755,12 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
       expect.objectContaining({ amount: 21 }),
     );
     const pending = (await loadTransactions(encKey)).find((transaction) => transaction.quoteId === 'bolt12-mint-quote');
-    expect(pending).toMatchObject({ status: 'pending', bolt12: true, paymentRequest: 'lno1offer' });
+    expect(pending).toMatchObject({
+      status: 'pending',
+      bolt12: true,
+      paymentRequest: 'lno1offer',
+      quotePrivateKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
 
     await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
 
@@ -667,7 +768,7 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     expect(wallet.mintProofsBolt12).toHaveBeenCalledWith(
       21,
       expect.objectContaining({ quote: 'bolt12-mint-quote', amount_paid: 21 }),
-      expect.stringMatching(/^[0-9a-f]{64}$/),
+      pending?.quotePrivateKey,
       expect.objectContaining({ counter: expect.any(Number) }),
     );
     expect(validateReceivedProofs).toHaveBeenCalledWith(
@@ -676,7 +777,7 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     );
   });
 
-  it('does not issue the same paid BOLT12 quote twice', async () => {
+  it('does not issue a BOLT12 quote again when no new amount is available', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     const { result } = renderHook(
       () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
@@ -684,12 +785,63 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     );
     await waitFor(() => expect(result.current.wallet).not.toBeNull());
     const wallet = result.current.wallet!;
+    vi.mocked(wallet.checkProofsStates).mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((proof) => ({
+        Y: hashToCurve(new TextEncoder().encode(proof.secret)).toHex(true),
+        state: 'UNSPENT',
+      })) as never,
+    );
+    vi.mocked(wallet.checkMintQuoteBolt12)
+      .mockResolvedValueOnce({
+        quote: 'bolt12-mint-quote', request: 'lno1offer', amount: 21, unit: 'sat', expiry: null,
+        pubkey: `02${'1'.repeat(64)}`, amount_paid: 21, amount_issued: 0,
+      })
+      .mockResolvedValueOnce({
+        quote: 'bolt12-mint-quote', request: 'lno1offer', amount: 21, unit: 'sat', expiry: null,
+        pubkey: `02${'1'.repeat(64)}`, amount_paid: 21, amount_issued: 21,
+      });
 
     await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
     await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
 
     expect(wallet.mintProofsBolt12).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(result.current.error).toContain('already been minted'));
+    await waitFor(() => expect(result.current.error).toContain('Offer not yet paid'));
+  });
+
+  it('issues newly paid BOLT12 increments from the same reusable offer', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    vi.mocked(wallet.checkProofsStates).mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((proof) => ({
+        Y: hashToCurve(new TextEncoder().encode(proof.secret)).toHex(true),
+        state: 'UNSPENT',
+      })) as never,
+    );
+    vi.mocked(wallet.checkMintQuoteBolt12)
+      .mockResolvedValueOnce({
+        quote: 'bolt12-mint-quote', request: 'lno1offer', amount: 21, unit: 'sat', expiry: null,
+        pubkey: `02${'1'.repeat(64)}`, amount_paid: 10, amount_issued: 0,
+      })
+      .mockResolvedValueOnce({
+        quote: 'bolt12-mint-quote', request: 'lno1offer', amount: 21, unit: 'sat', expiry: null,
+        pubkey: `02${'1'.repeat(64)}`, amount_paid: 21, amount_issued: 10,
+      });
+
+    expect(
+      await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12')),
+      result.current.error,
+    ).toBe(true);
+    expect(
+      await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12')),
+      result.current.error,
+    ).toBe(true);
+
+    expect(vi.mocked(wallet.mintProofsBolt12).mock.calls.map((call) => call[0])).toEqual([10, 11]);
   });
 });
 
