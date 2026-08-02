@@ -396,18 +396,20 @@ export function CashuWalletTab() {
             Manage mints
           </Button>
 
-          <div className='flex gap-2'>
+          <div className='grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_auto]'>
             <Input
+              className='min-w-0'
               placeholder='Mint name'
               value={mintName}
               onChange={(e) => setMintName(e.target.value)}
             />
             <Input
+              className='min-w-0'
               placeholder='https://mint.example.com'
               value={mintUrl}
               onChange={(e) => setMintUrl(e.target.value)}
             />
-            <Button onClick={handleAddMint} disabled={!mintName.trim() || !mintUrl.trim()}>
+            <Button className='w-full sm:w-auto' onClick={handleAddMint} disabled={!mintName.trim() || !mintUrl.trim()}>
               Add
             </Button>
           </div>
@@ -433,7 +435,7 @@ export function CashuWalletTab() {
       </Card>
 
       <Dialog open={manageMintsOpen} onOpenChange={setManageMintsOpen}>
-        <DialogContent className='max-w-lg'>
+        <DialogContent className='max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>Manage mints</DialogTitle>
           </DialogHeader>

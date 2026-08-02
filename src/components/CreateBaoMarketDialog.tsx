@@ -11,6 +11,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
@@ -24,6 +31,21 @@ interface CreateBaoMarketDialogProps {
   /** Called after the market event is published (e.g. to refetch the list). */
   onCreated?: () => void;
 }
+
+export const MARKET_CATEGORIES = [
+  { value: 'bitcoin', label: 'Bitcoin' },
+  { value: 'politics', label: 'Politics' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'nostr', label: 'Nostr' },
+  { value: 'angor-markets', label: 'Angor Markets' },
+  { value: 'culture', label: 'Culture' },
+  { value: 'events', label: 'Events' },
+  { value: 'climate-energy', label: 'Climate & Energy' },
+  { value: 'economics', label: 'Economics' },
+  { value: 'tech-science', label: 'Tech & Science' },
+  { value: 'bao', label: 'BAO' },
+  { value: 'other', label: 'Other' },
+] as const;
 
 /**
  * Create a prediction market nostr-natively: publishes a kind-38000 market
@@ -39,14 +61,14 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('bao-fund');
+  const [category, setCategory] = useState('bitcoin');
   const [outcomes, setOutcomes] = useState<string[]>(['yes', 'no']);
   const [endDays, setEndDays] = useState('30');
 
   const reset = () => {
     setTitle('');
     setDescription('');
-    setCategory('bao-fund');
+    setCategory('bitcoin');
     setOutcomes(['yes', 'no']);
     setEndDays('30');
   };
@@ -80,7 +102,7 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
         tags: [
           ['d', id],
           ['title', title.trim()],
-          ['c', category.trim() || 'bao-fund'],
+          ['c', category],
           ['n', BAO_MARKET_NETWORK],
           ['end', String(end)],
           ...validOutcomes.map((o) => ['outcome', o]),
@@ -138,12 +160,18 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="mkt-cat">Category</Label>
-              <Input
-                id="mkt-cat"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="bao-fund"
-              />
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger id="mkt-cat" aria-label="Category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MARKET_CATEGORIES.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="mkt-days">Ends in (days)</Label>
