@@ -58,9 +58,33 @@ const mocks = vi.hoisted(() => ({
     checkProofsStates: vi.fn().mockResolvedValue([]),
     createMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', request: 'lnbc...', state: 'UNPAID' }),
     checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', state: 'PAID' }),
+    createMintQuoteBolt12: vi.fn().mockResolvedValue({
+      quote: 'bolt12-mint-quote',
+      request: 'lno1offer',
+      amount: 21,
+      unit: 'sat',
+      expiry: null,
+      pubkey: `02${'1'.repeat(64)}`,
+      amount_paid: 0,
+      amount_issued: 0,
+    }),
+    checkMintQuoteBolt12: vi.fn().mockResolvedValue({
+      quote: 'bolt12-mint-quote',
+      request: 'lno1offer',
+      amount: 21,
+      unit: 'sat',
+      expiry: null,
+      pubkey: `02${'1'.repeat(64)}`,
+      amount_paid: 21,
+      amount_issued: 0,
+    }),
     mintProofs: vi.fn().mockImplementation(async (amount: number) => {
       const callId = ++mocks.mintProofsCallCount;
       return [{ id: 'ks', amount, secret: `mint-secret-${callId}`, C: `C-mint-${callId}` }];
+    }),
+    mintProofsBolt12: vi.fn().mockImplementation(async (amount: number) => {
+      const callId = ++mocks.mintProofsCallCount;
+      return [{ id: 'ks', amount, secret: `bolt12-mint-secret-${callId}`, C: `C-bolt12-mint-${callId}` }];
     }),
     createMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', amount: 21, fee_reserve: 1, state: 'UNPAID' }),
     checkMeltQuote: vi.fn().mockResolvedValue({ quote: 'melt-quote-id', state: 'PAID' }),
@@ -538,6 +562,56 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
 
     await waitFor(() => expect(result.current.error).toBe('Mint failed: invalid proof'));
+  });
+
+  it('persists a BOLT12 offer and mints its paid amount through the BOLT12 endpoint', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+
+    const quote = await act(async () => result.current.requestBolt12Offer(21));
+    expect(quote?.request).toBe('lno1offer');
+    expect(wallet.createMintQuoteBolt12).toHaveBeenCalledWith(
+      expect.stringMatching(/^(02|03)[0-9a-f]{64}$/),
+      expect.objectContaining({ amount: 21 }),
+    );
+    const pending = (await loadTransactions(encKey)).find((transaction) => transaction.quoteId === 'bolt12-mint-quote');
+    expect(pending).toMatchObject({ status: 'pending', bolt12: true, paymentRequest: 'lno1offer' });
+
+    await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
+
+    expect(wallet.checkMintQuoteBolt12).toHaveBeenCalledWith('bolt12-mint-quote');
+    expect(wallet.mintProofsBolt12).toHaveBeenCalledWith(
+      21,
+      expect.objectContaining({ quote: 'bolt12-mint-quote', amount_paid: 21 }),
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+      expect.objectContaining({ counter: expect.any(Number) }),
+    );
+    expect(validateReceivedProofs).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ amount: 21 })]),
+      expect.objectContaining({ requireDleq: true }),
+    );
+  });
+
+  it('does not issue the same paid BOLT12 quote twice', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+
+    await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
+    await act(async () => result.current.mintFromQuote('bolt12-mint-quote', 21, 'bolt12'));
+
+    expect(wallet.mintProofsBolt12).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.error).toContain('already been minted'));
   });
 });
 

@@ -42,11 +42,12 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { DEFAULT_MINTS, normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { Transaction } from '@/lib/cashu/storage';
-import type { Bolt12MintQuoteResponse, MintQuoteResponse } from '@cashu/cashu-ts';
-
-type DepositQuote =
-  | { method: 'bolt11'; quote: MintQuoteResponse }
-  | { method: 'bolt12'; quote: Bolt12MintQuoteResponse };
+interface DepositQuote {
+  method: 'bolt11' | 'bolt12';
+  quoteId: string;
+  request: string;
+  amount: number;
+}
 
 export function CashuWalletTab() {
   const { toast } = useToast();
@@ -58,6 +59,7 @@ export function CashuWalletTab() {
   const [invoiceAmount, setInvoiceAmount] = useState('');
   const [depositMethod, setDepositMethod] = useState<'bolt11' | 'bolt12'>('bolt11');
   const [invoiceQuote, setInvoiceQuote] = useState<DepositQuote | null>(null);
+  const [dismissedQuoteId, setDismissedQuoteId] = useState<string | null>(null);
 
   const [sendAmount, setSendAmount] = useState('');
   const [sendMemo, setSendMemo] = useState('');
@@ -124,6 +126,28 @@ export function CashuWalletTab() {
     setInvoiceQuote(null);
   }, [wallet.mintUrl, supportsBolt12Mint, depositMethod]);
 
+  useEffect(() => {
+    if (invoiceQuote) return;
+    const pending = [...wallet.transactions]
+      .reverse()
+      .find((transaction) =>
+        transaction.type === 'mint'
+        && transaction.status === 'pending'
+        && safeNormalizeMintUrl(transaction.mintUrl) === safeNormalizeMintUrl(wallet.mintUrl)
+        && typeof transaction.quoteId === 'string'
+        && typeof transaction.paymentRequest === 'string'
+        && transaction.quoteId !== dismissedQuoteId,
+      );
+    if (!pending?.quoteId || !pending.paymentRequest) return;
+    setInvoiceAmount(String(pending.amount));
+    setInvoiceQuote({
+      method: pending.bolt12 ? 'bolt12' : 'bolt11',
+      quoteId: pending.quoteId,
+      request: pending.paymentRequest,
+      amount: pending.amount,
+    });
+  }, [dismissedQuoteId, invoiceQuote, wallet.mintUrl, wallet.transactions]);
+
   const handleReceiveToken = async () => {
     if (!receiveTokenStr.trim()) return;
     await wallet.receiveToken(receiveTokenStr.trim());
@@ -138,22 +162,16 @@ export function CashuWalletTab() {
     }
     if (depositMethod === 'bolt12') {
       const quote = await wallet.requestBolt12Offer(amount, '2140.wtf Cashu deposit');
-      if (quote) setInvoiceQuote({ method: 'bolt12', quote });
+      if (quote) setInvoiceQuote({ method: 'bolt12', quoteId: quote.quote, request: quote.request, amount });
     } else {
       const quote = await wallet.requestInvoice(amount, '2140.wtf Cashu deposit');
-      if (quote) setInvoiceQuote({ method: 'bolt11', quote });
+      if (quote) setInvoiceQuote({ method: 'bolt11', quoteId: quote.quote, request: quote.request, amount });
     }
   };
 
   const handleMintInvoice = async () => {
     if (!invoiceQuote) return;
-    const quote = invoiceQuote.quote;
-    const amount = quote.amount ?? parseInt(invoiceAmount, 10);
-    if (invoiceQuote.method === 'bolt12') {
-      await wallet.mintFromQuote(quote.quote, amount, invoiceQuote.quote);
-    } else {
-      await wallet.mintFromQuote(quote.quote, amount);
-    }
+    await wallet.mintFromQuote(invoiceQuote.quoteId, invoiceQuote.amount, invoiceQuote.method);
     setInvoiceQuote(null);
     setInvoiceAmount('');
   };
@@ -417,16 +435,16 @@ export function CashuWalletTab() {
                   ) : (
                     <div className='space-y-4 flex flex-col items-center'>
                       <div className='rounded-xl bg-white p-4 shadow-sm'>
-                        <QRCodeSVG value={invoiceQuote.quote.request} size={200} level='M' />
+                        <QRCodeSVG value={invoiceQuote.request} size={200} level='M' />
                       </div>
                       <p className='text-xs text-muted-foreground text-center break-all max-w-xs'>
-                        {invoiceQuote.quote.request}
+                        {invoiceQuote.request}
                       </p>
                       <div className='flex gap-2'>
                         <Button
                           variant='outline'
                           size='sm'
-                          onClick={() => copyToClipboard(invoiceQuote.quote.request, setCopiedInvoice)}
+                          onClick={() => copyToClipboard(invoiceQuote.request, setCopiedInvoice)}
                         >
                           {copiedInvoice ? <Check className='size-3.5 mr-1.5' /> : <Copy className='size-3.5 mr-1.5' />}
                           {copiedInvoice ? 'Copied' : `Copy ${invoiceQuote.method === 'bolt12' ? 'offer' : 'invoice'}`}
@@ -434,7 +452,10 @@ export function CashuWalletTab() {
                         <Button size='sm' onClick={handleMintInvoice} disabled={wallet.loading}>
                           Confirm payment
                         </Button>
-                        <Button variant='ghost' size='sm' onClick={() => setInvoiceQuote(null)}>
+                        <Button variant='ghost' size='sm' onClick={() => {
+                          setDismissedQuoteId(invoiceQuote.quoteId);
+                          setInvoiceQuote(null);
+                        }}>
                           Cancel
                         </Button>
                       </div>

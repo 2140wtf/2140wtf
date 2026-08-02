@@ -163,7 +163,7 @@ export interface CashuWalletActions {
   getWalletP2pkPubkey: () => string | null;
   requestInvoice: (amount: number, description?: string) => Promise<MintQuoteResponse | null>;
   requestBolt12Offer: (amount: number, description?: string) => Promise<Bolt12MintQuoteResponse | null>;
-  mintFromQuote: (quoteId: string, amount: number, bolt12Quote?: Bolt12MintQuoteResponse) => Promise<void>;
+  mintFromQuote: (quoteId: string, amount: number, method?: 'bolt11' | 'bolt12') => Promise<void>;
   payInvoice: (invoice: string) => Promise<{ success: boolean; amount: number; preimage?: string; pending?: boolean; quote?: MeltQuoteResponse }>;
   payBolt12: (offer: string, amountSats: number) => Promise<{ success: boolean; amount: number; pending?: boolean; quote?: Bolt12MeltQuoteResponse }>;
   sendNutzap: (amount: number, recipientNpubOrNprofile: string, mintUrl: string, opts?: { memo?: string; zappedEvent?: { id: string; kind: number; relay?: string } }) => Promise<NutzapSendResult>;
@@ -2732,6 +2732,7 @@ export function useCashuWallet(
             mintUrl,
             status: 'pending',
             quoteId: quote.quote,
+            paymentRequest: quote.request,
             expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
           }, encKey || undefined, legacyEncKeyRef.current ?? undefined);
         });
@@ -2778,6 +2779,7 @@ export function useCashuWallet(
           quoteId: quote.quote,
           expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
           bolt12: true,
+          paymentRequest: quote.request,
         }, encKeyRef.current!, legacyEncKeyRef.current ?? undefined);
       });
       await refreshTransactions();
@@ -2792,7 +2794,7 @@ export function useCashuWallet(
     }
   }, [wallet, mintUrl, refreshTransactions, triggerBackup]);
 
-  const mintFromQuote = useCallback(async (quoteId: string, amount: number, bolt12Quote?: Bolt12MintQuoteResponse) => {
+  const mintFromQuote = useCallback(async (quoteId: string, amount: number, method: 'bolt11' | 'bolt12' = 'bolt11') => {
     const encKey = encKeyRef.current;
     const bip39Seed = bip39SeedRef.current;
     const err = validateAmount(amount);
@@ -2833,7 +2835,7 @@ export function useCashuWallet(
 
       await storageRef.current.withProofLock(async () => {
         // Verify quote is paid inside the lock to prevent race-conditioned double-mint
-        const checkedBolt12 = bolt12Quote
+        const checkedBolt12 = method === 'bolt12'
           ? await withTimeout(wallet.checkMintQuoteBolt12(quoteId), 15000, 'BOLT12 mint quote check')
           : null;
         const quoteCheck = checkedBolt12 ?? await withTimeout(
