@@ -103,6 +103,15 @@ describe("rekey events (CORD-06 §1–2)", () => {
     expect(full.length).toBe(1);
     expect(full[0].complete).toBe(true);
     expect([...full[0].chunks.values()].reduce((n, c) => n + c.blobs.length, 0)).toBe(250);
+
+    // A rotator can sign two different payloads for one index. Relay order
+    // must not decide which valid-looking rotation every client assembles.
+    const equivocation = { ...parsed[0], sealId: "00".repeat(32), wrapId: "ff".repeat(32), blobs: [{ locator: "11".repeat(32), wrapped: "winner" }] };
+    const forward = groupRotations([parsed[0], equivocation, ...parsed.slice(1)]);
+    const reverse = groupRotations([...parsed.slice(1).reverse(), equivocation, parsed[0]]);
+    expect(forward[0].chunks.get(equivocation.chunkIndex)?.sealId).toBe(equivocation.sealId);
+    expect(reverse[0].chunks.get(equivocation.chunkIndex)?.sealId).toBe(equivocation.sealId);
+    expect(forward[0].chunks.get(equivocation.chunkIndex)?.blobs).toEqual(reverse[0].chunks.get(equivocation.chunkIndex)?.blobs);
   });
 
   it("continuity: match adopts, higher prevepoch is a gap, mismatch is a fork", () => {
@@ -232,4 +241,3 @@ describe("exclusion vs. history (join-onto-a-past-Refounding, liveness-only bug)
     expect(rotationExcludesMe(rotationPublishedAtMs(chunkedRotationAtMs(joinedAt + 1)), joinedAt)).toBe(true);
   });
 });
-
