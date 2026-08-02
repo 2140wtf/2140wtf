@@ -31,6 +31,7 @@ import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoP
 import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { useBaoSmjOdds, withSmjOdds } from "@/hooks/useBaoSmjOdds";
 import { BaoMarketDetailDialog } from "@/components/BaoMarketDetailDialog";
+import { MarketMiniSparkline } from "@/components/MarketMiniSparkline";
 import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
 import { MyTradesSection } from "@/components/MyTradesSection";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,10 @@ function titleCaseCategory(name: string): string {
   return name
     .replace(/[_-]/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
 /** Rail id → chip label/color (bao.markets card chips). */
@@ -184,6 +189,8 @@ const MarketCard = memo(function MarketCard({
         {/* Payment rails (bao.markets chips) */}
         <RailChips rails={market.paymentRails} />
 
+        {!market.viaRelay && <MarketMiniSparkline market={market} />}
+
         {/* Actions — Details / Buy Yes / Buy No (bao.markets row) */}
         <div className="grid grid-cols-3 gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={() => onSelect(market)}>
@@ -219,6 +226,10 @@ const MarketCard = memo(function MarketCard({
             {formatDuration(market.createdAt, market.endTime)}
           </span>
           <span className="tabular-nums">Ends {formatEndDate(market.endTime)}</span>
+        </div>
+        <div className="flex flex-wrap gap-x-3 text-[11px] font-medium tabular-nums text-muted-foreground">
+          <span>Vol {market.totalVolumeSats === undefined ? '—' : `${formatCompactNumber(market.totalVolumeSats)} sats`}</span>
+          <span>{market.tradeCount === undefined ? '— trades' : `${formatCompactNumber(market.tradeCount)} trades`}</span>
         </div>
       </CardContent>
     </Card>
@@ -411,6 +422,15 @@ export function PredictionMarketsPage(): React.JSX.Element {
       </PageHeader>
 
       <div className="px-4 py-4 max-w-6xl mx-auto space-y-4">
+        <Alert className="border-primary/30 bg-primary/5">
+          <Info className="size-4" />
+          <AlertDescription>
+            <span className="font-semibold text-foreground">The first Bitcoin-only prediction market on Nostr.</span>{' '}
+            ₿AO MARKETS is currently for training and demo use only. Mainnet is expected after testing passes.
+            Feedback is welcome while we prepare it.
+          </AlertDescription>
+        </Alert>
+
         <MyTradesSection
           onOpenMarket={(market, position) => {
             if (market) {
@@ -500,8 +520,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            Prediction Markets powered by ₿AO MARKETS. All markets are for play only with dummy
-            bitcoin in demo mode, claim testnet bitcoin by visiting{' '}
+            Practice with dummy bitcoin in demo mode; claim testnet bitcoin by visiting{' '}
             <button
               type="button"
               onClick={() => openUrl("https://bao.markets")}

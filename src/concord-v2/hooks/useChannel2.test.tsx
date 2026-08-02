@@ -45,11 +45,14 @@ import {
 import { buildRumor, channelBindingTags, sealRumor, wrapSeal } from "@/concord-v2/lib/stream";
 import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
 
-import { useChannelTimeline2 } from "./useChannel2";
+import { channelKey, useChannelTimeline2 } from "./useChannel2";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
-const h = vi.hoisted(() => ({ pool: undefined as unknown }));
+const h = vi.hoisted(() => ({
+  pool: undefined as unknown,
+  user: { pubkey: "11".repeat(32) },
+}));
 
 vi.mock("@nostrify/react", () => ({
   useNostr: () => ({ nostr: h.pool }),
@@ -62,7 +65,7 @@ vi.mock("@/concord-v2/hooks/useControlPlane2", () => ({
   useControlFold2: () => ({ data: undefined }),
 }));
 vi.mock("@/hooks/useCurrentUser", () => ({
-  useCurrentUser: () => ({ user: undefined }),
+  useCurrentUser: () => ({ user: h.user }),
 }));
 vi.mock("@/hooks/useSendStatusMap", () => ({
   useSendStatusMap: () => ({ setStatus: () => {} }),
@@ -206,6 +209,15 @@ function makeWrapper() {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () => {
+  it("scopes decrypted timeline query keys by account and held stream set", () => {
+    expect(channelKey("aa", "channel", ["epoch-1"])).not.toEqual(
+      channelKey("bb", "channel", ["epoch-1"]),
+    );
+    expect(channelKey("aa", "channel", ["epoch-1"])).not.toEqual(
+      channelKey("aa", "channel", ["epoch-2"]),
+    );
+  });
+
   it(
     "renders EVERY message that arrived while the app was closed, even when the offline burst exceeds one backfill page",
     { timeout: 40_000 },
@@ -221,7 +233,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
       writeRumors(await openChatBatch(oldWraps, channel));
       await updateChannelCursor(idHex, { newest: base + 9, oldest: base });
       await waitFor(async () => {
-        expect((await queryChannelRumors(idHex, { limit: 200 })).length).toBe(10);
+        expect((await queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 200 })).length).toBe(10);
       });
 
       // ── While the app was closed: 80 new messages (> BACKFILL_PAGE = 50).
@@ -290,7 +302,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
       writeRumors(await openChatBatch(oldWraps, channel));
       await updateChannelCursor(idHex, { newest: base + 4, oldest: base });
       await waitFor(async () => {
-        expect((await queryChannelRumors(idHex, { limit: 200 })).length).toBe(5);
+        expect((await queryChannelRumors(idHex, { streamPks: channel.streams.map((s) => s.group.pk), limit: 200 })).length).toBe(5);
       });
 
       // While the app was closed: 10 new messages — well under one page, so
@@ -354,7 +366,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
 
     // The notified messages are still recoverable locally — decoded into the
     // rumor store, or still parked for the next read.
-    const decoded = await queryChannelRumors(idHex, { limit: 10 });
+    const decoded = await queryChannelRumors(idHex, { streamPks: pks, limit: 10 });
     const stillParked = await peekPendingWraps(pks);
     expect(decoded.length + stillParked.length).toBeGreaterThanOrEqual(3);
 
@@ -364,7 +376,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
     writeRumors(opened);
     ackPendingWraps(stillParked.filter((w) => opened.some((o) => o.wrapId === w.id)).map((w) => w.id));
     await waitFor(async () => {
-      expect((await queryChannelRumors(idHex, { limit: 10 })).length).toBe(3);
+      expect((await queryChannelRumors(idHex, { streamPks: pks, limit: 10 })).length).toBe(3);
       expect((await peekPendingWraps(pks)).length).toBe(0);
     });
   });
@@ -379,7 +391,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
     const wraps = [await wrapChatAt(chanA.channel, alice, "a-msg", now - 100)];
     writeRumors(await openChatBatch(wraps, chanA.channel));
     await waitFor(async () => {
-      expect((await queryChannelRumors(chanA.idHex, { limit: 10 })).length).toBe(1);
+      expect((await queryChannelRumors(chanA.idHex, { streamPks: chanA.channel.streams.map((s) => s.group.pk), limit: 10 })).length).toBe(1);
     });
 
     // Channel B is empty and its relay is cold (auth round-trips), so B's first
@@ -431,7 +443,7 @@ describe("useChannelTimeline2 — issue #19 (notified but never rendered)", () =
     writeRumors(await openChatBatch([await wrapChatAt(chanA.channel, alice, "a-msg", now - 100)], chanA.channel));
     const bWrap = await wrapChatAt(chanB.channel, alice, "b-msg", now - 50);
     await waitFor(async () => {
-      expect((await queryChannelRumors(chanA.idHex, { limit: 10 })).length).toBe(1);
+      expect((await queryChannelRumors(chanA.idHex, { streamPks: chanA.channel.streams.map((s) => s.group.pk), limit: 10 })).length).toBe(1);
     });
 
     // B's relay is slow, so the window between the empty store read and the

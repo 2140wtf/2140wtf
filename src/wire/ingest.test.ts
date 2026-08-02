@@ -136,7 +136,10 @@ describe("ingestWireEvents", () => {
 
     expect(store.events).toHaveLength(0); // wraps never land in the plaintext store
     expect(scopes.has(`c2:${idHex}`)).toBe(true);
-    const rumors = await queryChannelRumors(idHex, { limit: 10 });
+    const rumors = await queryChannelRumors(idHex, {
+      streamPks: channel.streams.map((stream) => stream.group.pk),
+      limit: 10,
+    });
     expect(rumors.some((r) => r.content === "sealed hello")).toBe(true);
   });
 
