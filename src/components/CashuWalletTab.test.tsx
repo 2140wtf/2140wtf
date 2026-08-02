@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import { CashuWalletTab } from './CashuWalletTab';
@@ -7,6 +7,7 @@ import { CashuWalletTab } from './CashuWalletTab';
 const mocks = vi.hoisted(() => ({
   sendTokenMock: vi.fn(),
   mintFromQuoteMock: vi.fn(),
+  removeMintMock: vi.fn(),
   transactions: [] as Array<Record<string, unknown>>,
 }));
 
@@ -20,6 +21,7 @@ vi.mock('@/hooks/useCashuWalletContext', () => ({
     mintUrl: 'https://mint.example',
     setMintUrl: vi.fn(),
     totalBalance: 10_000,
+    balances: { 'https://mint.example': 0 },
     loading: false,
     calculateAllBalances: vi.fn(),
     backupStatus: 'idle',
@@ -32,7 +34,7 @@ vi.mock('@/hooks/useCashuWalletContext', () => ({
     sendNutzap: vi.fn(),
     nutzaps: [],
     addCustomMint: vi.fn(),
-    removeCustomMint: vi.fn(),
+    removeCustomMint: mocks.removeMintMock,
     fetchBackup: vi.fn(),
     restoreFromBackup: vi.fn(),
     transactions: mocks.transactions,
@@ -51,6 +53,7 @@ describe('CashuWalletTab send token persistence', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.sendTokenMock.mockResolvedValue('cashuBtesttoken');
+    mocks.removeMintMock.mockResolvedValue({ status: 'removed' });
     mocks.transactions = [];
   });
 
@@ -115,5 +118,40 @@ describe('CashuWalletTab send token persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm payment' }));
 
     expect(mocks.mintFromQuoteMock).toHaveBeenCalledWith('bolt12-quote', 21, 'bolt12');
+  });
+});
+
+describe('CashuWalletTab mint management', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.transactions = [];
+    mocks.removeMintMock.mockResolvedValue({ status: 'removed' });
+  });
+
+  afterEach(() => cleanup());
+
+  it('removes a zero-balance mint directly from the manager', async () => {
+    render(<MemoryRouter><CashuWalletTab /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage mints' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Test Mint' }));
+
+    await waitFor(() => expect(mocks.removeMintMock).toHaveBeenCalledWith('https://mint.example', undefined));
+    expect(screen.queryByText('This mint still holds ecash')).not.toBeInTheDocument();
+  });
+
+  it('warns with the authoritative balance before destructive removal', async () => {
+    mocks.removeMintMock
+      .mockResolvedValueOnce({ status: 'confirmation-required', balance: 42 })
+      .mockResolvedValueOnce({ status: 'removed' });
+    render(<MemoryRouter><CashuWalletTab /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage mints' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Test Mint' }));
+
+    expect(await screen.findByText(/holds 42 sats/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove and lose 42 sats' }));
+    await waitFor(() => expect(mocks.removeMintMock).toHaveBeenLastCalledWith('https://mint.example', 42));
   });
 });
