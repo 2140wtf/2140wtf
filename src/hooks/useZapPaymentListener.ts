@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { NRelay1, type NostrEvent } from '@nostrify/nostrify';
 import type { Event } from 'nostr-tools';
+import { verifyEvent } from 'nostr-tools/pure';
+
+import { receiptZapRequest } from '@/lib/zaps';
 
 /**
  * Well-known public relays that LNURL servers commonly publish kind 9735
@@ -28,6 +31,7 @@ export function useZapPaymentListener(
   target: Event | undefined,
   relayUrls: string[],
   onPaid: () => void,
+  expectedProviderPubkey?: string,
 ): void {
   // The invoice that was already detected as paid — NOT a bare boolean. The
   // dialog this hook lives in stays mounted between zaps and resets its
@@ -52,12 +56,23 @@ export function useZapPaymentListener(
 
     const matchesInvoice = (event: NostrEvent): boolean => {
       const bolt11 = event.tags.find(([name]) => name === 'bolt11')?.[1];
-      return !!bolt11 && bolt11.toLowerCase() === invoice.toLowerCase();
+      if (!bolt11 || bolt11.toLowerCase() !== invoice.toLowerCase()) return false;
+      if (event.kind !== 9735 || !verifyEvent(event)) return false;
+      if (expectedProviderPubkey && event.pubkey !== expectedProviderPubkey) return false;
+      if (!event.tags.some(([name, value]) => name === 'p' && value === target.pubkey)) return false;
+
+      // A receipt is not proof merely because it repeats a visible invoice.
+      // Require the provider to commit the payer's signed kind-9734 request,
+      // and require that request to name this exact recipient/target.
+      const request = receiptZapRequest(event);
+      if (!request?.tags.some(([name, value]) => name === 'p' && value === target.pubkey)) return false;
+      if (target.kind !== 0 && !request.tags.some(([name, value]) => name === 'e' && value === target.id)) return false;
+      return true;
     };
 
     const listeners = listenUrls.map(async (url) => {
       if (paidInvoiceRef.current === invoice || abortController.signal.aborted) return;
-      const relay = new NRelay1(url);
+      let relay: NRelay1 | null = null;
       try {
         // NIP-57 receipts only carry an `e` tag when the zap targeted an
         // event — profile (kind 0) and QR-code zaps produce receipts with only
@@ -68,6 +83,22 @@ export function useZapPaymentListener(
           { kinds: [9735], '#e': [target.id], since },
           { kinds: [9735], '#p': [target.pubkey], since },
         ];
+        relay = new NRelay1(url);
+
+        // First perform a bounded catch-up query. External wallets can settle
+        // and the provider can publish its receipt in the short gap between
+        // invoice display and the live WebSocket subscription becoming ready.
+        const existing = await relay.query(
+          filters.map((filter) => ({ ...filter, limit: 20 })),
+          { signal: abortController.signal },
+        );
+        const caughtUp = existing.find(matchesInvoice);
+        if (caughtUp && paidInvoiceRef.current !== invoice && !abortController.signal.aborted) {
+          paidInvoiceRef.current = invoice;
+          onPaidRef.current();
+          return;
+        }
+
         for await (const msg of relay.req(filters, { signal: abortController.signal })) {
           if (paidInvoiceRef.current === invoice || abortController.signal.aborted) break;
           if (msg[0] !== 'EVENT') continue;
@@ -81,7 +112,7 @@ export function useZapPaymentListener(
       } catch {
         // Best-effort per-relay subscription; ignore errors.
       } finally {
-        relay.close().catch(() => {});
+        relay?.close().catch(() => {});
       }
     });
 
@@ -89,5 +120,5 @@ export function useZapPaymentListener(
       abortController.abort();
       void Promise.allSettled(listeners);
     };
-  }, [invoice, target, listenUrls]);
+  }, [invoice, target, listenUrls, expectedProviderPubkey]);
 }
