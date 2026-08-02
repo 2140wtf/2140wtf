@@ -848,6 +848,9 @@ export interface Transaction {
   bolt12?: boolean;
   /** Payment request needed to restore an open mint quote after reload. */
   paymentRequest?: string;
+  /** NUT-20 per-quote signing key. Stored only inside the encrypted
+   * transaction envelope; never render, log, or publish it. */
+  quotePrivateKey?: string;
 }
 
 export interface StoredMint {
@@ -1102,6 +1105,7 @@ export function isValidTransaction(t: unknown, _namespace?: string): t is Transa
     !['pending', 'completed', 'failed', 'expired'].includes(tx.status) ||
     (tx.quoteId !== undefined && (typeof tx.quoteId !== 'string' || tx.quoteId.length > 1000)) ||
     (tx.paymentRequest !== undefined && (typeof tx.paymentRequest !== 'string' || tx.paymentRequest.length > 10000)) ||
+    (tx.quotePrivateKey !== undefined && (typeof tx.quotePrivateKey !== 'string' || !/^[0-9a-f]{64}$/.test(tx.quotePrivateKey))) ||
     typeof tx.createdAt !== 'number' ||
     !Number.isFinite(tx.createdAt) ||
     !Number.isInteger(tx.createdAt) ||
