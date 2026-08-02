@@ -65,7 +65,7 @@ vi.mock('@/components/bao-fund/StreamBar', () => ({
   StreamBar: () => null,
 }));
 vi.mock('@/components/bao-fund/ComputeCreditsTab', () => ({
-  ComputeCreditsTab: () => null,
+  ComputeCreditsTab: ({ defaultView }: { defaultView?: 'browse' | 'agent' }) => <div>Compute credits feed: {defaultView ?? 'browse'}</div>,
 }));
 
 const fundraiserA: BaoFundraiser = {
@@ -383,12 +383,35 @@ describe('BaoFundingPage — campaign card accessibility', () => {
     expect(screen.queryByText('Run agent check')).not.toBeInTheDocument();
   });
 
-  it('opens campaign creation directly for human, agent, or mixed teams', async () => {
+  it('offers distinct milestone and agent-compute creation flows', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: /Create a campaign/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Create/ }));
+    expect(await screen.findByRole('heading', { name: 'What do you want to create?' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Create milestone campaign/ }));
     expect(await screen.findByText('Campaign creation form')).toBeInTheDocument();
     expect(screen.queryByText('Agent check required to create')).not.toBeInTheDocument();
+  });
+
+  it('opens the agent tools flow from the create choice', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Create/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Request agent compute/ }));
+    expect(await screen.findByText('Compute credits feed: agent')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Campaign A/ })).not.toBeInTheDocument();
+  });
+
+  it('shows milestone and compute opportunities together by default and filters by type', async () => {
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /Campaign A/ })).toBeInTheDocument();
+    expect(screen.getByText('Compute credits feed: browse')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Compute credits/ }));
+    expect(screen.queryByRole('button', { name: /Campaign A/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Compute credits feed: browse')).toBeInTheDocument();
   });
 
   it('renders embedded repository metadata as a review action instead of description prose', async () => {
