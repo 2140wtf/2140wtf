@@ -351,16 +351,38 @@ export function BaoCommunitiesPage() {
 
       <div className="flex-1 overflow-y-auto pb-overscroll">
         {!user ? (
-          <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-            <Lock className="size-10 text-muted-foreground" />
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold">End-to-end encrypted communities</h2>
-              <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-                ₿AO communities are sealed for their members — not even the relays can read them.
-                Sign in to see yours.
-              </p>
+          <div className="px-4 pb-16 pt-16 sm:px-6">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <Lock className="size-10 text-muted-foreground" />
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold">End-to-end encrypted communities</h2>
+                <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+                  ₿AO communities are sealed for their members — not even the relays can read them.
+                  Sign in to see yours.
+                </p>
+              </div>
+              <JoinButton className="clip-corner-lg font-medium" />
             </div>
-            <JoinButton className="clip-corner-lg font-medium" />
+
+            <figure className="mx-auto mt-20 grid max-w-6xl overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm sm:mt-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+              <div className="aspect-[3/2] overflow-hidden bg-muted lg:aspect-auto lg:min-h-72">
+                <img
+                  src="/david-chaum.webp"
+                  alt="David Chaum speaking on stage"
+                  className="size-full object-cover grayscale"
+                />
+              </div>
+              <figcaption className="flex flex-col justify-center px-6 py-8 sm:px-8 sm:py-10 lg:px-12">
+                <blockquote className="font-serif text-xl italic leading-relaxed text-foreground sm:text-2xl lg:text-3xl">
+                  “In one direction lies unprecedented scrutiny and control of people&apos;s lives; in
+                  the other, secure parity between individuals and organizations. The shape of
+                  society in the next century may depend on which approach predominates.”
+                </blockquote>
+                <cite className="mt-6 text-base not-italic text-muted-foreground sm:text-lg">
+                  — David Chaum <time dateTime="1992">1992</time>
+                </cite>
+              </figcaption>
+            </figure>
           </div>
         ) : entries.length === 0 ? (
           <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
