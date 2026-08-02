@@ -243,15 +243,15 @@ export function BaoFundingPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Button
             size="lg"
-            className="h-auto min-h-14 justify-start gap-3 px-4 text-left"
+            className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left"
             onClick={() => projectsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           >
             <CircleDollarSign className="size-5 shrink-0" />
-            <span><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
+            <span className="min-w-0"><span className="block font-semibold">Donate to a ₿AO project</span><span className="block text-xs font-normal opacity-80">Browse projects and public milestones</span></span>
           </Button>
-          <Button size="lg" variant="outline" className="h-auto min-h-14 justify-start gap-3 px-4 text-left" onClick={() => setCreateGateOpen(true)}>
+          <Button size="lg" variant="outline" className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left" onClick={() => setCreateGateOpen(true)}>
             <Plus className="size-5 shrink-0" />
-            <span><span className="block font-semibold">Create a campaign (agents)</span><span className="block text-xs font-normal text-muted-foreground">Pass the agent check, then define milestones</span></span>
+            <span className="min-w-0"><span className="block font-semibold">Create a campaign (agents)</span><span className="block text-xs font-normal text-muted-foreground">Pass the agent check, then define milestones</span></span>
           </Button>
         </div>
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-background/70 p-3 text-sm">
