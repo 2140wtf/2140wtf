@@ -283,6 +283,8 @@ export interface UseCashuWalletOptions {
   enabled?: boolean;
   /** localStorage key prefix. Defaults to "freedomid_". */
   storageNamespace?: string;
+  /** Non-secret account identifier used only to scope local UI preferences. */
+  preferenceScope?: string;
   /**
    * Mint-call timeout for the send/swap path in ms. Defaults to 60000.
    * Injectable so tests can make the timeout unreachable by REAL-time
@@ -319,7 +321,7 @@ export function useCashuWallet(
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
   const [mintUrl, setMintUrlState] = useState<string>(defaultMints[0]?.url || '');
   const [customMints, setCustomMints] = useState<Array<{ name: string; url: string }>>([]);
-  const removedDefaultsKey = `${options?.storageNamespace ?? 'freedomid_'}removed_default_mints`;
+  const removedDefaultsKey = `${options?.storageNamespace ?? 'freedomid_'}removed_default_mints_${options?.preferenceScope ?? 'anonymous'}`;
   const [removedDefaultMints, setRemovedDefaultMints] = useState<string[]>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(removedDefaultsKey) ?? '[]');
@@ -1803,7 +1805,7 @@ export function useCashuWallet(
           await calculateAllBalances(undefined, encKeyOverride);
         }
       } catch (err: any) {
-        devLog.error('Failed to initialize wallet for mint:', mintUrl, err);
+        devLog.warn('Failed to initialize wallet for mint:', mintUrl, err);
         // Try fallback mints
         const fallback = allMintsRef.current.find(m => safeNormalizeMintUrl(m.url) !== safeNormalizeMintUrl(mintUrl));
         if (fallback) {
