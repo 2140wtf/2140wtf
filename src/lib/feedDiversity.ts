@@ -11,6 +11,30 @@ export interface DiversifyOptions {
   typeCaps?: Record<string, number>;
 }
 
+/**
+ * Reorder a page so new authors are introduced before prolific authors repeat.
+ * All items are retained; once every available author has appeared, the
+ * function continues by avoiding consecutive posts from the same author.
+ */
+export function interleaveFeedAuthors(items: FeedItem[]): FeedItem[] {
+  const remaining = [...items];
+  const result: FeedItem[] = [];
+  const seenAuthors = new Set<string>();
+  let previousAuthor: string | undefined;
+
+  while (remaining.length > 0) {
+    const unseenAuthorIndex = remaining.findIndex((item) => !seenAuthors.has(item.event.pubkey));
+    const differentAuthorIndex = remaining.findIndex((item) => item.event.pubkey !== previousAuthor);
+    const nextIndex = unseenAuthorIndex >= 0 ? unseenAuthorIndex : differentAuthorIndex >= 0 ? differentAuthorIndex : 0;
+    const [next] = remaining.splice(nextIndex, 1);
+    result.push(next);
+    seenAuthors.add(next.event.pubkey);
+    previousAuthor = next.event.pubkey;
+  }
+
+  return result;
+}
+
 /** Default per-type cap overrides. */
 const DEFAULT_TYPE_CAPS: Record<string, number> = {
   pets: 0.1, // 10% cap for Pets

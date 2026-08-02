@@ -23,9 +23,11 @@ import {
 import { isReplyEvent } from '@/lib/nostrEvents';
 import { getStorageKey } from '@/lib/storageKey';
 import { FEED_TOPICS } from '@/lib/feedTopics';
+import { interleaveFeedAuthors } from '@/lib/feedDiversity';
 import type { NostrFilter } from '@nostrify/nostrify';
 
 const PAGE_SIZE = 15;
+const GUEST_DISCOVERY_PAGE_SIZE = 30;
 
 /**
  * Over-fetch multiplier: when client-side reply filtering is active, we ask
@@ -207,11 +209,18 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
           filters.push({ kinds: authorKinds, authors: communityPubkeys, limit: fetchLimit });
         }
 
-        filters.push({ kinds: postKinds, limit: PAGE_SIZE, search: 'sort:hot protocol:nostr' });
+        const discoveryPageSize = user ? PAGE_SIZE : GUEST_DISCOVERY_PAGE_SIZE;
+        const guestDistinctAuthors = user ? '' : ' distinct:author';
+        filters.push({ kinds: postKinds, limit: discoveryPageSize, search: `sort:hot protocol:nostr${guestDistinctAuthors}` });
 
         const topicTags = getAllTopicTags();
         if (topicTags.length > 0) {
-          filters.push({ kinds: postKinds, '#t': topicTags, limit: PAGE_SIZE });
+          filters.push({
+            kinds: postKinds,
+            '#t': topicTags,
+            limit: discoveryPageSize,
+            ...(user ? {} : { search: 'distinct:author' }),
+          });
         }
 
         if (pageParam) {
@@ -241,6 +250,7 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
 
         // Sort newest-first in case the relay returned interleaved filter results.
         dedupedItems.sort((a, b) => b.event.created_at - a.event.created_at);
+        if (!user) dedupedItems = interleaveFeedAuthors(dedupedItems);
 
         cacheEvents(dedupedItems);
         return { items: dedupedItems, oldestQueryTimestamp, rawCount: validEvents.length };
@@ -428,11 +438,15 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         // which are too noisy without an author filter and require an extra
         // unwrap step. Users will see those overlays on the Follows tab.
         const globalKinds = allKinds.filter((k) => !isRepostKind(k) && !isReactionKind(k) && !isZapKind(k));
-        const filter: Record<string, unknown> = { kinds: globalKinds, limit: PAGE_SIZE, ...tagFilters };
+        const filter: Record<string, unknown> = {
+          kinds: globalKinds,
+          limit: user ? PAGE_SIZE : GUEST_DISCOVERY_PAGE_SIZE,
+          ...tagFilters,
+        };
         // Use hot sorting on the homepage Global tab for better content quality,
         // but not on kind-specific pages that pass custom kinds.
         if (tab === 'global' && !options?.kinds) {
-          filter.search = 'sort:hot protocol:nostr';
+          filter.search = user ? 'sort:hot protocol:nostr' : 'sort:hot protocol:nostr distinct:author';
         }
         if (pageParam) {
           filter.until = pageParam;
@@ -449,9 +463,11 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         // Drop Mastodon / ActivityPub bridged content from the global feed.
         const filteredEvents = validEvents.filter((ev) => !isMastodonBridgeEvent(ev));
 
-        const items = filteredEvents
+        let items = filteredEvents
           .sort((a, b) => b.created_at - a.created_at)
           .map((ev) => ({ event: ev, sortTimestamp: ev.created_at }));
+
+        if (!user) items = interleaveFeedAuthors(items);
 
         // Seed event cache so embedded note previews resolve instantly.
         cacheEvents(items);
