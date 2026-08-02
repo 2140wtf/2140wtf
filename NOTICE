@@ -1,22 +1,44 @@
-2140.wtf
-========
+2140.wtf — Copyright and Attribution Notice
+===========================================
 
-2140.wtf is free software, licensed under the GNU Affero General Public
-License v3.0 (see LICENSE). We build in the open — you are welcome to
-study, fork, and reuse this code under the terms of that license, and we
-ask that you keep the 2140.wtf name and commit authorship intact so the
-project gets credit for its work.
+2140.wtf is free software licensed under the GNU Affero General Public
+License version 3 only (AGPL-3.0-only). See LICENSE. Copyright in each
+contribution remains with its respective copyright holder.
 
-This repository contains third-party material:
+Project lineage
+---------------
 
-* Fork lineage — 2140.wtf descends from Shakespeare / ditto.pub by Alex
-  Gleason and many contributors, itself AGPL-3.0. Upstream authorship is
-  preserved in the git history.
+* The original application was created with Shakespeare as "Mew" and was
+  subsequently developed and renamed "Ditto" by Alex Gleason and other Ditto
+  contributors. That history is preserved in this repository.
 
-* Buzz pet characters (public/pets/buzz/) — the clay characters
-  "Bumble", "Fizz" and "Honey" from Buzz (https://buzz.xyz,
-  https://github.com/block/buzz), © Block, Inc., licensed under the
-  Apache License 2.0.
+* Portions of the encrypted community, chat, wallet settings, and wire-sync
+  implementation were adapted from Soapbox Armada:
+  https://gitlab.com/soapbox-pub/armada
+  Armada is licensed under AGPL-3.0.
+
+* 2140.wtf contributors have substantially extended those foundations with
+  original funding, agent, wallet, Cashu, Nostr, privacy, community, market,
+  pet, native-app, and user-interface work. These modifications are identified
+  in the Git history and are released under AGPL-3.0-only.
+
+Third-party material
+--------------------
+
+* Buzz pet characters (public/pets/buzz/) — the clay characters "Bumble",
+  "Fizz", and "Honey" from Buzz (https://buzz.xyz and
+  https://github.com/block/buzz), copyright Block, Inc., licensed under the
+  Apache License 2.0. No endorsement by or trademark licence from Block, Inc.
+  is implied.
 
 * Bleep (public/pets/bleep/) — original character artwork created for
-  2140.wtf, AGPL-3.0 like the rest of the project.
+  2140.wtf and distributed under AGPL-3.0-only with the project.
+
+* Standalone agent bundles include MIT-licensed Noble and Scure libraries.
+  Their notices and other third-party terms are recorded in
+  THIRD_PARTY_NOTICES.md and LICENSES/.
+
+The 2140.wtf name and logos are not licensed as trademarks by the AGPL. See
+TRADEMARKS.md. Required copyright, attribution, and license notices must be
+preserved; Git authorship is retained as the historical record of individual
+contributions.

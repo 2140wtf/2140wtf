@@ -1,4 +1,5 @@
 import path from "node:path";
+import { standaloneLicenseBanner } from "./standalone-license-banner.mjs";
 
 // Bundles the headless ₿AO agent driver (scripts/bao-agent.ts) into ONE
 // self-contained node ESM file at public/bao-agent.mjs — every dependency
@@ -21,5 +22,6 @@ export default {
     format: "esm",
     // One single file — nostr-tools uses dynamic imports internally.
     codeSplitting: false,
+    banner: standaloneLicenseBanner('bao-agent.mjs'),
   },
 };
