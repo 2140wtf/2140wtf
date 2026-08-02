@@ -61,13 +61,20 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
 
   const handleSelect = async (profile: SearchProfile) => {
     setError(null);
+    if (
+      !confirm(
+        "Send an identity-visible direct invite? The recipient’s inbox relays can see their pubkey, that this is a Concord invite, and its timing, size, and expiry. They cannot see the inviter or community inside it. Cancel and create a link below for lower linkability.",
+      )
+    ) {
+      return;
+    }
     setPendingPubkey(profile.pubkey);
     try {
       await sendDirectInvite({ recipientPubkey: profile.pubkey });
       setSentPubkey(profile.pubkey);
       toast({
-        title: "Invite sent",
-        description: `${profile.metadata.name || profile.metadata.display_name || "They"} will be asked to accept.`,
+        title: "Encrypted invite delivered",
+        description: "The recipient will be asked to accept.",
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't send the invite.");
@@ -181,8 +188,9 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
           </p>
         )}
         <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-          Direct invites p-tag the invitee's pubkey on the relays once. When member
-          anonymity matters, share an invite link instead — link joins are anonymous.
+          A direct invite exposes the recipient's pubkey, the Concord invite classifier,
+          timing, size, and expiry to their inbox relays. A link avoids publishing the
+          recipient before acceptance, but relay traffic can still be correlated.
         </p>
       </div>
 
