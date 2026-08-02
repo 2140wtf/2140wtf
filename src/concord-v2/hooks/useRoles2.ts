@@ -7,6 +7,7 @@ import { buildGrantEdition, buildMetadataEdition, buildRoleEdition } from "@/con
 import { bytesToHex, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
 import { adminRole, canActOnMember, canActOnPosition, emptyRoles, moderatorRole, Permissions, type MemberGrant, type Role } from "@/concord-v2/lib/roles";
 import type { CommunityMetadata, CommunityV2, ImagePointer } from "@/concord-v2/lib/types";
+import { parseRepoNaddr } from "@/lib/nip34Project";
 
 /**
  * Metadata mutations (vsk 0, MANAGE_METADATA): edit name / description /
@@ -22,7 +23,7 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
   const updateMetadata = useMutation<
     void,
     Error,
-    { name?: string; description?: string; icon?: ImagePointer | null; banner?: ImagePointer | null; relays?: string[]; repo?: string | null; fund_id?: string | null }
+    { name?: string; description?: string; icon?: ImagePointer | null; banner?: ImagePointer | null; relays?: string[]; repo?: string | null; repo_naddr?: string | null; fund_id?: string | null }
   >({
     mutationFn: async (patch) => {
       if (!user || !community) throw new Error("Not ready.");
@@ -36,6 +37,15 @@ export function useMetadataActions2(community: CommunityV2 | undefined) {
       if (patch.banner !== undefined) next.banner = patch.banner ?? undefined;
       if (patch.relays !== undefined) next.relays = patch.relays;
       if (patch.repo !== undefined) next.repo = patch.repo?.trim() || undefined;
+      if (patch.repo_naddr !== undefined) {
+        const value = patch.repo_naddr?.trim();
+        if (!value) next.repo_naddr = undefined;
+        else {
+          const pointer = parseRepoNaddr(value);
+          if (!pointer) throw new Error("Project repository must be a valid kind-30617 naddr.");
+          next.repo_naddr = pointer.naddr;
+        }
+      }
       if (patch.fund_id !== undefined) next.fund_id = patch.fund_id?.trim() || undefined;
 
       // A relay-list change fans out to old ∪ new: members still folding from
