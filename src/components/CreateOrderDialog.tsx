@@ -49,7 +49,7 @@ export function CreateOrderDialog({
   onOpenChange,
   onCreated,
 }: CreateOrderDialogProps) {
-  const { btcPrice } = useBtcPrice(open && !!listing.price);
+  const { btcPrice } = useBtcPrice(open && !!listing.price, listing.price?.currency ?? 'usd');
   const priceState = useMemo(
     () => getListingPriceState(listing, btcPrice),
     [listing, btcPrice],
