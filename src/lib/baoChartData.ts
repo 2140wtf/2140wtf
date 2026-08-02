@@ -18,3 +18,23 @@ export function normalizeBaoPriceHistory(
   }
   return [...byTime.values()].sort((a, b) => a.time - b.time);
 }
+
+/**
+ * Represent a live pool price honestly when the API exposes current odds but
+ * no historical fills. A flat two-point line is a snapshot, not an invented
+ * price path.
+ */
+export function buildCurrentPoolSnapshot(
+  price: number,
+  startTime: number,
+  endTime: number,
+): BaoPriceHistoryPoint[] {
+  if (!Number.isFinite(price) || !Number.isFinite(startTime) || !Number.isFinite(endTime)) return [];
+  const start = Math.floor(Math.min(startTime, endTime - 1));
+  const end = Math.floor(Math.max(endTime, start + 1));
+  const normalizedPrice = Math.max(0, Math.min(1, price));
+  return [
+    { time: start, price: normalizedPrice },
+    { time: end, price: normalizedPrice },
+  ];
+}
