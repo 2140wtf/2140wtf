@@ -6,6 +6,7 @@ import { Bot, CheckCircle2, Copy, Cpu, Loader2, Send, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -267,6 +268,7 @@ export function ComputeCreditsTab() {
         <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
         <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
       </div>
+      </AgentGateCheck>
 
       <div className="space-y-3">
         <h2 className="text-sm font-semibold flex items-center gap-1.5">
@@ -290,7 +292,6 @@ export function ComputeCreditsTab() {
           </div>
         )}
       </div>
-      </AgentGateCheck>
     </div>
   );
 }
@@ -509,13 +510,14 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
   const { nostr } = useNostr();
   const { toast } = useToast();
   const publish = useNostrPublish();
-  const { allMints, balances, mintUrl, sendToken } = useCashuWalletContext();
+  const { allMints, balances, mintUrl, sendTokenToOutbox } = useCashuWalletContext();
   const { sendMessage } = useNip17SendMessage();
   const [token, setToken] = useState<string | null>(null);
   const [lockMode, setLockMode] = useState<CreditLockMode | null>(null);
   const [allowBearer, setAllowBearer] = useState(false);
   const [dmState, setDmState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
   const [receiptFailed, setReceiptFailed] = useState(false);
+  const [confirmFunding, setConfirmFunding] = useState(false);
 
   const isOwn = !!user && user.pubkey === request.pubkey;
   const hasWallet = allMints.length > 0;
@@ -643,11 +645,12 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
 
       // 3. Mint a real Cashu token, P2PK-locked unless bearer was opted in.
       const memo = `₿AO compute credits: ${request.purpose.slice(0, 80)}`;
-      const cashuToken = await sendToken(
+      const cashuToken = await sendTokenToOutbox(
         fundAmount,
         memo,
         target.lockPubkey ?? undefined,
         target.mintUrl,
+        { key: outboxKey, metadata: { lockMode: target.mode } },
       );
       if (!cashuToken) throw new Error('Wallet did not return a token — check your balance and mints.');
       setToken(cashuToken);
@@ -797,7 +800,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                           variant={fundShot === shot ? 'default' : 'outline'}
                           className="gap-1"
                           disabled={!hasWallet || fulfillMutation.isPending || covered}
-                          onClick={() => { setFundShot(shot as 1 | 2); fulfillMutation.mutate(); }}
+                          onClick={() => { setFundShot(shot as 1 | 2); setConfirmFunding(true); }}
                         >
                           {covered ? <CheckCircle2 className="size-3.5" /> : fulfillMutation.isPending && fundShot === shot ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
                           {covered ? `Milestone ${shot} funded` : `Milestone ${shot} · ${formatSats(amount)}`}
@@ -809,7 +812,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                   <Button
                     size="sm" className="gap-1.5 shrink-0"
                     disabled={!hasWallet || fulfillMutation.isPending}
-                    onClick={() => fulfillMutation.mutate()}
+                    onClick={() => setConfirmFunding(true)}
                   >
                     {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
                     Send {formatSats(request.amountSats)} sats
@@ -833,6 +836,34 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
           </div>
         )}
       </CardContent>
+      <Dialog open={confirmFunding} onOpenChange={(open) => !fulfillMutation.isPending && setConfirmFunding(open)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send real Cashu?</DialogTitle>
+            <DialogDescription>
+              This will irreversibly debit {formatSats(fundAmount)} real mainnet sats from your Cashu balance and send a token to the agent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
+            <p><span className="text-muted-foreground">Request:</span> {request.purpose}</p>
+            <p><span className="text-muted-foreground">Amount:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · milestone ${fundShot}/2` : ''}</p>
+            <p><span className="text-muted-foreground">Active mint:</span> <span className="break-all">{mintUrl}</span></p>
+            <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : 'P2PK lock selected automatically'}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={fulfillMutation.isPending} onClick={() => setConfirmFunding(false)}>Cancel</Button>
+            <Button
+              disabled={fulfillMutation.isPending}
+              onClick={() => {
+                setConfirmFunding(false);
+                fulfillMutation.mutate();
+              }}
+            >
+              {fulfillMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Send ${formatSats(fundAmount)} sats`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -57,6 +57,15 @@ const mocks = vi.hoisted(() => ({
     getFeesForProofs: vi.fn().mockImplementation((proofs: unknown[]) => (Array.isArray(proofs) ? proofs.length : 0)),
     checkProofsStates: vi.fn().mockResolvedValue([]),
     createMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', request: 'lnbc...', state: 'UNPAID' }),
+    createLockedMintQuote: vi.fn().mockImplementation(async (amount: number, pubkey: string) => ({
+      quote: 'locked-mint-quote-id', request: 'lnbc-locked', state: 'UNPAID', pubkey, amount, unit: 'sat',
+    })),
+    lazyGetMintInfo: vi.fn().mockResolvedValue({
+      isSupported: vi.fn().mockImplementation((nut: number) => nut === 17
+        ? { supported: false, params: [] }
+        : { supported: false }),
+    }),
+    onMintQuotePaid: vi.fn(),
     checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', state: 'PAID' }),
     createMintQuoteBolt12: vi.fn().mockResolvedValue({
       quote: 'bolt12-mint-quote',
@@ -564,6 +573,75 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     await waitFor(() => expect(result.current.error).toBe('Mint failed: invalid proof'));
   });
 
+  it('uses a NUT-20 locked quote when the mint supports it', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    vi.mocked(wallet.lazyGetMintInfo).mockResolvedValue({
+      isSupported: (nut: number) => nut === 20 ? { supported: true } : { supported: false },
+    } as Awaited<ReturnType<typeof wallet.lazyGetMintInfo>>);
+
+    const quote = await act(async () => result.current.requestInvoice(21));
+
+    expect(quote?.quote).toBe('locked-mint-quote-id');
+    expect(wallet.createLockedMintQuote).toHaveBeenCalledWith(21, expect.stringMatching(/^(02|03)[0-9a-f]{64}$/), 'Freedom ID');
+    expect(wallet.createMintQuote).not.toHaveBeenCalled();
+
+    await act(async () => result.current.requestInvoice(22));
+    const firstPubkey = vi.mocked(wallet.createLockedMintQuote).mock.calls[0][1];
+    const secondPubkey = vi.mocked(wallet.createLockedMintQuote).mock.calls[1][1];
+    expect(secondPubkey).not.toBe(firstPubkey);
+  });
+
+  it('keeps an unpaid quote pending when confirmation is checked early', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    vi.mocked(wallet.checkMintQuote).mockResolvedValueOnce({ quote: 'mint-quote-id', request: 'lnbc', state: 'UNPAID', expiry: Math.floor(Date.now() / 1000) + 60 });
+    await act(async () => result.current.requestInvoice(21));
+
+    const issued = await act(async () => result.current.mintFromQuote('mint-quote-id', 21));
+
+    expect(issued).toBe(false);
+    expect((await loadTransactions(encKey)).find((t) => t.quoteId === 'mint-quote-id')?.status).toBe('pending');
+  });
+
+  it('uses NUT-17 when bolt11 mint-quote subscriptions are advertised', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    const cancel = vi.fn();
+    vi.mocked(wallet.lazyGetMintInfo).mockResolvedValue({
+      isSupported: (nut: number) => nut === 17
+        ? { supported: true, params: [{ method: 'bolt11', unit: 'sat', commands: ['bolt11_mint_quote'] }] }
+        : { supported: false },
+    } as Awaited<ReturnType<typeof wallet.lazyGetMintInfo>>);
+    vi.mocked(wallet.onMintQuotePaid).mockResolvedValue(cancel);
+    const onPaid = vi.fn();
+
+    const stop = await act(async () => result.current.watchMintQuote('quote-live', onPaid));
+
+    expect(wallet.onMintQuotePaid).toHaveBeenCalledWith('quote-live', expect.any(Function), expect.any(Function));
+    const callback = vi.mocked(wallet.onMintQuotePaid).mock.calls[0][1];
+    callback({ quote: 'quote-live', request: 'lnbc', amount: 21, unit: 'sat', state: 'PAID', expiry: Math.floor(Date.now() / 1000) + 60 });
+    expect(onPaid).toHaveBeenCalledOnce();
+    stop();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('persists a BOLT12 offer and mints its paid amount through the BOLT12 endpoint', async () => {
     const seedPhrase = generateMnemonic(wordlist);
     const encKey = await deriveEncryptionKey(seedPhrase);
@@ -820,6 +898,33 @@ describe('useCashuWallet hunt regressions: sendToken offline no-swap path', () =
     // The token carries the original input proof (ecash changes hands as-is).
     expect(token).toContain('cashu');
     expect(result.current.error).toBe('');
+  });
+
+  it('durably journals an automatic-delivery token before returning it', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    await setupWallet(seedPhrase);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    mockOfflineSend(wallet);
+
+    const token = await act(async () => result.current.sendTokenToOutbox(
+      21,
+      'compute delivery',
+      undefined,
+      mintUrl,
+      { key: 'compute-outbox:test', metadata: { lockMode: 'bearer' } },
+    ));
+
+    expect(token).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem('compute-outbox:test')!)).toEqual({
+      token,
+      lockMode: 'bearer',
+      dmState: 'failed',
+    });
   });
 
   /** Mimic the REAL cashu-ts swap path: fresh send outputs, unselected inputs passed through in keep. */

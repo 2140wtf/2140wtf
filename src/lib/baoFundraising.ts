@@ -138,14 +138,15 @@ export function baoApiDate(value: number | string | null | undefined): Date | nu
 async function apiFetch<T>(path: string, opts?: { method?: string; body?: unknown; signer?: BaoApiSigner }): Promise<T> {
   const url = `${baoApiBase()}${path}`;
   const method = opts?.method ?? 'GET';
+  const body = opts?.body !== undefined ? JSON.stringify(opts.body) : undefined;
   const headers: Record<string, string> = {};
   if (opts?.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (opts?.signer) headers['Authorization'] = await baoNip98Header(opts.signer, url, method);
+  if (opts?.signer) headers['Authorization'] = await baoNip98Header(opts.signer, url, method, body);
 
   const res = await fetch(url, {
     method,
     headers,
-    body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body,
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {

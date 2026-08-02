@@ -107,9 +107,11 @@ export function CashuWalletDrawer({
 
   const handleMint = async () => {
     if (!invoiceQuote) return;
-    await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
-    setInvoiceQuote(null);
-    setInvoiceAmount('');
+    const issued = await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
+    if (issued) {
+      setInvoiceQuote(null);
+      setInvoiceAmount('');
+    }
   };
 
   const activeMint = wallet.mintUrl ?? '';
