@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { nip19 } from 'nostr-tools';
-import { Bot, ShieldX, Wrench } from 'lucide-react';
+import { Bot, Hammer, Loader2, ShieldX, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { grindJoinRumor, DEFAULT_AGENT_GATE_DIFFICULTY } from '@/concord-v2/lib/agentGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useToast } from '@/hooks/useToast';
 
 /** The 2140 operator account — the only one offered a dev bypass. */
 const DEV_NPUB = 'npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j';
@@ -44,18 +46,23 @@ interface AgentGateCheckProps {
 /**
  * Agent-only gate ("captcha stopping humans") for agent-dedicated areas.
  *
- * Humans are BLOCKED here — there is deliberately no "pass" button. The gate
- * exists for autonomous agents, whose tooling clears the proof-of-work
- * automatically (the same NIP-13 grind as the agent-only ₿AO join gate); a
- * human app politely refuses, exactly like the human join path for gated
- * communities. Human operators fund agents from the Campaigns tab instead.
+ * Access requires the same NIP-13-style local proof-of-work as an agent-only
+ * ₿AO join. The check is intentionally computational rather than an identity
+ * claim: it discourages casual human entry while remaining available to every
+ * agent account, not just the operator account.
  *
  * The 2140 operator account is the only one offered a "Dev bypass" so the
  * gated area can be reviewed and tested.
  */
 export function AgentGateCheck({ children }: AgentGateCheckProps) {
   const { user } = useCurrentUser();
-  const [passed, setPassed] = useState(() => (user ? loadPassed(user.pubkey) : false));
+  const { toast } = useToast();
+  const [passedPubkey, setPassedPubkey] = useState<string | null>(() =>
+    user && loadPassed(user.pubkey) ? user.pubkey : null,
+  );
+  const [grinding, setGrinding] = useState(false);
+
+  const passed = !!user && (passedPubkey === user.pubkey || loadPassed(user.pubkey));
 
   if (passed) return <>{children}</>;
 
@@ -63,7 +70,34 @@ export function AgentGateCheck({ children }: AgentGateCheckProps) {
 
   const markPassed = () => {
     if (user) savePassed(user.pubkey);
-    setPassed(true);
+    setPassedPubkey(user?.pubkey ?? null);
+  };
+
+  const runCheck = async () => {
+    if (!user) {
+      toast({
+        title: 'Log in first',
+        description: 'The agent check needs an identity to bind to.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setGrinding(true);
+    // Yield once so the busy state paints before the CPU-bound grind begins.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      grindJoinRumor(user.pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY);
+      markPassed();
+    } catch (error) {
+      toast({
+        title: 'Agent check failed',
+        description: error instanceof Error ? error.message : 'The proof-of-work could not be completed.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGrinding(false);
+    }
   };
 
   return (
@@ -78,24 +112,34 @@ export function AgentGateCheck({ children }: AgentGateCheckProps) {
             <ShieldX className="size-3.5 text-muted-foreground" />
           </h3>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Compute credits are for autonomous agents. Proceeding requires a
-            proof-of-work that agent tooling computes automatically — a captcha
-            humans can't pass here. Agents discover the flow from{' '}
-            <code className="text-[11px]">/AGENTS.md</code> and clear it
-            themselves. If you're human, the Campaigns tab is the way to fund
-            agents.
+            Compute credits are for autonomous agents. Enter by completing a
+            local proof-of-work check — the same machine-friendly challenge used
+            by agent-only ₿AO communities. Human funders can use the Campaigns tab.
           </p>
         </div>
       </div>
 
-      {isDev && (
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => void runCheck()} disabled={grinding}>
+          {grinding ? (
+            <>
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              Running agent check…
+            </>
+          ) : (
+            <>
+              <Hammer className="mr-1.5 size-3.5" />
+              Run agent check
+            </>
+          )}
+        </Button>
+        {isDev && (
           <Button size="sm" variant="outline" onClick={markPassed}>
             <Wrench className="size-3.5 mr-1.5" />
             Dev bypass (2140 admin only)
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
