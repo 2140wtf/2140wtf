@@ -16,6 +16,7 @@ import { toast } from "@/hooks/useToast";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { appProfileUrl } from "@/lib/dittoUrl";
 import { getDisplayName } from "@/lib/getDisplayName";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { tryNpubEncode } from "@/lib/safeNip19";
 import { cn } from "@/lib/utils";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -40,6 +41,7 @@ function ProfilePreviewBody({ pubkey, onAction }: { pubkey: string; onAction?: (
   const musicStatus = isStatusExpired(rawMusicStatus) ? undefined : rawMusicStatus;
   const displayName = getDisplayName(metadata, pubkey);
   const avatarShape = getAvatarShape(metadata);
+  const bannerUrl = sanitizeUrl(metadata?.banner);
   const npub = tryNpubEncode(pubkey);
   const [copied, setCopied] = useState(false);
   const isSelf = user?.pubkey === pubkey;
@@ -73,8 +75,8 @@ function ProfilePreviewBody({ pubkey, onAction }: { pubkey: string; onAction?: (
     <>
       {/* Mini banner */}
       <div className="h-16 bg-secondary relative">
-        {metadata?.banner && (
-          <img src={metadata.banner} alt="" className="w-full h-full object-cover" loading="lazy" />
+        {bannerUrl && (
+          <img src={bannerUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
         )}
       </div>
 
