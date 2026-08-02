@@ -1,5 +1,5 @@
 /**
- * Concord V2 stream-key NIP-42 authentication.
+ * Legacy stream-key NIP-42 registry retained as a compatibility/test seam.
  *
  * Every V2 plane is kind-1059 traffic addressed to a DERIVED per-stream pubkey
  * (control, guestbook, per-channel, dissolved, rekey) — never the user's own
@@ -8,12 +8,10 @@
  * kind-1059 REQ be an authenticated pubkey on the connection. The user's login
  * can't satisfy that: the stream address isn't their pubkey.
  *
- * The fix: the client holds the stream SECRET keys (they live in the
- * community_root / channel keys it derives), so it can NIP-42-authenticate AS
- * each stream. This module is the registry of stream keys the client currently
- * holds; {@link NostrProvider}'s AUTH handler signs an extra kind-22242 event
- * per registered key on the same challenge, so the connection ends up
- * authenticated as the user AND every stream it will query.
+ * Production web traffic MUST NOT use this global registry: authenticating a
+ * user and community streams on one socket, or streams from two communities,
+ * creates a cryptographic metadata link. Production uses concordTransport.ts,
+ * whose sessions are partitioned by community, relay, and exact keyset.
  *
  * ditto-relay keeps a per-connection SET of authenticated pubkeys and its
  * challenge stays valid for the socket's whole lifetime, so a key registered
@@ -28,16 +26,14 @@
  *
  * Keys register with the RELAYS their community lives on, and a challenge
  * signs only the keys scoped to that relay (a key registered without relays is
- * unscoped and signs everywhere — the safe fallback). This matters: a Schnorr
+ * unscoped and signs everywhere — the legacy compatibility fallback). This matters: a Schnorr
  * signature costs ~4ms (phones 5-10x slower), a multi-community registry holds
  * hundreds of keys, and every socket (re)open earns a fresh challenge —
  * unscoped, one challenge burned 1.5-2s of main-thread signing per relay (see
  * streamAuth.perf.test.ts) for keys the relay would never see queried.
  *
- * Kept out of `concord-v1` and imported by only two shared files
- * (NostrProvider for the WebView's own sockets, useNativeNotifications for
- * the Android service's bridged AUTH challenges) so the V2 tree stays
- * independently deletable.
+ * These exports remain for legacy plane-sync compatibility tests. NostrProvider
+ * only clears the registry on account switch; it never reads or signs its keys.
  */
 
 import { finalizeEvent } from "nostr-tools/pure";
@@ -229,11 +225,11 @@ export function _resetStreamAuthRegistry(): void {
 // ── Per-relay AUTH ack state ─────────────────────────────────────────────────
 //
 // ditto-relay acks every accepted kind-22242 with `["OK", <id>, true]` and adds
-// the pubkey to the connection's authenticated set. NostrProvider feeds those
-// acks in here; plane sweeps gate on them (`streamAuthsSettled`) so a REQ only
+// the pubkey to the connection's authenticated set. Legacy integrations can
+// feed those acks here; compatibility sweeps gate on them so a REQ only
 // flies once the relay has CONFIRMED its authors — deterministic, no settle
 // timers. State is per live socket: a reopened socket is a fresh
-// unauthenticated session, so NostrProvider resets it on reconnect.
+// unauthenticated session and must reset this state on reconnect.
 
 interface RelayAuthState {
   /** Whether this relay has issued a NIP-42 challenge on the live socket. */
@@ -267,8 +263,7 @@ const reauthListeners = new Set<ReauthListener>();
 /**
  * Subscribe to auth-stale events: fired for a relay that has been challenged
  * but hasn't fully acked its stream AUTHs within {@link AUTH_STALE_MS}. The
- * listener (NostrProvider) re-signs and re-sends the stream AUTH frames on the
- * live socket. Returns an unsubscribe.
+ * legacy listener re-signs and re-sends stream AUTH frames on the live socket.
  */
 export function onStreamAuthStale(listener: ReauthListener): () => void {
   reauthListeners.add(listener);

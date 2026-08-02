@@ -1,4 +1,3 @@
-import { useNostr } from "@nostrify/react";
 import { hashKey, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,7 +17,7 @@ import {
 } from "@/concord-v2/lib/chat";
 import { KIND_COMMENT, KIND_DELETE, KIND_MESSAGE, KIND_REACTION, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { expirationOf, getDisappearTtl, isExpired } from "@/concord-v2/lib/disappearing";
-import { whenAuthSettled } from "@/concord-v2/lib/planeSync";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 import {
   clearChannelExhausted,
   queryChannelRumors,
@@ -112,7 +111,7 @@ const upsert = upsertOpenedChat;
  * unconditionally. Only the decrypted rumors are persisted (see rumorStore.ts).
  */
 async function backfillStore(
-  nostr: ReturnType<typeof useNostr>["nostr"],
+  nostr: ReturnType<typeof concordClient>,
   relays: string[],
   channel: ChannelV2,
   signal: AbortSignal,
@@ -229,7 +228,6 @@ export function useChatModeration2(community: CommunityV2 | undefined): ChatMode
  * resume where it left off instead of re-paging the newest window.
  */
 export function useChannelTimeline2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined) {
-  const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const moderation = useChatModeration2(community);
 
@@ -390,15 +388,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
 
       const backfillAndRefresh = async (task: SyncTaskHandle) => {
         if (signal.aborted) return;
-        // Hold the round until every relay has ACKED our stream AUTHs (if it
-        // challenged) — a kind-1059 REQ racing NIP-42 gets CLOSED and reads
-        // back as an empty page, which on a cold open paints "no messages"
-        // for a channel that has plenty (the post-login empty-rooms bug).
-        // Capped inside whenAuthSettled; the sync task is already showing.
-        await Promise.all(
-          community!.relays.map((url) => whenAuthSettled(url, () => channel!.streams.map((s) => s.group))),
-        );
-        if (signal.aborted) return;
+        const scoped = concordClient(community!.idHex, channel!.streams.map((s) => s.group));
         // Running count of rumors this round decrypted, for the status bar.
         let synced = 0;
         const tick = () => {
@@ -410,7 +400,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
         // lands rather than waiting for the deep-history passes below (which,
         // on a cold channel, meant staring at a skeleton through up to 20
         // back-to-back relay pages).
-        const newest = await backfillStore(nostr, community!.relays, channel!, signal, { maxPages: 1 });
+        const newest = await backfillStore(scoped, community!.relays, channel!, signal, { maxPages: 1 });
         if (signal.aborted) return;
 
         const firstOpened = await openChatBatch(newest.events, channel!, { signal });
@@ -435,7 +425,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
           failed: false,
         };
         if (saved?.newest && newest.oldest !== undefined && newest.oldest > saved.newest) {
-          bridge = await backfillStore(nostr, community!.relays, channel!, signal, {
+          bridge = await backfillStore(scoped, community!.relays, channel!, signal, {
             until: newest.oldest - 1,
             since: saved.newest,
           });
@@ -446,7 +436,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
         // cursor if we have one; otherwise (cold channel) resume from just
         // below pass 1's newest page rather than re-fetching that page.
         const resumeFrom = saved?.oldest ?? (newest.oldest !== undefined ? newest.oldest - 1 : undefined);
-        const older = await backfillStore(nostr, community!.relays, channel!, signal, { until: resumeFrom });
+        const older = await backfillStore(scoped, community!.relays, channel!, signal, { until: resumeFrom });
         if (signal.aborted) return;
 
         // Decrypt the bridge + older pages into the rumor cache (pass 1 already
@@ -560,10 +550,16 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
       if (!localHasMore && !cursor.current.get(cursorKeyId)?.exhausted) {
         const controller = new AbortController();
         const resumeFrom = cursor.current.get(cursorKeyId)?.oldest;
-        const older = await backfillStore(nostr, community!.relays, channel!, controller.signal, {
-          until: resumeFrom,
-          maxPages: LOAD_OLDER_MAX_PAGES,
-        });
+        const older = await backfillStore(
+          concordClient(community!.idHex, channel!.streams.map((s) => s.group)),
+          community!.relays,
+          channel!,
+          controller.signal,
+          {
+            until: resumeFrom,
+            maxPages: LOAD_OLDER_MAX_PAGES,
+          },
+        );
         const opened = await openChatBatch(older.events, channel!);
         writeRumors(opened);
 
@@ -591,7 +587,7 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
     } finally {
       setIsLoadingOlder(false);
     }
-  }, [hasMore, isLoadingOlder, query, nostr, community, channel, channelIdHex, queryClient, queryKey]);
+  }, [hasMore, isLoadingOlder, query, community, channel, channelIdHex, queryClient, queryKey]);
 
   // The folded view (moderation + edits + reaction tallies), plus the
   // optimistic-delete overlay.
@@ -665,11 +661,16 @@ export function useChannelTimeline2(community: CommunityV2 | undefined, channel:
  * marks the message "failed" (retry/discard) — it never silently vanishes.
  */
 export function useSendMessage2(community: CommunityV2 | undefined, channel: ChannelV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
   const channelIdHex = channel?.idHex ?? null;
   const { setStatus } = useSendStatusMap(statusKey(channelIdHex));
+  // Capture the revocable capability before the potentially slow real-user
+  // seal signature. Logout/leave during a bunker round-trip then makes the
+  // eventual publish fail closed instead of recreating an old session.
+  const delivery = community && channel
+    ? concordClient(community.idHex, channel.streams.map((stream) => stream.group))
+    : undefined;
 
   const broadcast = useCallback(
     async (wrap: NostrEvent) => {
@@ -678,7 +679,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
       const timeout = publishTimeoutMs(user?.method);
       const started = Date.now();
       const results = await Promise.allSettled(
-        community!.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(timeout) })),
+        community!.relays.map((url) => delivery!.relay(url).event(wrap, { signal: AbortSignal.timeout(timeout) })),
       );
       results.forEach((r, i) => {
         logSync(
@@ -688,7 +689,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
       });
       if (!results.some((r) => r.status === "fulfilled")) throw new Error("No relay accepted the message.");
     },
-    [nostr, community, user?.method],
+    [community, delivery, user?.method],
   );
 
   return useMutation({

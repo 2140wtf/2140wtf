@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, useDissolved2 } from "@/concord-v2/hooks/useControlPlane2";
+import { concordClient, concordTransport } from "@/concord-v2/lib/concordTransport";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { toJoinMaterial } from "@/concord-v2/lib/communityList";
 import { controlGroups, currentControlGroup, foldControlState, openControlEditions } from "@/concord-v2/lib/control";
 import { controlSweepTruncated, sweepControl } from "@/concord-v2/lib/planeSync";
-import { channelRekeyGroupKey, controlGroupKey, guestbookGroupKey } from "@/concord-v2/lib/derive";
+import { channelRekeyGroupKey, controlGroupKey, guestbookGroupKey, hexToBytes, type GroupKey } from "@/concord-v2/lib/derive";
 import {
   baseRekeyGroupKey,
   bytesToHex,
@@ -45,6 +46,8 @@ import type { CommunityMetadata, CommunityV2, HeldRoot, PrivateChannelKey } from
 
 import type { NostrEvent } from "@nostrify/nostrify";
 import type { NUser } from "@nostrify/react/login";
+import { getConversationKey } from "nostr-tools/nip44";
+import { getPublicKey } from "nostr-tools/pure";
 
 const ZERO_SCOPE = new Uint8Array(32);
 
@@ -93,10 +96,25 @@ export async function refreshInviteBundlesFor(
   };
 
   const targets = publishRelays ?? rotated.relays;
+  const linkKeys = new Map<string, GroupKey>();
+  for (const entry of live) {
+    const sk = hexToBytes(entry.signer_sk);
+    const pk = getPublicKey(sk);
+    linkKeys.set(pk, { sk, pk, convKey: getConversationKey(sk, pk) });
+  }
   for (const bundleEvent of buildRefreshedBundleEvents(bundle, live)) {
-    await Promise.allSettled(
-      targets.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
-    );
+    const linkKey = linkKeys.get(bundleEvent.pubkey);
+    if (!linkKey) throw new Error("Invite bundle signer is unavailable.");
+    const client = concordClient(rotated.idHex, [linkKey]);
+    try {
+      await Promise.allSettled(
+        targets.map((url) => client.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
+      );
+    } finally {
+      concordTransport.closeCapability(rotated.idHex, [linkKey]);
+      linkKey.sk.fill(0);
+      linkKey.convKey.fill(0);
+    }
   }
 }
 
@@ -180,7 +198,7 @@ export function useRekeyWatch2(community: CommunityV2 | undefined): { stranded: 
           const cursor = await readStreamCursor(scope);
           const filter = cursor?.newest ? { ...base, since: cursor.newest } : base;
           try {
-            const events = await nostr
+            const events = await concordClient(community!.idHex, [address])
               .relay(url)
               .query([filter], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
             if (events.length > 0) {
@@ -466,7 +484,6 @@ export function useLinkRefreshWatch2(community: CommunityV2 | undefined): void {
  * any of the three is honored; a banned rotator never is.
  */
 export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
-  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { data: folded } = useControlFold2(community);
   const { data: dissolved } = useDissolved2(community);
@@ -517,7 +534,7 @@ export function useChannelRekeyWatch2(community: CommunityV2 | undefined) {
           const cursor = await readStreamCursor(scope);
           const filter = cursor?.newest ? { ...base, since: cursor.newest } : base;
           try {
-            const events = await nostr
+            const events = await concordClient(community!.idHex, [...byPk.values()])
               .relay(url)
               .query([filter], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
             if (events.length > 0) {
@@ -696,7 +713,7 @@ export function useRefound2(community: CommunityV2 | undefined) {
       // would be silently dropped from, or compacted stale into, the new epoch
       // — for every member, forever.
       try {
-        await sweepControl(nostr, community);
+        await sweepControl(concordClient(community.idHex, controlGroups(community)), community);
       } catch {
         throw new Error("Couldn't re-fetch the community's control plane; check your connection and try again.");
       }
@@ -750,7 +767,9 @@ export function useRefound2(community: CommunityV2 | undefined) {
       for (const rumor of rumors) {
         const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, address, user.signer), address);
         const results = await Promise.allSettled(
-          community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+          community.relays.map((url) =>
+            concordClient(community.idHex, [address]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+          ),
         );
         if (!results.some((r) => r.status === "fulfilled")) {
           throw new Error("No relay accepted the key rotation.");
@@ -764,7 +783,9 @@ export function useRefound2(community: CommunityV2 | undefined) {
         try {
           const rewrapped = rewrapSeal(head.opened.seal, newControl);
           await Promise.allSettled(
-            community.relays.map((url) => nostr.relay(url).event(rewrapped, { signal: AbortSignal.timeout(8000) })),
+            community.relays.map((url) =>
+              concordClient(community.idHex, [newControl]).relay(url).event(rewrapped, { signal: AbortSignal.timeout(8000) }),
+            ),
           );
         } catch {
           // An encrypted-seal head can't re-wrap; control heads are plaintext
@@ -806,7 +827,9 @@ export function useRefound2(community: CommunityV2 | undefined) {
         for (const rumor of chRumors) {
           const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, chAddress, user.signer), chAddress);
           const results = await Promise.allSettled(
-            community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+            community.relays.map((url) =>
+              concordClient(community.idHex, [chAddress]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            ),
           );
           if (!results.some((r) => r.status === "fulfilled")) {
             // Gating like the root roll: an unrotated channel leaves the
@@ -825,7 +848,9 @@ export function useRefound2(community: CommunityV2 | undefined) {
         for (const rumor of buildSnapshotRumors(user.pubkey, recipients, snapId, Date.now())) {
           const wrap = await sealGuestbook(rumor, newGuestbook, user.signer);
           await Promise.allSettled(
-            community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+            community.relays.map((url) =>
+              concordClient(community.idHex, [newGuestbook]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            ),
           );
         }
       } catch {

@@ -9,8 +9,9 @@ import type { CommunityV2 } from "@/concord-v2/lib/types";
  * One stream address of a V2 channel (one per held epoch): the wrap author to
  * filter on and the NIP-44 self-ECDH conversation key that opens its wraps.
  * The stream SECRET key is deliberately NOT shipped to native code — the
- * conversation key decrypts (all the notification needs); NIP-42 stream auth
- * stays in the WebView (see streamAuth.ts).
+ * conversation key decrypts notification payloads. A future native service
+ * must implement its own per-community authenticated transport rather than
+ * borrowing WebView or user-identity sockets.
  */
 export interface Concord2Stream {
   /** Stream address (x-only pubkey hex) — the kind-1059 `authors` filter entry. */
@@ -44,9 +45,9 @@ export interface Concord2Sub {
 /**
  * Build the per-channel V2 notification subscriptions for one community from
  * its rehydrated runtime shape + its (possibly cached) Control fold. Also
- * returns the channels' stream GroupKeys so the caller can register them for
- * NIP-42 stream auth (an auth-gating relay requires every `authors` entry to
- * be authenticated; the signing happens in the WebView).
+ * returns the channels' stream GroupKeys for a future native implementation to
+ * place into per-community sessions. They must never be registered on a shared
+ * WebView/user socket.
  */
 export function buildConcord2Subs(
   community: CommunityV2,

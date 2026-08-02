@@ -1,4 +1,3 @@
-import { useNostr } from "@nostrify/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useDeferredFold } from "@/concord-v2/hooks/useDeferredFold2";
@@ -22,6 +21,7 @@ import { openWrap, type OpenedEvent, type Rumor, type StreamSigner } from "@/con
 import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
 import { logSync } from "@/lib/syncLog";
 import { onWireScopes } from "@/wire/bus";
+import { concordClient } from "@/concord-v2/lib/concordTransport";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -51,7 +51,6 @@ export const controlFoldKey = (idHex: string) => `concord2-fold:${idHex}`;
  * after publishing an edition) re-folds from the store.
  */
 export function useControlEvents2(community: CommunityV2 | undefined, active = true) {
-  const { nostr } = useNostr();
   const queryClient = useQueryClient();
 
   const cidHex = community?.idHex ?? null;
@@ -101,7 +100,8 @@ export function useControlEvents2(community: CommunityV2 | undefined, active = t
   useEffect(() => {
     if (!community || !active) return;
     let cancelled = false;
-    void sweepControl(nostr, community, {
+    const client = concordClient(community.idHex, controlGroups(community));
+    void sweepControl(client, community, {
       onFresh: (fresh) => {
         if (cancelled || fresh.length === 0) return;
         queryClient.setQueryData<OpenedEvent[]>(queryKey, (old) => mergeOpened(old ?? [], fresh));
@@ -113,7 +113,7 @@ export function useControlEvents2(community: CommunityV2 | undefined, active = t
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nostr, cidHex, epochSig, active]);
+  }, [cidHex, epochSig, active]);
 
   return useQuery<OpenedEvent[]>({
     queryKey,
@@ -197,8 +197,6 @@ export function useChannels2(community: CommunityV2 | undefined, active = true):
  * dissolution status up-front, so it's only checked once you open the community.
  */
 export function useDissolved2(community: CommunityV2 | undefined, active = true) {
-  const { nostr } = useNostr();
-
   return useQuery<boolean>({
     queryKey: ["concord2", "dissolved", community?.idHex ?? null],
     enabled: Boolean(community) && active,
@@ -210,6 +208,7 @@ export function useDissolved2(community: CommunityV2 | undefined, active = true)
     refetchIntervalInBackground: false,
     queryFn: async ({ signal }) => {
       const group = dissolvedGroupKey(community!.id);
+      const client = concordClient(community!.idHex, [group]);
       // A dissolution tombstone is terminal and immutable — if we've already
       // stored one, we're done without touching the network.
       const cached = await queryByStreams([group.pk]);
@@ -217,7 +216,7 @@ export function useDissolved2(community: CommunityV2 | undefined, active = true)
 
       const results = await Promise.all(
         community!.relays.map((url) =>
-          nostr
+          client
             .relay(url)
             .query([{ kinds: [KIND_WRAP], authors: [group.pk], limit: 10 }], {
               signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
@@ -241,7 +240,6 @@ export function useDissolved2(community: CommunityV2 | undefined, active = true)
  * relays being moved away from).
  */
 export async function publishEdition2(
-  nostr: ReturnType<typeof useNostr>["nostr"],
   community: CommunityV2,
   signer: StreamSigner,
   rumor: Rumor,
@@ -251,7 +249,7 @@ export async function publishEdition2(
   const wrap = await sealEdition(rumor, control, signer);
   const urls = opts?.relays ?? community.relays;
   const results = await Promise.allSettled(
-    urls.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+    urls.map((url) => concordClient(community.idHex, [control]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
   );
   if (!results.some((r) => r.status === "fulfilled")) {
     throw new Error("No relay accepted the change.");

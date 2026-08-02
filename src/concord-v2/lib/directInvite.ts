@@ -34,6 +34,7 @@ import type { EventTemplate, NostrEvent } from "nostr-tools/pure";
 
 import { validateBundle, type InviteBundle } from "@/concord-v2/lib/invite";
 import { KIND_DIRECT_INVITE, KIND_WRAP } from "@/concord-v2/lib/kinds";
+import type { GroupKey } from "@/concord-v2/lib/derive";
 
 /** The standard NIP-59 seal kind (classic giftwrap — not a CORD-01 seal). */
 export const KIND_NIP59_SEAL = 13;
@@ -101,11 +102,11 @@ export async function sealDirectInvite(
  * recipient `p` and the indexing `k` (plus optional NIP-40 expiration matching
  * the bundle's `expires_at`, so relays can prune a stale handoff).
  */
-export function wrapDirectInvite(
+export function wrapDirectInviteWithKey(
   seal: NostrEvent,
   recipientPubkey: string,
   opts?: { expiresAtMs?: number },
-): NostrEvent {
+): { event: NostrEvent; authKey: GroupKey } {
   const ephemeralSk = generateSecretKey();
   const convKey = getConversationKey(ephemeralSk, recipientPubkey);
   const tags: string[][] = [
@@ -113,7 +114,7 @@ export function wrapDirectInvite(
     ["k", String(KIND_DIRECT_INVITE)],
   ];
   if (opts?.expiresAtMs) tags.push(["expiration", String(Math.floor(opts.expiresAtMs / 1000))]);
-  return finalizeEvent(
+  const event = finalizeEvent(
     {
       kind: KIND_WRAP,
       content: nip44Encrypt(JSON.stringify(seal), convKey),
@@ -122,6 +123,15 @@ export function wrapDirectInvite(
     },
     ephemeralSk,
   );
+  return { event, authKey: { sk: ephemeralSk, pk: event.pubkey, convKey } };
+}
+
+export function wrapDirectInvite(
+  seal: NostrEvent,
+  recipientPubkey: string,
+  opts?: { expiresAtMs?: number },
+): NostrEvent {
+  return wrapDirectInviteWithKey(seal, recipientPubkey, opts).event;
 }
 
 // ── Receiving ────────────────────────────────────────────────────────────────
