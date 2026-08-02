@@ -543,9 +543,11 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
   const handleMint = async () => {
     if (!invoiceQuote) return;
-    await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
-    setInvoiceQuote(null);
-    setInvoiceAmount('');
+    const issued = await wallet.mintFromQuote(invoiceQuote.quote, Number(invoiceAmount));
+    if (issued) {
+      setInvoiceQuote(null);
+      setInvoiceAmount('');
+    }
   };
 
   const copyToClipboard = async (text: string, setCopied: (v: boolean) => void) => {
