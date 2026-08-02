@@ -8,6 +8,7 @@
  */
 
 import type { GroupKey } from "@/concord-v2/lib/derive";
+import { isLocalNetworkUrl } from "@/lib/sanitizeUrl";
 
 /**
  * Protocol recommendation for a community's relay set (CORD-02 §6). Kept in
@@ -49,13 +50,25 @@ export function capRelays(relays: string[], cap = MAX_COMMUNITY_RELAYS): string[
   const out: string[] = [];
   for (const r of relays) {
     if (out.length >= cap) break;
-    if (typeof r !== "string" || !r) continue;
+    if (typeof r !== "string" || !r || !isSafeCommunityRelayUrl(r)) continue;
     const canonical = canonicalRelayUrl(r);
     if (seen.has(canonical)) continue;
     seen.add(canonical);
     out.push(canonical);
   }
   return out;
+}
+
+/** Community metadata is untrusted: never let it steer sockets to arbitrary
+ * schemes, credential-bearing URLs, or local-network targets. */
+export function isSafeCommunityRelayUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    if (url.username || url.password || url.hash) return false;
+    return url.protocol === "wss:" && !isLocalNetworkUrl(raw);
+  } catch {
+    return false;
+  }
 }
 
 /** Byte length of a string as UTF-8. */
@@ -84,9 +97,9 @@ export function isImagePointer(v: unknown): v is ImagePointer {
   const o = v as Record<string, unknown>;
   return (
     typeof o.url === "string" &&
-    typeof o.key === "string" &&
-    typeof o.nonce === "string" &&
-    typeof o.hash === "string"
+    typeof o.key === "string" && /^[0-9a-f]{64}$/i.test(o.key) &&
+    typeof o.nonce === "string" && /^[0-9a-f]{32}$/i.test(o.nonce) &&
+    typeof o.hash === "string" && /^[0-9a-f]{64}$/i.test(o.hash)
   );
 }
 

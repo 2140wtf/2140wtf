@@ -138,6 +138,8 @@ export interface ParsedRekey {
   /** ms of the rumor (ordering / correlation aid). */
   ms: number;
   wrapId: string;
+  /** Verified signed seal id; unlike the outer wrap id, relays cannot rewrite it. */
+  sealId: string;
 }
 
 /** Parse an opened rekey stream event into its rotation fields. */
@@ -179,6 +181,7 @@ export function parseRekey(opened: OpenedEvent): ParsedRekey {
     blobs,
     ms: opened.ms,
     wrapId: opened.wrapId,
+    sealId: opened.seal.id,
   };
 }
 
@@ -201,31 +204,61 @@ export interface RekeyRotationSet {
 }
 
 export function groupRotations(parsed: ParsedRekey[]): RekeyRotationSet[] {
-  const byKey = new Map<string, RekeyRotationSet>();
+  const byKey = new Map<string, { sample: ParsedRekey; byIndex: Map<number, ParsedRekey[]> }>();
   for (const p of parsed) {
-    const key = `${p.rotator}:${p.scopeIdHex}:${p.newEpoch}:${p.prevCommit}`;
-    let set = byKey.get(key);
-    if (!set) {
-      byKey.set(
-        key,
-        (set = {
-          rotator: p.rotator,
-          scopeIdHex: p.scopeIdHex,
-          newEpoch: p.newEpoch,
-          prevEpoch: p.prevEpoch,
-          prevCommit: p.prevCommit,
-          chunkCount: p.chunkCount,
-          chunks: new Map(),
-          complete: false,
-        }),
-      );
+    // chunkCount is part of the candidate identity. Without it, whichever
+    // conflicting variant a relay returned first chose the set's shape.
+    const key = `${p.rotator}:${p.scopeIdHex}:${p.newEpoch}:${p.prevEpoch}:${p.prevCommit}:${p.chunkCount}`;
+    let group = byKey.get(key);
+    if (!group) byKey.set(key, (group = { sample: p, byIndex: new Map() }));
+    const candidates = group.byIndex.get(p.chunkIndex) ?? [];
+    const candidateId = p.sealId || p.wrapId;
+    if (!candidates.some((candidate) => (candidate.sealId || candidate.wrapId) === candidateId)) {
+      candidates.push(p);
+      candidates.sort((a, b) => (a.sealId || a.wrapId).localeCompare(b.sealId || b.wrapId));
+      group.byIndex.set(p.chunkIndex, candidates);
     }
-    if (p.chunkCount === set.chunkCount) set.chunks.set(p.chunkIndex, p);
   }
-  for (const set of byKey.values()) {
-    set.complete = set.chunks.size >= set.chunkCount;
+
+  const out: Array<{ key: string; variant: string; set: RekeyRotationSet }> = [];
+  for (const [key, group] of byKey) {
+    // Preserve every signed equivocation as a separate candidate rotation so
+    // callers can decrypt each candidate and apply the protocol's lower-key
+    // convergence rule. Bound the Cartesian product against hostile floods.
+    let variants: Map<number, ParsedRekey>[] = [new Map()];
+    for (const index of [...group.byIndex.keys()].sort((a, b) => a - b)) {
+      const next: Map<number, ParsedRekey>[] = [];
+      for (const variant of variants) {
+        for (const candidate of group.byIndex.get(index) ?? []) {
+          const copy = new Map(variant);
+          copy.set(index, candidate);
+          next.push(copy);
+          if (next.length >= 64) break;
+        }
+        if (next.length >= 64) break;
+      }
+      variants = next;
+    }
+    for (const chunks of variants) {
+      const sample = group.sample;
+      const variant = [...chunks.values()].map((p) => p.sealId || p.wrapId).join(":");
+      out.push({
+        key,
+        variant,
+        set: {
+          rotator: sample.rotator,
+          scopeIdHex: sample.scopeIdHex,
+          newEpoch: sample.newEpoch,
+          prevEpoch: sample.prevEpoch,
+          prevCommit: sample.prevCommit,
+          chunkCount: sample.chunkCount,
+          chunks,
+          complete: chunks.size >= sample.chunkCount,
+        },
+      });
+    }
   }
-  return [...byKey.values()];
+  return out.sort((a, b) => a.key.localeCompare(b.key) || a.variant.localeCompare(b.variant)).map(({ set }) => set);
 }
 
 /**

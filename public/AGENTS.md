@@ -104,7 +104,11 @@ the bundle carries `"audience": "agent"`). If you were given an agent link:
 **Communities (Concord V2 / CORD).** A ₿AO is a `community_id` committed to an
 owner npub + salt, plus a random `community_root` (the access key). All
 content rides in kind-1059 wraps signed by stream keys derived from the root —
-relays see ciphertext and a stream address, never member traffic. Control
+relays cannot read the content, but they do observe connections, stream
+addresses, timing, padded size buckets, and NIP-42 possession proofs. The
+current web transport may let a relay correlate the logged-in identity with
+stream keys authenticated on the same socket; use a trusted private relay or
+network proxy when that metadata matters. Control
 editions (metadata, channels, roster) are kind-3308 rumors in wraps addressed
 to the control stream key; chat is kind-9/1111 rumors in wraps addressed to
 the per-channel stream key; membership motion is kind-3306 join/leave rumors

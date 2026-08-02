@@ -14,12 +14,16 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
-import type { ImagePointer } from "@/concord-v2/lib/types";
+import { isImagePointer, type ImagePointer } from "@/concord-v2/lib/types";
+import { isLocalNetworkUrl, sanitizeUrl } from "@/lib/sanitizeUrl";
 
 /** 16-byte (128-bit) nonce, matching Vector's AES-GCM parameters. */
 const NONCE_BYTES = 16;
 
 const CACHE_NAME = "concord-v2-images";
+
+/** Bound untrusted encrypted media before buffering it in memory. */
+const MAX_ENCRYPTED_IMAGE_BYTES = 20 * 1024 * 1024;
 
 /** Copy into a fresh ArrayBuffer-backed view (WebCrypto wants BufferSource). */
 function buf(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
@@ -53,6 +57,7 @@ export function sniffImageMime(bytes: Uint8Array): string {
 export async function encryptImageBlob(
   file: File | Blob,
 ): Promise<{ ciphertext: Uint8Array<ArrayBuffer>; key: string; nonce: string; hash: string }> {
+  if (file.size > MAX_ENCRYPTED_IMAGE_BYTES - 16) throw new Error("image is too large (maximum 20 MiB)");
   const plaintext = new Uint8Array(await file.arrayBuffer());
   const keyBytes = crypto.getRandomValues(new Uint8Array(32));
   const nonceBytes = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
@@ -92,13 +97,52 @@ async function writeCached(hash: string, plaintext: Uint8Array, mime: string): P
  * re-decrypt across reloads.
  */
 export async function decryptImagePointer(pointer: ImagePointer, signal?: AbortSignal): Promise<string> {
+  if (!isImagePointer(pointer)) throw new Error("invalid encrypted image pointer");
   const cached = await readCached(pointer.hash);
   if (cached) return URL.createObjectURL(cached);
 
-  const res = await fetch(pointer.url, { signal });
-  if (!res.ok) throw new Error(`image fetch failed: HTTP ${res.status}`);
-  const ciphertext = new Uint8Array(await res.arrayBuffer());
+  const safeUrl = sanitizeUrl(pointer.url);
+  if (!safeUrl || isLocalNetworkUrl(safeUrl)) throw new Error("image URL must be a public HTTPS URL");
 
+  const res = await fetch(safeUrl, { signal });
+  if (!res.ok) throw new Error(`image fetch failed: HTTP ${res.status}`);
+  const lengthHeader = res.headers.get("content-length");
+  const declaredLength = lengthHeader === null ? undefined : Number(lengthHeader);
+  if (declaredLength !== undefined && Number.isFinite(declaredLength) && declaredLength > MAX_ENCRYPTED_IMAGE_BYTES) {
+    throw new Error("encrypted image is too large");
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    if (declaredLength === undefined || !Number.isFinite(declaredLength) || declaredLength > MAX_ENCRYPTED_IMAGE_BYTES) {
+      throw new Error("image response has no bounded readable body");
+    }
+    const ciphertext = new Uint8Array(await res.arrayBuffer());
+    return decryptImageCiphertext(pointer, ciphertext);
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_ENCRYPTED_IMAGE_BYTES) {
+      await reader.cancel();
+      throw new Error("encrypted image is too large");
+    }
+    chunks.push(value);
+  }
+  const ciphertext = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    ciphertext.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return decryptImageCiphertext(pointer, ciphertext);
+}
+
+async function decryptImageCiphertext(pointer: ImagePointer, ciphertext: Uint8Array): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey("raw", buf(hexToBytes(pointer.key)), "AES-GCM", false, ["decrypt"]);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf(hexToBytes(pointer.nonce)) }, cryptoKey, buf(ciphertext));
   const plaintext = new Uint8Array(pt);
