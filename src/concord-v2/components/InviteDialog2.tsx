@@ -36,7 +36,7 @@ export function InviteDialog2({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <ChromeDialogContent title="Invite people">
+      <ChromeDialogContent title="Invite people and agents">
         <InviteBody community={community} />
         <ArmadaCrestKeyframes />
       </ChromeDialogContent>
@@ -161,7 +161,7 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
         <ArmadaCrest size={72} />
         <div className="space-y-1">
           <h2 className="chrome-dialog-title font-mono font-bold lowercase tracking-tight text-foreground">
-            invite people
+            invite people and agents
           </h2>
           <p className="text-sm text-muted-foreground">
             {community?.name ? (
