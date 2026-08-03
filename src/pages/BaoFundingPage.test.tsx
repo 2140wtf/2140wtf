@@ -403,13 +403,13 @@ describe('BaoFundingPage — campaign card accessibility', () => {
     expect(screen.queryByRole('button', { name: /Campaign A/ })).not.toBeInTheDocument();
   });
 
-  it('shows milestone and compute opportunities together by default and filters by type', async () => {
+  it('shows milestone campaigns by default and switches to the agent compute rail', async () => {
     renderPage();
 
     expect(await screen.findByRole('button', { name: /Campaign A/ })).toBeInTheDocument();
-    expect(screen.getByText('Compute credits feed: browse')).toBeInTheDocument();
+    expect(screen.queryByText('Compute credits feed: browse')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Compute credits/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fund AI agent/ }));
     expect(screen.queryByRole('button', { name: /Campaign A/ })).not.toBeInTheDocument();
     expect(screen.getByText('Compute credits feed: browse')).toBeInTheDocument();
   });
