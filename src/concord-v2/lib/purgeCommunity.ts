@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { finalizeEvent } from "nostr-tools/pure";
 
 import { controlGroups } from "@/concord-v2/lib/control";
 import {
@@ -18,6 +19,95 @@ import {
 } from "@/concord-v2/lib/rumorStore";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { deleteFoldedWhere } from "@/lib/foldedCache";
+import { mirrorGroups } from "@/concord-v2/lib/relayMirror";
+import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
+
+interface RemotePurgeRelay {
+  relay(url: string): {
+    query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]>;
+    event(event: NostrEvent, opts?: { signal?: AbortSignal }): Promise<void>;
+  };
+}
+
+export interface RemotePurgeReport {
+  found: number;
+  requested: number;
+  accepted: number;
+  failed: number;
+}
+
+const PURGE_QUERY_LIMIT = 5000;
+const PURGE_AUTHOR_CHUNK = 100;
+const PURGE_TAG_CHUNK = 100;
+
+/**
+ * Request NIP-09 deletion of all durable BAO events authored by keys held by
+ * the founder. Relays are independent and may decline deletion; the report
+ * deliberately exposes that best-effort boundary to the caller.
+ */
+export async function purgeCommunityRemote(
+  nostr: RemotePurgeRelay,
+  community: CommunityV2,
+  signerKeys: ReadonlyMap<string, Uint8Array>,
+): Promise<RemotePurgeReport> {
+  const keys = new Map<string, Uint8Array>();
+  for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
+  for (const [pubkey, sk] of signerKeys) keys.set(pubkey, sk);
+  const authors = [...keys.keys()];
+  const perRelay = await Promise.all(community.relays.map(async (url): Promise<RemotePurgeReport> => {
+    const events = new Map<string, NostrEvent>();
+    for (let i = 0; i < authors.length; i += PURGE_AUTHOR_CHUNK) {
+      const chunk = authors.slice(i, i + PURGE_AUTHOR_CHUNK);
+      try {
+        const found = await nostr.relay(url).query(
+          [{ kinds: [1059, 33301], authors: chunk, limit: PURGE_QUERY_LIMIT }],
+          { signal: AbortSignal.timeout(15_000) },
+        );
+        for (const event of found) events.set(event.id, event);
+      } catch {
+        // One unavailable relay must not prevent deletion requests elsewhere.
+      }
+    }
+    const byAuthor = new Map<string, NostrEvent[]>();
+    for (const event of events.values()) {
+      const list = byAuthor.get(event.pubkey) ?? [];
+      list.push(event);
+      byAuthor.set(event.pubkey, list);
+    }
+    let requested = 0;
+    let accepted = 0;
+    for (const [pubkey, targets] of byAuthor) {
+      const sk = keys.get(pubkey);
+      if (!sk) continue;
+      for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
+        const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
+        const deletion = finalizeEvent({
+          kind: 5,
+          content: "",
+          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          created_at: Math.floor(Date.now() / 1000),
+        }, sk);
+        requested++;
+        try {
+          await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
+          accepted++;
+        } catch {
+          // The relay may reject NIP-09 or the request may time out.
+        }
+      }
+    }
+    return { found: events.size, requested, accepted, failed: requested - accepted };
+  }));
+  return perRelay.reduce(
+    (report, current) => ({
+      found: report.found + current.found,
+      requested: report.requested + current.requested,
+      accepted: report.accepted + current.accepted,
+      failed: report.failed + current.requested - current.accepted,
+    }),
+    { found: 0, requested: 0, accepted: 0, failed: 0 },
+  );
+}
 
 /**
  * Per-community local purge (P1-5 of the privacy audit): wipe ONE community's
