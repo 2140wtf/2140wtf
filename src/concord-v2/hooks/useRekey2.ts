@@ -107,10 +107,9 @@ export async function refreshInviteBundlesFor(
   for (const bundleEvent of buildRefreshedBundleEvents(bundle, live)) {
     const linkKey = linkKeys.get(bundleEvent.pubkey);
     if (!linkKey) throw new Error("Invite bundle signer is unavailable.");
-    const client = concordClient(rotated.idHex, [linkKey]);
     try {
       await Promise.allSettled(
-        targets.map((url) => client.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
+        targets.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
       );
     } finally {
       concordTransport.closeCapability(rotated.idHex, [linkKey]);
