@@ -25,7 +25,6 @@ import {
   mintLinkSigner,
   mintToken,
   parseInviteLink,
-  STOCK_RELAYS,
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
@@ -54,17 +53,13 @@ function linkAuthKey(sk: Uint8Array, pk: string): GroupKey {
 }
 
 /**
- * Where an invite bundle (kind 33301) is published: the community's home
- * relays UNION the stock interop set. The bundle must be fetchable by anyone
- * holding the link, so it can't live ONLY on the home relays — a
- * write-restricted home relay (e.g. one gating addressable kinds to
- * registered accounts, as wss://relay.bao.network does) rejects the per-link
- * signer's bundle and strands every link the community mints. The stock set
- * accepts these bundles and is exactly where {@link resolveBundle} looks when
- * a fragment carries no bootstrap hints.
+ * Invite bundles follow the community's configured relay boundary. Never add
+ * fallback relays here: publishing a private community capability to relays
+ * the creator did not select violates the relay choice represented by the
+ * community and leaks link metadata to unrelated operators.
  */
 function bundlePublishTargets(communityRelays: string[]): string[] {
-  return [...new Set([...communityRelays, ...STOCK_RELAYS])];
+  return [...new Set(communityRelays)];
 }
 
 async function readInviteList(
@@ -351,10 +346,8 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
         throw new Error(`No relay accepted the invite bundle — ${relayFailureSummary(targets, results)}`);
       }
 
-      // Bootstrap hints name only relays the bundle actually landed on —
-      // community homes first, then the stock interop set (the fragment caps
-      // the explicit list at MAX_BOOTSTRAP_RELAYS).
-      const bootstrap = [...community.relays, ...STOCK_RELAYS].filter((url) => accepted.has(url));
+      // Bootstrap hints name only configured relays that accepted the bundle.
+      const bootstrap = community.relays.filter((url) => accepted.has(url));
       const url = buildInviteUrl(inviteOrigin, link.pk, token, bootstrap);
 
       // The creator's private bookkeeping (the merge key is the token).
@@ -398,9 +391,8 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const tomb = buildRevocationEvent(hexToBytes(entry.signer_sk));
       const authKey = linkAuthKey(hexToBytes(entry.signer_sk), parsed.linkSigner);
-      // The tombstone must overwrite the bundle everywhere it was ever
-      // published: the community's homes, the link's own bootstrap hints, and
-      // the stock set the publisher fans out to.
+      // Include the link's own hints so links created by an older client that
+      // fanned out beyond the configured homes can still be revoked safely.
       const targets = bundlePublishTargets([...community.relays, ...parsed.bootstrapRelays]);
       let results: PromiseSettledResult<void>[];
       try {
