@@ -2,7 +2,7 @@ import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 
-import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
+import { useControlFold2, citationFor, invalidateControl2, publishEdition2, relayFailureSummary } from "@/concord-v2/hooks/useControlPlane2";
 import { useCommunity2 } from "@/concord-v2/hooks/useCommunityList2";
 import { resolveBundle } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -25,6 +25,7 @@ import {
   mintLinkSigner,
   mintToken,
   parseInviteLink,
+  STOCK_RELAYS,
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
@@ -50,6 +51,20 @@ const inviteListKey = (pubkey: string | undefined) => ["concord2", "invite-list"
 /** A link signer is also the exact NIP-42 identity for its bundle coordinate. */
 function linkAuthKey(sk: Uint8Array, pk: string): GroupKey {
   return { sk, pk, convKey: getConversationKey(sk, pk) };
+}
+
+/**
+ * Where an invite bundle (kind 33301) is published: the community's home
+ * relays UNION the stock interop set. The bundle must be fetchable by anyone
+ * holding the link, so it can't live ONLY on the home relays — a
+ * write-restricted home relay (e.g. one gating addressable kinds to
+ * registered accounts, as wss://relay.bao.network does) rejects the per-link
+ * signer's bundle and strands every link the community mints. The stock set
+ * accepts these bundles and is exactly where {@link resolveBundle} looks when
+ * a fragment carries no bootstrap hints.
+ */
+function bundlePublishTargets(communityRelays: string[]): string[] {
+  return [...new Set([...communityRelays, ...STOCK_RELAYS])];
 }
 
 async function readInviteList(
@@ -319,22 +334,28 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
       const authKey = linkAuthKey(link.sk, link.pk);
+      const targets = bundlePublishTargets(community.relays);
       let results: PromiseSettledResult<void>[];
       try {
         const client = concordClient(community.idHex, [authKey]);
         results = await Promise.allSettled(
-          community.relays.map((url) =>
+          targets.map((url) =>
             client.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) }),
           ),
         );
       } finally {
         concordTransport.closeCapability(community.idHex, [authKey]);
       }
-      if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
+      const accepted = new Set(targets.filter((_, i) => results[i].status === "fulfilled"));
+      if (accepted.size === 0) {
+        throw new Error(`No relay accepted the invite bundle — ${relayFailureSummary(targets, results)}`);
       }
 
-      const url = buildInviteUrl(inviteOrigin, link.pk, token, community.relays);
+      // Bootstrap hints name only relays the bundle actually landed on —
+      // community homes first, then the stock interop set (the fragment caps
+      // the explicit list at MAX_BOOTSTRAP_RELAYS).
+      const bootstrap = [...community.relays, ...STOCK_RELAYS].filter((url) => accepted.has(url));
+      const url = buildInviteUrl(inviteOrigin, link.pk, token, bootstrap);
 
       // The creator's private bookkeeping (the merge key is the token).
       await updateInviteList({
@@ -377,11 +398,15 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       const tomb = buildRevocationEvent(hexToBytes(entry.signer_sk));
       const authKey = linkAuthKey(hexToBytes(entry.signer_sk), parsed.linkSigner);
+      // The tombstone must overwrite the bundle everywhere it was ever
+      // published: the community's homes, the link's own bootstrap hints, and
+      // the stock set the publisher fans out to.
+      const targets = bundlePublishTargets([...community.relays, ...parsed.bootstrapRelays]);
       let results: PromiseSettledResult<void>[];
       try {
         const client = concordClient(community.idHex, [authKey]);
         results = await Promise.allSettled(
-          community.relays.map((relay) =>
+          targets.map((relay) =>
             client.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) }),
           ),
         );
@@ -391,7 +416,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
         authKey.convKey.fill(0);
       }
       if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error(`Couldn't reach any of the community's ${community.relays.length} relays — check your connection and retry.`);
+        throw new Error(`No relay accepted the revocation — ${relayFailureSummary(targets, results)}`);
       }
 
       await updateInviteList({
