@@ -28,7 +28,7 @@ import {
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
-import { joinCommitmentOf, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { joinCommitmentOf } from "@/concord-v2/lib/guestbook";
 import { useGuestbook2 } from "@/concord-v2/hooks/useGuestbook2";
 import { KIND_INVITE_LIST } from "@/concord-v2/lib/kinds";
 import { inviteDeliveryRelays, recipientInboxRelays } from "@/concord-v2/lib/inviteRelays";
@@ -553,26 +553,27 @@ export function useSingleUseSweep2(community: CommunityV2 | undefined): void {
 
   useEffect(() => {
     if (!user || !community || !opened || opened.length === 0) return;
-    const singles = (inviteList.data?.entries ?? []).filter(
-      (e) => e.community_id === community.idHex && e.max_uses === 1,
+    const limited = (inviteList.data?.entries ?? []).filter(
+      (e) => e.community_id === community.idHex && typeof e.max_uses === "number" && e.max_uses >= 1,
     );
-    for (const entry of singles) {
+    for (const entry of limited) {
       if (handled.current.has(entry.token)) continue;
-      let used = false;
+      let used = 0;
       try {
-        used = singleUseLinkUsed(opened, inviteCommitment(hexToBytes(entry.token)));
+        const commitment = inviteCommitment(hexToBytes(entry.token));
+        used = opened.reduce((count, event) => count + (joinCommitmentOf(event) === commitment ? 1 : 0), 0);
       } catch {
         continue; // a malformed stored entry can't be swept; skip it
       }
-      if (!used) continue;
+      if (used < (entry.max_uses ?? 1)) continue;
       handled.current.add(entry.token);
       revokeLink({ url: entry.url })
         .then(() => {
           toast({
-            title: "Single-use link spent",
+            title: "Invite link usage limit reached",
             description: entry.label
-              ? `"${entry.label}" was used to join and has auto-revoked.`
-              : "Your single-use invite link was used to join and has auto-revoked.",
+              ? `"${entry.label}" reached ${entry.max_uses} uses and has auto-revoked.`
+              : `Your invite link reached ${entry.max_uses} uses and has auto-revoked.`,
           });
         })
         .catch(() => {
