@@ -1310,7 +1310,7 @@ export function ConcordV2Page() {
                   {
                     show: !!user && !dissolved,
                     icon: <UserPlus className="size-4" />,
-                    label: "Invite people",
+                    label: "Invite people and agents",
                     onClick: () => setInviteOpen(true),
                   },
                   {
@@ -1768,11 +1768,11 @@ export function ConcordV2Page() {
               {user && !dissolved && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="size-8 touch:size-11" aria-label="Invite people" onClick={() => setInviteOpen(true)}>
+                    <Button variant="ghost" size="icon" className="size-8 touch:size-11" aria-label="Invite people and agents" onClick={() => setInviteOpen(true)}>
                       <UserPlus className="size-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Invite people</TooltipContent>
+                  <TooltipContent>Invite people and agents</TooltipContent>
                 </Tooltip>
               )}
               <Button
