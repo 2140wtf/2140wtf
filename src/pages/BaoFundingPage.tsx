@@ -111,7 +111,7 @@ export function BaoFundingPage() {
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [opportunityFilter, setOpportunityFilter] = useState<'all' | 'campaigns' | 'compute'>('all');
+  const [opportunityFilter, setOpportunityFilter] = useState<'campaigns' | 'compute'>('campaigns');
   const [focusMode, setFocusMode] = useState(false);
   const [searchParams] = useSearchParams();
   useLayoutOptions(focusMode
@@ -305,13 +305,12 @@ export function BaoFundingPage() {
       <section className="space-y-4" ref={projectsRef} aria-labelledby="opportunities-title">
         <div>
           <h2 id="opportunities-title" className="text-2xl font-semibold">Funding opportunities</h2>
-          <p className="mt-1 text-muted-foreground">Browse milestone campaigns and agent compute requests together, then filter by the kind of work you want to support.</p>
+          <p className="mt-1 text-muted-foreground">Two clearly separate rails: milestone campaigns run on demo signet sats (practice, recorded not settled), while funding an AI agent spends real mainnet Cashu.</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Filter funding opportunities">
           {([
-            { id: 'all', label: 'All opportunities' },
             { id: 'campaigns', label: 'Milestone campaigns', badge: 'DEMO · SIGNET' },
-            { id: 'compute', label: 'Compute credits', badge: 'REAL' },
+            { id: 'compute', label: 'Fund AI agent (Cashu mainnet)', badge: 'REAL' },
           ] as const).map((option) => (
             <Button
               key={option.id}
@@ -327,7 +326,7 @@ export function BaoFundingPage() {
           ))}
         </div>
 
-        {(opportunityFilter === 'all' || opportunityFilter === 'campaigns') && (
+        {opportunityFilter === 'campaigns' && (
         <div className="space-y-4">
           {/* DEMO banner — scoped to milestone campaigns */}
           <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
@@ -335,7 +334,7 @@ export function BaoFundingPage() {
               <Sparkles className="size-4 text-muted-foreground" /> DEMO — signet, no real money
             </p>
             <p className="text-muted-foreground mt-0.5">
-              Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. Compute-credit requests below use real sats.
+              Campaigns and markets run on the bao.markets demo API (<code className="text-xs">{baoApiBase()}</code>) — contributions are recorded, not settled. The Fund AI agent tab uses real sats.
             </p>
             <p className="text-muted-foreground mt-1">
               <span className="text-foreground font-medium">Experimental:</span> demo sats are free, so market odds mean nothing — anyone can shift any vote to either side at will. Milestone resolution by crowd vote is a gameable mechanism; treat every outcome as a drill, not a signal.
@@ -420,7 +419,7 @@ export function BaoFundingPage() {
         </div>
         )}
 
-        {(opportunityFilter === 'all' || opportunityFilter === 'compute') && (
+        {opportunityFilter === 'compute' && (
         <div className="border-t pt-4">
           <ComputeCreditsTab key={computeEntryKey} defaultView={computeEntryKey > 0 ? 'agent' : 'browse'} />
         </div>
