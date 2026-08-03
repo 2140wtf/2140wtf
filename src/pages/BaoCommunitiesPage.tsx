@@ -305,7 +305,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                         <RelayIdentity url={url} />
                       </label>
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {source === "dm" ? "DM inbox relay · capability unverified" : source === "app" ? "App relay" : source === "fallback" ? "Interop fallback" : "Custom relay"}
+                        {source === "dm" ? "Your DM relay · not yet tested for community writes" : source === "app" ? "App relay" : source === "fallback" ? "Interop fallback" : "Custom relay"}
                       </span>
                     </div>
                   </div>
