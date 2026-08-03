@@ -133,3 +133,41 @@ export async function writeFolded(key: string, value: unknown): Promise<void> {
     // Best-effort cache.
   }
 }
+
+/** Delete one folded value by key (best-effort). */
+export async function deleteFolded(key: string): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // Best-effort cache.
+  }
+}
+
+/** Delete every folded value whose key matches (best-effort). */
+export async function deleteFoldedWhere(match: (key: string) => boolean): Promise<void> {
+  try {
+    const db = await openDb();
+    const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAllKeys();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const doomed = keys.filter((key): key is string => typeof key === "string" && match(key));
+    if (doomed.length === 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      for (const key of doomed) tx.objectStore(STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // Best-effort cache.
+  }
+}
