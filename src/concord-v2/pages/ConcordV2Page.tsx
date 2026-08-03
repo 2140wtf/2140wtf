@@ -870,7 +870,7 @@ export function ConcordV2Page() {
     return () => document.removeEventListener("visibilitychange", stamp);
   }, [user, channelIdForRead, allMessages, markChannelRead]);
 
-  const { leave, isLeaving, dissolve, createChannel, isAddingChannel } = useCommunityManagement2(community);
+  const { leave, isLeaving, dissolve, isDissolving, purgeRemote, isPurging, createChannel, isAddingChannel } = useCommunityManagement2(community);
   const { coalesced } = useGuestbook2(community);
 
   // (Armada's CORD-07 voice join logic lived here; voice is not part of the
@@ -1245,6 +1245,21 @@ export function ConcordV2Page() {
     }
   };
 
+  const handlePurgeRemote = async () => {
+    if (!confirm("Permanently dissolve this BAO and request deletion of its relay data? This cannot be undone.")) return;
+    if (!confirm("Final warning: relay deletion is best-effort, but this will erase the founder-controlled BAO history from configured relays where NIP-09 is honored.")) return;
+    try {
+      const report = await purgeRemote();
+      toast({
+        title: "BAO purge requested",
+        description: `${report.accepted} deletion request${report.accepted === 1 ? "" : "s"} accepted; ${report.failed} rejected or timed out.`,
+      });
+      navigateTo("/bao/baocommunity");
+    } catch (e) {
+      toast({ title: "Couldn't purge BAO", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    }
+  };
+
   const handleSetRole = async (pubkey: string, roles: string[]) => {
     const tier = roles.includes("admin") ? ("admin" as const) : roles.includes("moderator") ? ("moderator" as const) : null;
     try {
@@ -1419,6 +1434,20 @@ export function ConcordV2Page() {
                       >
                         <Trash2 className="size-4" />
                         Dissolve community
+                      </button>
+                    )}
+                    {iAmOwner && (
+                      <button
+                        type="button"
+                        disabled={isPurging || isDissolving}
+                        className="flex w-full items-center gap-3 px-3 py-2 text-sm text-left text-destructive transition-colors clip-corner-lg hover:bg-destructive/10 disabled:opacity-50"
+                        onClick={() => {
+                          void handlePurgeRemote();
+                          setCommunityMenuOpen(false);
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                        {isPurging ? "Purging BAO…" : "Purge BAO from relays…"}
                       </button>
                     )}
                   </>
