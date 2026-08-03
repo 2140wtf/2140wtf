@@ -233,6 +233,19 @@ export function useDissolved2(community: CommunityV2 | undefined, active = true)
 
 // ── Publishing ───────────────────────────────────────────────────────────────
 
+/** Per-relay rejection detail for publish errors: `host: reason; …`. */
+export function relayFailureSummary(urls: string[], results: PromiseSettledResult<void>[]): string {
+  return urls
+    .map((url, i) => {
+      const r = results[i];
+      if (r.status === "fulfilled") return null;
+      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      return `${url.replace(/^wss:\/\//, "")}: ${reason}`;
+    })
+    .filter((line): line is string => Boolean(line))
+    .join("; ");
+}
+
 /**
  * Sign (plaintext seal) + wrap + broadcast one edition to the community relays.
  * `opts.relays` overrides the fan-out set — a relay-list edition must reach
@@ -252,7 +265,7 @@ export async function publishEdition2(
     urls.map((url) => concordClient(community.idHex, [control]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
   );
   if (!results.some((r) => r.status === "fulfilled")) {
-    throw new Error("No relay accepted the change.");
+    throw new Error(`No relay accepted the change — ${relayFailureSummary(urls, results)}`);
   }
   // Write our own edition to the local opened-event store immediately: the
   // refetch after invalidation unions the store, so the publisher's fold picks
