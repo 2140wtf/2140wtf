@@ -39,7 +39,7 @@ import {
 import { hasPermission, Permissions } from "@/concord-v2/lib/roles";
 import { queryByStreams, readStreamCursor, updateStreamCursor, writeOpened } from "@/concord-v2/lib/rumorStore";
 import { openWrap, rewrapSeal, sealRumor, wrapSeal, type OpenedEvent } from "@/concord-v2/lib/stream";
-import { buildRefreshedBundleEvents, type InviteBundle } from "@/concord-v2/lib/invite";
+import { buildRefreshedBundleEvents, STOCK_RELAYS, type InviteBundle } from "@/concord-v2/lib/invite";
 import { fetchInviteList } from "@/concord-v2/hooks/useInvites2";
 import { toast } from "@/hooks/useToast";
 import type { CommunityMetadata, CommunityV2, HeldRoot, PrivateChannelKey } from "@/concord-v2/lib/types";
@@ -95,7 +95,11 @@ export async function refreshInviteBundlesFor(
     creator_npub: user.pubkey,
   };
 
-  const targets = publishRelays ?? rotated.relays;
+  // Refreshed bundles must overwrite every copy a joiner could resolve:
+  // createLink fans bundles out to the stock interop set (write-restricted
+  // home relays reject kind 33301), so the refresh covers it too — otherwise
+  // the stock copy keeps vending the superseded epoch forever.
+  const targets = publishRelays ?? [...new Set([...rotated.relays, ...STOCK_RELAYS])];
   const linkKeys = new Map<string, GroupKey>();
   for (const entry of live) {
     const sk = hexToBytes(entry.signer_sk);
