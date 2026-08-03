@@ -25,6 +25,7 @@ import {
   mintLinkSigner,
   mintToken,
   parseInviteLink,
+  STOCK_RELAYS,
   type InviteBundle,
   type InviteList,
 } from "@/concord-v2/lib/invite";
@@ -53,13 +54,27 @@ function linkAuthKey(sk: Uint8Array, pk: string): GroupKey {
 }
 
 /**
- * Invite bundles follow the community's configured relay boundary. Never add
- * fallback relays here: publishing a private community capability to relays
- * the creator did not select violates the relay choice represented by the
- * community and leaks link metadata to unrelated operators.
+ * Every configured relay rejected the invite bundle (e.g. a write-restricted
+ * relay gating addressable kinds to registered accounts, as
+ * wss://relay.bao.network does). Carries the per-relay summary so the UI can
+ * offer the interop fallback as an explicit, informed choice.
  */
-function bundlePublishTargets(communityRelays: string[]): string[] {
-  return [...new Set(communityRelays)];
+export class BundleRejectedError extends Error {
+  constructor(public readonly relaySummary: string) {
+    super(`No configured relay accepted the invite bundle — ${relaySummary}`);
+    this.name = "BundleRejectedError";
+  }
+}
+
+/**
+ * Invite bundles follow the community's configured relay boundary. Fallback
+ * relays join ONLY with `interopFallback` (the user's explicit, informed
+ * consent after every configured relay rejected) — silently publishing a
+ * private community capability to relays the creator did not select leaks
+ * link metadata to unrelated operators.
+ */
+function bundlePublishTargets(communityRelays: string[], interopFallback = false): string[] {
+  return interopFallback ? [...new Set([...communityRelays, ...STOCK_RELAYS])] : [...new Set(communityRelays)];
 }
 
 async function readInviteList(
@@ -301,8 +316,8 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
     invalidateControl2(queryClient, community.idHex);
   };
 
-  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string; maxUses?: number; audience?: "agent" }>({
-    mutationFn: async ({ expiresAtMs, label, maxUses, audience }) => {
+  const createLink = useMutation<string, Error, { expiresAtMs?: number; label?: string; maxUses?: number; audience?: "agent"; interopFallback?: boolean }>({
+    mutationFn: async ({ expiresAtMs, label, maxUses, audience, interopFallback }) => {
       if (!user || !community) throw new Error("Not ready.");
       if (!user.signer.nip44) throw new Error("This signer can't mint invite links (NIP-44 unsupported).");
 
@@ -328,7 +343,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       const bundle = buildBundle({ expiresAtMs, label, maxUses, audience });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-      const targets = bundlePublishTargets(community.relays);
+      const targets = bundlePublishTargets(community.relays, interopFallback === true);
       const results = await Promise.allSettled(
         targets.map((url) =>
           // Invite bundles are public kind-33301 addressable events, not
@@ -340,11 +355,13 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       );
       const accepted = new Set(targets.filter((_, i) => results[i].status === "fulfilled"));
       if (accepted.size === 0) {
+        if (!interopFallback) throw new BundleRejectedError(relayFailureSummary(targets, results));
         throw new Error(`No relay accepted the invite bundle — ${relayFailureSummary(targets, results)}`);
       }
 
-      // Bootstrap hints name only configured relays that accepted the bundle.
-      const bootstrap = community.relays.filter((url) => accepted.has(url));
+      // Bootstrap hints name only relays the bundle actually landed on —
+      // configured homes first, the interop set (when consented) after.
+      const bootstrap = targets.filter((url) => accepted.has(url));
       const url = buildInviteUrl(inviteOrigin, link.pk, token, bootstrap);
 
       // The creator's private bookkeeping (the merge key is the token).
