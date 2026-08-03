@@ -23,18 +23,13 @@ describe('getRailBalance', () => {
     expect(getRailBalance('l1', api, 0)).toBe(4000);
   });
 
-  it('always shows the local balance for the cashu rail, never the custodial API balance', () => {
-    // The Cashu panel spends local NIP-60 proofs, so the tile must match the
-    // panel. The custodial bao.markets cashu balance only appears in the
-    // breakdown line above the tiles.
-    expect(getRailBalance('cashu', api, 1234)).toBe(1234);
+  it('shows the custodial balance for the cashu rail when the API is available', () => {
+    expect(getRailBalance('cashu', api, 1234)).toBe(40660);
   });
 
-  it('shows the local cashu balance regardless of API health', () => {
-    // Regression: the tile previously flipped between custodial (API up) and
-    // local (API down) balances at the same pixel position.
+  it('falls back to the local cashu balance when the API is unavailable', () => {
     expect(getRailBalance('cashu', undefined, 1234)).toBe(1234);
-    expect(getRailBalance('cashu', { ...api, cashu: 0 }, 1234)).toBe(1234);
+    expect(getRailBalance('cashu', { ...api, cashu: 0 }, 1234)).toBe(0);
   });
 
   it('falls back to 0 for other rails when API is missing', () => {
@@ -48,8 +43,8 @@ describe('getRailBalance', () => {
 });
 
 describe('getRailTileBalance', () => {
-  it('shows the local balance on the cashu tile regardless of API health', () => {
-    expect(getRailTileBalance('cashu', api, 1234)).toEqual({ main: '1234 sats' });
+  it('shows the custodial balance on the cashu tile when the API is available', () => {
+    expect(getRailTileBalance('cashu', api, 1234)).toEqual({ main: '40660 sats' });
     expect(getRailTileBalance('cashu', undefined, 1234)).toEqual({ main: '1234 sats' });
   });
 
