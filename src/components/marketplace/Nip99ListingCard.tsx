@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPin, ShoppingCart, Tag, User, Box, Truck, Download, ImageOff } from 'lucide-react';
+import { MapPin, ShoppingCart, Tag, User, MessageCircle, Box, Truck, Download, ImageOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
@@ -277,15 +277,26 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                 <span className="font-medium">{displayName}</span>
                 <span className="text-muted-foreground text-xs ml-2">{listing.pubkey.slice(0, 12)}…</span>
               </div>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                onClick={() => navigate(profileUrl)}
-              >
-                <User className="w-3.5 h-3.5 mr-1" />
-                Visit profile
-              </Button>
+              <div className="flex items-center gap-3 shrink-0">
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => navigate(profileUrl)}
+                >
+                  <User className="w-3.5 h-3.5 mr-1" />
+                  Visit profile
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => navigate(`/messages/${merchantNpub}`)}
+                >
+                  <MessageCircle className="w-3.5 h-3.5 mr-1" />
+                  Message
+                </Button>
+              </div>
             </div>
 
             {listing.summary && (
