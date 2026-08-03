@@ -25,6 +25,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useCashuSeed } from '@/hooks/useCashuSeed';
+import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -53,6 +56,7 @@ import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
+import { nip19 } from 'nostr-tools';
 
 function formatSats(n: number): string {
   return Number(n).toLocaleString();
@@ -831,9 +835,16 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   onContributed: () => void;
 }) {
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const { seedPhrase } = useCashuSeed();
+  const relayUrls = useMemo(
+    () => (config.relayMetadata?.relays ?? []).filter((relay) => relay.read !== false || relay.write !== false).map((relay) => relay.url),
+    [config.relayMetadata?.relays],
+  );
+  const baoWallet = useBaoCashuWallet(seedPhrase ?? '', user!, relayUrls, { enableAutoClaim: false, enabled: !!user && !!seedPhrase });
   const { toast } = useToast();
   const [amount, setAmount] = useState('1000');
-  const [rail, setRail] = useState<BaoRail>('lightning');
+  const [rail, setRail] = useState<BaoRail>('cashu');
   const [judgeModel, setJudgeModel] = useState<string>(DEFAULT_VERIFICATION_MODEL);
   const [instructions, setInstructions] = useState<Record<string, unknown> | null>(null);
   // Stable idempotency key per campaign: a retry after a network timeout (or
@@ -884,7 +895,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   }, [models, judgeModel, serverDefaultModel]);
 
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!user) throw new Error('Log in to fund this project');
       if (fundraiser?.owner_pubkey.toLowerCase() === user.pubkey.toLowerCase()) {
         throw new Error('Campaign owners cannot fund their own project.');
@@ -893,9 +904,19 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         idemKeyRef.current = { fundraiserId: fundraiser!.id, key: crypto.randomUUID() };
       }
       mutationTargetIdRef.current = fundraiser!.id;
+      if (rail !== 'cashu') throw new Error('Milestone contributions currently settle through the BAO Cashu rail only.');
+      if (!baoWallet.mintUrl) throw new Error('Select a BAO Cashu mint before contributing.');
+      const amountSats = parseInt(amount, 10) || 0;
+      const balance = baoWallet.balances?.[baoWallet.mintUrl] ?? 0;
+      if (balance < amountSats) throw new Error(`Insufficient BAO Cashu balance. You have ${balance.toLocaleString()} sats.`);
+      const recipient = nip19.npubEncode(fundraiser!.owner_pubkey);
+      const payment = await baoWallet.sendNutzap(amountSats, recipient, baoWallet.mintUrl, { memo: `BAO milestone: ${fundraiser!.title}` });
+      if (payment.status === 'failed') throw new Error(baoWallet.error ?? 'BAO Cashu payment failed.');
+      if (payment.status === 'unknown') throw new Error('Payment outcome is unknown. Check your BAO wallet before retrying.');
       return contributeToFundraiser(user!.signer, fundraiser!.id, {
-        amount_sats: parseInt(amount, 10) || 0,
+        amount_sats: amountSats,
         rail,
+        ...(payment.status === 'sent' ? { reference: payment.eventId } : {}),
         idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current.key}`,
         preferredModel: judgeModel || undefined,
       });
@@ -916,7 +937,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
       if (openFundraiserIdRef.current !== null && openFundraiserIdRef.current === mutationTargetIdRef.current) {
         setInstructions(data.payment_instructions as Record<string, unknown>);
       }
-      toast({ title: 'Contribution recorded (DEMO)' });
+      toast({ title: 'BAO Cashu contribution paid and recorded' });
       onContributed();
     },
     onError: (e) => toast({ title: 'Contribution failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
@@ -967,7 +988,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                   <button
                     key={r}
                     type="button"
-                    disabled={!isBaoRailLive(r)}
+                    disabled={!isBaoRailLive(r) || r !== 'cashu'}
                     onClick={() => setRail(r)}
                     className={cn(
                       'rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
@@ -976,12 +997,12 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                     )}
                   >
                     {BAO_RAIL_LABELS[r]}
-                    {!isBaoRailLive(r) && <span className="block text-[9px]">soon</span>}
+                    {(!isBaoRailLive(r) || r !== 'cashu') && <span className="block text-[9px]">Cashu only</span>}
                   </button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Need demo sats? Claim 21,400 free sats per rail every 24h on{' '}
+                BAO milestone contributions currently settle from your BAO Cashu balance. Need signet sats? Claim 21,400 free sats every 24h on{' '}
                 <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
                   bao.markets
                 </button>
@@ -1026,7 +1047,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
               disabled={!(parseInt(amount, 10) > 0) || mutation.isPending}
               onClick={() => mutation.mutate()}
             >
-              {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Contribute ${formatSats(parseInt(amount, 10) || 0)} sats (demo)`}
+              {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Pay and contribute ${formatSats(parseInt(amount, 10) || 0)} BAO sats`}
             </Button>
             )}
           </div>
