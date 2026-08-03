@@ -56,6 +56,7 @@ export async function fetchBaoWalletBalances(signer: BaoApiSigner): Promise<BaoW
   const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+    signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json().catch(() => ({}))) as BalanceEnvelope;
   if (!res.ok) {
