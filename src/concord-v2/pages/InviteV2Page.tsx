@@ -39,7 +39,18 @@ export function InviteV2Page() {
   // navigating away) before the agent stores it would orphan the key.
   const [holdJoin, setHoldJoin] = useState(false);
 
-  const fragment = (location.hash || window.location.hash).replace(/^#/, "").trim();
+  // Capture the fragment exactly once, then scrub it from the address bar:
+  // an invite URL is a bearer capability — it must not linger in visible
+  // history, tab restores, screenshots, or a later copy of the URL. The
+  // parsed invite below keeps working from the captured copy; a manual
+  // reload after the scrub needs the original link again (it lives wherever
+  // it was shared).
+  const [fragment] = useState(() => (location.hash || window.location.hash).replace(/^#/, "").trim());
+  useEffect(() => {
+    if (window.location.hash) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    }
+  }, []);
   const invite = naddr && fragment ? parseInviteRoute(naddr, fragment) : undefined;
 
   // Look before you leap: resolve the preview even before sign-in.
