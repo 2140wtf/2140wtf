@@ -926,16 +926,9 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
       // intentional contribution isn't mistaken for a retry of this one.
       idemKeyRef.current = null;
       if (data.replayed) {
-        // Replay responses omit payment_instructions — setting them would
-        // blank the dialog back to the funding form after a success toast.
-        toast({ title: 'Contribution already recorded (DEMO)' });
+        toast({ title: 'Contribution already recorded' });
         onContributed();
         return;
-      }
-      // Only show the instructions while the dialog is still open on the
-      // campaign this request was for.
-      if (openFundraiserIdRef.current !== null && openFundraiserIdRef.current === mutationTargetIdRef.current) {
-        setInstructions(data.payment_instructions as Record<string, unknown>);
       }
       toast({ title: 'BAO Cashu contribution paid and recorded' });
       onContributed();
@@ -956,7 +949,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         <DialogHeader>
           <DialogTitle>Fund: {fundraiser?.title}</DialogTitle>
           <DialogDescription>
-            DEMO — the contribution is recorded by the API but no real payment is made.
+            Pays BAO signet sats from your NIP-60 Cashu wallet, then records the contribution.
             {fundraiser && (remaining > 0 ? ` ${formatSats(remaining)} sats to goal.` : ' Goal reached — further contributions are disabled.')}
           </DialogDescription>
         </DialogHeader>
