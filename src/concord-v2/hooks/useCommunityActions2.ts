@@ -1,6 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getPublicKey } from "nostr-tools/pure";
 
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
@@ -40,6 +41,7 @@ import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
 import { concordClient, ephemeralRelayClient } from "@/concord-v2/lib/concordTransport";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
+import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
@@ -485,6 +487,7 @@ export function useCommunityActions2() {
 
 /** Per-community actions: leave, dissolve, and channel management. */
 export function useCommunityManagement2(community: CommunityV2 | undefined) {
+  const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { mutateAsync: updateList } = useUpdateCommunityList2();
   const { data: folded } = useControlFold2(community);
@@ -516,6 +519,52 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
         throw new Error("No relay accepted the dissolution.");
       }
       await updateList({ type: "remove", communityId: community.idHex });
+    },
+  });
+
+  const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
+    mutationFn: async () => {
+      if (!user || !community) throw new Error("Not ready.");
+      if (user.pubkey !== community.owner) throw new Error("Only the founder can purge this community.");
+      if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
+
+      // Capture link-signer secrets before removing the community from the
+      // local list. Without these keys, kind-33301 invite bundles cannot be
+      // addressed by NIP-09 because deletion must be signed by their author.
+      const inviteKeys = new Map<string, Uint8Array>();
+      try {
+        const listEvents = await nostr.query([{ kinds: [13303], authors: [user.pubkey], limit: 20 }]);
+        for (const event of listEvents) {
+          try {
+            const decrypted = await user.signer.nip44.decrypt(user.pubkey, event.content);
+            const parsed = JSON.parse(decrypted) as { entries?: Array<{ community_id?: string; signer_sk?: string }> };
+            for (const entry of parsed.entries ?? []) {
+              if (entry.community_id !== community.idHex || !entry.signer_sk) continue;
+              let sk: Uint8Array | undefined;
+              try {
+                sk = hex32(entry.signer_sk);
+              } catch {
+                sk = undefined;
+              }
+              if (sk && sk.length === 32) inviteKeys.set(getPublicKey(sk), sk);
+            }
+          } catch {
+            // An undecryptable historical copy does not block other keys.
+          }
+        }
+      } catch {
+        // Continue with stream keys; the report still makes missing invite
+        // bundle deletions visible to the caller.
+      }
+
+      // Publish the terminal marker first, then request physical deletion.
+      await dissolve.mutateAsync();
+      const report = await purgeCommunityRemote(nostr, community, inviteKeys);
+      await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
+      if (report.accepted === 0 && report.found > 0) {
+        throw new Error("The relay did not accept any NIP-09 deletion requests.");
+      }
+      return report;
     },
   });
 
@@ -597,6 +646,8 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
     isLeaving: leave.isPending,
     dissolve: dissolve.mutateAsync,
     isDissolving: dissolve.isPending,
+    purgeRemote: purgeRemote.mutateAsync,
+    isPurging: purgeRemote.isPending,
     createChannel: createChannel.mutateAsync,
     isAddingChannel: createChannel.isPending,
     renameChannel: renameChannel.mutateAsync,
