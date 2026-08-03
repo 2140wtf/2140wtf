@@ -297,6 +297,21 @@ export async function unseenPlaneWraps(wraps: NostrEvent[]): Promise<NostrEvent[
   return wraps.filter((w) => !seenCompleteWraps.has(w.id));
 }
 
+/**
+ * Forget processed wrap ids, session AND persisted (loads the memo first so a
+ * racing load can't resurrect them). Required by the per-community local
+ * purge: it wipes the opened-event store, so the next sweep must re-decrypt
+ * these wraps — without this the memo would suppress them as "already
+ * processed" and the plane would never come back.
+ */
+export async function forgetPlaneWraps(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await loadSeenWraps();
+  const before = seenCompleteWraps.size;
+  for (const id of ids) seenCompleteWraps.delete(id);
+  if (seenCompleteWraps.size !== before) schedulePersistSeenWraps();
+}
+
 /** Test seam: forget which wraps have been processed (session + persisted). */
 export function _resetPlaneSweepMemoForTests(): void {
   seenCompleteWraps.clear();

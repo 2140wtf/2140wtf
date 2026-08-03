@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Eraser, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -61,6 +61,7 @@ import { useCommunity2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityLi
 import { useCommunityManagement2, useStrandedRecovery2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useChannels2, useControlFold2, useDissolved2 } from "@/concord-v2/hooks/useControlPlane2";
 import { BanMemberDialog } from "@/concord-v2/components/BanMemberDialog2";
+import { PurgeCommunityDialog2 } from "@/concord-v2/components/PurgeCommunityDialog2";
 import type { BanPhase } from "@/concord-v2/hooks/useModeration2";
 import { hasForeignLiveLinks } from "@/concord-v2/lib/control";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
@@ -893,6 +894,7 @@ export function ConcordV2Page() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [rolesOpen, setRolesOpen] = useState(false);
   const [banTarget, setBanTarget] = useState<string | null>(null);
+  const [purgeOpen, setPurgeOpen] = useState(false);
   // The community-name header menu (Discord-style): expands inline below the
   // header, pushing the channel list down with a height animation.
   const [communityMenuOpen, setCommunityMenuOpen] = useState(false);
@@ -1368,6 +1370,12 @@ export function ConcordV2Page() {
                     icon: communityMuted ? <Bell className="size-4" /> : <BellOff className="size-4" />,
                     label: communityMuted ? "Unmute community" : "Mute community",
                     onClick: () => toggleCommunityMute(`c2:${community.idHex}`),
+                  },
+                  {
+                    show: !!user,
+                    icon: <Eraser className="size-4" />,
+                    label: "Delete local data…",
+                    onClick: () => setPurgeOpen(true),
                   },
                 ]
                   .filter((i) => i.show)
@@ -2127,6 +2135,7 @@ export function ConcordV2Page() {
       </div>
 
       <InviteDialog2 community={community} open={inviteOpen} onOpenChange={setInviteOpen} />
+      <PurgeCommunityDialog2 community={community} open={purgeOpen} onOpenChange={setPurgeOpen} />
       <BanMemberDialog
         target={banTarget}
         willRotate={banWillRotate}
