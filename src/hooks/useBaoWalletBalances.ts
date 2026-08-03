@@ -18,6 +18,13 @@ export function useBaoWalletBalances() {
     enabled: !!user,
     staleTime: 15_000,
     refetchInterval: 30_000,
+    // The BAO tab can be mounted after the wallet page itself, and balances
+    // may change while the user is on another tab or returns from bao.markets.
+    // Always fetch on mount/focus instead of waiting for a manual refresh.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchIntervalInBackground: true,
     retry: 1,
     queryFn: () => fetchBaoWalletBalances(user!.signer),
   });
