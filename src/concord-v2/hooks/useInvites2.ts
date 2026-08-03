@@ -328,19 +328,16 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       const bundle = buildBundle({ expiresAtMs, label, maxUses, audience });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-      const authKey = linkAuthKey(link.sk, link.pk);
       const targets = bundlePublishTargets(community.relays);
-      let results: PromiseSettledResult<void>[];
-      try {
-        const client = concordClient(community.idHex, [authKey]);
-        results = await Promise.allSettled(
-          targets.map((url) =>
-            client.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) }),
-          ),
-        );
-      } finally {
-        concordTransport.closeCapability(community.idHex, [authKey]);
-      }
+      const results = await Promise.allSettled(
+        targets.map((url) =>
+          // Invite bundles are public kind-33301 addressable events, not
+          // Concord stream wraps. Publish through the app's authenticated
+          // relay client; using the Concord transport here makes BAO wait
+          // for NIP-42 from the freshly generated link key and time out.
+          nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(15_000) }),
+        ),
+      );
       const accepted = new Set(targets.filter((_, i) => results[i].status === "fulfilled"));
       if (accepted.size === 0) {
         throw new Error(`No relay accepted the invite bundle — ${relayFailureSummary(targets, results)}`);
@@ -390,23 +387,14 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       if (!entry) throw new Error("This device doesn't hold that link's signing secret.");
 
       const tomb = buildRevocationEvent(hexToBytes(entry.signer_sk));
-      const authKey = linkAuthKey(hexToBytes(entry.signer_sk), parsed.linkSigner);
       // Include the link's own hints so links created by an older client that
       // fanned out beyond the configured homes can still be revoked safely.
       const targets = bundlePublishTargets([...community.relays, ...parsed.bootstrapRelays]);
-      let results: PromiseSettledResult<void>[];
-      try {
-        const client = concordClient(community.idHex, [authKey]);
-        results = await Promise.allSettled(
-          targets.map((relay) =>
-            client.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) }),
-          ),
-        );
-      } finally {
-        concordTransport.closeCapability(community.idHex, [authKey]);
-        authKey.sk.fill(0);
-        authKey.convKey.fill(0);
-      }
+      const results = await Promise.allSettled(
+        targets.map((relay) =>
+          nostr.relay(relay).event(tomb, { signal: AbortSignal.timeout(15_000) }),
+        ),
+      );
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error(`No relay accepted the revocation — ${relayFailureSummary(targets, results)}`);
       }
