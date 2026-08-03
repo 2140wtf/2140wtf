@@ -26,19 +26,27 @@ import { APP_RELAYS as APP_RELAY_METADATA } from "@/lib/appRelays";
 import { STOCK_RELAYS } from "@/concord-v2/lib/invite";
 import { cn } from "@/lib/utils";
 
+/**
+ * Interop discovery relays offered in the create dialog. Curated by probing
+ * each relay with a Concord-style kind-1059 wrap from a fresh key (what a
+ * community genesis actually publishes): PAID relays (nostr.land family,
+ * nostr.wine) and relays that categorically reject kind 1059 or unregistered
+ * pubkeys (purplepag.es, relay.nostr.info, nostr21.com, relay.nostr.nu,
+ * relay.nostrview.com, relay.nostrplebs.com) are excluded — suggesting them
+ * strands the create with "No relay accepted the change."
+ */
 const DISCOVERY_RELAY_URLS = [
-  "wss://atlas.nostr.land", "wss://eden.nostr.land",
   "wss://relay.dreamith.to", "wss://relay.primal.net", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band",
   "wss://offchain.pub", "wss://relay.snort.social", "wss://bitcoiner.social", "wss://nostr.bitcoiner.social", "wss://nostr.jcloud.es",
-  "wss://purplepag.es", "wss://relay.mostr.pub", "wss://relay.nsecbunker.com", "wss://nostr-relay.psfoundation.info", "wss://nostr.swiss-enigma.ch", "wss://jskitty.com/nostr",
-  "wss://asia.vectorapp.io/nostr", "wss://relay.nostrview.com", "wss://relay.notoshi.io", "wss://nostr.slothy.win", "wss://relay.nostr.ro",
-  "wss://relay.nostr.bg", "wss://nostr.wine", "wss://nostr.land", "wss://relay.nostr.info", "wss://relay.nostrati.com",
+  "wss://relay.mostr.pub", "wss://relay.nsecbunker.com", "wss://nostr-relay.psfoundation.info", "wss://nostr.swiss-enigma.ch", "wss://jskitty.com/nostr",
+  "wss://asia.vectorapp.io/nostr", "wss://relay.notoshi.io", "wss://nostr.slothy.win", "wss://relay.nostr.ro",
+  "wss://relay.nostr.bg", "wss://relay.nostrati.com",
   "wss://relay.nostr.net", "wss://nostr.mom", "wss://nostr.oxtr.dev", "wss://relay.orangepill.dev", "wss://relay.f7z.io",
-  "wss://nostr21.com", "wss://relay.nostr.band", "wss://relay.nostrplebs.com", "wss://relay.nostrified.org", "wss://nostr-relay.app",
-  "wss://nostr-relay.wlvs.dev", "wss://relay.nostr.net", "wss://nostr.mutinywallet.com", "wss://relay.nostr.bg", "wss://relay.nostrverse.com",
-  "wss://nostr-relay.dtonon.com", "wss://relay.nostr.wine", "wss://nostr.azzamo.net", "wss://relay.nostr.ro", "wss://nostr.privex.io",
+  "wss://relay.nostrified.org", "wss://nostr-relay.app",
+  "wss://nostr-relay.wlvs.dev", "wss://nostr.mutinywallet.com", "wss://relay.nostrverse.com",
+  "wss://nostr-relay.dtonon.com", "wss://nostr.azzamo.net", "wss://nostr.privex.io",
   "wss://nostr-relay.schnitzel.world", "wss://relay.nostr.express", "wss://relay.nostr.au", "wss://nostr-relay.online", "wss://nostr.21.co",
-  "wss://relay.nostr.nu", "wss://relay.nostr.place", "wss://nostr-relay.einundzwanzig.space", "wss://relay.nostr.guru", "wss://nostr-relay.damus.io",
+  "wss://relay.nostr.place", "wss://nostr-relay.einundzwanzig.space", "wss://relay.nostr.guru", "wss://nostr-relay.damus.io",
 ];
 
 /**
