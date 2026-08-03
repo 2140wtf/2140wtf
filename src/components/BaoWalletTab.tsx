@@ -173,7 +173,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
 
   const cashuWallet = useBaoCashuWallet(seedPhrase, user, relayUrls, { enableAutoClaim: false });
-  const apiBalances = useBaoWalletBalances();
+  const apiBalances = useBaoWalletBalances(user);
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = cashuWallet;
   const { toast } = useToast();
   const walletStatus = useWallet();
