@@ -320,9 +320,9 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <div className="pt-1">
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="px-0 text-xs text-muted-foreground hover:text-foreground"
+                    className="w-full justify-between border-primary/40 bg-background/40 text-xs text-foreground hover:bg-primary/10"
                     onClick={() => setShowMoreRelays((open) => !open)}
                     aria-expanded={showMoreRelays}
                   >
