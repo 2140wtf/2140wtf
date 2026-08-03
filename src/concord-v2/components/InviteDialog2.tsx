@@ -1,8 +1,7 @@
-import { Check, Copy, Info, Link as LinkIcon, Loader2, UserPlus } from "lucide-react";
+import { Check, Copy, Info, Link as LinkIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { BaoMark as ArmadaCrest, BaoMarkKeyframes as ArmadaCrestKeyframes } from "@/components/brand/BaoMark";
-import { ProfileSearchSelect } from "@/components/chat/ProfileSearchSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, ChromeDialogContent } from "@/components/ui/dialog";
@@ -10,20 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useInviteActions2, useMyLinkUsage2 } from "@/concord-v2/hooks/useInvites2";
-import { DIRECT_INVITE_DISCLOSURE } from "@/concord-v2/lib/directInvite";
 import { toast } from "@/hooks/useToast";
-import type { SearchProfile } from "@/hooks/useSearchProfiles";
 import { writeClipboardText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
 
 /**
- * Invite people to a Concord V2 community two ways (CORD-05): a direct
- * gift-wrapped key handoff to someone found by name (NIP-50 search, follows
- * first), or a shareable public link — the path carries the bundle's naddr
- * locator, the `#fragment` carries the unlock token, never sent to any server.
- * Links revoke without re-keying; a direct invite is unrevocable and keeps the
- * community Private.
+ * Invite people and agents with shareable public links (CORD-05). The path
+ * carries the bundle's naddr locator and the `#fragment` carries the unlock
+ * token, never sent to any server. Links revoke without re-keying.
  */
 export function InviteDialog2({
   community,
@@ -45,44 +39,19 @@ export function InviteDialog2({
 }
 
 function InviteBody({ community }: { community: CommunityV2 | undefined }) {
-  const { createLink, isCreatingLink, revokeLink, myLinks, sendDirectInvite, isSendingInvite, isPublic, revokeWouldPrivatize } =
+  const { createLink, isCreatingLink, revokeLink, myLinks, isPublic, revokeWouldPrivatize } =
     useInviteActions2(community);
   // Per-link join status ("was it ever used?") — matched client-side from the
   // sealed Guestbook's token commitments; only the creator can make this map.
   const { usage } = useMyLinkUsage2(community);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [expiry, setExpiry] = useState<string>("single"); // "single" | "never" | days
+  const [expiry, setExpiry] = useState<string>("single"); // "single" | "limited" | "never" | days
+  const [maxUses, setMaxUses] = useState<string>("2");
   const [audience, setAudience] = useState<string>("human"); // "human" | "agent"
   const [label, setLabel] = useState("");
   const [revoking, setRevoking] = useState<string | null>(null);
-  const [sentPubkey, setSentPubkey] = useState<string | null>(null);
-  const [pendingPubkey, setPendingPubkey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const handleSelect = async (profile: SearchProfile) => {
-    setError(null);
-    if (
-      !confirm(
-        `${DIRECT_INVITE_DISCLOSURE} Cancel and create a link below for lower linkability.`,
-      )
-    ) {
-      return;
-    }
-    setPendingPubkey(profile.pubkey);
-    try {
-      await sendDirectInvite({ recipientPubkey: profile.pubkey });
-      setSentPubkey(profile.pubkey);
-      toast({
-        title: "Encrypted invite delivered",
-        description: "The recipient will be asked to accept.",
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't send the invite.");
-    } finally {
-      setPendingPubkey(null);
-    }
-  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -100,9 +69,15 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
     try {
       const labelOpt = label.trim() || undefined;
       const audienceOpt = audience === "agent" ? ("agent" as const) : undefined;
+      const limitedUses = Number(maxUses);
+      if (expiry === "limited" && (!Number.isInteger(limitedUses) || limitedUses < 1 || limitedUses > 21)) {
+        throw new Error("Limited-use links must allow between 1 and 21 uses.");
+      }
       setLink(
         expiry === "single"
           ? await createLink({ maxUses: 1, label: labelOpt, audience: audienceOpt })
+          : expiry === "limited"
+            ? await createLink({ maxUses: limitedUses, label: labelOpt, audience: audienceOpt })
           : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt, audience: audienceOpt }),
       );
     } catch (e) {
@@ -175,31 +150,12 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
         </div>
       </div>
 
-      {/* Direct invite — search by name, follows first. A key handoff: the
-          bundle giftwraps straight to them, and the community stays Private. */}
+      {/* Shareable link — the only invite path, so no recipient npub is
+          published to inbox relays before acceptance. */}
       <div className="w-full space-y-2">
         <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          <UserPlus className="size-3.5" />
-          Invite someone directly
-        </div>
-        <ProfileSearchSelect onSelect={handleSelect} busyPubkey={pendingPubkey} autoFocus />
-        {sentPubkey && !isSendingInvite && (
-          <p className="flex items-center gap-1.5 text-xs text-success">
-            <Check className="size-3.5" /> Invite sent. Search again to invite more.
-          </p>
-        )}
-        <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-          A direct invite exposes the recipient's pubkey, the Concord invite classifier,
-          timing, size, and expiry when set to their inbox relays. A link avoids publishing the
-          recipient before acceptance, but relay traffic can still be correlated.
-        </p>
-      </div>
-
-      {/* Public link — the escape hatch / share-anywhere path. */}
-      <div className="w-full space-y-2 border-t border-chrome pt-5">
-        <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           <LinkIcon className="size-3.5" />
-          Or share a link
+          Share an invite link
           <Popover>
             <PopoverTrigger asChild>
               <button type="button" className="ml-auto text-muted-foreground/70 hover:text-foreground" aria-label="About invite links">
@@ -256,12 +212,26 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="single">Single use</SelectItem>
+                  <SelectItem value="limited">Limited uses (1–21)</SelectItem>
                   <SelectItem value="never">Never expires</SelectItem>
                   <SelectItem value="1">Expires in 1 day</SelectItem>
                   <SelectItem value="7">Expires in 7 days</SelectItem>
                   <SelectItem value="30">Expires in 30 days</SelectItem>
                 </SelectContent>
               </Select>
+              {expiry === "limited" && (
+                <Input
+                  type="number"
+                  min={1}
+                  max={21}
+                  step={1}
+                  value={maxUses}
+                  onChange={(e) => setMaxUses(e.target.value)}
+                  placeholder="Uses"
+                  className="w-24 shrink-0 text-sm"
+                  aria-label="Maximum link uses"
+                />
+              )}
               <Input
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
@@ -332,8 +302,8 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
               u ? "text-success" : "text-muted-foreground/70",
             )}>
               {u
-                ? `Used ${u.count > 1 ? `×${u.count} ` : ""}· first ${new Date(u.firstUsedMs).toLocaleDateString()}`
-                : "Not used yet"}
+                ? `${e.max_uses ? `Used ${u.count} / ${e.max_uses}` : `Used ${u.count}`} · first ${new Date(u.firstUsedMs).toLocaleDateString()}`
+                : e.max_uses ? `Used 0 / ${e.max_uses}` : "Not used yet"}
             </p>
             </div>
             );

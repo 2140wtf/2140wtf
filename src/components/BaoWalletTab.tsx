@@ -115,15 +115,15 @@ const API_RAIL_LABELS: Record<keyof BaoWalletBalances, string> = {
 
 /** Map a rail id to its displayed balance.
  *
- * The Cashu rail always shows the local NIP-60 balance, because its panel
- * (CashuPanel) spends local proofs — the tile must match the panel. The
- * custodial bao.markets Cashu balance is only shown in the breakdown line
- * above. All other rails show the custodial bao.markets API balance.
+ * When the bao.markets balance response is available, every tile shows that
+ * same custodial ledger. Cashu falls back to the local NIP-60 balance only
+ * while the remote response is unavailable, so the tiles and headline never
+ * present two different sources as if they were one wallet.
  */
 export function getRailBalance(railId: WalletRailId, apiBalances: BaoWalletBalances | undefined, localCashuBalance: number): number {
   switch (railId) {
     case 'cashu':
-      return localCashuBalance;
+      return apiBalances?.cashu ?? localCashuBalance;
     case 'lightning':
       return apiBalances?.lightning ?? 0;
     case 'liquid':
@@ -152,18 +152,15 @@ export interface RailTileBalance {
 /**
  * Balance text for a rail tile.
  *
- * The Cashu tile always shows the local balance (never the custodial API
- * balance, and never falls back between the two depending on API health).
- * The Lightning tile shows the custodial bao.markets balance with an "on
+ * The Cashu tile shows the custodial bao.markets balance when available and
+ * falls back to the local balance while it is loading. The Lightning tile
+ * shows the custodial bao.markets balance with an "on
  * bao.markets" qualifier, because its panel pays via the user's external
  * NWC/WebLN wallet and cannot touch the displayed custodial sats.
  */
 export function getRailTileBalance(railId: WalletRailId, apiBalances: BaoWalletBalances | undefined, localCashuBalance: number): RailTileBalance {
-  if (railId === 'cashu') {
-    return { main: `${localCashuBalance} sats` };
-  }
   if (!apiBalances) {
-    return { main: '—' };
+    return railId === 'cashu' ? { main: `${localCashuBalance} sats` } : { main: '—' };
   }
   const sats = getRailBalance(railId, apiBalances, localCashuBalance);
   if (railId === 'lightning') {
@@ -213,6 +210,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
     getRailBalance(railId, apiBalances.data, cashuWallet.totalBalance);
 
   const apiTotal = apiBalances.data ? totalBaoApiBalance(apiBalances.data) : null;
+  const displayedTotal = apiTotal ?? cashuWallet.totalBalance;
 
   // Per-rail breakdown of the custodial total, so every sat in "held on
   // bao.markets" is accounted for (the total sums all 7 API rails).
@@ -251,7 +249,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           ) : (
             <>
               <div className='flex items-baseline gap-2'>
-                <span className='text-3xl font-bold'>{cashuWallet.totalBalance}</span>
+                <span className='text-3xl font-bold'>{displayedTotal.toLocaleString()}</span>
                 <span className='text-muted-foreground'>testnet sats</span>
               </div>
               {apiTotal !== null && (
