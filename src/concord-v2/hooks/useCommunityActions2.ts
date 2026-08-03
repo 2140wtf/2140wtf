@@ -6,7 +6,7 @@ import { getPublicKey } from "nostr-tools/pure";
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useGuestbookPublisher2 } from "@/concord-v2/hooks/useGuestbook2";
-import { buildJoinRumor, currentGuestbookGroup, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook } from "@/concord-v2/lib/guestbook";
 import {
   AGENT_GATE_METADATA_KEY,
   AgentOnlyCommunityError,
@@ -427,10 +427,11 @@ export function useCommunityActions2() {
           if (!grindAgentPow) throw new AgentOnlyCommunityError(gate.difficulty);
           grindDifficulty = gate.difficulty;
         }
-        // A single-use link is spent once the Guestbook shows a Join citing
-        // its token commitment. Honest-client enforcement: a modified client
-        // skips this, so creators should rotate keys when it truly matters.
-        if (bundle.max_uses === 1) {
+        // A limited-use link is spent once the Guestbook shows enough Joins
+        // citing its token commitment. Honest-client enforcement: a modified
+        // client can skip this, so creators should rotate keys when a hard
+        // cutoff matters.
+        if (typeof bundle.max_uses === "number" && bundle.max_uses >= 1) {
           const group = currentGuestbookGroup(community);
           const client = concordClient(community.idHex, [group]);
           const results = await Promise.all(
@@ -442,7 +443,9 @@ export function useCommunityActions2() {
           );
           const seen = new Set<string>();
           const wraps = results.flat().filter((event) => (seen.has(event.id) ? false : seen.add(event.id)));
-          if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(wraps, [group])), commitment)) {
+          const opened = openGuestbookOpened(openGuestbookWraps(wraps, [group]));
+          const used = opened.filter((event) => joinCommitmentOf(event) === commitment).length;
+          if (used >= bundle.max_uses) {
             throw new SingleUseLinkUsedError();
           }
         }
