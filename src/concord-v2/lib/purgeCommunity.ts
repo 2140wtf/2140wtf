@@ -40,8 +40,8 @@ const PURGE_QUERY_LIMIT = 5000;
 const PURGE_AUTHOR_CHUNK = 100;
 const PURGE_TAG_CHUNK = 100;
 
-/** The minimal signer surface for an admin-signed purge (matches NUser's signer). */
-export interface PurgeAdminSigner {
+/** The minimal signer surface for a caller-signed purge (matches NUser's signer). */
+export interface PurgeCallerSigner {
   signEvent(event: { kind: number; content: string; tags: string[][]; created_at: number }): Promise<NostrEvent>;
 }
 
@@ -50,11 +50,12 @@ export interface PurgeAdminSigner {
  * the founder. Relays are independent and may decline deletion; the report
  * deliberately exposes that best-effort boundary to the caller.
  *
- * With `adminSigner` (a 2140.wtf operator key) deletions are signed by the
- * ADMIN instead of per-author: one signature covers every found event
- * regardless of author, and no per-link secrets are needed. Only relays
- * whose write policy honors admin-moderated deletion (see
- * docs/BAO_RELAY_ADMIN_DELETION.md) will accept these.
+ * With `callerSigner`, one extra kind-5 per batch is signed by the CALLER's
+ * own key in addition to the per-author signatures. This is fully neutral:
+ * standard NIP-09 relays apply it to the caller's own events only (usually
+ * none), while a relay with an operator-deletion policy — whose operator
+ * list lives in the RELAY's configuration, never in this repo — may honor it
+ * community-wide.
  */
 export async function purgeCommunityRemote(
   nostr: RemotePurgeRelay,
@@ -63,7 +64,7 @@ export async function purgeCommunityRemote(
   // Relays beyond the community's homes that ever held a bundle copy (each
   // live link's own bootstrap hints — consented interop fallback copies).
   relayHints: string[] = [],
-  adminSigner?: PurgeAdminSigner,
+  callerSigner?: PurgeCallerSigner,
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
@@ -92,13 +93,13 @@ export async function purgeCommunityRemote(
     }
     let requested = 0;
     let accepted = 0;
-    if (adminSigner) {
-      // Admin-moderated deletion: one admin-signed kind-5 per batch covering
-      // every found event, regardless of author.
+    if (callerSigner) {
+      // Caller-signed batch: the caller's key signs one kind-5 covering every
+      // found event; the relay decides per its own policy what to honor.
       const targets = [...events.values()];
       for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
         const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
-        const deletion = await adminSigner.signEvent({
+        const deletion = await callerSigner.signEvent({
           kind: 5,
           content: "",
           tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
