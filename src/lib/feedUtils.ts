@@ -189,6 +189,11 @@ function isDeprecatedFollowSet(event: NostrEvent): boolean {
  * components that would return null.
  */
 export function shouldHideFeedEvent(event: NostrEvent): boolean {
+  // NIP-89 app handlers (kind 31990). Anyone can publish an "app" announcement
+  // with an arbitrary website link (e.g. "Open App"), which makes these a
+  // phishing/attack vector in the feed. Hide them from feed listings; they
+  // remain reachable directly via their naddr/AppHandlerDetailPage.
+  if (event.kind === 31990) return true;
   // Deprecated kind 30000 follow sets
   if (isDeprecatedFollowSet(event)) return true;
   // Emoji packs (kind 30030) without at least one valid emoji tag
