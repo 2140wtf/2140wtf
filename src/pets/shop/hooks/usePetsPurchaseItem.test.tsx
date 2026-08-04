@@ -6,6 +6,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { usePetsPurchaseItem, splitSatsPayment, splitFiatPayment, estimateCashuSendFee, PET_FIAT_RESERVE_SATS } from './usePetsPurchaseItem';
 import { parseNostrPetProfileEvent, KIND_NOSTR_PET_PROFILE } from '@/pets/core/lib/pets';
 import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWallet';
+import { BaoSendError } from '@/lib/baoWalletApi';
 
 const PUBKEY = '0000000000000000000000000000000000000000000000000000000000000001';
 const TREASURY_NPUB = 'npub1ahqqyfxyrxn3cg7cdkh9nv6ghn07sqnc4yycwq8wlyjd3dr8wt9qjhuesp';
@@ -14,8 +15,17 @@ const mocks = vi.hoisted(() => ({
   publishEvent: vi.fn(),
   fetchFreshPetsEvent: vi.fn(),
   toast: vi.fn(),
+  sendDemoSats: vi.fn(),
   petsEnabled: { value: true },
 }));
+
+vi.mock('@/lib/baoWalletApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/baoWalletApi')>();
+  return {
+    ...actual,
+    sendDemoSats: (...args: unknown[]) => mocks.sendDemoSats(...args),
+  };
+});
 
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { pubkey: PUBKEY } }),
@@ -67,6 +77,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   mocks.petsEnabled.value = true;
   localStorage.clear();
+  // Default: the scoped spend route hasn't shipped — purchases must fall
+  // back to the NIP-60 nutzap path (current production behavior).
+  mocks.sendDemoSats.mockRejectedValue(new BaoSendError('Route POST:/v1/wallet/send not found', undefined, 404));
 });
 
 describe('usePetsPurchaseItem cashu mode', () => {
