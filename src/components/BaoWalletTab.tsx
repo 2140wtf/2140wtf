@@ -9,13 +9,16 @@ import {
   Copy,
   Droplets,
   Landmark,
+  Loader2,
   RefreshCw,
+  Send as SendIcon,
   Ship,
   Sparkles,
   Wallet as WalletIcon,
   Zap,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { nip19 } from 'nostr-tools';
 
 import { Button } from '@/components/ui/button';
 import { SatsPresetPills } from '@/components/SatsPresetPills';
@@ -23,6 +26,7 @@ import { CashuTokenQr } from '@/components/CashuTokenQr';
 import { QrScannerDialog } from '@/components/QrScannerDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -38,7 +42,7 @@ import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
-import { totalBaoApiBalance, type BaoWalletBalances } from '@/lib/baoWalletApi';
+import { totalBaoApiBalance, BaoSendError, isSendRouteMissing, sendDemoSats, type BaoSendRail, type BaoWalletBalances } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
@@ -48,6 +52,124 @@ interface BaoWalletTabProps {
   seedPhrase: string;
   user: { pubkey: string; signer: NostrSigner };
   relayUrls: string[];
+}
+
+/** Rails the scoped spend endpoint can debit (mirrors BAO_MARKETS ledger). */
+const SEND_RAILS: Array<{ id: BaoSendRail; label: string }> = [
+  { id: 'cashu', label: 'Cashu' },
+  { id: 'lightning', label: 'Lightning' },
+  { id: 'ecash', label: 'Fedimint' },
+  { id: 'spark', label: 'Spark' },
+  { id: 'liquid', label: 'Liquid' },
+  { id: 'ark', label: 'Ark' },
+  { id: 'l1', label: 'L1' },
+];
+
+/** Send custodial demo sats to another ₿AO user (POST /v1/wallet/send, `user:<pubkey>`). */
+function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => void }) {
+  const { toast } = useToast();
+  const [destination, setDestination] = useState('');
+  const [amount, setAmount] = useState('2140');
+  const [rail, setRail] = useState<BaoSendRail>('cashu');
+  const [busy, setBusy] = useState(false);
+  // One idempotency key per in-flight intent: a retry after an ambiguous
+  // failure replays server-side instead of debiting twice.
+  const idemRef = useRef<string | null>(null);
+
+  const submit = async () => {
+    const amountSats = parseInt(amount, 10) || 0;
+    if (amountSats <= 0 || busy) return;
+    let hex = destination.trim();
+    if (hex.startsWith('npub1')) {
+      try {
+        const decoded = nip19.decode(hex);
+        if (decoded.type !== 'npub') throw new Error();
+        hex = decoded.data;
+      } catch {
+        toast({ title: 'Invalid npub', description: 'Check the destination and try again.', variant: 'destructive' });
+        return;
+      }
+    }
+    if (!/^[0-9a-f]{64}$/i.test(hex)) {
+      toast({ title: 'Enter an npub or 64-char hex pubkey', variant: 'destructive' });
+      return;
+    }
+    idemRef.current ??= crypto.randomUUID();
+    setBusy(true);
+    try {
+      const result = await sendDemoSats(signer, {
+        rail,
+        amountSats,
+        destination: `user:${hex.toLowerCase()}`,
+        idempotencyKey: idemRef.current,
+      });
+      toast({
+        title: 'Demo sats sent',
+        description: `${amountSats.toLocaleString()} sats on the ${rail} rail${typeof result.new_balance_sats === 'number' ? ` — new ${rail} balance ${result.new_balance_sats.toLocaleString()}` : ''}.`,
+      });
+      idemRef.current = null;
+      setDestination('');
+      onSent();
+    } catch (e) {
+      if (isSendRouteMissing(e)) {
+        toast({ title: 'Coming soon', description: 'The scoped spend endpoint ships in an upcoming bao.markets API deploy.', variant: 'destructive' });
+      } else if (e instanceof BaoSendError && e.code === 'INSUFFICIENT_BALANCE') {
+        toast({ title: 'Insufficient balance', description: `Not enough sats on the ${rail} rail.`, variant: 'destructive' });
+      } else if (e instanceof BaoSendError && e.code === 'SEND_DAILY_LIMIT') {
+        toast({ title: 'Daily limit reached', description: '100,000 sats per day per user. Try again tomorrow.', variant: 'destructive' });
+      } else {
+        toast({ title: 'Send failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className='pb-3'>
+        <CardTitle className='text-base flex items-center gap-2'>
+          <SendIcon className='size-4 text-primary' />
+          Send demo sats
+        </CardTitle>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        <div className='space-y-1.5'>
+          <Label htmlFor='bao-send-dest'>To (npub or hex pubkey)</Label>
+          <Input
+            id='bao-send-dest'
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            placeholder='npub1…'
+            autoComplete='off'
+          />
+        </div>
+        <div className='flex gap-3'>
+          <div className='space-y-1.5 flex-1'>
+            <Label htmlFor='bao-send-amount'>Amount (sats)</Label>
+            <Input id='bao-send-amount' value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode='numeric' />
+          </div>
+          <div className='space-y-1.5 w-32'>
+            <Label>Rail</Label>
+            <Select value={rail} onValueChange={(v) => setRail(v as BaoSendRail)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SEND_RAILS.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <Button className='w-full' disabled={busy || !destination.trim() || !(parseInt(amount, 10) > 0)} onClick={() => void submit()}>
+          {busy ? <Loader2 className='size-4 animate-spin' /> : `Send ${(parseInt(amount, 10) || 0).toLocaleString()} demo sats`}
+        </Button>
+        <p className='text-xs text-muted-foreground'>
+          Debits your custodial bao.markets balance. Demo sats stay inside the ecosystem — no external withdrawals.
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
 interface BaoMintQuote {
@@ -279,6 +401,8 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           )}
         </CardContent>
       </Card>
+
+      <BaoSendPanel signer={user.signer} onSent={() => void apiBalances.refetch()} />
 
       <div className='grid grid-cols-4 gap-3'>
         {WALLET_RAILS.map((rail) => {
