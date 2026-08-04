@@ -31,8 +31,6 @@ export interface BaoApiSigner {
  * signer that's a prompt per poll.
  */
 const HEADER_TTL_MS = 120_000;
-// Scoped per signer instance (WeakMap key) so an account switch never sends
-// a header signed by the previous account.
 const headerCache = new WeakMap<object, Map<string, { header: string; expiresAt: number }>>();
 
 /** Build the `Authorization` header value for a NIP-98 authenticated call. */
@@ -54,7 +52,6 @@ export async function baoNip98Header(signer: BaoApiSigner, url: string, method: 
   }
   const cached = perSigner.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.header;
-
   const tags = [['u', url], ['method', method.toUpperCase()]];
   if (payloadHash) tags.push(['payload', payloadHash]);
   const event = await signer.signEvent({
