@@ -40,10 +40,21 @@ const PURGE_QUERY_LIMIT = 5000;
 const PURGE_AUTHOR_CHUNK = 100;
 const PURGE_TAG_CHUNK = 100;
 
+/** The minimal signer surface for an admin-signed purge (matches NUser's signer). */
+export interface PurgeAdminSigner {
+  signEvent(event: { kind: number; content: string; tags: string[][]; created_at: number }): Promise<NostrEvent>;
+}
+
 /**
  * Request NIP-09 deletion of all durable BAO events authored by keys held by
  * the founder. Relays are independent and may decline deletion; the report
  * deliberately exposes that best-effort boundary to the caller.
+ *
+ * With `adminSigner` (a 2140.wtf operator key) deletions are signed by the
+ * ADMIN instead of per-author: one signature covers every found event
+ * regardless of author, and no per-link secrets are needed. Only relays
+ * whose write policy honors admin-moderated deletion (see
+ * docs/BAO_RELAY_ADMIN_DELETION.md) will accept these.
  */
 export async function purgeCommunityRemote(
   nostr: RemotePurgeRelay,
@@ -52,6 +63,7 @@ export async function purgeCommunityRemote(
   // Relays beyond the community's homes that ever held a bundle copy (each
   // live link's own bootstrap hints — consented interop fallback copies).
   relayHints: string[] = [],
+  adminSigner?: PurgeAdminSigner,
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
@@ -80,6 +92,28 @@ export async function purgeCommunityRemote(
     }
     let requested = 0;
     let accepted = 0;
+    if (adminSigner) {
+      // Admin-moderated deletion: one admin-signed kind-5 per batch covering
+      // every found event, regardless of author.
+      const targets = [...events.values()];
+      for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
+        const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
+        const deletion = await adminSigner.signEvent({
+          kind: 5,
+          content: "",
+          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          created_at: Math.floor(Date.now() / 1000),
+        });
+        requested++;
+        try {
+          await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
+          accepted++;
+        } catch {
+          // The relay may reject admin NIP-09 or the request may time out.
+        }
+      }
+      return { found: events.size, requested, accepted, failed: requested - accepted };
+    }
     for (const [pubkey, targets] of byAuthor) {
       const sk = keys.get(pubkey);
       if (!sk) continue;
