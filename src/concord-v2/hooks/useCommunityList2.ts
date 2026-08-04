@@ -29,6 +29,7 @@ import { logSync } from "@/lib/syncLog";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import type { NUser } from "@nostrify/react/login";
+import { PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 
 /**
  * The user's Concord V2 Community List — the kind-13302 replaceable event,
@@ -253,7 +254,7 @@ export function useUpdateCommunityList2() {
 
       queryClient.setQueryData<ListData>(listQueryKey(user.pubkey), { event, list: next });
       void writeFolded(foldKeyOf(user.pubkey), { event, list: next } satisfies PersistedList);
-      await nostr.event(event, { signal: AbortSignal.timeout(8000) });
+      await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
       return next;
     },
     onSuccess: () => {

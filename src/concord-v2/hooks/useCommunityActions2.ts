@@ -41,7 +41,7 @@ import {
 import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
-import { concordClient, ephemeralRelayClient } from "@/concord-v2/lib/concordTransport";
+import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
 
@@ -370,7 +370,7 @@ export function useCommunityActions2() {
         const wrap = await sealGuestbook(rumor, group, user.signer);
         await Promise.allSettled(
           community.relays.map((url) =>
-            concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
           ),
         );
       })().catch(() => undefined);
@@ -470,7 +470,7 @@ export function useCommunityActions2() {
           const wrap = await sealGuestbook(rumor, group, user.signer);
           await Promise.allSettled(
             community.relays.map((url) =>
-              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
             ),
           );
         })().catch(() => undefined);
@@ -517,7 +517,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       const wrap = await sealDissolved(community.id, user.pubkey, user.signer);
       const results = await Promise.allSettled(
         community.relays.map((url) =>
-          concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+          concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
         ),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
@@ -747,7 +747,7 @@ export function useStrandedRecovery2(
         const wrap = await sealGuestbook(rumor, group, user.signer);
         await Promise.allSettled(
           rehydrated.relays.map((url) =>
-            concordClient(rehydrated.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            concordClient(rehydrated.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
           ),
         );
       })().catch(() => undefined);
