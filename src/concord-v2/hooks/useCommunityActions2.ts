@@ -21,7 +21,7 @@ import { APP_RELAYS, normalizeRelayUrl } from "@/lib/platform";
 import { BAO_MARKETS_RELAY } from "@/lib/baoRelayMarkets";
 import { preferPortableRelays, unusableRelaysReason } from "@/lib/relayUsability";
 import { toJoinMaterial, rehydrateCommunity, type CommunityListEntry, type JoinMaterial } from "@/concord-v2/lib/communityList";
-import { mintCommunity } from "@/concord-v2/lib/community";
+import { channelsView, mintCommunity } from "@/concord-v2/lib/community";
 import {
   buildChannelEdition,
   buildMetadataEdition,
@@ -671,6 +671,8 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
         inviteKeys,
         [...hintRelays],
         user.signer,
+        // Channel streams too — chat messages must die with the community.
+        channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group)),
       );
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {

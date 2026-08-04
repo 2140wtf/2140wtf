@@ -8,6 +8,7 @@ import {
   dissolvedGroupKey,
 } from "@/concord-v2/lib/derive";
 import { guestbookGroups } from "@/concord-v2/lib/guestbook";
+import type { GroupKey } from "@/concord-v2/lib/derive";
 import { queryStoredInvites, inviteInbox } from "@/concord-v2/lib/inviteInbox";
 import { forgetPlaneWraps } from "@/concord-v2/lib/planeSync";
 import { clearReadCutPending } from "@/concord-v2/lib/readCutPending";
@@ -65,9 +66,14 @@ export async function purgeCommunityRemote(
   // live link's own bootstrap hints — consented interop fallback copies).
   relayHints: string[] = [],
   callerSigner?: PurgeCallerSigner,
+  // Channel stream groups from channelsView(community, folded) — mirrorGroups
+  // covers control/guestbook/rekey planes but NOT chat channels, so without
+  // these every chat message survives the purge on the relay.
+  channelGroups: GroupKey[] = [],
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
+  for (const group of channelGroups) keys.set(group.pk, group.sk);
   for (const [pubkey, sk] of signerKeys) keys.set(pubkey, sk);
   const authors = [...keys.keys()];
   const relays = [...new Set([...community.relays, ...relayHints])];
@@ -93,46 +99,43 @@ export async function purgeCommunityRemote(
     }
     let requested = 0;
     let accepted = 0;
-    if (callerSigner) {
-      // Caller-signed batch: the caller's key signs one kind-5 covering every
-      // found event; the relay decides per its own policy what to honor.
-      const targets = [...events.values()];
-      for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
-        const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
-        const deletion = await callerSigner.signEvent({
-          kind: 5,
-          content: "",
-          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
-          created_at: Math.floor(Date.now() / 1000),
-        });
-        requested++;
-        try {
-          await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
-          accepted++;
-        } catch {
-          // The relay may reject admin NIP-09 or the request may time out.
-        }
+    const sendDeletion = async (deletion: NostrEvent): Promise<void> => {
+      requested++;
+      try {
+        await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
+        accepted++;
+      } catch {
+        // The relay may reject NIP-09 or the request may time out.
       }
-      return { found: events.size, requested, accepted, failed: requested - accepted };
-    }
+    };
+    // Per-author deletions first: signed with each stream's own key, honored
+    // by every standard NIP-09 relay.
     for (const [pubkey, targets] of byAuthor) {
       const sk = keys.get(pubkey);
       if (!sk) continue;
       for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
         const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
-        const deletion = finalizeEvent({
+        await sendDeletion(finalizeEvent({
           kind: 5,
           content: "",
           tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
           created_at: Math.floor(Date.now() / 1000),
-        }, sk);
-        requested++;
-        try {
-          await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
-          accepted++;
-        } catch {
-          // The relay may reject NIP-09 or the request may time out.
-        }
+        }, sk));
+      }
+    }
+    // PLUS one caller-signed batch covering every found event: a no-op on
+    // standard relays (the caller authored none of these), community-wide on
+    // a relay with an operator-deletion policy.
+    if (callerSigner) {
+      const targets = [...events.values()];
+      for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
+        const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
+        await sendDeletion(await callerSigner.signEvent({
+          kind: 5,
+          content: "",
+          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          created_at: Math.floor(Date.now() / 1000),
+        }));
       }
     }
     return { found: events.size, requested, accepted, failed: requested - accepted };
