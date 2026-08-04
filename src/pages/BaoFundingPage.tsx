@@ -28,6 +28,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { isSendRouteMissing, sendDemoSats } from '@/lib/baoWalletApi';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -49,6 +50,7 @@ import {
   type BaoFundraiser,
   type BaoMilestone,
   type BaoRail,
+  type ContributeResult,
   type ReleaseMilestoneResult,
 } from '@/lib/baoFundraising';
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
@@ -897,8 +899,30 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
       }
       mutationTargetIdRef.current = fundraiser!.id;
       if (rail !== 'cashu') throw new Error('Milestone contributions currently settle through the BAO Cashu rail only.');
-      if (!baoWallet.mintUrl) throw new Error('Select a BAO Cashu mint before contributing.');
       const amountSats = parseInt(amount, 10) || 0;
+      const idempotencyKey = `2140:${fundraiser!.id}:${rail}:${amountSats}:${idemKeyRef.current.key}`;
+
+      // Preferred settlement: debit the custodial bao.markets balance
+      // server-side (POST /v1/wallet/send, scoped fundraiser destination).
+      // The same call records the contribution. Falls back to the local
+      // NIP-60 nutzap path while the route isn't deployed yet.
+      try {
+        await sendDemoSats(user.signer, {
+          rail: 'cashu',
+          amountSats,
+          destination: `fundraiser:${fundraiser!.id}`,
+          idempotencyKey,
+        });
+        return {
+          payment_instructions: { kind: 'custodial' },
+          fundraiser: fundraiser!,
+          milestones: [],
+        } satisfies ContributeResult;
+      } catch (e) {
+        if (!isSendRouteMissing(e)) throw e;
+      }
+
+      if (!baoWallet.mintUrl) throw new Error('Select a BAO Cashu mint before contributing.');
       const balance = baoWallet.balances?.[baoWallet.mintUrl] ?? 0;
       if (balance < amountSats) throw new Error(`Insufficient BAO Cashu balance. You have ${balance.toLocaleString()} sats.`);
       const recipient = nip19.npubEncode(fundraiser!.owner_pubkey);
@@ -909,7 +933,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         amount_sats: amountSats,
         rail,
         ...(payment.status === 'sent' ? { reference: payment.eventId } : {}),
-        idempotencyKey: `2140:${fundraiser!.id}:${rail}:${parseInt(amount, 10) || 0}:${idemKeyRef.current.key}`,
+        idempotencyKey,
         preferredModel: judgeModel || undefined,
       });
     },
