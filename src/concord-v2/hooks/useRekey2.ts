@@ -39,7 +39,7 @@ import {
 import { hasPermission, Permissions } from "@/concord-v2/lib/roles";
 import { queryByStreams, readStreamCursor, updateStreamCursor, writeOpened } from "@/concord-v2/lib/rumorStore";
 import { openWrap, rewrapSeal, sealRumor, wrapSeal, type OpenedEvent } from "@/concord-v2/lib/stream";
-import { buildRefreshedBundleEvents, type InviteBundle } from "@/concord-v2/lib/invite";
+import { buildRefreshedBundleEvents, parseInviteLink, type InviteBundle } from "@/concord-v2/lib/invite";
 import { fetchInviteList } from "@/concord-v2/hooks/useInvites2";
 import { toast } from "@/hooks/useToast";
 import type { CommunityMetadata, CommunityV2, HeldRoot, PrivateChannelKey } from "@/concord-v2/lib/types";
@@ -97,7 +97,19 @@ export async function refreshInviteBundlesFor(
 
   // Keep refreshed bundles on the configured community relays. A relay-list
   // change passes old ∪ new explicitly so existing links remain resolvable.
-  const targets = publishRelays ?? rotated.relays;
+  // Every refreshed bundle must overwrite each copy a joiner could resolve:
+  // the community's configured homes, PLUS any relay a live link's own
+  // fragment hints name (links minted with the consented interop fallback
+  // hold copies on those relays — leave them stale and they keep vending the
+  // superseded epoch). No relay beyond those two sets, ever.
+  const hinted = live.flatMap((entry) => {
+    try {
+      return parseInviteLink(entry.url)?.bootstrapRelays ?? [];
+    } catch {
+      return [];
+    }
+  });
+  const targets = publishRelays ?? [...new Set([...rotated.relays, ...hinted])];
   const linkKeys = new Map<string, GroupKey>();
   for (const entry of live) {
     const sk = hexToBytes(entry.signer_sk);
