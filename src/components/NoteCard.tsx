@@ -646,7 +646,13 @@ export const NoteCard = memo(function NoteCard({
   // seed it into feeds. Drop them from feed cards; apps published by accounts
   // with an authored identity still show, and any app remains reachable
   // directly via its naddr/AppHandlerDetailPage.
-  if (isAppHandler && !metadata?.name && !metadata?.display_name) {
+  //
+  // Gate on `author.isLoading` so a NAMED account's app is not hidden during
+  // the brief moment its kind-0 profile is still resolving (metadata is
+  // undefined until then, which would otherwise look anonymous). Only once the
+  // author query has settled AND there is no name/display_name do we treat the
+  // publisher as anonymous.
+  if (isAppHandler && !author.isLoading && !metadata?.name && !metadata?.display_name) {
     return null;
   }
 
