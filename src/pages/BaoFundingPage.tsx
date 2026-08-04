@@ -846,7 +846,6 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const [amount, setAmount] = useState('1000');
   const [rail, setRail] = useState<BaoRail>('cashu');
   const [judgeModel, setJudgeModel] = useState<string>(DEFAULT_VERIFICATION_MODEL);
-  const [instructions, setInstructions] = useState<Record<string, unknown> | null>(null);
   // Stable idempotency key per campaign: a retry after a network timeout (or
   // an accidental double submit) replays server-side instead of recording the
   // contribution twice. Rotated only after a COMPLETED contribution — never
@@ -863,13 +862,6 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   const openFundraiserIdRef = useRef<string | null>(null);
   openFundraiserIdRef.current = fundraiser?.id ?? null;
   const mutationTargetIdRef = useRef<string | null>(null);
-
-  // Reset the instructions panel when the dialog is reopened, so a previous
-  // session's instructions never leak into a new one.
-  const fundraiserId = fundraiser?.id ?? null;
-  useEffect(() => {
-    setInstructions(null);
-  }, [fundraiserId]);
 
   // Curated AI judge models for the Advanced picker. Failure-tolerant: fall
   // back to the registry default so the dialog still works on an older API.
@@ -937,7 +929,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
   });
 
   const close = (open: boolean) => {
-    if (!open) { setInstructions(null); setAmount('1000'); }
+    if (!open) { setAmount('1000'); }
     onOpenChange(open);
   };
 
@@ -954,25 +946,11 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
           </DialogDescription>
         </DialogHeader>
 
-        {instructions ? (
-          <div className="space-y-3">
-            <div className="rounded-md border-2 border-amber-500/70 bg-card p-3 text-xs space-y-1 text-foreground">
-              <p className="font-semibold">⚠️ DO NOT PAY — demo payment instructions ({String(instructions.kind)})</p>
-              <p className="text-muted-foreground">
-                This is what the settlement rail WILL return once it leaves demo. Real sats sent to it now are lost.
-              </p>
-              {Object.entries(instructions).map(([k, v]) => (
-                <p key={k} className="break-all"><span className="text-muted-foreground">{k}:</span> {String(v)}</p>
-              ))}
-            </div>
-            <Button className="w-full" onClick={() => close(false)}>Done</Button>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="fr-amount">Amount (sats)</Label>
+            <Input id="fr-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="fr-amount">Amount (sats)</Label>
-              <Input id="fr-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
-            </div>
 
             <div className="space-y-1.5">
               <Label>Pay via</Label>
@@ -1043,8 +1021,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
               {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Pay and contribute ${formatSats(parseInt(amount, 10) || 0)} BAO sats`}
             </Button>
             )}
-          </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
