@@ -1,5 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
+import { nip19 } from 'nostr-tools';
+
+import { sendDemoSats, isSendRouteMissing } from '@/lib/baoWalletApi';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -49,6 +52,16 @@ interface PaidPendingPurchase {
 
 function paidPendingKey(pubkey: string, itemId: string): string {
   return `${PAID_PENDING_PREFIX}:${pubkey}:${itemId}`;
+}
+
+/** Decode the configured treasury npub to hex for the scoped spend destination. */
+function treasuryHexOf(treasuryNpub: string): string | null {
+  try {
+    const decoded = nip19.decode(treasuryNpub);
+    return decoded.type === 'npub' ? decoded.data : null;
+  } catch {
+    return null;
+  }
 }
 
 function readPaidPending(pubkey: string, itemId: string): PaidPendingPurchase | null {
@@ -347,9 +360,39 @@ export function usePetsPurchaseItem(
               );
             }
             // Pay the 2140 treasury BEFORE updating the profile so a payment failure
-            // cannot grant a free item. Nutzaps cannot be clawed back automatically;
-            // if the profile update fails after this point we surface a clear error
-            // so support can refund from the treasury side.
+            // cannot grant a free item. Preferred path: the custodial
+            // balance-debit endpoint (scoped spend, destination user:<treasury>)
+            // — debits the custodial balance server-side on any supported rail.
+            // Falls back to a NIP-60 nutzap while the route isn't deployed.
+            // Nutzaps cannot be clawed back automatically; if the profile
+            // update fails after this point we surface a clear error so
+            // support can refund from the treasury side.
+            const treasuryHex = treasuryHexOf(treasuryNpub);
+            let paidViaApi = false;
+            if (treasuryHex) {
+              try {
+                await sendDemoSats(user!.signer, {
+                  rail: 'cashu',
+                  amountSats: walletSatsCost,
+                  destination: `user:${treasuryHex}`,
+                  idempotencyKey: `pets-shop:${user.pubkey}:${itemId}:${quantity}`,
+                });
+                paidViaApi = true;
+              } catch (e) {
+                if (!isSendRouteMissing(e)) throw e;
+              }
+            }
+            if (paidViaApi) {
+              // The API debited the custodial balance — journal for delivery
+              // completion without re-paying, same as the nutzap path.
+              writePaidPending(user.pubkey, itemId, {
+                quantity,
+                amountSats: walletSatsCost,
+                mintUrl: externalWallet.mintUrl,
+                paidAt: Date.now(),
+              });
+              treasuryPaid = true;
+            } else {
             const sendResult = await externalWallet.sendNutzap(walletSatsCost, treasuryNpub, externalWallet.mintUrl, {
               memo: `Pets shop: ${item.name}`,
             });
@@ -375,6 +418,7 @@ export function usePetsPurchaseItem(
               paidAt: Date.now(),
             });
             treasuryPaid = true;
+            }
           }
         }
       } else {
