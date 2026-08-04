@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BaoFundingPage, { ContributeDialog, ReleaseBreakdown } from './BaoFundingPage';
 import type { BaoFundraiser, BaoMilestone, ContributeResult } from '@/lib/baoFundraising';
+import { BaoSendError } from '@/lib/baoWalletApi';
 
 const mocks = vi.hoisted(() => ({
   contributeMock: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   releaseMock: vi.fn(),
   toastMock: vi.fn(),
   sendNutzapMock: vi.fn(),
+  sendDemoSatsMock: vi.fn(),
   baoWallet: {
     mintUrl: 'https://relay.bao.network/cashu',
     balances: { 'https://relay.bao.network/cashu': 1_000_000 },
@@ -53,6 +55,14 @@ vi.mock('@/hooks/useCashuSeed', () => ({
 vi.mock('@/hooks/useBaoCashuWallet', () => ({
   useBaoCashuWallet: () => ({ ...mocks.baoWallet, sendNutzap: mocks.sendNutzapMock }),
 }));
+
+vi.mock('@/lib/baoWalletApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/baoWalletApi')>();
+  return {
+    ...actual,
+    sendDemoSats: (...args: unknown[]) => mocks.sendDemoSatsMock(...args),
+  };
+});
 
 vi.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mocks.toastMock }),
@@ -141,6 +151,9 @@ describe('ContributeDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sendNutzapMock.mockResolvedValue({ status: 'sent', eventId: 'a'.repeat(64) });
+    // Default: the scoped spend route hasn't shipped — the dialog must fall
+    // back to the local NIP-60 nutzap path (current production behavior).
+    mocks.sendDemoSatsMock.mockRejectedValue(new BaoSendError('Route POST:/v1/wallet/send not found', undefined, 404));
   });
 
   afterEach(() => {
@@ -185,6 +198,25 @@ describe('ContributeDialog', () => {
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(2));
 
     expect(idempotencyKeyOf(1)).not.toBe(idempotencyKeyOf(0));
+  });
+
+  it('settles through the custodial balance-debit path when the API has it', async () => {
+    mocks.sendDemoSatsMock.mockResolvedValue({ status: 'completed', new_balance_sats: 990_000 });
+    mocks.contributeMock.mockResolvedValue(successResult());
+    renderWithClient(<ContributeHarness />);
+
+    fireEvent.click(screen.getByText('fund A'));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
+
+    await waitFor(() => expect(mocks.sendDemoSatsMock).toHaveBeenCalledTimes(1));
+    const [, input] = mocks.sendDemoSatsMock.mock.calls[0] as [unknown, { destination: string; idempotencyKey: string }];
+    expect(input.destination).toBe('fundraiser:fund-a');
+    // The debit path records the contribution itself — no separate record call.
+    expect(mocks.contributeMock).not.toHaveBeenCalled();
+    expect(mocks.sendNutzapMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'BAO Cashu contribution paid and recorded' }),
+    ));
   });
 
   it('blocks a campaign owner before recording a contribution', async () => {
