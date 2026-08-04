@@ -33,6 +33,7 @@ import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { logSync } from "@/lib/syncLog";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
+import { PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 
 /** Minimal relay-capable client the mirror needs (test seam). Production
  * callers provide one community-scoped Concord client for both reads/writes. */
@@ -178,7 +179,7 @@ async function publishWraps(
     for (const batch of chunk(batchList, PUBLISH_CONCURRENCY)) {
       throwIfAborted(signal);
       const results = await Promise.allSettled(
-        batch.map((w) => nostr.relay(url).event(w, { signal: AbortSignal.timeout(8000) })),
+        batch.map((w) => nostr.relay(url).event(w, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
       );
       results.forEach((r, i) => {
         if (r.status === "fulfilled") accepted++;

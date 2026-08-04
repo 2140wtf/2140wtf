@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, useDissolved2 } from "@/concord-v2/hooks/useControlPlane2";
-import { concordClient, concordTransport } from "@/concord-v2/lib/concordTransport";
+import { concordClient, concordTransport, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { toJoinMaterial } from "@/concord-v2/lib/communityList";
 import { controlGroups, currentControlGroup, foldControlState, openControlEditions } from "@/concord-v2/lib/control";
@@ -121,7 +121,7 @@ export async function refreshInviteBundlesFor(
     if (!linkKey) throw new Error("Invite bundle signer is unavailable.");
     try {
       await Promise.allSettled(
-        targets.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(8000) })),
+        targets.map((url) => nostr.relay(url).event(bundleEvent, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
       );
     } finally {
       concordTransport.closeCapability(rotated.idHex, [linkKey]);
@@ -781,7 +781,7 @@ export function useRefound2(community: CommunityV2 | undefined) {
         const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, address, user.signer), address);
         const results = await Promise.allSettled(
           community.relays.map((url) =>
-            concordClient(community.idHex, [address]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+            concordClient(community.idHex, [address]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
           ),
         );
         if (!results.some((r) => r.status === "fulfilled")) {
@@ -797,7 +797,7 @@ export function useRefound2(community: CommunityV2 | undefined) {
           const rewrapped = rewrapSeal(head.opened.seal, newControl);
           await Promise.allSettled(
             community.relays.map((url) =>
-              concordClient(community.idHex, [newControl]).relay(url).event(rewrapped, { signal: AbortSignal.timeout(8000) }),
+              concordClient(community.idHex, [newControl]).relay(url).event(rewrapped, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
             ),
           );
         } catch {
@@ -841,7 +841,7 @@ export function useRefound2(community: CommunityV2 | undefined) {
           const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, chAddress, user.signer), chAddress);
           const results = await Promise.allSettled(
             community.relays.map((url) =>
-              concordClient(community.idHex, [chAddress]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+              concordClient(community.idHex, [chAddress]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
             ),
           );
           if (!results.some((r) => r.status === "fulfilled")) {
@@ -862,7 +862,7 @@ export function useRefound2(community: CommunityV2 | undefined) {
           const wrap = await sealGuestbook(rumor, newGuestbook, user.signer);
           await Promise.allSettled(
             community.relays.map((url) =>
-              concordClient(community.idHex, [newGuestbook]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+              concordClient(community.idHex, [newGuestbook]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
             ),
           );
         }
