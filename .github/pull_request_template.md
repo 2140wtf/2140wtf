@@ -1,27 +1,10 @@
-## Linked issue
+<!--
+Write the PR description here, replacing this comment. Cover, in plain prose:
 
-<!-- Every feature PR must link to an existing open issue. Bug fixes: describe the bug. -->
+1. Root cause — what was broken or missing, and why it happened.
+2. The fix — what changed, where, and why this approach.
+3. Verification — what you ran and observed (test suite, live checks, relay probes), with numbers.
 
-Closes #
-
-## Philosophy alignment
-
-<!-- How does this change make 2140.wtf more magnetic, more threatening to the
-     status quo, and more peaceful to inhabit? See CONTRIBUTING.md. If you can't
-     articulate this clearly, the change probably doesn't belong. -->
-
-## Live preview
-
-<!-- Static hosting URL (surge.sh, Netlify, Vercel, ...) so reviewers can test
-     without pulling the branch. -->
-
-## Screenshots
-
-<!-- Before/after for any UI change. If there is no visual component, say so. -->
-
-## Checklist
-
-- [ ] `npm run test` passes (type-check, lint, unit tests, production build)
-- [ ] Self-review checklist from CONTRIBUTING.md completed
-- [ ] New Nostr event kinds documented in NIP.md
-- [ ] No secrets, keys, or env-specific values committed
+Delete this comment before submitting. An unfilled template renders as
+nothing — no scaffolding, no placeholders, no checklists.
+-->
