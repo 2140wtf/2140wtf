@@ -8,7 +8,7 @@ import { Dialog, ChromeDialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useInviteActions2, useMyLinkUsage2 } from "@/concord-v2/hooks/useInvites2";
+import { useInviteActions2, useMyLinkUsage2, BundleRejectedError } from "@/concord-v2/hooks/useInvites2";
 import { toast } from "@/hooks/useToast";
 import { writeClipboardText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
@@ -52,13 +52,20 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
   const [label, setLabel] = useState("");
   const [revoking, setRevoking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when every configured relay rejected the bundle: the UI offers the
+  // public interop relays as an explicit, informed choice — never silently.
+  const [fallbackOffer, setFallbackOffer] = useState<string | null>(null);
 
-  const handleGenerate = async () => {
+  const handleGenerate = () => runGenerate(false);
+
+  const runGenerate = async (interopFallback: boolean) => {
     setError(null);
     // The first live link flips the derived mode Public (CORD-05 §5). Whether
     // bans still rotate is per-banner (foreign links gate rotations, own links
-    // don't) — the ban dialog's step list tells that truth case by case.
+    // don't) — the ban dialog's step list tells that truth case by case. Only
+    // ask on the FIRST attempt, not on the consented fallback retry.
     if (
+      !interopFallback &&
       !isPublic &&
       !confirm(
         "Creating an invite link makes this community public: anyone with the link can join. Revoking every link makes it private again.",
@@ -75,13 +82,17 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
       }
       setLink(
         expiry === "single"
-          ? await createLink({ maxUses: 1, label: labelOpt, audience: audienceOpt })
+          ? await createLink({ maxUses: 1, label: labelOpt, audience: audienceOpt, interopFallback })
           : expiry === "limited"
-            ? await createLink({ maxUses: limitedUses, label: labelOpt, audience: audienceOpt })
-          : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt, audience: audienceOpt }),
+            ? await createLink({ maxUses: limitedUses, label: labelOpt, audience: audienceOpt, interopFallback })
+          : await createLink({ expiresAtMs: expiry !== "never" ? Date.now() + Number(expiry) * 86400_000 : undefined, label: labelOpt, audience: audienceOpt, interopFallback }),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't create the link.");
+      if (e instanceof BundleRejectedError) {
+        setFallbackOffer(e.relaySummary);
+      } else {
+        setError(e instanceof Error ? e.message : "Couldn't create the link.");
+      }
     }
   };
 
@@ -309,6 +320,38 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
             );
           })}
         </div>
+      )}
+
+      {fallbackOffer && (
+        <Alert>
+          <AlertDescription className="space-y-3">
+            <p>
+              This community&apos;s relays rejected the public invite bundle — links can&apos;t be
+              fetched from them ({fallbackOffer}).
+            </p>
+            <p>
+              You can publish just this link&apos;s <span className="text-foreground font-medium">encrypted</span>{" "}
+              bundle to the public interop relays instead. They learn that a link exists and when —
+              never the community, its members, or its contents.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={isCreatingLink}
+                onClick={() => {
+                  setFallbackOffer(null);
+                  void runGenerate(true);
+                }}
+              >
+                {isCreatingLink ? <Loader2 className="size-4 animate-spin" /> : "Publish to interop relays"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setFallbackOffer(null)}>
+                Cancel
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {error && (
