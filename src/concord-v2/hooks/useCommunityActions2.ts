@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPublicKey } from "nostr-tools/pure";
 
+import { isAdminPubkey } from "@/lib/admins";
+
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useGuestbookPublisher2 } from "@/concord-v2/hooks/useGuestbook2";
@@ -528,12 +530,16 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
   const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
     mutationFn: async () => {
       if (!user || !community) throw new Error("Not ready.");
-      if (user.pubkey !== community.owner) throw new Error("Only the founder can purge this community.");
+      const admin = isAdminPubkey(user.pubkey);
+      if (user.pubkey !== community.owner && !admin) throw new Error("Only the founder can purge this community.");
       if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
 
       // Capture link-signer secrets before removing the community from the
       // local list. Without these keys, kind-33301 invite bundles cannot be
       // addressed by NIP-09 because deletion must be signed by their author.
+      // (Skipped for an admin purge: the admin's single signature covers
+      // every author, so no per-link secrets are needed — the relay's write
+      // policy honors them, see docs/BAO_RELAY_ADMIN_DELETION.md.)
       const inviteKeys = new Map<string, Uint8Array>();
       // Relays beyond the community's homes that ever held a bundle copy:
       // each live link's own bootstrap hints (consented interop fallback).
@@ -554,7 +560,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
                   // A malformed historical link contributes no hints.
                 }
               }
-              if (!entry.signer_sk) continue;
+              if (admin || !entry.signer_sk) continue;
               let sk: Uint8Array | undefined;
               try {
                 sk = hex32(entry.signer_sk);
@@ -574,7 +580,13 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
 
       // Publish the terminal marker first, then request physical deletion.
       await dissolve.mutateAsync();
-      const report = await purgeCommunityRemote(nostr, community, inviteKeys, [...hintRelays]);
+      const report = await purgeCommunityRemote(
+        nostr,
+        community,
+        inviteKeys,
+        [...hintRelays],
+        admin ? user.signer : undefined,
+      );
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {
         throw new Error("The relay did not accept any NIP-09 deletion requests.");
