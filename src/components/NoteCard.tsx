@@ -640,6 +640,16 @@ export const NoteCard = memo(function NoteCard({
     return null;
   }
 
+  // NIP-89 app handlers (kind 31990) published by accounts with no profile
+  // name (they render as "Anonymous") are a phishing/attack vector — an
+  // anonymous publisher can attach an arbitrary "Open App" website link and
+  // seed it into feeds. Drop them from feed cards; apps published by accounts
+  // with an authored identity still show, and any app remains reachable
+  // directly via its naddr/AppHandlerDetailPage.
+  if (isAppHandler && !metadata?.name && !metadata?.display_name) {
+    return null;
+  }
+
   // Shared content block used in both normal and threaded layouts
   const contentBlock = (
     <>
