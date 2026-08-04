@@ -21,7 +21,7 @@ import { queryByStreams } from "@/concord-v2/lib/rumorStore";
 import type { OpenedEvent } from "@/concord-v2/lib/stream";
 import { canActOnMember, Permissions } from "@/concord-v2/lib/roles";
 import type { CommunityV2 } from "@/concord-v2/lib/types";
-import { concordClient } from "@/concord-v2/lib/concordTransport";
+import { concordClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 
 /**
  * The Guestbook Plane (CORD-02 §5): membership motion, coalesced flat.
@@ -111,7 +111,7 @@ export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
             : buildKickRumor(user.pubkey, action.target, ms, action.vac);
       const wrap = await sealGuestbook(rumor, group, user.signer);
       const results = await Promise.allSettled(
-        community.relays.map((url) => concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+        community.relays.map((url) => concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
         throw new Error("No relay accepted the update.");
