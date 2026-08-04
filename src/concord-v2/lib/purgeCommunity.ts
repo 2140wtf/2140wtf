@@ -49,12 +49,16 @@ export async function purgeCommunityRemote(
   nostr: RemotePurgeRelay,
   community: CommunityV2,
   signerKeys: ReadonlyMap<string, Uint8Array>,
+  // Relays beyond the community's homes that ever held a bundle copy (each
+  // live link's own bootstrap hints — consented interop fallback copies).
+  relayHints: string[] = [],
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
   for (const [pubkey, sk] of signerKeys) keys.set(pubkey, sk);
   const authors = [...keys.keys()];
-  const perRelay = await Promise.all(community.relays.map(async (url): Promise<RemotePurgeReport> => {
+  const relays = [...new Set([...community.relays, ...relayHints])];
+  const perRelay = await Promise.all(relays.map(async (url): Promise<RemotePurgeReport> => {
     const events = new Map<string, NostrEvent>();
     for (let i = 0; i < authors.length; i += PURGE_AUTHOR_CHUNK) {
       const chunk = authors.slice(i, i + PURGE_AUTHOR_CHUNK);
