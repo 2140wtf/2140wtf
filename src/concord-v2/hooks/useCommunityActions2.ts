@@ -3,10 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPublicKey } from "nostr-tools/pure";
 
-import { isAdminPubkey } from "@/lib/admins";
-
 import { useCommunityEntry2, useUpdateCommunityList2 } from "@/concord-v2/hooks/useCommunityList2";
-import { useControlFold2, citationFor, invalidateControl2, publishEdition2 } from "@/concord-v2/hooks/useControlPlane2";
+import { useControlFold2, citationFor, invalidateControl2, publishEdition2, relayFailureSummary } from "@/concord-v2/hooks/useControlPlane2";
 import { useGuestbookPublisher2 } from "@/concord-v2/hooks/useGuestbook2";
 import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook } from "@/concord-v2/lib/guestbook";
 import {
@@ -16,6 +14,7 @@ import {
   agentGateOf,
   grindJoinRumor,
 } from "@/concord-v2/lib/agentGate";
+import { isAdminPubkey } from "@/lib/admins";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
@@ -28,7 +27,7 @@ import {
   buildMetadataEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { bytesToHex, dissolvedGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
+import { bytesToHex, channelGroupKey, dissolvedGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
 import {
   encodeFragment,
   inviteCommitment,
@@ -40,9 +39,11 @@ import {
 } from "@/concord-v2/lib/invite";
 import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/lib/types";
-import { controlGroups, foldControlState, openControlWraps, type FoldedControl } from "@/concord-v2/lib/control";
+import { controlGroups, currentControlGroup, foldControlState, openControlWraps, sealEdition, type FoldedControl } from "@/concord-v2/lib/control";
+import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type Rumor } from "@/concord-v2/lib/stream";
+import { writeOpened } from "@/concord-v2/lib/rumorStore";
 import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
-import { KIND_WRAP } from "@/concord-v2/lib/kinds";
+import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
@@ -68,6 +69,66 @@ export class SingleUseLinkUsedError extends Error {
   constructor() {
     super("This invite link was single-use and has already been used. Ask for a fresh one.");
     this.name = "SingleUseLinkUsedError";
+  }
+}
+
+/**
+ * Publish one control edition through the APP POOL instead of the Concord
+ * transport. Used for OPERATOR-created communities: relays that gate stream
+ * creation to operator npubs (see docs/BAO_RELAY_ADMIN_DELETION.md) require a
+ * socket NIP-42-authed with the operator's real identity, which the pool
+ * provides on challenge. Operator identities are public, so the transport's
+ * isolation buys them nothing; members keep the isolated path (their sockets
+ * never carry their real npub).
+ */
+async function publishEditionPool(
+  nostr: { relay(url: string): { event(event: NostrEvent, opts?: { signal?: AbortSignal }): Promise<void> } },
+  community: CommunityV2,
+  signer: Parameters<typeof sealEdition>[2],
+  rumor: Rumor,
+): Promise<void> {
+  const control = currentControlGroup(community);
+  const wrap = await sealEdition(rumor, control, signer);
+  const results = await Promise.allSettled(
+    community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
+  );
+  if (!results.some((r) => r.status === "fulfilled")) {
+    throw new Error(`No relay accepted the change — ${relayFailureSummary(community.relays, results)}`);
+  }
+  try {
+    writeOpened([openWrap(wrap, control)]);
+  } catch {
+    // best-effort — the relay echo remains the fallback
+  }
+}
+
+/**
+ * Seed a channel's stream with a founder message through the app pool
+ * (operator path): the first wrap on any stream must be operator-authored for
+ * relays that gate stream creation, and after this seed every member's write
+ * to the channel is a "known author" write needing no identity at all.
+ */
+async function seedChannelStreamPool(
+  nostr: { relay(url: string): { event(event: NostrEvent, opts?: { signal?: AbortSignal }): Promise<void> } },
+  community: CommunityV2,
+  signer: Parameters<typeof sealRumor>[3],
+  channelId: Uint8Array,
+  text: string,
+): Promise<void> {
+  const group = channelGroupKey(community.root, channelId, community.rootEpoch);
+  const rumor = buildRumor({
+    kind: KIND_MESSAGE,
+    content: text,
+    tags: channelBindingTags(bytesToHex(channelId), community.rootEpoch),
+    pubkey: community.owner,
+    ms: Date.now(),
+  });
+  const wrap = wrapSeal(await sealRumor(rumor, KIND_SEAL_ENCRYPTED, group, signer), group);
+  const results = await Promise.allSettled(
+    community.relays.map((url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
+  );
+  if (!results.some((r) => r.status === "fulfilled")) {
+    throw new Error(`No relay accepted the channel seed — ${relayFailureSummary(community.relays, results)}`);
   }
 }
 
@@ -324,12 +385,20 @@ export function useCommunityActions2() {
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
       const { community, generalChannelId } = mintCommunity(trimmed, user.pubkey, relays);
 
+      // Operator npubs publish the genesis through the app pool (the socket
+      // NIP-42s with their public operator identity — relays that gate stream
+      // creation to operators accept it). Everyone else keeps the isolated
+      // Concord transport, which never carries the real npub.
+      const operator = isAdminPubkey(user.pubkey);
+      const publishGenesis = (rumor: Rumor) =>
+        operator
+          ? publishEditionPool(nostr, community, user.signer, rumor)
+          : publishEdition2(community, user.signer, rumor);
+
       // Genesis: two owner-signed editions, nothing more (CORD-02 §1). An
       // agent-only create seals the gate INTO the metadata edition: every
       // conforming client then drops Guestbook Joins that lack the PoW.
-      await publishEdition2(
-        community,
-        user.signer,
+      await publishGenesis(
         buildMetadataEdition(
           community.id,
           {
@@ -342,15 +411,21 @@ export function useCommunityActions2() {
           { actorPubkey: user.pubkey, version: 1n },
         ),
       );
-      await publishEdition2(
-        community,
-        user.signer,
+      await publishGenesis(
         buildChannelEdition(
           generalChannelId,
           { name: "general", private: false },
           { actorPubkey: user.pubkey, version: 1n },
         ),
       );
+
+      // Operator path, continued: seed the #general stream with a founder
+      // message, so every member's write to it is a "known author" write on
+      // creation-gated relays. Skipped for non-operators (their streams are
+      // never gated today — and they hold no operator identity anyway).
+      if (operator) {
+        await seedChannelStreamPool(nostr, community, user.signer, generalChannelId, `₿AO “${trimmed}” created — welcome to #general`);
+      }
 
       // Record membership FIRST (the vault), then announce presence.
       const jm = toJoinMaterial(community, { relays: community.relays });
@@ -610,6 +685,10 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
           { actorPubkey: user.pubkey, version: 1n, authority: citationFor(community, folded, user.pubkey) },
         ),
       );
+      // Operator path: seed the new channel's stream (see create()).
+      if (isAdminPubkey(user.pubkey)) {
+        await seedChannelStreamPool(nostr, community, user.signer, channelId, `#${trimmed} created`);
+      }
       invalidateControl2(queryClient, community.idHex);
       return { channelIdHex: bytesToHex(channelId) };
     },
