@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
   fetchVerificationModelsMock: vi.fn(),
   releaseMock: vi.fn(),
   toastMock: vi.fn(),
+  sendNutzapMock: vi.fn(),
+  baoWallet: {
+    mintUrl: 'https://relay.bao.network/cashu',
+    balances: { 'https://relay.bao.network/cashu': 1_000_000 },
+    error: null as string | null,
+  },
 }));
 
 vi.mock('@/lib/baoFundraising', async (importOriginal) => {
@@ -33,7 +39,19 @@ vi.mock('@/lib/baoFundraising', async (importOriginal) => {
 });
 
 vi.mock('@/hooks/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { pubkey: 'user-pubkey', signer: {} } }),
+  useCurrentUser: () => ({ user: { pubkey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', signer: {} } }),
+}));
+
+vi.mock('@/hooks/useAppContext', () => ({
+  useAppContext: () => ({ config: { relayMetadata: { relays: [] } } }),
+}));
+
+vi.mock('@/hooks/useCashuSeed', () => ({
+  useCashuSeed: () => ({ seedPhrase: 'test seed phrase' }),
+}));
+
+vi.mock('@/hooks/useBaoCashuWallet', () => ({
+  useBaoCashuWallet: () => ({ ...mocks.baoWallet, sendNutzap: mocks.sendNutzapMock }),
 }));
 
 vi.mock('@/hooks/useToast', () => ({
@@ -72,7 +90,7 @@ const fundraiserA: BaoFundraiser = {
   id: 'fund-a',
   title: 'Campaign A',
   description: null,
-  owner_pubkey: 'owner-a',
+  owner_pubkey: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   runner_type: 'agent',
   goal_sats: 100_000,
   raised_sats: 0,
@@ -122,6 +140,7 @@ function idempotencyKeyOf(call: number): string {
 describe('ContributeDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.sendNutzapMock.mockResolvedValue({ status: 'sent', eventId: 'a'.repeat(64) });
   });
 
   afterEach(() => {
@@ -135,14 +154,14 @@ describe('ContributeDialog', () => {
     renderWithClient(<ContributeHarness />);
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(2));
 
     expect(idempotencyKeyOf(1)).toBe(idempotencyKeyOf(0));
@@ -153,26 +172,28 @@ describe('ContributeDialog', () => {
     renderWithClient(<ContributeHarness />);
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
-    await screen.findByText(/DO NOT PAY/);
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
+    await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'BAO Cashu contribution paid and recorded' }),
+    ));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(2));
 
     expect(idempotencyKeyOf(1)).not.toBe(idempotencyKeyOf(0));
   });
 
   it('blocks a campaign owner before recording a contribution', async () => {
-    const ownedFundraiser = { ...fundraiserA, owner_pubkey: 'user-pubkey' };
+    const ownedFundraiser = { ...fundraiserA, owner_pubkey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' };
     renderWithClient(
       <ContributeDialog fundraiser={ownedFundraiser} onOpenChange={() => {}} onContributed={() => {}} />,
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
 
     await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Contribution failed',
@@ -189,7 +210,7 @@ describe('ContributeDialog', () => {
     renderWithClient(<ContributeHarness />);
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
     await waitFor(() => expect(mocks.contributeMock).toHaveBeenCalledTimes(1));
 
     // The user dismisses the dialog while the request is in flight…
@@ -201,25 +222,28 @@ describe('ContributeDialog', () => {
     await screen.findByText('Fund: Campaign B');
 
     // …and only then campaign A's response arrives. Campaign B's dialog must
-    // stay on the funding form, not show A's demo payment instructions.
+    // stay on the funding form — no stale instructions panel exists anymore.
     resolveContribute(successResult());
     await waitFor(() =>
       expect(mocks.toastMock).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Contribution recorded (DEMO)' }),
+        expect.objectContaining({ title: 'BAO Cashu contribution paid and recorded' }),
       ),
     );
     expect(screen.queryByText(/DO NOT PAY/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Amount (sats)')).toBeInTheDocument();
   });
 
-  it('shows payment instructions when the response lands while the same campaign is still open', async () => {
+  it('confirms the contribution when the response lands while the same campaign is still open', async () => {
     mocks.contributeMock.mockResolvedValue(successResult());
     renderWithClient(<ContributeHarness />);
 
     fireEvent.click(screen.getByText('fund A'));
-    fireEvent.click(await screen.findByRole('button', { name: /Contribute 1,000 sats/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pay and contribute 1,000 BAO sats/ }));
 
-    expect(await screen.findByText(/DO NOT PAY/)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'BAO Cashu contribution paid and recorded' }),
+    ));
+    expect(screen.getByLabelText('Amount (sats)')).toBeInTheDocument();
   });
 });
 
@@ -278,7 +302,7 @@ describe('ContributeDialog — overfunded campaign', () => {
 
 const pageFundraiser: BaoFundraiser = {
   ...fundraiserA,
-  owner_pubkey: 'user-pubkey',
+  owner_pubkey: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 };
 
 const unlockedMilestone: BaoMilestone = {
