@@ -535,14 +535,26 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // local list. Without these keys, kind-33301 invite bundles cannot be
       // addressed by NIP-09 because deletion must be signed by their author.
       const inviteKeys = new Map<string, Uint8Array>();
+      // Relays beyond the community's homes that ever held a bundle copy:
+      // each live link's own bootstrap hints (consented interop fallback).
+      // Without them a consented link would survive the purge on those relays.
+      const hintRelays = new Set<string>();
       try {
         const listEvents = await nostr.query([{ kinds: [13303], authors: [user.pubkey], limit: 20 }]);
         for (const event of listEvents) {
           try {
             const decrypted = await user.signer.nip44.decrypt(user.pubkey, event.content);
-            const parsed = JSON.parse(decrypted) as { entries?: Array<{ community_id?: string; signer_sk?: string }> };
+            const parsed = JSON.parse(decrypted) as { entries?: Array<{ community_id?: string; signer_sk?: string; url?: string }> };
             for (const entry of parsed.entries ?? []) {
-              if (entry.community_id !== community.idHex || !entry.signer_sk) continue;
+              if (entry.community_id !== community.idHex) continue;
+              if (entry.url) {
+                try {
+                  for (const relay of parseInviteLink(entry.url)?.bootstrapRelays ?? []) hintRelays.add(relay);
+                } catch {
+                  // A malformed historical link contributes no hints.
+                }
+              }
+              if (!entry.signer_sk) continue;
               let sk: Uint8Array | undefined;
               try {
                 sk = hex32(entry.signer_sk);
@@ -562,7 +574,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
 
       // Publish the terminal marker first, then request physical deletion.
       await dissolve.mutateAsync();
-      const report = await purgeCommunityRemote(nostr, community, inviteKeys);
+      const report = await purgeCommunityRemote(nostr, community, inviteKeys, [...hintRelays]);
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {
         throw new Error("The relay did not accept any NIP-09 deletion requests.");
