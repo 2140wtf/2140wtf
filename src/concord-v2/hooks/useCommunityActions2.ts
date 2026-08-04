@@ -17,7 +17,8 @@ import {
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
-import { APP_RELAYS } from "@/lib/platform";
+import { APP_RELAYS, normalizeRelayUrl } from "@/lib/platform";
+import { BAO_MARKETS_RELAY } from "@/lib/baoRelayMarkets";
 import { preferPortableRelays, unusableRelaysReason } from "@/lib/relayUsability";
 import { toJoinMaterial, rehydrateCommunity, type CommunityListEntry, type JoinMaterial } from "@/concord-v2/lib/communityList";
 import { mintCommunity } from "@/concord-v2/lib/community";
@@ -228,10 +229,22 @@ export function inviteRefOf(invite: ParsedInviteLink): string {
  * The create UI still requires the creator to explicitly select every relay.
  */
 export function defaultCreateRelays(appRelays: string[], dmRelays: string[]): string[] {
-  const dm = preferPortableRelays(dmRelays);
+  const dm = preferPortableRelays(dmRelays).filter((url) => !isMarketsOnlyRelay(url));
   if (dm.length > 0) return capRelays(dm);
-  const app = preferPortableRelays(appRelays);
+  const app = preferPortableRelays(appRelays).filter((url) => !isMarketsOnlyRelay(url));
   return capRelays(app.length > 0 ? app : preferPortableRelays(STOCK_RELAYS));
+}
+
+/**
+ * The ₿AO Markets relay is intentionally NOT a community home: it exists for
+ * markets, the 2140.wtf app, and ₿AO Fund traffic, and must not fill with
+ * third-party encrypted ₿AO storage until a dedicated community relay
+ * exists. Excluded from every create-dialog suggestion; a deliberate custom
+ * entry still works (the operator's own choice).
+ */
+export function isMarketsOnlyRelay(url: string): boolean {
+  const normalized = normalizeRelayUrl(url);
+  return normalized === BAO_MARKETS_RELAY;
 }
 
 export interface CreateRelayCandidate {
@@ -241,8 +254,8 @@ export interface CreateRelayCandidate {
 
 /** Explicit-picker choices: private inbox relays first, then configured app relays. */
 export function createRelayCandidates(appRelays: string[], dmRelays: string[]): CreateRelayCandidate[] {
-  const dm = preferPortableRelays(dmRelays);
-  const app = preferPortableRelays(appRelays);
+  const dm = preferPortableRelays(dmRelays).filter((url) => !isMarketsOnlyRelay(url));
+  const app = preferPortableRelays(appRelays).filter((url) => !isMarketsOnlyRelay(url));
   const distinctApp = app.filter((url) => !dm.includes(url));
   const candidates = dm.length > 0 && distinctApp.length > 0
     ? [...dm.slice(0, MAX_COMMUNITY_RELAYS - 1), distinctApp[0], ...distinctApp.slice(1)]
