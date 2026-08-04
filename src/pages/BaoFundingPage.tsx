@@ -28,7 +28,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
-import { isSendRouteMissing, sendDemoSats } from '@/lib/baoWalletApi';
+import { isSendRouteMissing, sendDemoSats, type BaoSendRail } from '@/lib/baoWalletApi';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -43,7 +43,6 @@ import {
   fetchVerificationModels,
   fetchVerificationStats,
   fundingProgressPct,
-  isBaoRailLive,
   latestVerification,
   releaseMilestone,
   scoreMilestone,
@@ -828,6 +827,11 @@ function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
   );
 }
 
+/** Rails the scoped spend endpoint can debit (bolt12/nwc are not part of it). */
+function isSpendRailSupported(rail: BaoRail): boolean {
+  return rail === 'lightning' || rail === 'cashu' || rail === 'l1' || rail === 'liquid' || rail === 'spark' || rail === 'ark' || rail === 'fedimint';
+}
+
 // ── Contribute dialog ────────────────────────────────────────────────────────
 
 // Exported for regression tests (idempotency key + stale instructions races).
@@ -898,17 +902,17 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
         idemKeyRef.current = { fundraiserId: fundraiser!.id, key: crypto.randomUUID() };
       }
       mutationTargetIdRef.current = fundraiser!.id;
-      if (rail !== 'cashu') throw new Error('Milestone contributions currently settle through the BAO Cashu rail only.');
       const amountSats = parseInt(amount, 10) || 0;
       const idempotencyKey = `2140:${fundraiser!.id}:${rail}:${amountSats}:${idemKeyRef.current.key}`;
 
       // Preferred settlement: debit the custodial bao.markets balance
-      // server-side (POST /v1/wallet/send, scoped fundraiser destination).
-      // The same call records the contribution. Falls back to the local
-      // NIP-60 nutzap path while the route isn't deployed yet.
+      // server-side (POST /v1/wallet/send, scoped fundraiser destination) —
+      // every supported rail works here, not just Cashu. The same call
+      // records the contribution. Falls back to the local NIP-60 nutzap path
+      // (Cashu-only) while the route isn't deployed yet.
       try {
         await sendDemoSats(user.signer, {
-          rail: 'cashu',
+          rail: (rail === 'fedimint' ? 'ecash' : rail) as BaoSendRail,
           amountSats,
           destination: `fundraiser:${fundraiser!.id}`,
           idempotencyKey,
@@ -921,6 +925,8 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
       } catch (e) {
         if (!isSendRouteMissing(e)) throw e;
       }
+
+      if (rail !== 'cashu') throw new Error('Only Cashu until the scoped spend endpoint ships — the API path settles every rail.');
 
       if (!baoWallet.mintUrl) throw new Error('Select a BAO Cashu mint before contributing.');
       const balance = baoWallet.balances?.[baoWallet.mintUrl] ?? 0;
@@ -983,21 +989,21 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
                   <button
                     key={r}
                     type="button"
-                    disabled={!isBaoRailLive(r) || r !== 'cashu'}
+                    disabled={!isSpendRailSupported(r)}
                     onClick={() => setRail(r)}
                     className={cn(
                       'rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
                       rail === r ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground',
-                      !isBaoRailLive(r) && 'opacity-40 cursor-not-allowed hover:text-muted-foreground',
+                      !isSpendRailSupported(r) && 'opacity-40 cursor-not-allowed hover:text-muted-foreground',
                     )}
                   >
                     {BAO_RAIL_LABELS[r]}
-                    {(!isBaoRailLive(r) || r !== 'cashu') && <span className="block text-[9px]">Cashu only</span>}
+                    {!isSpendRailSupported(r) && <span className="block text-[9px]">soon</span>}
                   </button>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                BAO milestone contributions currently settle from your BAO Cashu balance. Need signet sats? Claim 21,400 free sats every 24h on{' '}
+                Contributions settle from your custodial bao.markets balance on any supported rail. Need signet sats? Claim 21,400 free sats every 24h on{' '}
                 <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openUrl(BAO_MARKETS_URL)}>
                   bao.markets
                 </button>
