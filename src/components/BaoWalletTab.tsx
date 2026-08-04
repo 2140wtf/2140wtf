@@ -263,9 +263,12 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
                   {apiBreakdown.map((rail) => `${rail.label} ${rail.sats.toLocaleString()}`).join(' · ')}
                 </p>
               )}
+              {apiBalances.isPending && (
+                <p className='text-xs text-muted-foreground mt-2'>Loading bao.markets balances…</p>
+              )}
               {apiBalances.isError && (
                 <p className='text-xs text-muted-foreground mt-2'>
-                  Couldn't fetch your bao.markets balances — tap refresh to retry.
+                  Couldn't fetch your bao.markets balances — {apiBalances.error instanceof Error ? apiBalances.error.message : 'unknown error'}. Tap refresh to retry.
                 </p>
               )}
               <p className='text-xs text-muted-foreground mt-3 leading-relaxed'>

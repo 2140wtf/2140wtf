@@ -1,7 +1,7 @@
 import { Wallet, RefreshCw, AlertTriangle, Landmark } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/PageHeader';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { ArkWalletTab } from '@/components/ArkWalletTab';
+import { BaoWalletTab } from '@/components/BaoWalletTab';
 import { CashuWalletTab } from '@/components/CashuWalletTab';
 import { LightningWalletTab } from '@/components/LightningWalletTab';
 import { ComingSoonTab } from '@/components/ComingSoonTab';
@@ -33,6 +34,14 @@ export function WalletPage() {
   const { user } = useCurrentUser();
   const cashuWallet = useCashuWalletContext();
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const relayUrls = useMemo(
+    () =>
+      (config.relayMetadata?.relays ?? [])
+        .filter((relay) => relay.read !== false || relay.write !== false)
+        .map((relay) => relay.url)
+        .filter((url): url is string => typeof url === 'string' && url.length > 0),
+    [config.relayMetadata?.relays],
+  );
 
   useSeoMeta({
     title: `Wallet | ${config.appName}`,
@@ -60,11 +69,12 @@ export function WalletPage() {
         <div className="px-4 pt-6 pb-4 max-w-sm mx-auto space-y-4">
           <ResearchBetaAlert />
           <Tabs defaultValue="cashu" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsList className="grid w-full grid-cols-5 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
               <TabsTrigger value="lightning">Lightning</TabsTrigger>
               <TabsTrigger value="spark">Spark</TabsTrigger>
               <TabsTrigger value="ark">Ark</TabsTrigger>
+              <TabsTrigger value="bao">BAO Wallet</TabsTrigger>
             </TabsList>
 
             <TabsContent value="cashu">
@@ -203,6 +213,25 @@ export function WalletPage() {
 
             <TabsContent value="ark">
               <ArkWalletTab />
+            </TabsContent>
+
+            <TabsContent value="bao">
+              {cashuWallet.seedLoading ? (
+                <div className="py-12 flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+                  <RefreshCw className="size-5 animate-spin" />
+                  <p>Loading BAO wallet…</p>
+                </div>
+              ) : cashuWallet.seedError ? (
+                <div className="py-12 text-center text-sm text-destructive">
+                  {cashuWallet.seedError}
+                </div>
+              ) : !cashuWallet.seedPhrase || !user.signer?.nip44 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  Your signer does not support the BAO wallet (NIP-44 required).
+                </div>
+              ) : (
+                <BaoWalletTab seedPhrase={cashuWallet.seedPhrase} user={user} relayUrls={relayUrls} />
+              )}
             </TabsContent>
           </Tabs>
         </div>
