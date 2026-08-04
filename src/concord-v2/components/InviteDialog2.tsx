@@ -323,30 +323,30 @@ function InviteBody({ community }: { community: CommunityV2 | undefined }) {
       )}
 
       {fallbackOffer && (
-        <Alert>
+        <Alert className="border-primary/50 bg-primary/5">
           <AlertDescription className="space-y-3">
-            <p>
-              This community&apos;s relays rejected the public invite bundle — links can&apos;t be
-              fetched from them ({fallbackOffer}).
+            <p className="font-medium text-foreground">
+              This community&apos;s relays don&apos;t accept invite bundles ({fallbackOffer}).
             </p>
             <p>
-              You can publish just this link&apos;s <span className="text-foreground font-medium">encrypted</span>{" "}
-              bundle to the public interop relays instead. They learn that a link exists and when —
-              never the community, its members, or its contents.
+              Create the link anyway on the public interop relays. Only this link&apos;s{" "}
+              <span className="text-foreground font-medium">encrypted</span> bundle is published
+              there — they learn that a link exists and when, never the community, its members,
+              or its contents.
             </p>
             <div className="flex gap-2">
               <Button
                 type="button"
-                size="sm"
                 disabled={isCreatingLink}
+                className="clip-corner-lg"
                 onClick={() => {
                   setFallbackOffer(null);
                   void runGenerate(true);
                 }}
               >
-                {isCreatingLink ? <Loader2 className="size-4 animate-spin" /> : "Publish to interop relays"}
+                {isCreatingLink ? <Loader2 className="size-4 animate-spin" /> : "Create link on interop relays"}
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setFallbackOffer(null)}>
+              <Button type="button" variant="ghost" onClick={() => setFallbackOffer(null)}>
                 Cancel
               </Button>
             </div>
