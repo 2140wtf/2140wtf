@@ -14,7 +14,6 @@ import {
   agentGateOf,
   grindJoinRumor,
 } from "@/concord-v2/lib/agentGate";
-import { isAdminPubkey } from "@/lib/admins";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
@@ -385,20 +384,18 @@ export function useCommunityActions2() {
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
       const { community, generalChannelId } = mintCommunity(trimmed, user.pubkey, relays);
 
-      // Operator npubs publish the genesis through the app pool (the socket
-      // NIP-42s with their public operator identity — relays that gate stream
-      // creation to operators accept it). Everyone else keeps the isolated
-      // Concord transport, which never carries the real npub.
-      const operator = isAdminPubkey(user.pubkey);
-      const publishGenesis = (rumor: Rumor) =>
-        operator
-          ? publishEditionPool(nostr, community, user.signer, rumor)
-          : publishEdition2(community, user.signer, rumor);
-
       // Genesis: two owner-signed editions, nothing more (CORD-02 §1). An
       // agent-only create seals the gate INTO the metadata edition: every
       // conforming client then drops Guestbook Joins that lack the PoW.
-      await publishGenesis(
+      //
+      // Neutral two-path publish, no operator lists in code: the isolated
+      // Concord transport first (never carries the real npub). Only if EVERY
+      // relay refuses the genesis, retry through the app pool — the pool's
+      // NIP-42 answers with the user's own identity, and only to relays the
+      // user explicitly chose. Relays with an operator-creation policy (their
+      // operator list lives in the RELAY's policy, secret, never here) then
+      // accept operators and keep refusing everyone else.
+      const editions: Rumor[] = [
         buildMetadataEdition(
           community.id,
           {
@@ -410,20 +407,19 @@ export function useCommunityActions2() {
           },
           { actorPubkey: user.pubkey, version: 1n },
         ),
-      );
-      await publishGenesis(
         buildChannelEdition(
           generalChannelId,
           { name: "general", private: false },
           { actorPubkey: user.pubkey, version: 1n },
         ),
-      );
-
-      // Operator path, continued: seed the #general stream with a founder
-      // message, so every member's write to it is a "known author" write on
-      // creation-gated relays. Skipped for non-operators (their streams are
-      // never gated today — and they hold no operator identity anyway).
-      if (operator) {
+      ];
+      try {
+        for (const rumor of editions) await publishEdition2(community, user.signer, rumor);
+      } catch {
+        for (const rumor of editions) await publishEditionPool(nostr, community, user.signer, rumor);
+        // Seed #general with a founder message: on creation-gated relays the
+        // first wrap on any stream needs the pool's identity, and after this
+        // seed every member's write is a "known author" write needing none.
         await seedChannelStreamPool(nostr, community, user.signer, generalChannelId, `₿AO “${trimmed}” created — welcome to #general`);
       }
 
@@ -605,16 +601,12 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
   const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
     mutationFn: async () => {
       if (!user || !community) throw new Error("Not ready.");
-      const admin = isAdminPubkey(user.pubkey);
-      if (user.pubkey !== community.owner && !admin) throw new Error("Only the founder can purge this community.");
+      if (user.pubkey !== community.owner) throw new Error("Only the founder can purge this community.");
       if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
 
       // Capture link-signer secrets before removing the community from the
       // local list. Without these keys, kind-33301 invite bundles cannot be
       // addressed by NIP-09 because deletion must be signed by their author.
-      // (Skipped for an admin purge: the admin's single signature covers
-      // every author, so no per-link secrets are needed — the relay's write
-      // policy honors them, see docs/BAO_RELAY_ADMIN_DELETION.md.)
       const inviteKeys = new Map<string, Uint8Array>();
       // Relays beyond the community's homes that ever held a bundle copy:
       // each live link's own bootstrap hints (consented interop fallback).
@@ -635,7 +627,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
                   // A malformed historical link contributes no hints.
                 }
               }
-              if (admin || !entry.signer_sk) continue;
+              if (!entry.signer_sk) continue;
               let sk: Uint8Array | undefined;
               try {
                 sk = hex32(entry.signer_sk);
@@ -654,13 +646,18 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       }
 
       // Publish the terminal marker first, then request physical deletion.
+      // Deletions are signed per-author (founder keys — honored by every
+      // NIP-09 relay) PLUS once with the caller's own key: standard relays
+      // apply that to the caller's own events only, while a relay with an
+      // operator-deletion policy (operator list lives in the RELAY's policy,
+      // secret, never in this repo) may honor it for the whole community.
       await dissolve.mutateAsync();
       const report = await purgeCommunityRemote(
         nostr,
         community,
         inviteKeys,
         [...hintRelays],
-        admin ? user.signer : undefined,
+        user.signer,
       );
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {
@@ -676,17 +673,31 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Channel name is required.");
       const channelId = random32();
-      await publishEdition2(
-        community,
-        user.signer,
-        buildChannelEdition(
-          channelId,
-          { name: trimmed, private: false },
-          { actorPubkey: user.pubkey, version: 1n, authority: citationFor(community, folded, user.pubkey) },
-        ),
-      );
-      // Operator path: seed the new channel's stream (see create()).
-      if (isAdminPubkey(user.pubkey)) {
+      try {
+        await publishEdition2(
+          community,
+          user.signer,
+          buildChannelEdition(
+            channelId,
+            { name: trimmed, private: false },
+            { actorPubkey: user.pubkey, version: 1n, authority: citationFor(community, folded, user.pubkey) },
+          ),
+        );
+      } catch {
+        // Every relay refused the isolated transport: retry through the app
+        // pool (its NIP-42 answers with the user's own identity — operator
+        // policies relay-side, never in code) and seed the channel stream so
+        // member writes are "known author" writes there.
+        await publishEditionPool(
+          nostr,
+          community,
+          user.signer,
+          buildChannelEdition(
+            channelId,
+            { name: trimmed, private: false },
+            { actorPubkey: user.pubkey, version: 1n, authority: citationFor(community, folded, user.pubkey) },
+          ),
+        );
         await seedChannelStreamPool(nostr, community, user.signer, channelId, `#${trimmed} created`);
       }
       invalidateControl2(queryClient, community.idHex);
