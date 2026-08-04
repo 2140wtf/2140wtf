@@ -1264,6 +1264,25 @@ export function ConcordV2Page() {
     }
   };
 
+  const handleKick = async (pk: string) => {
+    try {
+      await moderation.kick({ target: pk });
+      // Kick is a COOPERATIVE directive: the member's client is asked to
+      // leave, but nothing stops them reading with the keys they hold. Ban
+      // rotates the keys — that is the enforced removal.
+      toast({
+        title: "Member kicked",
+        description: "They've been asked to leave. Their old keys still read history — use Ban to lock them out for real.",
+      });
+    } catch (e) {
+      toast({
+        title: "Couldn't kick that member",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSetRole = async (pubkey: string, roles: string[]) => {
     const tier = roles.includes("admin") ? ("admin" as const) : roles.includes("moderator") ? ("moderator" as const) : null;
     try {
@@ -2149,7 +2168,7 @@ export function ConcordV2Page() {
                     onFilterEnabledChange: setAgentFilterEnabled,
                   }}
                   onSetRole={canManageRoles ? handleSetRole : undefined}
-                  onKick={canKickAny ? (pk) => moderation.kick({ target: pk }).catch(() => {}) : undefined}
+                  onKick={canKickAny ? handleKick : undefined}
                   onBan={canBanAny ? setBanTarget : undefined}
                   banLabel={(pk) =>
                     folded && user && moderation.canRekey && !hasForeignLiveLinks(folded, user.pubkey, pk)
