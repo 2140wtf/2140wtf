@@ -1,27 +1,15 @@
-## Linked issue
+## What & why
 
-<!-- Every feature PR must link to an existing open issue. Bug fixes: describe the bug. -->
+<!-- One short paragraph: what changed and why it was needed. Link the issue if
+     there is one. Cut everything that doesn't help a reviewer understand. -->
 
-Closes #
+## Verification
 
-## Philosophy alignment
+<!-- How you proved it works: `npm run test` output, browser/device checks,
+     relay probes, before/after behavior. Screenshots only for UI changes. -->
 
-<!-- How does this change make 2140.wtf more magnetic, more threatening to the
-     status quo, and more peaceful to inhabit? See CONTRIBUTING.md. If you can't
-     articulate this clearly, the change probably doesn't belong. -->
+## Nostr & privacy notes
 
-## Live preview
-
-<!-- Static hosting URL (surge.sh, Netlify, Vercel, ...) so reviewers can test
-     without pulling the branch. -->
-
-## Screenshots
-
-<!-- Before/after for any UI change. If there is no visual component, say so. -->
-
-## Checklist
-
-- [ ] `npm run test` passes (type-check, lint, unit tests, production build)
-- [ ] Self-review checklist from CONTRIBUTING.md completed
-- [ ] New Nostr event kinds documented in NIP.md
-- [ ] No secrets, keys, or env-specific values committed
+<!-- Only if relevant: new event kinds (must be documented in NIP.md), changes
+     to what relays/operators can observe, new trust assumptions, migration or
+     compatibility concerns. Delete this section otherwise. -->
