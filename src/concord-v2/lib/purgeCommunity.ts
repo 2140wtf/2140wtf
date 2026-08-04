@@ -40,10 +40,22 @@ const PURGE_QUERY_LIMIT = 5000;
 const PURGE_AUTHOR_CHUNK = 100;
 const PURGE_TAG_CHUNK = 100;
 
+/** The minimal signer surface for a caller-signed purge (matches NUser's signer). */
+export interface PurgeCallerSigner {
+  signEvent(event: { kind: number; content: string; tags: string[][]; created_at: number }): Promise<NostrEvent>;
+}
+
 /**
  * Request NIP-09 deletion of all durable BAO events authored by keys held by
  * the founder. Relays are independent and may decline deletion; the report
  * deliberately exposes that best-effort boundary to the caller.
+ *
+ * With `callerSigner`, one extra kind-5 per batch is signed by the CALLER's
+ * own key in addition to the per-author signatures. This is fully neutral:
+ * standard NIP-09 relays apply it to the caller's own events only (usually
+ * none), while a relay with an operator-deletion policy — whose operator
+ * list lives in the RELAY's configuration, never in this repo — may honor it
+ * community-wide.
  */
 export async function purgeCommunityRemote(
   nostr: RemotePurgeRelay,
@@ -52,6 +64,7 @@ export async function purgeCommunityRemote(
   // Relays beyond the community's homes that ever held a bundle copy (each
   // live link's own bootstrap hints — consented interop fallback copies).
   relayHints: string[] = [],
+  callerSigner?: PurgeCallerSigner,
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
@@ -80,6 +93,28 @@ export async function purgeCommunityRemote(
     }
     let requested = 0;
     let accepted = 0;
+    if (callerSigner) {
+      // Caller-signed batch: the caller's key signs one kind-5 covering every
+      // found event; the relay decides per its own policy what to honor.
+      const targets = [...events.values()];
+      for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
+        const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
+        const deletion = await callerSigner.signEvent({
+          kind: 5,
+          content: "",
+          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          created_at: Math.floor(Date.now() / 1000),
+        });
+        requested++;
+        try {
+          await nostr.relay(url).event(deletion, { signal: AbortSignal.timeout(15_000) });
+          accepted++;
+        } catch {
+          // The relay may reject admin NIP-09 or the request may time out.
+        }
+      }
+      return { found: events.size, requested, accepted, failed: requested - accepted };
+    }
     for (const [pubkey, targets] of byAuthor) {
       const sk = keys.get(pubkey);
       if (!sk) continue;

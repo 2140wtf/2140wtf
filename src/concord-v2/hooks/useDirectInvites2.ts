@@ -11,7 +11,7 @@ import {
 } from "@/concord-v2/lib/directInvite";
 import { buildJoinRumor, currentGuestbookGroup, sealGuestbook } from "@/concord-v2/lib/guestbook";
 import { controlGroups } from "@/concord-v2/lib/control";
-import { concordClient } from "@/concord-v2/lib/concordTransport";
+import { concordClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { agentGateOf, grindJoinRumor } from "@/concord-v2/lib/agentGate";
 import {
   advanceInviteInboxCursor,
@@ -274,7 +274,7 @@ export function useAcceptDirectInvite2() {
           const wrap = await sealGuestbook(rumor, group, user.signer);
           await Promise.allSettled(
             community.relays.map((url) =>
-              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) }),
+              concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
             ),
           );
         })().catch(() => undefined);
