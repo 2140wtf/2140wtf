@@ -21,7 +21,7 @@ import { openWrap, type OpenedEvent, type Rumor, type StreamSigner } from "@/con
 import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
 import { logSync } from "@/lib/syncLog";
 import { onWireScopes } from "@/wire/bus";
-import { concordClient } from "@/concord-v2/lib/concordTransport";
+import { concordClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -239,8 +239,14 @@ export function relayFailureSummary(urls: string[], results: PromiseSettledResul
     .map((url, i) => {
       const r = results[i];
       if (r.status === "fulfilled") return null;
-      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
-      return `${url.replace(/^wss:\/\//, "")}: ${reason}`;
+      const reason = r.reason instanceof Error ? r.reason : undefined;
+      const text =
+        reason?.name === "AbortError" || (reason ? /aborted|abort/i.test(reason.message) : false)
+          ? `timed out after ${PUBLISH_TIMEOUT_MS / 1000}s`
+          : reason
+            ? reason.message
+            : String(r.reason);
+      return `${url.replace(/^wss:\/\//, "")}: ${text}`;
     })
     .filter((line): line is string => Boolean(line))
     .join("; ");
@@ -262,7 +268,7 @@ export async function publishEdition2(
   const wrap = await sealEdition(rumor, control, signer);
   const urls = opts?.relays ?? community.relays;
   const results = await Promise.allSettled(
-    urls.map((url) => concordClient(community.idHex, [control]).relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+    urls.map((url) => concordClient(community.idHex, [control]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
   );
   if (!results.some((r) => r.status === "fulfilled")) {
     throw new Error(`No relay accepted the change — ${relayFailureSummary(urls, results)}`);
