@@ -62,7 +62,6 @@ import { useCommunityManagement2, useStrandedRecovery2 } from "@/concord-v2/hook
 import { useChannels2, useControlFold2, useDissolved2 } from "@/concord-v2/hooks/useControlPlane2";
 import { BanMemberDialog } from "@/concord-v2/components/BanMemberDialog2";
 import { PurgeCommunityDialog2 } from "@/concord-v2/components/PurgeCommunityDialog2";
-import { isAdminPubkey } from "@/lib/admins";
 import type { BanPhase } from "@/concord-v2/hooks/useModeration2";
 import { hasForeignLiveLinks } from "@/concord-v2/lib/control";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
@@ -815,9 +814,6 @@ export function ConcordV2Page() {
   const { setTier } = useRoles2(community);
   const ownerHex = folded?.ownerHex ?? community?.owner;
   const iAmOwner = Boolean(user && ownerHex && user.pubkey === ownerHex);
-  // The 2140wtf operator can purge any BAO (the relay's write policy honors
-  // admin-moderated NIP-09 — see docs/BAO_RELAY_ADMIN_DELETION.md).
-  const canPurgeRemote = iAmOwner || isAdminPubkey(user?.pubkey);
   const roster = folded?.roster;
   const canManageRoles = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_ROLES));
   const canManageMetadata = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_METADATA));
@@ -1459,7 +1455,7 @@ export function ConcordV2Page() {
                         Dissolve community
                       </button>
                     )}
-                    {canPurgeRemote && (
+                    {iAmOwner && (
                       <button
                         type="button"
                         disabled={isPurging || isDissolving}
