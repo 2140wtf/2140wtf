@@ -36,6 +36,16 @@ const productionFactory: ConcordRelayFactory = (relayUrl, auth) => new NRelay1(r
  * several round trips before acknowledging every identity in a large scope. */
 const SECONDARY_AUTH_TIMEOUT_MS = 15_000;
 
+/**
+ * Budget for publishing one event to one relay. MUST exceed
+ * {@link SECONDARY_AUTH_TIMEOUT_MS}: on a relay that sends an AUTH challenge,
+ * the transport settles every held identity before the EVENT round trip, and
+ * an 8s publish budget could never cover that handshake — every challenged
+ * publish aborted with an unhelpful "signal has been aborted" even on healthy
+ * relays (and mobile networks add seconds of plain latency on top).
+ */
+export const PUBLISH_TIMEOUT_MS = SECONDARY_AUTH_TIMEOUT_MS + 5_000;
+
 function keySignature(keys: readonly GroupKey[]): string {
   return [...new Set(keys.map((key) => key.pk))].sort().join(",");
 }

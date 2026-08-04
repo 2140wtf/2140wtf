@@ -9,7 +9,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { buildRegistryEdition } from "@/concord-v2/lib/control";
 import { isAuthorized, Permissions } from "@/concord-v2/lib/roles";
 import { bytesToHex, grantLocator, hexToBytes, inviteLinksLocator, hex32, type GroupKey } from "@/concord-v2/lib/derive";
-import { concordClient, concordTransport } from "@/concord-v2/lib/concordTransport";
+import { concordClient, concordTransport, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import {
   buildDirectInviteRumor,
   sealDirectInvite,
@@ -202,7 +202,7 @@ function useUpdateInviteList2() {
       const content = await user.signer.nip44.encrypt(user.pubkey, JSON.stringify(next));
       const event = await user.signer.signEvent({ kind: KIND_INVITE_LIST, content, tags: [], created_at: createdAt });
       queryClient.setQueryData(inviteListKey(user.pubkey), next);
-      await nostr.event(event, { signal: AbortSignal.timeout(8000) });
+      await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
       return next;
     },
   });
@@ -458,7 +458,7 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       let results: PromiseSettledResult<void>[];
       try {
         results = await Promise.allSettled(
-          relays.map((url) => delivery.relay(url).event(wrap, { signal: AbortSignal.timeout(8000) })),
+          relays.map((url) => delivery.relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
         );
       } finally {
         // The outer author is single-use. Closing zeroizes its transport copy
