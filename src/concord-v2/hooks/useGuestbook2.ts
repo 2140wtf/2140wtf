@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
+import { relayFailureSummary, useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
 import { agentGateOf } from "@/concord-v2/lib/agentGate";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -114,7 +114,7 @@ export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
         community.relays.map((url) => concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
       );
       if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error("No relay accepted the update.");
+        throw new Error(`No relay accepted the update — ${relayFailureSummary(community.relays, results)}`);
       }
     },
     onSuccess: () => {
