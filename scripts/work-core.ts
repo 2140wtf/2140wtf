@@ -31,7 +31,12 @@ import {
   type ComputeCreditRequest,
 } from "@/lib/baoComputeCredits";
 import { openCreditRequests, totalOpenSats } from "@/lib/baoWorkDiscovery";
-import { publishAll, queryAll, signerOf, type State } from "./chat-core";
+import { publishAll, queryAll, signerOf } from "./chat-core";
+import type { State } from "./chat-core";
+
+/** Re-exported so impure shells (e.g. Paradise runtime) can build a State shim
+ *  and reuse the shared relay verbs without coupling to chat-core directly. */
+export type { State };
 
 const nowSec = (): number => Math.floor(Date.now() / 1000);
 const npub = (hex: string): string => {
