@@ -51,7 +51,16 @@ export interface BaoInvite {
 
 /** The one identity shape every surface persists. Mirrors the CLI's State. */
 export interface BaoIdentity {
-  sk: string; // hex private key — NEVER log
+  /**
+   * Hex private key — NEVER log. For key-based identities (create/join) this is
+   * the signing key. For a signer-based login (browser extension / remote
+   * signer) the app cannot expose a hex key; instead `pubkey` is set and `sk`
+   * may be empty — such an identity can run read-only/identity commands but not
+   * key-signed community publishes without a real key.
+   */
+  sk: string;
+  /** Public key (hex). Always present; equals getPublicKey(sk) when `sk` is set. */
+  pubkey?: string;
   role: "owner" | "member";
   /** Local selector (the CLI's --as name). */
   identity_name: string;

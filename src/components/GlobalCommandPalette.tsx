@@ -15,9 +15,6 @@ import { useEffect, useState } from "react";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { BAO_COMMANDS } from "@/concord-v2/lib/commands";
 
-/** Commands that need no arguments and run immediately on select. */
-const NO_ARG_VERBS = new Set(["help", "logout", "identities", "members", "whoami", "dissolve", "wallet", "project"]);
-
 interface Entry {
   ok: boolean;
   error?: string;
@@ -113,13 +110,10 @@ export function GlobalCommandPalette() {
               <CommandItem
                 key={c.verb}
                 value={c.verb}
-                onSelect={() => {
-                  if (NO_ARG_VERBS.has(c.verb)) {
-                    void run(c.verb);
-                    return;
-                  }
-                  setDraft(`${c.verb} `);
-                }}
+                // Enter (or click) on a selected item executes it. A command
+                // that needs arguments returns a usage error inline, which is
+                // the cue to type the full command in the input.
+                onSelect={() => void run(c.verb)}
               >
                 <span className="font-mono text-sm">{c.verb}</span>
                 <span className="ml-2 truncate text-muted-foreground text-xs">{c.summary}</span>

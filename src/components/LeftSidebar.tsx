@@ -21,6 +21,7 @@ import LoginDialog from '@/components/auth/LoginDialog';
 import { FollowQRDialog } from '@/components/FollowQRDialog';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { genUserName } from '@/lib/genUserName';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useLoginActions } from '@/hooks/useLoginActions';
 
@@ -89,7 +90,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
     }
   }, [location.pathname]);
 
-  const getDisplayName = (account: Account) => account.metadata.name || account.metadata.display_name || 'Anonymous';
+  const getDisplayName = (account: Account) => account.metadata.name || account.metadata.display_name || genUserName(account.pubkey);
 
   const handleLogout = async () => {
     setAccountPopoverOpen(false);
@@ -205,7 +206,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
                   <Avatar shape={currentUserAvatarShape} className={cn('shrink-0', collapsed ? 'size-9' : 'size-10')}>
                     <AvatarImage src={metadata?.picture} alt={metadata?.name} />
                     <AvatarFallback className="bg-primary/20 text-primary text-sm">
-                      {(metadata?.name || metadata?.display_name || 'Anonymous')[0]?.toUpperCase() ?? '?'}
+                      {(metadata?.name || metadata?.display_name || genUserName(user?.pubkey ?? ''))[0]?.toUpperCase() ?? '?'}
                     </AvatarFallback>
                   </Avatar>
                 )}
@@ -218,7 +219,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
                         <span className="font-semibold text-sm truncate">
                           {currentUserEvent && (metadata?.name || metadata?.display_name)
                             ? <EmojifiedText tags={currentUserEvent.tags}>{metadata.name || metadata.display_name || ''}</EmojifiedText>
-                            : (metadata?.name || metadata?.display_name || 'Anonymous')}
+                            : (metadata?.name || metadata?.display_name || genUserName(user?.pubkey ?? ''))}
                         </span>
                         {metadata?.nip05 && (
                           <VerifiedNip05Text nip05={metadata.nip05} pubkey={user.pubkey} className="text-xs text-muted-foreground truncate" />
@@ -367,7 +368,7 @@ export function LeftSidebar({ collapsed = false, onToggleCollapse }: LeftSidebar
                 </button>
                 <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors">
                   <LogOut className="size-4" />
-                  <span>Log out @{metadata?.name || metadata?.display_name || 'Anonymous'}</span>
+                  <span>Log out @{metadata?.name || metadata?.display_name || genUserName(user?.pubkey ?? '')}</span>
                 </button>
               </div>
             </PopoverContent>
