@@ -10,6 +10,7 @@ import { sunsetPreset } from "@/themes";
 import { NativeNotifications } from "@/components/NativeNotifications";
 import NostrProvider from "@/components/NostrProvider";
 import { NostrSync } from "@/components/NostrSync";
+import { WindowBaoMount } from "@/hooks/useWindowBao";
 import { PlausibleProvider } from "@/components/PlausibleProvider";
 import { SentryProvider } from "@/components/SentryProvider";
 
@@ -266,6 +267,10 @@ export function App() {
                 <NostrProvider>
                   <NostrSync />
                   <NativeNotifications />
+                  {/* Mounts window.bao — the in-page agent terminal API. The
+                      dispatcher reuses this NostrProvider's pool, so terminal
+                      commands share the app's relay connections. */}
+                  <WindowBaoMount />
 
                     <NWCProvider>
                       <EmotionDevProvider>
