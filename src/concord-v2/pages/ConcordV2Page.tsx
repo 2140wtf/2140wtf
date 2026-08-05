@@ -824,20 +824,21 @@ export function ConcordV2Page() {
   const canKickAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.KICK));
   const canBanAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.BAN));
   const canModerateMessages = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_MESSAGES));
-  // The "/" command palette in this community offers the registry commands the
-  // current member is allowed to run: owner > admin (MANAGE_ROLES) > member.
+  // The "/" command palette offers the registry commands reachable here:
+  // global-scope commands (login/register, join, create, help, shell, purge)
+  // are always offered — a signed-out user or agent still needs them — and the
+  // community-scope commands appear once a member is signed in, filtered by
+  // role (owner > admin (MANAGE_ROLES) > member).
   const baoAccess = !user ? undefined : user.pubkey === ownerHex ? "owner" : canManageRoles ? "admin" : "member";
-  const baoCommands = useMemo(
-    () =>
-      baoAccess
-        ? commandsFor("community", baoAccess).map((c) => ({
-            name: c.verb,
-            usage: `/${c.verb} ${c.usage}`,
-            description: c.summary,
-          }))
-        : [],
-    [baoAccess],
-  );
+  const baoCommands = useMemo(() => {
+    const global = commandsFor("global", "anyone");
+    const community = baoAccess ? commandsFor("community", baoAccess) : [];
+    return [...global, ...community].map((c) => ({
+      name: c.verb,
+      usage: `/${c.verb} ${c.usage}`,
+      description: c.summary,
+    }));
+  }, [baoAccess]);
   // A dissolved community is terminal: the owner has torn it down, so no key
   // rotation or new messages will ever land. Keep it fully readable (members
   // asked to still see the history), but freeze every write path.
