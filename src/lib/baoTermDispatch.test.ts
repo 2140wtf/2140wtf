@@ -84,18 +84,22 @@ describe('parseCommandLine', () => {
 describe('dispatchBaoTerm — envelopes', () => {
   it('rejects unknown commands with the JSON envelope', async () => {
     const r = await dispatchBaoTerm('bogus');
-    expect(r).toEqual({ ok: false, error: 'Unknown command: bogus. Run help.' });
+    expect(r).toEqual({ ok: false, error: "Unknown command: bogus. Run 'help'." });
   });
 
-  it('help returns the command catalog', async () => {
+  it('help returns the full engine command catalog (superset of the old terminal set)', async () => {
     const r = await dispatchBaoTerm('help');
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const names = (r.result as { commands: { cmd: string }[] }).commands.map((c) => c.cmd);
-    expect(names).toEqual([
-      'create', 'invite', 'join', 'say', 'read',
-      'whoami', 'identities', 'use', 'remove', 'help',
-    ]);
+    // Every verb the old in-page terminal exposed…
+    expect(names).toEqual(expect.arrayContaining([
+      'create', 'invite', 'join', 'say', 'read', 'whoami', 'identities', 'use', 'remove', 'help',
+    ]));
+    // …plus the engine verbs the merge added (admin/moderation/channels/meta/members/dissolve/login).
+    expect(names).toEqual(expect.arrayContaining([
+      'login', 'admin', 'ban', 'unban', 'kick', 'channel', 'meta', 'members', 'dissolve',
+    ]));
   });
 
   it('identities is empty on a clean browser', async () => {
