@@ -89,3 +89,4 @@ grant-proposal-experiment/
 
 # Encrypted signing-key backups — never commit, keep outside the repo
 *.gpg
+.gstack/
