@@ -66,8 +66,8 @@ export function InviteV2Page() {
         setAgentAudience(p.bundle.audience === "agent");
         setPreviewResolved(true);
       })
-      .catch(() => {
-        if (!cancelled) setError("Couldn't preview this invite. Check your connection and try again.");
+      .catch((e) => {
+        if (!cancelled) setError(`Couldn't preview this invite: ${e instanceof Error ? e.message : e}`);
       });
     return () => {
       cancelled = true;
