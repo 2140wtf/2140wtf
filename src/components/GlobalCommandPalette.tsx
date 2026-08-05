@@ -1,18 +1,22 @@
 /**
- * Global ₿AO command palette — press `/` (or Ctrl+K) anywhere in the app to
- * open it. Lists every command from the shared registry (src/concord-v2/lib/
- * commands.ts) grouped by category, so an agent or human always knows what is
- * at hand — global commands (login/create/join/help/…) plus community commands.
+ * Global ₿AO command palette — press `/` (or Ctrl+K) anywhere to open it.
  *
- * Selecting a command runs it through `window.bao` (the in-page engine adapter)
- * and shows the JSON result inline, so the palette is a real launcher, not just
- * a help list. A command that needs an argument still shows its usage line.
+ * Lists every command from the shared registry grouped by category, so an
+ * agent or human always knows what is at hand. It's a real launcher:
+ *   - selecting a no-argument command runs it through `window.bao` and shows
+ *     the JSON result inline;
+ *   - selecting an argument command fills the input with `<verb> ` so you type
+ *     the args and press Enter to run;
+ *   - typing any full command line and pressing Enter also runs it.
  */
 
 import { useEffect, useState } from "react";
 
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { BAO_COMMANDS } from "@/concord-v2/lib/commands";
+
+/** Commands that need no arguments and run immediately on select. */
+const NO_ARG_VERBS = new Set(["help", "logout", "identities", "members", "whoami", "dissolve", "wallet", "project"]);
 
 interface Entry {
   ok: boolean;
@@ -36,9 +40,11 @@ function isEditableTarget(el: EventTarget | null): boolean {
 
 export function GlobalCommandPalette() {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
   const [result, setResult] = useState<Entry | null>(null);
+  const [running, setRunning] = useState(false);
 
-  // "/" opens when not already typing in a field; Ctrl+K opens always.
+  // "/" opens when not typing in a field; Ctrl+K opens always.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -56,12 +62,19 @@ export function GlobalCommandPalette() {
   }, [open]);
 
   const run = async (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed || running) return;
+    setRunning(true);
     setResult(null);
-    const r = await runBao(line);
-    setResult(r);
+    try {
+      setResult(await runBao(trimmed));
+    } catch (e) {
+      setResult({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRunning(false);
+    }
   };
 
-  // Group commands by category, keeping registry order.
   const groups = new Map<string, typeof BAO_COMMANDS>();
   for (const c of BAO_COMMANDS) {
     const list = groups.get(c.category) ?? [];
@@ -71,9 +84,20 @@ export function GlobalCommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a ₿AO command — e.g. login, join, members, help…" />
+      <CommandInput
+        value={draft}
+        onValueChange={setDraft}
+        placeholder='Type a ₿AO command — e.g. "login alice" or "join <invite>" — then Enter'
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void run(draft);
+          }
+        }}
+      />
       <CommandList>
         <CommandEmpty>No commands match.</CommandEmpty>
+        {running && <div className="px-3 py-2 text-xs text-muted-foreground">Running…</div>}
         {result && (
           <div className="px-3 py-2 text-xs border-b border-border">
             {result.ok ? (
@@ -90,15 +114,16 @@ export function GlobalCommandPalette() {
                 key={c.verb}
                 value={c.verb}
                 onSelect={() => {
-                  const line = `${c.verb}${c.usage ? ` ${c.usage.replace(/<[^>]*>/g, "").replace(/\[[^\]]*\]/g, "").trim()}` : ""}`;
-                  void run(line);
+                  if (NO_ARG_VERBS.has(c.verb)) {
+                    void run(c.verb);
+                    return;
+                  }
+                  setDraft(`${c.verb} `);
                 }}
               >
                 <span className="font-mono text-sm">{c.verb}</span>
                 <span className="ml-2 truncate text-muted-foreground text-xs">{c.summary}</span>
-                <span className="ml-auto shrink-0 text-[10px] uppercase text-muted-foreground/50">
-                  {c.access}
-                </span>
+                <span className="ml-auto shrink-0 text-[10px] uppercase text-muted-foreground/50">{c.access}</span>
               </CommandItem>
             ))}
           </CommandGroup>
