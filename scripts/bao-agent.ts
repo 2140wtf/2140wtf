@@ -15,7 +15,10 @@
  *
  * Modes:
  *   create [--name "…"] [--agent-only]   genesis + first invite, saves owner state
+ *                                        (first invite defaults to AGENT audience)
  *   invite [--label L] [--single-use]    mint another invite link (owner state)
+ *                                        (defaults to AGENT audience; --human for a
+ *                                        human-facing card)
  *   join <invite-url> [--as name]        join with a FRESH key, saves member state
  *                                        (grinds the agent_gate PoW + checks
  *                                        single-use spend automatically)
@@ -214,7 +217,7 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
   console.log(`\nOwner identity "${name}": ${nip19.npubEncode(pubkey)}`);
   console.log(`State: ${statePath(name)}\n`);
 
-  await invite(name);
+  await invite(name, undefined, false, true);
 }
 
 async function invite(name: string, label?: string, singleUse = false, agent = false): Promise<void> {
@@ -641,7 +644,7 @@ async function main(): Promise<void> {
       await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
       break;
     case "invite":
-      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"), rest.includes("--agent"));
+      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"), !rest.includes("--human"));
       break;
     case "join": {
       const url = positionalArgs(rest)[0];
