@@ -23,14 +23,27 @@ import { freshLoopState, step, type LoopState } from "@/lib/paradise/loop";
 import { classifyFuel, type FuelLevel } from "@/lib/paradise/treasury";
 import type { StrategyId, StrategyMeta } from "@/lib/paradise/strategy";
 import { defaultStrategies, type Strategy, type StrategyContext } from "./strategies";
+import { requestCredits, type State } from "../work-core";
 
 const ROUTSTR_BASE_URL = (process.env.ROUTSTR_API_URL ?? "https://api.routstr.com").replace(/\/+$/, "");
 const PARADISE_DIR = process.env.PARADISE_HOME ?? join(homedir(), ".paradise");
+
+/** Minimum seconds between raise-bitcoin (kind-4971) requests from one identity. */
+export const RAISE_COOLDOWN_SEC = Number.parseInt(process.env.BAO_RAISE_COOLDOWN_SEC ?? "300", 10) || 300;
+
+/** Relays a Paradise identity raises bitcoin on. Override via BAO_RELAYS=relay1,relay2. */
+export function defaultRelays(): string[] {
+  return (process.env.BAO_RELAYS?.split(",").map((s) => s.trim()).filter(Boolean)) ?? ["wss://relay.bao.network"];
+}
 
 export interface ParadiseState {
   sk: string;
   pubkey: string;
   npub: string;
+  /** Relays this identity raises bitcoin on (kinds 4971/4972/4973). Defaults to relay.bao.network. */
+  relays: string[];
+  /** Epoch seconds of the last kind-4971 work request this identity posted (cooldown gate). */
+  lastRaiseAt: number;
   /** Routstr sk_ key — bearer money, stored locally only, never published. */
   routstrKey: string | null;
   /** Cashu wallet balance (msats). Simulated until a real Cashu wallet is wired. */
@@ -50,7 +63,11 @@ export function loadState(name: string): ParadiseState {
   if (!existsSync(path)) {
     throw new Error(`No paradise identity "${name}" — run: paradise init ${name} (expected ${path})`);
   }
-  return JSON.parse(readFileSync(path, "utf8")) as ParadiseState;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<ParadiseState>;
+  // Backfill fields added after this identity was created.
+  if (!Array.isArray(parsed.relays) || parsed.relays.length === 0) parsed.relays = defaultRelays();
+  if (typeof parsed.lastRaiseAt !== "number") parsed.lastRaiseAt = 0;
+  return parsed as ParadiseState;
 }
 
 export function saveState(name: string, state: ParadiseState): void {
@@ -62,10 +79,12 @@ export function createIdentity(name: string): ParadiseState {
   if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use run/fuel.`);
   const sk = generateSecretKey();
   const pubkey = getPublicKey(sk);
-  const state: ParadiseState = {
+    const state: ParadiseState = {
     sk: bytesToHex(sk),
     pubkey,
     npub: nip19.npubEncode(pubkey),
+    relays: defaultRelays(),
+    lastRaiseAt: 0,
     routstrKey: null,
     cashuMsats: 0,
     simRoutstrMsats: 0,
@@ -165,10 +184,23 @@ export class ParadiseRuntime {
       return `${head} → IDLE (${command.reason})`;
     }
 
-    // earn | work
+        // earn | work
     const strat = this.strategies.find((s) => s.id === command.strategy);
     if (!strat) return `${head} → ${command.kind.toUpperCase()} ${command.strategy}\n  ↳ strategy not found`;
-    const ctx: StrategyContext = { nowMs, fuel: command.fuel, routstrMsats, dryRun, agentPubkey: this.state.pubkey };
+    const live = !dryRun;
+    const nowSec = nowMs / 1000;
+    // Minimal State shim so Paradise reuses the shared work-core relay verbs
+    // (requestCredits / fulfillCredits / receiptCredits) instead of re-implementing
+    // nostr I/O here. See scripts/work-core.ts.
+    const concordState: State = { sk: this.state.sk, community: { relays: this.state.relays } } as State;
+    const canRaise = !this.state.lastRaiseAt || nowSec - this.state.lastRaiseAt >= RAISE_COOLDOWN_SEC;
+    const raiseBitcoin = async (amountSats: number, purpose: string): Promise<string> => {
+      if (!live) return "";
+      const id = await requestCredits(concordState, amountSats, purpose, false);
+      this.state.lastRaiseAt = nowSec;
+      return id;
+    };
+    const ctx: StrategyContext = { nowMs, fuel: command.fuel, routstrMsats, dryRun, live, relays: this.state.relays, canRaise, raiseBitcoin, agentPubkey: this.state.pubkey };
     const result = await strat.execute(ctx);
 
     this.state.cashuMsats = Math.max(0, this.state.cashuMsats + result.walletDeltaMsats);
