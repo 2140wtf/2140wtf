@@ -15,9 +15,16 @@ const STORAGE_PREFIX = '2140:bao-term:';
 const ACTIVE_KEY = `${STORAGE_PREFIX}active`;
 const STATE_PREFIX = `${STORAGE_PREFIX}state:`;
 const ROSTER_KEY = `${STORAGE_PREFIX}roster`;
+/** Schema stamp on the persistable payload; bump when the shape changes.
+ *  Stored identities stamped by a NEWER binary than this code are refused —
+ *  matches the CLI's PROTOCOL_VERSION asymmetry (old readable by new, never
+ *  the reverse). */
+export const PROTOCOL_VERSION = 1;
 
 export interface BaoTermIdentity {
-  /** Hex private key — NEVER log or expose via window.bao. */
+  /** Hex private key — NEVER log or expose via window.bao. Plaintext in
+   *  localStorage on web (same posture as the app's NLogin nsec flow);
+   *  native builds use the OS Keychain/KeyStore via secureStorage. */
   sk: string;
   role: 'owner' | 'member';
   name: string;
@@ -38,6 +45,13 @@ export interface BaoTermIdentity {
   joined_at?: number;
   /** Local selector; mirrors the CLI's --as name. */
   identity_name: string;
+}
+
+/** Persisted payload (roster contents). Distinct from the in-memory identity
+ *  shape so the storage format can evolve independently — callers go through
+ *  migrateIdentity / readState and never parse this directly. */
+interface StoredIdentity extends BaoTermIdentity {
+  protocol_version: number;
 }
 
 export interface BaoTermState {
