@@ -91,6 +91,14 @@ import {
   withStateLock,
   type State,
 } from "./chat-core";
+import {
+  fulfillCredits,
+  listWork,
+  printWorkListing,
+  receiptCredits,
+  requestCredits,
+  resolvePubkey,
+} from "./work-core";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -646,9 +654,48 @@ async function main(): Promise<void> {
       console.log(`${as}: ${nip19.npubEncode(getPublicKey(hexToBytes(state.sk)))} (${state.role} of ${state.community.name})`);
       break;
     }
+    case "work": {
+      const pos = positionalArgs(rest);
+      const sub = pos[0];
+      const dryRun = rest.includes("--dry-run");
+      if (sub === "list") {
+        printWorkListing(await listWork(loadState(as)), json);
+        break;
+      }
+      if (sub === "request") {
+        const amountSats = Number(pos[1]);
+        const purpose = pos.slice(2).join(" ");
+        if (!Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work request needs <sats> <purpose>");
+        if (!purpose) throw new Error("work request needs a purpose");
+        const id = await requestCredits(loadState(as), amountSats, purpose, dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit request ${id.slice(0, 16)}… (${amountSats} sats): ${purpose}`);
+        break;
+      }
+      if (sub === "fulfill") {
+        const requestId = pos[1];
+        const requester = pos[2];
+        const amountSats = Number(pos[3]);
+        if (!requestId || !requester || !Number.isFinite(amountSats) || amountSats <= 0) {
+          throw new Error("work fulfill needs <requestId> <requesterNpub> <sats>");
+        }
+        const id = await fulfillCredits(loadState(as), requestId, resolvePubkey(requester), amountSats, dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit fulfillment ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
+        break;
+      }
+      if (sub === "receipt") {
+        const requestId = pos[1];
+        const amountSats = Number(pos[2]);
+        const note = pos.slice(3).join(" ");
+        if (!requestId || !Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work receipt needs <requestId> <sats> <note>");
+        const id = await receiptCredits(loadState(as), requestId, amountSats, note || "redeemed for inference", [], dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
+        break;
+      }
+      throw new Error("work needs: list | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+    }
     default:
       console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
+        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | whoami   [--as identity] [--json] [--dry-run]",
       );
   }
 }
