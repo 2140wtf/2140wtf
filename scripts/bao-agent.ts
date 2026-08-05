@@ -71,6 +71,7 @@ import {
   mintToken,
   parseBundleEvent,
   parseInviteLink,
+  InviteError,
   type InviteBundle,
 } from "@/concord-v2/lib/invite";
 import { openWrap, resolveMs } from "@/concord-v2/lib/stream";
@@ -215,7 +216,7 @@ async function create(name: string, communityName: string, agentOnly: boolean): 
   await invite(name);
 }
 
-async function invite(name: string, label?: string, singleUse = false): Promise<void> {
+async function invite(name: string, label?: string, singleUse = false, agent = false): Promise<void> {
   // Whole body under the state lock: registry_version and invites[] are a
   // read-modify-write that races with concurrent invites/sweeps.
   await withStateLock(name, async () => {
@@ -240,6 +241,7 @@ async function invite(name: string, label?: string, singleUse = false): Promise<
       creator_npub: pubkey,
       ...(label ? { label } : {}),
       ...(singleUse ? { max_uses: 1 } : {}),
+      ...(agent ? { audience: "agent" } : {}),
     };
 
     const bundleEvent = buildBundleEvent(bundle, token, link.sk);
@@ -264,7 +266,7 @@ async function invite(name: string, label?: string, singleUse = false): Promise<
     state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
     saveState(name, state);
 
-    console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
+    console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""}${agent ? " — AUDIENCE: agent (renders machine-first join page)" : ""} — share EITHER origin (same secret):`);
     for (const url of urls) console.log(`  ${url}`);
   });
 }
@@ -292,8 +294,25 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   const atMax = events.filter((e) => ts(e) === maxTs);
   const newest =
     atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
-  if (!newest) throw new Error("Couldn't find that invite on its relays.");
-  const bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
+  // parseBundleEvent can throw an InviteError with a precise code, but the raw
+  // message reads like 'bundle decrypt: invalid MAC' — opaque to an agent that
+  // held nothing but a link. Wrap it so a stale/revoked/expired link returns a
+  // one-line next action instead of a stack trace: 'ask the owner to re-issue
+  // via bao-agent invite'.
+  let bundle: InviteBundle;
+  try {
+    bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
+  } catch (e) {
+    if (e instanceof InviteError) {
+      const linkSignerNpub = nip19.npubEncode(parsed.linkSigner);
+      const hint =
+        e.code === 'bad-bundle'
+          ? `This invite link is no longer valid — its token doesn't decrypt the live bundle on ${CANONICAL_BAO_RELAY} (owner ${linkSignerNpub.slice(0, 16)}… re-minted it). Ask the owner to re-issue via 'bao-agent invite'.`
+          : e.message;
+      throw new Error(`${e.message}\n${hint}`);
+    }
+    throw e;
+  }
 
   const sk = generateSecretKey();
   const pubkey = getPublicKey(sk);
@@ -621,7 +640,7 @@ async function main(): Promise<void> {
       await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
       break;
     case "invite":
-      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"));
+      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"), rest.includes("--agent"));
       break;
     case "join": {
       const url = positionalArgs(rest)[0];
@@ -814,7 +833,7 @@ async function main(): Promise<void> {
     }
     default:
       console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | wallet | import <token> | routstr fuel|topup|redeem | think <prompt> | whoami   [--as identity] [--json] [--dry-run]",
+        "modes: create [--agent-only] | invite [--label L] [--single-use] [--agent] | join <url> [--as name] | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | wallet | import <token> | routstr fuel|topup|redeem | think <prompt> | whoami   [--as identity] [--json] [--dry-run]",
       );
   }
 }
