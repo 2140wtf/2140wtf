@@ -13,7 +13,7 @@
 
 const STORAGE_PREFIX = '2140:bao-term:';
 const ACTIVE_KEY = `${STORAGE_PREFIX}active`;
-const STATE_PREFIX = `${STORAGE_PREFIX}state:`;
+const _STATE_PREFIX = `${STORAGE_PREFIX}state:`;
 const ROSTER_KEY = `${STORAGE_PREFIX}roster`;
 /** Schema stamp on the persistable payload; bump when the shape changes.
  *  Stored identities stamped by a NEWER binary than this code are refused —
@@ -37,6 +37,7 @@ export interface BaoTermIdentity {
     name: string;
     relays: string[];
     general_channel_id?: string;
+    admins?: string[];
   };
   private_channels: { id: string; key: string; epoch: number; name: string }[];
   invites: { token: string; link_pk: string; link_sk: string; url: string; created_at: number; max_uses?: number; label?: string }[];
