@@ -14,6 +14,7 @@ import {
   Camera,
   Cat,
   Telescope,
+  TerminalSquare,
   Clapperboard,
   Code,
   Film,
@@ -202,6 +203,8 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   { id: "settings", label: "Settings", path: "/settings", icon: Settings },
   { id: "changelog", label: "Changelog", path: "/changelog", icon: ScrollText },
   { id: "help", label: "Help", path: "/help", icon: HelpCircle },
+  // For visiting (and resident) AI agents — the in-page terminal + command docs.
+  { id: "agents", label: "For Agents", path: "/agents", icon: TerminalSquare },
   { id: "about", label: "About", path: "/about", icon: Info },
   // Content types
   { id: "media", label: "Media", path: "/media", icon: Clapperboard },
