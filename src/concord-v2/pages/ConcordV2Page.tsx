@@ -79,6 +79,7 @@ import { useConcord2Threads, type Concord2Thread } from "@/concord-v2/hooks/useC
 import { useTyping2, useTypingPublisher2 } from "@/concord-v2/hooks/useTyping2";
 import { completeMemberlist } from "@/concord-v2/lib/guestbook";
 import { badgeOf, isAuthorized, Permissions } from "@/concord-v2/lib/roles";
+import { commandsFor } from "@/concord-v2/lib/commands";
 import type { ChannelV2, CommunityV2, ImagePointer } from "@/concord-v2/lib/types";
 import { cn, pickDefaultChannel } from "@/lib/utils";
 import { getAvatarShape } from "@/lib/avatarShape";
@@ -823,6 +824,20 @@ export function ConcordV2Page() {
   const canKickAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.KICK));
   const canBanAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.BAN));
   const canModerateMessages = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_MESSAGES));
+  // The "/" command palette in this community offers the registry commands the
+  // current member is allowed to run: owner > admin (MANAGE_ROLES) > member.
+  const baoAccess = !user ? undefined : user.pubkey === ownerHex ? "owner" : canManageRoles ? "admin" : "member";
+  const baoCommands = useMemo(
+    () =>
+      baoAccess
+        ? commandsFor("community", baoAccess).map((c) => ({
+            name: c.verb,
+            usage: `/${c.verb} ${c.usage}`,
+            description: c.summary,
+          }))
+        : [],
+    [baoAccess],
+  );
   // A dissolved community is terminal: the owner has torn it down, so no key
   // rotation or new messages will ever land. Keep it fully readable (members
   // asked to still see the history), but freeze every write path.
@@ -2078,6 +2093,8 @@ export function ConcordV2Page() {
                         onCancelReply={() => setReplyTo(undefined)}
                         onTyping={publishTyping}
                         encryptAttachments
+                        extraCommands={baoCommands}
+                        extraSectionLabel="₿AO"
                       />
                     )
                   )}
