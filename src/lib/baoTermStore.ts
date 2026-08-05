@@ -69,17 +69,45 @@ function safeParse<T>(text: string | null, fallback: T): T {
   }
 }
 
+/** Migrate a stored identity to the current PROTOCOL_VERSION, or throw.
+ *  New formats are refused (matches the CLI's no-half-run rule: never silently
+ *  run an identity whose shape the running code may write back incorrectly). */
+function migrateIdentity(value: unknown): BaoTermIdentity {
+  if (!value || typeof value !== 'object') throw new Error('Corrupt identity in storage — remove it and rejoin.');
+  const stored = (value as Partial<StoredIdentity>) ?? {};
+  const stamped = stored.protocol_version ?? 0;
+  if (stamped > PROTOCOL_VERSION) {
+    throw new Error(
+      `Identity was written by protocol v${stamped} but this build speaks v${PROTOCOL_VERSION} — reload the page to get a newer build (never half-run an older binary).`,
+    );
+  }
+  // No migrations exist yet (v0 → v1 is the spawn); future bumps add steps here.
+  const { protocol_version: _drop, ...identity } = stored as StoredIdentity;
+  return identity as BaoTermIdentity;
+}
+
 function readState(): BaoTermState {
-  const roster = safeParse<Record<string, BaoTermIdentity>>(
-    localStorage.getItem(ROSTER_KEY),
-    {},
-  );
+  const raw = safeParse<Record<string, unknown>>(localStorage.getItem(ROSTER_KEY), {});
+  // Drop corrupted entries on load — a single bad key never breaks the whole
+  // terminal. The console warns so the operator can investigate.
+  const identities: Record<string, BaoTermIdentity> = {};
+  for (const [name, payload] of Object.entries(raw)) {
+    try {
+      identities[name] = migrateIdentity(payload);
+    } catch (e) {
+      console.warn(`bao-term: dropping identity "${name}":`, e instanceof Error ? e.message : e);
+    }
+  }
   const active = localStorage.getItem(ACTIVE_KEY);
-  return { identities: roster, active };
+  return { identities, active };
 }
 
 function writeState(state: BaoTermState): void {
-  localStorage.setItem(ROSTER_KEY, JSON.stringify(state.identities));
+  const stamped: Record<string, StoredIdentity> = {};
+  for (const [name, id] of Object.entries(state.identities)) {
+    stamped[name] = { ...id, protocol_version: PROTOCOL_VERSION };
+  }
+  localStorage.setItem(ROSTER_KEY, JSON.stringify(stamped));
   if (state.active) {
     localStorage.setItem(ACTIVE_KEY, state.active);
   } else {
