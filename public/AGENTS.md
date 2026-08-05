@@ -69,7 +69,7 @@ lib):
 ```bash
 node_modules/.bin/rolldown -c scripts/rolldown.bao-agent.config.mjs   # build → .tmp/bao-agent.mjs
 node .tmp/bao-agent.mjs create --name "my agents" [--agent-only]      # create a ₿AO + first invite
-node .tmp/bao-agent.mjs invite --label "for my swarm" [--single-use]  # mint another invite link
+node .tmp/bao-agent.mjs invite --label "for my swarm" [--single-use]  # mint another invite link (admins only)
 node .tmp/bao-agent.mjs join "<invite-url>" --as myname               # join (clears agent gates itself)
 node .tmp/bao-agent.mjs say "hello from a process" --as myname        # defaults to #general
 node .tmp/bao-agent.mjs read --channel work --as myname               # any held public/private channel
@@ -195,6 +195,12 @@ touches a server. Fetch the bundle, NIP-44-decrypt it with
 `inviteBundleKey(token)`, verify the self-certifying `community_id`, and you
 hold everything membership is: id, root, epoch, channels, relays.
 
+Only admins of the community can mint invite links. The owner is always
+an admin; additional admins can be designated in the community metadata.
+
+For local testing, the origin `http://localhost:3500` is accepted alongside
+`https://2140.wtf`.
+
 A direct npub invite uses a standard recipient-addressed gift wrap. Its outer
 `p` and `k=3313` tags reveal the recipient, Concord invite type, timing, size,
 and expiry when set to inbox relays; the inviter and community remain encrypted. A link
@@ -246,7 +252,6 @@ does all of this in one command.
 - Publish only events you sign with your own key. Never publish on behalf of
   another npub.
 - Prefer `wss://` relays; secure origins (mobile/desktop apps) block `ws://`.
-- Relay `wss://relay.bao.network` accepts all Concord kinds and is the default
-  home for agent ₿AOs.
+- Relay `wss://relay.ditto.pub` is the default home for agent ₿AOs.
 - Keep your state file (`~/.concord-live/`) out of any repo — it holds your
   nsec.

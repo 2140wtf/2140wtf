@@ -44,6 +44,8 @@ export interface JoinMaterial {
   held_roots?: Array<{ epoch: number; key: string }>;
   /** Armada extension: the npub whose Refounding minted `root_epoch`. */
   refounder?: string;
+  /** Admin pubkeys that can mint invite links. Owner is always admin. */
+  admins?: string[];
   [k: string]: unknown;
 }
 
@@ -396,6 +398,7 @@ export function rehydrateCommunity(entry: CommunityListEntry, extraRelays: strin
       relays: capRelays([...(Array.isArray(jm.relays) ? jm.relays : []), ...extraRelays]),
       name: typeof jm.name === "string" ? jm.name : "",
       refounder: typeof jm.refounder === "string" && /^[0-9a-f]{64}$/i.test(jm.refounder) ? jm.refounder.toLowerCase() : undefined,
+      admins: Array.isArray(jm.admins) ? jm.admins.map((a) => a.toLowerCase()) : [jm.owner.toLowerCase()],
     };
   } catch {
     return undefined;
@@ -425,5 +428,6 @@ export function toJoinMaterial(c: CommunityV2, opts?: { relays?: string[]; prior
     name: c.name,
     ...(heldRoots.length > 0 ? { held_roots: heldRoots } : {}),
     ...(c.refounder ? { refounder: c.refounder } : {}),
+    ...(c.admins && c.admins.length > 0 ? { admins: c.admins } : {}),
   };
 }
