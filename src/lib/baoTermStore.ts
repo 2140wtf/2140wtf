@@ -154,10 +154,15 @@ export function getActiveIdentity(): BaoTermIdentity | undefined {
   return state.identities[state.active];
 }
 
-/** Set the active identity by name (must already exist). */
+/** Set the active identity by name (must already exist). An empty string
+ *  clears the active selector (logout). */
 export function setActiveIdentity(name: string): void {
-  const validated = validateIdentityName(name);
   const state = readState();
+  if (!name) {
+    writeState({ ...state, active: null });
+    return;
+  }
+  const validated = validateIdentityName(name);
   if (!state.identities[validated]) {
     throw new Error(`No identity "${name}" — create or join one first.`);
   }
