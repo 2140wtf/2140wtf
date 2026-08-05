@@ -22,8 +22,10 @@ import {
   dispatchBaoTerm,
   initBaoTermDispatcher,
   parseCommandLine,
+  setBaoCurrentUser,
   type BaoTermResult,
 } from '@/lib/baoTermDispatch';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 export interface BaoTermApi {
   /** Parse + dispatch a CLI-style string. Errors return { ok: false, error }. */
@@ -63,6 +65,7 @@ const BAO_TERM_VERSION = '1';
 /** Component — render once near the root so window.bao is available everywhere. */
 export function WindowBaoMount(): null {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
 
   useEffect(() => {
     initBaoTermDispatcher(nostr as never);
@@ -108,6 +111,11 @@ export function WindowBaoMount(): null {
     };
     window.bao = api;
   }, [nostr]);
+
+  // Keep the terminal's logged-in-user fallback in sync with the app's login.
+  useEffect(() => {
+    setBaoCurrentUser(user ? { pubkey: user.pubkey } : null);
+  }, [user]);
 
   return null;
 }

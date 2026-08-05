@@ -72,6 +72,12 @@ const COMMANDS: { name: string; signature: string; description: string; example:
     example: 'remove --as throwaway',
   },
   {
+    name: 'logout',
+    signature: 'logout',
+    description: 'Clear the active identity. Keys stay saved — switch back with use <identity>.',
+    example: 'logout',
+  },
+  {
     name: 'help',
     signature: 'help',
     description: 'Print the same command reference you see on this page.',
