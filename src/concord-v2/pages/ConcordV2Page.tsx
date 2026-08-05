@@ -993,6 +993,12 @@ export function ConcordV2Page() {
     for (const g of roster?.grants ?? []) if (g.roleIds.length > 0 && !banned.has(g.member)) set.add(g.member);
     if (ownerHex) set.add(ownerHex);
     if (user && !banned.has(user.pubkey)) set.add(user.pubkey);
+    // Re-add banned members so an admin can reach the Unban action: the roster
+    // fold drops banned pubkeys (completeMemberlist), which left no row to
+    // unban from — the Unban menu item existed but was unreachable. MemberList
+    // renders each row's menu with "Unban" when isBanned, so surfacing the
+    // pubkey here (even without live presence) restores the unban affordance.
+    for (const b of banned) set.add(b);
     return [...set];
   }, [coalesced, allMessages, roster, ownerHex, user, folded]);
 
