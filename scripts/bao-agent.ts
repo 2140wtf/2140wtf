@@ -62,8 +62,9 @@ import {
   foldControlState,
   openControlWraps,
   sealEdition,
+  sealDissolved,
 } from "@/concord-v2/lib/control";
-import { banlistLocator, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
+import { banlistLocator, dissolvedGroupKey, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
 import { adminRole, badgeOf, canActOnMember, canActOnPosition, emptyRoles, moderatorRole, Permissions, rolesOf, type Role } from "@/concord-v2/lib/roles";
 import type { CommunityMetadata } from "@/concord-v2/lib/types";
 import { buildJoinRumor, buildKickRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
@@ -594,6 +595,17 @@ async function metaVerb(name: string, sub: string | undefined, args: string[]): 
 
 // ── Members ─────────────────────────────────────────────────────────────────
 
+/** Owner-only: publish the terminal dissolution tombstone for the community. */
+async function dissolveVerb(name: string): Promise<void> {
+  const ctx = await controlContext(name);
+  if (ctx.pubkey !== ctx.community.owner) {
+    throw new Error("Only the owner can dissolve the community.");
+  }
+  const wrap = await sealDissolved(ctx.community.id, ctx.pubkey, ctx.signer);
+  await publishAll(ctx.community.relays, wrap, "dissolution tombstone");
+  console.log(`Dissolved ${ctx.community.name}. The community is now terminal for everyone.`);
+}
+
 async function membersVerb(name: string, json: boolean): Promise<void> {
   const ctx = await controlContext(name);
   const gb = currentGuestbookGroup(ctx.community);
@@ -1072,6 +1084,9 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       break;
     case "members":
       await membersVerb(as, json);
+      break;
+    case "dissolve":
+      await dissolveVerb(as);
       break;
     case "help":
       await helpVerb(as, positionalArgs(rest)[0]);

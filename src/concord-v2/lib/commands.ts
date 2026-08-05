@@ -199,6 +199,15 @@ export const BAO_COMMANDS: BaoCommand[] = [
     scope: "community",
     access: "member",
   },
+  {
+    verb: "dissolve",
+    summary: "Permanently dissolve the community for everyone (owner only).",
+    usage: "dissolve",
+    description: "Publishes the terminal dissolution tombstone. Irreversible: the community becomes read-only and is gone for every member. Only the owner can run this.",
+    category: "communities",
+    scope: "community",
+    access: "owner",
+  },
   // ── orchestration ────────────────────────────────────────────────────────
   {
     verb: "orch",
