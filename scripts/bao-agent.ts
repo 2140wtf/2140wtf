@@ -39,7 +39,7 @@
  */
 
 import { getDecodedToken } from "@cashu/cashu-ts";
-import { existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { nip44 } from "nostr-tools";
@@ -222,11 +222,11 @@ async function invite(name: string, label?: string, singleUse = false, agent = f
   // read-modify-write that races with concurrent invites/sweeps.
   await withStateLock(name, async () => {
     const state = loadState(name);
-    if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
     const sk = hexToBytes(state.sk);
     const pubkey = getPublicKey(sk);
     const signer = signerOf(sk);
     const community = communityOf(state.community, state.private_channels);
+    if (!(community.admins ?? [community.owner]).includes(pubkey)) throw new Error("Only admins can mint invites.");
 
     const token = mintToken();
     const link = mintLinkSigner();
@@ -701,7 +701,6 @@ async function main(): Promise<void> {
       break;
     }
     case "purge": {
-      const { unlinkSync, existsSync } = require("node:fs");
       const p = statePath(as);
       if (!existsSync(p)) throw new Error(`No state for "${as}" at ${p}`);
       unlinkSync(p);

@@ -578,7 +578,7 @@ async function identitiesCommand(): Promise<unknown> {
   };
 }
 
-async function useCommand(args: { identityName?: string }): Promise<unknown> {
+async function switchCommand(args: { identityName?: string }): Promise<unknown> {
   if (!args.identityName) throw new Error('use needs an identity name.');
   setActiveIdentity(args.identityName);
   return { active: args.identityName };
@@ -735,7 +735,7 @@ export async function dispatchBaoTerm(
         result = await identitiesCommand();
         break;
       case 'use':
-        result = await useCommand({ identityName: args.name as string | undefined });
+        result = await switchCommand({ identityName: args.name as string | undefined });
         break;
       case 'remove':
         result = await removeCommand({ identityName });
