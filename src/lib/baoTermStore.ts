@@ -11,6 +11,8 @@
  * never log the sk.
  */
 
+import type { BaoIdentity, BaoStore } from "@/concord-v2/lib/baoCore";
+
 const STORAGE_PREFIX = '2140:bao-term:';
 const ACTIVE_KEY = `${STORAGE_PREFIX}active`;
 const _STATE_PREFIX = `${STORAGE_PREFIX}state:`;
@@ -195,3 +197,24 @@ export async function mutateIdentity<T>(
   saveIdentity(current);
   return { identity: current, result };
 }
+
+// ── BaoStore adapter (the engine's browser identity seam) ───────────────────
+
+/**
+ * The localStorage store as the shared engine's {@link BaoStore}. BaoTermIdentity
+ * is a structural superset of the engine's BaoIdentity (it carries a top-level
+ * `name` the engine never reads), so the mapping is a thin, lossless cast — the
+ * browser keeps persisting exactly what it always did, and the engine sees the
+ * canonical shape.
+ */
+export function createBaoStore(): BaoStore {
+  return {
+    get: (name) => getIdentity(name) as BaoIdentity | undefined,
+    list: () => listIdentities(),
+    save: (identity) => saveIdentity(identity as BaoTermIdentity),
+    remove: (name) => deleteIdentity(name),
+    getActive: () => getActiveIdentity()?.identity_name ?? null,
+    setActive: (name) => setActiveIdentity(name),
+  };
+}
+
