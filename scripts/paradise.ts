@@ -55,7 +55,8 @@ async function main(): Promise<void> {
         console.log(`paradise identity "${name}" created`);
         console.log(`  npub:  ${state.npub}`);
         console.log(`  state: ${statePath(name)}`);
-        console.log(`  fuel:  ${state.routstrKey ? "live sk_ key set" : "none (dry-run sim fuel)"}`);
+                console.log(`  fuel:  ${state.routstrKey ? "live sk_ key set" : "none (dry-run sim fuel)"}`);
+        console.log(`  relays: ${state.relays.join(", ")}`);
         break;
       }
       case "redeem": {
@@ -104,7 +105,7 @@ async function main(): Promise<void> {
         const dryRun = !live;
         const state = loadState(name);
         const rt = new ParadiseRuntime(state);
-        console.log(`paradise "${name}" ${dryRun ? "dry-run" : "live"} — npub ${state.npub}`);
+                console.log(`paradise "${name}" ${dryRun ? "dry-run" : "live"} — npub ${state.npub} · relays=${state.relays.length}`);
         const target = cycles > 0 ? cycles : Infinity;
         for (let i = 0; i < target; i++) {
           const line = await rt.cycle({ dryRun, intervalMs });
