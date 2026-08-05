@@ -75,7 +75,18 @@ function safeParse<T>(text: string | null, fallback: T): T {
  *  run an identity whose shape the running code may write back incorrectly). */
 function migrateIdentity(value: unknown): BaoTermIdentity {
   if (!value || typeof value !== 'object') throw new Error('Corrupt identity in storage — remove it and rejoin.');
-  const stored = (value as Partial<StoredIdentity>) ?? {};
+  const stored = value as Partial<StoredIdentity>;
+  // Required fields — refuse anything that isn't recognizable as an identity.
+  // This protects a single corrupted roster slot from breaking the whole
+  // terminal: readState() catches and drops the entry with a console warn.
+  if (
+    typeof stored.sk !== 'string' || stored.sk.length !== 64 ||
+    typeof stored.identity_name !== 'string' ||
+    typeof stored.role !== 'string' || (stored.role !== 'owner' && stored.role !== 'member') ||
+    !stored.community || typeof stored.community !== 'object'
+  ) {
+    throw new Error('Stored payload is missing required identity fields.');
+  }
   const stamped = stored.protocol_version ?? 0;
   if (stamped > PROTOCOL_VERSION) {
     throw new Error(
