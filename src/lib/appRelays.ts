@@ -95,7 +95,6 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://purplepag.es/', read: true, write: false },
     { url: 'wss://relay.mostr.pub/', read: true, write: false },
     { url: 'wss://nostr-relay.psfoundation.info/', read: true, write: false },
-    { url: 'wss://nostr.swiss-enigma.ch/', read: true, write: false },
   ],
   updatedAt: 0,
 };
