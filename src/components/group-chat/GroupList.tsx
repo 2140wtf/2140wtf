@@ -27,7 +27,7 @@ function LastMessageLine({ message }: { message: GroupChatMessage }) {
   const isOwn = message.senderPubkey === user?.pubkey;
   const name = isOwn
     ? 'You'
-    : getDisplayName(author.data?.metadata) || message.senderPubkey.slice(0, 8);
+    : getDisplayName(author.data?.metadata, message.senderPubkey);
 
   return (
     <span className="truncate">
