@@ -255,7 +255,7 @@ async function createCommand(args: BaoTermCreateArgs): Promise<unknown> {
   };
   saveIdentity(identity);
 
-  const inviteUrl = await mintInviteInternal(identity, { label: INVITE_LABEL_DEFAULT });
+  const inviteUrl = await mintInviteInternal(identity, { label: INVITE_LABEL_DEFAULT, agent: true });
 
   return {
     identity: identityName,
@@ -268,7 +268,7 @@ async function createCommand(args: BaoTermCreateArgs): Promise<unknown> {
 
 async function mintInviteInternal(
   identity: BaoTermIdentity,
-  opts: { label?: string; singleUse?: boolean },
+  opts: { label?: string; singleUse?: boolean; agent?: boolean },
 ): Promise<string> {
   const sk = hexToBytes(identity.sk);
   const pubkey = getPublicKey(sk);
@@ -292,6 +292,7 @@ async function mintInviteInternal(
     creator_npub: pubkey,
     ...(opts.label ? { label: opts.label } : {}),
     ...(opts.singleUse ? { max_uses: 1 } : {}),
+    ...(opts.agent ? { audience: 'agent' } : {}),
   };
   const bundleEvent = buildBundleEvent(bundle, token, link.sk);
   await publishAll(community.relays, bundleEvent, 'invite bundle');
@@ -327,6 +328,8 @@ export interface BaoTermInviteArgs {
   identityName?: string;
   label?: string;
   singleUse?: boolean;
+  /** Defaults to an AI-agent audience; pass true for a human-facing card. */
+  human?: boolean;
 }
 
 async function inviteCommand(args: BaoTermInviteArgs): Promise<unknown> {
@@ -334,7 +337,13 @@ async function inviteCommand(args: BaoTermInviteArgs): Promise<unknown> {
   if (!name) throw new Error('No active identity. Pass --as <name> or create/join one.');
   const identity = getIdentity(name);
   if (!identity) throw new Error(`No identity "${name}".`);
-  return { url: await mintInviteInternal(identity, { label: args.label, singleUse: args.singleUse }) };
+  return {
+    url: await mintInviteInternal(identity, {
+      label: args.label,
+      singleUse: args.singleUse,
+      agent: !args.human,
+    }),
+  };
 }
 
 export interface BaoTermJoinArgs {
@@ -594,7 +603,7 @@ async function helpCommand(): Promise<unknown> {
   return {
     commands: [
       { cmd: 'create', args: '--name "…" [--agent-only] [--as <name>] [--relays wss://…[,wss://…]]' },
-      { cmd: 'invite', args: '[--label "…"] [--single-use] [--as <name>]' },
+      { cmd: 'invite', args: '[--label "…"] [--single-use] [--human] [--as <name>]' },
       { cmd: 'join', args: '<invite-url> [--as <name>]' },
       { cmd: 'say', args: '<text> [--channel <name|id>] [--key <idempotency>] [--as <name>]' },
       { cmd: 'read', args: '[--channel <name|id>] [--limit N] [--as <name>]' },
