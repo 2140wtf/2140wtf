@@ -50,6 +50,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useIsTouch } from "@/hooks/useIsMobile";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
+import { getKeyedFallbackName } from "@/lib/getDisplayName";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useSyncTasks } from "@/hooks/useSyncActivity";
 import { concordChannelMuteKey, useMutes } from "@/hooks/useMutes";
@@ -560,7 +561,7 @@ function ThreadReplyAvatars({ pubkeys }: { pubkeys: string[] }) {
 function ThreadReplyAvatar({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const name = metadata?.name ?? pubkey.slice(0, 8);
+  const name = metadata?.name ?? getKeyedFallbackName(pubkey);
   return (
     <Avatar shape={getAvatarShape(metadata)} className="size-5 ring-2 ring-chrome" title={name}>
       <AvatarImage src={metadata?.picture} alt={name} />
