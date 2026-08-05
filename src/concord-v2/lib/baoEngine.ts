@@ -474,7 +474,8 @@ async function readVerb(store: BaoStore, relay: BaoRelay, args: { channel?: stri
 
 async function whoamiVerb(store: BaoStore, args: { identityName?: string }): Promise<unknown> {
   const identity = resolveIdentity(store, args.identityName);
-  const pubkey = getPublicKey(hexToBytes(identity.sk));
+  const pubkey = identity.pubkey ?? (identity.sk ? getPublicKey(hexToBytes(identity.sk)) : undefined);
+  if (!pubkey) throw new Error("This identity has no key to report.");
   return { identity: identity.identity_name, role: identity.role, community: { id: identity.community.id, name: identity.community.name, relays: identity.community.relays }, npub: nip19.npubEncode(pubkey) };
 }
 
