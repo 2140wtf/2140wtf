@@ -169,7 +169,7 @@ function communityOf(identity: BaoTermIdentity): CommunityV2 {
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
-const HOME_RELAYS_DEFAULT = ['wss://relay.ditto.pub'];
+const HOME_RELAYS_DEFAULT = ['wss://jskitty.com/nostr', 'wss://relay.primal.net'];
 const INVITE_ORIGINS = ['http://localhost:3500', 'https://2140.wtf'];
 const INVITE_LABEL_DEFAULT = 'invited from 2140.wtf terminal';
 
