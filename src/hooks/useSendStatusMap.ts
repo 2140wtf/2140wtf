@@ -5,9 +5,13 @@ import { useCallback } from "react";
  * Optimistic send status for a locally-published, not-yet-confirmed message.
  * `"pending"` while the publish is in flight (rendered immediately on sign),
  * `"failed"` if no relay accepted it (offers retry). A message with neither is
- * confirmed/delivered.
+ * confirmed/delivered. A failed entry may carry a short `reason` (the first
+ * relay rejection / publish error) surfaced in the UI so a stuck send is
+ * diagnosable without opening the console.
  */
-export type SendStatus = "pending" | "failed";
+export type SendStatus =
+  | "pending"
+  | { failed: true; reason?: string };
 
 /** Message id → optimistic send status. */
 export type SendStatusMap = Record<string, SendStatus>;
