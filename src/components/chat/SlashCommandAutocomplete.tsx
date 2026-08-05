@@ -8,6 +8,13 @@ import { cn } from "@/lib/utils";
 
 import type { BotCommandEntry } from "@/lib/botCommands";
 
+/** A bare command offered as a menu row that inserts "/<name> " when picked. */
+export interface ExtraSlashCommand {
+  name: string;
+  usage: string;
+  description: string;
+}
+
 interface SlashCommandAutocompleteProps {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   content: string;
@@ -39,12 +46,21 @@ interface SlashCommandAutocompleteProps {
   botRecents?: string[];
   /** Pick a bot command: run it now if it takes no arguments, else collect them. */
   onRunBotCommand?: (entry: BotCommandEntry) => void;
+  /**
+   * Extra bare commands rendered as their own section (e.g. a ₿AO's registry).
+   * Picking one inserts "/<name> " into the composer; they are never executed
+   * locally.
+   */
+  extraCommands?: ExtraSlashCommand[];
+  /** Header label for the extra section. */
+  extraSectionLabel?: string;
 }
 
 /** A selectable row. Section headers are not rows and never take focus. */
 type Row =
   | { type: "local"; command: SlashCommand }
-  | { type: "bot"; entry: BotCommandEntry };
+  | { type: "bot"; entry: BotCommandEntry }
+  | { type: "extra"; command: ExtraSlashCommand };
 
 interface Section {
   key: string;
@@ -64,7 +80,11 @@ interface Section {
 const MAX_VISIBLE_ARGS = 2;
 
 const rowKey = (row: Row): string =>
-  row.type === "local" ? `local:${row.command.name}` : `bot:${row.entry.bot}:${row.entry.command.name}`;
+  row.type === "local"
+    ? `local:${row.command.name}`
+    : row.type === "bot"
+      ? `bot:${row.entry.bot}:${row.entry.command.name}`
+      : `extra:${row.command.name}`;
 
 /** A bot's avatar + display name, resolved from its profile. */
 function BotIdentity({ pubkey, avatarOnly }: { pubkey: string; avatarOnly?: boolean }) {
@@ -106,6 +126,8 @@ export function SlashCommandAutocomplete({
   botsLoading = false,
   botRecents,
   onRunBotCommand,
+  extraCommands,
+  extraSectionLabel = "Agent",
 }: SlashCommandAutocompleteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -174,8 +196,21 @@ export function SlashCommandAutocomplete({
       out.push({ key: `bot:${bot}`, bot, rows });
     }
 
+    // The extra (e.g. ₿AO registry) commands, matched by name substring.
+    if (extraCommands && extraCommands.length > 0) {
+      const q2 = query.toLowerCase();
+      const matched = extraCommands.filter((c) => c.name.includes(q2) || c.description.toLowerCase().includes(q2));
+      if (matched.length > 0) {
+        out.push({
+          key: "extra",
+          label: extraSectionLabel,
+          rows: matched.map((command) => ({ type: "extra", command })),
+        });
+      }
+    }
+
     return out;
-  }, [isOpen, query, canModerate, capabilities, commandFilter, botEntries, botRecents]);
+  }, [isOpen, query, canModerate, capabilities, commandFilter, botEntries, botRecents, extraCommands, extraSectionLabel]);
 
   const rows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
 
@@ -227,6 +262,12 @@ export function SlashCommandAutocomplete({
     setIsOpen(false);
     if (row.type === "bot") {
       onRunBotCommand?.(row.entry);
+      return;
+    }
+    if (row.type === "extra") {
+      const textarea = textareaRef.current;
+      const end = textarea?.value.length ?? query.length + 1;
+      onInsertCommand({ start: 0, end, replacement: `/${row.command.name} ` });
       return;
     }
     const command = row.command;
@@ -319,6 +360,7 @@ export function SlashCommandAutocomplete({
               const isBot = row.type === "bot";
               const command = isBot ? row.entry.command : row.command;
               const args = isBot ? row.entry.command.args : [];
+              const isExtra = row.type === "extra";
               return (
                 <button
                   key={rowKey(row)}
@@ -346,6 +388,9 @@ export function SlashCommandAutocomplete({
                   <span className="font-mono text-sm font-semibold shrink-0">
                     {!isBot && row.command.usage ? row.command.usage : `/${command.name}`}
                   </span>
+                  {isExtra && (
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/60">₿AO</span>
+                  )}
                   {args.slice(0, MAX_VISIBLE_ARGS).map((a) => (
                     <span
                       key={a.name}
