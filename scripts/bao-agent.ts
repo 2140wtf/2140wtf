@@ -120,6 +120,17 @@ import {
 const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.bao.network").split(",");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 
+/**
+ * Canonical public relay every 2140.wtf community replicates its invite bundle
+ * onto. `join` always probes this as a discovery fallback: an AI agent holds
+ * ONLY an invite link, so if the fragment's bootstrap relay is a typo, stale, or
+ * unreachable from this network (e.g. "reiay.bao.network", which fails DNS),
+ * the agent still finds the bundle on the canonical relay and joins instead of
+ * dying with "Couldn't find that invite on its relays." Read-only discovery —
+ * membership still publishes to the community's own relays (bundle.relays).
+ */
+const CANONICAL_BAO_RELAY = "wss://relay.bao.network";
+
 // ── Modes ────────────────────────────────────────────────────────────────────
 
 async function create(name: string, communityName: string, agentOnly: boolean): Promise<void> {
@@ -263,7 +274,8 @@ async function joinBao(name: string, inviteUrl: string): Promise<void> {
   const parsed = parseInviteLink(inviteUrl.trim());
   if (!parsed) throw new Error("Not a recognizable invite link.");
 
-  const events = await queryAll(parsed.bootstrapRelays, {
+    const discoveryRelays = [...new Set([...parsed.bootstrapRelays, CANONICAL_BAO_RELAY])];
+  const events = await queryAll(discoveryRelays, {
     kinds: [KIND_INVITE_BUNDLE],
     authors: [parsed.linkSigner],
     "#d": [""],
