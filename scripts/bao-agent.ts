@@ -51,23 +51,18 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import { mintCommunity } from "@/concord-v2/lib/community";
 import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
+import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
+import { createNodeRelay, createNodeStore } from "./baoAdapter";
 import {
-  buildBanlistEdition,
   buildChannelEdition,
-  buildGrantEdition,
   buildMetadataEdition,
   buildRegistryEdition,
-  buildRoleEdition,
   currentControlGroup,
   foldControlState,
   openControlWraps,
   sealEdition,
-  sealDissolved,
 } from "@/concord-v2/lib/control";
-import { banlistLocator, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
-import { adminRole, badgeOf, canActOnMember, canActOnPosition, emptyRoles, moderatorRole, Permissions, rolesOf, type Role } from "@/concord-v2/lib/roles";
-import type { CommunityMetadata } from "@/concord-v2/lib/types";
-import { buildJoinRumor, buildKickRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
+import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
 import {
   AGENT_GATE_METADATA_KEY,
   DEFAULT_AGENT_GATE_DIFFICULTY,
@@ -286,359 +281,6 @@ async function invite(name: string, label?: string, singleUse = false, agent = f
 // ── Control-plane helpers (shared by the admin/moderation/channel/meta verbs) ─
 
 /** Load an identity, fold its current control plane, and return the signing context. */
-async function controlContext(name: string): Promise<{
-  state: ReturnType<typeof loadState>;
-  community: ReturnType<typeof communityOf>;
-  signer: ReturnType<typeof signerOf>;
-  pubkey: string;
-  folded: ReturnType<typeof foldControlState>;
-  control: ReturnType<typeof currentControlGroup>;
-}> {
-  const state = loadState(name);
-  const community = communityOf(state.community, state.private_channels);
-  const sk = hexToBytes(state.sk);
-  const signer = signerOf(sk);
-  const pubkey = getPublicKey(sk);
-  const control = currentControlGroup(community);
-  const wraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
-  const folded = foldControlState(openControlWraps(wraps, [control]), community.id, community.owner);
-  return { state, community, signer, pubkey, folded, control };
-}
-
-/** Seal + broadcast one control edition to the community relays. */
-async function publishEdition(
-  ctx: Awaited<ReturnType<typeof controlContext>>,
-  rumor: ReturnType<typeof buildMetadataEdition> extends infer R ? R : never,
-  label: string,
-): Promise<void> {
-  await publishAll(ctx.community.relays, await sealEdition(rumor, ctx.control, ctx.signer), label);
-}
-
-/** Resolve a member to a lowercase hex pubkey (accepts npub1… or hex). */
-function toHexPubkey(target: string): string {
-  if (/^[0-9a-f]{64}$/i.test(target)) return target.toLowerCase();
-  try {
-    const d = nip19.decode(target);
-    if (d.type !== "npub" && d.type !== "nprofile") throw new Error();
-    return d.type === "npub" ? d.data : d.data.pubkey;
-  } catch {
-    throw new Error(`"${target}" isn't a valid npub or hex pubkey`);
-  }
-}
-
-/** Require the actor to hold `permission` and strictly outrank `target`. */
-function requireCanActOn(ctx: Awaited<ReturnType<typeof controlContext>>, target: string, permission: bigint, action: string): void {
-  if (!canActOnMember(ctx.folded.roster, ctx.pubkey, ctx.folded.ownerHex, target, permission)) {
-    throw new Error(`You don't outrank this member — can't ${action}.`);
-  }
-}
-
-/** The stock Admin/Moderator role id in the folded roster, if present. */
-function stockRoleId(ctx: Awaited<ReturnType<typeof controlContext>>, tier: "admin" | "moderator"): string | undefined {
-  return ctx.folded.roster.roles.find((r) => r.name === (tier === "admin" ? "Admin" : "Moderator"))?.roleId;
-}
-
-// ── Admin / roles ───────────────────────────────────────────────────────────
-
-async function adminVerb(name: string, sub: string | undefined, targetNpub: string | undefined, role: string | undefined): Promise<void> {
-  const ctx = await controlContext(name);
-  const ownerHex = ctx.folded.ownerHex;
-  const roster = ctx.folded.roster ?? emptyRoles();
-  const need = (): string => {
-    if (!targetNpub) throw new Error("admin needs a <npub> argument");
-    return toHexPubkey(targetNpub);
-  };
-
-  if (sub === "roles") {
-    const member = need();
-    const roles = rolesOf(roster, member);
-    console.log(`Roles for ${nip19.npubEncode(member)}:`);
-    if (roles.length === 0) console.log("  (none)");
-    for (const r of roles) console.log(`  ${r.name} (position ${r.position})`);
-    return;
-  }
-
-  if (sub === "grant") {
-    const member = need();
-    const tier: "admin" | "moderator" = role === "moderator" ? "moderator" : "admin";
-    if (!canActOnMember(roster, ctx.pubkey, ownerHex, member, Permissions.MANAGE_ROLES)) {
-      throw new Error("You don't outrank this member.");
-    }
-    const minted: Role | undefined = tier === "admin" ? adminRole(bytesToHex(random32())) : moderatorRole(bytesToHex(random32()));
-    if (minted && !canActOnPosition(roster, ctx.pubkey, ownerHex, minted.position, Permissions.MANAGE_ROLES)) {
-      throw new Error(tier === "admin" ? "Only the owner can grant Admin." : "You can't grant a role at this rank.");
-    }
-
-    let roleId: string | undefined = stockRoleId(ctx, tier);
-    if (!roleId && minted) {
-      roleId = minted.roleId;
-      await publishEdition(ctx, buildRoleEdition(minted, { actorPubkey: ctx.pubkey, version: 1n }), `role ${roleId.slice(0, 12)}…`);
-    }
-
-    const grantEid = bytesToHex(grantLocator(ctx.community.id, hex32(member)));
-    const head = ctx.folded.heads.get(grantEid);
-    await publishEdition(
-      ctx,
-      buildGrantEdition(ctx.community.id, { member, roleIds: roleId ? [roleId] : [] }, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      `grant ${tier} → ${member.slice(0, 12)}…`,
-    );
-    console.log(`Made ${member.slice(0, 12)}… a ${tier}.`);
-    return;
-  }
-
-  if (sub === "revoke") {
-    const member = need();
-    requireCanActOn(ctx, member, Permissions.MANAGE_ROLES, "revoke roles");
-    const grantEid = bytesToHex(grantLocator(ctx.community.id, hex32(member)));
-    const head = ctx.folded.heads.get(grantEid);
-    await publishEdition(
-      ctx,
-      buildGrantEdition(ctx.community.id, { member, roleIds: [] }, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      `revoke roles → ${member.slice(0, 12)}…`,
-    );
-    console.log(`Revoked all roles from ${member.slice(0, 12)}….`);
-    return;
-  }
-
-  throw new Error("admin needs: grant <npub> [--role admin|moderator] | revoke <npub> | roles <npub>");
-}
-
-// ── Moderation (ban / unban / kick) ─────────────────────────────────────────
-
-async function banVerb(name: string, targetNpub: string, unban = false): Promise<void> {
-  const ctx = await controlContext(name);
-  const target = toHexPubkey(targetNpub);
-  requireCanActOn(ctx, target, Permissions.BAN, unban ? "unban" : "ban");
-  const next = new Set(ctx.folded.banned);
-  if (unban) next.delete(target);
-  else next.add(target);
-
-  const head = ctx.folded.heads.get(bytesToHex(banlistLocator(ctx.community.id)));
-  await publishEdition(
-    ctx,
-    buildBanlistEdition(ctx.community.id, [...next], {
-      actorPubkey: ctx.pubkey,
-      version: head ? head.version + 1n : 1n,
-      prevHash: head?.hash,
-    }),
-    `banlist (${[...next].length} banned)`,
-  );
-  console.log(`${unban ? "Unbanned" : "Banned"} ${target.slice(0, 12)}…`);
-
-  if (!unban) {
-    // A Private-community ban rotates keys; the headless driver refuses when it
-    // can't carry the rotation (CORD-04 §6). Public bans are the banlist alone.
-    const isPublic = ctx.folded.liveInviteLinks.size > 0;
-    if (isPublic) {
-      console.log("  ⓘ public community — ban is the banlist alone (no key rotation).");
-    } else {
-      console.log("  ⚠ this is a private community: a full ban also rotates keys, which the headless driver doesn't do. Role strip + banlist published; ask an admin client to Refound for cryptographic severance.");
-    }
-  }
-}
-
-async function kickVerb(name: string, targetNpub: string): Promise<void> {
-  const ctx = await controlContext(name);
-  const target = toHexPubkey(targetNpub);
-  requireCanActOn(ctx, target, Permissions.KICK, "kick");
-
-  // Strip roles first, then the cooperative guestbook kick directive.
-  const hasGrant = ctx.folded.roster.grants.some((g) => g.member === target && g.roleIds.length > 0);
-  if (hasGrant && canActOnMember(ctx.folded.roster, ctx.pubkey, ctx.folded.ownerHex, target, Permissions.MANAGE_ROLES)) {
-    const head = ctx.folded.heads.get(bytesToHex(grantLocator(ctx.community.id, hex32(target))));
-    await publishEdition(
-      ctx,
-      buildGrantEdition(ctx.community.id, { member: target, roleIds: [] }, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      `strip roles → ${target.slice(0, 12)}…`,
-    );
-  }
-  const gb = currentGuestbookGroup(ctx.community);
-  const kick = buildKickRumor(ctx.pubkey, target, Date.now());
-  await publishAll(ctx.community.relays, await sealGuestbook(kick, gb, ctx.signer), `kick → ${target.slice(0, 12)}…`);
-  console.log(`Kicked ${target.slice(0, 12)}…`);
-}
-
-// ── Channels ────────────────────────────────────────────────────────────────
-
-async function channelVerb(name: string, sub: string | undefined, args: string[]): Promise<void> {
-  const ctx = await controlContext(name);
-  const resolveId = async (selector: string | undefined): Promise<string | undefined> => {
-    if (!selector) return undefined;
-    for (const [id, ch] of ctx.folded.channels) {
-      if (id === selector || ch.name === selector) return id;
-    }
-    throw new Error(`No channel named/id "${selector}"`);
-  };
-
-  if (sub === "list") {
-    for (const [id, ch] of ctx.folded.channels) {
-      console.log(`  ${ch.name} (${id.slice(0, 12)}…)${ch.deleted ? " [deleted]" : ""}${ch.isPrivate ? " [private]" : ""}`);
-    }
-    return;
-  }
-
-  if (!canActOnPosition(ctx.folded.roster, ctx.pubkey, ctx.folded.ownerHex, 1, Permissions.MANAGE_CHANNELS)) {
-    throw new Error("You need MANAGE_CHANNELS to change channels.");
-  }
-
-  if (sub === "create") {
-    const nameArg = args[0];
-    if (!nameArg) throw new Error("channel create needs <name>");
-    const id = bytesToHex(random32());
-    await publishEdition(
-      ctx,
-      buildChannelEdition(hex32(id), { name: nameArg, private: args.includes("--private") }, { actorPubkey: ctx.pubkey, version: 1n }),
-      `channel create ${nameArg}`,
-    );
-    console.log(`Created channel ${nameArg} (${id.slice(0, 12)}…).`);
-    return;
-  }
-
-  if (sub === "rename") {
-    const id = await resolveId(args[0]);
-    if (!id || !args[1]) throw new Error("channel rename needs <id-or-name> <name>");
-    const head = ctx.folded.heads.get(id);
-    const existing = ctx.folded.channels.get(id)!;
-    await publishEdition(
-      ctx,
-      buildChannelEdition(hex32(id), { name: args[1], private: existing.isPrivate }, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      `channel rename ${args[1]}`,
-    );
-    console.log(`Renamed channel to ${args[1]}.`);
-    return;
-  }
-
-  if (sub === "delete") {
-    const id = await resolveId(args[0]);
-    if (!id) throw new Error("channel delete needs <id-or-name>");
-    const head = ctx.folded.heads.get(id);
-    const existing = ctx.folded.channels.get(id)!;
-    await publishEdition(
-      ctx,
-      buildChannelEdition(hex32(id), { name: existing.name, private: existing.isPrivate, deleted: true }, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      `channel delete ${existing.name}`,
-    );
-    console.log(`Deleted channel ${existing.name}.`);
-    return;
-  }
-
-  throw new Error("channel needs: list | create <name> [--private] | rename <id-or-name> <name> | delete <id-or-name>");
-}
-
-// ── Metadata ────────────────────────────────────────────────────────────────
-
-async function metaVerb(name: string, sub: string | undefined, args: string[]): Promise<void> {
-  const ctx = await controlContext(name);
-  if (sub === "get" || sub === undefined) {
-    const m = ctx.folded.metadata;
-    if (!m) {
-      console.log("(no metadata edition yet)");
-      return;
-    }
-    console.log(`name: ${m.name}`);
-    if (m.description) console.log(`description: ${m.description}`);
-    if (m.icon) console.log(`icon: ${m.icon.url}`);
-    if (m.banner) console.log(`banner: ${m.banner.url}`);
-    console.log(`relays: ${m.relays.join(", ")}`);
-    if (m.repo) console.log(`repo: ${m.repo}`);
-    return;
-  }
-  if (sub === "set") {
-    const current: CommunityMetadata = ctx.folded.metadata ?? { name: ctx.community.name, relays: ctx.community.relays };
-    const next: CommunityMetadata = { ...current };
-    for (const pair of args) {
-      const eq = pair.indexOf("=");
-      if (eq < 1) throw new Error(`malformed assignment "${pair}" — expected key=value`);
-      const k = pair.slice(0, eq);
-      const v = pair.slice(eq + 1);
-      if (k === "name") next.name = v.trim();
-      else if (k === "description") next.description = v.trim() || undefined;
-      else if (k === "relays") next.relays = v.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (k === "repo") next.repo = v.trim() || undefined;
-      else throw new Error(`unknown metadata key "${k}"`);
-    }
-    const head = ctx.folded.heads.get(ctx.community.idHex);
-    await publishEdition(
-      ctx,
-      buildMetadataEdition(ctx.community.id, next, {
-        actorPubkey: ctx.pubkey,
-        version: head ? head.version + 1n : 1n,
-        prevHash: head?.hash,
-      }),
-      "metadata edition",
-    );
-    console.log(`Updated metadata: name=${next.name} · relays=${next.relays.length}`);
-    return;
-  }
-  throw new Error("meta needs: get | set key=value […]");
-}
-
-// ── Members ─────────────────────────────────────────────────────────────────
-
-/** Owner-only: publish the terminal dissolution tombstone for the community. */
-async function dissolveVerb(name: string): Promise<void> {
-  const ctx = await controlContext(name);
-  if (ctx.pubkey !== ctx.community.owner) {
-    throw new Error("Only the owner can dissolve the community.");
-  }
-  const wrap = await sealDissolved(ctx.community.id, ctx.pubkey, ctx.signer);
-  await publishAll(ctx.community.relays, wrap, "dissolution tombstone");
-  console.log(`Dissolved ${ctx.community.name}. The community is now terminal for everyone.`);
-}
-
-async function membersVerb(name: string, json: boolean): Promise<void> {
-  const ctx = await controlContext(name);
-  const gb = currentGuestbookGroup(ctx.community);
-  const gbWraps = await queryAll(ctx.community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-  const members = new Map<string, string>();
-  for (const wrap of gbWraps.sort((a, b) => a.created_at - b.created_at)) {
-    try {
-      const opened = openWrap(wrap, gb);
-      if (opened.kind === 3306) members.set(opened.author, opened.content);
-    } catch {
-      // skip
-    }
-  }
-  const roster = ctx.folded.roster;
-  const rows = [...members].map(([pk, status]) => ({
-    pubkey: pk,
-    npub: nip19.npubEncode(pk),
-    status,
-    badge: badgeOf(roster, pk) ?? null,
-    banned: ctx.folded.banned.has(pk),
-  }));
-  if (json) {
-    console.log(JSON.stringify({ community: ctx.community.name, members: rows }, null, 2));
-    return;
-  }
-  for (const r of rows) {
-    const badge = r.badge ? ` [${r.badge}]` : "";
-    const ban = r.banned ? " ⛔banned" : "";
-    console.log(`  ${r.npub} — ${r.status}${badge}${ban}`);
-  }
-}
-
-
 async function joinBao(name: string, inviteUrl: string): Promise<void> {
   if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use say/read.`);
   const parsed = parseInviteLink(inviteUrl.trim());
@@ -998,6 +640,29 @@ function positionalArgs(args: string[]): string[] {
   return out;
 }
 
+/**
+ * Route a shared verb through the transport-agnostic engine. The node store
+ * (fs) + a per-community SimplePool relay give the CLI the same single
+ * implementation the in-page terminal uses, with per-community pool isolation.
+ * `--json` prints the raw envelope; otherwise pretty-prints a useful line.
+ */
+async function engineDispatch(as: string, command: string, args: BaoDispatchArgs, json: boolean): Promise<void> {
+  const store = createNodeStore();
+  const identity = store.get(args.identityName ?? as);
+  const relay = createNodeRelay({ communityId: identity?.community.id });
+  const r = await dispatchBao(store, relay, command, args);
+  if (!r.ok) {
+    throw new Error(r.error);
+  }
+  if (json) {
+    console.log(JSON.stringify(r.result, null, 2));
+  } else if (typeof r.result === "object" && r.result !== null) {
+    console.log(JSON.stringify(r.result, null, 2));
+  } else {
+    console.log(String(r.result));
+  }
+}
+
 /** `help [cmd]` — list all commands, or full docs for one. */
 async function helpVerb(_as: string, cmd?: string): Promise<void> {
   if (cmd) {
@@ -1064,29 +729,47 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
     case "read":
       await read(as, argValue(rest, "--channel"), json);
       break;
-    case "admin":
-      await adminVerb(as, positionalArgs(rest)[0], positionalArgs(rest)[1], argValue(rest, "--role"));
+    case "admin": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "admin", { sub: p[0], target: p[1], role: argValue(rest, "--role"), identityName: as }, json);
       break;
-    case "ban":
-      await banVerb(as, positionalArgs(rest)[0]);
+    }
+    case "ban": {
+      await engineDispatch(as, "ban", { target: positionalArgs(rest)[0], identityName: as }, json);
       break;
-    case "unban":
-      await banVerb(as, positionalArgs(rest)[0], true);
+    }
+    case "unban": {
+      await engineDispatch(as, "unban", { target: positionalArgs(rest)[0], identityName: as }, json);
       break;
-    case "kick":
-      await kickVerb(as, positionalArgs(rest)[0]);
+    }
+    case "kick": {
+      await engineDispatch(as, "kick", { target: positionalArgs(rest)[0], identityName: as }, json);
       break;
-    case "channel":
-      await channelVerb(as, positionalArgs(rest)[0], rest);
+    }
+    case "channel": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "channel", { sub: p[0], args: p.slice(1), identityName: as }, json);
       break;
-    case "meta":
-      await metaVerb(as, positionalArgs(rest)[0], positionalArgs(rest).slice(1));
+    }
+    case "meta": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "meta", { sub: p[0], args: p.slice(1), identityName: as }, json);
       break;
+    }
     case "members":
-      await membersVerb(as, json);
+      await engineDispatch(as, "members", { identityName: as }, json);
       break;
     case "dissolve":
-      await dissolveVerb(as);
+      await engineDispatch(as, "dissolve", { identityName: as }, json);
+      break;
+    case "identities":
+      await engineDispatch(as, "identities", {}, json);
+      break;
+    case "use":
+      await engineDispatch(as, "use", { name: positionalArgs(rest)[0] }, json);
+      break;
+    case "remove":
+      await engineDispatch(as, "remove", { identityName: as }, json);
       break;
     case "help":
       await helpVerb(as, positionalArgs(rest)[0]);
