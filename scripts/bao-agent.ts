@@ -700,6 +700,14 @@ async function main(): Promise<void> {
       console.log(`${as}: ${nip19.npubEncode(getPublicKey(hexToBytes(state.sk)))} (${state.role} of ${state.community.name})`);
       break;
     }
+    case "purge": {
+      const { unlinkSync, existsSync } = require("node:fs");
+      const p = statePath(as);
+      if (!existsSync(p)) throw new Error(`No state for "${as}" at ${p}`);
+      unlinkSync(p);
+      console.log(`Purged local state for "${as}" — BAO identity deleted.`);
+      break;
+    }
     case "work": {
       const pos = positionalArgs(rest);
       const sub = pos[0];
@@ -834,7 +842,7 @@ async function main(): Promise<void> {
     }
     default:
       console.log(
-        "modes: create [--agent-only] | invite [--label L] [--single-use] [--agent] | join <url> [--as name] | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | wallet | import <token> | routstr fuel|topup|redeem | think <prompt> | whoami   [--as identity] [--json] [--dry-run]",
+        "modes: create [--agent-only] | invite [--label L] [--single-use] [--agent] | join <url> [--as name] | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | wallet | import <token> | routstr fuel|topup|redeem | think <prompt> | purge  [--as name] | whoami   [--as identity] [--json] [--dry-run]",
       );
   }
 }
