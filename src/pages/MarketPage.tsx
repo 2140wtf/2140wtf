@@ -144,6 +144,14 @@ export function MarketPage(): React.JSX.Element {
   }, [listings, sort, btcPrice, authors]);
 
   const gridItems = useMemo(() => {
+    // Progressive: render real listings as soon as any have arrived, so the
+    // first cards land instantly and the rest fill in as more come back —
+    // never make the user stare at skeletons until the whole (slow) query
+    // resolves.
+    if (sortedListings.length > 0) {
+      return sortedListings.map((listing) => <Nip99ListingCard key={listing.id} listing={listing} />);
+    }
+
     if (isLoading) {
       return Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -157,25 +165,25 @@ export function MarketPage(): React.JSX.Element {
       ));
     }
 
-    if (sortedListings.length === 0) {
+    if (error) {
       return (
         <div className="col-span-full py-20 text-center text-sm text-muted-foreground">
-          {error ? (
-            <div className="space-y-3">
-              <p className="text-destructive">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                <RefreshCw className="size-3.5 mr-1.5" />
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <p>No active listings found. Try a different category or search.</p>
-          )}
+          <div className="space-y-3">
+            <p className="text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="size-3.5 mr-1.5" />
+              Retry
+            </Button>
+          </div>
         </div>
       );
     }
 
-    return sortedListings.map((listing) => <Nip99ListingCard key={listing.id} listing={listing} />);
+    return (
+      <div className="col-span-full py-20 text-center text-sm text-muted-foreground">
+        <p>No active listings found. Try a different category or search.</p>
+      </div>
+    );
   }, [isLoading, sortedListings, error, refetch]);
 
   return (
