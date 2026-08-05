@@ -18,13 +18,13 @@ const CLUSTER_GAP_MS = 5 * 60 * 1000;
 
 function SenderName({ pubkey, fallback }: { pubkey: string; fallback: string }) {
   const author = useAuthor(pubkey);
-  return <>{getDisplayName(author.data?.metadata) || fallback}</>;
+  return <>{getDisplayName(author.data?.metadata, pubkey) || fallback}</>;
 }
 
 function MessageAvatar({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const displayName = getDisplayName(metadata) || pubkey.slice(0, 8);
+  const displayName = getDisplayName(metadata, pubkey);
   return (
     <Avatar className="size-8 shrink-0">
       <AvatarImage src={metadata?.picture} alt={displayName} />
