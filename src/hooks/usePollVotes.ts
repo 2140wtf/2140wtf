@@ -18,7 +18,6 @@ const ZAP_RECEIPT_LIMIT = 500;
 export const BAO_POLL_RELAYS = [
   'wss://nos.lol',
   'wss://relay.snort.social',
-  'wss://relay.damus.io',
   'wss://relay.primal.net',
   'wss://relay.nostr.wirednet.jp',
   'wss://nostr-01.yakihonne.com',

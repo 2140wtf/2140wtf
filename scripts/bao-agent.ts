@@ -64,7 +64,7 @@ import {
   sealEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { banlistLocator, dissolvedGroupKey, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
+import { banlistLocator, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
 import { adminRole, badgeOf, canActOnMember, canActOnPosition, emptyRoles, moderatorRole, Permissions, rolesOf, type Role } from "@/concord-v2/lib/roles";
 import type { CommunityMetadata } from "@/concord-v2/lib/types";
 import { buildJoinRumor, buildKickRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
