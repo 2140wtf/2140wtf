@@ -14,7 +14,6 @@ export const APP_CURATED_FEED_RELAYS: string[] = [
   'wss://relay.ditto.pub/',
   'wss://relay.dreamith.to/',
   'wss://relay.primal.net/',
-  'wss://relay.damus.io/',
   'wss://relay.nostr.band/',
   'wss://nos.lol/',
   'wss://relay.mostr.pub/',
@@ -43,7 +42,6 @@ export const NIP99_RELAYS: string[] = [
   'wss://nostr.wine',
   'wss://antiprimal.net',
   'wss://relay.primal.net',
-  'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.snort.social',
   'wss://relay.nostr.wirednet.jp',
@@ -82,7 +80,6 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://relay.ditto.pub/', read: true, write: true },
     { url: 'wss://relay.dreamith.to/', read: true, write: true },
     { url: 'wss://relay.primal.net/', read: false, write: true },
-    { url: 'wss://relay.damus.io/', read: false, write: true },
     { url: 'wss://nos.lol/', read: true, write: false },
     { url: 'wss://relay.nostr.band/', read: true, write: false },
     // Broad general-purpose relays for better content discovery. Paid/AUTH-

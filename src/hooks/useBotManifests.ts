@@ -21,7 +21,6 @@ import type { NostrEvent } from "@nostrify/nostrify";
  * published, and whichever relay is behind.
  */
 export const BOT_DISCOVERY_RELAYS = [
-  "wss://relay.damus.io",
   "wss://nos.lol",
   "wss://purplepag.es",
   "wss://relay.nostr.band",

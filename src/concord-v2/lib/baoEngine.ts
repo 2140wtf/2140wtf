@@ -28,7 +28,7 @@ import {
   sealEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { banlistLocator, dissolvedGroupKey, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
+import { banlistLocator, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
 import {
   adminRole,
   badgeOf,
@@ -54,7 +54,6 @@ import {
 import {
   buildBundleEvent,
   buildInviteUrl,
-  buildRevocationEvent,
   inviteCommitment,
   mintLinkSigner,
   mintToken,
@@ -489,7 +488,7 @@ function identitiesVerb(store: BaoStore): unknown {
   };
 }
 
-function useVerb(store: BaoStore, args: { name?: string }): unknown {
+function switchVerb(store: BaoStore, args: { name?: string }): unknown {
   if (!args.name) throw new Error("use needs an identity name.");
   store.setActive(args.name);
   return { active: args.name };
@@ -785,7 +784,7 @@ export async function dispatchBao(
       case "read": result = await readVerb(store, relay, { channel: raw.channel, identityName: raw.identityName, limit: raw.limit }); break;
       case "whoami": result = await whoamiVerb(store, argsOf(raw)); break;
       case "identities": result = identitiesVerb(store); break;
-      case "use": result = useVerb(store, { name: raw.name }); break;
+      case "use": result = switchVerb(store, { name: raw.name }); break;
       case "remove": result = removeVerb(store, argsOf(raw)); break;
       case "admin": result = await adminVerb(store, relay, { sub: raw.sub, target: raw.target, role: raw.role, identityName: raw.identityName }); break;
       case "ban": result = await banVerb(store, relay, { target: raw.target, identityName: raw.identityName }); break;
