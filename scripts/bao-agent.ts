@@ -28,13 +28,20 @@
  *   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
  *   orch claim|progress|done|blocked <taskId> [text] [--orch id] [--as name]
  *   whoami [--as name]                   print the identity's npub
+ *   wallet [--as name]                   show NIP-60 wallet config (mints, keys)
+ *   import <cashuToken> [--as name]      decode a Cashu token and show its value
+ *   routstr fuel [--as name] [--live]    check fuel balance (live or sim)
+ *   routstr topup <name> <cashuToken>    top up the Routstr key with a Cashu token
+ *   routstr redeem <name> <cashuToken>   redeem Cashu into a fresh Routstr key
+ *   think <prompt> [--as name]           send a prompt to Routstr LLM, pay with Cashu
  *
  * Exit codes: 0 ok · 1 error · 2 timeout/no-result (Buzz-style discipline).
  */
 
+import { getDecodedToken } from "@cashu/cashu-ts";
 import { existsSync } from "node:fs";
 
-import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import { generateSecretKey, getPublicKey, nip44 } from "nostr-tools/pure";
 import * as nip19 from "nostr-tools/nip19";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
@@ -99,6 +106,13 @@ import {
   requestCredits,
   resolvePubkey,
 } from "./work-core";
+import {
+  loadState as loadParadiseState,
+  readFuel,
+  routstrCreateFromCashu,
+  routstrTopupWithCashu,
+  saveState as saveParadiseState,
+} from "./paradise/runtime";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
@@ -693,9 +707,102 @@ async function main(): Promise<void> {
       }
       throw new Error("work needs: list | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
     }
+    case "wallet": {
+      const state = loadState(as);
+      const pubkey = getPublicKey(hexToBytes(state.sk));
+      const events = await queryAll(state.community.relays, { kinds: [17375], authors: [pubkey] });
+      if (events.length === 0) {
+        console.log(`No NIP-60 wallet config (kind 17375) found for ${nip19.npubEncode(pubkey)} on these relays.`);
+        console.log("Publish a wallet config first via the web client or another NIP-60 wallet.");
+        break;
+      }
+      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
+      try {
+        const convKey = nip44.getConversationKey(hexToBytes(pubkey), hexToBytes(pubkey));
+        const decrypted = nip44.decrypt(latest.content, convKey);
+        const config = JSON.parse(decrypted) as { mints?: string[]; unit?: string };
+        console.log(`Wallet config for ${nip19.npubEncode(pubkey)}:`);
+        console.log(`  unit: ${config.unit ?? "sat"}`);
+        console.log(`  mints (${config.mints?.length ?? 0}):`);
+        for (const m of config.mints ?? []) console.log(`    ${m}`);
+      } catch {
+        console.log(`Found kind 17375 event but could not decrypt it.`);
+      }
+      break;
+    }
+    case "import": {
+      const token = positionalArgs(rest)[0];
+      if (!token) throw new Error("import needs a Cashu token string");
+      const decoded = getDecodedToken(token);
+      const totalSats = decoded.token.proofs.reduce((sum, p) => sum + p.amount, 0);
+      if (json) {
+        console.log(JSON.stringify({ mint: decoded.token.mint, proofs: decoded.token.proofs.map((p) => ({ id: p.id, amount: p.amount })), totalSats }));
+      } else {
+        console.log(`\nCashu token decoded:`);
+        console.log(`  mint: ${decoded.token.mint}`);
+        console.log(`  proofs: ${decoded.token.proofs.length}`);
+        console.log(`  total: ${totalSats} sats`);
+        for (const p of decoded.token.proofs) console.log(`    ${p.id.slice(0, 16)}… ${p.amount} msat`);
+      }
+      break;
+    }
+    case "routstr": {
+      const routstrSub = positionalArgs(rest)[0];
+      if (routstrSub === "fuel") {
+        const [live] = rest.includes("--live") ? [true] : [false];
+        const pState = loadParadiseState(as);
+        const fuel = live ? await readFuel(pState) : pState.simRoutstrMsats;
+        console.log(`"${as}" fuel: ${fuel} msat${pState.routstrKey ? " (live key)" : " (sim)"} · cashu wallet: ${pState.cashuMsats} msat`);
+      } else if (routstrSub === "topup") {
+        const name = positionalArgs(rest)[0];
+        const token = positionalArgs(rest)[1];
+        if (!name || !token) throw new Error("routstr topup needs <name> <cashuToken>");
+        const state = loadParadiseState(name);
+        if (!state.routstrKey) throw new Error(`"${name}" has no Routstr key — run 'routstr redeem ${name} <token>' first.`);
+        const balance = await routstrTopupWithCashu(state.routstrKey, token);
+        state.simRoutstrMsats = balance;
+        saveParadiseState(name, state);
+        console.log(`topped up "${name}" → ${balance} msat`);
+      } else if (routstrSub === "redeem") {
+        const name = positionalArgs(rest)[0];
+        const token = positionalArgs(rest)[1];
+        if (!name || !token) throw new Error("routstr redeem needs <name> <cashuToken>");
+        const state = loadParadiseState(name);
+        const { apiKey, balance } = await routstrCreateFromCashu(token);
+        state.routstrKey = apiKey;
+        state.simRoutstrMsats = balance;
+        saveParadiseState(name, state);
+        console.log(`redeemed Cashu into a Routstr key for "${name}"`);
+        console.log(`  sk_ key: ${apiKey} (bearer — stored locally, never publish)`);
+        console.log(`  balance: ${balance} msat`);
+      } else {
+        throw new Error("routstr needs: fuel | topup <name> <token> | redeem <name> <token>");
+      }
+      break;
+    }
+    case "think": {
+      const prompt = positionalArgs(rest).join(" ");
+      if (!prompt) throw new Error("think needs a prompt string");
+      const pState = loadParadiseState(as);
+      if (!pState.routstrKey) throw new Error(`"${as}" has no Routstr key — run 'routstr redeem ${as} <token>' first.`);
+      const res = await fetch("https://api.routstr.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pState.routstrKey}` },
+        body: JSON.stringify({ model: "routstr", messages: [{ role: "user", content: prompt }], max_tokens: 2048 }),
+      });
+      if (!res.ok) throw new Error(`Routstr API returned ${res.status}`);
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const content = json.choices?.[0]?.message?.content ?? "(no response)";
+      if (json) {
+        console.log(JSON.stringify({ prompt, response: content }));
+      } else {
+        console.log(`\n${content}`);
+      }
+      break;
+    }
     default:
       console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | whoami   [--as identity] [--json] [--dry-run]",
+        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | work list|request|fulfill|receipt … | wallet | import <token> | routstr fuel|topup|redeem | think <prompt> | whoami   [--as identity] [--json] [--dry-run]",
       );
   }
 }
