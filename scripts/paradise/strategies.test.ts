@@ -9,7 +9,7 @@ function ctx(patch: Partial<StrategyContext>): StrategyContext {
     routstrMsats: 0,
     dryRun: false,
     live: false,
-    relays: ["wss://relay.bao.network"],
+    relays: ["wss://relay.ditto.pub"],
     canRaise: true,
     raiseBitcoin: vi.fn().mockResolvedValue("a".repeat(64)),
     agentPubkey: "0".repeat(64),

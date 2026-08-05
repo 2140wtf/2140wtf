@@ -18,7 +18,7 @@
 
 import { generateSecretKey, getEventHash, getPublicKey, finalizeEvent } from 'nostr-tools/pure';
 import * as nip19 from 'nostr-tools/nip19';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { NPool } from '@nostrify/nostrify';
 
@@ -166,7 +166,7 @@ function communityOf(identity: BaoTermIdentity): CommunityV2 {
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
-const HOME_RELAYS_DEFAULT = ['wss://relay.bao.network'];
+const HOME_RELAYS_DEFAULT = ['wss://relay.ditto.pub'];
 const INVITE_ORIGINS = ['https://2140.wtf'];
 const INVITE_LABEL_DEFAULT = 'invited from 2140.wtf terminal';
 
