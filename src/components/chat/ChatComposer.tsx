@@ -355,6 +355,9 @@ interface ChatComposerProps {
    * Ignored on the `sendOverride` path, where the caller owns the kind.
    */
   messageKind?: number;
+  /** Extra bare commands shown as their own "/" section (e.g. a ₿AO's registry). */
+  extraCommands?: { name: string; usage: string; description: string }[];
+  extraSectionLabel?: string;
 }
 
 /**
@@ -367,7 +370,7 @@ interface ChatComposerProps {
  * same input/upload/picker UX, but sending is delegated to the caller and
  * group-only features (polls, NIP-29 tagging) are disabled.
  */
-export function ChatComposer({ relayUrl, groupId, messages, replyTo, onCancelReply, replyMarker = "nip10", onSent, sendOverride, mentionPubkeys, placeholder, draftScope, onOptimisticInsert, onOptimisticSent, onOptimisticFailed, canModerate = false, autoFocus = false, onTyping, onSlashAction, encryptAttachments = false, botCommands = false, botDmPeer, recentAuthors, conversationRelays, pollsEnabled = true, replyExtraTags, messageKind = KIND_GROUP_CHAT }: ChatComposerProps) {
+export function ChatComposer({ relayUrl, groupId, messages, replyTo, onCancelReply, replyMarker = "nip10", onSent, sendOverride, mentionPubkeys, placeholder, draftScope, onOptimisticInsert, onOptimisticSent, onOptimisticFailed, canModerate = false, autoFocus = false, onTyping, onSlashAction, encryptAttachments = false, botCommands = false, botDmPeer, recentAuthors, conversationRelays, pollsEnabled = true, replyExtraTags, messageKind = KIND_GROUP_CHAT, extraCommands, extraSectionLabel }: ChatComposerProps) {
   const { user } = useCurrentUser();
   const composerBoundsRef = useComposerBoundsRef();
   const { mutateAsync: createEvent, isPending: isSending } = useNostrPublish();
@@ -1693,6 +1696,8 @@ export function ChatComposer({ relayUrl, groupId, messages, replyTo, onCancelRep
                   botsLoading={botsLoading}
                   botRecents={botRecents}
                   onRunBotCommand={runBotFromMenu}
+                  extraCommands={extraCommands}
+                  extraSectionLabel={extraSectionLabel}
                 />
                 <EmojiShortcodeAutocomplete
                   textareaRef={textareaRef}
