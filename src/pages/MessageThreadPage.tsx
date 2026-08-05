@@ -59,7 +59,7 @@ export function MessageThreadPage() {
 
   const author = useAuthor(recipientPubkey);
   const metadata = author.data?.metadata;
-  const displayName = getDisplayName(metadata) || recipientPubkey.slice(0, 8);
+  const displayName = getDisplayName(metadata, recipientPubkey);
   const profileUrl = useProfileUrl(recipientPubkey, metadata);
   const shape = getAvatarShape(metadata);
 
