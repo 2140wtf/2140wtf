@@ -111,6 +111,15 @@ export function createNodeStore(): BaoStore {
       }
     },
     setActive: (name) => {
+      if (!name) {
+        const { unlinkSync: ul } = { unlinkSync };
+        try {
+          ul(ACTIVE_FILE);
+        } catch {
+          /* no active file — fine */
+        }
+        return;
+      }
       writeFileActive(validateIdentityName(name));
     },
   };

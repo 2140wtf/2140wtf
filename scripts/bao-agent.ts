@@ -771,6 +771,9 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
     case "remove":
       await engineDispatch(as, "remove", { identityName: as }, json);
       break;
+    case "logout":
+      await engineDispatch(as, "logout", {}, json);
+      break;
     case "help":
       await helpVerb(as, positionalArgs(rest)[0]);
       break;
