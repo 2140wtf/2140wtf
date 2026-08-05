@@ -11,6 +11,7 @@ import { NativeNotifications } from "@/components/NativeNotifications";
 import NostrProvider from "@/components/NostrProvider";
 import { NostrSync } from "@/components/NostrSync";
 import { WindowBaoMount } from "@/hooks/useWindowBao";
+import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { PlausibleProvider } from "@/components/PlausibleProvider";
 import { SentryProvider } from "@/components/SentryProvider";
 
@@ -271,6 +272,10 @@ export function App() {
                       dispatcher reuses this NostrProvider's pool, so terminal
                       commands share the app's relay connections. */}
                   <WindowBaoMount />
+                  {/* Global `/` (or Ctrl+K) command palette over the shared
+                      engine — works outside any ₿AO, so login/create/join/help
+                      are always one keystroke away. */}
+                  <GlobalCommandPalette />
 
                     <NWCProvider>
                       <EmotionDevProvider>
