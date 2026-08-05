@@ -334,6 +334,15 @@ export const BAO_COMMANDS: BaoCommand[] = [
     access: "anyone",
   },
   {
+    verb: "logout",
+    summary: "Clear the active identity (keys stay saved).",
+    usage: "logout",
+    description: "Clears the active identity selector. Your saved keys are not deleted — switch back with use <name>.",
+    category: "identity",
+    scope: "global",
+    access: "anyone",
+  },
+  {
     verb: "purge",
     summary: "Delete a local identity (dangerous).",
     usage: "purge",

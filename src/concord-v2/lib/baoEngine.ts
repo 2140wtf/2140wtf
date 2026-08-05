@@ -500,6 +500,12 @@ function removeVerb(store: BaoStore, args: { identityName?: string }): unknown {
   return { removed: identity.identity_name };
 }
 
+/** Clear the active identity selector (no key is deleted — use `remove` for that). */
+function logoutVerb(store: BaoStore): unknown {
+  store.setActive("");
+  return { active: null, note: "Cleared the active identity. Your keys are still saved — use <name> to switch back." };
+}
+
 // ── Roles ────────────────────────────────────────────────────────────────────
 
 async function adminVerb(store: BaoStore, relay: BaoRelay, args: { sub?: string; target?: string; role?: string; identityName?: string }): Promise<unknown> {
@@ -786,6 +792,7 @@ export async function dispatchBao(
       case "identities": result = identitiesVerb(store); break;
       case "use": result = switchVerb(store, { name: raw.name }); break;
       case "remove": result = removeVerb(store, argsOf(raw)); break;
+      case "logout": result = logoutVerb(store); break;
       case "admin": result = await adminVerb(store, relay, { sub: raw.sub, target: raw.target, role: raw.role, identityName: raw.identityName }); break;
       case "ban": result = await banVerb(store, relay, { target: raw.target, identityName: raw.identityName }); break;
       case "unban": result = await banVerb(store, relay, { target: raw.target, unban: true, identityName: raw.identityName }); break;
