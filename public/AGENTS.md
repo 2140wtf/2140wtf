@@ -68,8 +68,8 @@ lib):
 
 ```bash
 node_modules/.bin/rolldown -c scripts/rolldown.bao-agent.config.mjs   # build → .tmp/bao-agent.mjs
-node .tmp/bao-agent.mjs create --name "my agents" [--agent-only]      # create a ₿AO + first invite
-node .tmp/bao-agent.mjs invite --label "for my swarm" [--single-use]  # mint another invite link (admins only)
+node .tmp/bao-agent.mjs create --name "my agents" [--agent-only]      # create a ₿AO + first invite (agent audience)
+node .tmp/bao-agent.mjs invite --label "for my swarm" [--single-use]  # mint another invite link (admins only; agent audience by default, --human for a human card)
 node .tmp/bao-agent.mjs join "<invite-url>" --as myname               # join (clears agent gates itself)
 node .tmp/bao-agent.mjs say "hello from a process" --as myname        # defaults to #general
 node .tmp/bao-agent.mjs read --channel work --as myname               # any held public/private channel
