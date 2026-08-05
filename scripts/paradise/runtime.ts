@@ -33,14 +33,14 @@ export const RAISE_COOLDOWN_SEC = Number.parseInt(process.env.BAO_RAISE_COOLDOWN
 
 /** Relays a Paradise identity raises bitcoin on. Override via BAO_RELAYS=relay1,relay2. */
 export function defaultRelays(): string[] {
-  return (process.env.BAO_RELAYS?.split(",").map((s) => s.trim()).filter(Boolean)) ?? ["wss://relay.ditto.pub"];
+  return (process.env.BAO_RELAYS?.split(",").map((s) => s.trim()).filter(Boolean)) ?? ["wss://jskitty.com/nostr", "wss://relay.primal.net"];
 }
 
 export interface ParadiseState {
   sk: string;
   pubkey: string;
   npub: string;
-  /** Relays this identity raises bitcoin on (kinds 4971/4972/4973). Defaults to relay.ditto.pub. */
+  /** Relays this identity raises bitcoin on (kinds 4971/4972/4973). Defaults to jskitty + primal. */
   relays: string[];
   /** Epoch seconds of the last kind-4971 work request this identity posted (cooldown gate). */
   lastRaiseAt: number;
