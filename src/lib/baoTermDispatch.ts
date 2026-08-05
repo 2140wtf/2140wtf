@@ -161,6 +161,9 @@ function communityOf(identity: BaoTermIdentity): CommunityV2 {
     relays: identity.community.relays,
     name: identity.community.name,
     refounder: undefined,
+    // Owner is always an admin of its own community; an empty array here would
+    // make every owner-side operation fail the admins check on newer code.
+    admins: [identity.community.owner],
   };
 }
 
@@ -267,11 +270,13 @@ async function mintInviteInternal(
   identity: BaoTermIdentity,
   opts: { label?: string; singleUse?: boolean },
 ): Promise<string> {
-  if (identity.role !== 'owner') throw new Error('Only the owner identity can mint invites.');
   const sk = hexToBytes(identity.sk);
   const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
   const community = communityOf(identity);
+  if (!(community.admins ?? [community.owner]).includes(pubkey)) {
+    throw new Error('Only admins can mint invites.');
+  }
+  const signer = signerOf(sk);
 
   const token = mintToken();
   const link = mintLinkSigner();
@@ -380,6 +385,7 @@ async function joinCommand(args: BaoTermJoinArgs): Promise<unknown> {
     relays: bundle.relays,
     name: bundle.name,
     refounder: undefined,
+    admins: [bundle.owner],
   };
 
   // Agent gate: captcha we solve, not a refusal.

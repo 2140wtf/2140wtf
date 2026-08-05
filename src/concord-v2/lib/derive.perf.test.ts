@@ -58,6 +58,7 @@ function makeCommunity(n: number, heldRootCount: number): CommunityV2 {
     privateChannels: [],
     relays: ["wss://relay.example.com"],
     name: `community-${n}`,
+    admins: [bytesToHex(b32(`owner-${n}`))],
   };
 }
 

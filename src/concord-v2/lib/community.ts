@@ -48,6 +48,7 @@ export function mintCommunity(name: string, ownerPubkeyHex: string, relays: stri
       privateChannels: [],
       relays: capRelays(relays),
       name,
+      admins: [owner],
     },
     generalChannelId,
   };
