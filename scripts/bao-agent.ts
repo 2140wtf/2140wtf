@@ -119,7 +119,7 @@ import {
 // ── Config ───────────────────────────────────────────────────────────────────
 
 // BAO_RELAYS overrides (comma-separated) for live tests against a local relay.
-const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.ditto.pub").split(",");
+const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://jskitty.com/nostr,wss://relay.primal.net").split(",");
 const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
 
 /**
@@ -131,7 +131,7 @@ const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
  * dying with "Couldn't find that invite on its relays." Read-only discovery —
  * membership still publishes to the community's own relays (bundle.relays).
  */
-const CANONICAL_BAO_RELAY = "wss://relay.ditto.pub";
+const CANONICAL_BAO_RELAY = "wss://jskitty.com/nostr";
 
 // ── Modes ────────────────────────────────────────────────────────────────────
 
