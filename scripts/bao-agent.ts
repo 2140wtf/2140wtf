@@ -41,7 +41,8 @@
 import { getDecodedToken } from "@cashu/cashu-ts";
 import { existsSync } from "node:fs";
 
-import { generateSecretKey, getPublicKey, nip44 } from "nostr-tools/pure";
+import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import { nip44 } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
