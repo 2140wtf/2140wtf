@@ -645,6 +645,17 @@ async function banVerb(store: BaoStore, relay: BaoRelay, args: { target?: string
   const folded = await foldControl(relay, community);
   if (!canActOnMember(folded.roster, pubkey, folded.ownerHex, target, Permissions.BAN)) throw new Error("You don't have permission to ban this member.");
 
+  // A Private-community ban must rotate keys to truly lock the member out.
+  // The headless driver can't carry the rotation, so refuse up front (the
+  // documented contract in commands.ts) instead of silently publishing a
+  // banlist that doesn't sever read access.
+  const isPublic = folded.liveInviteLinks.size > 0;
+  if (!args.unban && !isPublic) {
+    throw new Error(
+      "This is a private community: a ban here also rotates the community keys, which the headless driver can't do. Ask an admin whose signer supports encryption to carry out the ban, or use the web client.",
+    );
+  }
+
   const next = new Set(folded.banned);
   if (args.unban) next.delete(target);
   else next.add(target);
@@ -654,7 +665,6 @@ async function banVerb(store: BaoStore, relay: BaoRelay, args: { target?: string
     buildBanlistEdition(community.id, [...next], { actorPubkey: pubkey, version: head ? head.version + 1n : 1n, prevHash: head?.hash }),
     `banlist (${[...next].length} banned)`,
   );
-  const isPublic = folded.liveInviteLinks.size > 0;
   return { banned: target, unban: args.unban, public_community: isPublic };
 }
 
