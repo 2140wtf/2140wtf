@@ -97,9 +97,12 @@ NSP/AI stay outside as services the engine reaches over the protocol.
 ## Release
 
 - [✅] Merged `session/opencode-work-20260805` → `main` (fast-forward, all tests
-  green). Commits continue on `main`. **NOT pushed** — per instruction, do not
-  push to main; deploy is on hold.
-- [⏳] Deploy / push `main` when approved (deferred).
+  green). Commits continue on `main`.
+- [🔵] **PR #22** — "Feat/bao agent 026" (branch `feat/bao-agent-026`), OPEN,
+  target `main`, ~69 commits. This is the ₿AO agent engine + terminal + palette
+  + security + perf work of this session. Needs a proper PR description + review
+  before merge.
+- [⏳] Deploy / push `main` when approved.
 
 ## Deferred / later
 
