@@ -195,7 +195,9 @@ function positionalArgs(args: string[]): string[] {
 async function engineDispatch(as: string, command: string, args: BaoDispatchArgs, json: boolean): Promise<void> {
   const store = createNodeStore();
   const identity = store.get(args.identityName ?? as);
-  const relay = createNodeRelay({ communityId: identity?.community.id });
+  // Per-community pool + NIP-42 AUTH signed with the member's key, so relays
+  // see one authenticated session per community (closes the correlation leak).
+  const relay = createNodeRelay({ communityId: identity?.community.id, authSk: identity?.sk });
   const r = await dispatchBao(store, relay, command, args);
   if (!r.ok) {
     throw new Error(r.error);
