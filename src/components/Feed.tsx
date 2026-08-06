@@ -898,7 +898,7 @@ function HashtagFeedContent({ tag }: { tag: string }) {
       const appRelays = nostr.group(APP_SEARCH_RELAYS);
       return appRelays.query(
         [{ kinds, '#t': [tag.toLowerCase()], limit: 40 }],
-        { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]) },
       );
     },
   });
@@ -960,7 +960,7 @@ function GeotagFeedContent({ tag }: { tag: string }) {
       const filter = { kinds, limit: 40 } as Record<string, unknown>;
       filter['#g'] = [tag];
       return appRelays.query([filter as Parameters<typeof appRelays.query>[0][number]], {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]),
       });
     },
   });

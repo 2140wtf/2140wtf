@@ -21,6 +21,7 @@ function makeCommunity(overrides: Partial<CommunityV2> = {}): CommunityV2 {
     privateChannels: [],
     relays: ["wss://old-a.example", "wss://old-b.example"],
     name: "Test",
+    admins: [bytesToHex(id)],
     ...overrides,
   };
 }

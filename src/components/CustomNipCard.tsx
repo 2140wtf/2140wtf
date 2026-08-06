@@ -14,7 +14,7 @@ function extractFirstParagraph(
 	content: string,
 	maxLength: number = 200,
 ): string {
-	if (!content) return "";
+	if (typeof content !== "string") return "";
 
 	const lines = content
 		.split("\n")

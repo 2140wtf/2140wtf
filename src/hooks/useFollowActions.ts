@@ -51,7 +51,7 @@ export function useFollowList() {
     queryKey: ['follow-list', user?.pubkey ?? ''],
     queryFn: async ({ signal }) => {
       if (!user) return { event: null, pubkeys: [] };
-      const event = await fetchContactList(nostr, store, user.pubkey, { signal, timeout: 10000 });
+      const event = await fetchContactList(nostr, store, user.pubkey, { signal, timeout: 4000 });
       return { event, pubkeys: contactListPubkeys(event) };
     },
     enabled: !!user,
@@ -120,7 +120,7 @@ export function useFollowActions(): UseFollowActionsReturn {
         // If relays returned nothing, try the longer cache-aware read path as
         // a last resort before mutating.
         if (!prev) {
-          prev = await fetchContactList(nostr, store, user.pubkey, { timeout: 15_000 });
+          prev = await fetchContactList(nostr, store, user.pubkey, { timeout: 6000 });
         }
 
         // Unfollowing requires a known baseline; otherwise we could publish an
