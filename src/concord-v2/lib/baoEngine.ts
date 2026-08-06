@@ -805,6 +805,17 @@ function helpVerb(): unknown {
 
 // ── Top-level dispatch ───────────────────────────────────────────────────────
 
+/** The verbs the transport-agnostic engine implements in every surface
+ *  (browser `window.bao` + CLI). CLI-only verbs (orch/work/wallet/import/
+ *  routstr/think/project/shell/purge) live in the CLI driver and are NOT in
+ *  this set — surfaces like the `/` palette filter on it so they never offer a
+ *  command that would error with "Unknown command". */
+export const ENGINE_VERBS: ReadonlySet<string> = new Set([
+  "create", "login", "join", "invite", "say", "read", "whoami", "identities",
+  "use", "remove", "logout", "admin", "ban", "unban", "kick", "channel",
+  "meta", "members", "dissolve", "help",
+]);
+
 export interface BaoDispatchArgs {
   identityName?: string;
   name?: string;
