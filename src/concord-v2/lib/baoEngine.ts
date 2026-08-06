@@ -202,14 +202,63 @@ async function channelMessages(relay: BaoRelay, community: CommunityV2, identity
 
 // ── Identity verbs ───────────────────────────────────────────────────────────
 
+/** A key-only identity — registered a key but not yet in any community. The
+ *  `id` stays empty (so `isKeyOnly` detects it); the other fields are valid hex
+ *  placeholders so filesystem stores that validate community fields accept it. */
+const KEY_ONLY_COMMUNITY = { id: "", owner: "0".repeat(64), owner_salt: "0".repeat(64), community_root: "0".repeat(64), root_epoch: 0, name: "", relays: [] };
+
+function isKeyOnly(identity: BaoIdentity): boolean {
+  return !identity.community.id;
+}
+
+/** Reuse an existing key-only identity's key, else generate a fresh one. */
+function resolveIdentityKey(store: BaoStore, identityName: string, nsec?: string): Uint8Array {
+  const existing = store.get(identityName);
+  if (existing) {
+    if (!isKeyOnly(existing)) throw new Error(`Identity "${identityName}" already exists — use say/read or remove it first.`);
+    return hexToBytes(existing.sk);
+  }
+  if (nsec) {
+    const decoded = nip19.decode(nsec);
+    if (decoded.type !== "nsec") throw new Error("--nsec must be an nsec1… secret key");
+    return decoded.data;
+  }
+  return generateSecretKey();
+}
+
+/** Create or activate a local identity (register). A bare `login` mints a key
+ *  and saves a key-only identity that `join`/`create` then upgrade into a
+ *  member/owner of a community. */
+async function loginVerb(store: BaoStore, args: { name?: string; nsec?: string; identityName?: string }): Promise<unknown> {
+  const name = validateIdentityName(args.name ?? args.identityName ?? "agent");
+  const existing = store.get(name);
+  if (existing) {
+    store.setActive(name);
+    const pubkey = existing.pubkey ?? (existing.sk ? getPublicKey(hexToBytes(existing.sk)) : undefined);
+    return { identity: name, npub: pubkey ? nip19.npubEncode(pubkey) : null, existing: true };
+  }
+  const sk = resolveIdentityKey(store, name, args.nsec);
+  const identity: BaoIdentity = {
+    sk: bytesToHex(sk),
+    pubkey: getPublicKey(sk),
+    role: "member",
+    identity_name: name,
+    community: KEY_ONLY_COMMUNITY,
+    private_channels: [],
+    invites: [],
+    registry_version: 0,
+  };
+  store.save(identity);
+  return { identity: name, npub: nip19.npubEncode(getPublicKey(sk)), registered: true, note: "Key created. Use `join <invite> --as <name>` or `create --as <name>` to enter a ₿AO." };
+}
+
 async function createVerb(store: BaoStore, relay: BaoRelay, args: { name?: string; identityName?: string; agentOnly?: boolean; relays?: string[] }): Promise<unknown> {
   const name = args.name?.trim();
   if (!name) throw new Error("create needs --name <name>");
   const identityName = validateIdentityName(args.identityName ?? "owner");
-  if (store.get(identityName)) throw new Error(`Identity "${identityName}" already exists — use say/read or remove it first.`);
+  const sk = resolveIdentityKey(store, identityName, undefined);
   const relays = args.relays?.length ? args.relays : HOME_RELAYS_DEFAULT;
 
-  const sk = generateSecretKey();
   const pubkey = getPublicKey(sk);
   const signer = signerOf(sk);
   const { community, generalChannelId } = mintCommunity(name, pubkey, relays);
@@ -322,7 +371,7 @@ async function inviteVerb(store: BaoStore, relay: BaoRelay, args: { identityName
 async function joinVerb(store: BaoStore, relay: BaoRelay, args: { inviteUrl?: string; identityName?: string }): Promise<unknown> {
   if (!args.inviteUrl) throw new Error("join needs an invite URL");
   const identityName = validateIdentityName(args.identityName ?? "agent");
-  if (store.get(identityName)) throw new Error(`Identity "${identityName}" already exists — use say/read or pick a new name.`);
+  const sk = resolveIdentityKey(store, identityName, undefined);
   const parsed = parseInviteLink(args.inviteUrl.trim());
   if (!parsed) throw new Error("Not a recognizable invite link.");
 
@@ -334,7 +383,6 @@ async function joinVerb(store: BaoStore, relay: BaoRelay, args: { inviteUrl?: st
   if (!newest) throw new Error("Couldn't find that invite on its relays.");
   const bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
 
-  const sk = generateSecretKey();
   const pubkey = getPublicKey(sk);
   const signer = signerOf(sk);
 
@@ -766,6 +814,7 @@ export interface BaoDispatchArgs {
   agentOnly?: boolean;
   relays?: string[];
   inviteUrl?: string;
+  nsec?: string;
   sub?: string;
   target?: string;
   role?: string;
@@ -785,6 +834,7 @@ export async function dispatchBao(
     let result: unknown;
     switch (command) {
       case "create": result = await createVerb(store, relay, { name: raw.name, identityName: raw.identityName, agentOnly: raw.agentOnly, relays: raw.relays }); break;
+      case "login": result = await loginVerb(store, { name: raw.name, nsec: raw.nsec, identityName: raw.identityName }); break;
       case "invite": result = await inviteVerb(store, relay, { identityName: raw.identityName, label: raw.label, singleUse: raw.singleUse, human: raw.human }); break;
       case "join": result = await joinVerb(store, relay, { inviteUrl: raw.inviteUrl, identityName: raw.identityName }); break;
       case "say": result = await sayVerb(store, relay, { text: raw.text, channel: raw.channel, key: raw.key, identityName: raw.identityName }); break;
