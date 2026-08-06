@@ -110,6 +110,9 @@ function signerOf(sk: Uint8Array): StreamSigner {
 
 function communityOf(identity: BaoIdentity): CommunityV2 {
   const c = identity.community;
+  if (!c.id) {
+    throw new Error(`No community yet for "${identity.identity_name}" — use 'join <invite>' or 'create' to enter a ₿AO first.`);
+  }
   const root = hexToBytes(c.community_root);
   const heldRoots = [
     { epoch: BigInt(c.root_epoch), key: root },
