@@ -42,6 +42,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useMountedTransition } from "@/hooks/useMountedTransition";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useResolvedMediaSrc } from "@/hooks/useResolvedMediaSrc";
+import { describeError } from "@/lib/errorCodes";
 import { useToast } from "@/hooks/useToast";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -781,8 +782,13 @@ export function ChatComposer({ relayUrl, groupId, messages, replyTo, onCancelRep
       setUploadedFileGroups((prev) => new Map(prev).set(url, tags));
       // The URL is tracked as an attachment chip (rendered above the input)
       // rather than dumped into the text; it's appended to content on send.
-    } catch {
-      toast({ title: "Upload failed", description: "Could not upload file.", variant: "destructive" });
+    } catch (e) {
+      const { message, code } = describeError(e);
+      toast({
+        title: "Couldn't attach that file",
+        description: code ? `${message} (${code})` : message,
+        variant: "destructive",
+      });
     } finally {
       setPendingUploads((n) => Math.max(0, n - 1));
     }
