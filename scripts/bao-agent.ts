@@ -44,77 +44,29 @@
 import { getDecodedToken } from "@cashu/cashu-ts";
 import { existsSync, unlinkSync } from "node:fs";
 
-import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import { getPublicKey } from "nostr-tools/pure";
 import { nip44 } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes } from "@noble/hashes/utils.js";
 
-import { mintCommunity } from "@/concord-v2/lib/community";
 import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
 import { errorCodeDocs } from "@/lib/errorCodes";
 import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
 import { createNodeRelay, createNodeStore } from "./baoAdapter";
-import {
-  buildChannelEdition,
-  buildMetadataEdition,
-  buildRegistryEdition,
-  currentControlGroup,
-  foldControlState,
-  openControlWraps,
-  sealEdition,
-} from "@/concord-v2/lib/control";
-import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
-import {
-  AGENT_GATE_METADATA_KEY,
-  DEFAULT_AGENT_GATE_DIFFICULTY,
-  agentGateOf,
-  grindJoinRumor,
-} from "@/concord-v2/lib/agentGate";
-import {
-  buildBundleEvent,
-  buildInviteUrl,
-  buildRevocationEvent,
-  inviteCommitment,
-  mintLinkSigner,
-  mintToken,
-  parseBundleEvent,
-  parseInviteLink,
-  InviteError,
-  type InviteBundle,
-} from "@/concord-v2/lib/invite";
-import { openWrap, resolveMs } from "@/concord-v2/lib/stream";
-import { KIND_INVITE_BUNDLE, KIND_WRAP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 import {
   CLAIM_TTL_MS,
-  PROTOCOL_VERSION,
-  channelMessages,
   closePool,
-  communityOf,
-  listChannels,
   loadState,
   orchStates,
   orchVerbPost,
-  publishAll,
   projectSnapshot,
   queryAll,
   resolveChannel,
-  saveState,
-  sendChannelMessage,
-  signerOf,
   statePath,
   waitForInterrupt,
-  withStateLock,
-  type State,
 } from "./chat-core";
-import {
-  fulfillCredits,
-  listWork,
-  printWorkListing,
-  receiptCredits,
-  requestCredits,
-  resolvePubkey,
-} from "./work-core";
+import { fulfillCredits, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
 import {
   loadState as loadParadiseState,
   readFuel,
@@ -127,415 +79,8 @@ import {
 
 // BAO_RELAYS overrides (comma-separated) for live tests against a local relay.
 const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://jskitty.com/nostr,wss://relay.primal.net").split(",");
-const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
-
-/**
- * Canonical public relay every 2140.wtf community replicates its invite bundle
- * onto. `join` always probes this as a discovery fallback: an AI agent holds
- * ONLY an invite link, so if the fragment's bootstrap relay is a typo, stale, or
- * unreachable from this network (e.g. "reiay.bao.network", which fails DNS),
- * the agent still finds the bundle on the canonical relay and joins instead of
- * dying with "Couldn't find that invite on its relays." Read-only discovery —
- * membership still publishes to the community's own relays (bundle.relays).
- */
-const CANONICAL_BAO_RELAY = "wss://jskitty.com/nostr";
 
 // ── Modes ────────────────────────────────────────────────────────────────────
-
-async function create(name: string, communityName: string, agentOnly: boolean): Promise<void> {
-  if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use invite/say/read.`);
-
-  const sk = generateSecretKey();
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-
-  const { community, generalChannelId } = mintCommunity(communityName, pubkey, HOME_RELAYS);
-  console.log(`Creating "${communityName}" (${community.idHex.slice(0, 16)}…) on ${HOME_RELAYS.join(", ")}${agentOnly ? " — AGENT-ONLY" : ""}`);
-
-  // Genesis: two owner-signed editions (CORD-02 §1). Agent-only seals the gate
-  // into the metadata edition, where every conforming client folds it.
-  await publishAll(
-    community.relays,
-    await sealEdition(
-      buildMetadataEdition(
-        community.id,
-        {
-          name: communityName,
-          relays: community.relays,
-          ...(agentOnly
-            ? { [AGENT_GATE_METADATA_KEY]: { type: "pow", difficulty: DEFAULT_AGENT_GATE_DIFFICULTY } }
-            : {}),
-        },
-        { actorPubkey: pubkey, version: 1n },
-      ),
-      currentControlGroup(community),
-      signer,
-    ),
-    "metadata edition",
-  );
-  await publishAll(
-    community.relays,
-    await sealEdition(
-      buildChannelEdition(generalChannelId, { name: "general", private: false }, { actorPubkey: pubkey, version: 1n }),
-      currentControlGroup(community),
-      signer,
-    ),
-    "#general channel edition",
-  );
-
-  // Best-effort founder Join so the member list has a firsthand entry. On a
-  // gated community the founder's own Join must clear the gate too.
-  await publishAll(
-    community.relays,
-    await sealGuestbook(
-      agentOnly
-        ? grindJoinRumor(pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY)
-        : buildJoinRumor(pubkey, Date.now()),
-      currentGuestbookGroup(community),
-      signer,
-    ),
-    "founder join",
-  );
-
-  const state: State = {
-    sk: bytesToHex(sk),
-    role: "owner",
-    community: {
-      id: community.idHex,
-      owner: pubkey,
-      owner_salt: bytesToHex(community.ownerSalt),
-      community_root: bytesToHex(community.root),
-      root_epoch: Number(community.rootEpoch),
-      held_roots: [],
-      joined_at: Date.now(),
-      name: communityName,
-      relays: community.relays,
-      general_channel_id: bytesToHex(generalChannelId),
-    },
-    private_channels: [],
-    invites: [],
-    registry_version: 0,
-    protocol_version: PROTOCOL_VERSION,
-  };
-  saveState(name, state);
-  console.log(`\nOwner identity "${name}": ${nip19.npubEncode(pubkey)}`);
-  console.log(`State: ${statePath(name)}\n`);
-
-  await invite(name, undefined, false, true);
-}
-
-async function invite(name: string, label?: string, singleUse = false, agent = false): Promise<void> {
-  // Whole body under the state lock: registry_version and invites[] are a
-  // read-modify-write that races with concurrent invites/sweeps.
-  await withStateLock(name, async () => {
-    const state = loadState(name);
-    const sk = hexToBytes(state.sk);
-    const pubkey = getPublicKey(sk);
-    const signer = signerOf(sk);
-    const community = communityOf(state.community, state.private_channels);
-    if (!(community.admins ?? [community.owner]).includes(pubkey)) throw new Error("Only admins can mint invites.");
-
-    const token = mintToken();
-    const link = mintLinkSigner();
-    const bundle: InviteBundle = {
-      community_id: community.idHex,
-      owner: community.owner,
-      owner_salt: bytesToHex(community.ownerSalt),
-      community_root: bytesToHex(community.root),
-      root_epoch: Number(community.rootEpoch),
-      channels: [],
-      relays: community.relays,
-      name: community.name,
-      creator_npub: pubkey,
-      ...(label ? { label } : {}),
-      ...(singleUse ? { max_uses: 1 } : {}),
-      ...(agent ? { audience: "agent" } : {}),
-    };
-
-    const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-    await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
-
-    // Member-facing Registry (vsk 8): this creator's live link coordinates.
-    state.registry_version += 1;
-    await publishAll(
-      community.relays,
-      await sealEdition(
-        buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
-          actorPubkey: pubkey,
-          version: BigInt(state.registry_version),
-        }),
-        currentControlGroup(community),
-        signer,
-      ),
-      "invite registry edition",
-    );
-
-    const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
-    state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
-    saveState(name, state);
-
-    console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""}${agent ? " — AUDIENCE: agent (renders machine-first join page)" : ""} — share EITHER origin (same secret):`);
-    for (const url of urls) console.log(`  ${url}`);
-  });
-}
-
-// ── Control-plane helpers (shared by the admin/moderation/channel/meta verbs) ─
-
-/** Load an identity, fold its current control plane, and return the signing context. */
-async function joinBao(name: string, inviteUrl: string): Promise<void> {
-  if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use say/read.`);
-  const parsed = parseInviteLink(inviteUrl.trim());
-  if (!parsed) throw new Error("Not a recognizable invite link.");
-
-    const discoveryRelays = [...new Set([...parsed.bootstrapRelays, CANONICAL_BAO_RELAY])];
-  const events = await queryAll(discoveryRelays, {
-    kinds: [KIND_INVITE_BUNDLE],
-    authors: [parsed.linkSigner],
-    "#d": [""],
-    // NO limit: a relay holding several editions may satisfy limit:1 with a
-    // STALE one (a live bundle superseded by its revocation tombstone).
-  });
-  // Newest edition wins — but a revocation tombstone wins TIES (and anything
-  // older): created_at has second granularity, so a revoked-then-reshown live
-  // bundle can tie the tombstone, and a relay's delivery order is not a trust
-  // signal. Only a strictly-newer live bundle (a genuine re-mint) overrides
-  // revocation.
-  const ts = (e: (typeof events)[number]) => e.created_at;
-  const maxTs = events.reduce((m, e) => Math.max(m, ts(e)), 0);
-  const atMax = events.filter((e) => ts(e) === maxTs);
-  const newest =
-    atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
-  // parseBundleEvent can throw an InviteError with a precise code, but the raw
-  // message reads like 'bundle decrypt: invalid MAC' — opaque to an agent that
-  // held nothing but a link. Wrap it so a stale/revoked/expired link returns a
-  // one-line next action instead of a stack trace: 'ask the owner to re-issue
-  // via bao-agent invite'.
-  let bundle: InviteBundle;
-  try {
-    bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
-  } catch (e) {
-    if (e instanceof InviteError) {
-      const linkSignerNpub = nip19.npubEncode(parsed.linkSigner);
-      const hint =
-        e.code === 'bad-bundle'
-          ? `This invite link is no longer valid — its token doesn't decrypt the live bundle on ${CANONICAL_BAO_RELAY} (owner ${linkSignerNpub.slice(0, 16)}… re-minted it). Ask the owner to re-issue via 'bao-agent invite'.`
-          : e.message;
-      throw new Error(`${e.message}\n${hint}`);
-    }
-    throw e;
-  }
-
-  const sk = generateSecretKey();
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-
-  const community = communityOf(
-    {
-      id: bundle.community_id,
-      owner: bundle.owner,
-      owner_salt: bundle.owner_salt,
-      community_root: bundle.community_root,
-      root_epoch: bundle.root_epoch,
-      name: bundle.name,
-      relays: bundle.relays,
-    },
-    bundle.channels,
-  );
-
-  // The agent gate is NOT a refusal for us — it's the captcha we solve. Fold
-  // the metadata, and if the community is gated, grind the Join's PoW.
-  const control = currentControlGroup(community);
-  const controlWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
-  const folded = foldControlState(openControlWraps(controlWraps, [control]), community.id, community.owner);
-  const gate = agentGateOf(folded.metadata);
-  if (gate) console.log(`  agent_gate detected (pow, difficulty ${gate.difficulty}) — grinding…`);
-
-  // Every Join from this link cites the token commitment (sha256 of the
-  // unlock token). A single-use link is spent once the Guestbook shows one.
-  const commitment = inviteCommitment(parsed.token);
-  if (bundle.max_uses === 1) {
-    const gb = currentGuestbookGroup(community);
-    const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-    if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(gbWraps, [gb])), commitment)) {
-      throw new Error("That invite link was single-use and has already been used. Ask for a fresh one.");
-    }
-  }
-
-  const attribution = { creator: bundle.creator_npub ?? "", ...(bundle.label ? { label: bundle.label } : {}), commitment };
-  const joinedAt = Date.now();
-  const rumor = gate
-    ? grindJoinRumor(pubkey, joinedAt, gate.difficulty, attribution)
-    : buildJoinRumor(pubkey, joinedAt, attribution);
-  await publishAll(
-    community.relays,
-    await sealGuestbook(rumor, currentGuestbookGroup(community), signer),
-    gate ? `guestbook join (pow ≥ ${gate.difficulty})` : "guestbook join",
-  );
-
-  // Single-use links: the spend check above is check-then-act, so two
-  // CONCURRENT joiners can both pass it and both post a Join — the fold is
-  // per-npub and can't dedupe a commitment (it can't tell single-use links
-  // from multi-use). Nostr has no atomic claim, so the loser SELF-EJECTS
-  // instead: re-fold, and if an earlier Join (lower ms, tie → lower rumor id)
-  // cites the same commitment, we lost the race — exit WITHOUT saving state,
-  // so the losing agent never acts as a member. (Its Join stays on the
-  // guestbook as a ghost until the owner sweeps/kicks; only a rekey truly
-  // excludes it. Documented in docs/ORCHESTRATION.md.)
-  if (bundle.max_uses === 1) {
-    const gb = currentGuestbookGroup(community);
-    const myMs = resolveMs(rumor.created_at, rumor.tags);
-    const earlierJoinWins = async (): Promise<boolean> => {
-      const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-      const rival = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]))
-        .filter((ev) => joinCommitmentOf(ev) === commitment)
-        .map((ev) => ({ ms: ev.ms, id: ev.rumorId }))
-        .sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
-      return rival !== undefined && (rival.ms < myMs || (rival.ms === myMs && rival.id < rumor.id));
-    };
-    // Immediate re-fold, then one settle beat for a rival still in flight.
-    let lost = await earlierJoinWins();
-    if (!lost) {
-      await new Promise((r) => setTimeout(r, 1500));
-      lost = await earlierJoinWins();
-    }
-    if (lost) {
-      console.error("  ✗ That single-use link was spent by a CONCURRENT join (earlier Join on the guestbook) — you are NOT a member. Ask for a fresh link.");
-      process.exitCode = 2;
-      return;
-    }
-  }
-
-  const state: State = {
-    sk: bytesToHex(sk),
-    role: "member",
-    community: {
-      id: bundle.community_id,
-      owner: bundle.owner,
-      owner_salt: bundle.owner_salt,
-      community_root: bundle.community_root,
-      root_epoch: bundle.root_epoch,
-      held_roots: [],
-      joined_at: Date.now(),
-      name: bundle.name,
-      relays: bundle.relays,
-    },
-    private_channels: bundle.channels,
-    invites: [],
-    registry_version: 0,
-    protocol_version: PROTOCOL_VERSION,
-  };
-  saveState(name, state);
-  console.log(`\nJoined "${bundle.name}" as "${name}": ${nip19.npubEncode(pubkey)}`);
-  console.log(`State: ${statePath(name)}`);
-}
-
-async function say(name: string, text: string, idemKey: string | undefined, channelSelector: string | undefined, json: boolean): Promise<void> {
-  const state = loadState(name);
-  const channel = await resolveChannel(state, channelSelector);
-  const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey, channel: channel.idHex });
-  if (json) {
-    console.log(JSON.stringify({ rumor_id: rumorId, deduped, channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) } }));
-  } else if (deduped) {
-    console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
-  }
-}
-
-async function read(name: string, channelSelector: string | undefined, json: boolean): Promise<void> {
-  const state = loadState(name);
-  const community = communityOf(state.community, state.private_channels);
-  const channel = await resolveChannel(state, channelSelector);
-  const messages = await channelMessages(state, channel.idHex);
-
-  // Member list from the guestbook.
-  const gb = currentGuestbookGroup(community);
-  const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-  const members = new Map<string, string>(); // pubkey → last state
-  for (const wrap of gbWraps.sort((a, b) => a.created_at - b.created_at)) {
-    try {
-      const opened = openWrap(wrap, gb);
-      if (opened.kind === 3306) members.set(opened.author, opened.content);
-    } catch {
-      // skip
-    }
-  }
-
-  if (json) {
-    console.log(
-      JSON.stringify(
-        {
-          community: community.name,
-          channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) },
-          channels: await listChannels(state),
-          messages: messages.map((m) => ({
-            id: m.id,
-            author: m.author,
-            author_npub: nip19.npubEncode(m.author),
-            ms: m.ms,
-            content: m.content,
-            tags: m.tags,
-          })),
-          members: [...members].map(([pk, status]) => ({ pubkey: pk, npub: nip19.npubEncode(pk), status })),
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
-  console.log(`\n#${channel.name} — ${messages.length} message(s):`);
-  for (const m of messages) {
-    const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
-    console.log(`  [${time}] ${nip19.npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
-  }
-
-  console.log(`\nMembers (${[...members.values()].filter((s) => s === "join").length}):`);
-  for (const [pk, status] of members) {
-    console.log(`  ${nip19.npubEncode(pk)} — ${status}`);
-  }
-
-  // Single-use sweep (owner): a single-use link dies the moment the Guestbook
-  // shows a Join citing its token commitment — tombstone the bundle and drop
-  // the coordinate from the Registry, like the app's useSingleUseSweep2.
-  if (state.role === "owner") {
-    await withStateLock(name, async () => {
-      // Re-read under the lock — a concurrent invite may have landed since
-      // the load at the top of read(); writing the stale array back would
-      // silently drop it.
-      const fresh = loadState(name);
-      const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
-      const spent = fresh.invites.filter(
-        (inv) => inv.max_uses === 1 && singleUseLinkUsed(opened, inviteCommitment(hexToBytes(inv.token))),
-      );
-      if (spent.length === 0) return;
-      // Compute the FULL surviving set before publishing the registry: building
-      // the edition mid-scan (the old loop) omitted unspent links that sorted
-      // after a spent one — members would see an incomplete live-invite list.
-      const remaining = fresh.invites.filter((inv) => !spent.includes(inv));
-      const sk = hexToBytes(fresh.sk);
-      const signer = signerOf(sk);
-      for (const inv of spent) {
-        await publishAll(community.relays, buildRevocationEvent(hexToBytes(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
-        console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
-      }
-      fresh.registry_version += 1;
-      await publishAll(
-        community.relays,
-        await sealEdition(
-          buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
-            actorPubkey: getPublicKey(sk),
-            version: BigInt(fresh.registry_version),
-          }),
-          currentControlGroup(community),
-          signer,
-        ),
-        "invite registry edition",
-      );
-      fresh.invites = remaining;
-      saveState(name, fresh);
-    });
-  }
-}
 
 async function waitMode(
   name: string,
@@ -711,25 +256,25 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       await shellMode();
       break;
     case "create":
-      await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
+      await engineDispatch(as, "create", { name: argValue(rest, "--name") ?? "₿AO agent hangout — live test", agentOnly: rest.includes("--agent-only"), identityName: as }, json);
       break;
     case "invite":
-      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"), !rest.includes("--human"));
+      await engineDispatch(as, "invite", { label: argValue(rest, "--label"), singleUse: rest.includes("--single-use"), human: rest.includes("--human"), identityName: as }, json);
       break;
     case "join": {
       const url = positionalArgs(rest)[0];
       if (!url) throw new Error("join needs an invite URL");
-      await joinBao(as, url);
+      await engineDispatch(as, "join", { inviteUrl: url, identityName: as }, json);
       break;
     }
     case "say": {
       const text = positionalArgs(rest).join(" ");
       if (!text) throw new Error("say needs text");
-      await say(as, text, argValue(rest, "--key"), argValue(rest, "--channel"), json);
+      await engineDispatch(as, "say", { text, key: argValue(rest, "--key"), channel: argValue(rest, "--channel"), identityName: as }, json);
       break;
     }
     case "read":
-      await read(as, argValue(rest, "--channel"), json);
+      await engineDispatch(as, "read", { channel: argValue(rest, "--channel"), identityName: as }, json);
       break;
     case "admin": {
       const p = positionalArgs(rest);
