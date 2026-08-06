@@ -765,6 +765,9 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
     case "identities":
       await engineDispatch(as, "identities", {}, json);
       break;
+    case "login":
+      await engineDispatch(as, "login", { name: positionalArgs(rest)[0], identityName: as }, json);
+      break;
     case "use":
       await engineDispatch(as, "use", { name: positionalArgs(rest)[0] }, json);
       break;
