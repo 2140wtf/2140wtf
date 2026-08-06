@@ -433,7 +433,9 @@ const ChatMessageInner = memo(function ChatMessageInner({
   // it as `replyContext`; its presence is the authoritative "this is a reply".
   const hasReplyContext = Boolean(replyContext);
   const isPending = sendStatus === "pending";
-  const isFailed = sendStatus === "failed";
+  const failedStatus = sendStatus && typeof sendStatus === "object" ? sendStatus : undefined;
+  const isFailed = Boolean(failedStatus);
+  const failReason = failedStatus?.reason;
   const isOwn = user?.pubkey === event.pubkey;
   // Highlight messages that mention you or reply to you: both add a `p` tag for
   // the current user (NIP-27 mention / NIP-10 reply). Not your own messages.
@@ -703,7 +705,7 @@ const ChatMessageInner = memo(function ChatMessageInner({
       {isFailed && (
         <div className="flex items-center gap-2 touch:gap-4 mt-1 text-[11px] text-destructive">
           <AlertCircle className="size-3.5 shrink-0" />
-          <span>Failed to send.</span>
+          <span>Failed to send.{failReason ? <span className="text-destructive/80 break-all"> {failReason}</span> : null}</span>
           {onRetry && (
             <button type="button" className="font-semibold underline hover:no-underline touch:py-2" onClick={onRetry}>
               Retry

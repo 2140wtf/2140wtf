@@ -18,7 +18,6 @@ export const BAO_POSITION_SYNC_VERSION = 1;
 
 export const BAO_SYNC_RELAYS = [
   'wss://relay.bao.network',
-  'wss://relay.damus.io',
   'wss://nos.lol',
 ] as const;
 

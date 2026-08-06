@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Eraser, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Eraser, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, Activity, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -19,6 +19,7 @@ import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
 import { InviteDialog2 } from "@/concord-v2/components/InviteDialog2";
 import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
 import { AuditLogView } from "@/concord-v2/components/AuditLogView2";
+import { LiveActivityView } from "@/concord-v2/components/LiveActivityView2";
 import { BannedView } from "@/concord-v2/components/BannedView2";
 import { useBanSelfRemove2 } from "@/concord-v2/hooks/useBanSelfRemove2";
 import { useLinkAuthorityWatch2, useSingleUseSweep2 } from "@/concord-v2/hooks/useInvites2";
@@ -50,6 +51,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useIsTouch } from "@/hooks/useIsMobile";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
+import { getKeyedFallbackName } from "@/lib/getDisplayName";
 import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useSyncTasks } from "@/hooks/useSyncActivity";
 import { concordChannelMuteKey, useMutes } from "@/hooks/useMutes";
@@ -78,6 +80,7 @@ import { useConcord2Threads, type Concord2Thread } from "@/concord-v2/hooks/useC
 import { useTyping2, useTypingPublisher2 } from "@/concord-v2/hooks/useTyping2";
 import { completeMemberlist } from "@/concord-v2/lib/guestbook";
 import { badgeOf, isAuthorized, Permissions } from "@/concord-v2/lib/roles";
+import { commandsFor } from "@/concord-v2/lib/commands";
 import type { ChannelV2, CommunityV2, ImagePointer } from "@/concord-v2/lib/types";
 import { cn, pickDefaultChannel } from "@/lib/utils";
 import { getAvatarShape } from "@/lib/avatarShape";
@@ -560,7 +563,7 @@ function ThreadReplyAvatars({ pubkeys }: { pubkeys: string[] }) {
 function ThreadReplyAvatar({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const name = metadata?.name ?? pubkey.slice(0, 8);
+  const name = metadata?.name ?? getKeyedFallbackName(pubkey);
   return (
     <Avatar shape={getAvatarShape(metadata)} className="size-5 ring-2 ring-chrome" title={name}>
       <AvatarImage src={metadata?.picture} alt={name} />
@@ -676,7 +679,7 @@ export function ConcordV2Page() {
   // Which pane the main area shows: the selected channel's chat, the
   // community-wide "@ Mentions" list, or the "Threads" list. Selecting a
   // channel returns to chat.
-  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "project" | "audit" | "invites" | "banned" | "health">("channel");
+  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "project" | "activity" | "audit" | "invites" | "banned" | "health">("channel");
   useEffect(() => {
     if (routeChannelId) setView("channel");
   }, [routeChannelId]);
@@ -822,6 +825,21 @@ export function ConcordV2Page() {
   const canKickAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.KICK));
   const canBanAny = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.BAN));
   const canModerateMessages = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_MESSAGES));
+  // The "/" command palette offers the registry commands reachable here:
+  // global-scope commands (login/register, join, create, help, shell, purge)
+  // are always offered — a signed-out user or agent still needs them — and the
+  // community-scope commands appear once a member is signed in, filtered by
+  // role (owner > admin (MANAGE_ROLES) > member).
+  const baoAccess = !user ? undefined : user.pubkey === ownerHex ? "owner" : canManageRoles ? "admin" : "member";
+  const baoCommands = useMemo(() => {
+    const global = commandsFor("global", "anyone");
+    const community = baoAccess ? commandsFor("community", baoAccess) : [];
+    return [...global, ...community].map((c) => ({
+      name: c.verb,
+      usage: `/${c.verb} ${c.usage}`,
+      description: c.summary,
+    }));
+  }, [baoAccess]);
   // A dissolved community is terminal: the owner has torn it down, so no key
   // rotation or new messages will ever land. Keep it fully readable (members
   // asked to still see the history), but freeze every write path.
@@ -1360,6 +1378,15 @@ export function ConcordV2Page() {
                     icon: <Shield className="size-4" />,
                     label: "Manage roles",
                     onClick: () => setRolesOpen(true),
+                  },
+                  {
+                    show: true,
+                    icon: <Activity className="size-4" />,
+                    label: "Live activity",
+                    onClick: () => {
+                      setView("activity");
+                      setChannelsOpen(false);
+                    },
                   },
                   {
                     show: true,
@@ -1909,6 +1936,10 @@ export function ConcordV2Page() {
                     onJump={jumpToMention}
                   />
                 </div>
+              ) : view === "activity" ? (
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip overscroll-contain scrollbar-stable pb-safe">
+                  {community && channel && <LiveActivityView community={community} channel={channel} />}
+                </div>
               ) : view === "audit" ? (
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip overscroll-contain scrollbar-stable pb-safe">
                   {community && <AuditLogView community={community} />}
@@ -2077,6 +2108,8 @@ export function ConcordV2Page() {
                         onCancelReply={() => setReplyTo(undefined)}
                         onTyping={publishTyping}
                         encryptAttachments
+                        extraCommands={baoCommands}
+                        extraSectionLabel="₿AO"
                       />
                     )
                   )}
@@ -2173,6 +2206,7 @@ export function ConcordV2Page() {
                   }
                   onUnban={canBanAny ? (pk) => moderation.unban({ target: pk }).catch(() => {}) : undefined}
                   bannedPubkeys={moderation.banned}
+                  bannedMembers={canBanAny ? [...moderation.banned] : []}
                   onClose={() => setMembersOpen(false)}
                 />
               </div>

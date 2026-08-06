@@ -15,7 +15,10 @@
  *
  * Modes:
  *   create [--name "…"] [--agent-only]   genesis + first invite, saves owner state
+ *                                        (first invite defaults to AGENT audience)
  *   invite [--label L] [--single-use]    mint another invite link (owner state)
+ *                                        (defaults to AGENT audience; --human for a
+ *                                        human-facing card)
  *   join <invite-url> [--as name]        join with a FRESH key, saves member state
  *                                        (grinds the agent_gate PoW + checks
  *                                        single-use spend automatically)
@@ -28,450 +31,56 @@
  *   orch show [--orch id] [--as name]    resolved task claims (shared tie-break)
  *   orch claim|progress|done|blocked <taskId> [text] [--orch id] [--as name]
  *   whoami [--as name]                   print the identity's npub
+ *   wallet [--as name]                   show NIP-60 wallet config (mints, keys)
+ *   import <cashuToken> [--as name]      decode a Cashu token and show its value
+ *   routstr fuel [--as name] [--live]    check fuel balance (live or sim)
+ *   routstr topup <name> <cashuToken>    top up the Routstr key with a Cashu token
+ *   routstr redeem <name> <cashuToken>   redeem Cashu into a fresh Routstr key
+ *   think <prompt> [--as name]           send a prompt to Routstr LLM, pay with Cashu
  *
  * Exit codes: 0 ok · 1 error · 2 timeout/no-result (Buzz-style discipline).
  */
 
-import { existsSync } from "node:fs";
+import { getDecodedToken } from "@cashu/cashu-ts";
+import { existsSync, unlinkSync } from "node:fs";
 
-import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
+import { getPublicKey } from "nostr-tools/pure";
+import { nip44 } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { hexToBytes } from "@noble/hashes/utils.js";
 
-import { mintCommunity } from "@/concord-v2/lib/community";
-import {
-  buildChannelEdition,
-  buildMetadataEdition,
-  buildRegistryEdition,
-  currentControlGroup,
-  foldControlState,
-  openControlWraps,
-  sealEdition,
-} from "@/concord-v2/lib/control";
-import { buildJoinRumor, currentGuestbookGroup, joinCommitmentOf, openGuestbookOpened, openGuestbookWraps, sealGuestbook, singleUseLinkUsed } from "@/concord-v2/lib/guestbook";
-import {
-  AGENT_GATE_METADATA_KEY,
-  DEFAULT_AGENT_GATE_DIFFICULTY,
-  agentGateOf,
-  grindJoinRumor,
-} from "@/concord-v2/lib/agentGate";
-import {
-  buildBundleEvent,
-  buildInviteUrl,
-  buildRevocationEvent,
-  inviteCommitment,
-  mintLinkSigner,
-  mintToken,
-  parseBundleEvent,
-  parseInviteLink,
-  type InviteBundle,
-} from "@/concord-v2/lib/invite";
-import { openWrap, resolveMs } from "@/concord-v2/lib/stream";
-import { KIND_INVITE_BUNDLE, KIND_WRAP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
+import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
+import { errorCodeDocs } from "@/lib/errorCodes";
+import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
+import { createNodeRelay, createNodeStore } from "./baoAdapter";
 import type { OrchVerb } from "@/concord-v2/lib/orchestration";
 import {
   CLAIM_TTL_MS,
-  PROTOCOL_VERSION,
-  channelMessages,
   closePool,
-  communityOf,
-  listChannels,
   loadState,
   orchStates,
   orchVerbPost,
-  publishAll,
   projectSnapshot,
   queryAll,
   resolveChannel,
-  saveState,
-  sendChannelMessage,
-  signerOf,
   statePath,
   waitForInterrupt,
-  withStateLock,
-  type State,
 } from "./chat-core";
+import { fulfillCredits, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
+import {
+  loadState as loadParadiseState,
+  readFuel,
+  routstrCreateFromCashu,
+  routstrTopupWithCashu,
+  saveState as saveParadiseState,
+} from "./paradise/runtime";
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
 // BAO_RELAYS overrides (comma-separated) for live tests against a local relay.
-const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://relay.bao.network").split(",");
-const ORIGINS = ["https://2140.wtf", "http://localhost:3500"];
+const HOME_RELAYS = (process.env.BAO_RELAYS ?? "wss://jskitty.com/nostr,wss://relay.primal.net").split(",");
 
 // ── Modes ────────────────────────────────────────────────────────────────────
-
-async function create(name: string, communityName: string, agentOnly: boolean): Promise<void> {
-  if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use invite/say/read.`);
-
-  const sk = generateSecretKey();
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-
-  const { community, generalChannelId } = mintCommunity(communityName, pubkey, HOME_RELAYS);
-  console.log(`Creating "${communityName}" (${community.idHex.slice(0, 16)}…) on ${HOME_RELAYS.join(", ")}${agentOnly ? " — AGENT-ONLY" : ""}`);
-
-  // Genesis: two owner-signed editions (CORD-02 §1). Agent-only seals the gate
-  // into the metadata edition, where every conforming client folds it.
-  await publishAll(
-    community.relays,
-    await sealEdition(
-      buildMetadataEdition(
-        community.id,
-        {
-          name: communityName,
-          relays: community.relays,
-          ...(agentOnly
-            ? { [AGENT_GATE_METADATA_KEY]: { type: "pow", difficulty: DEFAULT_AGENT_GATE_DIFFICULTY } }
-            : {}),
-        },
-        { actorPubkey: pubkey, version: 1n },
-      ),
-      currentControlGroup(community),
-      signer,
-    ),
-    "metadata edition",
-  );
-  await publishAll(
-    community.relays,
-    await sealEdition(
-      buildChannelEdition(generalChannelId, { name: "general", private: false }, { actorPubkey: pubkey, version: 1n }),
-      currentControlGroup(community),
-      signer,
-    ),
-    "#general channel edition",
-  );
-
-  // Best-effort founder Join so the member list has a firsthand entry. On a
-  // gated community the founder's own Join must clear the gate too.
-  await publishAll(
-    community.relays,
-    await sealGuestbook(
-      agentOnly
-        ? grindJoinRumor(pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY)
-        : buildJoinRumor(pubkey, Date.now()),
-      currentGuestbookGroup(community),
-      signer,
-    ),
-    "founder join",
-  );
-
-  const state: State = {
-    sk: bytesToHex(sk),
-    role: "owner",
-    community: {
-      id: community.idHex,
-      owner: pubkey,
-      owner_salt: bytesToHex(community.ownerSalt),
-      community_root: bytesToHex(community.root),
-      root_epoch: Number(community.rootEpoch),
-      held_roots: [],
-      joined_at: Date.now(),
-      name: communityName,
-      relays: community.relays,
-      general_channel_id: bytesToHex(generalChannelId),
-    },
-    private_channels: [],
-    invites: [],
-    registry_version: 0,
-    protocol_version: PROTOCOL_VERSION,
-  };
-  saveState(name, state);
-  console.log(`\nOwner identity "${name}": ${nip19.npubEncode(pubkey)}`);
-  console.log(`State: ${statePath(name)}\n`);
-
-  await invite(name);
-}
-
-async function invite(name: string, label?: string, singleUse = false): Promise<void> {
-  // Whole body under the state lock: registry_version and invites[] are a
-  // read-modify-write that races with concurrent invites/sweeps.
-  await withStateLock(name, async () => {
-    const state = loadState(name);
-    if (state.role !== "owner") throw new Error("Only the owner identity can mint invites.");
-    const sk = hexToBytes(state.sk);
-    const pubkey = getPublicKey(sk);
-    const signer = signerOf(sk);
-    const community = communityOf(state.community, state.private_channels);
-
-    const token = mintToken();
-    const link = mintLinkSigner();
-    const bundle: InviteBundle = {
-      community_id: community.idHex,
-      owner: community.owner,
-      owner_salt: bytesToHex(community.ownerSalt),
-      community_root: bytesToHex(community.root),
-      root_epoch: Number(community.rootEpoch),
-      channels: [],
-      relays: community.relays,
-      name: community.name,
-      creator_npub: pubkey,
-      ...(label ? { label } : {}),
-      ...(singleUse ? { max_uses: 1 } : {}),
-    };
-
-    const bundleEvent = buildBundleEvent(bundle, token, link.sk);
-    await publishAll(community.relays, bundleEvent, `invite bundle${singleUse ? " (single-use)" : ""}`);
-
-    // Member-facing Registry (vsk 8): this creator's live link coordinates.
-    state.registry_version += 1;
-    await publishAll(
-      community.relays,
-      await sealEdition(
-        buildRegistryEdition(community.id, pubkey, state.invites.map((i) => i.link_pk).concat(link.pk), {
-          actorPubkey: pubkey,
-          version: BigInt(state.registry_version),
-        }),
-        currentControlGroup(community),
-        signer,
-      ),
-      "invite registry edition",
-    );
-
-    const urls = ORIGINS.map((origin) => buildInviteUrl(origin, link.pk, token, community.relays));
-    state.invites.push({ token: bytesToHex(token), link_sk: bytesToHex(link.sk), link_pk: link.pk, url: urls[0], created_at: Math.floor(Date.now() / 1000), ...(singleUse ? { max_uses: 1 } : {}) });
-    saveState(name, state);
-
-    console.log(`\nInvite link minted${label ? ` ("${label}")` : ""}${singleUse ? " — SINGLE-USE, dies after the first join" : ""} — share EITHER origin (same secret):`);
-    for (const url of urls) console.log(`  ${url}`);
-  });
-}
-
-async function joinBao(name: string, inviteUrl: string): Promise<void> {
-  if (existsSync(statePath(name))) throw new Error(`Identity "${name}" already exists — use say/read.`);
-  const parsed = parseInviteLink(inviteUrl.trim());
-  if (!parsed) throw new Error("Not a recognizable invite link.");
-
-  const events = await queryAll(parsed.bootstrapRelays, {
-    kinds: [KIND_INVITE_BUNDLE],
-    authors: [parsed.linkSigner],
-    "#d": [""],
-    // NO limit: a relay holding several editions may satisfy limit:1 with a
-    // STALE one (a live bundle superseded by its revocation tombstone).
-  });
-  // Newest edition wins — but a revocation tombstone wins TIES (and anything
-  // older): created_at has second granularity, so a revoked-then-reshown live
-  // bundle can tie the tombstone, and a relay's delivery order is not a trust
-  // signal. Only a strictly-newer live bundle (a genuine re-mint) overrides
-  // revocation.
-  const ts = (e: (typeof events)[number]) => e.created_at;
-  const maxTs = events.reduce((m, e) => Math.max(m, ts(e)), 0);
-  const atMax = events.filter((e) => ts(e) === maxTs);
-  const newest =
-    atMax.find((e) => e.tags.some((t) => t[0] === "vsk" && t[1] === VSK_INVITE_REVOKED)) ?? atMax[0];
-  if (!newest) throw new Error("Couldn't find that invite on its relays.");
-  const bundle = parseBundleEvent(newest, parsed.linkSigner, parsed.token, Date.now());
-
-  const sk = generateSecretKey();
-  const pubkey = getPublicKey(sk);
-  const signer = signerOf(sk);
-
-  const community = communityOf(
-    {
-      id: bundle.community_id,
-      owner: bundle.owner,
-      owner_salt: bundle.owner_salt,
-      community_root: bundle.community_root,
-      root_epoch: bundle.root_epoch,
-      name: bundle.name,
-      relays: bundle.relays,
-    },
-    bundle.channels,
-  );
-
-  // The agent gate is NOT a refusal for us — it's the captcha we solve. Fold
-  // the metadata, and if the community is gated, grind the Join's PoW.
-  const control = currentControlGroup(community);
-  const controlWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [control.pk] });
-  const folded = foldControlState(openControlWraps(controlWraps, [control]), community.id, community.owner);
-  const gate = agentGateOf(folded.metadata);
-  if (gate) console.log(`  agent_gate detected (pow, difficulty ${gate.difficulty}) — grinding…`);
-
-  // Every Join from this link cites the token commitment (sha256 of the
-  // unlock token). A single-use link is spent once the Guestbook shows one.
-  const commitment = inviteCommitment(parsed.token);
-  if (bundle.max_uses === 1) {
-    const gb = currentGuestbookGroup(community);
-    const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-    if (singleUseLinkUsed(openGuestbookOpened(openGuestbookWraps(gbWraps, [gb])), commitment)) {
-      throw new Error("That invite link was single-use and has already been used. Ask for a fresh one.");
-    }
-  }
-
-  const attribution = { creator: bundle.creator_npub ?? "", ...(bundle.label ? { label: bundle.label } : {}), commitment };
-  const joinedAt = Date.now();
-  const rumor = gate
-    ? grindJoinRumor(pubkey, joinedAt, gate.difficulty, attribution)
-    : buildJoinRumor(pubkey, joinedAt, attribution);
-  await publishAll(
-    community.relays,
-    await sealGuestbook(rumor, currentGuestbookGroup(community), signer),
-    gate ? `guestbook join (pow ≥ ${gate.difficulty})` : "guestbook join",
-  );
-
-  // Single-use links: the spend check above is check-then-act, so two
-  // CONCURRENT joiners can both pass it and both post a Join — the fold is
-  // per-npub and can't dedupe a commitment (it can't tell single-use links
-  // from multi-use). Nostr has no atomic claim, so the loser SELF-EJECTS
-  // instead: re-fold, and if an earlier Join (lower ms, tie → lower rumor id)
-  // cites the same commitment, we lost the race — exit WITHOUT saving state,
-  // so the losing agent never acts as a member. (Its Join stays on the
-  // guestbook as a ghost until the owner sweeps/kicks; only a rekey truly
-  // excludes it. Documented in docs/ORCHESTRATION.md.)
-  if (bundle.max_uses === 1) {
-    const gb = currentGuestbookGroup(community);
-    const myMs = resolveMs(rumor.created_at, rumor.tags);
-    const earlierJoinWins = async (): Promise<boolean> => {
-      const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-      const rival = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]))
-        .filter((ev) => joinCommitmentOf(ev) === commitment)
-        .map((ev) => ({ ms: ev.ms, id: ev.rumorId }))
-        .sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
-      return rival !== undefined && (rival.ms < myMs || (rival.ms === myMs && rival.id < rumor.id));
-    };
-    // Immediate re-fold, then one settle beat for a rival still in flight.
-    let lost = await earlierJoinWins();
-    if (!lost) {
-      await new Promise((r) => setTimeout(r, 1500));
-      lost = await earlierJoinWins();
-    }
-    if (lost) {
-      console.error("  ✗ That single-use link was spent by a CONCURRENT join (earlier Join on the guestbook) — you are NOT a member. Ask for a fresh link.");
-      process.exitCode = 2;
-      return;
-    }
-  }
-
-  const state: State = {
-    sk: bytesToHex(sk),
-    role: "member",
-    community: {
-      id: bundle.community_id,
-      owner: bundle.owner,
-      owner_salt: bundle.owner_salt,
-      community_root: bundle.community_root,
-      root_epoch: bundle.root_epoch,
-      held_roots: [],
-      joined_at: Date.now(),
-      name: bundle.name,
-      relays: bundle.relays,
-    },
-    private_channels: bundle.channels,
-    invites: [],
-    registry_version: 0,
-    protocol_version: PROTOCOL_VERSION,
-  };
-  saveState(name, state);
-  console.log(`\nJoined "${bundle.name}" as "${name}": ${nip19.npubEncode(pubkey)}`);
-  console.log(`State: ${statePath(name)}`);
-}
-
-async function say(name: string, text: string, idemKey: string | undefined, channelSelector: string | undefined, json: boolean): Promise<void> {
-  const state = loadState(name);
-  const channel = await resolveChannel(state, channelSelector);
-  const { rumorId, deduped } = await sendChannelMessage(state, text, { idemKey, channel: channel.idHex });
-  if (json) {
-    console.log(JSON.stringify({ rumor_id: rumorId, deduped, channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) } }));
-  } else if (deduped) {
-    console.log(`  ⓘ --key ${idemKey} already sent (rumor ${rumorId.slice(0, 12)}…) — deduped`);
-  }
-}
-
-async function read(name: string, channelSelector: string | undefined, json: boolean): Promise<void> {
-  const state = loadState(name);
-  const community = communityOf(state.community, state.private_channels);
-  const channel = await resolveChannel(state, channelSelector);
-  const messages = await channelMessages(state, channel.idHex);
-
-  // Member list from the guestbook.
-  const gb = currentGuestbookGroup(community);
-  const gbWraps = await queryAll(community.relays, { kinds: [KIND_WRAP], authors: [gb.pk] });
-  const members = new Map<string, string>(); // pubkey → last state
-  for (const wrap of gbWraps.sort((a, b) => a.created_at - b.created_at)) {
-    try {
-      const opened = openWrap(wrap, gb);
-      if (opened.kind === 3306) members.set(opened.author, opened.content);
-    } catch {
-      // skip
-    }
-  }
-
-  if (json) {
-    console.log(
-      JSON.stringify(
-        {
-          community: community.name,
-          channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) },
-          channels: await listChannels(state),
-          messages: messages.map((m) => ({
-            id: m.id,
-            author: m.author,
-            author_npub: nip19.npubEncode(m.author),
-            ms: m.ms,
-            content: m.content,
-            tags: m.tags,
-          })),
-          members: [...members].map(([pk, status]) => ({ pubkey: pk, npub: nip19.npubEncode(pk), status })),
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
-  console.log(`\n#${channel.name} — ${messages.length} message(s):`);
-  for (const m of messages) {
-    const time = new Date(m.ms).toISOString().replace("T", " ").slice(0, 19);
-    console.log(`  [${time}] ${nip19.npubEncode(m.author).slice(0, 16)}…: ${m.content}`);
-  }
-
-  console.log(`\nMembers (${[...members.values()].filter((s) => s === "join").length}):`);
-  for (const [pk, status] of members) {
-    console.log(`  ${nip19.npubEncode(pk)} — ${status}`);
-  }
-
-  // Single-use sweep (owner): a single-use link dies the moment the Guestbook
-  // shows a Join citing its token commitment — tombstone the bundle and drop
-  // the coordinate from the Registry, like the app's useSingleUseSweep2.
-  if (state.role === "owner") {
-    await withStateLock(name, async () => {
-      // Re-read under the lock — a concurrent invite may have landed since
-      // the load at the top of read(); writing the stale array back would
-      // silently drop it.
-      const fresh = loadState(name);
-      const opened = openGuestbookOpened(openGuestbookWraps(gbWraps, [gb]));
-      const spent = fresh.invites.filter(
-        (inv) => inv.max_uses === 1 && singleUseLinkUsed(opened, inviteCommitment(hexToBytes(inv.token))),
-      );
-      if (spent.length === 0) return;
-      // Compute the FULL surviving set before publishing the registry: building
-      // the edition mid-scan (the old loop) omitted unspent links that sorted
-      // after a spent one — members would see an incomplete live-invite list.
-      const remaining = fresh.invites.filter((inv) => !spent.includes(inv));
-      const sk = hexToBytes(fresh.sk);
-      const signer = signerOf(sk);
-      for (const inv of spent) {
-        await publishAll(community.relays, buildRevocationEvent(hexToBytes(inv.link_sk)), `single-use tombstone (${inv.url.slice(0, 60)}…)`);
-        console.log(`  ⓘ single-use link spent${inv.label ? ` ("${inv.label}")` : ""} — auto-revoked`);
-      }
-      fresh.registry_version += 1;
-      await publishAll(
-        community.relays,
-        await sealEdition(
-          buildRegistryEdition(community.id, getPublicKey(sk), remaining.map((i) => i.link_pk), {
-            actorPubkey: getPublicKey(sk),
-            version: BigInt(fresh.registry_version),
-          }),
-          currentControlGroup(community),
-          signer,
-        ),
-        "invite registry edition",
-      );
-      fresh.invites = remaining;
-      saveState(name, fresh);
-    });
-  }
-}
 
 async function waitMode(
   name: string,
@@ -493,6 +102,26 @@ async function waitMode(
   } else {
     const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
     console.log(`[${time}] ${nip19.npubEncode(hit.author).slice(0, 16)}…: ${hit.content}`);
+  }
+}
+
+/** Always-on subscription: loop the mention interrupt, streaming each match.
+ *  With `--all` it streams every new message; otherwise only mentions of the
+ *  identity. Each iteration re-subscribes (no missed messages between hops). */
+async function listenMode(name: string, opts: { mentionsOnly: boolean; channel?: string; json: boolean }): Promise<void> {
+  const state = loadState(name);
+  const channel = await resolveChannel(state, opts.channel);
+  console.error(`listening on #${channel.name} of "${state.community.name}" (${opts.mentionsOnly ? "mentions only" : "all messages"}) — Ctrl-C to stop`);
+  const subOpts = { mentionsOnly: opts.mentionsOnly, channel: channel.idHex, timeoutSec: 300 };
+  while (true) {
+    const hit = await waitForInterrupt(name, state, subOpts);
+    if (!hit) continue; // timeout sentinel — loop to keep listening
+    if (opts.json) {
+      console.log(JSON.stringify({ channel: { id: channel.idHex, name: channel.name }, id: hit.id, author: hit.author, author_npub: nip19.npubEncode(hit.author), ms: hit.ms, content: hit.content, tags: hit.tags }));
+    } else {
+      const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
+      console.log(`[${time}] ${nip19.npubEncode(hit.author).slice(0, 16)}…: ${hit.content}`);
+    }
   }
 }
 
@@ -560,7 +189,7 @@ function argValue(args: string[], flag: string): string | undefined {
 }
 
 /** Flags whose NEXT token is a value (not a positional arg). */
-const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel"];
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec"];
 
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args: string[]): string[] {
@@ -577,32 +206,148 @@ function positionalArgs(args: string[]): string[] {
   return out;
 }
 
-async function main(): Promise<void> {
-  const [mode, ...rest] = process.argv.slice(2);
+/**
+ * Route a shared verb through the transport-agnostic engine. The node store
+ * (fs) + a per-community SimplePool relay give the CLI the same single
+ * implementation the in-page terminal uses, with per-community pool isolation.
+ * `--json` prints the raw envelope; otherwise pretty-prints a useful line.
+ */
+async function engineDispatch(as: string, command: string, args: BaoDispatchArgs, json: boolean): Promise<void> {
+  const store = createNodeStore();
+  const identity = store.get(args.identityName ?? as);
+  // Per-community pool + NIP-42 AUTH signed with the member's key, so relays
+  // see one authenticated session per community (closes the correlation leak).
+  const relay = createNodeRelay({ communityId: identity?.community.id, authSk: identity?.sk });
+  const r = await dispatchBao(store, relay, command, args);
+  if (!r.ok) {
+    throw new Error(r.error);
+  }
+  if (json) {
+    console.log(JSON.stringify(r.result, null, 2));
+  } else if (typeof r.result === "object" && r.result !== null) {
+    console.log(JSON.stringify(r.result, null, 2));
+  } else {
+    console.log(String(r.result));
+  }
+}
+
+/** `help [cmd]` — list all commands, or full docs for one. */
+async function helpVerb(_as: string, cmd?: string): Promise<void> {
+  if (cmd) {
+    const c = findCommand(cmd);
+    if (!c) throw new Error(`No command "${cmd}" — run 'help' to list them.`);
+    console.log(renderCommandDoc(c));
+    return;
+  }
+  console.log(`\n₿AO agent commands (${BAO_COMMANDS.length}). Type 'help <command>' for details, or 'shell' for the interactive terminal.`);
+  console.log(renderCommandHelp());
+  console.log("\nEvery command is also a chat slash-command: type '/' in a ₿AO channel to see them.");
+  console.log(`\nError codes:\n${errorCodeDocs()}`);
+}
+
+/** `shell` — an interactive terminal that runs every registry command. */
+async function shellMode(): Promise<void> {
+  const readline = await import("node:readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  console.log("₿AO agent shell — type a command, 'help', or 'exit'. Tab completes verbs.");
+  rl.on("line", async (raw) => {
+    const line = raw.trim();
+    if (!line) return;
+    if (line === "exit" || line === "quit") return rl.close();
+    const [verb, ...rest] = line.split(/\s+/);
+    const cmd = findCommand(verb);
+    if (!cmd) {
+      console.log(`Unknown command "${verb}" — run 'help'.`);
+      return;
+    }
+    try {
+      await mainDispatch(verb, rest, line);
+    } catch (e) {
+      console.error(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+  rl.on("close", () => process.exit(0));
+}
+
+/** Re-run the CLI dispatcher from inside the shell (re-entrant entry point). */
+async function mainDispatch(mode: string, rest: string[], _line: string): Promise<void> {
   const as = argValue(rest, "--as") ?? "owner";
   const json = rest.includes("--json");
-
   switch (mode) {
+    case "shell":
+      await shellMode();
+      break;
     case "create":
-      await create(as, argValue(rest, "--name") ?? "₿AO agent hangout — live test", rest.includes("--agent-only"));
+      await engineDispatch(as, "create", { name: argValue(rest, "--name") ?? "₿AO agent hangout — live test", agentOnly: rest.includes("--agent-only"), identityName: as }, json);
       break;
     case "invite":
-      await invite(as, argValue(rest, "--label"), rest.includes("--single-use"));
+      await engineDispatch(as, "invite", { label: argValue(rest, "--label"), singleUse: rest.includes("--single-use"), human: rest.includes("--human"), identityName: as }, json);
       break;
     case "join": {
       const url = positionalArgs(rest)[0];
       if (!url) throw new Error("join needs an invite URL");
-      await joinBao(as, url);
+      await engineDispatch(as, "join", { inviteUrl: url, identityName: as }, json);
       break;
     }
     case "say": {
       const text = positionalArgs(rest).join(" ");
       if (!text) throw new Error("say needs text");
-      await say(as, text, argValue(rest, "--key"), argValue(rest, "--channel"), json);
+      await engineDispatch(as, "say", { text, key: argValue(rest, "--key"), channel: argValue(rest, "--channel"), identityName: as }, json);
       break;
     }
     case "read":
-      await read(as, argValue(rest, "--channel"), json);
+      await engineDispatch(as, "read", { channel: argValue(rest, "--channel"), identityName: as }, json);
+      break;
+    case "admin": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "admin", { sub: p[0], target: p[1], role: argValue(rest, "--role"), identityName: as }, json);
+      break;
+    }
+    case "ban": {
+      await engineDispatch(as, "ban", { target: positionalArgs(rest)[0], identityName: as }, json);
+      break;
+    }
+    case "unban": {
+      await engineDispatch(as, "unban", { target: positionalArgs(rest)[0], identityName: as }, json);
+      break;
+    }
+    case "kick": {
+      await engineDispatch(as, "kick", { target: positionalArgs(rest)[0], identityName: as }, json);
+      break;
+    }
+    case "channel": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "channel", { sub: p[0], args: p.slice(1), identityName: as }, json);
+      break;
+    }
+    case "meta": {
+      const p = positionalArgs(rest);
+      await engineDispatch(as, "meta", { sub: p[0], args: p.slice(1), identityName: as }, json);
+      break;
+    }
+    case "members":
+      await engineDispatch(as, "members", { identityName: as }, json);
+      break;
+    case "dissolve":
+      await engineDispatch(as, "dissolve", { identityName: as }, json);
+      break;
+    case "identities":
+      await engineDispatch(as, "identities", {}, json);
+      break;
+    case "login":
+      await engineDispatch(as, "login", { name: positionalArgs(rest)[0], nsec: argValue(rest, "--nsec"), identityName: as }, json);
+      break;
+    case "use":
+      await engineDispatch(as, "use", { name: positionalArgs(rest)[0] }, json);
+      break;
+    case "remove":
+      await engineDispatch(as, "remove", { identityName: as }, json);
+      break;
+    case "logout":
+      await engineDispatch(as, "logout", {}, json);
+      break;
+    case "help":
+      await helpVerb(as, positionalArgs(rest)[0]);
       break;
     case "project": {
       const snapshot = await projectSnapshot(loadState(as));
@@ -624,6 +369,9 @@ async function main(): Promise<void> {
       await waitMode(as, { timeoutSec, mentionsOnly: !rest.includes("--all"), channel: argValue(rest, "--channel"), json });
       break;
     }
+    case "listen":
+      await listenMode(as, { mentionsOnly: !rest.includes("--all"), channel: argValue(rest, "--channel"), json });
+      break;
     case "orch": {
       const pos = positionalArgs(rest);
       const sub = pos[0];
@@ -646,11 +394,177 @@ async function main(): Promise<void> {
       console.log(`${as}: ${nip19.npubEncode(getPublicKey(hexToBytes(state.sk)))} (${state.role} of ${state.community.name})`);
       break;
     }
+    case "purge": {
+      const p = statePath(as);
+      if (!existsSync(p)) throw new Error(`No state for "${as}" at ${p}`);
+      unlinkSync(p);
+      console.log(`Purged local state for "${as}" — BAO identity deleted.`);
+      break;
+    }
+    case "work": {
+      const pos = positionalArgs(rest);
+      const sub = pos[0];
+      const dryRun = rest.includes("--dry-run");
+      if (sub === "list") {
+        printWorkListing(await listWork(loadState(as)), json);
+        break;
+      }
+      if (sub === "request") {
+        const amountSats = Number(pos[1]);
+        const purpose = pos.slice(2).join(" ");
+        if (!Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work request needs <sats> <purpose>");
+        if (!purpose) throw new Error("work request needs a purpose");
+        const id = await requestCredits(loadState(as), amountSats, purpose, dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit request ${id.slice(0, 16)}… (${amountSats} sats): ${purpose}`);
+        break;
+      }
+      if (sub === "fulfill") {
+        const requestId = pos[1];
+        const requester = pos[2];
+        const amountSats = Number(pos[3]);
+        if (!requestId || !requester || !Number.isFinite(amountSats) || amountSats <= 0) {
+          throw new Error("work fulfill needs <requestId> <requesterNpub> <sats>");
+        }
+        const id = await fulfillCredits(loadState(as), requestId, resolvePubkey(requester), amountSats, dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit fulfillment ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
+        break;
+      }
+      if (sub === "receipt") {
+        const requestId = pos[1];
+        const amountSats = Number(pos[2]);
+        const note = pos.slice(3).join(" ");
+        if (!requestId || !Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work receipt needs <requestId> <sats> <note>");
+        const id = await receiptCredits(loadState(as), requestId, amountSats, note || "redeemed for inference", [], dryRun);
+        console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
+        break;
+      }
+      throw new Error("work needs: list | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+    }
+    case "wallet": {
+      const state = loadState(as);
+      const pubkey = getPublicKey(hexToBytes(state.sk));
+      const events = await queryAll(state.community.relays, { kinds: [17375], authors: [pubkey] });
+      if (events.length === 0) {
+        console.log(`No NIP-60 wallet config (kind 17375) found for ${nip19.npubEncode(pubkey)} on these relays.`);
+        console.log("Publish a wallet config first via the web client or another NIP-60 wallet.");
+        break;
+      }
+      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
+      try {
+        const convKey = nip44.getConversationKey(hexToBytes(pubkey), hexToBytes(pubkey));
+        const decrypted = nip44.decrypt(latest.content, convKey);
+        const config = JSON.parse(decrypted) as { mints?: string[]; unit?: string };
+        console.log(`Wallet config for ${nip19.npubEncode(pubkey)}:`);
+        console.log(`  unit: ${config.unit ?? "sat"}`);
+        console.log(`  mints (${config.mints?.length ?? 0}):`);
+        for (const m of config.mints ?? []) console.log(`    ${m}`);
+      } catch {
+        console.log(`Found kind 17375 event but could not decrypt it.`);
+      }
+      break;
+    }
+    case "import": {
+      const token = positionalArgs(rest)[0];
+      if (!token) throw new Error("import needs a Cashu token string");
+      const decoded = getDecodedToken(token);
+      const totalSats = decoded.token.proofs.reduce((sum, p) => sum + p.amount, 0);
+      if (json) {
+        console.log(JSON.stringify({ mint: decoded.token.mint, proofs: decoded.token.proofs.map((p) => ({ id: p.id, amount: p.amount })), totalSats }));
+      } else {
+        console.log(`\nCashu token decoded:`);
+        console.log(`  mint: ${decoded.token.mint}`);
+        console.log(`  proofs: ${decoded.token.proofs.length}`);
+        console.log(`  total: ${totalSats} sats`);
+        for (const p of decoded.token.proofs) console.log(`    ${p.id.slice(0, 16)}… ${p.amount} msat`);
+      }
+      break;
+    }
+    case "routstr": {
+      const routstrSub = positionalArgs(rest)[0];
+      if (routstrSub === "fuel") {
+        const [live] = rest.includes("--live") ? [true] : [false];
+        const pState = loadParadiseState(as);
+        const fuel = live ? await readFuel(pState) : pState.simRoutstrMsats;
+        console.log(`"${as}" fuel: ${fuel} msat${pState.routstrKey ? " (live key)" : " (sim)"} · cashu wallet: ${pState.cashuMsats} msat`);
+      } else if (routstrSub === "topup") {
+        const name = positionalArgs(rest)[0];
+        const token = positionalArgs(rest)[1];
+        if (!name || !token) throw new Error("routstr topup needs <name> <cashuToken>");
+        const state = loadParadiseState(name);
+        if (!state.routstrKey) throw new Error(`"${name}" has no Routstr key — run 'routstr redeem ${name} <token>' first.`);
+        const balance = await routstrTopupWithCashu(state.routstrKey, token);
+        state.simRoutstrMsats = balance;
+        saveParadiseState(name, state);
+        console.log(`topped up "${name}" → ${balance} msat`);
+      } else if (routstrSub === "redeem") {
+        const name = positionalArgs(rest)[0];
+        const token = positionalArgs(rest)[1];
+        if (!name || !token) throw new Error("routstr redeem needs <name> <cashuToken>");
+        const state = loadParadiseState(name);
+        const { apiKey, balance } = await routstrCreateFromCashu(token);
+        state.routstrKey = apiKey;
+        state.simRoutstrMsats = balance;
+        saveParadiseState(name, state);
+        console.log(`redeemed Cashu into a Routstr key for "${name}"`);
+        console.log(`  sk_ key: ${apiKey.slice(0, 8)}…${apiKey.length > 8 ? ` (${apiKey.length} chars)` : ""} (bearer — stored locally, never printed in full)`);
+        console.log(`  balance: ${balance} msat`);
+      } else {
+        throw new Error("routstr needs: fuel | topup <name> <token> | redeem <name> <token>");
+      }
+      break;
+    }
+    case "think": {
+      const prompt = positionalArgs(rest).join(" ");
+      if (!prompt) throw new Error("think needs a prompt string");
+      const useOpenRouter = rest.includes("--openrouter") || rest.includes("--provider") && positionalArgs(rest)[0] === "openrouter";
+      const model = argValue(rest, "--model") ?? (useOpenRouter ? "openrouter/auto" : "routstr");
+
+      if (useOpenRouter) {
+        // OpenRouter backend — key from the OPENROUTER_API_KEY env var, never
+        // from source. Run `OPENROUTER_API_KEY=sk-or-v1-… bao-agent think …`.
+        const key = process.env.OPENROUTER_API_KEY;
+        if (!key) throw new Error("OPENROUTER_API_KEY is not set — export it (never put the key in the repo).");
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 2048 }),
+        });
+        if (!res.ok) throw new Error(`OpenRouter API returned ${res.status}`);
+        const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        const content = json.choices?.[0]?.message?.content ?? "(no response)";
+        if (json) {
+          console.log(JSON.stringify({ prompt, provider: "openrouter", model, response: content }));
+        } else {
+          console.log(`\n${content}`);
+        }
+        break;
+      }
+
+      const pState = loadParadiseState(as);
+      if (!pState.routstrKey) throw new Error(`"${as}" has no Routstr key — run 'routstr redeem ${as} <token>' first.`);
+      const res = await fetch("https://api.routstr.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pState.routstrKey}` },
+        body: JSON.stringify({ model: "routstr", messages: [{ role: "user", content: prompt }], max_tokens: 2048 }),
+      });
+      if (!res.ok) throw new Error(`Routstr API returned ${res.status}`);
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const content = json.choices?.[0]?.message?.content ?? "(no response)";
+      if (json) {
+        console.log(JSON.stringify({ prompt, response: content }));
+      } else {
+        console.log(`\n${content}`);
+      }
+      break;
+    }
     default:
-      console.log(
-        "modes: create [--agent-only] | invite | join <url> | say <text> [--channel C] [--key K] | read [--channel C] [--json] | project [--json] | wait [--channel C] [--timeout S] [--all] | orch show|claim|progress|done|blocked|ack|handoff … | whoami   [--as identity] [--json]",
-      );
+      console.log("Run 'help' for the full command list.");
   }
+}
+
+async function main(): Promise<void> {
+  const [mode, ...rest] = process.argv.slice(2);
+  await mainDispatch(mode ?? "", rest, "");
 }
 
 main()

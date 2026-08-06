@@ -152,6 +152,7 @@ function communityOf(fill: number, owner: string): CommunityV2 {
     privateChannels: [],
     relays: [RELAY_A, RELAY_B],
     name: "test",
+    admins: [owner],
   } as CommunityV2;
 }
 

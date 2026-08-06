@@ -44,7 +44,7 @@ const SECONDARY_AUTH_TIMEOUT_MS = 15_000;
  * publish aborted with an unhelpful "signal has been aborted" even on healthy
  * relays (and mobile networks add seconds of plain latency on top).
  */
-export const PUBLISH_TIMEOUT_MS = SECONDARY_AUTH_TIMEOUT_MS + 5_000;
+export const PUBLISH_TIMEOUT_MS = SECONDARY_AUTH_TIMEOUT_MS + 45_000;
 
 function keySignature(keys: readonly GroupKey[]): string {
   return [...new Set(keys.map((key) => key.pk))].sort().join(",");

@@ -179,6 +179,8 @@ export interface CommunityV2 {
   name: string;
   /** The npub whose Refounding minted the current epoch (snapshot authority). */
   refounder?: string;
+  /** Admin pubkeys that can mint invite links. Owner is always admin. */
+  admins?: string[];
 }
 
 /**
