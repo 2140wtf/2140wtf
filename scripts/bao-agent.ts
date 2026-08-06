@@ -51,6 +51,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 import { mintCommunity } from "@/concord-v2/lib/community";
 import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
+import { errorCodeDocs } from "@/lib/errorCodes";
 import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
 import { createNodeRelay, createNodeStore } from "./baoAdapter";
 import {
@@ -674,6 +675,7 @@ async function helpVerb(_as: string, cmd?: string): Promise<void> {
   console.log(`\n₿AO agent commands (${BAO_COMMANDS.length}). Type 'help <command>' for details, or 'shell' for the interactive terminal.`);
   console.log(renderCommandHelp());
   console.log("\nEvery command is also a chat slash-command: type '/' in a ₿AO channel to see them.");
+  console.log(`\nError codes:\n${errorCodeDocs()}`);
 }
 
 /** `shell` — an interactive terminal that runs every registry command. */
