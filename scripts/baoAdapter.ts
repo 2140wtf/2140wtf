@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SimplePool } from "nostr-tools/pool";
+import { hexToBytes } from "@noble/hashes/utils.js";
 import type { NostrEvent } from "nostr-tools/pure";
 
 import { loadState, saveState, statePath, validateIdentityName, type State } from "./chat-core";
@@ -43,13 +44,39 @@ export function closeAllPools(): void {
   pools.clear();
 }
 
-/** The relay seam. `communityId` lets it pick (and thus isolate) a per-community pool. */
+/** The relay seam. `communityId` lets it pick (and thus isolate) a per-community
+ *  pool. When `authSk` (the member's hex secret key) is provided, the pool
+ *  answers NIP-42 AUTH challenges signed by that key, so the relay sees one
+ *  authenticated session per community rather than a shared anonymous one. */
 export interface NodeRelayOpts {
   communityId?: string;
+  authSk?: string;
 }
 
 export function createNodeRelay(opts: NodeRelayOpts = {}): BaoRelay {
   const pool = () => (opts.communityId ? poolFor(opts.communityId) : new SimplePool());
+
+  // NIP-42: when a relay challenges the connection, respond with a signed
+  // kind-22242 event. Set once on the (per-community, cached) pool.
+  if (opts.authSk && opts.communityId) {
+    const sk = hexToBytes(opts.authSk);
+    pool().authHandler = async (url, challenge) => {
+      const { finalizeEvent } = await import("nostr-tools/pure");
+      return finalizeEvent(
+        {
+          kind: 22242,
+          content: "",
+          tags: [
+            ["relay", url],
+            ["challenge", challenge],
+          ],
+          created_at: Math.floor(Date.now() / 1000),
+        },
+        sk,
+      ) as NostrEvent;
+    };
+  }
+
   return {
     query: async (filters, relays) =>
       pool().querySync(relays ?? [], filters as never, { maxWait: 8000 }) as Promise<NostrEvent[]>,
