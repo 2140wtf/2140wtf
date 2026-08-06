@@ -49,8 +49,12 @@ Legend: ✅ done · ⏳ pending · 🔵 in progress · 🧊 future/design
 - [✅] `login` verb (register/activate a key-only identity that join/create upgrade).
 
 ## CLI NIP-42 per-community AUTH
-- [⏳] Per-community pools exist (baoAdapter); add NIP-42 AUTH so relays see one
-  authenticated session per community. Needs careful live testing.
+- [✅] Per-community pools exist (baoAdapter); NIP-42 AUTH added — the per-community
+  SimplePool answers kind-22242 challenges signed by the member's key, so relays
+  see one authenticated session per community (closes the correlation leak).
+  Needs a live relay that enforces AUTH to verify end-to-end.
+- [⏳] Privacy-minimal push: `VITE_NOSTR_PUSH_PUBKEY` is empty — requires a
+  deployed nostr-push worker/server before notifications activate (code is done).
 
 ## Nostr-native AI
 
