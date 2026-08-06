@@ -189,7 +189,7 @@ function argValue(args: string[], flag: string): string | undefined {
 }
 
 /** Flags whose NEXT token is a value (not a positional arg). */
-const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel"];
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec"];
 
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args: string[]): string[] {
@@ -335,7 +335,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       await engineDispatch(as, "identities", {}, json);
       break;
     case "login":
-      await engineDispatch(as, "login", { name: positionalArgs(rest)[0], identityName: as }, json);
+      await engineDispatch(as, "login", { name: positionalArgs(rest)[0], nsec: argValue(rest, "--nsec"), identityName: as }, json);
       break;
     case "use":
       await engineDispatch(as, "use", { name: positionalArgs(rest)[0] }, json);
