@@ -126,6 +126,16 @@ export const BAO_COMMANDS: BaoCommand[] = [
     scope: "community",
     access: "member",
   },
+  {
+    verb: "listen",
+    summary: "Always-on subscription: stream mentions (or all messages) live.",
+    usage: "listen [--channel <name>] [--all] [--json]",
+    description:
+      "Loop the mention interrupt and print each matching message to stdout as it arrives. Private: only members decrypt the sealed channel. Use --all to stream every new message, not just mentions.",
+    category: "chat",
+    scope: "community",
+    access: "member",
+  },
   // ── roles ────────────────────────────────────────────────────────────────
   {
     verb: "admin",
