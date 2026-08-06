@@ -89,10 +89,15 @@ export function GlobalCommandPalette() {
       <CommandInput
         value={draft}
         onValueChange={setDraft}
-        placeholder='Type to filter — e.g. "lo" for login — then Enter to run'
-        // No Enter handler here: cmdk fires the highlighted item's onSelect on
-        // Enter, so typing "lo" + Enter runs `login` (the selected item), not
-        // the raw text. Free-form command lines go in the terminal.
+        placeholder='Type a command — e.g. "lo" (then Enter runs login) or "login alice" (runs the full line)'
+        onKeyDown={(e: React.KeyboardEvent) => {
+          // A bare verb → let cmdk run the highlighted item (typing "lo", Enter
+          // runs login). A full command line (has args/space) → run it directly.
+          if (e.key === "Enter" && draft.trim().includes(" ")) {
+            e.preventDefault();
+            void run(draft);
+          }
+        }}
       />
       <CommandList>
         <CommandEmpty>No commands match.</CommandEmpty>
