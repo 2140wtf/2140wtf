@@ -59,6 +59,7 @@ import {
   mintToken,
   parseBundleEvent,
   parseInviteLink,
+  MAX_BOOTSTRAP_RELAYS,
   type InviteBundle,
 } from "@/concord-v2/lib/invite";
 import {
@@ -81,6 +82,7 @@ import {
 } from "@/concord-v2/lib/stream";
 import { KIND_INVITE_BUNDLE, KIND_JOIN_LEAVE, KIND_WRAP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import type { ChannelV2, CommunityV2 } from "@/concord-v2/lib/types";
+import { capRelays } from "@/concord-v2/lib/types";
 
 import {
   err,
@@ -237,6 +239,14 @@ async function loginVerb(store: BaoStore, args: { name?: string; nsec?: string; 
   const name = validateIdentityName(args.name ?? args.identityName ?? "agent");
   const existing = store.get(name);
   if (existing) {
+    // If a secret was supplied, make sure it matches the existing identity's key
+    // rather than silently activating a different key the user didn't intend.
+    if (args.nsec) {
+      const decoded = nip19.decode(args.nsec);
+      if (decoded.type === "nsec" && bytesToHex(decoded.data) !== existing.sk) {
+        throw new Error(`Identity "${name}" already exists with a different key — the --nsec you gave doesn't match. Use a different name or 'remove' first.`);
+      }
+    }
     store.setActive(name);
     const pubkey = existing.pubkey ?? (existing.sk ? getPublicKey(hexToBytes(existing.sk)) : undefined);
     return { identity: name, npub: pubkey ? nip19.npubEncode(pubkey) : null, existing: true };
@@ -379,7 +389,11 @@ async function joinVerb(store: BaoStore, relay: BaoRelay, args: { inviteUrl?: st
   const parsed = parseInviteLink(args.inviteUrl.trim());
   if (!parsed) throw new Error("Not a recognizable invite link.");
 
-  const events = await relay.query({ kinds: [KIND_INVITE_BUNDLE], authors: [parsed.linkSigner], "#d": [""] }, parsed.bootstrapRelays);
+  // Validate the fragment's bootstrap relays before opening any socket — an
+  // untrusted invite URL must not steer the pool to local-network/internal
+  // targets (SSRF guard, same rule as community-metadata relays).
+  const bootstrapRelays = capRelays(parsed.bootstrapRelays, MAX_BOOTSTRAP_RELAYS);
+  const events = await relay.query({ kinds: [KIND_INVITE_BUNDLE], authors: [parsed.linkSigner], "#d": [""] }, bootstrapRelays);
   const ts = (e: { created_at: number }) => e.created_at;
   const maxTs = events.reduce((m, e) => Math.max(m, ts(e)), 0);
   const atMax = events.filter((e) => ts(e) === maxTs);
