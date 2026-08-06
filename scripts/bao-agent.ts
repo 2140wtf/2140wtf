@@ -944,6 +944,30 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
     case "think": {
       const prompt = positionalArgs(rest).join(" ");
       if (!prompt) throw new Error("think needs a prompt string");
+      const useOpenRouter = rest.includes("--openrouter") || rest.includes("--provider") && positionalArgs(rest)[0] === "openrouter";
+      const model = argValue(rest, "--model") ?? (useOpenRouter ? "openrouter/auto" : "routstr");
+
+      if (useOpenRouter) {
+        // OpenRouter backend — key from the OPENROUTER_API_KEY env var, never
+        // from source. Run `OPENROUTER_API_KEY=sk-or-v1-… bao-agent think …`.
+        const key = process.env.OPENROUTER_API_KEY;
+        if (!key) throw new Error("OPENROUTER_API_KEY is not set — export it (never put the key in the repo).");
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 2048 }),
+        });
+        if (!res.ok) throw new Error(`OpenRouter API returned ${res.status}`);
+        const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        const content = json.choices?.[0]?.message?.content ?? "(no response)";
+        if (json) {
+          console.log(JSON.stringify({ prompt, provider: "openrouter", model, response: content }));
+        } else {
+          console.log(`\n${content}`);
+        }
+        break;
+      }
+
       const pState = loadParadiseState(as);
       if (!pState.routstrKey) throw new Error(`"${as}" has no Routstr key — run 'routstr redeem ${as} <token>' first.`);
       const res = await fetch("https://api.routstr.com/v1/chat/completions", {
