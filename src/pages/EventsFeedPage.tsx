@@ -76,14 +76,11 @@ export function EventsFeedPage() {
   const { user } = useCurrentUser();
   const { muteItems } = useMuteList();
 
-  const [activeTab, setActiveTab] = useFeedTab<FeedTab>("events", [
-    "follows",
-    "global",
-  ]);
+  const [activeTab, setActiveTab] = useFeedTab<FeedTab>("events", ["follows", "global"], "global");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("list");
   const [query, setQuery] = useState("");
-  const [when, setWhen] = useState<WhenFilter>("upcoming");
+  const [when, setWhen] = useState<WhenFilter>("all");
   const [place, setPlace] = useState<PlaceFilter>("all");
 
   useSeoMeta({ title: `Events | ${config.appName}` });
