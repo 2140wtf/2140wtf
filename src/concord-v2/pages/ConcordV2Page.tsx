@@ -1,4 +1,4 @@
-import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Eraser, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { AtSign, Ban, ChevronDown, ChevronLeft, Bell, BellOff, Eraser, GitBranch, HandCoins, Hash, HeartPulse, Link as LinkIcon, Loader2, Lock, LogOut, Maximize2, MessagesSquare, Minimize2, Plus, Activity, ScrollText, Settings, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -19,6 +19,7 @@ import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
 import { InviteDialog2 } from "@/concord-v2/components/InviteDialog2";
 import { RolesDialog2 } from "@/concord-v2/components/RolesDialog2";
 import { AuditLogView } from "@/concord-v2/components/AuditLogView2";
+import { LiveActivityView } from "@/concord-v2/components/LiveActivityView2";
 import { BannedView } from "@/concord-v2/components/BannedView2";
 import { useBanSelfRemove2 } from "@/concord-v2/hooks/useBanSelfRemove2";
 import { useLinkAuthorityWatch2, useSingleUseSweep2 } from "@/concord-v2/hooks/useInvites2";
@@ -678,7 +679,7 @@ export function ConcordV2Page() {
   // Which pane the main area shows: the selected channel's chat, the
   // community-wide "@ Mentions" list, or the "Threads" list. Selecting a
   // channel returns to chat.
-  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "project" | "audit" | "invites" | "banned" | "health">("channel");
+  const [view, setView] = useState<"channel" | "mentions" | "threads" | "fund" | "project" | "activity" | "audit" | "invites" | "banned" | "health">("channel");
   useEffect(() => {
     if (routeChannelId) setView("channel");
   }, [routeChannelId]);
@@ -1380,6 +1381,15 @@ export function ConcordV2Page() {
                   },
                   {
                     show: true,
+                    icon: <Activity className="size-4" />,
+                    label: "Live activity",
+                    onClick: () => {
+                      setView("activity");
+                      setChannelsOpen(false);
+                    },
+                  },
+                  {
+                    show: true,
                     icon: <ScrollText className="size-4" />,
                     label: "Audit log",
                     // Also close the mobile channel drawer so the view slides
@@ -1925,6 +1935,10 @@ export function ConcordV2Page() {
                     isLoading={mentionsLoading}
                     onJump={jumpToMention}
                   />
+                </div>
+              ) : view === "activity" ? (
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip overscroll-contain scrollbar-stable pb-safe">
+                  {community && channel && <LiveActivityView community={community} channel={channel} />}
                 </div>
               ) : view === "audit" ? (
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-clip overscroll-contain scrollbar-stable pb-safe">
