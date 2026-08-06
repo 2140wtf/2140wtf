@@ -100,10 +100,10 @@ NSP/AI stay outside as services the engine reaches over the protocol.
 
 ## Release
 
-- [⏳] Merge `session/opencode-work-20260805` → `main` + CI (GitHub Actions
-  deploy). ~31 commits / 65 files / +5570 lines relative to main (2026-08).
-- [⏳] Branch hygiene: two sessions share one branch — give the other session its
-  own branch before merge to avoid collisions.
+- [✅] Merged `session/opencode-work-20260805` → `main` (fast-forward, 46 commits,
+  all 2026 tests green). NOT yet pushed (deploy to 2140.wtf pending).
+- [⏳] Push `main` to trigger GitHub Actions deploy.
+- [⏳] Branch hygiene: the work branch can be deleted after push.
 
 ## Log
 
