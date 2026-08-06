@@ -203,7 +203,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                 {formatNip99PaymentMethod(method)}
               </Badge>
             ))}
-            {listing.categories.slice(0, 3).map((cat) => (
+            {[...new Set(listing.categories)].slice(0, 3).map((cat) => (
               <Badge key={cat} variant="secondary" className="text-[10px] capitalize">
                 <Tag className="w-2.5 h-2.5 mr-0.5" />
                 {cat}
@@ -315,7 +315,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   {formatNip99PaymentMethod(method)}
                 </Badge>
               ))}
-              {listing.categories.map((cat) => (
+              {[...new Set(listing.categories)].map((cat) => (
                 <Badge key={cat} variant="secondary" className="text-xs capitalize">
                   {cat}
                 </Badge>
