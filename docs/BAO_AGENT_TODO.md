@@ -41,13 +41,16 @@ Legend: ✅ done · ⏳ pending · 🔵 in progress · 🧊 future/design
 - [✅] Browser adapter — `baoTermDispatch` is a thin engine adapter; `baoTermStore`
   exposes a BaoStore.
 - [✅] Node adapter — `scripts/baoAdapter.ts` (fs store + per-community
-  SimplePool); CLI admin/moderation/members/dissolve/identities/use/remove route
-  through the engine.
-- [✅] Global `/` palette app-wide.
-- [⏳] Migrate core chat verbs (create/invite/join/say/read) off chat-core onto
-  the engine (regression-safe pass).
-- [⏳] Identity verbs: `identities`/`use`/`remove`/`logout` complete (verify
-  `logout` clears active in both stores).
+  SimplePool); CLI routes ALL verbs (create/invite/join/say/read/admin/moderation/
+  members/dissolve/identities/use/remove/login/logout/help) through the engine.
+- [✅] Core chat verbs migrated — CLI create/invite/join/say/read now dispatch
+  through the engine; ~460 lines of dead CLI-side verb logic removed.
+- [✅] Global `/` palette app-wide (select + Enter executes).
+- [✅] `login` verb (register/activate a key-only identity that join/create upgrade).
+
+## CLI NIP-42 per-community AUTH
+- [⏳] Per-community pools exist (baoAdapter); add NIP-42 AUTH so relays see one
+  authenticated session per community. Needs careful live testing.
 
 ## Nostr-native AI
 
@@ -100,10 +103,18 @@ NSP/AI stay outside as services the engine reaches over the protocol.
 
 ## Release
 
-- [✅] Merged `session/opencode-work-20260805` → `main` (fast-forward, 46 commits,
-  all 2026 tests green). NOT yet pushed (deploy to 2140.wtf pending).
-- [⏳] Push `main` to trigger GitHub Actions deploy.
-- [⏳] Branch hygiene: the work branch can be deleted after push.
+- [✅] Merged `session/opencode-work-20260805` → `main` (fast-forward, all tests
+  green). Commits continue on `main`. **NOT pushed** — per instruction, do not
+  push to main; deploy is on hold.
+- [⏳] Deploy / push `main` when approved (deferred).
+
+## Deferred / later
+
+- [🧊] Review `soapbox-pub/universes` (community platform: group chats,
+  marketplace, shared resources) for borrowable patterns — **deferred to a later
+  day** (lean-core compatible only; marketplace/NIP-99, community patterns).
+- [⏸️] Shakespeare harness backend — **skipped for now** (per instruction).
+  OpenRouter backend (`think --openrouter`) added instead.
 
 ## Log
 
