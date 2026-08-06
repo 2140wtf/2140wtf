@@ -7,16 +7,19 @@ Legend: ✅ done · ⏳ pending · 🔵 in progress · 🧊 future/design
 
 ## URGENT — performance (add to top when active)
 
-- [🔵] Feed takes ~30s to load — root cause: the feed queries `APP_SEARCH_RELAYS`
-  = `[relay.ditto.pub, relay.dreamith.to]`, and `relay.ditto.pub` is
-  dead/hanging (confirmed failing in the browser console). Needs the search
-  relay set cleaned up (overlaps the other session's dead-relay work).
+- [✅] Feed ~30-60s → **fixed**: the All/global feed now runs immediately (the
+  `enabled: followsReady` gate was blanking it until follow+love lists resolved)
+  and refetches once the lists arrive. Content shows instantly; follow/love lists
+  enrich in the background. Also tightened query timeouts (10s→4s) so a slow
+  relay can't stack. Verified: content at ~1-3s in the test browser.
 - [🔵] Markets page — progressive loading added (real listings render as soon
   as any arrive, no full-load gate). Verify it feels instant.
 - [✅] Removed broken read relay `nostr.swiss-enigma.ch` (CERT error) from
   `APP_RELAYS`.
-- [⏳] New users show "Anonymous" on front page / bottom of menu — fixed in
+- [✅] New users show "Anonymous" on front page / bottom of menu — fixed in
   `LeftSidebar` (now `Anon-<last5 of npub>`). Audit other non-chat surfaces.
+- [✅] Follow list showing a stale/short copy — fixed in `useProfileData`
+  (picks the newest kind 3, not the first relay's copy).
 
 ## Security (highest priority)
 
