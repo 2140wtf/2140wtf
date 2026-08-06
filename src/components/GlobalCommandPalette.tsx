@@ -14,6 +14,11 @@ import { useEffect, useState } from "react";
 
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { BAO_COMMANDS } from "@/concord-v2/lib/commands";
+import { ENGINE_VERBS } from "@/concord-v2/lib/baoEngine";
+
+/** Only surface commands the in-browser engine can actually run — the CLI-only
+ *  verbs (orch/work/wallet/… ) aren't available here and would error. */
+const RUNNABLE = BAO_COMMANDS.filter((c) => ENGINE_VERBS.has(c.verb));
 
 interface Entry {
   ok: boolean;
@@ -73,7 +78,7 @@ export function GlobalCommandPalette() {
   };
 
   const groups = new Map<string, typeof BAO_COMMANDS>();
-  for (const c of BAO_COMMANDS) {
+  for (const c of RUNNABLE) {
     const list = groups.get(c.category) ?? [];
     list.push(c);
     groups.set(c.category, list);
@@ -84,13 +89,10 @@ export function GlobalCommandPalette() {
       <CommandInput
         value={draft}
         onValueChange={setDraft}
-        placeholder='Type a ₿AO command — e.g. "login alice" or "join <invite>" — then Enter'
-        onKeyDown={(e: React.KeyboardEvent) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void run(draft);
-          }
-        }}
+        placeholder='Type to filter — e.g. "lo" for login — then Enter to run'
+        // No Enter handler here: cmdk fires the highlighted item's onSelect on
+        // Enter, so typing "lo" + Enter runs `login` (the selected item), not
+        // the raw text. Free-form command lines go in the terminal.
       />
       <CommandList>
         <CommandEmpty>No commands match.</CommandEmpty>
