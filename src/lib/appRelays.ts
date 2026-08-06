@@ -14,8 +14,6 @@ export const APP_CURATED_FEED_RELAYS: string[] = [
   'wss://relay.ditto.pub/',
   'wss://relay.dreamith.to/',
   'wss://relay.primal.net/',
-  'wss://relay.damus.io/',
-  'wss://relay.nostr.band/',
   'wss://nos.lol/',
   'wss://relay.mostr.pub/',
   'wss://offchain.pub/',
@@ -38,12 +36,10 @@ export const ZAPSTORE_RELAY = 'wss://relay.zapstore.dev/';
 export const NIP99_RELAYS: string[] = [
   'wss://relay.ditto.pub',
   'wss://relay.dreamith.to',
-  'wss://relay.nostr.band',
   'wss://relay.noswhere.com',
   'wss://nostr.wine',
   'wss://antiprimal.net',
   'wss://relay.primal.net',
-  'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.snort.social',
   'wss://relay.nostr.wirednet.jp',
@@ -82,9 +78,7 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://relay.ditto.pub/', read: true, write: true },
     { url: 'wss://relay.dreamith.to/', read: true, write: true },
     { url: 'wss://relay.primal.net/', read: false, write: true },
-    { url: 'wss://relay.damus.io/', read: false, write: true },
     { url: 'wss://nos.lol/', read: true, write: false },
-    { url: 'wss://relay.nostr.band/', read: true, write: false },
     // Broad general-purpose relays for better content discovery. Paid/AUTH-
     // gated relays (nostr.land, nostr.wine) and bunker relays (nsecbunker)
     // are deliberately excluded — they reject anonymous traffic.
@@ -98,7 +92,6 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://purplepag.es/', read: true, write: false },
     { url: 'wss://relay.mostr.pub/', read: true, write: false },
     { url: 'wss://nostr-relay.psfoundation.info/', read: true, write: false },
-    { url: 'wss://nostr.swiss-enigma.ch/', read: true, write: false },
   ],
   updatedAt: 0,
 };

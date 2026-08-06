@@ -76,14 +76,11 @@ export function EventsFeedPage() {
   const { user } = useCurrentUser();
   const { muteItems } = useMuteList();
 
-  const [activeTab, setActiveTab] = useFeedTab<FeedTab>("events", [
-    "follows",
-    "global",
-  ]);
+  const [activeTab, setActiveTab] = useFeedTab<FeedTab>("events", ["follows", "global"], "global");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("list");
   const [query, setQuery] = useState("");
-  const [when, setWhen] = useState<WhenFilter>("upcoming");
+  const [when, setWhen] = useState<WhenFilter>("all");
   const [place, setPlace] = useState<PlaceFilter>("all");
 
   useSeoMeta({ title: `Events | ${config.appName}` });
@@ -178,12 +175,18 @@ export function EventsFeedPage() {
   const filteredItems = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     const q = query.trim().toLowerCase();
+    // Defensive id-dedupe: feedItems can theoretically surface the same event
+    // id twice (e.g. a 31922 + 31923 pair sharing an id), which would otherwise
+    // trigger a React "duplicate key" error in the list render.
+    const seen = new Set<string>();
     return feedItems.filter((item) => {
       if (when === "upcoming" && !eventIsUpcoming(item.event, now)) return false;
       if (when === "past" && eventIsUpcoming(item.event, now)) return false;
       if (place === "online" && !isOnlineEvent(item.event)) return false;
       if (place === "in-person" && isOnlineEvent(item.event)) return false;
       if (q && !matchesQuery(item.event, q)) return false;
+      if (seen.has(item.event.id)) return false;
+      seen.add(item.event.id);
       return true;
     });
   }, [feedItems, when, place, query]);

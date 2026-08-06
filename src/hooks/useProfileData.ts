@@ -36,14 +36,21 @@ export function useProfileSupplementary(pubkey: string | undefined) {
 
       const events = await nostr.query(
         [
-          { kinds: [3], authors: [pubkey], limit: 1 },
+          // No limit on kind 3: relays can disagree on a replaceable event's
+          // latest version, so we want every copy back and pick the newest below.
+          { kinds: [3], authors: [pubkey] },
           { kinds: [10001], authors: [pubkey], limit: 1 },
           { kinds: [LOVE_LIST_KIND], authors: [pubkey], limit: 1 },
         ],
         { signal: AbortSignal.timeout(8000) },
       );
 
-      const kind3 = events.find((e) => e.kind === 3);
+      const kind3 = events
+        .filter((e) => e.kind === 3)
+        // Relays can disagree on a replaceable event's latest version; always
+        // take the newest by created_at so a stale/shortened copy returned by
+        // one relay can't make the Following count (or wall gating) regress.
+        .sort((a, b) => b.created_at - a.created_at)[0];
       const kind10001 = events.find((e) => e.kind === 10001);
       const loveListEvent = events.find((e) => e.kind === LOVE_LIST_KIND);
 

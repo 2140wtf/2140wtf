@@ -26,7 +26,7 @@ interface GroupMemberPanelProps {
 function MemberAvatar({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const displayName = getDisplayName(metadata) || pubkey.slice(0, 8);
+  const displayName = getDisplayName(metadata, pubkey);
   return (
     <Avatar className="size-7 shrink-0">
       <AvatarImage src={metadata?.picture} alt={displayName} />
@@ -39,7 +39,7 @@ function MemberAvatar({ pubkey }: { pubkey: string }) {
 
 function MemberName({ pubkey, fallback }: { pubkey: string; fallback: string }) {
   const author = useAuthor(pubkey);
-  return <>{getDisplayName(author.data?.metadata) || fallback}</>;
+  return <>{getDisplayName(author.data?.metadata, pubkey) || fallback}</>;
 }
 
 export function GroupMemberPanel({

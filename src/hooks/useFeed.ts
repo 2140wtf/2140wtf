@@ -1,6 +1,6 @@
 import { useNostr } from '@nostrify/react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppContext } from './useAppContext';
 import { useCurrentUser } from './useCurrentUser';
 import { useFeedSettings } from './useFeedSettings';
@@ -142,19 +142,38 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
   const kindsKey = [...allKinds].sort().join(',');
   const tagFiltersKey = tagFilters ? JSON.stringify(tagFilters) : '';
 
-  // For the follows tab, wait until the follow list is loaded before running any query.
-  // Without this guard, the query falls through to the global branch while followList is still loading.
-  // Allow query to run if not on follows tab, OR if follow list has loaded (even if empty).
+  // For the follows tab, wait until the follow list is loaded before running any
+  // query (the tab is about those follows; showing global there would be wrong).
   // The loved tab gates on the love list the same way.
-  // The all tab waits for both lists when logged in so follows/loved filters are included on first load.
+  // The all / global / communities tabs run IMMEDIATELY — the queryFn falls back
+  // to global discovery while the lists are still loading, so the feed always
+  // has instant content instead of a blank screen waiting on slow relays. We
+  // refetch once the lists resolve (below) to upgrade to the personalized mix.
   const followsReady =
     tab === 'follows'
       ? !!user && followList !== undefined
       : tab === 'loved'
         ? !!user && lovedPubkeys !== undefined
-        : tab === 'all'
-          ? !user || (followList !== undefined && lovedPubkeys !== undefined)
-          : true;
+        : true;
+
+  // Once the follow/love lists resolve, refetch the immediately-started
+  // all/global feed so it upgrades from global discovery to the personalized
+  // follows+loved mix — without the user waiting or pulling to refresh.
+  const listsUpgraded = useRef(false);
+  useEffect(() => {
+    const listsReady =
+      tab === 'all'
+        ? !user || (followList !== undefined && lovedPubkeys !== undefined)
+        : tab === 'follows'
+          ? followList !== undefined
+          : tab === 'loved'
+            ? lovedPubkeys !== undefined
+            : true;
+    if (listsReady && !listsUpgraded.current) {
+      listsUpgraded.current = true;
+      queryClient.refetchQueries({ queryKey: ['feed', tab] });
+    }
+  }, [tab, user, followList, lovedPubkeys, queryClient]);
 
   const allCommunityPubkeys = useCommunityPubkeys(config.appId);
   const communityPubkeys = tab === 'communities' ? allCommunityPubkeys : [];

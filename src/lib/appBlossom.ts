@@ -28,7 +28,6 @@ export function parseBlossomServerList(event: NostrEvent): string[] {
 export const APP_BLOSSOM_SERVERS: BlossomServerMetadata = {
   servers: [
     "https://blossom.ditto.pub/",
-    "https://blossom.dreamith.to/",
     "https://blossom.primal.net/",
   ],
   updatedAt: 0,

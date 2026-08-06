@@ -17,7 +17,7 @@ import {
 } from "@/concord-v2/lib/chat";
 import { KIND_COMMENT, KIND_DELETE, KIND_MESSAGE, KIND_REACTION, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { expirationOf, getDisappearTtl, isExpired } from "@/concord-v2/lib/disappearing";
-import { concordClient } from "@/concord-v2/lib/concordTransport";
+import { concordClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import {
   clearChannelExhausted,
   queryChannelRumors,
@@ -707,7 +707,12 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
     async (wrap: NostrEvent) => {
       // Budget scaled to the signer: an auth-gating relay can demand a NIP-42
       // sign (a bunker round-trip for NIP-46 logins) inside this await (#51).
-      const timeout = publishTimeoutMs(user?.method);
+      // Concord publishes MUST use the Concord-aware budget: the transport's
+      // NIP-42 auth handshake (settling every held stream identity) can exceed
+      // the plain publishTimeoutMs (8s local), which aborted sends before the
+      // relay finished AUTH + EVENT — "The signal has been aborted" on every
+      // relay. PUBLISH_TIMEOUT_MS covers the full handshake + publish.
+      const timeout = Math.max(publishTimeoutMs(user?.method), PUBLISH_TIMEOUT_MS);
       const started = Date.now();
       const results = await Promise.allSettled(
         community!.relays.map((url) => delivery!.relay(url).event(wrap, { signal: AbortSignal.timeout(timeout) })),
@@ -718,7 +723,12 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
           `wrap ${wrap.id.slice(0, 8)} → ${community!.relays[i]}: ${r.status === "fulfilled" ? "accepted" : `FAILED (${r.reason instanceof Error ? r.reason.message : r.reason})`} in ${sinceMs(started)}`,
         );
       });
-      if (!results.some((r) => r.status === "fulfilled")) throw new Error("No relay accepted the message.");
+      if (!results.some((r) => r.status === "fulfilled")) {
+        const reasons = results
+          .map((r, i) => `${community!.relays[i]}: ${r.status === "fulfilled" ? "ok" : r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+          .join("; ");
+        throw new Error(`No relay accepted the message (${reasons})`);
+      }
     },
     [community, delivery, user?.method],
   );
@@ -834,7 +844,7 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
         logSync("send", `sealing ${rumor.id.slice(0, 8)} FAILED in ${sinceMs(sealStarted)}: ${err instanceof Error ? err.message : String(err)}`);
         if (isVisible) {
           // The message stays in the timeline as failed — retryable.
-          setStatus(rumor.id, "failed");
+          setStatus(rumor.id, { failed: true, reason: err instanceof Error ? err.message : String(err) });
           return { rumorId: rumor.id, wrap: undefined };
         }
         throw err; // reactions/edits/deletes: callers own the rollback
@@ -852,8 +862,8 @@ export function useSendMessage2(community: CommunityV2 | undefined, channel: Cha
         .then(() => {
           if (isVisible) setStatus(rumor.id, undefined); // delivered
         })
-        .catch(() => {
-          if (isVisible) setStatus(rumor.id, "failed");
+        .catch((err) => {
+          if (isVisible) setStatus(rumor.id, { failed: true, reason: err instanceof Error ? err.message : String(err) });
         });
 
       return { rumorId: rumor.id, wrap: wrap as NostrEvent | undefined };

@@ -94,7 +94,7 @@ function extractEventLabel(event: NostrEvent): string {
 }
 
 function truncateLabel(text: string, maxLen = 24): string {
-  const clean = text.replace(/\n/g, ' ').trim();
+  const clean = (text ?? '').replace(/\n/g, ' ').trim();
   if (clean.length <= maxLen) return clean;
   return clean.slice(0, maxLen - 1) + '\u2026';
 }

@@ -8,6 +8,7 @@ import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
 import { getEffectiveBlossomServers } from "@/lib/appBlossom";
 import { stripFileMetadata } from "@/lib/stripMetadata";
+import { baoError, ErrorCodes } from "@/lib/errorCodes";
 
 export function useUploadFile() {
   const { user } = useCurrentUser();
@@ -16,13 +17,16 @@ export function useUploadFile() {
   return useMutation({
     mutationFn: async (file: File) => {
       if (!user) {
-        throw new Error('Must be logged in to upload files');
+        throw baoError(ErrorCodes.UPLOAD_NOT_LOGGED_IN);
       }
 
       const servers = getEffectiveBlossomServers(
         config.blossomServerMetadata,
         config.useAppBlossomServers,
       );
+      if (servers.length === 0) {
+        throw baoError(ErrorCodes.UPLOAD_NO_SERVERS);
+      }
 
       // Strip EXIF/GPS/device metadata from images and videos before upload.
       // Unsupported formats or browsers fall back to the original file.
@@ -45,7 +49,14 @@ export function useUploadFile() {
         }),
       });
 
-      const tags = await uploader.upload(sanitized);
+      let tags: string[][];
+      try {
+        tags = await uploader.upload(sanitized);
+      } catch (e) {
+        // Map raw Blossom/fetch failures to a stable, documented code.
+        const timedOut = e instanceof Error && /abort|timeout/i.test(e.message);
+        throw baoError(timedOut ? ErrorCodes.UPLOAD_TIMEOUT : ErrorCodes.UPLOAD_FAILED);
+      }
 
       // If the returned URL is missing a file extension, append one from the
       // sanitized file name. Blossom URLs are content-addressed (`/<sha256>`)

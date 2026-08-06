@@ -21,7 +21,7 @@ import { isNostrId } from '@/lib/nostrId';
 // ============================================================================
 
 /** Default per-fetch timeout for contact-list reads. */
-const DEFAULT_TIMEOUT = 8000;
+const DEFAULT_TIMEOUT = 4000;
 
 /**
  * Fetch the latest kind 3 contact list for `pubkey`.

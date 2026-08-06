@@ -278,7 +278,7 @@ function ConversationRow({
 function ConversationAvatar({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const name = getDisplayName(metadata) || pubkey.slice(0, 8);
+  const name = getDisplayName(metadata, pubkey);
   const shape = getAvatarShape(metadata);
 
   return (
@@ -294,7 +294,7 @@ function ConversationAvatar({ pubkey }: { pubkey: string }) {
 function ParticipantName({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const name = getDisplayName(metadata) || pubkey.slice(0, 8);
+  const name = getDisplayName(metadata, pubkey);
 
   return (
     <span className="font-semibold text-sm truncate">
