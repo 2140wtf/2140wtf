@@ -506,7 +506,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         state.simRoutstrMsats = balance;
         saveParadiseState(name, state);
         console.log(`redeemed Cashu into a Routstr key for "${name}"`);
-        console.log(`  sk_ key: ${apiKey} (bearer — stored locally, never publish)`);
+        console.log(`  sk_ key: ${apiKey.slice(0, 8)}…${apiKey.length > 8 ? ` (${apiKey.length} chars)` : ""} (bearer — stored locally, never printed in full)`);
         console.log(`  balance: ${balance} msat`);
       } else {
         throw new Error("routstr needs: fuel | topup <name> <token> | redeem <name> <token>");
