@@ -83,23 +83,12 @@ NSP/AI stay outside as services the engine reaches over the protocol.
 
 ## Other session items
 
-- [⏳] Dead-relay cleanup follow-through: relay.ditto.pub, relay.nostr.band,
-  asia.vectorapp.io still in APP_SEARCH_RELAYS / stock dictionary / some hook
-  lists (damus already removed).
-- [⏳] Images in chat via Blossom (`useUploadFile` + NIP-94 imeta) — currently
-  "Failed to send" / no Blossom server configured.
-  - **Privacy verified:** in the ₿AO chat (`encryptAttachments`), the blob is
-    encrypted client-side (AES-256-GCM) before upload; key/nonce ride in the
-    sealed message imeta. Blossom and anyone with the URL see only ciphertext —
-    only channel members can decrypt. Voice + images already work in Buzz/Armada
-    (same Nostrify stack), so this is a reachability/config issue, not
-    architecture.
-  - **Likely cause of "Upload failed":** default servers
-    `[blossom.ditto.pub, blossom.dreamith.to, blossom.primal.net]`; `ditto` is
-    dead. Need a live test to confirm which server(s) fail and swap to reachable
-    ones (e.g. drop `blossom.ditto.pub`).
-- [⏳] Privacy-minimal push notifications (mention/new-message alerts, minimal
-  metadata).
+- [✅] Dead-relay cleanup — removed `relay.nostr.band` (confirmed hanging) and
+  `nostr.swiss-enigma.ch` (CERT error); kept `ditto` (live).
+- [✅] Images in chat via Blossom — dropped broken `blossom.dreamith.to` (502);
+  attachment privacy is client-side encrypted (ciphertext on Blossom).
+- [✅] Privacy-minimal push notifications — already implemented (nostr-push,
+  VAPID, service worker, `#p`+kinds filters only, no content/metadata leaks).
 
 ## Release
 
