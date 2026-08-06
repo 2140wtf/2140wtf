@@ -28,7 +28,7 @@ import {
   sealEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { banlistLocator, grantLocator, hex32, random32 } from "@/concord-v2/lib/derive";
+import { banlistLocator, grantLocator, hex32, inviteLinksLocator, random32 } from "@/concord-v2/lib/derive";
 import {
   adminRole,
   badgeOf,
@@ -208,6 +208,13 @@ async function channelMessages(relay: BaoRelay, community: CommunityV2, identity
 
 // ── Identity verbs ───────────────────────────────────────────────────────────
 
+/** Idempotency window (ms) for the in-process `say --key` dedup cache — long
+ *  enough to cover a relay round-trip but short enough to not hold keys. */
+const KEY_DEDUP_WINDOW_MS = 60_000;
+/** Recently-sent idempotency keys → rumor id, to make rapid `--key` retries
+ *  idempotent before the first publish propagates. */
+const recentKeys = new Map<string, { ts: number; rumorId: string }>();
+
 /** A key-only identity — registered a key but not yet in any community. The
  *  `id` stays empty (so `isKeyOnly` detects it); the other fields are valid hex
  *  placeholders so filesystem stores that validate community fields accept it. */
@@ -353,16 +360,27 @@ async function mintInviteInternal(store: BaoStore, relay: BaoRelay, identity: Ba
   };
   await relay.publish(community.relays, buildBundleEvent(bundle, token, link.sk), "invite bundle");
 
-  identity.registry_version += 1;
+  // Registry edition version/hash are chained off the FOLDED head (like the
+  // other control editions), not an in-memory counter — so concurrent mints on
+  // the same identity chain correctly instead of producing equal-version forks
+  // that silently drop one link from the registry.
+  const folded = await foldControl(relay, community);
+  const registryEid = bytesToHex(inviteLinksLocator(community.id, hex32(pubkey)));
+  const regHead = folded.heads.get(registryEid);
   await relay.publish(
     community.relays,
     await sealEdition(
-      buildRegistryEdition(community.id, pubkey, identity.invites.map((i) => i.link_pk).concat(link.pk), { actorPubkey: pubkey, version: BigInt(identity.registry_version) }),
+      buildRegistryEdition(community.id, pubkey, identity.invites.map((i) => i.link_pk).concat(link.pk), {
+        actorPubkey: pubkey,
+        version: regHead ? regHead.version + 1n : 1n,
+        prevHash: regHead?.hash,
+      }),
       currentControlGroup(community),
       signer,
     ),
     "invite registry edition",
   );
+  identity.registry_version = regHead ? Number(regHead.version) + 1 : 1;
   const url = ["https://2140.wtf", "http://localhost:3500"].map((origin) => buildInviteUrl(origin, link.pk, token, community.relays))[0];
   identity.invites.push({
     token: bytesToHex(token),
@@ -486,6 +504,15 @@ async function sayVerb(store: BaoStore, relay: BaoRelay, args: { text?: string; 
   const channel = await resolveChannel(relay, community, args.channel, identity.community.general_channel_id);
 
   if (args.key) {
+    // Local recent-keys cache: close the check-then-publish window so a rapid
+    // retry with the same idempotency key (before the first publish propagates
+    // to the relays we'd re-query) can't double-post. Protocol-level dedup is
+    // inherently racy; this makes retries idempotent in-process.
+    const now = Date.now();
+    const prev = recentKeys.get(args.key);
+    if (prev && now - prev.ts < KEY_DEDUP_WINDOW_MS) {
+      return { rumor_id: prev.rumorId, deduped: true };
+    }
     const existing = await channelMessages(relay, community, identity, channel);
     const dupe = existing.find((m) => m.author === pubkey && m.tags.some((t) => t[0] === "d" && t[1] === args.key));
     if (dupe) return { rumor_id: dupe.id, deduped: true };
@@ -506,6 +533,14 @@ async function sayVerb(store: BaoStore, relay: BaoRelay, args: { text?: string; 
   const seal = await sealRumor(rumor, 20013, channel.current.group, signer);
   const wrap = wrapSeal(seal, channel.current.group);
   await relay.publish(community.relays, wrap, `message to #${channel.name}`);
+  if (args.key) {
+    recentKeys.set(args.key, { ts: Date.now(), rumorId: rumor.id });
+    // Bound the cache.
+    if (recentKeys.size > 512) {
+      const oldest = recentKeys.keys().next().value;
+      if (oldest !== undefined) recentKeys.delete(oldest);
+    }
+  }
   return { rumor_id: rumor.id, deduped: false, channel: { id: channel.idHex, name: channel.name, private: channel.isPrivate, epoch: Number(channel.current.epoch) } };
 }
 
