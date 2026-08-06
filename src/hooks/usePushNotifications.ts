@@ -31,7 +31,6 @@ const DOMAIN = typeof window !== 'undefined' ? window.location.hostname : '';
 const RPC_RELAYS = [
   'wss://relay.ditto.pub/',
   'wss://relay.primal.net/',
-  'wss://relay.damus.io/',
 ];
 
 // localStorage keys

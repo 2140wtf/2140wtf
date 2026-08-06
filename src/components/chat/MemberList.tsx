@@ -468,6 +468,13 @@ interface MemberListProps {
   onUnban?: (pubkey: string) => void;
   /** Concord: the set of currently-banned pubkeys (hex). */
   bannedPubkeys?: Set<string>;
+  /**
+   * Concord: banned members, rendered in a SEPARATE section at the bottom,
+   * visible only to the viewer when `canModerate`/`viewerIsAdmin` is set.
+   * Distinct from `bannedPubkeys` (the flag set): this drives rows that render
+   * with the Unban action, without polluting the live member list.
+   */
+  bannedMembers?: string[];
   /** Per-member role labels (Buzz: member/guest/bot) for badge rendering. */
   memberRoles?: Record<string, string>;
   /** Live presence (Buzz: ephemeral kind-20001 heartbeats). */
@@ -497,6 +504,7 @@ export function MemberList({
   banLabel,
   onUnban,
   bannedPubkeys,
+  bannedMembers,
   memberRoles,
   presence,
   onClose,
@@ -677,6 +685,29 @@ export function MemberList({
               />
             ))}
         </>
+      )}
+
+      {/* Banned members — admin-only, in their own section so they stay out of
+          the live roster and aren't conflated with current members. */}
+      {canModerate && bannedMembers && bannedMembers.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border/60">
+          <h3 className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Banned · {bannedMembers.length}
+          </h3>
+          {bannedMembers.map((pubkey) => (
+            <MemberRow
+              key={pubkey}
+              pubkey={pubkey}
+              canModerate={canModerate}
+              viewerIsAdmin={viewerIsAdmin}
+              currentUserPubkey={currentUserPubkey}
+              onUnban={onUnban}
+              isBanned={true}
+              onEditProfile={onEditProfile}
+              onMessage={onMessage}
+            />
+          ))}
+        </div>
       )}
     </aside>
   );

@@ -71,6 +71,8 @@ export interface SavedCommunity {
   name: string;
   relays: string[];
   general_channel_id?: string; // hex — owner only; members resolve via control fold
+  /** Admin pubkeys that can mint invite links. Owner is always admin. */
+  admins?: string[];
 }
 
 export interface SavedInvite {
@@ -308,6 +310,7 @@ export function communityOf(c: SavedCommunity, privateChannels: State["private_c
     relays: saved.relays,
     name: saved.name,
     refounder: saved.refounder,
+    admins: saved.admins ?? [saved.owner],
   };
 }
 
