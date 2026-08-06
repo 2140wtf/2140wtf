@@ -105,6 +105,26 @@ async function waitMode(
   }
 }
 
+/** Always-on subscription: loop the mention interrupt, streaming each match.
+ *  With `--all` it streams every new message; otherwise only mentions of the
+ *  identity. Each iteration re-subscribes (no missed messages between hops). */
+async function listenMode(name: string, opts: { mentionsOnly: boolean; channel?: string; json: boolean }): Promise<void> {
+  const state = loadState(name);
+  const channel = await resolveChannel(state, opts.channel);
+  console.error(`listening on #${channel.name} of "${state.community.name}" (${opts.mentionsOnly ? "mentions only" : "all messages"}) — Ctrl-C to stop`);
+  const subOpts = { mentionsOnly: opts.mentionsOnly, channel: channel.idHex, timeoutSec: 300 };
+  while (true) {
+    const hit = await waitForInterrupt(name, state, subOpts);
+    if (!hit) continue; // timeout sentinel — loop to keep listening
+    if (opts.json) {
+      console.log(JSON.stringify({ channel: { id: channel.idHex, name: channel.name }, id: hit.id, author: hit.author, author_npub: nip19.npubEncode(hit.author), ms: hit.ms, content: hit.content, tags: hit.tags }));
+    } else {
+      const time = new Date(hit.ms).toISOString().replace("T", " ").slice(0, 19);
+      console.log(`[${time}] ${nip19.npubEncode(hit.author).slice(0, 16)}…: ${hit.content}`);
+    }
+  }
+}
+
 async function orchVerb(name: string, verb: OrchVerb, taskId: string, text: string, orchId: string): Promise<void> {
   const state = loadState(name);
   const { rumorId, deduped, held, epoch } = await orchVerbPost(state, verb, taskId, text, orchId);
@@ -349,6 +369,9 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       await waitMode(as, { timeoutSec, mentionsOnly: !rest.includes("--all"), channel: argValue(rest, "--channel"), json });
       break;
     }
+    case "listen":
+      await listenMode(as, { mentionsOnly: !rest.includes("--all"), channel: argValue(rest, "--channel"), json });
+      break;
     case "orch": {
       const pos = positionalArgs(rest);
       const sub = pos[0];
