@@ -26,16 +26,22 @@ import type { BaoIdentity, BaoRelay, BaoStore } from "@/concord-v2/lib/baoCore";
 // ── Node relay (SimplePool, per-community pools for isolation) ───────────────
 
 /**
- * A SimplePool per community, so one connection/authenticated session is never
- * shared across communities on a relay (the CLI correlation-leak fix). Keyed by
- * the community idHex; the engine passes it via {@link NodeRelayOpts}.
+ * A SimplePool per (community, identity key), so one connection/authenticated
+ * session is never shared across communities — and the NIP-42 authHandler is
+ * never clobbered by two identities in the same community (each identity gets
+ * its own pool, so its AUTH is signed by its own key). Keyed by
+ * `${communityId}:${authSk}`.
  */
 const pools = new Map<string, SimplePool>();
-export function poolFor(communityId: string): SimplePool {
-  let p = pools.get(communityId);
+function poolKey(communityId: string, authSk?: string): string {
+  return authSk ? `${communityId}:${authSk}` : communityId;
+}
+export function poolFor(communityId: string, authSk?: string): SimplePool {
+  const key = poolKey(communityId, authSk);
+  let p = pools.get(key);
   if (!p) {
     p = new SimplePool();
-    pools.set(communityId, p);
+    pools.set(key, p);
   }
   return p;
 }
@@ -54,7 +60,7 @@ export interface NodeRelayOpts {
 }
 
 export function createNodeRelay(opts: NodeRelayOpts = {}): BaoRelay {
-  const pool = () => (opts.communityId ? poolFor(opts.communityId) : new SimplePool());
+  const pool = () => (opts.communityId ? poolFor(opts.communityId, opts.authSk) : new SimplePool());
 
   // NIP-42: when a relay challenges the connection, respond with a signed
   // kind-22242 event. Set once on the (per-community, cached) pool.
