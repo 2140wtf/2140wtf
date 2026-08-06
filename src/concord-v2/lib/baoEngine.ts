@@ -95,6 +95,7 @@ import {
   type BaoStore,
 } from "./baoCore";
 import { BAO_COMMANDS, findCommand, renderCommandHelp } from "./commands";
+import { errorCodeDocs } from "@/lib/errorCodes";
 
 // ── Pure helpers shared by every verb ────────────────────────────────────────
 
@@ -796,7 +797,10 @@ async function dissolveVerb(store: BaoStore, relay: BaoRelay, args: { identityNa
 // ── Help ─────────────────────────────────────────────────────────────────────
 
 function helpVerb(): unknown {
-  return { commands: BAO_COMMANDS.map((c) => ({ cmd: c.verb, args: c.usage, description: c.summary, access: c.access, scope: c.scope })) };
+  return {
+    commands: BAO_COMMANDS.map((c) => ({ cmd: c.verb, args: c.usage, description: c.summary, access: c.access, scope: c.scope })),
+    errors: `Error codes:\n${errorCodeDocs()}`,
+  };
 }
 
 // ── Top-level dispatch ───────────────────────────────────────────────────────
