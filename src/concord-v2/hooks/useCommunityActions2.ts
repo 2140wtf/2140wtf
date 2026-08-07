@@ -27,7 +27,7 @@ import {
   buildMetadataEdition,
   sealDissolved,
 } from "@/concord-v2/lib/control";
-import { bytesToHex, channelGroupKey, dissolvedGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
+import { bytesToHex, channelGroupKey, controlGroupKey, dissolvedGroupKey, guestbookGroupKey, hex32, random32 } from "@/concord-v2/lib/derive";
 import {
   encodeFragment,
   inviteCommitment,
@@ -37,7 +37,7 @@ import {
   type InviteBundle,
   type ParsedInviteLink,
 } from "@/concord-v2/lib/invite";
-import { KIND_INVITE_BUNDLE, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
+import { KIND_INVITE_BUNDLE, KIND_STREAM_SPONSORSHIP, VSK_INVITE_REVOKED } from "@/concord-v2/lib/kinds";
 import { capRelays, MAX_COMMUNITY_RELAYS, type CommunityV2 } from "@/concord-v2/lib/types";
 import { controlGroups, currentControlGroup, foldControlState, openControlWraps, sealEdition, type FoldedControl } from "@/concord-v2/lib/control";
 import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type Rumor } from "@/concord-v2/lib/stream";
@@ -70,6 +70,32 @@ export class SingleUseLinkUsedError extends Error {
     super("This invite link was single-use and has already been used. Ask for a fresh one.");
     this.name = "SingleUseLinkUsedError";
   }
+}
+
+/**
+ * Publish a stream sponsorship (CORD-08, kind 39998): the creator's signed,
+ * addressable claim of the stream pubkeys a community will publish from.
+ * Best-effort by design — relays with an operator-creation policy honor
+ * operator-signed sponsorships; every other relay stores or rejects it and
+ * nothing depends on the outcome. Published BEFORE the events it covers so a
+ * gating relay sees the claim first.
+ */
+export async function publishSponsorship(
+  nostr: { relay(url: string): { event(event: NostrEvent, opts?: { signal?: AbortSignal }): Promise<void> } },
+  signer: { signEvent(event: { kind: number; content: string; tags: string[][]; created_at: number }): Promise<NostrEvent> },
+  relays: string[],
+  dTag: string,
+  streamPks: string[],
+): Promise<void> {
+  const event = await signer.signEvent({
+    kind: KIND_STREAM_SPONSORSHIP,
+    content: "",
+    tags: [["d", dTag], ...streamPks.map((pk) => ["stream", pk])],
+    created_at: Math.floor(Date.now() / 1000),
+  });
+  await Promise.allSettled(
+    relays.map((url) => nostr.relay(url).event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) })),
+  );
 }
 
 /**
@@ -397,6 +423,22 @@ export function useCommunityActions2() {
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
       const { community, generalChannelId } = mintCommunity(trimmed, user.pubkey, relays);
 
+      // Sponsorship FIRST (CORD-08): relays with an operator-creation policy
+      // accept new streams only when an operator-signed claim names them.
+      // Best-effort elsewhere — see publishSponsorship.
+      await publishSponsorship(
+        nostr,
+        user.signer,
+        community.relays,
+        community.idHex,
+        [
+          controlGroupKey(community.root, community.id, 0n).pk,
+          guestbookGroupKey(community.root, community.id, 0n).pk,
+          dissolvedGroupKey(community.id).pk,
+          channelGroupKey(community.root, generalChannelId, 0n).pk,
+        ],
+      );
+
       // Genesis: two owner-signed editions, nothing more (CORD-02 §1). An
       // agent-only create seals the gate INTO the metadata edition: every
       // conforming client then drops Guestbook Joins that lack the PoW.
@@ -688,6 +730,15 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Channel name is required.");
       const channelId = random32();
+      // Sponsorship first (see create()): the new channel's stream needs the
+      // claim before any wrap lands on a creation-gating relay.
+      await publishSponsorship(
+        nostr,
+        user.signer,
+        community.relays,
+        community.idHex,
+        [channelGroupKey(community.root, channelId, community.rootEpoch).pk],
+      );
       try {
         await publishEdition2(
           community,
