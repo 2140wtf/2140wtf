@@ -121,6 +121,9 @@ interface MemberRowProps {
   onEditProfile?: () => void;
   /** Start a direct message with this member (Buzz relays: kind 41010). */
   onMessage?: (pubkey: string) => void;
+  /** Concord community-scoped display names from the encrypted guestbook —
+   *  rendered ahead of any public kind-0 identity (CORD-02 §5 extended). */
+  scopedNames?: Map<string, string>;
 }
 
 function MemberRow({
@@ -140,10 +143,15 @@ function MemberRow({
   isBanned,
   onEditProfile,
   onMessage,
+  scopedNames,
 }: MemberRowProps) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const { displayName, color } = useScopedIdentity(pubkey, metadata);
+  // A Concord community-scoped name (from the encrypted guestbook) beats any
+  // public identity — it's exactly what the member wants to be called HERE.
+  const scopedCommunityName = scopedNames?.get(pubkey)?.trim();
+  const { displayName: identityName, color } = useScopedIdentity(pubkey, metadata);
+  const displayName = scopedCommunityName || identityName;
   // Pet body (a Nostr Pet declared as this agent's body) — one shared relay
   // scan backs every member row (see useAgentBodyPets).
   const petBody = useAgentBodyPets([pubkey]).bodies.get(pubkey);
@@ -487,6 +495,9 @@ interface MemberListProps {
   onMessage?: (pubkey: string) => void;
   /** Override the default desktop panel chrome (e.g. for the mobile drawer). */
   className?: string;
+  /** Concord community-scoped display names from the encrypted guestbook —
+   *  rendered ahead of any public kind-0 identity (CORD-02 §5 extended). */
+  scopedNames?: Map<string, string>;
 }
 
 /** Right-hand member panel: admins (with roles) first, then regular members. */
@@ -510,6 +521,7 @@ export function MemberList({
   onClose,
   onEditProfile,
   onMessage,
+  scopedNames,
   className,
 }: MemberListProps) {
   const adminMap = new Map(admins.map((a) => [a.pubkey, a.roles] as const));
@@ -614,6 +626,7 @@ export function MemberList({
               isBanned={bannedPubkeys?.has(admin.pubkey)}
               onEditProfile={onEditProfile}
               onMessage={onMessage}
+              scopedNames={scopedNames}
             />
           ))}
         </>
@@ -646,6 +659,7 @@ export function MemberList({
             isBanned={bannedPubkeys?.has(pubkey)}
             onEditProfile={onEditProfile}
             onMessage={onMessage}
+            scopedNames={scopedNames}
           />
         ))
       )}
@@ -682,6 +696,7 @@ export function MemberList({
                 isBanned={bannedPubkeys?.has(pubkey)}
                 onEditProfile={onEditProfile}
                 onMessage={onMessage}
+                scopedNames={scopedNames}
               />
             ))}
         </>
@@ -705,6 +720,7 @@ export function MemberList({
               isBanned={true}
               onEditProfile={onEditProfile}
               onMessage={onMessage}
+              scopedNames={scopedNames}
             />
           ))}
         </div>
