@@ -37,6 +37,7 @@ These event kinds were created by community contributors and are supported by 21
 | 16158 | Weather Station        | Weather station metadata (location, sensors, connectivity)       | [Draft NIP](https://github.com/nostr-protocol/nips/pull/2163)                            |
 | 31124 | Pets Pet State       | Current state of a virtual Pets pet (addressable)              | [NIP-BB](https://github.com/Danidfra/nostr-pet/blob/production/NIP.md)                   |
 | 33863 | Fundraiser             | Self-authored Bitcoin fundraising campaign                       | See [Kind 33863: Fundraiser](#kind-33863-fundraiser) below                                |
+| 39998 | Stream Sponsorship     | Creator-signed claim of a ₿AO community's stream pubkeys, for relays gating creation to operators (CORD-08) | See [Kind 39998: Stream Sponsorship](#kind-39998-stream-sponsorship) below |
 | 1315  | Roadstr Report         | Road event report (police, accident, hazard, traffic jam, etc.)  | See [Roadstr](#roadstr) below                                                             |
 | 1316  | Roadstr Confirmation   | Confirmation or denial of a Roadstr report                       | See [Roadstr](#roadstr) below                                                             |
 | 37516 | Geocache               | Geocache listing for real-world treasure hunting                 | [NIP-GC](https://gitlab.com/chad.curtis/treasures/-/blob/main/NIP-GC.md)                 |
@@ -1722,3 +1723,29 @@ Regular event containing the final aggregated FROST dispute override attestation
 - **DKG commitments, votes, and FROST messages** SHOULD be filtered by the selected jurors' pubkeys to prevent spam.
 - **Encrypted shares** between jurors are delivered as NIP-17 private messages (kind 14) wrapped in NIP-59 gift wraps (kind 1059).
 - **Demo mode** runs the full Pedersen DKG and FROST signing locally, publishes the current user's real events, and simulates peer juror events internally for GUI completeness.
+
+### Kind 39998: Stream Sponsorship
+
+Addressable event (CORD-08) by which a ₿AO community's creator publicly claims the stream pubkeys the community publishes from. Relays that gate stream **creation** to operator identities (e.g. a community-dedicated relay) accept new-stream Concord wraps (kind 1059/21059) only when a sponsorship signed by one of their operator keys covers the author; relays without such a policy simply store or ignore this kind. Participation (writes to already-known streams) never requires sponsorship.
+
+Published BEFORE the genesis wraps it covers. One event per community, plus one per invite-link signer.
+
+```json
+{
+  "kind": 39998,
+  "pubkey": "<creator-pubkey>",
+  "content": "",
+  "tags": [
+    ["d", "<community-id-hex>"],
+    ["stream", "<control-stream-pk>"],
+    ["stream", "<guestbook-stream-pk>"],
+    ["stream", "<dissolved-stream-pk>"],
+    ["stream", "<channel-stream-pk>"],
+    ["alt", "₿AO stream sponsorship: creator claim of community stream pubkeys"]
+  ]
+}
+```
+
+- `d` is the community id hex; for a per-link signer sponsorship it is `link:<link-signer-pk>`.
+- Each `stream` tag names one stream pubkey (a derived Concord group key's public key).
+- New channel streams are sponsored by publishing a replacement sponsorship (same `d`) covering the new stream; clients and relays treat sponsorship as cumulative.
