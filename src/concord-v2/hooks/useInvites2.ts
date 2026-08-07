@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { useControlFold2, citationFor, invalidateControl2, publishEdition2, relayFailureSummary } from "@/concord-v2/hooks/useControlPlane2";
 import { useCommunity2 } from "@/concord-v2/hooks/useCommunityList2";
-import { resolveBundle } from "@/concord-v2/hooks/useCommunityActions2";
+import { publishSponsorship, resolveBundle } from "@/concord-v2/hooks/useCommunityActions2";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { buildRegistryEdition } from "@/concord-v2/lib/control";
 import { isAuthorized, Permissions } from "@/concord-v2/lib/roles";
@@ -349,6 +349,15 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
       const bundle = buildBundle({ expiresAtMs, label, maxUses, audience });
 
       const bundleEvent = buildBundleEvent(bundle, token, link.sk);
+      // Sponsorship first (CORD-08): a creation-gating relay accepts the
+      // fresh per-link signer's bundle only when an operator claim names it.
+      await publishSponsorship(
+        nostr,
+        user.signer,
+        bundlePublishTargets(community.relays, interopFallback === true),
+        `link:${link.pk}`,
+        [link.pk],
+      );
       const targets = bundlePublishTargets(community.relays, interopFallback === true);
       const results = await Promise.allSettled(
         targets.map((url) =>
