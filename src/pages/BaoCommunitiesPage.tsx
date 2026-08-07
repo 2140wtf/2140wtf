@@ -281,16 +281,12 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               </p>
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">Privacy tip:</span>{" "}
-                messages, member list, and community metadata stay sealed — relays
-                only ever hold ciphertext. What every relay you add CAN see is
-                traffic shape (timing and volume) and direct-invite handoffs
-                (a direct invite p-tags the invitee once; links avoid that recipient
-                tag but are not anonymous). For most communities the everyday app relays are a fine
-                home; only a super privacy-focused group benefits from trimming
-                down to a single relay you control, ideally with NIP-42 read
-                auth — and preferring invite links over direct invites. Nothing
-                is pre-ticked: your pick below doubles as confirming you've read
-                this.
+                Messages, members, and community details are encrypted — relays only
+                store ciphertext. What a relay can still see is how active your
+                community is, and who gets a direct invite (invite links don&apos;t tag
+                anyone). The default relays are fine for most groups. Want maximum
+                privacy? Pick a single relay you control, and share links instead of
+                direct invites. Nothing is pre-selected — your choice is yours.
               </p>
 
               <div className="space-y-1.5 pt-1">
