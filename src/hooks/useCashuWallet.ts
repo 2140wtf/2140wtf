@@ -2873,39 +2873,85 @@ export function useCashuWallet(
     method: 'bolt11' | 'bolt12' = 'bolt11',
   ): Promise<() => void> => {
     if (!wallet || !quoteId) return () => {};
+
+    // A paid quote fires exactly once; the returned cancel stops both the
+    // NUT-17 subscription and the polling fallback.
+    let fired = false;
+    let cancelled = false;
+    let unsubscribe: () => void = () => {};
+    // Idempotent: fire() and the returned cancel both call this.
+    const cancelSubscription = () => {
+      const u = unsubscribe;
+      unsubscribe = () => {};
+      u();
+    };
+    const fire = () => {
+      if (fired || cancelled) return;
+      fired = true;
+      cancelSubscription();
+      onPaid();
+    };
+
     try {
       const support = (await wallet.lazyGetMintInfo()).isSupported(17);
       const command = `${method}_mint_quote`;
       const supportsMintQuotes = support.supported && (support.params ?? []).some((p) =>
         p.method === method && p.unit === 'sat' && p.commands.includes(command),
       );
-      if (!supportsMintQuotes) return () => {};
-      const reportError = (error: Error) => {
-        devLog.warn('NUT-17 mint quote subscription failed; manual confirmation remains available:', error);
-      };
-      if (method === 'bolt11') {
-        return await wallet.onMintQuotePaid(quoteId, () => onPaid(), reportError);
+      if (supportsMintQuotes) {
+        const reportError = (error: Error) => {
+          devLog.warn('NUT-17 mint quote subscription failed; manual confirmation remains available:', error);
+        };
+        if (method === 'bolt11') {
+          unsubscribe = await wallet.onMintQuotePaid(quoteId, fire, reportError);
+        } else {
+          // cashu-ts 2.x types predate the BOLT12 NUT-17 subscription kinds, but
+          // its public JSON-RPC WebSocket transport is protocol-generic. Keep this
+          // compatibility shim local until the upstream union includes BOLT12.
+          await wallet.mint.connectWebSocket();
+          const connection = wallet.mint.webSocketConnection;
+          if (connection) {
+            const params = {
+              kind: 'bolt12_mint_quote',
+              filters: [quoteId],
+            } as unknown as Parameters<typeof connection.createSubscription>[0];
+            const handleQuote = (quote: Bolt12MintQuoteResponse) => {
+              if (quote.quote === quoteId && quote.amount_paid > quote.amount_issued) fire();
+            };
+            const subscriptionId = connection.createSubscription<Bolt12MintQuoteResponse>(params, handleQuote, reportError);
+            unsubscribe = () => connection.cancelSubscription(subscriptionId, handleQuote, reportError);
+          }
+        }
       }
-
-      // cashu-ts 2.x types predate the BOLT12 NUT-17 subscription kinds, but
-      // its public JSON-RPC WebSocket transport is protocol-generic. Keep this
-      // compatibility shim local until the upstream union includes BOLT12.
-      await wallet.mint.connectWebSocket();
-      const connection = wallet.mint.webSocketConnection;
-      if (!connection) return () => {};
-      const params = {
-        kind: 'bolt12_mint_quote',
-        filters: [quoteId],
-      } as unknown as Parameters<typeof connection.createSubscription>[0];
-      const handleQuote = (quote: Bolt12MintQuoteResponse) => {
-        if (quote.quote === quoteId && quote.amount_paid > quote.amount_issued) onPaid();
-      };
-      const subscriptionId = connection.createSubscription<Bolt12MintQuoteResponse>(params, handleQuote, reportError);
-      return () => connection.cancelSubscription(subscriptionId, handleQuote, reportError);
     } catch (error) {
       devLog.warn('NUT-17 unavailable; manual confirmation remains available:', error);
-      return () => {};
     }
+
+    // Polling fallback: NUT-17 can silently fail (websocket blocked or the
+    // relay path flaky) even when the mint advertises support — the invoice
+    // then never auto-mints until the user finds the manual confirm button.
+    const poll = async () => {
+      if (fired || cancelled) return;
+      try {
+        if (method === 'bolt11') {
+          const q = (await wallet.checkMintQuote(quoteId)) as MintQuoteResponse;
+          if (q.state === 'PAID' || q.state === 'ISSUED') fire();
+        } else {
+          const q = await wallet.checkMintQuoteBolt12(quoteId);
+          if (q.amount_paid > q.amount_issued) fire();
+        }
+      } catch {
+        // Transient failure — the next tick retries.
+      }
+    };
+    const pollTimer = setInterval(() => void poll(), 4000);
+    void poll(); // the quote may already be paid by the time we subscribe
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollTimer);
+      cancelSubscription();
+    };
   }, [wallet]);
 
   const requestBolt12Offer = useCallback(async (amount: number, description = '2140.wtf Cashu deposit'): Promise<Bolt12MintQuoteResponse | null> => {
