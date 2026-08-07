@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- The feed now renders instantly on warm devices — feed events are persisted to the shared IndexedDB event store as they arrive from relays, and the feed seeds itself from that cache on cold start: a repeat visit shows the previous session's posts in under a second while the relay query refreshes them, and a relay miss or fully-offline load can no longer flash "No posts found" over a warm cache (verified: content in 0.56s with every relay websocket blocked). Previously the cache held only profile metadata, so every cold start paid the full relay round-trip and an empty relay answer produced a bogus empty state
 - Paid Cashu deposit invoices now mint automatically even when the mint's NUT-17 websocket notification never arrives — the wallet relied on the realtime subscription alone, so a blocked or flaky socket left a paid invoice unminted until the user found the manual "Confirm payment" button. `watchMintQuote` now also polls the quote state every 4s (fires once, cleans up both paths on cancel), covering BOLT11 and BOLT12 quotes
 
 ### Added
