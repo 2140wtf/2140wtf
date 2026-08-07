@@ -891,6 +891,15 @@ export function ConcordV2Page() {
 
   const { leave, isLeaving, dissolve, isDissolving, purgeRemote, isPurging, createChannel, isAddingChannel } = useCommunityManagement2(community);
   const { coalesced } = useGuestbook2(community);
+  /** Community-scoped display names from the encrypted guestbook (latest Join
+   *  per member wins) — rendered ahead of public kind-0 identities. */
+  const scopedNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [pk, member] of coalesced) {
+      if (member.name) map.set(pk, member.name);
+    }
+    return map;
+  }, [coalesced]);
 
   // (Armada's CORD-07 voice join logic lived here; voice is not part of the
   // ₿AO build.)
@@ -2210,6 +2219,7 @@ export function ConcordV2Page() {
                   canModerate={canManageRoles || canKickAny || canBanAny}
                   viewerIsAdmin={iAmOwner}
                   currentUserPubkey={user?.pubkey}
+                  scopedNames={scopedNames}
                   wot={{
                     scores: wotScores,
                     resolved: wotResolved,
