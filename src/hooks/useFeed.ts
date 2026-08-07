@@ -1,5 +1,5 @@
 import { useNostr } from '@nostrify/react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppContext } from './useAppContext';
 import { useCurrentUser } from './useCurrentUser';
@@ -178,7 +178,42 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
   const allCommunityPubkeys = useCommunityPubkeys(config.appId);
   const communityPubkeys = tab === 'communities' ? allCommunityPubkeys : [];
 
-  return useInfiniteQuery<FeedPage, Error>({
+  // ── Instant cold-start seed from the IndexedDB event cache ──
+  // Every relay result is persisted to the shared NIndexedDB store, so a
+  // repeat visit can render the previous session's posts in <1s while the
+  // relay query refreshes them. IDB queries take ~10-50ms. The seed is a
+  // rendering accelerator only — the relay pages replace it when they land,
+  // and when a relay miss returns nothing, the seed prevents a bogus
+  // "No posts found" empty state on a warm device.
+  const seedQuery = useQuery<FeedItem[]>({
+    queryKey: ['feed-seed', tab, user?.pubkey ?? '', kindsKey],
+    queryFn: async ({ signal }) => {
+      const postKinds = allKinds.filter((k) => !isRepostKind(k) && !isReactionKind(k) && !isZapKind(k));
+      if (postKinds.length === 0) return [];
+      const now = Math.floor(Date.now() / 1000);
+      const events = await store.query(
+        [{ kinds: postKinds, limit: PAGE_SIZE * OVER_FETCH_MULTIPLIER }],
+        { signal },
+      );
+      const seen = new Set<string>();
+      const items: FeedItem[] = [];
+      const sorted = events
+        .filter((ev) => ev.created_at <= now && !isMastodonBridgeEvent(ev))
+        .sort((a, b) => b.created_at - a.created_at);
+      for (const event of sorted) {
+        if (seen.has(event.id)) continue;
+        seen.add(event.id);
+        if (!feedSettings.followsFeedShowReplies && isReplyEvent(event)) continue;
+        items.push({ event, sortTimestamp: event.created_at });
+        if (items.length >= PAGE_SIZE) break;
+      }
+      return items;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const infiniteQuery = useInfiniteQuery<FeedPage, Error>({
     // NOTE: followList is intentionally excluded from the query key
     // (see earlier comment). kindsKey IS included so the feed
     // refetches when the user changes feed kind settings. This is stable
@@ -196,6 +231,10 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
           if (!queryClient.getQueryData(['event', event.id])) {
             queryClient.setQueryData(['event', event.id], event);
           }
+          // Persist to the shared IndexedDB store so the cold-start seed can
+          // render this session's feed instantly on the next visit.
+          // Fire-and-forget — cache writes must never block the feed.
+          void store.event(event).catch(() => {});
         }
       }
 
@@ -510,4 +549,6 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
     gcTime: 30 * 60 * 1000, // 30 min — don't GC feed data while the app is open
     placeholderData: (prev) => prev, // keep showing previous data during refetches
   });
+
+  return { ...infiniteQuery, seedItems: seedQuery.data ?? [] };
 }
