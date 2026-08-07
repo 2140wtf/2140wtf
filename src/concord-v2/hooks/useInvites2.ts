@@ -202,7 +202,13 @@ function useUpdateInviteList2() {
       const content = await user.signer.nip44.encrypt(user.pubkey, JSON.stringify(next));
       const event = await user.signer.signEvent({ kind: KIND_INVITE_LIST, content, tags: [], created_at: createdAt });
       queryClient.setQueryData(inviteListKey(user.pubkey), next);
-      await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+      // Best-effort relay write — a rejecting/slow relay must not fail the
+      // mutation after local state is recorded (see useCommunityList2).
+      try {
+        await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+      } catch (e) {
+        console.warn("[concord2-invite-list] vault relay write failed (kept local):", e instanceof Error ? e.message : e);
+      }
       return next;
     },
   });

@@ -254,7 +254,17 @@ export function useUpdateCommunityList2() {
 
       queryClient.setQueryData<ListData>(listQueryKey(user.pubkey), { event, list: next });
       void writeFolded(foldKeyOf(user.pubkey), { event, list: next } satisfies PersistedList);
-      await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+      // Best-effort relay write: local state (above) is the source of truth
+      // for this session. A rejecting or slow relay (e.g. a roster-gated
+      // vault kind) must NOT fail the whole mutation — create() would show an
+      // error or hang after the community already landed on its relays, and
+      // users retry into duplicate communities. The sync layer re-publishes
+      // on the next mutation.
+      try {
+        await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+      } catch (e) {
+        console.warn("[concord2-list] vault relay write failed (kept local):", e instanceof Error ? e.message : e);
+      }
       return next;
     },
     onSuccess: () => {
