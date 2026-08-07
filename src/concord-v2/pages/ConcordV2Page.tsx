@@ -64,6 +64,7 @@ import { useCommunityManagement2, useStrandedRecovery2 } from "@/concord-v2/hook
 import { useChannels2, useControlFold2, useDissolved2 } from "@/concord-v2/hooks/useControlPlane2";
 import { BanMemberDialog } from "@/concord-v2/components/BanMemberDialog2";
 import { PurgeCommunityDialog2 } from "@/concord-v2/components/PurgeCommunityDialog2";
+import { ConfirmActionDialog2 } from "@/concord-v2/components/ConfirmActionDialog2";
 import type { BanPhase } from "@/concord-v2/hooks/useModeration2";
 import { hasForeignLiveLinks } from "@/concord-v2/lib/control";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
@@ -913,6 +914,11 @@ export function ConcordV2Page() {
   const [rolesOpen, setRolesOpen] = useState(false);
   const [banTarget, setBanTarget] = useState<string | null>(null);
   const [purgeOpen, setPurgeOpen] = useState(false);
+  /** The destructive action awaiting in-app confirmation (native
+   *  window.confirm is unreliable in the Capacitor WebView). */
+  const [pendingDestructive, setPendingDestructive] = useState<null | "leave" | "dissolve" | "purge">(null);
+  const destructiveBusy = isLeaving || isDissolving || isPurging;
+
   // The community-name header menu (Discord-style): expands inline below the
   // header, pushing the channel list down with a height animation.
   const [communityMenuOpen, setCommunityMenuOpen] = useState(false);
@@ -1238,12 +1244,6 @@ export function ConcordV2Page() {
   };
 
   const handleLeave = async () => {
-    const accepted = confirm(
-      dissolved
-        ? "Remove this community from your account? Downloaded history may remain on this device."
-        : "Leave this community? This removes it from your account and stops this app syncing it. It does not revoke keys already shared with you or erase downloaded history from this device.",
-    );
-    if (!accepted) return;
     try {
       await leave();
       navigateTo("/bao/baocommunity");
@@ -1253,7 +1253,6 @@ export function ConcordV2Page() {
   };
 
   const handleDissolve = async () => {
-    if (!confirm("Permanently dissolve this community for everyone? This cannot be undone.")) return;
     try {
       await dissolve();
       toast({ title: "Community dissolved" });
@@ -1264,8 +1263,6 @@ export function ConcordV2Page() {
   };
 
   const handlePurgeRemote = async () => {
-    if (!confirm("Permanently dissolve this BAO and request deletion of its relay data? This cannot be undone.")) return;
-    if (!confirm("Final warning: relay deletion is best-effort, but this will erase the founder-controlled BAO history from configured relays where NIP-09 is honored.")) return;
     try {
       const report = await purgeRemote();
       toast({
@@ -1277,6 +1274,29 @@ export function ConcordV2Page() {
       toast({ title: "Couldn't purge BAO", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     }
   };
+
+  const destructiveCopy = {
+    leave: {
+      title: dissolved ? "Remove this community?" : "Leave this community?",
+      body: dissolved
+        ? "Downloaded history may remain on this device."
+        : "This removes it from your account and stops this app syncing it. It does not revoke keys already shared with you or erase downloaded history from this device.",
+      label: dissolved ? "Remove community" : "Leave community",
+      run: handleLeave,
+    },
+    dissolve: {
+      title: "Dissolve this community for everyone?",
+      body: "Permanently dissolves the community for all members. This cannot be undone.",
+      label: "Dissolve community",
+      run: handleDissolve,
+    },
+    purge: {
+      title: "Purge this ₿AO from its relays?",
+      body: "Permanently dissolves the ₿AO and requests deletion of every founder-controlled wrap and invite bundle on its relays. Deletion is honored by the relays we've verified, but is best-effort by protocol — and anything members already synced to their devices can never be clawed back. This cannot be undone.",
+      label: "Purge ₿AO from relays",
+      run: handlePurgeRemote,
+    },
+  } as const;
 
   const handleKick = async (pk: string) => {
     try {
@@ -1462,7 +1482,7 @@ export function ConcordV2Page() {
                       disabled={isLeaving}
                       className="flex w-full items-center gap-3 px-3 py-2 text-sm text-left text-destructive transition-colors clip-corner-lg hover:bg-destructive/10 disabled:opacity-50"
                       onClick={() => {
-                        handleLeave();
+                        setPendingDestructive("leave");
                         setCommunityMenuOpen(false);
                       }}
                     >
@@ -1474,7 +1494,7 @@ export function ConcordV2Page() {
                         type="button"
                         className="flex w-full items-center gap-3 px-3 py-2 text-sm text-left text-destructive transition-colors clip-corner-lg hover:bg-destructive/10"
                         onClick={() => {
-                          handleDissolve();
+                          setPendingDestructive("dissolve");
                           setCommunityMenuOpen(false);
                         }}
                       >
@@ -1488,7 +1508,7 @@ export function ConcordV2Page() {
                         disabled={isPurging || isDissolving}
                         className="flex w-full items-center gap-3 px-3 py-2 text-sm text-left text-destructive transition-colors clip-corner-lg hover:bg-destructive/10 disabled:opacity-50"
                         onClick={() => {
-                          void handlePurgeRemote();
+                          setPendingDestructive("purge");
                           setCommunityMenuOpen(false);
                         }}
                       >
@@ -2218,6 +2238,20 @@ export function ConcordV2Page() {
 
       <InviteDialog2 community={community} open={inviteOpen} onOpenChange={setInviteOpen} />
       <PurgeCommunityDialog2 community={community} open={purgeOpen} onOpenChange={setPurgeOpen} />
+      <ConfirmActionDialog2
+        open={pendingDestructive !== null}
+        onOpenChange={(open) => !open && setPendingDestructive(null)}
+        title={pendingDestructive ? destructiveCopy[pendingDestructive].title : ""}
+        body={pendingDestructive ? destructiveCopy[pendingDestructive].body : null}
+        confirmLabel={pendingDestructive ? destructiveCopy[pendingDestructive].label : ""}
+        busy={destructiveBusy}
+        onConfirm={() => {
+          const action = pendingDestructive;
+          if (!action) return;
+          setPendingDestructive(null);
+          void destructiveCopy[action].run();
+        }}
+      />
       <BanMemberDialog
         target={banTarget}
         willRotate={banWillRotate}
