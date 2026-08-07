@@ -88,6 +88,15 @@ export const KIND_INVITE_BUNDLE = 33301;
 export const KIND_COMMUNITY_LIST = 13302;
 /** A creator's self-encrypted Invite List (replaceable, one per user). */
 export const KIND_INVITE_LIST = 13303;
+/**
+ * Stream sponsorship (CORD-08): a creator-signed, addressable claim listing
+ * the stream pubkeys a community will publish from. Relays that gate stream
+ * CREATION to operator identities honor sponsorships signed by their
+ * operator keys (relay-side policy, never in this client); every other relay
+ * simply stores or ignores it. d-tag: the community id — or `link:<pk>` for
+ * a per-link signer sponsorship.
+ */
+export const KIND_STREAM_SPONSORSHIP = 39998;
 
 // ── Control edition sub-kinds (the `vsk` tag) ────────────────────────────────
 
