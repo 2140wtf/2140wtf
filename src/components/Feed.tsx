@@ -402,12 +402,21 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       });
   }, [rawData?.pages, muteItems, useAppQuery]);
 
+  // Cold-start seed: while the first relay page is in flight (or after a
+  // relay miss returns nothing), render the IndexedDB-cached posts from the
+  // previous session so a warm device shows the feed in <1s instead of
+  // skeletons — and a bogus "No posts found" can't flash over a warm cache.
+  const seededDerivedItems = useMemo(
+    () => (derivedItems.length > 0 ? derivedItems : feedQuery.seedItems),
+    [derivedItems, feedQuery.seedItems],
+  );
+
   // Retain the last non-empty list so a key change / background refetch /
   // settled-empty relay miss never flashes the empty state over a feed the
   // user is actively reading. Retention resets when the viewed feed identity
   // (account or tab) changes.
   const feedItems = useStickyFeedItems(
-    derivedItems,
+    seededDerivedItems,
     `${user?.pubkey ?? ''}:${useAppQuery ? 'app' : activeTab}`,
   );
 
