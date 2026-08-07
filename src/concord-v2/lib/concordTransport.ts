@@ -440,5 +440,154 @@ export function ephemeralRelayClient() {
 /** Adapter for transport-neutral fold/backfill helpers. It has no global query
  * or publish method, so callers cannot silently fall back to app relays. */
 export function concordClient(communityId: string, keys: readonly GroupKey[]) {
+  if (keys.length > 1 && planeIsolationEnabled(communityId)) {
+    return planeIsolatingClient(communityId, keys);
+  }
   return concordTransport.client(communityId, keys);
+}
+
+// ── Per-plane isolation (opt-in, per community, per device) ──────────────────
+//
+// Multi-key sessions (e.g. every epoch's control keys on one socket) let an
+// auth-gated relay link a community's streams and epochs — the AUTH set is a
+// key-possession graph. Isolation mode fans multi-key clients out to one
+// session PER STREAM KEY, so no socket ever carries more than one identity.
+// It costs extra connections, so it's an explicit per-community toggle.
+
+const isolationKey = (communityId: string) => `concord2:plane-isolation:${communityId}`;
+
+export function planeIsolationEnabled(communityId: string): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(isolationKey(communityId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setPlaneIsolation(communityId: string, enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(isolationKey(communityId), "1");
+    else localStorage.removeItem(isolationKey(communityId));
+  } catch {
+    // storage unavailable — isolation silently stays off
+  }
+}
+
+type SessionForKey = (key: GroupKey) => ConcordRelayHandle;
+
+/** One fan-out relay handle: per-key sessions behind the grouped-client API.
+ * Filters are narrowed per session so no socket ever sees an author it does
+ * not own; results are merged and de-duplicated by event id. */
+class FanoutRelayHandle implements ConcordRelayHandle {
+  private readonly byPk = new Map<string, ConcordRelayHandle>();
+
+  constructor(
+    readonly communityId: string,
+    readonly relayUrl: string,
+    keys: readonly GroupKey[],
+    private readonly sessionFor: SessionForKey,
+  ) {
+    for (const key of keys) this.byPk.set(key.pk, sessionFor(key));
+  }
+
+  addKeys(keys: readonly GroupKey[]): void {
+    for (const key of keys) {
+      let session = this.byPk.get(key.pk);
+      if (!session) {
+        session = this.sessionFor(key);
+        this.byPk.set(key.pk, session);
+      }
+      session.addKeys([key]);
+    }
+  }
+
+  /** Split each filter's authors across the owning sessions. Throws (like the
+   * grouped session) on author-less filters or foreign authors. */
+  private planFilters(filters: NostrFilter[]): Array<{ session: ConcordRelayHandle; filters: NostrFilter[] }> {
+    const planned = new Map<ConcordRelayHandle, NostrFilter[]>();
+    for (const filter of filters) {
+      if (!filter.authors?.length) {
+        throw new Error(`Cross-scope Concord query blocked for ${this.communityId}.`);
+      }
+      const groups = new Map<ConcordRelayHandle, string[]>();
+      for (const author of filter.authors) {
+        const session = this.byPk.get(author);
+        if (!session) throw new Error(`Cross-scope Concord query blocked for ${this.communityId}.`);
+        const list = groups.get(session) ?? [];
+        list.push(author);
+        groups.set(session, list);
+      }
+      for (const [session, authors] of groups) {
+        const list = planned.get(session) ?? [];
+        list.push({ ...filter, authors });
+        planned.set(session, list);
+      }
+    }
+    return [...planned.entries()].map(([session, fs]) => ({ session, filters: fs }));
+  }
+
+  async query(filters: NostrFilter[], opts?: { signal?: AbortSignal }): Promise<NostrEvent[]> {
+    const plan = this.planFilters(filters);
+    const results = await Promise.allSettled(plan.map((p) => p.session.query(p.filters, opts)));
+    if (!results.some((r) => r.status === "fulfilled")) {
+      const reason = results[0].status === "rejected" ? results[0].reason : undefined;
+      throw reason instanceof Error ? reason : new Error("All isolated sessions failed the query.");
+    }
+    const seen = new Set<string>();
+    const out: NostrEvent[] = [];
+    for (const r of results) {
+      if (r.status !== "fulfilled") continue;
+      for (const ev of r.value) {
+        if (seen.has(ev.id)) continue;
+        seen.add(ev.id);
+        out.push(ev);
+      }
+    }
+    return out;
+  }
+
+  async *req(filters: NostrFilter[], opts?: { signal?: AbortSignal }): AsyncIterable<NostrRelayEVENT | NostrRelayEOSE | NostrRelayCLOSED> {
+    for (const p of this.planFilters(filters)) {
+      yield* p.session.req(p.filters, opts);
+    }
+  }
+
+  event(event: NostrEvent, opts?: { signal?: AbortSignal }): Promise<void> {
+    const session = this.byPk.get(event.pubkey);
+    if (!session) {
+      return Promise.reject(new Error(`Cross-scope Concord publish blocked for ${this.communityId}.`));
+    }
+    return session.event(event, opts);
+  }
+
+  onReopen(listener: () => void): () => void {
+    const unsubs = [...this.byPk.values()].map((s) => s.onReopen(listener));
+    return () => unsubs.forEach((u) => u());
+  }
+
+  async close(): Promise<void> {
+    await Promise.all([...this.byPk.values()].map((s) => s.close()));
+  }
+}
+
+function planeIsolatingClient(communityId: string, keys: readonly GroupKey[]) {
+  const signature = keySignature(keys);
+  return {
+    _concordScope: communityId,
+    _concordKeySig: signature,
+    relay(relayUrl: string): ConcordRelayHandle {
+      // One capability per key keeps revocation semantics identical to the
+      // grouped path; each capability yields its own single-key session.
+      const handles = new Map<string, ConcordRelayHandle>();
+      const sessionFor: SessionForKey = (key) => {
+        let handle = handles.get(key.pk);
+        if (!handle) {
+          handle = concordClient(communityId, [key]).relay(relayUrl);
+          handles.set(key.pk, handle);
+        }
+        return handle;
+      };
+      return new FanoutRelayHandle(communityId, relayUrl, keys, sessionFor);
+    },
+  };
 }

@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNostr } from "@nostrify/react";
 
 import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
+import { PlaneIsolationToggle2 } from "@/concord-v2/components/PlaneIsolationToggle2";
 import { ScopedNameEditor2 } from "@/concord-v2/components/ScopedNameEditor2";
 import { useCommunityManagement2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useChannels2 } from "@/concord-v2/hooks/useControlPlane2";
@@ -435,6 +436,10 @@ function InfoBody({
 
         <div className="border-t border-border/60 pt-3">
           <ScopedNameEditor2 community={community} />
+        </div>
+
+        <div className="border-t border-border/60 pt-3">
+          <PlaneIsolationToggle2 community={community} />
         </div>
       </div>
 
