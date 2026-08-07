@@ -50,6 +50,7 @@ export function buildJoinRumor(
   pubkey: string,
   ms: number,
   attribution?: { creator: string; label?: string; commitment?: string },
+  opts?: { name?: string },
 ): Rumor {
   const tags: string[][] = [];
   if (attribution) {
@@ -57,6 +58,8 @@ export function buildJoinRumor(
     if (attribution.commitment) tag.push(attribution.commitment);
     tags.push(tag);
   }
+  const name = opts?.name?.trim();
+  if (name) tags.push(["name", name.slice(0, 80)]);
   return buildRumor({ kind: KIND_JOIN_LEAVE, content: "join", tags, pubkey, ms });
 }
 
@@ -136,6 +139,8 @@ export interface CoalescedMember {
   fromSnapshot: boolean;
   /** Invite attribution (Joins only): the link creator + label. */
   invite?: { creator: string; label?: string };
+  /** Community-scoped display name from the winning Join, if set. */
+  name?: string;
 }
 
 /** Open every guestbook wrap that decodes under one of `groups`. Memoized per wrap. */
@@ -239,6 +244,7 @@ export function coalesceGuestbook(
         rumorId: ev.rumorId,
         fromSnapshot: false,
         invite: inviteTag?.[1] ? { creator: inviteTag[1], label: inviteTag[2] || undefined } : undefined,
+        name: verb === "join" ? ev.tags.find((t) => t[0] === "name")?.[1]?.trim() || undefined : undefined,
       });
       continue;
     }
