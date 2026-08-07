@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true, executablePath: '/home/bob/.cache/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-linux64/chrome-headless-shell' });
+const page = await (await browser.newContext()).newPage();
+page.on('pageerror', (e) => console.log('[pageerror]', e.message.slice(0, 300)));
+page.on('console', (m) => { if (m.type() === 'error') console.log('[cerr]', m.text().slice(0, 200)); });
+await page.goto('http://localhost:3301/', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(12000);
+console.log('url:', page.url());
+const texts = (await page.locator('button:visible').allTextContents()).filter((t) => t.trim()).slice(0, 20);
+console.log('buttons:', JSON.stringify(texts));
+await page.screenshot({ path: '/tmp/join-probe.png' });
+await browser.close();
