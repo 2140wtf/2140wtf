@@ -96,7 +96,7 @@ export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
   return useMutation({
     mutationFn: async (
       action:
-        | { type: "join"; attribution?: { creator: string; label?: string } }
+        | { type: "join"; attribution?: { creator: string; label?: string }; name?: string }
         | { type: "leave" }
         | { type: "kick"; target: string; vac?: { eid: string; version: bigint; hash: string } },
     ) => {
@@ -105,7 +105,7 @@ export function useGuestbookPublisher2(community: CommunityV2 | undefined) {
       const ms = Date.now();
       const rumor =
         action.type === "join"
-          ? buildJoinRumor(user.pubkey, ms, action.attribution)
+          ? buildJoinRumor(user.pubkey, ms, action.attribution, action.name ? { name: action.name } : undefined)
           : action.type === "leave"
             ? buildLeaveRumor(user.pubkey, ms)
             : buildKickRumor(user.pubkey, action.target, ms, action.vac);
