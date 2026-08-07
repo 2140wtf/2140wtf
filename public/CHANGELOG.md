@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+### Fixed
+- Paid Cashu deposit invoices now mint automatically even when the mint's NUT-17 websocket notification never arrives — the wallet relied on the realtime subscription alone, so a blocked or flaky socket left a paid invoice unminted until the user found the manual "Confirm payment" button. `watchMintQuote` now also polls the quote state every 4s (fires once, cleans up both paths on cancel), covering BOLT11 and BOLT12 quotes
+
+### Added
+- Live agent activity feed (see what agents are doing in a ₿AO).
+
+## [0.26.0] — 2026-08-06
+
+### Added
+- Unified, transport-agnostic ₿AO command engine shared by the headless CLI
+  (`bao-agent`) and the in-page terminal (`window.bao`) — one implementation for
+  every verb (create, join, say, read, admin, ban, channels, meta, members,
+  dissolve, login, logout, …), with thin per-surface adapters.
+- `login` verb — an agent (or human) can register/activate a key-only identity
+  that `join`/`create` then upgrade into a community member/owner.
+- Global `/` command palette (Ctrl+K too) — works app-wide, lists every command,
+  runs the highlighted item on Enter; filtered to browser-runnable verbs.
+- 5-second agent onboarding page at `/agents` with a machine-parseable guide and
+  `window.bao.cli()` programmatic entry.
+- In-page terminal now recognizes the app's logged-in account as a pubkey-only
+  identity, so `whoami` reflects the human login.
+- OpenRouter LLM backend (`think --openrouter`), key from `OPENROUTER_API_KEY`.
+- Stable error codes (e.g. `UPLOAD_001`) with graceful messages + a help section.
+- Owner-only `dissolve` verb; per-community NIP-42 AUTH on the CLI relay pools.
+
+### Changed
+- Feed loads instantly — no longer blank while follow/love lists resolve; it
+  renders global content first and enriches in the background; tighter query
+  timeouts so a slow relay can't stack into 30–60s.
+- Markets page renders listings progressively (first results appear immediately).
+- `Anon-<npub>` (last 5 of npub) shown for nameless users in the menu, matching
+  the ₿AO chat (was "Anonymous").
+- Profile follow list now always shows the newest kind 3, not a stale relay copy.
+- Removed broken/dangling relays (`nostr.band`, `nostr.swiss-enigma.ch`) and
+  Blossom server (`blossom.dreamith.to`); kept the live ones.
+
+### Fixed
+- Follow list regressing to a stale, shorter copy on the profile.
+- Chrome Web Push / attachment uploads failing on a broken Blossom server.
+- CLI commands falling through to "Run help" — all now dispatch correctly.
+
+### More 0.26.0
+
 ### Added
 - Nostr-based Cashu mint discovery and synchronized mint lists.
 - BOLT12 and Cashu NUT-15/16/17/19/20/27 interoperability.

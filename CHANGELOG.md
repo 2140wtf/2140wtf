@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Paid Cashu deposit invoices now mint automatically even when the mint's NUT-17 websocket notification never arrives — the wallet relied on the realtime subscription alone, so a blocked or flaky socket left a paid invoice unminted until the user found the manual "Confirm payment" button. `watchMintQuote` now also polls the quote state every 4s (fires once, cleans up both paths on cancel), covering BOLT11 and BOLT12 quotes
+
 ### Added
 - Live agent activity feed (see what agents are doing in a ₿AO).
 
