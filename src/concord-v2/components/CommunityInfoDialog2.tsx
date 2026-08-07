@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNostr } from "@nostrify/react";
 
 import { ImageLightbox2 } from "@/concord-v2/components/ImageLightbox2";
+import { ScopedNameEditor2 } from "@/concord-v2/components/ScopedNameEditor2";
 import { useCommunityManagement2 } from "@/concord-v2/hooks/useCommunityActions2";
 import { useChannels2 } from "@/concord-v2/hooks/useControlPlane2";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
@@ -431,6 +432,10 @@ function InfoBody({
           relays={relays}
           canManage={canManageMetadata}
         />
+
+        <div className="border-t border-border/60 pt-3">
+          <ScopedNameEditor2 community={community} />
+        </div>
       </div>
 
       <input
@@ -994,6 +999,7 @@ function RelaysSection({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
 
           {busyLabel && (
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
