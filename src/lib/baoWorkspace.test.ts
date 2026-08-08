@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { nip19 } from 'nostr-tools';
 
-import { parseRepoRef, type RepoRef } from '@/lib/baoWorkspace';
+import { parseRepoRef } from '@/lib/baoWorkspace';
 
 // Test vectors: a known owner pubkey, its naddr (NIP-34 coordinate) and npub form.
 const OWNER = '84230a6db2de1e1ce777c303a2b23bf309ff3bf8cb12c2392f9c3e4c8d85d947';
