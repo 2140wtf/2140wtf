@@ -11,6 +11,7 @@
  */
 
 import { baoNip98Header, type BaoApiSigner } from '@/lib/baoApiAuth';
+import type { MilestoneEvidenceV1 } from '@/lib/baoWorkContract';
 
 export type BaoFundraiserFormat = 'milestones' | 'stream';
 
@@ -544,21 +545,131 @@ export interface ScoreMilestoneResult {
 }
 
 /**
+ * Delivery evidence submitted to the AI scorer. Prefer the typed
+ * `MilestoneEvidenceV1` (bound to the work contract: delivered_commit, archive
+ * url+sha256, workflow_hash, artifact_event_ids) so the scorer's tools verify
+ * real fields; a plain string is accepted for backward compatibility and stays
+ * advisory-only.
+ */
+export type ScoreMilestoneEvidence = MilestoneEvidenceV1 | string;
+
+/**
+ * Input to a milestone AI-scoring job (advisory L0.5 signal, see
+ * docs/BAO_FUND_RESOLUTION.md §2). The worker runs the judge, may call
+ * verification tools, and publishes a signed kind-38037 event.
+ */
+export interface ScoreMilestoneInput {
+  /** Typed delivery evidence (preferred) or a free-text evidence note. */
+  evidence: ScoreMilestoneEvidence;
+  /** Max judge fee to reserve for the job, in msats. Capped server-side by the milestone's max_verification_fee_msats. */
+  toolBudgetMsats?: number;
+  /** Cap on verification-tool calls per scoring run (runaway/cost guard). */
+  maxToolCalls?: number;
+}
+
+/** Progress frame streamed from a running score job (SSE). */
+export type ScoreJobEventType = 'accepted' | 'tool_call' | 'token' | 'verdict' | 'done' | 'error';
+
+/** One verification-tool invocation the judge made (schema-driven, validated). */
+export interface ScoreToolCallEvent {
+  /** Tool name, e.g. `github:compare`, `fetch-hash`, `ci-status`, `nostr-fetch`. */
+  tool: string;
+  /** Validated, contract-bound argument (commit sha / archive url / workflow hash). */
+  argument: string;
+  /** Opaque reference to the deterministic result (for the kind-38037 `tool` tag). */
+  resultRef?: string;
+  /** SHA-256 of the deterministic result, so a client can re-check independently. */
+  resultHash?: string;
+}
+
+export interface ScoreJobEvent {
+  type: ScoreJobEventType;
+  /** Present when `type === 'tool_call'`. */
+  tool?: ScoreToolCallEvent;
+  /** Present when `type === 'verdict'` — advisory outcome of this attempt. */
+  verdict?: BaoVerificationVerdict;
+  /** Present when `type === 'verdict'` — 0..100 advisory confidence/score. */
+  score?: number;
+  /** Judge model id the job is running with. */
+  model?: string;
+  /** Reasoning token delta when `type === 'token'`. */
+  delta?: string;
+  /** Mirror of the score result's job id (present on every frame). */
+  job_id: number;
+}
+
+/**
  * Submit milestone evidence and enqueue AI scoring (owner/admin). The API
  * returns 202 + job id; the worker publishes a public, signed kind-38037
  * score event and the fee is deducted from the milestone payout.
+ *
+ * Accepts either a `ScoreMilestoneInput` object (typed evidence + tool/cost
+ * guardrails) or a legacy free-text string, which is treated as
+ * `{ evidence: <string> }`.
  */
 export async function scoreMilestone(
   signer: BaoApiSigner,
   fundraiserId: string,
   milestoneId: string,
-  evidence: string,
+  input: ScoreMilestoneInput | string,
 ): Promise<ScoreMilestoneResult> {
+  const body: { evidence: ScoreMilestoneEvidence; tool_budget_msats?: number; max_tool_calls?: number } =
+    typeof input === 'string'
+      ? { evidence: input }
+      : {
+          evidence: input.evidence,
+          ...(input.toolBudgetMsats !== undefined ? { tool_budget_msats: input.toolBudgetMsats } : {}),
+          ...(input.maxToolCalls !== undefined ? { max_tool_calls: input.maxToolCalls } : {}),
+        };
   const res = await apiFetch<{ data: ScoreMilestoneResult & { demo?: boolean } }>(
     `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/score`,
-    { method: 'POST', body: { evidence }, signer },
+    { method: 'POST', body, signer },
   );
   return res.data;
+}
+
+/**
+ * Live-tail an AI scoring job's progress over SSE and collect every frame.
+ * Emitted frames: tool-call invocations (with deterministic result hashes),
+ * reasoning token deltas, and the final advisory verdict. The consumer should
+ * reconcile the terminal state from the signed kind-38037 event once the
+ * stream closes — tool calls and tokens here are advisory transcripts only.
+ */
+export async function fetchScoreJobEvents(
+  fundraiserId: string,
+  milestoneId: string,
+  jobId: number,
+  signal?: AbortSignal,
+): Promise<ScoreJobEvent[]> {
+  const url = `${baoApiBase()}/v1/fundraisers/${encodeURIComponent(fundraiserId)}/milestones/${encodeURIComponent(milestoneId)}/score/${encodeURIComponent(String(jobId))}/events`;
+  const res = await fetch(url, { signal });
+  if (!res.ok || !res.body) throw new Error(`Score stream failed with HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const events: ScoreJobEvent[] = [];
+  let buffer = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        const dataLine = frame.split('\n').find((line) => line.startsWith('data:'));
+        if (!dataLine) continue;
+        try {
+          events.push(JSON.parse(dataLine.slice(5).trim()) as ScoreJobEvent);
+        } catch {
+          // skip a malformed frame rather than killing the whole stream
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return events;
 }
 
 export interface BaoVerificationStats {
