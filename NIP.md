@@ -1358,6 +1358,75 @@ The intent is published to the ₿AO relay (`VITE_BAO_RELAY_URL`, default `wss:/
 
 ---
 
+## Kind 38037: ₿AO Fund Milestone Score (advisory "Orbiter" verdict)
+
+### Summary
+
+Regular event carrying the **AI scorer's advisory verdict** on a milestone's
+delivery evidence. The scorer runs on the bao worker (enqueued via
+`POST …/milestones/:id/score`), reads the milestone rules and the runner's
+evidence, may call **verification tools** (git-commit compare, archive hash,
+CI status, Nostr artifact fetch), and publishes one signed event per scoring
+attempt.
+
+**Advisory only — never payout authority.** It feeds the layered resolution
+spec (`docs/BAO_FUND_RESOLUTION.md` §2) as an **L0.5 signal**: it can
+surface an automated early-objection *recommendation* and gives donor ring
+members decision-support before their L2 attestation ballot. Payouts are
+decided by L1 optimistic / L2 donor attestation / L3 court — not by this
+event. The `p` author MUST be in the campaign's declared `verifier_pubkeys`.
+
+### Event Structure
+
+```json
+{
+  "kind": 38037,
+  "pubkey": "<verifier-worker-pubkey>",
+  "content": "<freeform judgment: why the model scored it this way>",
+  "tags": [
+    ["d", "score:<campaignId>:<milestoneId>:<attempt>"],
+    ["e", "<38003-intent-event-id>"],
+    ["M", "<milestoneId>", "<milestoneIdx>"],
+    ["p", "<verifier-worker-pubkey>"],
+    ["model", "moonshotai/kimi-k3"],
+    ["verdict", "pass|review|fail"],
+    ["t", "bao-fund"],
+    ["amount", "<fee-msats>"],
+    ["evidence", "<sha256-of-evidence>"],
+    ["request", "<job-id-hex>"],
+    ["tool", "github:compare", "<delivered-commit>", "<result-hash>"],
+    ["alt", "₿AO Fund milestone score (advisory)"]
+  ]
+}
+```
+
+### Tags
+
+| Tag      | Required | Description |
+|----------|----------|-------------|
+| `d`      | Yes      | Stable identity per (campaign, milestone, attempt) so replays/dupes dedupe. |
+| `e`      | Yes      | The campaign's kind-38003 create-intent event id this score belongs to. |
+| `M`      | Yes      | Target milestone: id + index within the campaign. |
+| `p`      | Yes      | The verifier pubkey that signed. Trust-sensitive consumers MUST filter reads by the campaign's declared `verifier_pubkeys`. |
+| `model`  | Yes      | The judge model id (Routstr/OpenRouter marketplace id). |
+| `verdict`| Yes      | `pass` / `review` / `fail` — advisory outcome of this attempt. |
+| `t`      | No       | Discovery tag, `bao-fund`. |
+| `amount` | No       | Verification fee deducted, in msats. |
+| `evidence`| Yes     | SHA-256 of the evidence the score is bound to (tamper-attestation). |
+| `request`| No       | Opaque scorer job id. |
+| `tool`   | No       | **One tag per verification-tool call**: `[name, argument, result-hash]`. The result hash lets a client independently re-check what the judge relied on; the judge cannot assert a fact the tools didn't verify. |
+
+### Authority / verification rules
+
+- Consumers MUST only trust scores whose `p` is in the campaign's declared
+  `verifier_pubkeys` (see `docs/BAO_FUND_RESOLUTION.md` §8 declared
+  authorities). Any other author is ignored, however well-formed.
+- This event is **advisory**. It does not by itself open a window, release a
+  milestone, or refund a donor; those are L1–L3 decisions.
+- `tool` result hashes are the replayable proof for disputes and the court.
+
+---
+
 ## Kind 38000: ₿AO Market Definition
 
 ### Summary
