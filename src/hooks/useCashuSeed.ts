@@ -112,10 +112,15 @@ export function useCashuSeed(): UseCashuSeedResult {
           // Remote signers (NIP-46 bunkers like Amber) reject with strings
           // like "aka-profiles: denied" when the connection profile lacks
           // NIP-44 encrypt/decrypt permission — translate that into an
-          // actionable message instead of the raw signer string.
+          // actionable message instead of the raw signer string. An
+          // "invalid MAC" failure means the stored seed was encrypted with a
+          // DIFFERENT key (another signer or bunker profile) — the wallet is
+          // intact, the current signer just can't open it.
           const message = /denied/i.test(raw)
             ? `Your signer rejected the encryption request (${raw}). Enable NIP-44 encrypt/decrypt permission for this app in your signer's connection settings, then retry.`
-            : raw || 'Failed to load or create Cashu seed';
+            : /invalid mac/i.test(raw)
+              ? 'This wallet was encrypted with a different key or signer profile. Reconnect the signer you used when the wallet was created, or restore from a backup. (Regenerating would discard your existing wallet.)'
+              : raw || 'Failed to load or create Cashu seed';
           setError(message);
           setSeedPhrase(undefined);
         }
