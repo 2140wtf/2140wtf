@@ -69,7 +69,7 @@ const GITHUB_SLASH_SEGMENT = /^[A-Za-z0-9._-]+$/;
  */
 function decodeNostrAuthor(author: string): string | undefined {
   const v = author.toLowerCase();
-    if (v.startsWith('npub1')) {
+  if (v.startsWith('npub1')) {
     try {
       const decoded = nip19.decode(author);
       if (decoded.type === 'npub') {
@@ -118,6 +118,45 @@ function parseHostRef(raw: string, url: string): RepoRef | undefined {
 }
 
 /**
+ * Validate a NIP-34 repository `d`-tag value (the opaque, slash-tolerant part
+ * after `30617:<pubkey>:<identifier>`).
+ *
+ * ngit identifiers survive URL splitting intact, so they may contain slashes and
+ * percent-decoded characters — but once decoded they must still be safe to
+ * interpolate into a NIP-34 coordinate that is used as `authors`/`#d` filter
+ * values. We reject:
+ *  - empty values or values over NIP-34's 256-byte cap,
+ *  - control / non-printable characters,
+ *  - shell/HTML metacharacters and URL-encoding leftovers (`%`, `;`, `` ` ``,
+ *    `<`, `>`, `|`, `&`, newlines, `..` traversal sequences).
+ *
+ * This is a *character-level* guard, not a semantic allowlist — legitimate
+ * ngit identifiers are alphanumeric + `/`, `-`, `_`, `.`, `+`.
+ */
+const REPO_DTAG_RE = /^[A-Za-z0-9._+/ -]+$/;
+
+export function isValidNip34DTag(value: string): boolean {
+  if (!value || new TextEncoder().encode(value).length > MAX_REPO_IDENTIFIER_BYTES) return false;
+  if (!REPO_DTAG_RE.test(value)) return false;
+  // Reject traversal sequences even though `.` is otherwise allowed.
+  if (value.includes('..')) return false;
+  // Reject percent-encoding leftovers (e.g. decoded `%2f` → `/` is fine, but a
+  // literal stray `%` means the value wasn't fully/safely decoded).
+  if (value.includes('%')) return false;
+  return true;
+}
+
+/** Decode a URI component, returning undefined on malformed sequences (%zz) so
+ * the caller stays fail-closed instead of throwing a URIError. */
+function safeDecodeURIComponent(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Parse and security-screen any repo reference cited by a campaign/user/evidence
  * tag: an `naddr1…` pointer, a `nostr://<author>/<identifier>` ngit link, or a
  * GitHub/GitLab URL. Unreachable/non-Nostr refs are **fail-closed** (undefined).
@@ -153,17 +192,14 @@ export function parseRepoRef(input: unknown): RepoRef | undefined {
     if (identifier.endsWith('/')) identifier = identifier.slice(0, -1);
     const authorHex = decodeNostrAuthor(authorRaw);
     if (!authorHex) return undefined;
-    try {
-      decodeURIComponent(identifier);
-    } catch {
-      return undefined;
-    }
-    try {
-      identifier = decodeURIComponent(identifier);
-    } catch {
-      // fall back to raw if not fully URI-encoded
-    }
-    if (!identifier || new TextEncoder().encode(identifier).length > MAX_REPO_IDENTIFIER_BYTES) return undefined;
+    // ngit identifiers are opaque and slash-tolerant, but they are interpolated
+    // into a NIP-34 coordinate (`authors`/`#d` filters) and must not carry shell
+    // metacharacters, traversal sequences, URL-encoding artifacts, or anything
+    // that is not a valid NIP-34 `d`-tag value. Sanitize, then validate.
+    const decoded = safeDecodeURIComponent(identifier);
+    if (!decoded || new TextEncoder().encode(decoded).length > MAX_REPO_IDENTIFIER_BYTES) return undefined;
+    identifier = decoded;
+    if (!isValidNip34DTag(identifier)) return undefined;
     return {
       host: 'ngit',
       identifier,
