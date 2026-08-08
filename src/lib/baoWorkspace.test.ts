@@ -29,8 +29,6 @@ describe('parseRepoRef — control-vs-data, fail-closed', () => {
   });
 
   it('parses nostr:// with an opaque, slash-tolerant identifier', () => {
-    // The identifier segment preserves its slashes (e.g. an ngit repo id);
-    // a single trailing slash is dropped so `.../foo/` == `.../foo`.
     const ref = parseRepoRef(`nostr://${NPUB}/github/alice/repo/`);
     expect(ref).toMatchObject({
       host: 'ngit',
@@ -62,7 +60,6 @@ describe('parseRepoRef — control-vs-data, fail-closed', () => {
       url: 'https://github.com/alice/my-repo',
       raw: 'https://github.com/alice/my-repo',
     });
-    // Host refs never carry a coordinate — the relay asserts state, not the URL.
     expect(ref).not.toHaveProperty('coordinate');
     expect(ref).not.toHaveProperty('authorHex');
   });
@@ -79,7 +76,6 @@ describe('parseRepoRef — control-vs-data, fail-closed', () => {
   });
 
   it('rejects NIP-05 authors (no offline proof of authorship)', () => {
-    // Fail-closed: resolvable-by-DNS author names carry no signed proof of authorship.
     expect(parseRepoRef('nostr://alice.example/id')).toBeUndefined();
   });
 
@@ -109,11 +105,25 @@ describe('parseRepoRef — control-vs-data, fail-closed', () => {
 
   it('rejects bad hex pubkeys in nostr:// author segment', () => {
     expect(parseRepoRef('nostr://self/too-short/id')).toBeUndefined();
-    expect(parseRepoRef('nostr://zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/id')).toBeUndefined();
+    expect(parseRepoRef(`nostr://${'z'.repeat(64)}/id`)).toBeUndefined();
   });
 
   it('re-derives a stable naddr from a parsed naddr ref', () => {
     const ref = parseRepoRef(NADDR)!;
     expect(parseRepoRef(ref.raw)).toEqual(ref);
+  });
+
+  it('rejects ngit identifiers containing traversal sequences', () => {
+    expect(parseRepoRef(`nostr://${NPUB}/owner/../../etc/passwd`)).toBeUndefined();
+  });
+
+  it('rejects ngit identifiers carrying shell/HTML metacharacters', () => {
+    expect(parseRepoRef(`nostr://${NPUB}/owner/<script>alert(1)</script>`)).toBeUndefined();
+    expect(parseRepoRef(`nostr://${NPUB}/owner/repo;rm -rf /`)).toBeUndefined();
+    expect(parseRepoRef(`nostr://${NPUB}/owner/repo|cat`)).toBeUndefined();
+  });
+
+  it('rejects raw percent-encoding leftovers in ngit identifiers', () => {
+    expect(parseRepoRef(`nostr://${NPUB}/owner/repo%zz`)).toBeUndefined();
   });
 });
