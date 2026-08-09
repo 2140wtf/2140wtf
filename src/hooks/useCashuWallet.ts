@@ -2720,7 +2720,14 @@ export function useCashuWallet(
         return tokenStr;
       });
 
-      await syncNip60TokenForMint(activeMint, 'out', amount);
+      // Deliver the token as soon as the mint swap and local proof commit are
+      // complete. NIP-60 publication is a best-effort backup/remote-sync side
+      // effect; waiting for relay queries/publishes here can leave the Send
+      // button spinning even though the token is already valid and ready to
+      // hand to the recipient.
+      void syncNip60TokenForMint(activeMint, 'out', amount).catch((e) => {
+        devLog.warn('NIP-60 send sync deferred/failed:', e);
+      });
 
       // Return token immediately — proof update and tx recording are complete.
       if (mountedRef.current) setSuccessTimed(`Sent ${amount} sats`);
