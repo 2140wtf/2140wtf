@@ -35,7 +35,7 @@ import { useCuratedAppFeed } from '@/hooks/useCuratedAppFeed';
 import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
 
-import { isRepostKind, shouldHideFeedEvent, feedItemKey } from '@/lib/feedUtils';
+import { feedItemKey, isRepostKind, selectFeedItemsWithSeed, shouldHideFeedEvent } from '@/lib/feedUtils';
 import { FEED_TOPICS, getFeedTopic, isFeedTopicId } from '@/lib/feedTopics';
 import { isEventMuted } from '@/lib/muteHelpers';
 import { cn } from '@/lib/utils';
@@ -429,8 +429,12 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   // previous session so a warm device shows the feed in <1s instead of
   // skeletons — and a bogus "No posts found" can't flash over a warm cache.
   const seededDerivedItems = useMemo(
-    () => (derivedItems.length > 0 ? derivedItems : feedQuery.seedItems),
-    [derivedItems, feedQuery.seedItems],
+    () => selectFeedItemsWithSeed(
+      derivedItems,
+      feedQuery.seedItems,
+      !useAppQuery && !isTopicTab,
+    ),
+    [derivedItems, feedQuery.seedItems, isTopicTab, useAppQuery],
   );
 
   // Retain the last non-empty list so a key change / background refetch /
