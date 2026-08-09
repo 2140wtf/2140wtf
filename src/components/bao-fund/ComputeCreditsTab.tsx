@@ -554,6 +554,7 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
   const [token, setToken] = useState<string | null>(null);
   const [lockMode, setLockMode] = useState<CreditLockMode | null>(null);
   const [allowBearer, setAllowBearer] = useState(false);
+  const [allowIdentityLockFallback, setAllowIdentityLockFallback] = useState(false);
   const [dmState, setDmState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
   const [receiptFailed, setReceiptFailed] = useState(false);
   const [confirmFunding, setConfirmFunding] = useState(false);
@@ -671,6 +672,9 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
 
       if (!isLikelyMainnetMint(target.mintUrl)) {
         throw new Error('Agent funding requires a reachable HTTPS mainnet Cashu mint. Select a mainnet mint; signet and demo mints are blocked.');
+      }
+      if (target.mode === 'identity-key' && !allowIdentityLockFallback) {
+        throw new Error('This agent has no compatible NIP-61 wallet key. Ask the agent to publish one, or explicitly enable identity-key fallback.');
       }
 
       // 2. Balance check at the chosen mint — a raw "Insufficient balance: 0"
@@ -859,17 +863,28 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
               )}
             </div>
             {!isOwn && user && hasWallet && (
-              <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={allowBearer}
-                  onChange={(e) => setAllowBearer(e.target.checked)}
-                />
-                <span>
-                  Send <span className="text-amber-600 dark:text-amber-400 font-medium">unlocked</span> (bearer token in an encrypted DM — only for agents that ask for it)
-                </span>
-              </label>
+              <div className="space-y-1.5">
+                <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={allowIdentityLockFallback}
+                    onChange={(e) => setAllowIdentityLockFallback(e.target.checked)}
+                  />
+                  <span>Allow identity-key fallback when the agent has no compatible NIP-61 wallet key.</span>
+                </label>
+                <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={allowBearer}
+                    onChange={(e) => setAllowBearer(e.target.checked)}
+                  />
+                  <span>
+                    Send <span className="text-amber-600 dark:text-amber-400 font-medium">unlocked</span> (bearer token in an encrypted DM — only for agents that ask for it)
+                  </span>
+                </label>
+              </div>
             )}
             {!user && (
               <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
