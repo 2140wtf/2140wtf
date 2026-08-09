@@ -2,6 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeedTopic } from '@/lib/feedTopics';
 import type { NostrFilter } from '@nostrify/nostrify';
+import { useMusicArtists } from '@/hooks/useMusicArtists';
 
 /**
  * How far back to look when discovering active topic authors.
@@ -30,11 +31,19 @@ const HEX_PUBKEY = /^[0-9a-f]{64}$/;
  */
 export function useTopicAuthors(topic: FeedTopic | null) {
   const { nostr } = useNostr();
+  const musicRoster = useMusicArtists(topic?.id === 'music');
+  const musicPubkeys = musicRoster.artists.map((artist) => artist.pubkey);
+  const musicRosterKey = musicPubkeys.join(',');
 
   return useQuery<string[], Error>({
-    queryKey: ['topic-authors', topic?.id],
+    queryKey: ['topic-authors', topic?.id, topic?.id === 'music' ? musicRosterKey : ''],
     queryFn: async ({ signal }) => {
       if (!topic) return [];
+
+      // Keep the home Music tab aligned with `/music`: use the same curated
+      // plus track-discovered artist roster, then let Feed query their normal
+      // posts. Do not mix in unrelated hashtag or third-party pack authors.
+      if (topic.id === 'music') return musicPubkeys;
 
       // Static-author topics without tags (e.g. BAO) bypass discovery.
       if (topic.tags.length === 0) {
