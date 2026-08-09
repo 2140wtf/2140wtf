@@ -160,6 +160,30 @@ async function seedChannelStreamPool(
 }
 
 /**
+ * Publish a community-plane event privately first, then retry through the
+ * signed-in app connection when every relay rejects the isolated connection.
+ * Creation-gated relays may require NIP-42 authentication for the first wrap
+ * on a stream (including the dissolution stream of older communities).
+ */
+export async function publishWithAuthenticatedFallback(
+  relays: string[],
+  publishIsolated: (url: string) => Promise<void>,
+  publishAuthenticated: (url: string) => Promise<void>,
+  action: string,
+): Promise<void> {
+  const isolated = await Promise.allSettled(relays.map(publishIsolated));
+  if (isolated.some((result) => result.status === "fulfilled")) return;
+
+  const authenticated = await Promise.allSettled(relays.map(publishAuthenticated));
+  if (authenticated.some((result) => result.status === "fulfilled")) return;
+
+  const failures = relayFailureSummary(relays, authenticated)
+    || relayFailureSummary(relays, isolated)
+    || "the relays returned no details";
+  throw new Error(`The BAO's home relays refused ${action}, including the signed-in retry — ${failures}`);
+}
+
+/**
  * Refuse to join a community whose CURRENT Banlist names me (CORD-04 §4). An
  * honest client MUST NOT publish a Join, record the entry, or emit anything
  * while banlisted — presence on the folded head is disqualifying regardless of
@@ -655,14 +679,13 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       if (user.pubkey !== community.owner) throw new Error("Only the owner can dissolve the community.");
       const group = dissolvedGroupKey(community.id);
       const wrap = await sealDissolved(community.id, user.pubkey, user.signer);
-      const results = await Promise.allSettled(
-        community.relays.map((url) =>
-          concordClient(community.idHex, [group]).relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
-        ),
+      const isolated = concordClient(community.idHex, [group]);
+      await publishWithAuthenticatedFallback(
+        community.relays,
+        (url) => isolated.relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
+        (url) => nostr.relay(url).event(wrap, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) }),
+        "the dissolution",
       );
-      if (!results.some((r) => r.status === "fulfilled")) {
-        throw new Error("No relay accepted the dissolution.");
-      }
       await updateList({ type: "remove", communityId: community.idHex });
     },
   });
