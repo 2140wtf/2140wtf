@@ -2422,6 +2422,23 @@ export function useCashuWallet(
             await storageRef.current.saveProofsForMint(normalized, allProofs, encKey);
             storageRef.current.writeProofStoreTimestamp(normalized);
             storageRef.current.clearProofRecovery(normalized);
+            // A token may come from a mint that was not configured yet (for
+            // example the BAO Markets Cashu proxy). Keep the successfully
+            // received mint in the wallet's configured set so the next
+            // balance calculation includes its proofs instead of showing 0
+            // while History already contains the receive.
+            if (normalized !== normalizedMintUrl && isAllowedMintUrl(normalized)) {
+              const known = allMintsRef.current.map((m) => safeNormalizeMintUrl(m.url));
+              if (!known.includes(normalized)) {
+                const hostname = (() => { try { return new URL(normalized).hostname; } catch { return normalized; } })();
+                const stored = await storageRef.current.loadCustomMints(encKey, legacyEncKeyRef.current ?? undefined);
+                if (!stored.some((m) => safeNormalizeMintUrl(m.url) === normalized)) {
+                  const next = [...stored, { name: hostname, url: normalized, custom: true }];
+                  setCustomMints(next);
+                  await storageRef.current.saveCustomMints(next, encKey);
+                }
+              }
+            }
             await calculateAllBalances();
 
             // Record the transaction while still holding the proof lock.
