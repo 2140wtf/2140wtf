@@ -29,15 +29,36 @@ export const BAO_COMPUTE_CREDIT_FULFILLMENT_KIND = 4972;
 export const BAO_COMPUTE_CREDIT_RECEIPT_KIND = 4973;
 export const BAO_COMPUTE_CREDIT_TAG = 'bao-compute-credit-request';
 
+/**
+ * Agent funding is a real-money flow. Cashu does not encode the Bitcoin
+ * network in a mint URL, so reject the conventional test/demo endpoints
+ * before a token can be minted. This is deliberately conservative: custom
+ * production mints remain usable, while an operator must explicitly remove
+ * test markers from a URL before it can be selected for funding.
+ */
+export function isLikelyMainnetMint(mintUrl: string): boolean {
+  try {
+    const parsed = new URL(mintUrl);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'localhost' || host === '::1' || /^127(?:\\.\\d{1,3}){3}$/.test(host)) return false;
+    if (host.endsWith('.local') || host.endsWith('.test')) return false;
+    const endpoint = `${host}${parsed.pathname}`;
+    return !/(^|[./-])(testnet|signet|regtest|demo|staging|development|dev)([./-]|$)/.test(endpoint);
+  } catch {
+    return false;
+  }
+}
+
 export interface ComputeCreditRequest {
   id: string;
   pubkey: string;
   amountSats: number;
   purpose: string;
   createdAt: number;
-  /** 1 = single shot (one payout), 2 = double shot (two tranches). Absent = 1. */
+  /** 1 = Single-shot; 2 = Multi-shot (two tranches during testing). Absent = 1. */
   shots?: 1 | 2;
-  /** Tranche-2 amount for double-shot requests (amountSats is tranche 1). */
+  /** Tranche-2 amount for current Multi-shot requests (amountSats is tranche 1). */
   amount2Sats?: number;
 }
 
@@ -48,7 +69,7 @@ export interface ComputeCreditFulfillment {
   requesterPubkey: string;
   amountSats: number;
   createdAt: number;
-  /** Which tranche this claim funds (1 or 2). Absent = 1. */
+  /** Which tranche this claim funds (1 or 2 while Multi-shot is in testing). Absent = 1. */
   shot?: number;
 }
 
@@ -71,7 +92,7 @@ export function confirmedComputeCreditShots(
   return confirmed;
 }
 
-/** A double-shot request closes only after the agent confirms both tranches. */
+/** A Multi-shot request closes only after the agent confirms both test tranches. */
 export function isComputeCreditRequestConfirmed(
   request: ComputeCreditRequest,
   fulfillments: ComputeCreditFulfillment[],
@@ -84,7 +105,7 @@ export function isComputeCreditRequestConfirmed(
 export function buildComputeCreditRequest(input: {
   amountSats: number;
   purpose: string;
-  /** 2 = double shot: two donor-judged tranches (amountSats = tranche 1). */
+  /** 2 = Multi-shot during testing: two donor-judged tranches (amountSats = tranche 1). */
   shots?: 1 | 2;
   amount2Sats?: number;
 }) {
@@ -179,6 +200,8 @@ export interface ComputeCreditReceipt {
   note: string;
   /** p tags = CLAIMED funders — only render when corroborated (see below). */
   claimedFunders: string[];
+  /** Tranche this receipt covers for a Multi-shot request. */
+  shot?: number;
   createdAt: number;
 }
 
@@ -191,6 +214,7 @@ export function buildComputeCreditReceipt(input: {
   note: string;
   provider?: string;
   funderPubkeys?: string[];
+  shot?: number;
 }) {
   const tags: string[][] = [
     ['e', input.requestId],
@@ -200,6 +224,7 @@ export function buildComputeCreditReceipt(input: {
   for (const f of input.funderPubkeys ?? []) {
     if (HEX64.test(f)) tags.push(['p', f]);
   }
+  if (input.shot !== undefined) tags.push(['shot', String(Math.floor(input.shot))]);
   return {
     kind: BAO_COMPUTE_CREDIT_RECEIPT_KIND,
     content: input.note.trim(),
@@ -221,6 +246,8 @@ export function parseComputeCreditReceipt(event: NostrEvent): ComputeCreditRecei
   const claimedFunders = event.tags
     .filter((t) => t[0] === 'p' && typeof t[1] === 'string' && HEX64.test(t[1]))
     .map((t) => t[1]);
+  const shotRaw = Number(event.tags.find((t) => t[0] === 'shot')?.[1]);
+  const shot = Number.isSafeInteger(shotRaw) && shotRaw > 0 ? shotRaw : undefined;
 
   return {
     id: event.id,
@@ -230,8 +257,42 @@ export function parseComputeCreditReceipt(event: NostrEvent): ComputeCreditRecei
     provider,
     note: event.content.trim(),
     claimedFunders: [...new Set(claimedFunders)],
+    ...(shot ? { shot } : {}),
     createdAt: event.created_at,
   };
+}
+
+export type ComputeCreditStage = 'requested' | 'token_sent' | 'agent_confirmed' | 'redeemed';
+
+export interface ComputeCreditProgress {
+  shot: ComputeCreditShot;
+  amountSats: number;
+  stage: ComputeCreditStage;
+}
+
+/** Derive retry-safe progress without treating a donor claim as payment proof. */
+export function computeCreditProgress(
+  request: ComputeCreditRequest,
+  fulfillments: ComputeCreditFulfillment[],
+  receipts: ComputeCreditReceipt[],
+): ComputeCreditProgress[] {
+  const shots: ComputeCreditShot[] = request.shots === 2 ? [1, 2] : [1];
+  const confirmed = confirmedComputeCreditShots(request, fulfillments);
+  const claims = new Set(
+    fulfillments
+      .filter((f) => f.requestId === request.id && f.requesterPubkey === request.pubkey && f.pubkey !== request.pubkey)
+      .map((f) => request.shots === 2 && f.shot === 2 ? 2 : 1),
+  );
+  const redeemed = new Set(
+    receipts
+      .filter((r) => r.requestId === request.id && r.pubkey === request.pubkey)
+      .map((r) => request.shots === 2 && r.shot === 2 ? 2 : 1),
+  );
+  return shots.map((shot) => ({
+    shot,
+    amountSats: shot === 2 ? request.amount2Sats ?? 0 : request.amountSats,
+    stage: redeemed.has(shot) ? 'redeemed' : confirmed.has(shot) ? 'agent_confirmed' : claims.has(shot) ? 'token_sent' : 'requested',
+  }));
 }
 
 // ── Corroborated reputation aggregation ──────────────────────────────────────
