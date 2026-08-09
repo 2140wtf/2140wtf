@@ -42,7 +42,7 @@
  */
 
 import { getDecodedToken } from "@cashu/cashu-ts";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 import { getPublicKey } from "nostr-tools/pure";
 import { nip44 } from "nostr-tools";
@@ -66,7 +66,7 @@ import {
   statePath,
   waitForInterrupt,
 } from "./chat-core";
-import { fulfillCredits, listCreditInbox, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
+import { exportWorkHistory, fulfillCredits, listCreditInbox, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey, validateWorkHistory } from "./work-core";
 import {
   loadState as loadParadiseState,
   readFuel,
@@ -422,6 +422,21 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         }
         break;
       }
+      if (sub === "export") {
+        const path = pos[1];
+        if (!path) throw new Error("work export needs <path>");
+        writeFileSync(path, JSON.stringify(await exportWorkHistory(loadState(as)), null, 2), { mode: 0o600 });
+        console.log(`Exported metadata-only work history to ${path}`);
+        break;
+      }
+      if (sub === "import") {
+        const path = pos[1];
+        if (!path) throw new Error("work import needs <path>");
+        const bundle = validateWorkHistory(JSON.parse(readFileSync(path, "utf8")));
+        if (bundle.identityPubkey !== getPublicKey(hexToBytes(loadState(as).sk))) throw new Error("Work history belongs to a different identity.");
+        console.log(`Validated ${bundle.requests.length} requests, ${bundle.fulfillments.length} claims, and ${bundle.receipts.length} receipts.`);
+        break;
+      }
       if (sub === "request") {
         const amountSats = Number(pos[1]);
         const purpose = pos.slice(2).join(" ");
@@ -451,7 +466,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
         break;
       }
-      throw new Error("work needs: list | inbox | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+      throw new Error("work needs: list | inbox | export <path> | import <path> | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
     }
     case "wallet": {
       const state = loadState(as);
