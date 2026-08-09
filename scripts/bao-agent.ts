@@ -49,7 +49,7 @@ import { nip44 } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
-import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
+import { BAO_COMMANDS, commandManifest, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
 import { errorCodeDocs } from "@/lib/errorCodes";
 import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
 import { createNodeRelay, createNodeStore } from "./baoAdapter";
@@ -232,7 +232,11 @@ async function engineDispatch(as: string, command: string, args: BaoDispatchArgs
 }
 
 /** `help [cmd]` — list all commands, or full docs for one. */
-async function helpVerb(_as: string, cmd?: string): Promise<void> {
+async function helpVerb(_as: string, cmd?: string, json = false): Promise<void> {
+  if (json) {
+    console.log(JSON.stringify({ version: 1, commands: commandManifest() }));
+    return;
+  }
   if (cmd) {
     const c = findCommand(cmd);
     if (!c) throw new Error(`No command "${cmd}" — run 'help' to list them.`);
@@ -347,7 +351,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       await engineDispatch(as, "logout", {}, json);
       break;
     case "help":
-      await helpVerb(as, positionalArgs(rest)[0]);
+      await helpVerb(as, positionalArgs(rest)[0], json);
       break;
     case "project": {
       const snapshot = await projectSnapshot(loadState(as));
