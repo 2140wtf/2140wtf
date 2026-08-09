@@ -42,14 +42,14 @@
  */
 
 import { getDecodedToken } from "@cashu/cashu-ts";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 import { getPublicKey } from "nostr-tools/pure";
 import { nip44 } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
-import { BAO_COMMANDS, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
+import { BAO_COMMANDS, commandManifest, findCommand, renderCommandDoc, renderCommandHelp } from "@/concord-v2/lib/commands";
 import { errorCodeDocs } from "@/lib/errorCodes";
 import { dispatchBao, type BaoDispatchArgs } from "@/concord-v2/lib/baoEngine";
 import { createNodeRelay, createNodeStore } from "./baoAdapter";
@@ -66,7 +66,7 @@ import {
   statePath,
   waitForInterrupt,
 } from "./chat-core";
-import { fulfillCredits, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
+import { exportWorkHistory, fulfillCredits, listCreditInbox, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey, validateWorkHistory } from "./work-core";
 import {
   loadState as loadParadiseState,
   readFuel,
@@ -232,7 +232,11 @@ async function engineDispatch(as: string, command: string, args: BaoDispatchArgs
 }
 
 /** `help [cmd]` — list all commands, or full docs for one. */
-async function helpVerb(_as: string, cmd?: string): Promise<void> {
+async function helpVerb(_as: string, cmd?: string, json = false): Promise<void> {
+  if (json) {
+    console.log(JSON.stringify({ version: 1, commands: commandManifest() }));
+    return;
+  }
   if (cmd) {
     const c = findCommand(cmd);
     if (!c) throw new Error(`No command "${cmd}" — run 'help' to list them.`);
@@ -347,7 +351,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
       await engineDispatch(as, "logout", {}, json);
       break;
     case "help":
-      await helpVerb(as, positionalArgs(rest)[0]);
+      await helpVerb(as, positionalArgs(rest)[0], json);
       break;
     case "project": {
       const snapshot = await projectSnapshot(loadState(as));
@@ -409,6 +413,30 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         printWorkListing(await listWork(loadState(as)), json);
         break;
       }
+      if (sub === "inbox") {
+        const messages = await listCreditInbox(loadState(as));
+        if (json) console.log(JSON.stringify(messages));
+        else if (messages.length === 0) console.log("No compute-credit DMs found.");
+        else for (const message of messages) {
+          console.log(`  ${message.eventId.slice(0, 12)}… ${message.requestId ? `request ${message.requestId.slice(0, 12)}…` : "unmatched request"} ${message.token ? "Cashu token received" : "no token found"}`);
+        }
+        break;
+      }
+      if (sub === "export") {
+        const path = pos[1];
+        if (!path) throw new Error("work export needs <path>");
+        writeFileSync(path, JSON.stringify(await exportWorkHistory(loadState(as)), null, 2), { mode: 0o600 });
+        console.log(`Exported metadata-only work history to ${path}`);
+        break;
+      }
+      if (sub === "import") {
+        const path = pos[1];
+        if (!path) throw new Error("work import needs <path>");
+        const bundle = validateWorkHistory(JSON.parse(readFileSync(path, "utf8")));
+        if (bundle.identityPubkey !== getPublicKey(hexToBytes(loadState(as).sk))) throw new Error("Work history belongs to a different identity.");
+        console.log(`Validated ${bundle.requests.length} requests, ${bundle.fulfillments.length} claims, and ${bundle.receipts.length} receipts.`);
+        break;
+      }
       if (sub === "request") {
         const amountSats = Number(pos[1]);
         const purpose = pos.slice(2).join(" ");
@@ -438,7 +466,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
         break;
       }
-      throw new Error("work needs: list | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+      throw new Error("work needs: list | inbox | export <path> | import <path> | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
     }
     case "wallet": {
       const state = loadState(as);
