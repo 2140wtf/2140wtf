@@ -81,6 +81,12 @@ export interface EncryptedSettings {
   contentFilters?: ContentFilter[];
   /** How to handle NIP-36 content-warning events */
   contentWarningPolicy?: ContentWarningPolicy;
+  /** Account-wide Web-of-Trust feed filter, synced privately across devices. */
+  wotFilter?: {
+    enabled: boolean;
+    /** Minimum NIP-85 GrapeRank score (0..100) required in the home feed. */
+    threshold: number;
+  };
   /** Whether the user has enabled push notifications */
   notificationsEnabled?: boolean;
   /** Notification delivery style on native: 'push' (default) or 'persistent' (foreground service) */
