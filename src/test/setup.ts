@@ -59,6 +59,12 @@ Object.defineProperty(window, 'scrollTo', {
   value: vi.fn(),
 });
 
+// cmdk/Radix keep the keyboard-highlighted option visible with this DOM API.
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  writable: true,
+  value: vi.fn(),
+});
+
 // Mock IntersectionObserver
 global.IntersectionObserver = vi.fn().mockImplementation((_callback) => ({
   observe: vi.fn(),
@@ -69,12 +75,14 @@ global.IntersectionObserver = vi.fn().mockImplementation((_callback) => ({
   thresholds: [],
 }));
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation((_callback) => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver as a constructable class (cmdk calls `new
+// ResizeObserver(...)`; a vi.fn arrow implementation is not constructable).
+global.ResizeObserver = class ResizeObserverMock implements ResizeObserver {
+  constructor(_callback: ResizeObserverCallback) {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
 
 // jsdom's TextEncoder returns a Uint8Array from a different realm, which fails
 // `@noble/hashes`'s `instanceof Uint8Array` check ("expected Uint8Array, got
