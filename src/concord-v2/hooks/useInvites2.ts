@@ -433,7 +433,12 @@ export function useInviteActions2(community: CommunityV2 | undefined) {
 
       await updateInviteList({
         entries: [],
-        tombstones: [{ token: entry.token, community_id: community.idHex }],
+        tombstones: [{
+          token: entry.token,
+          community_id: community.idHex,
+          signer_sk: entry.signer_sk,
+          url: entry.url,
+        }],
       });
 
       const mine = new Set(folded?.registriesByCreator.get(user.pubkey) ?? []);
