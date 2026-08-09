@@ -147,6 +147,20 @@ export interface FeedItem {
 }
 
 /**
+ * Use the persisted core-feed seed only while rendering a core feed query.
+ * Topic and app-curated queries must start empty while their own query loads;
+ * otherwise changing tabs paints unrelated cached posts under the new label.
+ */
+export function selectFeedItemsWithSeed<T>(
+  derivedItems: T[],
+  coreSeedItems: T[],
+  allowCoreSeed: boolean,
+): T[] {
+  if (derivedItems.length > 0) return derivedItems;
+  return allowCoreSeed ? coreSeedItems : derivedItems;
+}
+
+/**
  * Compute a stable React key / dedup key for a feed item. The same target
  * event can appear with multiple wrappers (a repost AND a reaction AND a
  * zap), so the key incorporates the wrapper event id when present.
@@ -171,40 +185,6 @@ export function feedItemKey(item: FeedItem): string {
 /** d-tags reserved by NIP-51 for other purposes — hide these kind 30000 events from feeds. */
 const DEPRECATED_DTAGS = new Set(['mute', 'pin', 'bookmark', 'communities']);
 
-/**
- * Accounts excluded from app-rendered feed surfaces.
- *
- * This is deliberately narrower than a user mute list: it only covers a
- * coordinated cluster reported as unsolicited discovery spam. Users can still
- * open these profiles directly; the filter only prevents their events from
- * being injected into timelines.
- */
-export const DISCOVERY_BLOCKED_PUBKEYS = new Set([
-  'fe5915e97c59b0672a80351bd2e4a89d1414c56a25e74eab9b2ebc9014a8403b',
-  'bc58b531ebe1d4b6089ed346fbdb84d00fbcb619c26db6f303f7ffa4b4e4b5b7',
-  '34d2619e68720360854828326d149415e96394b76a93d7c107556d57e5d0d9a8',
-  '9f59d9117ce44768cc2cf259735455dbeaf1a38ee7c90aec1c5de4e1294f166b',
-  '794833e538ff2acb9149a736cf02d30c6ae0022c76d2dd55b57e540dc2f9c731',
-  'aee9d7ac9343f48e00337a7b97d7ff4d3d7877dacbb3fcccc0dce2a81b2e0502',
-  'e4dd796a3c78d952c509fb9791449c15c837da408650d4a2fbcac0c42f63d1d1',
-  '12e11290983d26a2281307228c98fe14618ceabda612900fa5b9ba699067d30e',
-  'd9c2ec9765485f7f39a1b59c4ef7578879d2d17908364e1031129cc7b72f692d',
-  'a8eeb2053dade88662496c468b92d425e3060af4dc32fc37a25abc99e35c7269',
-  '3185c2e56ed00d7a46778c241d8b20d4e41d7b29ea5538b3d194f7da26ab393f',
-  '7a21b98084eac6fcded076b37f09da1d6e7da3b0428195933bd165e8e994b2b4',
-  '343cf71f28c6d93c5674449406ef7184e117461b3395868f65af646cc4a2fddb',
-  '3170406792bed0426d3ebbbd00822bd87d5614ccf21f613e13a3a45e5d17caad',
-]);
-
-const DISCOVERY_BLOCKED_DOMAIN_RE = /(?:^|[\s/:.])(?:www\.)?nostrmag\.com(?:$|[\s/?#:.])/i;
-
-function referencesBlockedDiscoveryDomain(event: NostrEvent): boolean {
-  if (DISCOVERY_BLOCKED_DOMAIN_RE.test(event.content)) return true;
-  return event.tags.some(([, value]) =>
-    typeof value === 'string' && DISCOVERY_BLOCKED_DOMAIN_RE.test(value),
-  );
-}
-
 /** Returns true if a kind 30000 event is a deprecated/junk list that should be hidden. */
 function isDeprecatedFollowSet(event: NostrEvent): boolean {
   if (event.kind !== 30000) return false;
@@ -223,8 +203,6 @@ function isDeprecatedFollowSet(event: NostrEvent): boolean {
  * components that would return null.
  */
 export function shouldHideFeedEvent(event: NostrEvent): boolean {
-  if (DISCOVERY_BLOCKED_PUBKEYS.has(event.pubkey)) return true;
-  if (referencesBlockedDiscoveryDomain(event)) return true;
   // Deprecated kind 30000 follow sets
   if (isDeprecatedFollowSet(event)) return true;
   // Emoji packs (kind 30030) without at least one valid emoji tag

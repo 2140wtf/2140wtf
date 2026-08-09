@@ -2,7 +2,6 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeedTopic } from '@/lib/feedTopics';
 import type { NostrFilter } from '@nostrify/nostrify';
-import { DISCOVERY_BLOCKED_PUBKEYS } from '@/lib/feedUtils';
 
 /**
  * How far back to look when discovering active topic authors.
@@ -85,7 +84,7 @@ export function useTopicAuthors(topic: FeedTopic | null) {
       });
 
       scored.sort((a, b) => b.score - a.score);
-      const curated = (topic.authors ?? []).filter((pubkey) => !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+      const curated = topic.authors ?? [];
       const packAuthors = events
         .filter((event) => event.kind === 39089)
         .filter((event) => {
@@ -95,10 +94,9 @@ export function useTopicAuthors(topic: FeedTopic | null) {
           return topic.packTitles?.includes(title);
         })
         .flatMap((event) => event.tags.filter(([name]) => name === 'p').map(([, pubkey]) => pubkey))
-        .filter((pubkey) => HEX_PUBKEY.test(pubkey) && !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+        .filter((pubkey) => HEX_PUBKEY.test(pubkey));
       const discovered = scored
-        .map(({ pubkey }) => pubkey)
-        .filter((pubkey) => !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+        .map(({ pubkey }) => pubkey);
       return [...new Set([...curated, ...packAuthors, ...discovered])].slice(0, MAX_AUTHORS);
     },
     enabled: !!topic,
