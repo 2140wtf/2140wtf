@@ -147,11 +147,6 @@ export function usePetsWallet(): UsePetsWalletResult {
     return user;
   }, [user]);
 
-  const fallbackUser = useMemo(
-    () => ({ pubkey: '', signer: undefined } as unknown as NUser),
-    [],
-  );
-
   // Real Cashu wallet: same backup/restore logic as the Wallet tab.
   const backupCashuState = useCallback(
     async (payload: CashuBackupPayload): Promise<string | null> => {
@@ -180,9 +175,9 @@ export function usePetsWallet(): UsePetsWalletResult {
   // itself stays enabled so the Shop can display the BAO balance at all times.
   const baoWallet = useBaoCashuWallet(
     seedPhrase ?? '',
-    walletUser ?? fallbackUser,
+    walletUser ?? undefined,
     relayUrls,
-    { enableAutoClaim: mode === 'bao', enabled: true },
+    { enableAutoClaim: mode === 'bao', enabled: !!walletUser && !!seedPhrase },
   );
 
   const activeWallet = mode === 'bao' ? baoWallet : realWallet;
