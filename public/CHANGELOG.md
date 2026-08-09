@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
 - New-user onboarding removes the sparse activity block and consolidates news suggestions into one follow pack.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
 - Relay-discovered ₿AO markets restore odds from public SMJ history when settled pools clear live counters.
