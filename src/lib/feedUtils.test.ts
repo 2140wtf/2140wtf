@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { DISCOVERY_BLOCKED_PUBKEYS, getPaginationCursor, shouldHideFeedEvent } from './feedUtils';
+import { getPaginationCursor, selectFeedItemsWithSeed, shouldHideFeedEvent } from './feedUtils';
 
 function ev(created_at: number): NostrEvent {
   return {
@@ -61,32 +61,31 @@ describe('getPaginationCursor', () => {
   });
 });
 
-describe('discovery spam filtering', () => {
-  it('hides every app-blocked author before rendering a feed card', () => {
-    for (const pubkey of DISCOVERY_BLOCKED_PUBKEYS) {
-      expect(shouldHideFeedEvent({ ...ev(123), pubkey })).toBe(true);
-    }
-  });
-
+describe('feed event filtering', () => {
   it('does not hide an ordinary text note', () => {
     expect(shouldHideFeedEvent(ev(123))).toBe(false);
   });
 
-  it('hides NostrMag syndication from unlisted relay accounts', () => {
+  it('does not impose client-wide author or domain bans', () => {
     expect(shouldHideFeedEvent({
       ...ev(123),
       content: 'Read the syndicated story at https://nostrmag.com/example',
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldHideFeedEvent({
       ...ev(123),
       tags: [['r', 'https://www.nostrmag.com/story']],
-    })).toBe(true);
+    })).toBe(false);
+  });
+});
+
+describe('selectFeedItemsWithSeed', () => {
+  it('does not show the core-feed cache while a curated topic loads', () => {
+    const cachedCoreFeed = ['old core post'];
+    expect(selectFeedItemsWithSeed([], cachedCoreFeed, false)).toEqual([]);
+    expect(selectFeedItemsWithSeed([], cachedCoreFeed, true)).toEqual(cachedCoreFeed);
   });
 
-  it('does not block unrelated domains containing similar text', () => {
-    expect(shouldHideFeedEvent({
-      ...ev(123),
-      content: 'https://notnostrmag.com/example',
-    })).toBe(false);
+  it('always prefers results from the active query', () => {
+    expect(selectFeedItemsWithSeed(['topic post'], ['old core post'], false)).toEqual(['topic post']);
   });
 });
