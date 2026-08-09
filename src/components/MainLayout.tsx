@@ -15,6 +15,7 @@ import { useScrollDirection } from '@/hooks/useScrollDirection';
 import { DirectInvitesPrompt2 } from '@/concord-v2/components/DirectInvitesPrompt2';
 import { useForegroundNotifications } from '@/hooks/useForegroundNotifications';
 import { cn } from '@/lib/utils';
+import { RoutePreloader } from '@/components/RoutePreloader';
 
 const WidgetSidebar = lazy(() => import('@/components/WidgetSidebar').then((m) => ({ default: m.WidgetSidebar })));
 
@@ -70,6 +71,7 @@ function MainLayoutInner() {
     <CenterColumnContext.Provider value={centerColumnEl}>
     <DrawerContext.Provider value={openDrawer}>
     <NavHiddenContext.Provider value={navHidden}>
+      <RoutePreloader />
       {/* Magic Mouse fire particle overlay */}
       {config.magicMouse && <CursorFireEffect />}
 
