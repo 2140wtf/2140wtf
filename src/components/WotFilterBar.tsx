@@ -51,7 +51,8 @@ export function WotFilterBar({
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-64">
           Web of Trust: authors are scored 0–100 by global GrapeRank assertions (NIP-85).
-          Authors below the threshold — and unknown authors (rank 0) — are hidden.
+          Authors below the threshold — and unknown authors (rank 0) — are hidden. Your
+          choice is encrypted and follows your Nostr account across devices.
         </TooltipContent>
       </Tooltip>
 
