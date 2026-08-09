@@ -25,6 +25,7 @@ export type PublishFeature =
   | 'directMessages'
   | 'recovery'
   | 'encryptedSettings'
+  | 'baoCashuSync'
   | 'deleteRequests'
   | 'drafts'
   | 'emojiPacks'
@@ -62,6 +63,7 @@ const FEATURE_DEFAULTS: Record<PublishFeature, boolean> = {
   directMessages: true,
   recovery: true,
   encryptedSettings: true,
+  baoCashuSync: false,
   deleteRequests: true,
   drafts: true,
   emojiPacks: true,
