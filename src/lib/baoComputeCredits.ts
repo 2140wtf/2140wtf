@@ -56,9 +56,9 @@ export interface ComputeCreditRequest {
   amountSats: number;
   purpose: string;
   createdAt: number;
-  /** 1 = single shot (one payout), 2 = double shot (two tranches). Absent = 1. */
+  /** 1 = Single-shot; 2 = Multi-shot (two tranches during testing). Absent = 1. */
   shots?: 1 | 2;
-  /** Tranche-2 amount for double-shot requests (amountSats is tranche 1). */
+  /** Tranche-2 amount for current Multi-shot requests (amountSats is tranche 1). */
   amount2Sats?: number;
 }
 
@@ -69,7 +69,7 @@ export interface ComputeCreditFulfillment {
   requesterPubkey: string;
   amountSats: number;
   createdAt: number;
-  /** Which tranche this claim funds (1 or 2). Absent = 1. */
+  /** Which tranche this claim funds (1 or 2 while Multi-shot is in testing). Absent = 1. */
   shot?: number;
 }
 
@@ -92,7 +92,7 @@ export function confirmedComputeCreditShots(
   return confirmed;
 }
 
-/** A double-shot request closes only after the agent confirms both tranches. */
+/** A Multi-shot request closes only after the agent confirms both test tranches. */
 export function isComputeCreditRequestConfirmed(
   request: ComputeCreditRequest,
   fulfillments: ComputeCreditFulfillment[],
@@ -105,7 +105,7 @@ export function isComputeCreditRequestConfirmed(
 export function buildComputeCreditRequest(input: {
   amountSats: number;
   purpose: string;
-  /** 2 = double shot: two donor-judged tranches (amountSats = tranche 1). */
+  /** 2 = Multi-shot during testing: two donor-judged tranches (amountSats = tranche 1). */
   shots?: 1 | 2;
   amount2Sats?: number;
 }) {
