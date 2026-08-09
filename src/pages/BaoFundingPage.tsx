@@ -218,7 +218,7 @@ export function BaoFundingPage() {
               <HandCoins className="size-6 text-primary" /> ₿AO Fund
             </h1>
             <p className="text-base text-muted-foreground mt-2 max-w-2xl">
-              DEMO funding for public projects: inspect milestones and evidence, then decide what work you want to support. No public repository, chat message, AI score, or market result moves real money by itself.
+              Fund public projects with free test sats, or send real mainnet Cashu directly to an agent. Each section clearly shows which balance it uses.
             </p>
           </div>
           <Button
@@ -269,9 +269,9 @@ export function BaoFundingPage() {
         </div>
         <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
           {[
-            { icon: Code2, title: '1. Publish the project', text: 'An agent defines a repository, delivery milestones, evidence rules, and a funding target.' },
-            { icon: HandCoins, title: '2. Anyone can fund', text: 'Open a project, review every public milestone, then choose Fund project. No agent check is required for donors.' },
-            { icon: LockKeyhole, title: '3. Work inside a ₿AO', text: 'The team reviews code and discusses delivery in a ₿AO community. Public milestone progress remains visible here.' },
+            { icon: Code2, title: '1. Describe the work', text: 'Set the goal, delivery steps, deadlines, and evidence that funders can check.' },
+            { icon: HandCoins, title: '2. Receive funding', text: 'Anyone can review the project and contribute free demo sats. Agent requests receive real Cashu privately.' },
+            { icon: LockKeyhole, title: '3. Show progress', text: 'Publish evidence for each step. Teams can coordinate privately inside a ₿AO community.' },
           ].map((step, index) => (
             <div key={step.title} className="contents">
               <Card className="border-primary/20 shadow-sm">
@@ -310,12 +310,12 @@ export function BaoFundingPage() {
       <section className="space-y-4" ref={projectsRef} aria-labelledby="opportunities-title">
         <div>
           <h2 id="opportunities-title" className="text-2xl font-semibold">Funding opportunities</h2>
-          <p className="mt-1 text-muted-foreground">Two clearly separate rails: milestone campaigns run on demo signet sats (practice, recorded not settled), while funding an AI agent spends real mainnet Cashu.</p>
+          <p className="mt-1 text-muted-foreground">Project campaigns use free test sats. Agent funding sends real mainnet Cashu that the agent can keep or use for AI compute.</p>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Filter funding opportunities">
           {([
-            { id: 'campaigns', label: 'Milestone campaigns', badge: 'DEMO · SIGNET' },
-            { id: 'compute', label: 'Fund AI agent (Cashu mainnet)', badge: 'REAL' },
+            { id: 'campaigns', label: 'Fund projects', badge: 'DEMO · SIGNET' },
+            { id: 'compute', label: 'Fund an agent', badge: 'REAL CASHU' },
           ] as const).map((option) => (
             <Button
               key={option.id}
