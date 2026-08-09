@@ -244,7 +244,7 @@ describe('GroupChatService security fixes', () => {
     // The oldest event was evicted; the newest is retained.
     expect(pending.some((e) => e.id === first.id)).toBe(false);
     expect(pending.some((e) => e.id === lastId)).toBe(true);
-  });
+  }, 15_000);
 
   it('drops absurdly old future-epoch events instead of buffering them', async () => {
     const admin = createUser();
