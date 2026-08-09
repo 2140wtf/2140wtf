@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- New-account onboarding now loads curated follow packs and their profile avatars from the BAO pack relay with public relay fallbacks, so a cleared browser cache does not leave only the two local packs.
 - Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
 - New-user onboarding removes the sparse activity block and consolidates news suggestions into one follow pack.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
