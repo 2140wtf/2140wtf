@@ -847,7 +847,7 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
     () => (config.relayMetadata?.relays ?? []).filter((relay) => relay.read !== false || relay.write !== false).map((relay) => relay.url),
     [config.relayMetadata?.relays],
   );
-  const baoWallet = useBaoCashuWallet(seedPhrase ?? '', user!, relayUrls, { enableAutoClaim: false, enabled: !!user && !!seedPhrase });
+  const baoWallet = useBaoCashuWallet(seedPhrase ?? '', user, relayUrls, { enableAutoClaim: false, enabled: !!user && !!seedPhrase });
   const { toast } = useToast();
   const [amount, setAmount] = useState('1000');
   const [rail, setRail] = useState<BaoRail>('cashu');
