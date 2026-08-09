@@ -2050,7 +2050,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-14 md:mt-20">
+                <div className="flex flex-wrap items-center justify-end gap-2 mt-14 md:mt-20 min-w-0">
                   {/* More menu */}
                   <Button
                     variant="outline"
@@ -2094,9 +2094,14 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
                       )}
                       {!isOwnProfile && canReceiveDonations && metadataEvent && (
                         <ZapDialog target={metadataEvent} initialAmountSats={1000}>
-                          <Button className="rounded-full font-bold bg-purple-500 hover:bg-purple-600 text-white">
-                            <Zap className="size-4 mr-1.5" />
-                            Donate
+                          <Button
+                            size="icon"
+                            className="rounded-full bg-purple-500 hover:bg-purple-600 text-white sm:w-auto sm:px-4"
+                            aria-label="Donate with Lightning"
+                            title="Donate with Lightning"
+                          >
+                            <Zap className="size-4 sm:mr-1.5" />
+                            <span className="hidden sm:inline font-bold">Donate</span>
                           </Button>
                         </ZapDialog>
                       )}
@@ -3008,4 +3013,3 @@ function NoTabsEmptyState() {
     </div>
   );
 }
-
