@@ -62,10 +62,10 @@ export function FeedTabManager({ tabs, layout, onToggle, onMove, onReset }: Feed
                 <label htmlFor={`feed-tab-${tab.id}`} className="min-w-0 flex-1 text-sm font-medium cursor-pointer">
                   {tab.label}
                 </label>
-                <Button type="button" size="icon" variant="ghost" className="size-8" disabled={index === 0} onClick={() => onMove(tab.id, -1)} aria-label={`Move ${tab.label} left`}>
+                <Button type="button" size="icon" variant="ghost" className="size-8" disabled={index === 0} onClick={() => onMove(tab.id, -1)} aria-label={`Move ${tab.label} earlier`}>
                   <ChevronUp className="size-4" />
                 </Button>
-                <Button type="button" size="icon" variant="ghost" className="size-8" disabled={index === ordered.length - 1} onClick={() => onMove(tab.id, 1)} aria-label={`Move ${tab.label} right`}>
+                <Button type="button" size="icon" variant="ghost" className="size-8" disabled={index === ordered.length - 1} onClick={() => onMove(tab.id, 1)} aria-label={`Move ${tab.label} later`}>
                   <ChevronDown className="size-4" />
                 </Button>
               </div>
