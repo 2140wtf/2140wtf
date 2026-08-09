@@ -1,7 +1,7 @@
 // src/pets/shop/components/PetsShopDrawer.tsx
 
 import { useMemo } from 'react';
-import { ShoppingBag, Plus, Wallet as WalletIcon, Loader2 } from 'lucide-react';
+import { ShoppingBag, Plus, Wallet as WalletIcon, Loader2, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 
 import { usePetsPurchaseItem, estimateCashuSendFee, splitSatsPayment, PET_FIAT_RESERVE_SATS } from '../hooks/usePetsPurchaseItem';
 import { PETS_SHOP_ITEMS } from '../lib/pets-shop-items';
-import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
+import type { UsePetsWalletResult } from '@/pets/core/hooks/usePetsWallet';
 import type { NostrPetProfile, PetsCompanion } from '@/pets/core/lib/pets';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
@@ -21,6 +21,15 @@ interface PetsShopDrawerProps {
   profile: NostrPetProfile | null;
   companion?: PetsCompanion | null;
   externalWallet?: (CashuWalletState & CashuWalletActions) | null;
+  walletState: Pick<
+    UsePetsWalletResult,
+    | 'realWallet'
+    | 'baoWallet'
+    | 'mode'
+    | 'baoApiCashuBalance'
+    | 'baoApiBalanceLoading'
+    | 'refreshBaoApiBalances'
+  >;
   onCompanionUpdated?: (event: NostrEvent) => void;
 }
 
@@ -44,9 +53,29 @@ function effectSummary(effect: ShopItem['effect']): string {
   return parts.join(' · ');
 }
 
-export function PetsShopDrawer({ profile, companion, externalWallet, onCompanionUpdated }: PetsShopDrawerProps) {
-  const { realWallet, baoWallet, mode } = usePetsWallet();
-  const { mutate: purchase, isPending } = usePetsPurchaseItem(profile ?? null, companion, externalWallet, onCompanionUpdated, mode);
+export function PetsShopDrawer({
+  profile,
+  companion,
+  externalWallet,
+  walletState,
+  onCompanionUpdated,
+}: PetsShopDrawerProps) {
+  const {
+    realWallet,
+    baoWallet,
+    mode,
+    baoApiCashuBalance,
+    baoApiBalanceLoading,
+    refreshBaoApiBalances,
+  } = walletState;
+  const { mutate: purchase, isPending } = usePetsPurchaseItem(
+    profile ?? null,
+    companion,
+    externalWallet,
+    onCompanionUpdated,
+    mode,
+    { baoApiCashuBalance, refreshBaoApiBalances },
+  );
 
   // The rail label comes from the wallet mode that selected the active
   // wallet, not the profile tag — same source of truth as the purchase hook.
@@ -65,8 +94,9 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
 
   // Independent balance tracking for the two rails shown in the shop header.
   // BAO demo sats are shown from the cashu rail only (the BAO wallet).
-  const baoSignetBalance = baoWallet?.totalBalance ?? 0;
-  const baoSignetLoading = baoWallet?.loading ?? false;
+  const localBaoSignetBalance = baoWallet?.totalBalance ?? 0;
+  const baoSignetBalance = baoApiCashuBalance + localBaoSignetBalance;
+  const baoSignetLoading = baoApiBalanceLoading || (baoWallet?.loading ?? false);
   const cashuSatsBalance = realWallet?.totalBalance ?? 0;
   const cashuSatsLoading = realWallet?.loading ?? false;
 
@@ -96,12 +126,12 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b">
         <div className="flex items-center gap-2">
           <ShoppingBag className="size-5 text-primary" />
           <h2 className="font-semibold">Pet Shop</h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Badge variant="secondary" className="flex items-center gap-1.5">
             <WalletIcon className="size-3" />
             {walletLoading && demoSats === 0 ? (
@@ -115,7 +145,12 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
             {baoSignetLoading && baoSignetBalance === 0 ? (
               <Loader2 className="size-3 animate-spin" />
             ) : (
-              <span>{baoSignetBalance.toLocaleString()} ₿AO signet</span>
+              <span>
+                {baoSignetBalance.toLocaleString()} ₿AO signet
+                {baoApiCashuBalance > 0 && localBaoSignetBalance > 0
+                  ? ` (${baoApiCashuBalance.toLocaleString()} API + ${localBaoSignetBalance.toLocaleString()} NIP-60)`
+                  : ''}
+              </span>
             )}
           </Badge>
           <Badge variant="secondary" className="flex items-center gap-1.5">
@@ -126,6 +161,16 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
               <span>{cashuSatsBalance.toLocaleString()} Cashu sats</span>
             )}
           </Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label="Refresh BAO signet balance"
+            onClick={() => void refreshBaoApiBalances()}
+          >
+            <RefreshCw className="size-4" />
+          </Button>
         </div>
       </div>
 
@@ -158,7 +203,9 @@ export function PetsShopDrawer({ profile, companion, externalWallet, onCompanion
                       : splitSatsPayment(satsPrice, companion?.fiatBalance ?? 0, profile?.coins ?? 0);
                     const satsNeeded = satsSplit.walletSatsCost + (satsSplit.walletSatsCost > 0 ? feeReserve : 0);
                     const canAffordFiat = starterSpendable >= fiatPrice;
-                    const canAffordSats = demoSats >= satsNeeded;
+                    const canAffordViaApi = !isCashuMode && baoApiCashuBalance >= satsSplit.walletSatsCost;
+                    const canAffordViaNip60 = demoSats >= satsNeeded;
+                    const canAffordSats = satsSplit.walletSatsCost === 0 || canAffordViaApi || canAffordViaNip60;
                     const canAfford = canAffordFiat || canAffordSats;
                     return (
                       <Card key={item.id} className={cn('overflow-hidden', !canAfford && 'opacity-70')}>
