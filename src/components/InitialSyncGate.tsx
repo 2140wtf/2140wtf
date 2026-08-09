@@ -258,6 +258,19 @@ const NEWS_SOURCES = [
   { pubkey: "347447120a7a81123f131acfd91708dd2b85aca0e6a18647c6caa95914e45736", label: "CoinDesk" },
   { pubkey: "ecd4264b5dd03da823606f807370722bd66adc5943760428a09561fe58c5411d", label: "Cointelegraph" },
 ] as const;
+const NOSTR_CLIENTS = [
+  { pubkey: "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416", label: "2140.wtf" },
+  { pubkey: "532d830dffe09c13e75e8b145c825718fc12b0003f61d61e9077721c7fff93cb", label: "Primal" },
+  { pubkey: "781a1527055f74c1f70230f10384609b34548f8ab6a0a6caa74025827f9fdae5", label: "Ditto / Soapbox" },
+  { pubkey: "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c", label: "Amethyst" },
+  { pubkey: "e2ccf7cf20403f3f2a4a55b328f0de3be38558a7d5f33632fdaaefc726c1c8eb", label: "Wisp" },
+  { pubkey: "d1bd33333733dcc411f0ee893b38b8522fc0de227fff459d99044ced9e65581b", label: "Nostria" },
+  { pubkey: "f4eb8e62add1340b9cadcd9861e669b2e907cea534e0f7f3ac974c11c758a51a", label: "Jumble" },
+  { pubkey: "20986fb83e775d96d188ca5c9df10ce6d613e0eb7e5768a0f0b12b37cdac21b3", label: "YakiHonne" },
+  { pubkey: "266815e0c9210dfa324c6cba3573b14bee49da4209a9456f9484e5106cd408a5", label: "noStrudel" },
+  { pubkey: "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245", label: "Damus" },
+  { pubkey: "97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322", label: "Coracle" },
+] as const;
 const ACTIVE_SUGGESTION_CANDIDATES = [
   "19fefd7f39c96d2ff76f87f7627ae79145bc971d8ab23205005939a5a913bc2f",
   "04c915daefee38317fa734444acee390a8269fe5810b2241e5e6dd343dfbecc9",
@@ -1096,7 +1109,7 @@ function FollowsStep({
   }, [user, selectedPubkeys, selectedPubkeyCount, isEnabled, expectedPubkey, nostr, store, publishEvent, onNext]);
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">
+    <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-400">
       <div className="space-y-2">
         <h2 className="text-2xl font-bold tracking-tight">Find people to follow</h2>
         <p className="text-sm text-muted-foreground">
@@ -1104,12 +1117,12 @@ function FollowsStep({
         </p>
       </div>
 
-      <div className="max-h-[58dvh] space-y-7 overflow-y-auto pr-1">
-        <section className="space-y-3">
-          <h3 className="text-lg font-semibold">Meet the creators</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="max-h-[64dvh] space-y-4 overflow-y-auto pr-1">
+        <section className="space-y-2">
+          <h3 className="text-base font-semibold">Meet the creators</h3>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {FEATURED_CREATORS.map((person) => (
-              <PersonSuggestionCard
+              <CompactPersonPill
                 key={person.pubkey}
                 pubkey={person.pubkey}
                 fallbackName={person.label}
@@ -1121,10 +1134,10 @@ function FollowsStep({
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-2">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold">Active right now</h3>
+              <h3 className="text-base font-semibold">Active right now</h3>
               <p className="text-xs text-muted-foreground">
                 {isCheckingActivity ? "Checking recent posts…" : `${activePubkeys.length} people posted in the last 24 hours`}
               </p>
@@ -1147,14 +1160,14 @@ function FollowsStep({
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-2">
           <div>
-            <h3 className="text-lg font-semibold">News sources</h3>
+            <h3 className="text-base font-semibold">News sources</h3>
             <p className="text-xs text-muted-foreground">Pick the sources you want in your feed.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
             {NEWS_SOURCES.map((source) => (
-              <PersonSuggestionCard
+              <CompactPersonPill
                 key={source.pubkey}
                 pubkey={source.pubkey}
                 fallbackName={source.label}
@@ -1165,9 +1178,28 @@ function FollowsStep({
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-2">
           <div>
-            <h3 className="text-lg font-semibold">Explore by interest</h3>
+            <h3 className="text-base font-semibold">Nostr clients</h3>
+            <p className="text-xs text-muted-foreground">Follow the people and teams building the apps you use.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
+            {NOSTR_CLIENTS.map((client) => (
+              <CompactPersonPill
+                key={client.pubkey}
+                pubkey={client.pubkey}
+                fallbackName={client.label}
+                subtitle="Nostr client"
+                selected={selectedPubkeys.has(client.pubkey)}
+                onToggle={() => togglePubkey(client.pubkey)}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <div>
+            <h3 className="text-base font-semibold">Explore by interest</h3>
             <p className="text-xs text-muted-foreground">Optional Nostr follow packs from trusted curators.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1211,7 +1243,7 @@ function FollowsStep({
   );
 }
 
-function PersonSuggestionCard({
+function CompactPersonPill({
   pubkey,
   fallbackName,
   subtitle,
@@ -1226,33 +1258,35 @@ function PersonSuggestionCard({
 }) {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
-  const name = metadata?.display_name || metadata?.name || fallbackName || genUserName(pubkey);
+  const name = fallbackName || metadata?.display_name || metadata?.name || genUserName(pubkey);
   const picture = sanitizeUrl(metadata?.picture);
 
   return (
-    <div className={cn(
-      "flex min-h-48 flex-col items-center rounded-xl border bg-card p-4 text-center transition-colors",
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={cn(
+      "flex min-h-12 min-w-0 items-center gap-2 rounded-full border bg-card px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-3 sm:px-3 sm:py-2",
       selected && "border-primary bg-primary/5",
     )}>
-      <Avatar className="size-16" shape={getAvatarShape(metadata)}>
+      <Avatar className="size-8 shrink-0 sm:size-10" shape={getAvatarShape(metadata)}>
         <AvatarImage src={picture} alt={name} />
-        <AvatarFallback className="bg-primary/15 text-primary text-lg">
+        <AvatarFallback className="bg-primary/15 text-sm text-primary">
           {name[0]?.toUpperCase() ?? "?"}
         </AvatarFallback>
       </Avatar>
-      <p className="mt-3 line-clamp-1 font-semibold">{name}</p>
-      <p className="min-h-5 text-xs text-muted-foreground">{subtitle ?? "News on Nostr"}</p>
-      <Button
-        type="button"
-        size="sm"
-        variant={selected ? "secondary" : "default"}
-        className="mt-auto w-full rounded-full"
-        aria-pressed={selected}
-        onClick={onToggle}
-      >
-        {selected ? "Following" : "Follow"}
-      </Button>
-    </div>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold sm:text-sm">{name}</span>
+        <span className="hidden truncate text-xs text-muted-foreground sm:block">{subtitle ?? "News on Nostr"}</span>
+      </span>
+      <span className={cn(
+        "flex size-6 shrink-0 items-center justify-center rounded-full border text-primary sm:size-7",
+        selected && "border-primary bg-primary text-primary-foreground",
+      )} aria-hidden>
+        {selected ? <Check className="size-4" /> : <span className="text-lg leading-none">+</span>}
+      </span>
+    </button>
   );
 }
 
