@@ -393,12 +393,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         .filter((rail) => rail.sats > 0)
     : [];
 
-  // Swap guidance: local self-custody Cashu is what pets/battles spend. When
-  // it's empty but the user holds sats on bao.markets rails, point them at the
-  // swap instead of leaving them at a dead "0".
-  const showSwapHint =
-    cashuWallet.totalBalance === 0 && apiTotal !== null && apiTotal > 0;
-
   const selectedConfig = RAIL_BY_ID[selectedRail];
 
   return (
@@ -485,27 +479,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         })}
       </div>
 
-      {showSwapHint && (
-        <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
-          No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
-          <span className='font-medium text-foreground'>{(apiTotal ?? 0).toLocaleString()} sats</span>{' '}
-          on bao.markets
-          {apiBreakdown.length > 0 && (
-            <> ({apiBreakdown.map((rail) => rail.label).join(', ')})</>
-          )}
-          : swap them to Cashu on{' '}
-          <a
-            href='https://bao.markets'
-            target='_blank'
-            rel='noreferrer'
-            className='text-primary underline underline-offset-2'
-          >
-            bao.markets
-          </a>{' '}
-          to use them here.
-        </p>
-      )}
-
       <Card>
         <CardHeader className='pb-2'>
           <CardTitle className='flex items-center gap-2 text-base font-medium'>
@@ -518,7 +491,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           {selectedRail === 'lightning' && (
             <LightningPanel wallet={cashuWallet} walletStatus={walletStatus} nwc={nwc} />
           )}
-          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} signer={user.signer} onApiChanged={() => void apiBalances.refetch()} />}
+          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} signer={user.signer} onApiChanged={() => void apiBalances.refetch()} apiCashuBalance={apiBalances.data?.cashu ?? null} />}
           {['liquid', 'spark', 'ark', 'fedimint', 'l1'].includes(selectedRail) && (
             <DemoPlaceholderPanel rail={selectedConfig} balance={railBalance(selectedRail)} />
           )}
@@ -748,7 +721,7 @@ function LightningPanel({
   );
 }
 
-function CashuPanel({ wallet, signer, onApiChanged }: { wallet: ReturnType<typeof useBaoCashuWallet>; signer: BaoWalletTabProps['user']['signer']; onApiChanged: () => void }) {
+function CashuPanel({ wallet, signer, onApiChanged, apiCashuBalance }: { wallet: ReturnType<typeof useBaoCashuWallet>; signer: BaoWalletTabProps['user']['signer']; onApiChanged: () => void; apiCashuBalance: number | null }) {
   const { toast } = useToast();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -920,6 +893,17 @@ function CashuPanel({ wallet, signer, onApiChanged }: { wallet: ReturnType<typeo
           </div>
         </CardContent>
       </Card>
+      <details className='rounded-xl border bg-muted/20'>
+        <summary className='cursor-pointer list-none px-4 py-3 text-sm font-medium'>Advanced NIP-60 wallet</summary>
+        <div className='space-y-4 border-t px-4 py-4'>
+          <p className='text-xs text-muted-foreground'>This wallet stores encrypted Cashu state on Nostr relays. It can send and receive Cashu tokens without the BAO Markets API. The custodial BAO Markets Cashu balance is shown above and is separate from this local NIP-60 balance.</p>
+          {wallet.totalBalance === 0 && apiCashuBalance !== null && apiCashuBalance > 0 && (
+            <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
+              No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
+              <span className='font-medium text-foreground'>{apiCashuBalance.toLocaleString()} sats on bao.markets (Cashu)</span>.
+              Use the custodial controls above to redeem or deposit, or receive a Cashu token here to use the NIP-60 wallet.
+            </p>
+          )}
       <div className='flex items-baseline gap-2'>
         <span className='text-3xl font-bold'>{wallet.totalBalance}</span>
         <span className='text-muted-foreground'>demo sats</span>
@@ -1076,6 +1060,8 @@ function CashuPanel({ wallet, signer, onApiChanged }: { wallet: ReturnType<typeo
           setScannerOpen(false);
         }}
       />
+        </div>
+      </details>
     </div>
   );
 }
