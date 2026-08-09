@@ -8,8 +8,8 @@
 import { generateMnemonic, mnemonicToSeedSync, entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { CashuMint, CashuWallet, getDecodedToken } from '@cashu/cashu-ts';
+import { hashToCurve, pointFromHex } from '@cashu/cashu-ts/crypto/common';
 import { verifyDLEQProof_reblind } from '@cashu/cashu-ts/crypto/client/NUT12';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';
@@ -182,7 +182,15 @@ export function validateReceivedProofs(
       }
       try {
         const secretBytes = new TextEncoder().encode(secret);
-        const ok = verifyDLEQProof_reblind(secretBytes, { s, e, r }, C.point!, A!);
+        // cashu-ts bundles its own secp256k1 point class. Rehydrate the
+        // points through that package before calling its verifier; passing our
+        // direct @noble/curves points throws "Weierstrass Point expected".
+        const ok = verifyDLEQProof_reblind(
+          secretBytes,
+          { s, e, r },
+          pointFromHex(C.point!.toHex(true)),
+          pointFromHex(A!.toHex(true)),
+        );
         if (!ok) {
           return { valid: false, reason: 'received proof has invalid DLEQ proof' };
         }
@@ -317,6 +325,15 @@ function encodeAad(context?: string): BufferSource | undefined {
   return new TextEncoder().encode(context) as BufferSource;
 }
 
+function aesGcmParams(iv: Uint8Array, aad?: BufferSource): AesGcmParams {
+  // Chromium rejects an `additionalData: undefined` property even though
+  // WebCrypto treats an omitted field as valid. Only include AAD when a
+  // context was supplied so legacy/context-free storage works in browsers.
+  return aad === undefined
+    ? ({ name: 'AES-GCM', iv } as AesGcmParams)
+    : ({ name: 'AES-GCM', iv, additionalData: aad } as AesGcmParams);
+}
+
 /** Encrypt proofs for local storage.
  *  The ciphertext is prefixed with a version header and bound to the supplied
  *  context string via AES-GCM AAD.
@@ -328,7 +345,7 @@ export async function encryptProofs(proofs: unknown, key: CryptoKey, context?: s
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = new TextEncoder().encode(JSON.stringify(proofs));
   const aad = encodeAad(context);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad } as AesGcmParams, key, data);
+  const encrypted = await crypto.subtle.encrypt(aesGcmParams(iv, aad), key, data);
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
@@ -362,7 +379,7 @@ async function decryptAesGcm(
   const iv = combined.slice(0, 12);
   const data = combined.slice(12);
   const aad = encodeAad(context);
-  return crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad } as AesGcmParams, key, data);
+  return crypto.subtle.decrypt(aesGcmParams(iv, aad), key, data);
 }
 
 /** Decrypt proofs from local storage. Throws on crypto or format errors so callers know data is unreadable.
@@ -413,7 +430,7 @@ export async function encryptData(plaintext: string, key: CryptoKey, context?: s
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = new TextEncoder().encode(plaintext);
   const aad = encodeAad(context);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad } as AesGcmParams, key, data);
+  const encrypted = await crypto.subtle.encrypt(aesGcmParams(iv, aad), key, data);
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
