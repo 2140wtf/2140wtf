@@ -1013,6 +1013,12 @@ export function useCashuWallet(
         if (!cancelled && isBaoNamespaceRef.current && nip60SyncEnabled && nip60SyncRef.current) {
           try {
             await restoreFromBaoMarkets();
+            // API-only accounts have no bao.markets browser config yet. Publish
+            // the locally-derived BAO wallet key to the BAO relay so the first
+            // collected payout can be backed up and addressed by NIP-61.
+            await syncNip60WalletConfig();
+            await syncAllNip60Tokens();
+            if (nutzapsAdEnabledRef.current) await publishNip60NutzapInfo();
           } catch (e) {
             devLog.error('bao.markets NIP-60 init restore failed:', e);
           }
@@ -1202,9 +1208,10 @@ export function useCashuWallet(
 
   // Re-publish NIP-60 wallet config and Nutzap info when the mint list or sync adapter changes.
   useEffect(() => {
-    if (!encKeyRef.current || !nip60SyncRef.current || !nip60WalletKeyRef.current || !seedPhraseRef.current) return;
+    if (!nip60SyncEnabled || !encKeyRef.current || !nip60SyncRef.current || !getNip60WalletKey() || !seedPhraseRef.current) return;
     (async () => {
       await syncNip60WalletConfig();
+      await syncAllNip60Tokens();
       if (nutzapsAdEnabledRef.current) {
         await publishNip60NutzapInfo();
       } else {
@@ -1212,15 +1219,14 @@ export function useCashuWallet(
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allMints, options?.nip60Sync]);
+  }, [allMints, options?.nip60Sync, nip60SyncEnabled]);
 
   // Publish or hide the public Nutzap receiver ad (kind:10019) when the
   // "Receive Nutzaps" publish preference flips (Settings → Privacy, or the
   // ₿AO Fund compute-credits prompt).
   useEffect(() => {
     nutzapsAdEnabledRef.current = nutzapsAdEnabled;
-    if (!encKeyRef.current || !nip60SyncRef.current || !nip60WalletKeyRef.current || !seedPhraseRef.current) return;
-    if (isBaoNamespaceRef.current) return; // BAO demo wallets never publish kind:10019
+    if (!encKeyRef.current || !nip60SyncRef.current || !getNip60WalletKey() || !seedPhraseRef.current) return;
     if (nutzapsAdEnabled) {
       publishNip60NutzapInfo().catch((e) => devLog.error('Nutzap info publish failed:', e));
     } else {
@@ -1402,17 +1408,24 @@ export function useCashuWallet(
     return ['client', config.clientName ?? config.appName ?? '2140'];
   }, [config.clientName, config.appName]);
 
+  const getNip60WalletKey = useCallback(() => {
+    if (!isBaoNamespaceRef.current) return nip60WalletKeyRef.current;
+    // Prefer the key advertised by an existing bao.markets wallet so both
+    // clients converge. A fresh API-only account has no foreign config yet;
+    // its deterministic local BAO key becomes the wallet key and is published
+    // to the BAO relay before the first token backup or Nutzap receive.
+    return crossAppWalletKeyRef.current ?? nip60WalletKeyRef.current;
+  }, []);
+
   const getNip60WalletSigner = useCallback(() => {
     // BAO demo wallets sign with the key recovered from bao.markets' published
     // config so both apps converge on the same NIP-60 author. Without a
     // cross-app key there is nothing to publish (bao.markets could not read
     // events signed by our locally-derived key), so return null and skip.
-    const key = isBaoNamespaceRef.current
-      ? crossAppWalletKeyRef.current
-      : nip60WalletKeyRef.current;
+    const key = getNip60WalletKey();
     if (!key) return null;
     return createNip60Signer(key.privkey);
-  }, []);
+  }, [getNip60WalletKey]);
 
   const syncNip60TokenForMint = useCallback(async (
     mintUrl: string,
@@ -1440,7 +1453,8 @@ export function useCashuWallet(
 
     try {
       const proofs = sanitizeProofs(await storageRef.current.getProofsForMint(normalized, encKey, legacyEncKeyRef.current ?? undefined));
-      const lastEventId = await loadLastTokenEventId(normalized, encKey);
+      const namespace = storageNamespaceRef.current;
+      const lastEventId = await loadLastTokenEventId(normalized, encKey, namespace);
       const delIds = new Set<string>();
       if (lastEventId) delIds.add(lastEventId);
 
@@ -1479,7 +1493,7 @@ export function useCashuWallet(
       const delArray = [...delIds].filter((id) => id.length === 64);
       const payload = { mint: normalized, unit: 'sat' as const, proofs, del: delArray.length > 0 ? delArray : undefined };
       const hash = computeContentHash(payload);
-      const lastHash = await loadLastTokenEventHash(normalized, encKey);
+      const lastHash = await loadLastTokenEventHash(normalized, encKey, namespace);
       if (hash === lastHash) return;
 
       const tokenEvent = await buildTokenEvent(normalized, proofs, walletSigner, delArray.length > 0 ? delArray : undefined, [getClientTag()]);
@@ -1506,8 +1520,8 @@ export function useCashuWallet(
       const history = await buildHistoryEvent(direction, amount, normalized, walletSigner, historyRefs, [getClientTag()]);
       if (history) await publishEvent(history).catch(() => {});
 
-      await saveLastTokenEventId(normalized, tokenEvent.id, encKey);
-      await saveLastTokenEventHash(normalized, hash, encKey);
+      await saveLastTokenEventId(normalized, tokenEvent.id, encKey, namespace);
+      await saveLastTokenEventHash(normalized, hash, encKey, namespace);
       return tokenEvent;
     } catch (e) {
       devLog.error('NIP-60 token sync failed for mint:', normalized, e);
@@ -1529,12 +1543,15 @@ export function useCashuWallet(
     if (options?.publishWalletConfig === false) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
-    const key = nip60WalletKeyRef.current;
+    const key = getNip60WalletKey();
     if (!sync || !encKey || !key) return;
 
     try {
       const mints = allMintsRef.current.map((m) => m.url);
-      if (seedPhraseRef.current) {
+      // NUT-27 is the interoperable mint list for the MAIN wallet. Publishing
+      // the BAO demo mint there would overwrite the user's mainnet mint list
+      // and leak the isolated demo plane onto their normal relays.
+      if (seedPhraseRef.current && !isBaoNamespaceRef.current) {
         try {
           const nut27Event = await buildNut27MintListEvent(seedPhraseRef.current, mints, config.clientName ?? '2140.wtf');
           await sync.publish(nut27Event);
@@ -1544,19 +1561,22 @@ export function useCashuWallet(
       }
       const payload = buildWalletConfigPayload(key.privkey, mints);
       const baoConfig = baoWalletConfigRef.current;
-      const configs = baoConfig ? [payload, baoConfig] : payload;
+      const configs = !isBaoNamespaceRef.current && baoConfig ? [payload, baoConfig] : payload;
       const hash = computeContentHash(configs);
-      const lastHash = await loadLastWalletConfigHash(encKey);
+      const namespace = storageNamespaceRef.current;
+      const lastHash = await loadLastWalletConfigHash(encKey, namespace);
       if (hash === lastHash) return;
 
       const event = await buildWalletConfigEvent(configs, sync.signer, { extraTags: [getClientTag()] });
       if (!event) return;
-      const id = await sync.publish(event);
-      if (id) await saveLastWalletConfigHash(hash, encKey);
+      const id = isBaoNamespaceRef.current && sync.publishToRelays
+        ? await sync.publishToRelays([BAO_MARKETS_RELAY], event)
+        : await sync.publish(event);
+      if (id) await saveLastWalletConfigHash(hash, encKey, namespace);
     } catch (e) {
       devLog.error('NIP-60 wallet config sync failed:', e);
     }
-  }, [config.clientName, getClientTag, nip60SyncEnabled, options?.publishWalletConfig]);
+  }, [config.clientName, getClientTag, getNip60WalletKey, nip60SyncEnabled, options?.publishWalletConfig]);
 
   const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
     // Gated by the "Receive Nutzaps" publish preference (default OFF) — the
@@ -1564,23 +1584,27 @@ export function useCashuWallet(
     if (!nutzapsAdEnabledRef.current) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
-    const key = nip60WalletKeyRef.current;
+    const key = getNip60WalletKey();
     if (!sync || !encKey || !key) return;
 
     try {
       const mints = allMintsRef.current.map((m) => m.url);
-      const hash = computeContentHash({ pubkey: key.pubkey, mints, relays: sync.relays });
-      const lastHash = await loadLastNutzapInfoHash(encKey);
+      const relays = isBaoNamespaceRef.current ? [BAO_MARKETS_RELAY] : sync.relays;
+      const hash = computeContentHash({ pubkey: key.pubkey, mints, relays });
+      const namespace = storageNamespaceRef.current;
+      const lastHash = await loadLastNutzapInfoHash(encKey, namespace);
       if (hash === lastHash) return;
 
-      const event = await buildNutzapInfoEvent(mints, sync.relays, key.pubkey, sync.signer, { extraTags: [getClientTag()] });
+      const event = await buildNutzapInfoEvent(mints, relays, key.pubkey, sync.signer, { extraTags: [getClientTag()] });
       if (!event) return;
-      const id = await sync.publish(event);
-      if (id) await saveLastNutzapInfoHash(hash, encKey);
+      const id = isBaoNamespaceRef.current && sync.publishToRelays
+        ? await sync.publishToRelays([BAO_MARKETS_RELAY], event)
+        : await sync.publish(event);
+      if (id) await saveLastNutzapInfoHash(hash, encKey, namespace);
     } catch (e) {
       devLog.error('NIP-60 Nutzap info publish failed:', e);
     }
-  }, [getClientTag]);
+  }, [getClientTag, getNip60WalletKey]);
 
   /**
    * Hide the public Nutzap receiver ad when the "Receive Nutzaps" publish
@@ -1593,13 +1617,14 @@ export function useCashuWallet(
   const clearNip60NutzapInfo = useCallback(async (): Promise<void> => {
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
-    const key = nip60WalletKeyRef.current;
+    const key = getNip60WalletKey();
     if (!sync || !encKey || !key) return;
 
     try {
       // Only clear when an ad was actually published — users who never had
       // one shouldn't get a pointless event pair.
-      const lastHash = await loadLastNutzapInfoHash(encKey);
+      const namespace = storageNamespaceRef.current;
+      const lastHash = await loadLastNutzapInfoHash(encKey, namespace);
       if (!lastHash || lastHash === NUTZAP_INFO_CLEARED) return;
 
       const cleared = await sync.signer.signEvent({
@@ -1609,7 +1634,11 @@ export function useCashuWallet(
         created_at: Math.floor(Date.now() / 1000),
       });
       if (!cleared) return;
-      await sync.publish(cleared);
+      if (isBaoNamespaceRef.current && sync.publishToRelays) {
+        await sync.publishToRelays([BAO_MARKETS_RELAY], cleared);
+      } else {
+        await sync.publish(cleared);
+      }
 
       // The event author is the identity key (what the a-tag addresses).
       const deletion = await sync.signer.signEvent({
@@ -1619,13 +1648,17 @@ export function useCashuWallet(
         created_at: Math.floor(Date.now() / 1000),
       });
       if (!deletion) return;
-      await sync.publish(deletion);
+      if (isBaoNamespaceRef.current && sync.publishToRelays) {
+        await sync.publishToRelays([BAO_MARKETS_RELAY], deletion);
+      } else {
+        await sync.publish(deletion);
+      }
 
-      await saveLastNutzapInfoHash(NUTZAP_INFO_CLEARED, encKey);
+      await saveLastNutzapInfoHash(NUTZAP_INFO_CLEARED, encKey, namespace);
     } catch (e) {
       devLog.error('NIP-60 Nutzap info clear failed:', e);
     }
-  }, [getClientTag]);
+  }, [getClientTag, getNip60WalletKey]);
 
   const calculateAllBalances = useCallback(async (_seed?: Uint8Array, overrideEncKey?: CryptoKey) => {
     const encKey = encKeyRef.current;
@@ -2915,15 +2948,15 @@ export function useCashuWallet(
   // published in kind:10019). Key material stays inside the hook — callers
   // (e.g. the compute-credits redeem flow) never touch it.
   const sweepWalletLockedToken = useCallback(async (tokenStr: string): Promise<number> => {
-    const key = nip60WalletKeyRef.current;
+    const key = getNip60WalletKey();
     if (!key) {
       setError('Set up your Cashu wallet first — no wallet key to sweep locked tokens');
       return 0;
     }
     return receiveToken(tokenStr, bytesToHex(key.privkey));
-  }, [receiveToken]);
+  }, [getNip60WalletKey, receiveToken]);
 
-  const getWalletP2pkPubkey = useCallback((): string | null => nip60WalletKeyRef.current?.pubkey ?? null, []);
+  const getWalletP2pkPubkey = useCallback((): string | null => getNip60WalletKey()?.pubkey ?? null, [getNip60WalletKey]);
 
   const requestInvoice = useCallback(async (amount: number, description = 'Freedom ID'): Promise<MintQuoteResponse | null> => {
     const encKey = encKeyRef.current;
@@ -4306,7 +4339,8 @@ export function useCashuWallet(
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const walletSigner = getNip60WalletSigner();
-    if (!sync || !encKey || !walletSigner || !wallet) {
+    const walletKey = getNip60WalletKey();
+    if (!sync || !encKey || !walletSigner || !walletKey || !wallet) {
       devLog.warn('Cannot receive Nutzap: wallet or NIP-60 sync not ready');
       return;
     }
@@ -4354,7 +4388,7 @@ export function useCashuWallet(
         const received = await withTimeout(
           targetWallet.receive(tokenStr, {
             proofsWeHave: existing,
-            privkey: bytesToHex(nip60WalletKeyRef.current!.privkey),
+            privkey: bytesToHex(walletKey.privkey),
             requireDleq: true,
           }),
           60000,
@@ -4413,7 +4447,7 @@ export function useCashuWallet(
         await refreshTransactions();
 
         const tokenEvent = await syncNip60TokenForMint(normalized, 'in', receivedAmount);
-        const lastEventId = await loadLastTokenEventId(normalized, encKey);
+        const lastEventId = await loadLastTokenEventId(normalized, encKey, storageNamespaceRef.current);
         const redemption = await buildNutzapRedemptionHistoryEvent(
           receivedAmount,
           normalized,
@@ -4423,7 +4457,12 @@ export function useCashuWallet(
           walletSigner,
           [getClientTag()],
         );
-        if (redemption) await sync.publish(redemption).catch(() => {});
+        if (redemption) {
+          const publish = isBaoNamespaceRef.current && sync.publishToRelays
+            ? sync.publishToRelays([BAO_MARKETS_RELAY], redemption)
+            : sync.publish(redemption);
+          await publish.catch(() => {});
+        }
       });
 
       processedNutzapIdsRef.current.add(event.id);
@@ -4438,7 +4477,7 @@ export function useCashuWallet(
     } finally {
       releaseNutzapMutex();
     }
-  }, [wallet, mintUrl, getNip60WalletSigner, getOrCreateWallet, filterUnspentProofs, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
+  }, [wallet, mintUrl, getNip60WalletKey, getNip60WalletSigner, getOrCreateWallet, filterUnspentProofs, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, getClientTag]);
 
   const sendNutzap = useCallback(async (
     amount: number,
@@ -4487,7 +4526,9 @@ export function useCashuWallet(
     // redirect Nutzaps to an attacker's wallet pubkey.
     let recipientInfo: { pubkey: string; mints: string[]; relays: string[] } | null = null;
     try {
-      const infoEvents = await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
+      const infoEvents = isBaoNamespaceRef.current && sync.queryRelays
+        ? await sync.queryRelays([BAO_MARKETS_RELAY], { kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 })
+        : await sync.query({ kinds: [NUTZAP_INFO_KIND], authors: [recipientIdentityPubkey], limit: 5 });
       const sorted = infoEvents
         .filter((ev) => parseNutzapInfoEvent(ev, recipientIdentityPubkey) !== null)
         .sort((a, b) => b.created_at - a.created_at);
@@ -4497,7 +4538,7 @@ export function useCashuWallet(
     }
     // Fallback: the 2140 treasury's kind:10019 lives on BAO's relay, which is
     // not in the app default relay set — query it directly before giving up.
-    if (!recipientInfo && sync.queryRelays) {
+    if (!recipientInfo && !isBaoNamespaceRef.current && sync.queryRelays) {
       try {
         const infoEvents = await sync.queryRelays(
           [TREASURY_INFO_FALLBACK_RELAY],
@@ -4697,7 +4738,9 @@ export function useCashuWallet(
       }
       pendingEntry.id = event.id;
       pendingEntry.event = event;
-      const publishedId = await sync.publish(event);
+      const publishedId = isBaoNamespaceRef.current && sync.publishToRelays
+        ? await sync.publishToRelays([BAO_MARKETS_RELAY], event)
+        : await sync.publish(event);
       if (!publishedId) {
         pendingEntry.attempts = 1;
         try {
@@ -4718,7 +4761,7 @@ export function useCashuWallet(
       // lists only relay.bao.network, which is not an app default relay).
       // Fan out to any recipient relays we don't already cover; failures are
       // saved for background retry so the payment is not stranded.
-      const appRelayUrls = new Set((sync.relays ?? []).map(normalizeRelayUrlForCompare));
+      const appRelayUrls = new Set((isBaoNamespaceRef.current ? [BAO_MARKETS_RELAY] : (sync.relays ?? [])).map(normalizeRelayUrlForCompare));
       const extraRelays = [...new Set(
         recipientInfo.relays
           .map((u) => u.trim())
@@ -4834,7 +4877,9 @@ export function useCashuWallet(
           });
         }
         if (!event) continue;
-        const id = await sync.publish(event);
+        const id = isBaoNamespaceRef.current && sync.publishToRelays
+          ? await sync.publishToRelays([BAO_MARKETS_RELAY], event)
+          : await sync.publish(event);
         if (id) {
           // Also (re)deliver to any recipient kind:10019 relays still pending —
           // the app-relay publish alone does not reach a recipient whose wallet

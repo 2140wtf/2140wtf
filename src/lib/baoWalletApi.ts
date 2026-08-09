@@ -218,6 +218,164 @@ export async function redeemBaoCashuToken(
   return json.data;
 }
 
+// ─── Cashu faucet claim + proof collection ─────────────────────────────────
+
+export interface BaoCashuClaimResult {
+  status: 'pending' | 'completed';
+  idempotency_key: string;
+  claimed_sats?: number;
+  new_balance_sats?: number;
+  txid?: string;
+}
+
+interface BaoCashuClaimStatusEnvelope {
+  data?: {
+    status?: unknown;
+    idempotency_key?: unknown;
+    claimed_sats?: unknown;
+    new_balance_sats?: unknown;
+    txid?: unknown;
+    result?: {
+      claimed_sats?: unknown;
+      new_balance_sats?: unknown;
+      txid?: unknown;
+      error?: unknown;
+    } | null;
+  };
+  error?: { message?: string; code?: string };
+  message?: string;
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** Claim real BAO signet Cashu proofs and a matching custodial demo credit. */
+export async function claimBaoCashu(
+  signer: BaoApiSigner,
+  amountSats: number,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<BaoCashuClaimResult> {
+  if (!Number.isSafeInteger(amountSats) || amountSats <= 0) {
+    throw new Error('Claim amount must be a positive whole number of sats');
+  }
+  const url = `${baoApiBase()}/v1/wallet/claim`;
+  const body = JSON.stringify({
+    rail: 'cashu',
+    amount_sats: amountSats,
+    idempotency_key: idempotencyKey,
+  });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: await baoNip98Header(signer, url, 'POST', body),
+    },
+    body,
+    signal: AbortSignal.timeout(70_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as BaoCashuClaimStatusEnvelope;
+  if (!res.ok && res.status !== 202) {
+    throw new BaoSendError(
+      json.error?.message ?? json.message ?? `HTTP ${res.status}`,
+      json.error?.code,
+      res.status,
+    );
+  }
+  const data = json.data ?? {};
+  const result = data.result ?? data;
+  const status = res.status === 202 || data.status === 'pending' ? 'pending' : 'completed';
+  return {
+    status,
+    idempotency_key: typeof data.idempotency_key === 'string' ? data.idempotency_key : idempotencyKey,
+    claimed_sats: positiveInteger(result.claimed_sats),
+    new_balance_sats: positiveInteger(result.new_balance_sats),
+    txid: typeof result.txid === 'string' ? result.txid : undefined,
+  };
+}
+
+/** Poll an asynchronous Cashu faucet claim without relying on a session token. */
+export async function checkBaoCashuClaimStatus(
+  signer: BaoApiSigner,
+  idempotencyKey: string,
+): Promise<BaoCashuClaimResult> {
+  const url = `${baoApiBase()}/v1/wallet/claim-status/${encodeURIComponent(idempotencyKey)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as BaoCashuClaimStatusEnvelope;
+  if (!res.ok) {
+    throw new BaoSendError(
+      json.error?.message ?? json.message ?? `HTTP ${res.status}`,
+      json.error?.code,
+      res.status,
+    );
+  }
+  const data = json.data ?? {};
+  const result = data.result ?? {};
+  if (data.status === 'failed') {
+    throw new BaoSendError(
+      typeof result.error === 'string' ? result.error : 'BAO Cashu claim failed',
+      'CLAIM_FAILED',
+      409,
+    );
+  }
+  return {
+    status: data.status === 'completed' ? 'completed' : 'pending',
+    idempotency_key: typeof data.idempotency_key === 'string' ? data.idempotency_key : idempotencyKey,
+    claimed_sats: positiveInteger(result.claimed_sats),
+    new_balance_sats: positiveInteger(result.new_balance_sats),
+    txid: typeof result.txid === 'string' ? result.txid : undefined,
+  };
+}
+
+/** Fetch real Cashu payout tokens waiting to be imported into the local wallet. */
+export async function fetchPendingBaoCashuTokens(signer: BaoApiSigner): Promise<string[]> {
+  const url = `${baoApiBase()}/v1/wallet/cashu-pending`;
+  const res = await fetch(url, {
+    headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: { tokens?: unknown };
+    error?: { message?: string; code?: string };
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new BaoSendError(
+      json.error?.message ?? json.message ?? `HTTP ${res.status}`,
+      json.error?.code,
+      res.status,
+    );
+  }
+  return Array.isArray(json.data?.tokens)
+    ? json.data.tokens.filter((token): token is string => typeof token === 'string' && token.trim().length > 0)
+    : [];
+}
+
+/** Clear pending payout tokens only after every token is durable locally. */
+export async function clearPendingBaoCashuTokens(signer: BaoApiSigner): Promise<void> {
+  const url = `${baoApiBase()}/v1/wallet/cashu-collect`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: await baoNip98Header(signer, url, 'POST') },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string; code?: string };
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new BaoSendError(
+      json.error?.message ?? json.message ?? `HTTP ${res.status}`,
+      json.error?.code,
+      res.status,
+    );
+  }
+}
+
 // ─── Positions (my trades) ───────────────────────────────────────────────────
 
 export interface BaoPosition {
