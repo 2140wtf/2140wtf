@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterRealTrendingTags, isBlockedTrendEvent } from './useTrending';
+import { filterRealTrendingTags, isBlockedTrendEvent, uniqueTrendEvents } from './useTrending';
 
 describe('filterRealTrendingTags', () => {
   it('removes Solana and other altcoin promotion while retaining real topics', () => {
@@ -25,5 +25,21 @@ describe('isBlockedTrendEvent', () => {
       content: 'promotion',
       sig: '3'.repeat(128),
     })).toBe(true);
+  });
+});
+
+describe('uniqueTrendEvents', () => {
+  it('keeps the first copy of each relay result', () => {
+    const event = {
+      id: '1'.repeat(64),
+      pubkey: '2'.repeat(64),
+      created_at: 1,
+      kind: 1,
+      tags: [],
+      content: 'hello',
+      sig: '3'.repeat(128),
+    };
+
+    expect(uniqueTrendEvents([event, { ...event }])).toEqual([event]);
   });
 });

@@ -52,10 +52,12 @@ export function parsePeopleList(
   const getTag = (name: string) => event.tags.find(([n]) => n === name)?.[1];
   // Drop malformed `p` tag pubkeys — anything but a 64-char lowercase hex string
   // would crash `nip19.npubEncode` deep inside the renderer.
-  const pubkeys = event.tags
-    .filter(([n]) => n === 'p')
-    .map(([, pk]) => pk)
-    .filter(isNostrId);
+  const pubkeys = [...new Set(
+    event.tags
+      .filter(([n]) => n === 'p')
+      .map(([, pk]) => pk)
+      .filter(isNostrId),
+  )];
   const variant = getPeopleListVariant(event.kind) ?? 'follow-pack';
 
   if (event.kind === 3) {

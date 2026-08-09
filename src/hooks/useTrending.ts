@@ -41,6 +41,16 @@ export function isBlockedTrendEvent(event: NostrEvent): boolean {
   );
 }
 
+/** Relays may return the same event more than once; React lists need stable unique IDs. */
+export function uniqueTrendEvents(events: NostrEvent[]): NostrEvent[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
+}
+
 /**
  * Fetches trending hashtags from 2140.wtf relays via kind 1985 label events.
  * These are published with L: "pub.ditto.trends" and l: "#t", "pub.ditto.trends".
@@ -133,7 +143,7 @@ export function useTrendingPosts(enabled = true) {
 
       // Sort by the order they appeared in the label event (first = most trending)
       const idOrder = new Map(eventIds.map((id, i) => [id, i]));
-      return events
+      return uniqueTrendEvents(events)
         .sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999))
         .filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
     },
@@ -159,7 +169,7 @@ export function useSortedPosts(sort: SortMode, limit = 5, enabled = true) {
         [{ kinds: [1], search: `sort:${sort} protocol:nostr`, limit }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events.filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
+      return uniqueTrendEvents(events).filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
     },
     enabled,
     staleTime: 5 * 60 * 1000,
