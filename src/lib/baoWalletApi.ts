@@ -161,6 +161,63 @@ export async function sendDemoSats(signer: BaoApiSigner, input: BaoSendInput): P
   return json?.data ?? { status: 'completed' };
 }
 
+export interface BaoDepositInvoice {
+  bolt11: string;
+  payment_hash: string;
+  amount_sats: number;
+  expires_at: number;
+}
+
+export async function createBaoDepositInvoice(
+  signer: BaoApiSigner,
+  amountSats: number,
+  memo = 'BAO wallet deposit',
+): Promise<BaoDepositInvoice> {
+  const url = `${baoApiBase()}/v1/wallet/deposit`;
+  const body = JSON.stringify({ amount_sats: amountSats, memo });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: await baoNip98Header(signer, url, 'POST', body) },
+    body,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: BaoDepositInvoice; error?: { message?: string } };
+  if (!res.ok || !json.data) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+  return json.data;
+}
+
+export async function checkBaoDepositStatus(
+  signer: BaoApiSigner,
+  paymentHash: string,
+): Promise<{ paid: boolean; amount_sats?: number; preimage?: string }> {
+  const url = `${baoApiBase()}/v1/wallet/deposit-status/${encodeURIComponent(paymentHash)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: { paid?: boolean; amount_sats?: number; preimage?: string }; error?: { message?: string } };
+  if (!res.ok || !json.data) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+  return { paid: json.data.paid === true, amount_sats: json.data.amount_sats, preimage: json.data.preimage };
+}
+
+export async function redeemBaoCashuToken(
+  signer: BaoApiSigner,
+  token: string,
+  idempotencyKey = crypto.randomUUID(),
+): Promise<{ amount_sats: number; balance_sats: number; redeemed: boolean }> {
+  const url = `${baoApiBase()}/v1/wallet/cashu-redeem`;
+  const body = JSON.stringify({ token, idempotency_key: idempotencyKey });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: await baoNip98Header(signer, url, 'POST', body) },
+    body,
+    signal: AbortSignal.timeout(30_000),
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: { amount_sats: number; balance_sats: number; redeemed: boolean }; error?: { message?: string } };
+  if (!res.ok || !json.data) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
+  return json.data;
+}
+
 // ─── Positions (my trades) ───────────────────────────────────────────────────
 
 export interface BaoPosition {
