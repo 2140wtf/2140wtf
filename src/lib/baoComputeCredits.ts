@@ -29,6 +29,27 @@ export const BAO_COMPUTE_CREDIT_FULFILLMENT_KIND = 4972;
 export const BAO_COMPUTE_CREDIT_RECEIPT_KIND = 4973;
 export const BAO_COMPUTE_CREDIT_TAG = 'bao-compute-credit-request';
 
+/**
+ * Agent funding is a real-money flow. Cashu does not encode the Bitcoin
+ * network in a mint URL, so reject the conventional test/demo endpoints
+ * before a token can be minted. This is deliberately conservative: custom
+ * production mints remain usable, while an operator must explicitly remove
+ * test markers from a URL before it can be selected for funding.
+ */
+export function isLikelyMainnetMint(mintUrl: string): boolean {
+  try {
+    const parsed = new URL(mintUrl);
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'localhost' || host === '::1' || /^127(?:\\.\\d{1,3}){3}$/.test(host)) return false;
+    if (host.endsWith('.local') || host.endsWith('.test')) return false;
+    const endpoint = `${host}${parsed.pathname}`;
+    return !/(^|[./-])(testnet|signet|regtest|demo|staging|development|dev)([./-]|$)/.test(endpoint);
+  } catch {
+    return false;
+  }
+}
+
 export interface ComputeCreditRequest {
   id: string;
   pubkey: string;
