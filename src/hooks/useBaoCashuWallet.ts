@@ -122,10 +122,10 @@ export function useBaoCashuWallet(
 
   const collectPendingApiCashu = useCallback(async (): Promise<number> => {
     if (!userPubkey || !userSigner) throw new Error('Log in to collect BAO Cashu.');
-    const tokens = await fetchPendingBaoCashuTokens(userSigner);
-    if (tokens.length === 0) return 0;
+    const pendingItems = await fetchPendingBaoCashuTokens(userSigner);
+    if (pendingItems.length === 0) return 0;
     let imported = 0;
-    for (const token of tokens) {
+    for (const { token } of pendingItems) {
       const markerKey = `bao_cashu_collected_${userPubkey}_${computeContentHash(token)}`;
       let durable = false;
       try { durable = localStorage.getItem(markerKey) === '1'; } catch { durable = false; }
@@ -138,8 +138,8 @@ export function useBaoCashuWallet(
         try { localStorage.setItem(markerKey, '1'); } catch { /* marker is only crash recovery */ }
       }
     }
-    await clearPendingBaoCashuTokens(userSigner);
-    for (const token of tokens) {
+    await clearPendingBaoCashuTokens(userSigner, pendingItems.map((item) => item.id));
+    for (const { token } of pendingItems) {
       try { localStorage.removeItem(`bao_cashu_collected_${userPubkey}_${computeContentHash(token)}`); } catch { /* ignore */ }
     }
     return imported;

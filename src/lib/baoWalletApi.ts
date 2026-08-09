@@ -331,15 +331,20 @@ export async function checkBaoCashuClaimStatus(
   };
 }
 
-/** Fetch real Cashu payout tokens waiting to be imported into the local wallet. */
-export async function fetchPendingBaoCashuTokens(signer: BaoApiSigner): Promise<string[]> {
+export interface PendingBaoCashuToken {
+  readonly id: string;
+  readonly token: string;
+}
+
+/** Fetch owner-scoped Cashu payouts waiting to be imported locally. */
+export async function fetchPendingBaoCashuTokens(signer: BaoApiSigner): Promise<PendingBaoCashuToken[]> {
   const url = `${baoApiBase()}/v1/wallet/cashu-pending`;
   const res = await fetch(url, {
     headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
     signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json().catch(() => ({}))) as {
-    data?: { tokens?: unknown };
+    data?: { items?: unknown };
     error?: { message?: string; code?: string };
     message?: string;
   };
@@ -350,17 +355,34 @@ export async function fetchPendingBaoCashuTokens(signer: BaoApiSigner): Promise<
       res.status,
     );
   }
-  return Array.isArray(json.data?.tokens)
-    ? json.data.tokens.filter((token): token is string => typeof token === 'string' && token.trim().length > 0)
-    : [];
+  if (!Array.isArray(json.data?.items)) return [];
+  return json.data.items.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const item = value as Record<string, unknown>;
+    return typeof item.id === 'string' && /^[0-9a-f]{64}$/.test(item.id)
+      && typeof item.token === 'string' && item.token.trim().length > 0
+      ? [{ id: item.id, token: item.token }]
+      : [];
+  });
 }
 
 /** Clear pending payout tokens only after every token is durable locally. */
-export async function clearPendingBaoCashuTokens(signer: BaoApiSigner): Promise<void> {
+export async function clearPendingBaoCashuTokens(
+  signer: BaoApiSigner,
+  tokenIds: readonly string[],
+): Promise<void> {
+  if (tokenIds.length === 0 || tokenIds.some((id) => !/^[0-9a-f]{64}$/.test(id))) {
+    throw new Error('Pending Cashu token IDs are invalid');
+  }
   const url = `${baoApiBase()}/v1/wallet/cashu-collect`;
+  const body = JSON.stringify({ token_ids: tokenIds });
   const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: await baoNip98Header(signer, url, 'POST') },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: await baoNip98Header(signer, url, 'POST', body),
+    },
+    body,
     signal: AbortSignal.timeout(15_000),
   });
   const json = (await res.json().catch(() => ({}))) as {
