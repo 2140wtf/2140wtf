@@ -96,5 +96,14 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    self.clients.claim().then(() => {
+      // Tell controlled clients that a new build is active. The page-level
+      // controllerchange handler performs one safe reload; this message is
+      // useful to embedded/native wrappers that cannot rely on that event.
+      return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        for (const client of clients) client.postMessage({ type: '2140-sw-updated' });
+      });
+    }),
+  );
 });
