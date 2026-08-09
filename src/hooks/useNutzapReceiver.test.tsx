@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   currentUser: null as { pubkey: string } | null,
   received: [] as NostrEvent[],
   nostrReq: vi.fn(),
+  nostrGroup: vi.fn(),
 }));
 
 vi.mock('@/hooks/useCurrentUser', () => ({
@@ -18,7 +19,7 @@ vi.mock('@/hooks/useCurrentUser', () => ({
 }));
 
 vi.mock('@nostrify/react', () => ({
-  useNostr: () => ({ nostr: { req: mocks.nostrReq } }),
+  useNostr: () => ({ nostr: { req: mocks.nostrReq, group: mocks.nostrGroup } }),
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -44,6 +45,8 @@ describe('useNutzapReceiver', () => {
     mocks.currentUser = { pubkey: userPubkey };
     mocks.received = [];
     mocks.nostrReq.mockReset();
+    mocks.nostrGroup.mockReset();
+    mocks.nostrGroup.mockReturnValue({ req: mocks.nostrReq });
   });
 
   afterEach(() => {
@@ -126,5 +129,18 @@ describe('useNutzapReceiver', () => {
     // The old buggy behavior would have produced only this:
     expect(uValues).not.toContain('https://mint-a.example.com/casesensitive/');
     expect(uValues).not.toContain('https://mint-a.example.com/casesensitive');
+  });
+
+  it('subscribes only to explicitly selected relays when supplied', async () => {
+    mocks.nostrReq.mockImplementation(async function* () { /* no events */ });
+    const relayUrls = ['wss://relay.bao.network'];
+
+    renderHook(
+      () => useNutzapReceiver(seedPhrase, mints, (ev) => mocks.received.push(ev), { relayUrls }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(mocks.nostrGroup).toHaveBeenCalledWith(relayUrls));
+    expect(mocks.nostrReq).toHaveBeenCalled();
   });
 });
