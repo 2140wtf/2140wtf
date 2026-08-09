@@ -1198,7 +1198,7 @@ function CompactPersonPill({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const author = useAuthor(pubkey);
+  const author = useAuthor(pubkey, ONBOARDING_PACK_RELAYS);
   const metadata = author.data?.metadata;
   const name = fallbackName || metadata?.display_name || metadata?.name || genUserName(pubkey);
   const picture = sanitizeUrl(metadata?.picture);
