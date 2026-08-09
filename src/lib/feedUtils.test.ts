@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { getPaginationCursor, selectFeedItemsWithSeed, shouldHideFeedEvent } from './feedUtils';
+import {
+  getPaginationCursor,
+  isBlockedFeedDomainEvent,
+  selectFeedItemsWithSeed,
+  shouldHideFeedEvent,
+} from './feedUtils';
 
 function ev(created_at: number): NostrEvent {
   return {
@@ -66,14 +71,18 @@ describe('feed event filtering', () => {
     expect(shouldHideFeedEvent(ev(123))).toBe(false);
   });
 
-  it('does not impose client-wide author or domain bans', () => {
+  it('hides blocked-domain account markers while keeping ordinary links', () => {
     expect(shouldHideFeedEvent({
       ...ev(123),
-      content: 'Read the syndicated story at https://nostrmag.com/example',
-    })).toBe(false);
+      content: '@pausanias@nostrmag.com',
+    })).toBe(true);
     expect(shouldHideFeedEvent({
       ...ev(123),
       tags: [['r', 'https://www.nostrmag.com/story']],
+    })).toBe(false);
+    expect(isBlockedFeedDomainEvent({
+      ...ev(123),
+      content: 'Read a syndicated story at https://nostrmag.com/example',
     })).toBe(false);
   });
 });
