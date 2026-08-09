@@ -52,6 +52,7 @@ import { parseAuthorEvent, useAuthor } from "@/hooks/useAuthor";
 import { cn } from "@/lib/utils";
 import { sanitizeUrl } from "@/lib/sanitizeUrl";
 import { genUserName } from "@/lib/genUserName";
+import { fetchActiveOnboardingPubkeys } from "@/lib/onboardingActivity";
 
 // ---------------------------------------------------------------------------
 // InitialSyncGate
@@ -938,20 +939,12 @@ function FollowsStep({
     const findActivePeople = async () => {
       setIsCheckingActivity(true);
       try {
-        const events = await nostr.query([{
-          kinds: [1],
-          authors: [...ACTIVE_SUGGESTION_CANDIDATES],
-          since: Math.floor(Date.now() / 1000) - 24 * 60 * 60,
-          limit: 200,
-        }], { signal: AbortSignal.timeout(8000) });
-        const latestByAuthor = new Map<string, number>();
-        for (const event of events) {
-          latestByAuthor.set(event.pubkey, Math.max(latestByAuthor.get(event.pubkey) ?? 0, event.created_at));
-        }
-        const active = [...latestByAuthor.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8)
-          .map(([pubkey]) => pubkey);
+        const active = await fetchActiveOnboardingPubkeys(
+          nostr,
+          ACTIVE_SUGGESTION_CANDIDATES,
+          Math.floor(Date.now() / 1000),
+          AbortSignal.timeout(8000),
+        );
         if (!cancelled) setActivePubkeys(active);
       } catch (error) {
         console.warn("Could not check active onboarding accounts:", error);
@@ -1118,6 +1111,34 @@ function FollowsStep({
       </div>
 
       <div className="max-h-[64dvh] space-y-4 overflow-y-auto pr-1">
+        {(isCheckingActivity || activePubkeys.length > 0) && (
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold">Active right now</h3>
+                <p className="text-xs text-muted-foreground">
+                  {isCheckingActivity ? "Checking recent posts…" : `${activePubkeys.length} people posted in the last 24 hours`}
+                </p>
+              </div>
+              {activePubkeys.length > 0 && (
+                <Button type="button" size="sm" className="rounded-full" onClick={() => selectPubkeys(activePubkeys)}>
+                  Follow all
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activePubkeys.map((pubkey) => (
+                <ActivePersonButton
+                  key={pubkey}
+                  pubkey={pubkey}
+                  selected={selectedPubkeys.has(pubkey)}
+                  onToggle={() => togglePubkey(pubkey)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="space-y-2">
           <h3 className="text-base font-semibold">Meet the creators</h3>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
@@ -1129,32 +1150,6 @@ function FollowsStep({
                 subtitle={person.role}
                 selected={selectedPubkeys.has(person.pubkey)}
                 onToggle={() => togglePubkey(person.pubkey)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-2">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-semibold">Active right now</h3>
-              <p className="text-xs text-muted-foreground">
-                {isCheckingActivity ? "Checking recent posts…" : `${activePubkeys.length} people posted in the last 24 hours`}
-              </p>
-            </div>
-            {activePubkeys.length > 0 && (
-              <Button type="button" size="sm" className="rounded-full" onClick={() => selectPubkeys(activePubkeys)}>
-                Follow all
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {activePubkeys.map((pubkey) => (
-              <ActivePersonButton
-                key={pubkey}
-                pubkey={pubkey}
-                selected={selectedPubkeys.has(pubkey)}
-                onToggle={() => togglePubkey(pubkey)}
               />
             ))}
           </div>
