@@ -64,7 +64,6 @@ const SEND_RAILS: Array<{ id: BaoSendRail; label: string }> = [
   { id: 'ecash', label: 'Fedimint' },
   { id: 'spark', label: 'Spark' },
   { id: 'liquid', label: 'Liquid' },
-  { id: 'ark', label: 'Ark' },
   { id: 'l1', label: 'L1' },
 ];
 
