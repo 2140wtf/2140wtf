@@ -1,0 +1,52 @@
+name: Preview Browser Test
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build preview
+        run: npm run build
+
+      - name: Run browser smoke tests
+        env:
+          CI: true
+          PLAYWRIGHT_START_SERVER: '1'
+          PLAYWRIGHT_PORT: '3510'
+        run: npx playwright test -c e2e/playwright.config.ts specs/smoke.spec.ts
+
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-browser-failures
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 14
