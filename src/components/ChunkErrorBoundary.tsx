@@ -10,6 +10,8 @@ import {
 
 interface Props {
   children: ReactNode;
+  /** Clears a stale chunk failure when navigation moves to another route. */
+  resetKey?: string;
 }
 
 interface State {
@@ -42,6 +44,12 @@ export class ChunkErrorBoundary extends Component<Props, State> {
     recoverFromChunkError().catch(() => {
       this.setState({ recovering: false });
     });
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null, recovering: false });
+    }
   }
 
   render() {
@@ -88,4 +96,3 @@ export class ChunkErrorBoundary extends Component<Props, State> {
     );
   }
 }
-
