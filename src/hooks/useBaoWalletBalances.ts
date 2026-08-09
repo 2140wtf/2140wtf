@@ -24,7 +24,9 @@ export function useBaoWalletBalances() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: 1,
+    // A scheduled/manual refresh is already available. Retrying here can
+    // prompt remote signers twice and cannot repair a rejected authorization.
+    retry: false,
     queryFn: () => fetchBaoWalletBalances(user!.signer),
   });
 
