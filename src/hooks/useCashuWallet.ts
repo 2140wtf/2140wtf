@@ -2399,7 +2399,13 @@ export function useCashuWallet(
               }, encKey, legacyEncKeyRef.current ?? undefined);
             });
             await refreshTransactions();
-            await syncNip60TokenForMint(normalized, 'in', receivedAmount);
+            // The proof store and transaction are already durable. Do not keep
+            // the wallet operation mutex held while relays query/publish the
+            // NIP-60 backup; a following Send must be able to acquire it as
+            // soon as the received proofs are spendable locally.
+            void syncNip60TokenForMint(normalized, 'in', receivedAmount).catch((e) => {
+              devLog.warn('NIP-60 receive sync deferred/failed:', e);
+            });
             succeededMintUrls.add(normalized);
             await storageRef.current.writePendingReceive(tokenStr, tokenHash, pendingMintUrls, pendingAmount, encKey, [...succeededMintUrls]);
             return received;
@@ -2440,6 +2446,16 @@ export function useCashuWallet(
                 const next = [...stored, { name: hostname, url: normalized, custom: true }];
                 setCustomMints(next);
                 await storageRef.current.saveCustomMints(next, encKey);
+              }
+              // Recovery can run after a post-swap validation failure (for
+              // example a one-sat fee on a tiny test token). The recovered
+              // proofs are still spendable, so select this mint when the
+              // previous selection is empty rather than leaving Send pointed
+              // at an unfunded default.
+              const selected = safeNormalizeMintUrl(mintUrlRef.current);
+              if (selected && selected !== normalized) {
+                const selectedProofs = sanitizeProofs(await storageRef.current.getProofsForMint(selected, encKey, legacyEncKeyRef.current ?? undefined));
+                if (sumProofAmounts(selectedProofs) === 0) setMintUrlState(normalized);
               }
             } catch (adoptErr) {
               devLog.warn('Failed to adopt foreign mint for recovery:', adoptErr);
@@ -2619,6 +2635,14 @@ export function useCashuWallet(
         if (outputAmount > inputAmount) {
           throw new Error('Mint returned invalid proofs: outputs exceed inputs');
         }
+        const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
+        // An exact bearer send is an offline handoff: the original proofs are
+        // encoded for the recipient and no mint fee is charged. Do not apply
+        // the mint's per-proof fee cap to this path (a one-sat proof commonly
+        // advertises a one-sat input fee, which is irrelevant here).
+        const isOfflineNoSwap = !sendOpts.pubkey && sendProofs.length > 0
+          && sendProofs.every((p) => inputSecrets.has(String(p.secret)))
+          && keepProofs.every((p) => inputSecrets.has(String(p.secret)));
         // Compute the maximum fee from the keyset and enforce both conservation
         // and a hard ppm cap. The actual fee must be non-negative and not exceed
         // the fee the mint itself advertised.
@@ -2628,11 +2652,11 @@ export function useCashuWallet(
         } catch {
           maxFee = Math.max(1, Math.floor(inputAmount * 0.001));
         }
-        if (!isFeeWithinMaxPpm(maxFee, inputAmount, MAX_MINT_FEE_PPM)) {
+        if (!isOfflineNoSwap && !isFeeWithinMaxPpm(maxFee, inputAmount, MAX_MINT_FEE_PPM)) {
           throw new Error('Mint fee exceeds maximum allowed');
         }
         const actualFee = inputAmount - outputAmount;
-        if (actualFee < 0 || actualFee > maxFee) {
+        if (actualFee < 0 || (!isOfflineNoSwap && actualFee > maxFee)) {
           throw new Error('Mint returned invalid proofs: fee exceeds reported fee');
         }
         // Reject only if a SEND proof bears an input secret outside the
@@ -2649,10 +2673,6 @@ export function useCashuWallet(
         // An input secret among the keep proofs is therefore normal and the
         // proof is still unspent; rejecting it here threw on every legitimate
         // swap send AFTER the mint had already committed the spend.
-        const inputSecrets = new Set(proofs.map((p) => String(p.secret)));
-        const isOfflineNoSwap = !sendOpts.pubkey && sendProofs.length > 0
-          && sendProofs.every((p) => inputSecrets.has(String(p.secret)))
-          && keepProofs.every((p) => inputSecrets.has(String(p.secret)));
         if (!isOfflineNoSwap) {
           for (const p of sendProofs) {
             if (inputSecrets.has(String(p.secret))) {
