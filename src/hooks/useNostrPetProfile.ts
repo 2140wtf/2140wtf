@@ -66,30 +66,15 @@ export function useNostrPetProfile() {
     return bootCache.profile;
   }, [bootCache, user?.pubkey]);
 
-  // localStorage is the fastest boot path, but older sessions may only have
-  // the authored profile in IndexedDB. Seed that copy before waiting on the
-  // relay refresh so the Pets route remains progressive after navigation.
-  useEffect(() => {
-    if (!user?.pubkey || cachedProfile) return;
-    let cancelled = false;
-    const dValues = getNostrPetProfileQueryDValues(user.pubkey);
-    void store.query([{
-      kinds: [...NOSTR_PET_PROFILE_KINDS],
-      authors: [user.pubkey],
-      '#d': dValues,
-    }]).then((events) => {
-      if (cancelled) return;
-      const validEvents = events.filter(isValidNostrPetProfileEvent);
-      const preferred = validEvents
-        .sort((a, b) => {
-          const kindPriority = Number(b.kind === KIND_NOSTR_PET_PROFILE) - Number(a.kind === KIND_NOSTR_PET_PROFILE);
-          return kindPriority || b.created_at - a.created_at;
-        })[0];
-      const parsed = preferred ? parseNostrPetProfileEvent(preferred) : null;
-      if (parsed) queryClient.setQueryData(['nostr-pet-profile', user.pubkey], parsed);
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [cachedProfile, queryClient, store, user?.pubkey]);
+  const parsePreferredProfile = useCallback((events: NostrEvent[]): NostrPetProfile | null => {
+    const validEvents = events.filter(isValidNostrPetProfileEvent);
+    const preferred = validEvents
+      .sort((a, b) => {
+        const kindPriority = Number(b.kind === KIND_NOSTR_PET_PROFILE) - Number(a.kind === KIND_NOSTR_PET_PROFILE);
+        return kindPriority || b.created_at - a.created_at;
+      })[0];
+    return preferred ? (parseNostrPetProfileEvent(preferred) ?? null) : null;
+  }, []);
   
   // Debug logging removed - was causing console flood on every render
   // If debugging is needed, uncomment this block temporarily:
@@ -104,7 +89,7 @@ export function useNostrPetProfile() {
   // Main query to fetch the profile from relays
   const query = useQuery({
     queryKey: ['nostr-pet-profile', user?.pubkey],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       if (!user?.pubkey) {
         return null;
       }
@@ -119,40 +104,16 @@ export function useNostrPetProfile() {
         '#d': dValues,
       };
       
-      let events = await queryPetsRelay(nostr, [filter], {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(1_000)]),
-      }).catch(() => []);
-
-      // Keep a locally cached authored profile visible when every relay misses
-      // or times out; the background refresh must never downgrade it to null.
-      if (events.length === 0) {
-        events = await store.query([filter]).catch(() => []);
-      }
-      
-      // Filter to valid events
-      const validEvents = events.filter(isValidNostrPetProfileEvent);
-      
-      if (validEvents.length === 0) {
-        return null;
-      }
-      
-      // Separate by kind: prefer current kind (11125) over legacy (31125)
-      const currentKindEvents = validEvents.filter(e => e.kind === KIND_NOSTR_PET_PROFILE);
-      const legacyKindEvents = validEvents.filter(e => isLegacyNostrPetProfileKind(e));
-      
-      // If we have any current kind events, use the newest one
-      if (currentKindEvents.length > 0) {
-        const sorted = currentKindEvents.sort((a, b) => b.created_at - a.created_at);
-        return parseNostrPetProfileEvent(sorted[0]) ?? null;
-      }
-      
-      // Otherwise fall back to legacy kind (migration needed)
-      if (legacyKindEvents.length > 0) {
-        const sorted = legacyKindEvents.sort((a, b) => b.created_at - a.created_at);
-        return parseNostrPetProfileEvent(sorted[0]) ?? null;
-      }
-      
-      return null;
+      const localEvents = await store.query([filter]).catch(() => [] as NostrEvent[]);
+      const localProfile = parsePreferredProfile(localEvents);
+      const current = queryClient.getQueryData<NostrPetProfile | null>([
+        'nostr-pet-profile',
+        user.pubkey,
+      ]);
+      if (!localProfile) return current ?? null;
+      return !current || localProfile.event.created_at > current.event.created_at
+        ? localProfile
+        : current;
     },
     enabled: !!user?.pubkey,
     staleTime: 30_000, // 30 seconds - don't refetch if data is fresh
@@ -164,9 +125,40 @@ export function useNostrPetProfile() {
     // Use cached profile as initial data for instant UI
     // initialDataUpdatedAt tells React Query when this data was fetched
     // so it knows whether to refetch based on staleTime
-    initialData: cachedProfile ?? undefined,
+    // `null` is real progressive data: it renders the adoption/dashboard
+    // shell immediately while IndexedDB and relays refresh in the background.
+    // Leaving this undefined makes React Query hold the whole route in its
+    // loading skeleton until storage initialization finishes.
+    initialData: cachedProfile ?? null,
     initialDataUpdatedAt: cachedProfile ? (bootCache?.cachedAt ?? 0) : undefined,
   });
+
+  // Relay refresh is independent from React Query's local-store request. This
+  // prevents either source from overwriting the other when they finish in the
+  // opposite order, and keeps both off the first-paint path.
+  useEffect(() => {
+    if (!user?.pubkey) return;
+    const filter = {
+      kinds: [...NOSTR_PET_PROFILE_KINDS],
+      authors: [user.pubkey],
+      '#d': getNostrPetProfileQueryDValues(user.pubkey),
+    };
+    let cancelled = false;
+    void queryPetsRelay(nostr, [filter], {
+      signal: AbortSignal.timeout(5_000),
+    }).then((relayEvents) => {
+      if (cancelled) return;
+      const relayProfile = parsePreferredProfile(relayEvents);
+      if (!relayProfile) return;
+      queryClient.setQueryData<NostrPetProfile | null>(
+        ['nostr-pet-profile', user.pubkey],
+        (current) => !current || relayProfile.event.created_at > current.event.created_at
+          ? relayProfile
+          : current,
+      );
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [nostr, parsePreferredProfile, queryClient, user?.pubkey]);
   
   // Create stable signature for profile to detect actual changes
   const profileSignature = useMemo(() => {

@@ -12,5 +12,23 @@ export function queryPetsRelay(
   filters: NostrFilter[],
   opts?: { signal?: AbortSignal },
 ): Promise<NostrEvent[]> {
-  return nostr.query(filters, opts);
+  const query = nostr.query(filters, opts);
+  const signal = opts?.signal;
+  if (!signal) return query;
+
+  // Some relay adapters do not settle promptly after their signal aborts.
+  // Enforce cancellation at this boundary so a socket cannot hold the UI.
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('The operation was aborted', 'AbortError'));
+  }
+
+  return new Promise<NostrEvent[]>((resolve, reject) => {
+    const onAbort = () => reject(
+      signal.reason ?? new DOMException('The operation was aborted', 'AbortError'),
+    );
+    signal.addEventListener('abort', onAbort, { once: true });
+    query.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort);
+    });
+  });
 }
