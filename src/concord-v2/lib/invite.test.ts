@@ -274,7 +274,12 @@ describe("invite list merge (CORD-05 §4)", () => {
 
     const b = mergeInviteLists(a, {
       entries: [],
-      tombstones: [{ token: entry.token, community_id: entry.community_id }],
+      tombstones: [{
+        token: entry.token,
+        community_id: entry.community_id,
+        signer_sk: entry.signer_sk,
+        url: entry.url,
+      }],
     });
     expect(b.entries.length).toBe(0);
     expect(b.tombstones.length).toBe(1);
@@ -282,6 +287,14 @@ describe("invite list merge (CORD-05 §4)", () => {
     // A stale device re-merging the entry can't resurrect the revoked link.
     const c = mergeInviteLists(b, { entries: [entry], tombstones: [] });
     expect(c.entries.length).toBe(0);
+
+    // A minimal tombstone from an older device must not discard the retained
+    // signer and relay hints needed for a later NIP-09 community purge.
+    const d = mergeInviteLists(c, {
+      entries: [],
+      tombstones: [{ token: entry.token, community_id: entry.community_id }],
+    });
+    expect(d.tombstones[0]).toMatchObject({ signer_sk: entry.signer_sk, url: entry.url });
   });
 });
 
