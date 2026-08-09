@@ -91,6 +91,14 @@ export const FEED_TOPICS: FeedTopic[] = [
       'nwc', 'lnurl'],
   },
   {
+    id: 'artists',
+    label: 'Art',
+    description: 'Visual artists, illustrators, and digital creators',
+    icon: '🎨',
+    packTitles: ['Artists'],
+    tags: ['art', 'artist', 'illustration', 'digitalart', 'painting', 'drawing', 'bitcoinart'],
+  },
+  {
     id: 'tech',
     label: 'Tech / AI',
     description: 'Technology, AI, coding, privacy, and cybersecurity',
@@ -141,14 +149,6 @@ export const FEED_TOPICS: FeedTopic[] = [
       'mma', 'ufc', 'baseball', 'mlb', 'nhl', 'hockey', 'boxing', 'esports', 'cricket',
       'rugby', 'golf', 'pga', 'nascar', 'racing', 'motorsport', 'worldcup',
       'premierleague', 'laliga', 'championsleague'],
-  },
-  {
-    id: 'artists',
-    label: 'Artists',
-    description: 'Visual artists, illustrators, and digital creators',
-    icon: '🎨',
-    packTitles: ['Artists'],
-    tags: ['art', 'artist', 'illustration', 'digitalart', 'painting', 'drawing', 'bitcoinart'],
   },
   {
     id: 'photography',
