@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- New-user onboarding now finds active accounts on public discovery relays and keeps them at the top of follow suggestions.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
 - Relay-discovered ₿AO markets restore odds from public SMJ history when settled pools clear live counters.
 - Opening ₿AO Fund while logged out no longer crashes.
