@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3500';
+const previewPort = process.env.PLAYWRIGHT_PORT ?? '3500';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${previewPort}`;
 
 export default defineConfig({
   testDir: './specs',
@@ -26,7 +27,8 @@ export default defineConfig({
   ],
   webServer: process.env.PLAYWRIGHT_START_SERVER
     ? {
-        command: 'npm run preview',
+        command: `npx vite preview --host 127.0.0.1 --port ${previewPort}`,
+        cwd: process.cwd(),
         url: baseURL,
         timeout: 120_000,
         reuseExistingServer: !process.env.CI,
