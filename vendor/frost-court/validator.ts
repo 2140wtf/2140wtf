@@ -5,7 +5,9 @@
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import type { Event as NostrEvent } from 'nostr-tools/pure';
+import { verifyEvent } from 'nostr-tools/pure';
 import { BAO_COURT_ATTESTATION_KIND } from './events';
+import { buildAttestationMessage } from './crypto';
 
 export interface ValidationResult {
   readonly valid: boolean;
@@ -16,32 +18,56 @@ export interface ValidationResult {
   readonly error?: string;
 }
 
+export interface AttestationValidationContext {
+  readonly expectedGroupPubkey?: string;
+  readonly expectedDisputeEventId?: string;
+  readonly expectedMarketId?: string;
+  readonly allowedOutcomes?: readonly string[];
+  readonly trustedPublisherPubkeys?: readonly string[];
+}
+
+function uniqueTag(event: Pick<NostrEvent, 'tags'>, name: string): string | null {
+  const matches = event.tags.filter((tag) => tag[0] === name);
+  if (matches.length !== 1 || matches[0].length !== 2 || !matches[0][1]) return null;
+  return matches[0][1];
+}
+
 function isHex64(value: string): boolean {
   return /^[0-9a-fA-F]{64}$/.test(value);
 }
 
 export function validateAttestationEvent(
-  event: Pick<NostrEvent, 'kind' | 'tags' | 'content' | 'id'>,
-  expectedGroupPubkey?: string,
+  event: NostrEvent,
+  expected?: string | AttestationValidationContext,
 ): ValidationResult {
+  const context = typeof expected === 'string'
+    ? { expectedGroupPubkey: expected }
+    : (expected ?? {});
   if (event.kind !== 89 && event.kind !== BAO_COURT_ATTESTATION_KIND) {
     return { valid: false, pubkey: '', error: `Not a Kind 89 or ${BAO_COURT_ATTESTATION_KIND} attestation` };
   }
 
-  const pTag = event.tags.find((t) => t[0] === 'p');
-  const sigTag = event.tags.find((t) => t[0] === 'sig');
-  const nonceTag = event.tags.find((t) => t[0] === 'nonce');
-  const outcomeTag = event.tags.find((t) => t[0] === 'outcome');
-  const disputeTag = event.tags.find((t) => t[0] === 'dispute');
-
-  if (!pTag || !sigTag || !nonceTag) {
-    return { valid: false, pubkey: '', error: 'Missing required tags' };
+  if (!verifyEvent(event)) {
+    return { valid: false, pubkey: '', error: 'Invalid Nostr event signature or id' };
+  }
+  if (
+    context.trustedPublisherPubkeys &&
+    !context.trustedPublisherPubkeys.includes(event.pubkey)
+  ) {
+    return { valid: false, pubkey: '', error: 'Untrusted attestation publisher' };
   }
 
-  const pubkey = pTag[1];
-  const signature = sigTag[1];
-  const nonce = nonceTag[1];
-  const outcome = outcomeTag?.[1] ?? '';
+  const pubkey = uniqueTag(event, 'p');
+  const signature = uniqueTag(event, 'sig');
+  const nonce = uniqueTag(event, 'nonce');
+  const outcome = uniqueTag(event, 'outcome');
+  const disputeEventId = uniqueTag(event, 'dispute');
+  const marketId = uniqueTag(event, 'm');
+  const round = uniqueTag(event, 'round');
+
+  if (!pubkey || !signature || !nonce || !outcome || !marketId || !round) {
+    return { valid: false, pubkey: '', error: 'Missing required tags' };
+  }
 
   if (!pubkey || !isHex64(pubkey)) {
     return { valid: false, pubkey: pubkey ?? '', error: 'Invalid group pubkey' };
@@ -53,36 +79,54 @@ export function validateAttestationEvent(
     return { valid: false, pubkey, error: 'Invalid public nonce length' };
   }
 
-  if (expectedGroupPubkey && pubkey !== expectedGroupPubkey) {
+  if (context.expectedGroupPubkey && pubkey !== context.expectedGroupPubkey) {
     return {
       valid: false,
       pubkey,
-      error: `Pubkey mismatch: expected ${expectedGroupPubkey}, got ${pubkey}`,
+      error: `Pubkey mismatch: expected ${context.expectedGroupPubkey}, got ${pubkey}`,
     };
+  }
+  if (context.expectedDisputeEventId && disputeEventId !== context.expectedDisputeEventId) {
+    return { valid: false, pubkey, error: 'Dispute id mismatch' };
+  }
+  if (context.expectedMarketId && marketId !== context.expectedMarketId) {
+    return { valid: false, pubkey, error: 'Market id mismatch' };
+  }
+  if (context.allowedOutcomes && !context.allowedOutcomes.includes(outcome)) {
+    return { valid: false, pubkey, error: 'Outcome is not allowed' };
   }
 
   try {
     const content = JSON.parse(event.content || '{}') as Record<string, unknown>;
     const message = String(content.message || '');
-    const contentOutcome = content.outcome;
-    const contentDisputeId = content.disputeEventId;
+    const contentOutcome = String(content.outcome ?? '');
+    const contentDisputeId = typeof content.disputeEventId === 'string' ? content.disputeEventId : undefined;
+    const contentMarketId = String(content.marketId ?? '');
+    const contentRound = String(content.round ?? '');
 
     if (!message) {
       return { valid: false, pubkey, error: 'Attestation message missing' };
     }
-    if (outcome && contentOutcome && outcome !== String(contentOutcome)) {
+    if (outcome !== contentOutcome) {
       return {
         valid: false,
         pubkey,
         error: 'Outcome tag does not match content outcome',
       };
     }
-    if (disputeTag && contentDisputeId && disputeTag[1] !== String(contentDisputeId)) {
+    if (disputeEventId !== contentDisputeId) {
       return {
         valid: false,
         pubkey,
         error: 'Dispute tag does not match content dispute id',
       };
+    }
+    if (marketId !== contentMarketId || round !== contentRound) {
+      return { valid: false, pubkey, error: 'Market or round tag does not match content' };
+    }
+    const expectedMessage = buildAttestationMessage(marketId, outcome, round, disputeEventId);
+    if (message !== expectedMessage) {
+      return { valid: false, pubkey, error: 'Attestation message does not bind verdict fields' };
     }
 
     const ok = schnorr.verify(
@@ -91,7 +135,7 @@ export function validateAttestationEvent(
       hexToBytes(pubkey),
     );
     return ok
-      ? { valid: true, pubkey, outcome, message, disputeEventId: disputeTag?.[1] }
+      ? { valid: true, pubkey, outcome, message, disputeEventId }
       : { valid: false, pubkey, error: 'Schnorr signature verification failed' };
   } catch (err) {
     return {

@@ -56,6 +56,8 @@ export interface FrostAttestation {
   readonly marketId: string;
   /** Winning outcome string. */
   readonly outcome: string;
+  /** Canonical signing round bound into the signed message. */
+  readonly round: number | string;
   /** BIP-340 Schnorr signature (R || z) in hex. */
   readonly signature: string;
   /** Public nonce R in hex. */
