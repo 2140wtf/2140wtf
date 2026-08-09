@@ -437,6 +437,7 @@ export const EncryptedSettingsSchema = z.looseObject({
     directMessages: z.boolean().optional(),
     recovery: z.boolean().optional(),
     encryptedSettings: z.boolean().optional(),
+    baoCashuSync: z.boolean().optional(),
     deleteRequests: z.boolean().optional(),
     drafts: z.boolean().optional(),
     emojiPacks: z.boolean().optional(),

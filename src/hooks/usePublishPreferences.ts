@@ -96,10 +96,20 @@ export function usePublishPreferences() {
     });
   };
 
+  const setEnabledMany = (features: Partial<Record<PublishFeature, boolean>>) => {
+    updateSettings.mutate({
+      publishPreferences: {
+        ...prefs,
+        ...features,
+      },
+    });
+  };
+
   return {
     prefs,
     isEnabled,
     setEnabled,
+    setEnabledMany,
     isLoading: updateSettings.isPending,
   };
 }
