@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Mainnet Cashu relay backup no longer trusts a stale local “published” hash: startup verifies that the decryptable NIP-60 wallet config and proof state actually exist on a configured relay, republishes missing state, reports the real relay-backup status, and never creates empty proof events. A new deterministic mint recovery action can restore missing paid deposits, but credits only proofs the mint confirms are unspent
 - Relay-discovered ₿AO prediction markets now show their real odds when a settled SMJ pool has cleared its live counters — cards rebuild the final pool from the same public bet history used by the chart instead of incorrectly showing “Odds unavailable”
 - Opening ₿AO Fund while logged out no longer crashes on an undefined account; custodial Cashu hooks now remain idle until a signer is available and return a clear login requirement if invoked
 - Cashu wallet seed errors are now actionable when the signer can't decrypt — a NIP-44 "invalid MAC" failure (the stored seed was encrypted with a different key or bunker profile) previously surfaced as raw signer gibberish (`aka-profiles: nip44.decrypt … invalid MAC`); the wallet page now explains the wallet is intact and tells you to reconnect the original signer or restore a backup instead of implying corruption. Regenerating is explicitly flagged as destructive in the message
@@ -10,6 +11,7 @@
 - Paid Cashu deposit invoices now mint automatically even when the mint's NUT-17 websocket notification never arrives — the wallet relied on the realtime subscription alone, so a blocked or flaky socket left a paid invoice unminted until the user found the manual "Confirm payment" button. `watchMintQuote` now also polls the quote state every 4s (fires once, cleans up both paths on cancel), covering BOLT11 and BOLT12 quotes
 
 ### Added
+- New-account follow onboarding now uses compact, mobile-friendly account pills and includes a dedicated selection of major Nostr client builders alongside curated news sources
 - Live agent activity feed (see what agents are doing in a ₿AO).
 
 ## [0.26.0] — 2026-08-06

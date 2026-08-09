@@ -25,6 +25,8 @@ vi.mock('@/hooks/useCashuWalletContext', () => ({
     loading: false,
     calculateAllBalances: vi.fn(),
     backupStatus: 'idle',
+    nip60Status: 'verified',
+    recoverFromMints: vi.fn().mockResolvedValue(0),
     receiveToken: vi.fn(),
     requestInvoice: vi.fn(),
     requestBolt12Offer: vi.fn(),
