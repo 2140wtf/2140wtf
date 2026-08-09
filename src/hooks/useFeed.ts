@@ -16,6 +16,8 @@ import {
   isReactionKind,
   isZapKind,
   isMastodonBridgeEvent,
+  isBlockedFeedDomainEvent,
+  isBlockedFeedDomainIdentifier,
   buildFeedItems,
   dedupeFeedItems,
   type FeedItem,
@@ -24,7 +26,7 @@ import { isReplyEvent } from '@/lib/nostrEvents';
 import { getStorageKey } from '@/lib/storageKey';
 import { FEED_TOPICS } from '@/lib/feedTopics';
 import { interleaveFeedAuthors } from '@/lib/feedDiversity';
-import type { NostrFilter } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 const PAGE_SIZE = 15;
 const GUEST_DISCOVERY_PAGE_SIZE = 30;
@@ -111,6 +113,46 @@ function useCommunityPubkeys(appId: string): string[] {
   }, [key]);
 
   return useMemo(() => readCommunityPubkeys(raw), [raw]);
+}
+
+/**
+ * Remove posts from accounts whose kind-0 NIP-05 identifies a blocked domain.
+ * Domain ownership is profile metadata, not a property of the post event, so
+ * this lookup is required in addition to the direct event marker check.
+ * Metadata failures fail open so a slow relay never blanks the feed.
+ */
+async function filterBlockedDomainAuthors(
+  events: NostrEvent[],
+  nostr: ReturnType<typeof useNostr>['nostr'],
+  queryClient: ReturnType<typeof useQueryClient>,
+  signal: AbortSignal,
+): Promise<NostrEvent[]> {
+  const directFiltered = events.filter((event) => !isBlockedFeedDomainEvent(event));
+  const authors = [...new Set(directFiltered.map((event) => event.pubkey))];
+  if (authors.length === 0) return directFiltered;
+
+  try {
+    const metadataEvents = await nostr.query([{ kinds: [0], authors, limit: authors.length }], { signal });
+    const blockedAuthors = new Set<string>();
+    for (const metadata of metadataEvents) {
+      try {
+        const content: unknown = JSON.parse(metadata.content);
+        if (typeof content !== 'object' || content === null) continue;
+        const nip05 = (content as { nip05?: unknown }).nip05;
+        if (typeof nip05 === 'string' && isBlockedFeedDomainIdentifier(nip05)) {
+          blockedAuthors.add(metadata.pubkey);
+        }
+      } catch {
+        // Invalid kind-0 metadata is not a reason to hide a post.
+      }
+      if (!queryClient.getQueryData(['author', metadata.pubkey])) {
+        queryClient.setQueryData(['author', metadata.pubkey], parseAuthorEvent(metadata));
+      }
+    }
+    return directFiltered.filter((event) => !blockedAuthors.has(event.pubkey));
+  } catch {
+    return directFiltered;
+  }
 }
 
 /** Hook to fetch the global, followed, loved, communities, or unified All feed with infinite scroll pagination. */
@@ -292,10 +334,11 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
           : [];
 
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
+        const domainFilteredEvents = await filterBlockedDomainAuthors(validEvents, nostr, queryClient, signal);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
         // Drop Mastodon / ActivityPub bridged content from the default feed.
-        const filteredEvents = validEvents.filter((ev) => !isMastodonBridgeEvent(ev));
+        const filteredEvents = domainFilteredEvents.filter((ev) => !isMastodonBridgeEvent(ev));
 
         const items = await buildFeedItems(filteredEvents, nostr, signal);
         let dedupedItems = dedupeFeedItems(items);
@@ -433,11 +476,12 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         );
 
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
+        const domainFilteredEvents = await filterBlockedDomainAuthors(validEvents, nostr, queryClient, signal);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
         // Unwrap reposts / reactions / zaps so the target event renders
         // with the wrapper as an overlay header.
-        const items = await buildFeedItems(validEvents, nostr, signal);
+        const items = await buildFeedItems(domainFilteredEvents, nostr, signal);
 
         let dedupedItems = dedupeFeedItems(items);
 
@@ -472,11 +516,12 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         // Track oldest timestamp from the raw query for pagination, ignoring
         // outliers from out-of-sync relays to prevent cursor jumps.
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
+        const domainFilteredEvents = await filterBlockedDomainAuthors(validEvents, nostr, queryClient, signal);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
         // Unwrap reposts / reactions / zaps so the target event renders
         // with the wrapper as an overlay header.
-        const items = await buildFeedItems(validEvents, nostr, signal);
+        const items = await buildFeedItems(domainFilteredEvents, nostr, signal);
 
         let dedupedItems = dedupeFeedItems(items);
 
@@ -516,10 +561,11 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         );
 
         const validEvents = rawEvents.filter((ev) => ev.created_at <= now);
+        const domainFilteredEvents = await filterBlockedDomainAuthors(validEvents, nostr, queryClient, signal);
         const oldestQueryTimestamp = getPaginationCursor(validEvents);
 
         // Drop Mastodon / ActivityPub bridged content from the global feed.
-        const filteredEvents = validEvents.filter((ev) => !isMastodonBridgeEvent(ev));
+        const filteredEvents = domainFilteredEvents.filter((ev) => !isMastodonBridgeEvent(ev));
 
         let items = filteredEvents
           .sort((a, b) => b.created_at - a.created_at)

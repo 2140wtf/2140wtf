@@ -203,6 +203,8 @@ function isDeprecatedFollowSet(event: NostrEvent): boolean {
  * components that would return null.
  */
 export function shouldHideFeedEvent(event: NostrEvent): boolean {
+  // Known spam domains are excluded before rendering or mounting cards.
+  if (isBlockedFeedDomainEvent(event)) return true;
   // Deprecated kind 30000 follow sets
   if (isDeprecatedFollowSet(event)) return true;
   // Emoji packs (kind 30030) without at least one valid emoji tag
@@ -257,6 +259,49 @@ export function shouldHideFeedEvent(event: NostrEvent): boolean {
 const MASTODON_BRIDGE_DOMAINS = new Set([
   'mostr.pub',
 ]);
+
+/** Domains whose NIP-05 accounts are excluded from the default feed. */
+export const BLOCKED_FEED_DOMAINS = new Set([
+  'nostrmag.com',
+]);
+
+/** Returns true when a hostname is exactly, or a subdomain of, a blocked domain. */
+function isBlockedFeedHost(host: string): boolean {
+  const lower = host.toLowerCase().replace(/^\.+/, '');
+  for (const domain of BLOCKED_FEED_DOMAINS) {
+    if (lower === domain || lower.endsWith(`.${domain}`)) return true;
+  }
+  return false;
+}
+
+/** Returns true when an identifier contains a blocked NIP-05 domain. */
+export function isBlockedFeedDomainIdentifier(value: string): boolean {
+  const lower = value.toLowerCase();
+  const atIndex = lower.lastIndexOf('@');
+  if (atIndex > 0 && isBlockedFeedHost(lower.slice(atIndex + 1).split(/[/?#]/, 1)[0])) {
+    return true;
+  }
+  if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    try {
+      return isBlockedFeedHost(new URL(lower).hostname);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Returns true when an event directly carries a blocked account/domain marker. */
+export function isBlockedFeedDomainEvent(event: NostrEvent): boolean {
+  if (event.tags.some(([name, ...values]) =>
+    (name === 'nip05' || name === 'proxy') && values.some((value) => isBlockedFeedDomainIdentifier(value)))) {
+    return true;
+  }
+  // A normal post may link to a blocked-domain article; only account-shaped
+  // handles are treated as an author marker here. Author NIP-05 metadata is
+  // checked separately by useFeed.
+  return event.content.split(/\s+/).some((value) => value.includes('@') && isBlockedFeedDomainIdentifier(value));
+}
 
 /** Returns true if a hostname belongs to a known Mastodon/ActivityPub bridge. */
 function isMastodonBridgeHost(host: string): boolean {
