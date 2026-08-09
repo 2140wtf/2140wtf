@@ -39,11 +39,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/useToast';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { createBaoDepositInvoice, checkBaoDepositStatus, redeemBaoCashuToken } from '@/lib/baoWalletApi';
 import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
+import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
 import { totalBaoApiBalance, BaoSendError, isSendRouteMissing, sendDemoSats, type BaoSendRail, type BaoWalletBalances } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
+import { tryNpubEncode } from '@/lib/safeNip19';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
 import type { Transaction } from '@/lib/cashu/storage';
@@ -61,7 +65,6 @@ const SEND_RAILS: Array<{ id: BaoSendRail; label: string }> = [
   { id: 'ecash', label: 'Fedimint' },
   { id: 'spark', label: 'Spark' },
   { id: 'liquid', label: 'Liquid' },
-  { id: 'ark', label: 'Ark' },
   { id: 'l1', label: 'L1' },
 ];
 
@@ -69,12 +72,24 @@ const SEND_RAILS: Array<{ id: BaoSendRail; label: string }> = [
 function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => void }) {
   const { toast } = useToast();
   const [destination, setDestination] = useState('');
+  const [selectedRecipient, setSelectedRecipient] = useState<SearchProfile | null>(null);
   const [amount, setAmount] = useState('2140');
   const [rail, setRail] = useState<BaoSendRail>('cashu');
   const [busy, setBusy] = useState(false);
   // One idempotency key per in-flight intent: a retry after an ambiguous
   // failure replays server-side instead of debiting twice.
   const idemRef = useRef<string | null>(null);
+  const directRecipient = /^(?:npub1[0-9a-z]+|[0-9a-f]{64})$/i.test(destination.trim());
+  const { data: recipientResults, isLoading: isSearchingRecipients } = useSearchProfiles(
+    selectedRecipient || directRecipient ? '' : destination,
+  );
+
+  const selectRecipient = (profile: SearchProfile) => {
+    const npub = tryNpubEncode(profile.pubkey);
+    if (!npub) return;
+    setSelectedRecipient(profile);
+    setDestination(npub);
+  };
 
   const submit = async () => {
     const amountSats = parseInt(amount, 10) || 0;
@@ -117,6 +132,12 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
         toast({ title: 'Insufficient balance', description: `Not enough sats on the ${rail} rail.`, variant: 'destructive' });
       } else if (e instanceof BaoSendError && e.code === 'SEND_DAILY_LIMIT') {
         toast({ title: 'Daily limit reached', description: '100,000 sats per day per user. Try again tomorrow.', variant: 'destructive' });
+      } else if (e instanceof BaoSendError && e.code === 'IDEMPOTENCY_CONFLICT') {
+        toast({
+          title: 'Send request already used',
+          description: 'This send could not be retried because its amount, rail, or recipient changed. Press Send again to start a new request.',
+          variant: 'destructive',
+        });
       } else {
         toast({ title: 'Send failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
       }
@@ -139,19 +160,58 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
           <Input
             id='bao-send-dest'
             value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder='npub1…'
+            onChange={(e) => {
+              // A key is bound to one exact send payload. Start a fresh
+              // intent whenever the user edits the destination.
+              idemRef.current = null;
+              setSelectedRecipient(null);
+              setDestination(e.target.value);
+            }}
+            placeholder='Search name, NIP-05, or paste npub1…'
             autoComplete='off'
           />
+          {!selectedRecipient && !directRecipient && destination.trim().length > 0 && (
+            <div className='rounded-lg border bg-background shadow-sm' role='listbox' aria-label='Recipient search results'>
+              {isSearchingRecipients ? (
+                <p className='flex items-center gap-2 p-3 text-xs text-muted-foreground'>
+                  <Loader2 className='size-3.5 animate-spin' /> Searching public profiles…
+                </p>
+              ) : recipientResults && recipientResults.length > 0 ? (
+                <div className='max-h-52 overflow-y-auto py-1'>
+                  {recipientResults.map((profile) => {
+                    const name = profile.metadata.name || profile.metadata.display_name || 'Anonymous';
+                    const npub = tryNpubEncode(profile.pubkey);
+                    if (!npub) return null;
+                    return (
+                      <button
+                        key={profile.pubkey}
+                        type='button'
+                        role='option'
+                        className='flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted'
+                        onClick={() => selectRecipient(profile)}
+                      >
+                        <span className='text-sm font-medium'>{name}</span>
+                        <span className='text-xs text-muted-foreground'>
+                          {profile.metadata.nip05 || `${npub.slice(0, 14)}…`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className='p-3 text-xs text-muted-foreground'>No public profile match. You can still paste an npub or hex pubkey.</p>
+              )}
+            </div>
+          )}
         </div>
         <div className='flex gap-3'>
           <div className='space-y-1.5 flex-1'>
             <Label htmlFor='bao-send-amount'>Amount (sats)</Label>
-            <Input id='bao-send-amount' value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode='numeric' />
+            <Input id='bao-send-amount' value={amount} onChange={(e) => { idemRef.current = null; setAmount(e.target.value.replace(/[^0-9]/g, '')); }} inputMode='numeric' />
           </div>
           <div className='space-y-1.5 w-32'>
             <Label>Rail</Label>
-            <Select value={rail} onValueChange={(v) => setRail(v as BaoSendRail)}>
+            <Select value={rail} onValueChange={(v) => { idemRef.current = null; setRail(v as BaoSendRail); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SEND_RAILS.map((r) => (
@@ -342,12 +402,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         .filter((rail) => rail.sats > 0)
     : [];
 
-  // Swap guidance: local self-custody Cashu is what pets/battles spend. When
-  // it's empty but the user holds sats on bao.markets rails, point them at the
-  // swap instead of leaving them at a dead "0".
-  const showSwapHint =
-    cashuWallet.totalBalance === 0 && apiTotal !== null && apiTotal > 0;
-
   const selectedConfig = RAIL_BY_ID[selectedRail];
 
   return (
@@ -434,27 +488,6 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
         })}
       </div>
 
-      {showSwapHint && (
-        <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
-          No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
-          <span className='font-medium text-foreground'>{(apiTotal ?? 0).toLocaleString()} sats</span>{' '}
-          on bao.markets
-          {apiBreakdown.length > 0 && (
-            <> ({apiBreakdown.map((rail) => rail.label).join(', ')})</>
-          )}
-          : swap them to Cashu on{' '}
-          <a
-            href='https://bao.markets'
-            target='_blank'
-            rel='noreferrer'
-            className='text-primary underline underline-offset-2'
-          >
-            bao.markets
-          </a>{' '}
-          to use them here.
-        </p>
-      )}
-
       <Card>
         <CardHeader className='pb-2'>
           <CardTitle className='flex items-center gap-2 text-base font-medium'>
@@ -467,7 +500,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           {selectedRail === 'lightning' && (
             <LightningPanel wallet={cashuWallet} walletStatus={walletStatus} nwc={nwc} />
           )}
-          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} />}
+          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} signer={user.signer} onApiChanged={() => void apiBalances.refetch()} apiCashuBalance={apiBalances.data?.cashu ?? null} />}
           {['liquid', 'spark', 'ark', 'fedimint', 'l1'].includes(selectedRail) && (
             <DemoPlaceholderPanel rail={selectedConfig} balance={railBalance(selectedRail)} />
           )}
@@ -697,8 +730,10 @@ function LightningPanel({
   );
 }
 
-function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }) {
+function CashuPanel({ wallet, signer, onApiChanged, apiCashuBalance }: { wallet: ReturnType<typeof useBaoCashuWallet>; signer: BaoWalletTabProps['user']['signer']; onApiChanged: () => void; apiCashuBalance: number | null }) {
   const { toast } = useToast();
+  const publishPreferences = usePublishPreferences();
+  const portabilityEnabled = publishPreferences.isEnabled('baoCashuSync') && publishPreferences.isEnabled('nutzaps');
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [sendAmount, setSendAmount] = useState('');
@@ -710,12 +745,130 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
   const [dismissedQuoteId, setDismissedQuoteId] = useState<string | null>(null);
   const mintingQuoteRef = useRef<string | null>(null);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
+  const [apiToken, setApiToken] = useState('');
+  const [apiAmount, setApiAmount] = useState('');
+  const [apiInvoice, setApiInvoice] = useState<{ bolt11: string; payment_hash: string; amount_sats: number } | null>(null);
+  const [apiInvoicePaid, setApiInvoicePaid] = useState(false);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [claimAmount, setClaimAmount] = useState('2140');
+  const [nutzapRecipient, setNutzapRecipient] = useState('');
+  const [nutzapAmount, setNutzapAmount] = useState('');
 
   const handleReceive = async () => {
     if (!receiveTokenStr.trim()) return;
     await wallet.receiveToken(receiveTokenStr.trim());
     setReceiveTokenStr('');
   };
+
+  const handleApiRedeem = async () => {
+    if (!apiToken.trim()) return;
+    setApiLoading(true);
+    try {
+      const result = await redeemBaoCashuToken(signer, apiToken.trim());
+      toast({ title: 'BAO Cashu received', description: `${result.amount_sats.toLocaleString()} sats added to your custodial balance.` });
+      setApiToken('');
+      onApiChanged();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not redeem token', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const handleApiInvoice = async () => {
+    const amount = Number(apiAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    setApiLoading(true);
+    try {
+      setApiInvoice(await createBaoDepositInvoice(signer, amount));
+      setApiInvoicePaid(false);
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not create invoice', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const handleClaim = async () => {
+    const amount = Number(claimAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    setApiLoading(true);
+    try {
+      const result = await wallet.claimApiCashu(amount);
+      onApiChanged();
+      toast({
+        title: 'BAO Cashu claimed',
+        description: result.imported_sats > 0
+          ? `${result.imported_sats.toLocaleString()} signet sats were stored in your portable wallet.`
+          : result.already_imported
+            ? 'The server finished accounting for the Cashu proofs already stored in your portable wallet.'
+          : 'The claim completed. Use “Collect pending Cashu” if the mint is still delivering the proofs.',
+      });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not claim BAO Cashu', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const handleCollectPending = async () => {
+    setApiLoading(true);
+    try {
+      const imported = await wallet.collectPendingApiCashu();
+      onApiChanged();
+      toast({ title: imported > 0 ? 'BAO Cashu collected' : 'Wallet is up to date', description: imported > 0 ? `${imported.toLocaleString()} signet sats imported.` : 'No pending Cashu proofs were found.' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not collect Cashu', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const enablePortability = () => {
+    publishPreferences.setEnabledMany({ baoCashuSync: true, nutzaps: true });
+  };
+
+  const handleNutzapSend = async () => {
+    const amount = Number(nutzapAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    const result = await wallet.sendNutzap(amount, nutzapRecipient.trim(), wallet.mintUrl, { memo: sendMemo.trim() || undefined });
+    if (result.status === 'sent') {
+      toast({ title: 'BAO Cashu sent', description: `${amount.toLocaleString()} signet sats sent through NIP-61.` });
+      setNutzapAmount('');
+      setNutzapRecipient('');
+    } else if (result.status === 'pending') {
+      toast({ title: 'Payment saved for delivery', description: 'The mint accepted it and the wallet will retry relay delivery.' });
+    } else if (result.status === 'unknown') {
+      toast({ variant: 'destructive', title: 'Payment status unknown', description: 'Do not retry yet. Refresh the wallet and check whether your balance changed.' });
+    }
+  };
+
+  useEffect(() => {
+    if (!apiInvoice || apiInvoicePaid) return;
+    let active = true;
+    const check = async () => {
+      try {
+        const status = await checkBaoDepositStatus(signer, apiInvoice.payment_hash);
+        if (active && status.paid) {
+          setApiInvoicePaid(true);
+          onApiChanged();
+          toast({ title: 'BAO Lightning deposit received', description: `${apiInvoice.amount_sats.toLocaleString()} sats added.` });
+        }
+      } catch { /* transient status errors are retried */ }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [apiInvoice, apiInvoicePaid, signer, onApiChanged, toast]);
 
   const handleSend = async () => {
     const amount = Number(sendAmount);
@@ -799,6 +952,51 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
   return (
     <div className='space-y-5'>
+      <details className='rounded-xl border bg-muted/20'>
+        <summary className='cursor-pointer list-none px-4 py-3 text-sm font-medium'>Advanced Cashu wallet</summary>
+        <div className='space-y-4 border-t px-4 py-4'>
+          <Card className='border-primary/30'>
+            <CardHeader className='pb-2'><CardTitle className='text-sm'>Claim portable BAO Cashu</CardTitle></CardHeader>
+            <CardContent className='space-y-3'>
+              <p className='text-xs text-muted-foreground'>Claim BAO signet Cashu through the bao.markets API, import the issued proofs on this device, and keep the server copy until import succeeds.</p>
+              <div className='flex flex-col gap-2 sm:flex-row'>
+                <Input inputMode='numeric' value={claimAmount} onChange={(event) => setClaimAmount(event.target.value.replace(/[^0-9]/g, ''))} aria-label='Claim amount in sats' />
+                <Button disabled={apiLoading || !(Number(claimAmount) > 0)} onClick={() => void handleClaim()}>Claim Cashu</Button>
+                <Button variant='outline' disabled={apiLoading} onClick={() => void handleCollectPending()}>Collect pending Cashu</Button>
+              </div>
+              <SatsPresetPills value={claimAmount} onSelect={(value) => setClaimAmount(String(value))} />
+            </CardContent>
+          </Card>
+      <Card className='border-primary/30'>
+        <CardHeader className='pb-2'><CardTitle className='text-sm'>Custodial BAO Markets wallet</CardTitle></CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='space-y-2'>
+            <p className='text-xs text-muted-foreground'>Redeem a BAO Cashu token into your API balance.</p>
+            <Textarea placeholder='Paste BAO Cashu token…' value={apiToken} onChange={(e) => setApiToken(e.target.value)} rows={3} />
+            <Button onClick={() => void handleApiRedeem()} disabled={!apiToken.trim() || apiLoading}>Redeem into BAO balance</Button>
+          </div>
+          <div className='space-y-2 border-t pt-3'>
+            <p className='text-xs text-muted-foreground'>Create a Lightning invoice that credits your BAO Markets balance.</p>
+            <div className='flex gap-2'><Input type='number' placeholder='Amount in sats' value={apiAmount} onChange={(e) => setApiAmount(e.target.value)} /><Button onClick={() => void handleApiInvoice()} disabled={apiLoading || !apiAmount}>Create invoice</Button></div>
+            {apiInvoice && <div className='space-y-2 rounded-lg border p-3'><QRCodeSVG value={apiInvoice.bolt11} size={160} /><p className='break-all text-xs'>{apiInvoice.bolt11}</p><p className='text-xs text-muted-foreground'>{apiInvoicePaid ? 'Paid — balance updated.' : 'Waiting for payment…'}</p></div>}
+          </div>
+        </CardContent>
+      </Card>
+          <p className='text-xs text-muted-foreground'>This wallet combines BAO Markets custodial Cashu API actions with an optional NIP-60 wallet. The NIP-60 section stores encrypted Cashu state on Nostr relays and can send and receive tokens without the API. These are separate balances and are shown together here to avoid presenting two wallets.</p>
+          {!portabilityEnabled && (
+            <div className='space-y-2 rounded-lg border border-dashed p-3'>
+              <p className='text-sm font-medium'>Enable portable BAO Cashu</p>
+              <p className='text-xs text-muted-foreground'>Publishes encrypted NIP-60 wallet state to the BAO relay and a public NIP-61 receiver notice containing your npub, BAO mint, and relay. This lets the same signet tokens work across compatible apps. They are demo coins with no real value.</p>
+              <Button size='sm' disabled={publishPreferences.isLoading} onClick={enablePortability}>Enable NIP-60 send and receive</Button>
+            </div>
+          )}
+          {wallet.totalBalance === 0 && apiCashuBalance !== null && apiCashuBalance > 0 && (
+            <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
+              No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
+              <span className='font-medium text-foreground'>{apiCashuBalance.toLocaleString()} sats on bao.markets (Cashu)</span>.
+              Use the custodial controls above to redeem or deposit, or receive a Cashu token here to use the NIP-60 wallet.
+            </p>
+          )}
       <div className='flex items-baseline gap-2'>
         <span className='text-3xl font-bold'>{wallet.totalBalance}</span>
         <span className='text-muted-foreground'>demo sats</span>
@@ -844,6 +1042,18 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
         </TabsContent>
 
         <TabsContent value='send' className='space-y-4 pt-2'>
+          {portabilityEnabled && (
+            <div className='space-y-3 rounded-lg border p-3'>
+              <p className='text-sm font-medium'>Send directly to an npub</p>
+              <Input placeholder='Recipient npub1…' value={nutzapRecipient} onChange={(event) => setNutzapRecipient(event.target.value)} />
+              <div className='flex flex-col gap-2 sm:flex-row'>
+                <Input inputMode='numeric' placeholder='Amount in demo sats' value={nutzapAmount} onChange={(event) => setNutzapAmount(event.target.value.replace(/[^0-9]/g, ''))} />
+                <Button disabled={wallet.loading || !nutzapRecipient.trim() || !(Number(nutzapAmount) > 0)} onClick={() => void handleNutzapSend()}>Send to npub</Button>
+              </div>
+              <SatsPresetPills value={nutzapAmount} onSelect={(value) => setNutzapAmount(String(value))} />
+              <p className='text-xs text-muted-foreground'>The recipient must enable portable BAO Cashu first. Delivery stays on the BAO relay.</p>
+            </div>
+          )}
           <div className='flex flex-col gap-4'>
             <div className='flex flex-col sm:flex-row gap-2'>
               <Input
@@ -955,6 +1165,8 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
           setScannerOpen(false);
         }}
       />
+        </div>
+      </details>
     </div>
   );
 }

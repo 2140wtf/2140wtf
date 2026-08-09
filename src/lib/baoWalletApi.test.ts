@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchBaoWalletBalances, totalBaoApiBalance } from './baoWalletApi';
+import {
+  checkBaoCashuClaimStatus,
+  claimBaoCashu,
+  clearPendingBaoCashuTokens,
+  fetchBaoWalletBalances,
+  fetchPendingBaoCashuTokens,
+  totalBaoApiBalance,
+} from './baoWalletApi';
 import type { BaoApiSigner } from './baoApiAuth';
 
 const fakeSigner: BaoApiSigner = {
@@ -76,5 +83,85 @@ describe('fetchBaoWalletBalances', () => {
     mockFetchOnce(401, { error: { message: 'unauthorized' } });
 
     await expect(fetchBaoWalletBalances(fakeSigner)).rejects.toThrow('unauthorized');
+  });
+});
+
+describe('BAO Cashu claim and collection API', () => {
+  it('binds a Cashu claim authorization to the exact request body', async () => {
+    const spy = mockFetchOnce(202, {
+      data: { status: 'pending', idempotency_key: 'claim-key' },
+    });
+
+    await expect(claimBaoCashu(fakeSigner, 2_140, 'claim-key')).resolves.toEqual({
+      status: 'pending',
+      idempotency_key: 'claim-key',
+      claimed_sats: undefined,
+      new_balance_sats: undefined,
+      txid: undefined,
+    });
+
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/claim');
+    expect(init.body).toBe(JSON.stringify({ rail: 'cashu', amount_sats: 2_140, idempotency_key: 'claim-key' }));
+    const auth = String((init.headers as Record<string, string>).Authorization);
+    const event = JSON.parse(atob(auth.slice(6))) as { tags: string[][] };
+    expect(event.tags).toContainEqual(['u', url]);
+    expect(event.tags).toContainEqual(['method', 'POST']);
+    expect(event.tags.some(([name, value]) => name === 'payload' && value.length === 64)).toBe(true);
+  });
+
+  it('parses a completed asynchronous claim status', async () => {
+    mockFetchOnce(200, {
+      data: {
+        status: 'completed',
+        idempotency_key: 'claim-key',
+        result: { claimed_sats: 2_140, new_balance_sats: 7_040, txid: 'cashu-event' },
+      },
+    });
+
+    await expect(checkBaoCashuClaimStatus(fakeSigner, 'claim-key')).resolves.toEqual({
+      status: 'completed',
+      idempotency_key: 'claim-key',
+      claimed_sats: 2_140,
+      new_balance_sats: 7_040,
+      txid: 'cashu-event',
+    });
+  });
+
+  it('surfaces a failed asynchronous claim instead of polling forever', async () => {
+    mockFetchOnce(200, {
+      data: { status: 'failed', idempotency_key: 'claim-key', result: { error: 'Mint unavailable' } },
+    });
+
+    await expect(checkBaoCashuClaimStatus(fakeSigner, 'claim-key')).rejects.toMatchObject({
+      message: 'Mint unavailable',
+      code: 'CLAIM_FAILED',
+    });
+  });
+
+  it('parses a claim completed directly by the POST endpoint', async () => {
+    mockFetchOnce(200, {
+      data: { idempotency_key: 'claim-key', claimed_sats: 21, new_balance_sats: 42, txid: 'minted-token' },
+    });
+
+    await expect(claimBaoCashu(fakeSigner, 21, 'claim-key')).resolves.toEqual({
+      status: 'completed',
+      idempotency_key: 'claim-key',
+      claimed_sats: 21,
+      new_balance_sats: 42,
+      txid: 'minted-token',
+    });
+  });
+
+  it('fetches and clears only valid pending token strings', async () => {
+    const fetchSpy = mockFetchOnce(200, { data: { tokens: ['cashuA-token', '', 21, 'cashuB-token'] } });
+    await expect(fetchPendingBaoCashuTokens(fakeSigner)).resolves.toEqual(['cashuA-token', 'cashuB-token']);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-pending');
+
+    const clearSpy = mockFetchOnce(200, { data: { collected: true } });
+    await expect(clearPendingBaoCashuTokens(fakeSigner)).resolves.toBeUndefined();
+    const [url, init] = clearSpy.mock.calls.at(-1) as [string, RequestInit];
+    expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-collect');
+    expect(init.method).toBe('POST');
   });
 });

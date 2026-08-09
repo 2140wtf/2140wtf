@@ -1,0 +1,82 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan:
+    name: BAO Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Scan source for leaked secrets and dangerous code
+        run: node scripts/security-scan.mjs
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: security-scan-report.json
+          if-no-files-found: error
+          retention-days: 90
+
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=critical --json > audit-results.json
+          STATUS=$?
+          set -e
+          node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('audit-results.json','utf8')); const v=data.metadata?.vulnerabilities ?? {}; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Dependency Audit\\n\\n- Critical: '+(v.critical ?? 0)+'\\n- High: '+(v.high ?? 0)+'\\n');"
+          exit "$STATUS"
+
+      - name: Upload dependency audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: audit-results.json
+          if-no-files-found: error
+          retention-days: 90

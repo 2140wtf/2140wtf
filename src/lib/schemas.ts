@@ -394,6 +394,10 @@ export const EncryptedSettingsSchema = z.looseObject({
   feedSettings: FeedSettingsSchema.optional(),
   contentFilters: z.array(ContentFilterSchema).optional(),
   contentWarningPolicy: ContentWarningPolicySchema.optional(),
+  wotFilter: z.object({
+    enabled: z.boolean(),
+    threshold: z.number().int().min(0).max(100),
+  }).optional(),
   notificationsEnabled: z.boolean().optional(),
   notificationStyle: z.enum(['push', 'persistent']).optional(),
   notificationsCursor: z.number().optional(),
@@ -433,6 +437,7 @@ export const EncryptedSettingsSchema = z.looseObject({
     directMessages: z.boolean().optional(),
     recovery: z.boolean().optional(),
     encryptedSettings: z.boolean().optional(),
+    baoCashuSync: z.boolean().optional(),
     deleteRequests: z.boolean().optional(),
     drafts: z.boolean().optional(),
     emojiPacks: z.boolean().optional(),

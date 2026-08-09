@@ -6,6 +6,7 @@ import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
 import { createIdentityNip60Signer, type Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import { devLog } from '@/lib/cashu/devLog';
+import { BAO_MARKETS_RELAY } from '@/lib/baoRelayMarkets';
 
 const PUBLISH_TIMEOUT_MS = 8_000;
 const QUERY_TIMEOUT_MS = 8_000;
@@ -29,14 +30,21 @@ export function useNip60Sync(): Nip60SyncApi | undefined {
 
     const signer = createIdentityNip60Signer(user);
 
-    const relays = (config.relayMetadata?.relays ?? [])
-      .filter((r) => r.read !== false || r.write !== false)
-      .map((r) => r.url)
-      .filter((url): url is string => typeof url === 'string' && url.length > 0);
+    const baoRelay = BAO_MARKETS_RELAY.replace(/\/+$/, '').toLowerCase();
+    const configuredRelays = (config.relayMetadata?.relays ?? [])
+      .filter((relay) => typeof relay.url === 'string' && relay.url.length > 0)
+      // The BAO demo wallet uses a flat kind:17375 on its own relay. Keeping
+      // the main wallet off that relay prevents either replaceable config from
+      // overwriting the other when a user adds relay.bao.network to NIP-65.
+      .filter((relay) => relay.url.replace(/\/+$/, '').toLowerCase() !== baoRelay);
+    const readRelays = configuredRelays.filter((relay) => relay.read !== false).map((relay) => relay.url);
+    const writeRelays = configuredRelays.filter((relay) => relay.write !== false).map((relay) => relay.url);
+    const relays = [...new Set([...readRelays, ...writeRelays])];
 
     const publish: Nip60SyncApi['publish'] = async (event: NostrEvent) => {
+      if (writeRelays.length === 0) return null;
       try {
-        await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+        await nostr.group(writeRelays).event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
         return event.id;
       } catch (e) {
         devLog.error('NIP-60 publish failed:', e);
@@ -45,8 +53,9 @@ export function useNip60Sync(): Nip60SyncApi | undefined {
     };
 
     const query: Nip60SyncApi['query'] = async (filter: NostrFilter) => {
+      if (readRelays.length === 0) return [];
       try {
-        return await nostr.query([filter], { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
+        return await nostr.group(readRelays).query([filter], { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
       } catch (e) {
         devLog.error('NIP-60 query failed:', e);
         return [];

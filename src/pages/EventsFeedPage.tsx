@@ -206,9 +206,9 @@ export function EventsFeedPage() {
   return (
     <main className="max-w-2xl mx-auto">
       <PageHeader title="Events" icon={<CalendarDays className="size-5" />}>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4 mr-1" />
-          Create event
+        <Button size="sm" className="px-2 sm:px-3" onClick={() => setCreateOpen(true)} aria-label="Create event">
+          <Plus className="size-4 sm:mr-1" />
+          <span className="hidden sm:inline">Create event</span>
         </Button>
         <KindInfoButton
           kindDef={eventsDef}

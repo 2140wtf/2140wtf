@@ -8,6 +8,67 @@ import { useCacheFirstSeed } from '@/hooks/useCacheFirstSeed';
 /** Kinds whose canonical home is the Zapstore relay. */
 const ZAPSTORE_KINDS = [32267, 30063, 3063];
 
+/** Public relays used only to discover an author's NIP-65 outbox list. */
+const OUTBOX_DISCOVERY_RELAYS = [
+  'wss://relay.ditto.pub/',
+  'wss://nos.lol/',
+  'wss://purplepag.es/',
+];
+
+interface QueryableNostr {
+  query: (filters: NostrFilter[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]>;
+  relay: (url: string) => {
+    query: (filters: NostrFilter[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]>;
+  };
+}
+
+/**
+ * Query relays independently so one relay that never sends EOSE cannot discard
+ * events already returned by healthier relays when a grouped query times out.
+ */
+async function queryRelaySet(
+  nostr: QueryableNostr,
+  relayUrls: string[],
+  filters: NostrFilter[],
+  signal: AbortSignal,
+): Promise<NostrEvent[]> {
+  const urls = [...new Set(relayUrls)].slice(0, 8);
+  if (urls.length === 0 || signal.aborted) return [];
+
+  return new Promise<NostrEvent[]>((resolve) => {
+    const controller = new AbortController();
+    let pending = urls.length;
+    let settled = false;
+
+    const finish = (events: NostrEvent[]) => {
+      if (settled) return;
+      if (events.length > 0) {
+        settled = true;
+        controller.abort();
+        resolve(events);
+        return;
+      }
+      pending -= 1;
+      if (pending === 0) {
+        settled = true;
+        resolve([]);
+      }
+    };
+
+    signal.addEventListener('abort', () => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      resolve([]);
+    }, { once: true });
+    for (const url of urls) {
+      void nostr.relay(url).query(filters, {
+        signal: AbortSignal.any([signal, controller.signal, AbortSignal.timeout(3000)]),
+      }).then(finish).catch(() => finish([]));
+    }
+  });
+}
+
 /**
  * Extract write relay URLs from a NIP-65 (kind 10002) relay list event.
  * Write relays are where the author publishes their content.
@@ -34,28 +95,44 @@ function extractWriteRelays(event: NostrEvent): string[] {
  * for the target event. Returns the event if found, or null.
  */
 async function queryAuthorRelays(
-  nostr: { query: (filters: NostrFilter[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]>; group: (urls: string[]) => { query: (filters: NostrFilter[], opts?: { signal?: AbortSignal }) => Promise<NostrEvent[]> } },
+  nostr: QueryableNostr,
   authorPubkey: string,
   eventFilter: NostrFilter[],
   signal: AbortSignal,
 ): Promise<NostrEvent | null> {
   try {
     // Fetch the author's NIP-65 relay list from our connected relays
-    const relayListSignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
-    const relayListEvents = await nostr.query(
-      [{ kinds: [10002], authors: [authorPubkey], limit: 1 }],
-      { signal: relayListSignal },
-    );
+    const relayListSignal = AbortSignal.any([signal, AbortSignal.timeout(2000)]);
+    const relayListFilter: NostrFilter[] = [{ kinds: [10002], authors: [authorPubkey], limit: 1 }];
+    let relayListEvents: NostrEvent[] = [];
+    try {
+      relayListEvents = await nostr.query(relayListFilter, { signal: relayListSignal });
+    } catch {
+      // A pooled query can reject when one slow relay holds the batch open.
+      // Retry independently so results from responsive directory relays survive.
+    }
+
+    if (relayListEvents.length === 0) {
+      relayListEvents = await queryRelaySet(
+        nostr,
+        OUTBOX_DISCOVERY_RELAYS,
+        relayListFilter,
+        AbortSignal.any([signal, AbortSignal.timeout(3000)]),
+      );
+    }
 
     if (relayListEvents.length === 0) return null;
 
-    const writeRelays = extractWriteRelays(relayListEvents[0]).slice(0, 5);
+    const latestRelayList = relayListEvents.reduce((latest, event) =>
+      event.created_at > latest.created_at ? event : latest,
+    );
+    const writeRelays = extractWriteRelays(latestRelayList).slice(0, 5);
     if (writeRelays.length === 0) return null;
 
     // Query the author's write relays for the target event
-    const authorRelaySignal = AbortSignal.any([signal, AbortSignal.timeout(6000)]);
-    const events = await nostr.group(writeRelays).query(eventFilter, { signal: authorRelaySignal });
-    return events.length > 0 ? events[0] : null;
+    const authorRelaySignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+    const events = await queryRelaySet(nostr, writeRelays, eventFilter, authorRelaySignal);
+    return events.sort((a, b) => b.created_at - a.created_at)[0] ?? null;
   } catch {
     return null;
   }
@@ -79,13 +156,18 @@ export function useEvent(eventId: string | undefined, relays?: string[], authorH
 
       // 1. Query the user's configured relays first (batched automatically).
       //    Batched results are mirrored into the cache by the AppPool.
-      const events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
+      let events: NostrEvent[] = [];
+      try {
+        events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
+      } catch {
+        // Continue to relay hints and NIP-65 outbox discovery on timeout.
+      }
       if (events.length > 0) return events[0];
 
       // 2. If not found and we have relay hints, try those relays directly
       if (relays && relays.length > 0) {
         try {
-          const hintEvents = await nostr.group(relays).query(filter, { signal: AbortSignal.timeout(5000) });
+          const hintEvents = await queryRelaySet(nostr, relays, filter, AbortSignal.timeout(5000));
           if (hintEvents.length > 0) {
             // group() bypasses the batcher's cache tap — persist explicitly.
             void store.event(hintEvents[0]);
@@ -180,13 +262,18 @@ export function useAddrEvent(addr: AddrCoords | undefined, relays?: string[]) {
       }
 
       // 1. Query the user's configured relays (batched + cached automatically)
-      const events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
+      let events: NostrEvent[] = [];
+      try {
+        events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
+      } catch {
+        // Continue to relay hints and NIP-65 outbox discovery on timeout.
+      }
       if (events.length > 0) return events[0];
 
       // 2. If not found and we have relay hints, try those relays directly
       if (relays && relays.length > 0) {
         try {
-          const hintEvents = await nostr.group(relays).query(filter, { signal: AbortSignal.timeout(5000) });
+          const hintEvents = await queryRelaySet(nostr, relays, filter, AbortSignal.timeout(5000));
           if (hintEvents.length > 0) {
             // group() bypasses the batcher's cache tap — persist explicitly.
             void store.event(hintEvents[0]);

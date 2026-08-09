@@ -46,6 +46,17 @@ describe('parsePeopleList', () => {
     expect(result.title).toBe('Some list');
   });
 
+  it('deduplicates repeated members before rendering a pack', () => {
+    const event = makeEvent(39089, [
+      ['d', 'starter-pack'],
+      ['p', VALID_PK_1],
+      ['p', VALID_PK_2],
+      ['p', VALID_PK_1],
+    ]);
+
+    expect(parsePeopleList(event).pubkeys).toEqual([VALID_PK_1, VALID_PK_2]);
+  });
+
   it('parses follow-set metadata correctly', () => {
     const event = makeEvent(30000, [
       ['d', 'pals'],

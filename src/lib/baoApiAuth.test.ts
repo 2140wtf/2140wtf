@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { baoNip98Header, type BaoApiSigner } from './baoApiAuth';
 
@@ -12,6 +12,10 @@ function signer() {
     })),
   } satisfies BaoApiSigner;
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('baoNip98Header', () => {
   it('binds POST authorization to the exact JSON payload', async () => {
@@ -33,5 +37,23 @@ describe('baoNip98Header', () => {
     await baoNip98Header(testSigner, url, 'POST', '{"amount_sats":2000}');
 
     expect(testSigner.signEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('signs every repeated request because the server consumes each event ID', async () => {
+    const testSigner = signer();
+    const url = 'https://bao.example/v1/wallet/balance';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T12:00:00Z'));
+
+    const firstHeader = await baoNip98Header(testSigner, url, 'GET');
+    const secondHeader = await baoNip98Header(testSigner, url, 'GET');
+
+    expect(testSigner.signEvent).toHaveBeenCalledTimes(2);
+    const firstNonce = testSigner.signEvent.mock.calls[0][0].tags.find(([name]) => name === 'nonce');
+    const secondNonce = testSigner.signEvent.mock.calls[1][0].tags.find(([name]) => name === 'nonce');
+    expect(firstNonce?.[1]).toBeTruthy();
+    expect(secondNonce?.[1]).toBeTruthy();
+    expect(secondNonce?.[1]).not.toBe(firstNonce?.[1]);
+    expect(secondHeader).not.toBe(firstHeader);
   });
 });

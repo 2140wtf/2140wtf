@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import { Bot, CheckCircle2, Copy, Cpu, Loader2, Send, Zap } from 'lucide-react';
+import { Bot, CheckCircle2, Copy, Cpu, Loader2, Send, WalletCards, Zap } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,8 @@ import {
   buildComputeCreditFulfillment,
   buildComputeCreditReceipt,
   buildComputeCreditRequest,
+  confirmedComputeCreditShots,
+  isComputeCreditRequestConfirmed,
   parseComputeCreditFulfillment,
   parseComputeCreditReceipt,
   parseComputeCreditRequest,
@@ -28,6 +30,7 @@ import {
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
+  type ComputeCreditShot,
   type CreditLockMode,
 } from '@/lib/baoComputeCredits';
 import {
@@ -207,7 +210,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
     refetchInterval: 30_000,
   });
 
-  const { fulfilledByRequest, claimsByRequest } = useMemo(() => {
+  const { confirmedShotsByRequest, claimsByRequest } = useMemo(() => {
     // A kind-4972 event proves NOTHING about payment — anyone can publish one
     // for any request. So it is only trusted as follows:
     //   - authored by the REQUESTER → confirmation of receipt; closes the request
@@ -215,26 +218,30 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
     //     as a marker but never hides the request (a griefer could otherwise
     //     hide every open request without paying a single sat).
     const ownerById = new Map(requests.map((r) => [r.id, r.pubkey]));
-    const fulfilled = new Map<string, number>();
+    const confirmed = new Map<string, Set<ComputeCreditShot>>();
     const claims = new Map<string, ComputeCreditFulfillment[]>();
+    for (const request of requests) {
+      const shots = confirmedComputeCreditShots(request, fulfillmentsQuery.data ?? []);
+      if (shots.size > 0) confirmed.set(request.id, shots);
+    }
     for (const f of fulfillmentsQuery.data ?? []) {
       if (!f) continue;
       const owner = ownerById.get(f.requestId);
       if (!owner || f.requesterPubkey !== owner) continue; // p tag must match the real requester
-      if (f.pubkey === owner) {
-        fulfilled.set(f.requestId, (fulfilled.get(f.requestId) ?? 0) + f.amountSats);
-      } else {
+      if (f.pubkey !== owner) {
         const list = claims.get(f.requestId) ?? [];
         list.push(f);
         claims.set(f.requestId, list);
       }
     }
-    return { fulfilledByRequest: fulfilled, claimsByRequest: claims };
+    return { confirmedShotsByRequest: confirmed, claimsByRequest: claims };
   }, [fulfillmentsQuery.data, requests]);
 
-  const openRequests = requests.filter((r) => !fulfilledByRequest.has(r.id));
+  const requestIsConfirmed = (request: ComputeCreditRequest) =>
+    isComputeCreditRequestConfirmed(request, fulfillmentsQuery.data?.filter((f): f is ComputeCreditFulfillment => f !== null) ?? []);
+  const openRequests = requests.filter((request) => !requestIsConfirmed(request));
   const myRequests = user ? requests.filter((r) => r.pubkey === user.pubkey) : [];
-  const myFundedRequests = myRequests.filter((r) => fulfilledByRequest.has(r.id));
+  const myFundedRequests = myRequests.filter(requestIsConfirmed);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['bao-compute-credit-requests'] });
@@ -247,13 +254,12 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
       {/* REAL banner — contrasts with the DEMO banner on the Campaigns tab */}
       <div className="rounded-lg border-2 border-green-500/70 bg-green-500/10 px-4 py-3 text-sm">
         <p className="font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5">
-          <Zap className="size-4" /> REAL SATS — mainnet Cashu tokens via Routstr
+          <Zap className="size-4" /> REAL SATS — mainnet Cashu for agents
         </p>
         <p className="text-muted-foreground mt-0.5">
-          Routstr runs on <span className="text-green-600 dark:text-green-400 font-medium">real Cashu — Bitcoin mainnet</span>, not the
-          ₿AO testnet (signet) Cashu the Campaigns demo uses. Credits are real mainnet Cashu tokens P2PK-locked to the agent,
-          swept in-app, and redeemed for AI compute at <code className="text-xs">{ROUTSTR_BASE_URL}</code>. Every sat funded here
-          is real and fully backed by the mint — tokens only, straight from your wallet.
+          Funding sends a private <span className="text-green-600 dark:text-green-400 font-medium">Bitcoin mainnet Cashu token</span> to
+          the agent. The agent can keep it as Cashu or convert it into an AI-compute key at{' '}
+          <code className="text-xs">{ROUTSTR_BASE_URL}</code>. This is separate from the free ₿AO testnet sats used by demo campaigns.
         </p>
       </div>
         <p className="text-muted-foreground mt-1">
@@ -267,17 +273,17 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
       <Tabs defaultValue={defaultView} className="space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2">
           <TabsTrigger value="browse" className="min-h-11 gap-2 whitespace-normal py-2">
-            <Bot className="size-4" /> Browse requests
+            <Bot className="size-4" /> Fund an agent
           </TabsTrigger>
           <TabsTrigger value="agent" className="min-h-11 gap-2 whitespace-normal py-2">
-            <Cpu className="size-4" /> Agent tools
+            <Cpu className="size-4" /> Request or receive
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="browse" className="mt-0 space-y-3">
           <div>
-            <h2 className="text-lg font-semibold">Fund an agent&apos;s compute</h2>
-            <p className="text-sm text-muted-foreground">Discover open requests first. Review the requester and track record before sending real Cashu.</p>
+            <h2 className="text-lg font-semibold">Fund an agent with Cashu</h2>
+            <p className="text-sm text-muted-foreground">Review the request and the agent&apos;s track record before sending real mainnet sats.</p>
           </div>
           {requestsQuery.isLoading ? (
             <div className="space-y-3">
@@ -292,7 +298,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
           ) : (
             <div className="space-y-3">
               {openRequests.map((r) => (
-                <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} onFulfilled={invalidate} />
+                <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} confirmedShots={confirmedShotsByRequest.get(r.id) ?? new Set()} onFulfilled={invalidate} />
               ))}
             </div>
           )}
@@ -300,12 +306,12 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
 
         <TabsContent value="agent" className="mt-0 space-y-3">
           <div>
-            <h2 className="text-lg font-semibold">Request and redeem compute credits</h2>
-            <p className="text-sm text-muted-foreground">For agents that need compute: publish a request, then redeem received credits.</p>
+            <h2 className="text-lg font-semibold">Request or receive Cashu</h2>
+            <p className="text-sm text-muted-foreground">Publish a funding request, receive its Cashu token, and optionally turn it into AI compute.</p>
           </div>
           <AgentGateCheck>
             <div className="grid gap-6 md:grid-cols-2">
-              <RequestCreditCard myRequests={myRequests} fulfilledByRequest={fulfilledByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
+              <RequestCreditCard myRequests={myRequests} confirmedShotsByRequest={confirmedShotsByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
               <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
             </div>
           </AgentGateCheck>
@@ -317,9 +323,9 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
 
 // ── Agent: request credits ────────────────────────────────────────────────────
 
-function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, onPublished }: {
+function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByRequest, onPublished }: {
   myRequests: ComputeCreditRequest[];
-  fulfilledByRequest: Map<string, number>;
+  confirmedShotsByRequest: Map<string, Set<ComputeCreditShot>>;
   claimsByRequest: Map<string, ComputeCreditFulfillment[]>;
   onPublished: () => void;
 }) {
@@ -354,15 +360,16 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
   // Agent-side confirmation. Only a kind-4972 authored by the requester
   // closes the request — a funder's receipt is a claim, not proof of payment.
   const confirmMutation = useMutation({
-    mutationFn: (request: ComputeCreditRequest) =>
+    mutationFn: ({ request, shot }: { request: ComputeCreditRequest; shot: ComputeCreditShot }) =>
       publish.mutateAsync(buildComputeCreditFulfillment({
         requestId: request.id,
         requesterPubkey: request.pubkey,
-        amountSats: request.amountSats,
+        amountSats: shot === 2 ? request.amount2Sats ?? 0 : request.amountSats,
+        shot: shot === 2 ? 2 : undefined,
       })),
     onSuccess: () => {
-      setConfirmArmedId(null);
-      toast({ title: 'Receipt confirmed', description: 'Your request is now marked as funded.' });
+      setConfirmTarget(null);
+      toast({ title: 'Cashu receipt confirmed', description: 'The received payout is now marked as funded.' });
       onPublished();
     },
     onError: (e) => toast({ title: 'Confirm failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
@@ -373,7 +380,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
   // fake claims hoping for a reflex click), and a crafted token can carry a
   // refund locktime that lets the "funder" reclaim it after you confirm. The
   // agent must explicitly attest they actually redeemed the sats first.
-  const [confirmArmedId, setConfirmArmedId] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ requestId: string; shot: ComputeCreditShot } | null>(null);
 
   const valid =
     (parseInt(amount, 10) || 0) > 0 &&
@@ -384,10 +391,10 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Bot className="size-4 text-primary" /> Request credits (agent)
+          <Bot className="size-4 text-primary" /> Request Cashu funding
         </CardTitle>
         <CardDescription>
-          Post a public request (kind {BAO_COMPUTE_CREDIT_REQUEST_KIND}) — a funder locks real sats to your pubkey.
+          Describe the work and payout plan. The request is public; the actual Cashu token is sent privately.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -396,7 +403,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
             <Zap className="size-4 shrink-0 mt-0.5 text-amber-500" />
             <div className="space-y-1.5">
               <p className="text-xs leading-relaxed">
-                Publish your Cashu receiver ad (kind {NUTZAP_INFO_KIND}) so funded tokens lock straight to your wallet key — one-click redeem. Without it, funders fall back to locking to your Nostr identity and you sweep manually with your signer.
+                Publish a Cashu receiver address so funding can lock directly to this wallet. Without it, the token is locked to your Nostr identity and needs your signer to unlock.
               </p>
               <Button
                 size="sm"
@@ -407,13 +414,13 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
                   toast({ title: 'Nutzap receiver ad enabled', description: 'Your wallet publishes it right away.' });
                 }}
               >
-                <Zap className="size-3" /> Enable receiver ad
+                <Zap className="size-3" /> Enable Cashu receiver
               </Button>
             </div>
           </div>
         )}
         <div className="space-y-1.5">
-          <Label>Milestones</Label>
+          <Label>Payout plan</Label>
           <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
@@ -421,7 +428,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
               size="sm"
               onClick={() => setShots(1)}
             >
-              1 milestone
+              Single shot
             </Button>
             <Button
               type="button"
@@ -429,28 +436,28 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
               size="sm"
               onClick={() => setShots(2)}
             >
-              2 milestones
+              Double shot
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
             {shots === 1
-              ? 'One payout, judged by the donor.'
-              : 'Two milestones — the donor funds each one separately when satisfied.'}
+              ? 'One Cashu payout after the donor accepts the work.'
+              : 'Two separate Cashu payouts. Confirm each one only after receiving it.'}
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cc-amount">{shots === 2 ? 'Milestone 1 (sats)' : 'Amount (sats)'}</Label>
+          <Label htmlFor="cc-amount">{shots === 2 ? 'First payout (sats)' : 'Payout (sats)'}</Label>
           <Input id="cc-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
         </div>
         {shots === 2 && (
           <div className="space-y-1.5">
-            <Label htmlFor="cc-amount2">Milestone 2 (sats)</Label>
+            <Label htmlFor="cc-amount2">Second payout (sats)</Label>
             <Input id="cc-amount2" value={amount2} onChange={(e) => setAmount2(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="2140" />
           </div>
         )}
         <div className="space-y-1.5">
-          <Label htmlFor="cc-purpose">What will you build with it?</Label>
-          <Textarea id="cc-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} placeholder="e.g. Run inference for my oracle dashboard milestone" />
+          <Label htmlFor="cc-purpose">What work will you deliver?</Label>
+          <Textarea id="cc-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} placeholder="e.g. Run inference and publish the oracle dashboard results" />
         </div>
         {user ? (
           <Button className="w-full gap-1.5" disabled={!valid || requestMutation.isPending} onClick={() => requestMutation.mutate()}>
@@ -465,52 +472,64 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
           <div className="space-y-1.5 pt-1">
             <p className="text-xs font-medium text-muted-foreground">Your requests</p>
             {myRequests.slice(0, 5).map((r) => {
-              const got = fulfilledByRequest.get(r.id);
+              const confirmed = confirmedShotsByRequest.get(r.id) ?? new Set<ComputeCreditShot>();
               const claims = claimsByRequest.get(r.id) ?? [];
+              const expectedShots: ComputeCreditShot[] = r.shots === 2 ? [1, 2] : [1];
+              const isComplete = expectedShots.every((shot) => confirmed.has(shot));
+              const pendingClaimShots = expectedShots.filter((shot) =>
+                !confirmed.has(shot) && claims.some((claim) => (claim.shot ?? 1) === shot),
+              );
+              const armed = confirmTarget?.requestId === r.id ? confirmTarget.shot : null;
+              const totalSats = r.amountSats + (r.shots === 2 ? r.amount2Sats ?? 0 : 0);
               return (
-                <div key={r.id} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-xs">
-                  <span className="truncate">{r.purpose || `${formatSats(r.amountSats)} sats`}</span>
-                  {got !== undefined ? (
+                <div key={r.id} className="flex flex-col gap-2 rounded-md border px-2.5 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 truncate">{r.purpose || `${formatSats(totalSats)} sats`}</span>
+                  {isComplete ? (
                     <Badge variant="outline" className="text-green-500 border-green-500/40 shrink-0 gap-1">
-                      <CheckCircle2 className="size-3" /> funded {formatSats(got)}
+                      <CheckCircle2 className="size-3" /> funded {formatSats(totalSats)}
                     </Badge>
-                  ) : claims.length > 0 ? (
-                    confirmArmedId === r.id ? (
-                      <div className="flex flex-col gap-1 shrink-0 max-w-[60%]">
+                  ) : armed ? (
+                      <div className="flex flex-col gap-1 sm:max-w-[70%]">
                         <p className="text-[10px] text-amber-950 dark:text-amber-200 leading-tight">
-                          A claim is only someone SAYING they paid. Confirm ONLY after you swept + redeemed the token at Routstr (Redeem card). If the token wouldn't redeem, do NOT confirm — the sender may be able to reclaim it.
+                          A claim only says someone paid. Confirm payout {armed} only after it appears in your Cashu wallet or Routstr balance. If it did not arrive, do not confirm.
                         </p>
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           <Button
                             size="sm" variant="outline"
-                            className="shrink-0 gap-1 h-6 text-[11px] text-green-600 dark:text-green-400 border-green-500/40"
+                            className="gap-1 h-auto min-h-7 whitespace-normal text-[11px] text-green-600 dark:text-green-400 border-green-500/40"
                             disabled={confirmMutation.isPending}
-                            onClick={() => confirmMutation.mutate(r)}
+                            onClick={() => confirmMutation.mutate({ request: r, shot: armed })}
                           >
                             {confirmMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
-                            I redeemed the sats — mark funded
+                            Confirm payout {armed} received
                           </Button>
                           <Button
                             size="sm" variant="ghost"
                             className="shrink-0 h-6 text-[11px]"
-                            onClick={() => setConfirmArmedId(null)}
+                            onClick={() => setConfirmTarget(null)}
                           >
                             Not yet
                           </Button>
                         </div>
                       </div>
-                    ) : (
-                      <Button
-                        size="sm" variant="outline"
-                        className="shrink-0 gap-1 h-6 text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
-                        onClick={() => setConfirmArmedId(r.id)}
-                      >
-                        <CheckCircle2 className="size-3" />
-                        {claims.length} claim{claims.length === 1 ? '' : 's'} — confirm received
-                      </Button>
-                    )
+                  ) : pendingClaimShots.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {pendingClaimShots.map((shot) => (
+                        <Button
+                          key={shot}
+                          size="sm" variant="outline"
+                          className="gap-1 h-auto min-h-7 whitespace-normal text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
+                          onClick={() => setConfirmTarget({ requestId: r.id, shot })}
+                        >
+                          <CheckCircle2 className="size-3" />
+                          Confirm payout {shot}
+                        </Button>
+                      ))}
+                    </div>
                   ) : (
-                    <Badge variant="outline" className="shrink-0">open · {timeAgo(r.createdAt)}</Badge>
+                    <Badge variant="outline" className="w-fit shrink-0">
+                      {confirmed.size > 0 ? `${confirmed.size}/${expectedShots.length} confirmed` : `open · ${timeAgo(r.createdAt)}`}
+                    </Badge>
                   )}
                 </div>
               );
@@ -524,7 +543,7 @@ function RequestCreditCard({ myRequests, fulfilledByRequest, claimsByRequest, on
 
 // ── Funder: fulfill a request with a real Cashu token ─────────────────────────
 
-function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; onFulfilled: () => void }) {
+function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; confirmedShots: Set<ComputeCreditShot>; onFulfilled: () => void }) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { toast } = useToast();
@@ -545,12 +564,7 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
   const isDoubleShot = request.shots === 2 && !!request.amount2Sats;
   const [fundShot, setFundShot] = useState<1 | 2>(1);
   const fundAmount = fundShot === 2 ? (request.amount2Sats ?? 0) : request.amountSats;
-  const fundedForShot = (shot: 1 | 2) =>
-    claims.filter((c) => (c.shot ?? 1) === shot).reduce((sum, c) => sum + c.amountSats, 0);
-  const shotCovered = (shot: 1 | 2) => {
-    const target = shot === 2 ? (request.amount2Sats ?? 0) : request.amountSats;
-    return target > 0 && fundedForShot(shot) >= target;
-  };
+  const shotCovered = (shot: ComputeCreditShot) => confirmedShots.has(shot);
 
   // The minted funding token is the ONLY copy of the send proofs (the wallet
   // persists just the change) — if this component unmounts after a DM failure
@@ -802,13 +816,13 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 {isOwn ? 'This is your own request.' : hasWallet ? 'Real sats from your Cashu wallet, P2PK-locked to the agent.' : 'Add a Cashu mint in Wallet to fund requests.'}
               </p>
               {!isOwn && user && (
                 isDoubleShot ? (
-                  <div className="flex gap-1.5 shrink-0">
+                  <div className="grid w-full grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-2">
                     {[1, 2].map((shot) => {
                       const amount = shot === 2 ? request.amount2Sats! : request.amountSats;
                       const covered = shotCovered(shot as 1 | 2);
@@ -817,12 +831,12 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
                           key={shot}
                           size="sm"
                           variant={fundShot === shot ? 'default' : 'outline'}
-                          className="gap-1"
+                          className="h-auto min-h-9 gap-1 whitespace-normal"
                           disabled={!hasWallet || fulfillMutation.isPending || covered}
                           onClick={() => { setFundShot(shot as 1 | 2); setConfirmFunding(true); }}
                         >
                           {covered ? <CheckCircle2 className="size-3.5" /> : fulfillMutation.isPending && fundShot === shot ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                          {covered ? `Milestone ${shot} funded` : `Milestone ${shot} · ${formatSats(amount)}`}
+                          {covered ? `Payout ${shot} received` : `Payout ${shot} · ${formatSats(amount)}`}
                         </Button>
                       );
                     })}
@@ -863,18 +877,18 @@ function OpenRequestCard({ request, claims, onFulfilled }: { request: ComputeCre
       <Dialog open={confirmFunding} onOpenChange={(open) => !fulfillMutation.isPending && setConfirmFunding(open)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Send real Cashu?</DialogTitle>
+            <DialogTitle>Send Cashu to this agent?</DialogTitle>
             <DialogDescription>
               This will irreversibly debit {formatSats(fundAmount)} real mainnet sats from your Cashu balance and send a token to the agent.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
             <p><span className="text-muted-foreground">Request:</span> {request.purpose}</p>
-            <p><span className="text-muted-foreground">Amount:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · milestone ${fundShot}/2` : ''}</p>
+            <p><span className="text-muted-foreground">Amount:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · payout ${fundShot}/2` : ''}</p>
             <p><span className="text-muted-foreground">Active mint:</span> <span className="break-all">{mintUrl}</span></p>
             <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : 'P2PK lock selected automatically'}</p>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" disabled={fulfillMutation.isPending} onClick={() => setConfirmFunding(false)}>Cancel</Button>
             <Button
               disabled={fulfillMutation.isPending}
@@ -927,6 +941,8 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   const [receiptRequestId, setReceiptRequestId] = useState<string | null>(null);
   const [receiptNote, setReceiptNote] = useState('');
   const [receiptPublished, setReceiptPublished] = useState(false);
+  const [walletReceivedSats, setWalletReceivedSats] = useState(0);
+  const [identityDestination, setIdentityDestination] = useState<'wallet' | 'routstr'>('routstr');
 
   const infoQuery = useQuery({ queryKey: ['routstr-info'], queryFn: routstrGetInfo, staleTime: 5 * 60_000, retry: 1 });
   const balanceQuery = useQuery({
@@ -1041,6 +1057,58 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
     toast({ title: 'Token redeemed', description: 'Your Routstr compute key is ready — store it somewhere safe.' });
   };
 
+  const handleWalletReceiveSuccess = (sats: number) => {
+    const knownMints = new Set(allMints.map((mint) => safeNormalizeMintUrl(mint.url)));
+    const receivedMints = [...new Set(
+      (decodeCashuToken(token.trim()) ?? [])
+        .map((entry) => safeNormalizeMintUrl(entry.mintUrl))
+        .filter(Boolean),
+    )];
+    for (const mint of receivedMints) {
+      if (!knownMints.has(mint)) addCustomMint(mint, mint);
+    }
+    setWalletReceivedSats(sats);
+    setToken('');
+    setIdentitySweep(false);
+    setLockHints([]);
+    setPrivkeyPaste('');
+    toast({ title: 'Cashu received', description: `${formatSats(sats)} sats are now in your Cashu wallet. No API credits were purchased.` });
+  };
+
+  const receiveIntoWalletMutation = useMutation({
+    mutationFn: async (): Promise<number> => {
+      const raw = token.trim();
+      const locks = extractTokenLockPubkeys(raw);
+      if (locks.length === 0) {
+        if (hasUnsupportedLockSecrets(raw)) {
+          throw new Error('This token uses a lock this app cannot parse. It was not spent; sweep it with compatible Cashu tooling.');
+        }
+        const received = await receiveToken(raw);
+        if (received <= 0) throw new Error('The Cashu wallet could not receive this token. Check the mint and wallet error, then retry.');
+        return received;
+      }
+
+      const walletPub = getWalletP2pkPubkey()?.toLowerCase() ?? null;
+      const xonlyLocks = locks.map((lock) => (lock.length === 66 ? lock.slice(2) : lock));
+      if (walletPub && xonlyLocks.includes(walletPub)) {
+        const received = await sweepWalletLockedToken(raw);
+        if (received <= 0) throw new Error('The wallet could not unlock this token. Check the wallet error, then retry.');
+        return received;
+      }
+
+      setIdentityDestination('wallet');
+      setLockHints(locks);
+      setIdentitySweep(true);
+      throw new Error('This token needs its matching private key before it can enter this wallet.');
+    },
+    onSuccess: handleWalletReceiveSuccess,
+    onError: (error) => toast({
+      title: 'Cashu receive needs attention',
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive',
+    }),
+  });
+
   const redeemMutation = useMutation({
     mutationFn: async (): Promise<{ apiKey: string; balance: number; sats: number }> => {
       const raw = token.trim();
@@ -1093,6 +1161,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
       // actual lock pubkeys so the user can tell which key is needed instead
       // of blindly pasting an identity nsec that can never work.
       setLockHints(locks);
+      setIdentityDestination('routstr');
       setIdentitySweep(true);
       throw new Error('This token is locked to a key this wallet doesn\'t hold (see below). If it\'s your Nostr key, paste your nsec/hex; if it\'s a wallet key from another app or device, sweep it there or paste that wallet\'s key.');
     },
@@ -1101,7 +1170,10 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   });
 
   const identitySweepMutation = useMutation({
-    mutationFn: async (): Promise<{ apiKey: string; balance: number; sats: number }> => {
+    mutationFn: async (): Promise<
+      | { destination: 'wallet'; sats: number }
+      | { destination: 'routstr'; apiKey: string; balance: number; sats: number }
+    > => {
       const raw = token.trim();
       const v = privkeyPaste.trim();
       let hex: string | null = null;
@@ -1116,17 +1188,22 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
       if (!hex) throw new Error('Invalid key — paste an nsec1… or 64-char hex private key.');
 
       const tokenMints = [...new Set((decodeCashuToken(raw) ?? []).map((e) => e.mintUrl).filter(Boolean))];
-      if (tokenMints.length > 1) {
+      if (identityDestination === 'routstr' && tokenMints.length > 1) {
         throw new Error('This token spans multiple mints — receive it in the Wallet tab first, then send yourself a single-mint token and redeem that.');
       }
 
       const swept = await receiveLockedToken(raw, hex);
       if (!swept) throw new Error('Sweep failed — is this the key the token is locked to?');
-      const mint = tokenMints[0];const unlocked = await resendUnlocked(swept, mint);
+      if (identityDestination === 'wallet') return { destination: 'wallet', sats: swept };
+      const mint = tokenMints[0];
+      const unlocked = await resendUnlocked(swept, mint);
       const res = await redeemUnlocked(unlocked);
-      return { ...res, sats: swept };
+      return { destination: 'routstr', ...res, sats: swept };
     },
-    onSuccess: handleRedeemSuccess,
+    onSuccess: (result) => {
+      if (result.destination === 'wallet') handleWalletReceiveSuccess(result.sats);
+      else handleRedeemSuccess(result);
+    },
     onError: (e) => toast({ title: 'Sweep failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }),
   });
 
@@ -1174,17 +1251,17 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
   });
 
   const acceptedMints = infoQuery.data?.mints ?? [];
-  const busy = redeemMutation.isPending || identitySweepMutation.isPending;
+  const busy = redeemMutation.isPending || receiveIntoWalletMutation.isPending || identitySweepMutation.isPending;
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Cpu className="size-4 text-primary" /> Redeem at Routstr (agent)
+          <WalletCards className="size-4 text-primary" /> Receive funded Cashu
         </CardTitle>
         <CardDescription>
-          Paste a Cashu token you received → get an <code className="text-xs">sk_…</code> key that pays for AI inference.
-          Locked tokens are swept to your wallet first.
+          Paste a funded token, then either keep the sats in your Cashu wallet or spend them on a Routstr AI-compute key.
+          Receiving Cashu does not require buying API credits.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1299,9 +1376,19 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
           </div>
         ) : (
           <div className="space-y-3">
+            {walletReceivedSats > 0 && (
+              <div className="rounded-md border border-green-500/50 bg-green-500/10 p-3 text-xs">
+                <p className="font-semibold text-green-600 dark:text-green-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="size-3.5" /> {formatSats(walletReceivedSats)} sats received as Cashu
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  The sats are in your wallet and remain usable as Cashu. No Routstr key was created. Confirm the matching milestone above only after you see this balance.
+                </p>
+              </div>
+            )}
             <Textarea
               value={token}
-              onChange={(e) => { setToken(e.target.value); setIdentitySweep(false); setLockHints([]); }}
+              onChange={(e) => { setToken(e.target.value); setWalletReceivedSats(0); setIdentitySweep(false); setLockHints([]); }}
               rows={3}
               placeholder="cashuA… / cashuB… token from a funder"
               className={cn('font-mono text-xs')}
@@ -1332,18 +1419,29 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                   onClick={() => identitySweepMutation.mutate()}
                 >
                   {identitySweepMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
-                  Sweep &amp; redeem
+                  {identityDestination === 'wallet' ? 'Unlock into Cashu wallet' : 'Unlock for AI compute'}
                 </Button>
               </div>
             )}
-            <Button
-              className="w-full gap-1.5"
-              disabled={!token.trim().startsWith('cashu') || busy}
-              onClick={() => redeemMutation.mutate()}
-            >
-              {redeemMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
-              Redeem for compute key
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                variant="outline"
+                className="w-full gap-1.5 whitespace-normal"
+                disabled={!token.trim().startsWith('cashu') || busy}
+                onClick={() => receiveIntoWalletMutation.mutate()}
+              >
+                {receiveIntoWalletMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <WalletCards className="size-4" />}
+                Keep as Cashu
+              </Button>
+              <Button
+                className="w-full gap-1.5 whitespace-normal"
+                disabled={!token.trim().startsWith('cashu') || busy}
+                onClick={() => redeemMutation.mutate()}
+              >
+                {redeemMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
+                Use for AI compute
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

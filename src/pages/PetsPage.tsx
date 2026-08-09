@@ -17,7 +17,7 @@ import { getShopItemById } from '@/pets/shop/lib/pets-shop-items';
 import { timeAgo } from '@/lib/timeAgo';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPetProfile } from '@/hooks/useNostrPetProfile';
-import { usePetsWallet } from '@/pets/core/hooks/usePetsWallet';
+import { usePetsWallet, type UsePetsWalletResult } from '@/pets/core/hooks/usePetsWallet';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
 import { useNostrPetProfileNormalization } from '@/hooks/useNostrPetProfileNormalization';
 import { usePetssCollection } from '@/pets/core/hooks/usePetssCollection';
@@ -659,6 +659,11 @@ function PetsContent() {
     companion,
     petsWallet,
     updateCompanionEvent,
+    petsWalletResult.mode,
+    {
+      baoApiCashuBalance: petsWalletResult.baoApiCashuBalance,
+      refreshBaoApiBalances: petsWalletResult.refreshBaoApiBalances,
+    },
   );
 
   // ─── Use Inventory Item Hook ───
@@ -1054,6 +1059,7 @@ function PetsContent() {
       isUsingItem={isUsingItem}
       purchaseItem={purchaseItem}
       petsWallet={petsWallet}
+      petsWalletState={petsWalletResult}
       isDirectActionPending={isDirectActionPending}
       actionInProgress={actionInProgress}
       isPublishing={isPublishing}
@@ -1128,6 +1134,15 @@ interface PetsDashboardProps {
   isUsingItem: boolean;
   purchaseItem: (req: { itemId: string; price: number; quantity: number; currency?: 'fiat' | 'sats' }) => Promise<unknown>;
   petsWallet: (CashuWalletState & CashuWalletActions) | null | undefined;
+  petsWalletState: Pick<
+    UsePetsWalletResult,
+    | 'realWallet'
+    | 'baoWallet'
+    | 'mode'
+    | 'baoApiCashuBalance'
+    | 'baoApiBalanceLoading'
+    | 'refreshBaoApiBalances'
+  >;
   isDirectActionPending: boolean;
   actionInProgress: string | null;
   isPublishing: boolean;
@@ -1171,6 +1186,7 @@ function PetsDashboard({
   isUsingItem,
   purchaseItem,
   petsWallet,
+  petsWalletState,
   isDirectActionPending,
   actionInProgress,
   isPublishing,
@@ -2382,6 +2398,7 @@ function PetsDashboard({
                     profile={profile ?? null}
                     companion={companion}
                     externalWallet={petsWallet}
+                    walletState={petsWalletState}
                     onCompanionUpdated={updateCompanionEvent}
                   />
                 </div>
@@ -4451,4 +4468,3 @@ function CrumbBurst({ crumbX, crumbY, rewardX, rewardY }: {
 }
 
 // ─── Hatch Ceremony Overlay ───────────────────────────────────────────────────
-

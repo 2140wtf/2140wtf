@@ -465,7 +465,7 @@ describe('BaoFundingPage — campaign card accessibility', () => {
     expect(await screen.findByRole('button', { name: /Campaign A/ })).toBeInTheDocument();
     expect(screen.queryByText('Compute credits feed: browse')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Fund AI agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fund an agent/ }));
     expect(screen.queryByRole('button', { name: /Campaign A/ })).not.toBeInTheDocument();
     expect(screen.getByText('Compute credits feed: browse')).toBeInTheDocument();
   });

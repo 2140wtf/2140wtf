@@ -11,7 +11,14 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
 import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint, withProofLock } from '@/lib/cashu/storage';
-import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent, buildMintQuoteEvent, parseMintQuoteEvent } from '@/lib/cashu/cashuNip60';
+import {
+  createNip60Signer,
+  buildTokenEvent,
+  buildNutzapEvent,
+  buildNutzapInfoEvent,
+  buildMintQuoteEvent,
+  parseMintQuoteEvent,
+} from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -2229,6 +2236,10 @@ describe('useCashuWallet hunt regressions: foreign-mint receive after swap', () 
     expect(received).toBe(21);
     expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoDirectMint)).toBe(true);
     expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoProxyMint)).toBe(false);
+    // Receiving the first BAO token must select the funded canonical mint;
+    // otherwise the Send tab remains on the empty default mint and reports
+    // an insufficient balance despite the wallet total being nonzero.
+    expect(result.current.mintUrl).toBe(baoDirectMint);
     const stored = (await getProofsForMint(baoDirectMint, encKey)) as Array<{ secret: string }>;
     expect(stored.map((p) => p.secret)).toEqual(['bao-recv-1']);
     expect(await getProofsForMint(baoProxyMint, encKey)).toEqual([]);
@@ -2436,6 +2447,144 @@ describe('useCashuWallet sendNutzap ambiguous send failure', () => {
     });
     const res = await act(async () => result.current.sendNutzap(21, npub, mintUrl));
     expect(res.status).toBe('failed');
+  });
+});
+
+describe('useCashuWallet BAO NIP-61 receive isolation', () => {
+  const mintUrl = 'https://relay.bao.network/cashu';
+  const namespace = 'freedomid_bao_';
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(validateReceivedProofs).mockReturnValue({ valid: true });
+  });
+
+  it('redeems an npub payment with the BAO wallet key and backs it up only to the BAO relay', async () => {
+    const encoder = new TextEncoder();
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      const w = mocks.createMockWallet();
+      w.receive = vi.fn().mockResolvedValue([
+        { id: 'ks', amount: 21, secret: 'received-bao-proof', C: 'C-received-bao' },
+      ]);
+      w.getFeesForProofs = vi.fn().mockReturnValue(0);
+      w.checkProofsStates = vi.fn().mockImplementation(async (proofs: Array<{ secret: string }>) =>
+        proofs.map((proof) => ({
+          Y: hashToCurve(encoder.encode(proof.secret)).toHex(true),
+          state: 'UNSPENT',
+        })),
+      );
+      return w;
+    });
+
+    const identitySigner = createNip60Signer(generateSecretKey());
+    const queryRelays = vi.fn().mockResolvedValue([]);
+    const publishToRelays = vi.fn().mockImplementation(async (_urls: string[], event: NostrEvent) => event.id);
+    const genericPublish = vi.fn().mockImplementation(async (event: NostrEvent) => event.id);
+    const sync: Nip60SyncApi = {
+      signer: identitySigner,
+      query: vi.fn().mockResolvedValue([]),
+      publish: genericPublish,
+      queryRelays,
+      publishToRelays,
+      relays: ['wss://relay.ditto.pub'],
+    };
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, {
+        nip60Sync: sync,
+        defaultMints: [{ name: 'BAO', url: mintUrl }],
+        storageNamespace: namespace,
+        nip60SyncEnabled: true,
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull(), { timeout: 15_000 });
+    publishToRelays.mockClear();
+    genericPublish.mockClear();
+
+    const incoming = await buildNutzapEvent(
+      identitySigner.pubkey,
+      mintUrl,
+      [{ id: 'ks', amount: 21, secret: 'locked-input', C: 'C-locked-input' }],
+      createNip60Signer(generateSecretKey()),
+    );
+    expect(incoming).not.toBeNull();
+
+    await act(async () => { await result.current.receiveNutzap(incoming!); });
+    await waitFor(() => expect(result.current.totalBalance).toBe(21));
+
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const stored = await getProofsForMint(mintUrl, encKey, undefined, namespace) as Array<{ secret: string }>;
+    expect(stored.map((proof) => proof.secret)).toEqual(['received-bao-proof']);
+    expect(publishToRelays).toHaveBeenCalledWith(
+      ['wss://relay.bao.network'],
+      expect.objectContaining({ kind: 7375 }),
+    );
+    expect(genericPublish).not.toHaveBeenCalled();
+  });
+
+  it('discovers the recipient and publishes an npub payment only on the BAO relay', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    await saveProofsForMint(mintUrl, [
+      { id: 'ks', amount: 21, secret: 'send-a', C: 'C-send-a' },
+      { id: 'ks', amount: 79, secret: 'send-b', C: 'C-send-b' },
+    ], encKey, namespace);
+
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return mocks.createMockWallet();
+    });
+    const recipientIdentity = createNip60Signer(generateSecretKey());
+    const recipientInfo = await buildNutzapInfoEvent(
+      [mintUrl],
+      ['wss://relay.bao.network'],
+      getPublicKey(generateSecretKey()),
+      recipientIdentity,
+    );
+    expect(recipientInfo).not.toBeNull();
+
+    const queryRelays = vi.fn().mockImplementation(async (_urls: string[], filter: { kinds?: number[] }) =>
+      filter.kinds?.includes(10019) ? [recipientInfo!] : []);
+    const publishToRelays = vi.fn().mockImplementation(async (_urls: string[], event: NostrEvent) => event.id);
+    const genericPublish = vi.fn().mockImplementation(async (event: NostrEvent) => event.id);
+    const sync: Nip60SyncApi = {
+      signer: createNip60Signer(generateSecretKey()),
+      query: vi.fn().mockResolvedValue([]),
+      publish: genericPublish,
+      queryRelays,
+      publishToRelays,
+      relays: ['wss://relay.ditto.pub'],
+    };
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, {
+        nip60Sync: sync,
+        defaultMints: [{ name: 'BAO', url: mintUrl }],
+        storageNamespace: namespace,
+        nip60SyncEnabled: true,
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.totalBalance).toBe(100), { timeout: 15_000 });
+    queryRelays.mockClear();
+    publishToRelays.mockClear();
+    genericPublish.mockClear();
+
+    const sent = await act(async () => result.current.sendNutzap(
+      21,
+      nip19.npubEncode(recipientIdentity.pubkey),
+      mintUrl,
+    ));
+
+    expect(sent.status).toBe('sent');
+    expect(queryRelays).toHaveBeenCalledWith(
+      ['wss://relay.bao.network'],
+      expect.objectContaining({ kinds: [10019], authors: [recipientIdentity.pubkey] }),
+    );
+    expect(publishToRelays).toHaveBeenCalledWith(
+      ['wss://relay.bao.network'],
+      expect.objectContaining({ kind: 9321 }),
+    );
+    expect(genericPublish).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 9321 }));
   });
 });
 

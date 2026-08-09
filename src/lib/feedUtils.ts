@@ -147,6 +147,20 @@ export interface FeedItem {
 }
 
 /**
+ * Use the persisted core-feed seed only while rendering a core feed query.
+ * Topic and app-curated queries must start empty while their own query loads;
+ * otherwise changing tabs paints unrelated cached posts under the new label.
+ */
+export function selectFeedItemsWithSeed<T>(
+  derivedItems: T[],
+  coreSeedItems: T[],
+  allowCoreSeed: boolean,
+): T[] {
+  if (derivedItems.length > 0) return derivedItems;
+  return allowCoreSeed ? coreSeedItems : derivedItems;
+}
+
+/**
  * Compute a stable React key / dedup key for a feed item. The same target
  * event can appear with multiple wrappers (a repost AND a reaction AND a
  * zap), so the key incorporates the wrapper event id when present.
