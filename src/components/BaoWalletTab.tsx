@@ -878,6 +878,9 @@ function CashuPanel({ wallet, signer, onApiChanged, apiCashuBalance }: { wallet:
 
   return (
     <div className='space-y-5'>
+      <details className='rounded-xl border bg-muted/20'>
+        <summary className='cursor-pointer list-none px-4 py-3 text-sm font-medium'>Advanced Cashu wallet</summary>
+        <div className='space-y-4 border-t px-4 py-4'>
       <Card className='border-primary/30'>
         <CardHeader className='pb-2'><CardTitle className='text-sm'>Custodial BAO Markets wallet</CardTitle></CardHeader>
         <CardContent className='space-y-4'>
@@ -893,10 +896,7 @@ function CashuPanel({ wallet, signer, onApiChanged, apiCashuBalance }: { wallet:
           </div>
         </CardContent>
       </Card>
-      <details className='rounded-xl border bg-muted/20'>
-        <summary className='cursor-pointer list-none px-4 py-3 text-sm font-medium'>Advanced NIP-60 wallet</summary>
-        <div className='space-y-4 border-t px-4 py-4'>
-          <p className='text-xs text-muted-foreground'>This wallet stores encrypted Cashu state on Nostr relays. It can send and receive Cashu tokens without the BAO Markets API. The custodial BAO Markets Cashu balance is shown above and is separate from this local NIP-60 balance.</p>
+          <p className='text-xs text-muted-foreground'>This wallet combines BAO Markets custodial Cashu API actions with an optional NIP-60 wallet. The NIP-60 section stores encrypted Cashu state on Nostr relays and can send and receive tokens without the API. These are separate balances and are shown together here to avoid presenting two wallets.</p>
           {wallet.totalBalance === 0 && apiCashuBalance !== null && apiCashuBalance > 0 && (
             <p className='text-xs text-muted-foreground leading-relaxed rounded-lg border border-dashed p-3'>
               No Cashu on this device yet — pets and battles spend Cashu testnet coins. You have{' '}
