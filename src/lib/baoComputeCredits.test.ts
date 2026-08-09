@@ -15,6 +15,7 @@ import {
   parseComputeCreditRequest,
   resolveCreditLockTarget,
   isLikelyMainnetMint,
+  computeCreditProgress,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
@@ -138,6 +139,7 @@ describe('buildComputeCreditReceipt', () => {
       note: '  redeemed at routstr  ',
       provider: ' routstr ',
       funderPubkeys: [FUNDER1, 'not-hex', FUNDER1],
+      shot: 2,
     });
     expect(t.kind).toBe(BAO_COMPUTE_CREDIT_RECEIPT_KIND);
     expect(t.kind).toBe(4973);
@@ -145,7 +147,22 @@ describe('buildComputeCreditReceipt', () => {
     expect(t.tags).toContainEqual(['amount', '900']);
     expect(t.tags).toContainEqual(['provider', 'routstr']);
     expect(t.tags.filter((tag) => tag[0] === 'p')).toEqual([['p', FUNDER1], ['p', FUNDER1]]);
+    expect(t.tags).toContainEqual(['shot', '2']);
     expect(t.content).toBe('redeemed at routstr');
+  });
+});
+
+describe('computeCreditProgress', () => {
+  it('tracks multi-shot tranches independently', () => {
+    const progress = computeCreditProgress(
+      req({ shots: 2, amount2Sats: 1200 }),
+      [ful(), ful({ id: '3'.repeat(64), shot: 2 })],
+      [rec({ shot: 2 })],
+    );
+    expect(progress).toEqual([
+      { shot: 1, amountSats: 1000, stage: 'token_sent' },
+      { shot: 2, amountSats: 1200, stage: 'redeemed' },
+    ]);
   });
 });
 
