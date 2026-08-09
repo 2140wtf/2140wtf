@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/useToast';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { createBaoDepositInvoice, checkBaoDepositStatus, redeemBaoCashuToken } from '@/lib/baoWalletApi';
 import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
@@ -517,7 +518,7 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           {selectedRail === 'lightning' && (
             <LightningPanel wallet={cashuWallet} walletStatus={walletStatus} nwc={nwc} />
           )}
-          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} />}
+          {selectedRail === 'cashu' && <CashuPanel wallet={cashuWallet} signer={user.signer} onApiChanged={() => void apiBalances.refetch()} />}
           {['liquid', 'spark', 'ark', 'fedimint', 'l1'].includes(selectedRail) && (
             <DemoPlaceholderPanel rail={selectedConfig} balance={railBalance(selectedRail)} />
           )}
@@ -747,7 +748,7 @@ function LightningPanel({
   );
 }
 
-function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }) {
+function CashuPanel({ wallet, signer, onApiChanged }: { wallet: ReturnType<typeof useBaoCashuWallet>; signer: BaoWalletTabProps['user']['signer']; onApiChanged: () => void }) {
   const { toast } = useToast();
   const [receiveTokenStr, setReceiveTokenStr] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -760,12 +761,67 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
   const [dismissedQuoteId, setDismissedQuoteId] = useState<string | null>(null);
   const mintingQuoteRef = useRef<string | null>(null);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
+  const [apiToken, setApiToken] = useState('');
+  const [apiAmount, setApiAmount] = useState('');
+  const [apiInvoice, setApiInvoice] = useState<{ bolt11: string; payment_hash: string; amount_sats: number } | null>(null);
+  const [apiInvoicePaid, setApiInvoicePaid] = useState(false);
+  const [apiLoading, setApiLoading] = useState(false);
 
   const handleReceive = async () => {
     if (!receiveTokenStr.trim()) return;
     await wallet.receiveToken(receiveTokenStr.trim());
     setReceiveTokenStr('');
   };
+
+  const handleApiRedeem = async () => {
+    if (!apiToken.trim()) return;
+    setApiLoading(true);
+    try {
+      const result = await redeemBaoCashuToken(signer, apiToken.trim());
+      toast({ title: 'BAO Cashu received', description: `${result.amount_sats.toLocaleString()} sats added to your custodial balance.` });
+      setApiToken('');
+      onApiChanged();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not redeem token', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const handleApiInvoice = async () => {
+    const amount = Number(apiAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      toast({ variant: 'destructive', title: 'Invalid amount' });
+      return;
+    }
+    setApiLoading(true);
+    try {
+      setApiInvoice(await createBaoDepositInvoice(signer, amount));
+      setApiInvoicePaid(false);
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Could not create invoice', description: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!apiInvoice || apiInvoicePaid) return;
+    let active = true;
+    const check = async () => {
+      try {
+        const status = await checkBaoDepositStatus(signer, apiInvoice.payment_hash);
+        if (active && status.paid) {
+          setApiInvoicePaid(true);
+          onApiChanged();
+          toast({ title: 'BAO Lightning deposit received', description: `${apiInvoice.amount_sats.toLocaleString()} sats added.` });
+        }
+      } catch { /* transient status errors are retried */ }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [apiInvoice, apiInvoicePaid, signer, onApiChanged, toast]);
 
   const handleSend = async () => {
     const amount = Number(sendAmount);
@@ -849,6 +905,21 @@ function CashuPanel({ wallet }: { wallet: ReturnType<typeof useBaoCashuWallet> }
 
   return (
     <div className='space-y-5'>
+      <Card className='border-primary/30'>
+        <CardHeader className='pb-2'><CardTitle className='text-sm'>Custodial BAO Markets wallet</CardTitle></CardHeader>
+        <CardContent className='space-y-4'>
+          <div className='space-y-2'>
+            <p className='text-xs text-muted-foreground'>Redeem a BAO Cashu token into your API balance.</p>
+            <Textarea placeholder='Paste BAO Cashu token…' value={apiToken} onChange={(e) => setApiToken(e.target.value)} rows={3} />
+            <Button onClick={() => void handleApiRedeem()} disabled={!apiToken.trim() || apiLoading}>Redeem into BAO balance</Button>
+          </div>
+          <div className='space-y-2 border-t pt-3'>
+            <p className='text-xs text-muted-foreground'>Create a Lightning invoice that credits your BAO Markets balance.</p>
+            <div className='flex gap-2'><Input type='number' placeholder='Amount in sats' value={apiAmount} onChange={(e) => setApiAmount(e.target.value)} /><Button onClick={() => void handleApiInvoice()} disabled={apiLoading || !apiAmount}>Create invoice</Button></div>
+            {apiInvoice && <div className='space-y-2 rounded-lg border p-3'><QRCodeSVG value={apiInvoice.bolt11} size={160} /><p className='break-all text-xs'>{apiInvoice.bolt11}</p><p className='text-xs text-muted-foreground'>{apiInvoicePaid ? 'Paid — balance updated.' : 'Waiting for payment…'}</p></div>}
+          </div>
+        </CardContent>
+      </Card>
       <div className='flex items-baseline gap-2'>
         <span className='text-3xl font-bold'>{wallet.totalBalance}</span>
         <span className='text-muted-foreground'>demo sats</span>
