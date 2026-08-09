@@ -480,6 +480,10 @@ export interface InviteListEntry {
 export interface InviteListTombstone {
   token: string;
   community_id: string;
+  /** Retained only so the founder can later NIP-09 purge the revoked bundle. */
+  signer_sk?: string;
+  /** Retains historical relay hints for a later community-wide purge. */
+  url?: string;
   [k: string]: unknown;
 }
 
@@ -506,7 +510,8 @@ export function mergeInviteLists(a: InviteList, b: InviteList): InviteList {
   const tombstones = new Map<string, InviteListTombstone>();
   for (const t of [...a.tombstones, ...b.tombstones]) {
     if (!t || typeof t.token !== "string") continue;
-    if (!tombstones.has(t.token)) tombstones.set(t.token, t);
+    const prior = tombstones.get(t.token);
+    tombstones.set(t.token, prior ? { ...prior, ...t } : t);
   }
   for (const token of tombstones.keys()) entries.delete(token);
   return {
