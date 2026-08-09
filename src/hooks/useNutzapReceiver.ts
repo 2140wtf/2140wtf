@@ -38,6 +38,7 @@ export function useNutzapReceiver(
   seedPhrase: string,
   mints: Array<{ name: string; url: string }>,
   onNutzap?: (event: NostrEvent) => void,
+  options: { relayUrls?: string[] } = {},
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -60,6 +61,10 @@ export function useNutzapReceiver(
   }, [seedPhrase]);
 
   const mintUrls = useMemo(() => dedupeMintUrls(mints), [mints]);
+  const relayUrls = useMemo(
+    () => [...new Set((options.relayUrls ?? []).map((url) => url.trim()).filter(Boolean))].sort(),
+    [options.relayUrls],
+  );
 
   useEffect(() => {
     if (!user || !onNutzap || mintUrls.length === 0) return;
@@ -88,7 +93,8 @@ export function useNutzapReceiver(
     const runSubscription = async () => {
       while (active && !controller.signal.aborted) {
         try {
-          for await (const msg of nostr.req(filters, { signal: controller.signal })) {
+          const pool = relayUrls.length > 0 ? nostr.group(relayUrls) : nostr;
+          for await (const msg of pool.req(filters, { signal: controller.signal })) {
             if (!active || controller.signal.aborted) break;
             if (msg[0] === 'EVENT') {
               onNutzapRef.current?.(msg[2]);
@@ -112,5 +118,5 @@ export function useNutzapReceiver(
     // onNutzap is intentionally omitted; we use a ref so the subscription does
     // not tear down on every callback identity change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, mintUrls, nostr]);
+  }, [user, mintUrls, nostr, relayUrls]);
 }

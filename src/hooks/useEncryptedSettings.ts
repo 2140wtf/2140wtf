@@ -138,6 +138,7 @@ export interface EncryptedSettings {
     directMessages?: boolean;
     recovery?: boolean;
     encryptedSettings?: boolean;
+    baoCashuSync?: boolean;
     deleteRequests?: boolean;
     drafts?: boolean;
     emojiPacks?: boolean;
