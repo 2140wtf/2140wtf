@@ -2369,6 +2369,15 @@ export function useCashuWallet(
                   await storageRef.current.saveCustomMints(next, encKey);
                 }
               }
+              // Keep the selector on a newly funded foreign mint when the
+              // previously selected mint has no proofs. This makes a BAO
+              // token immediately spendable from the Send tab instead of
+              // reporting an empty default mint balance.
+              const selected = safeNormalizeMintUrl(mintUrlRef.current);
+              if (selected && selected !== normalized) {
+                const selectedProofs = sanitizeProofs(await storageRef.current.getProofsForMint(selected, encKey, legacyEncKeyRef.current ?? undefined));
+                if (sumProofAmounts(selectedProofs) === 0) setMintUrlState(normalized);
+              }
             }
             await calculateAllBalances();
 
