@@ -188,8 +188,6 @@ export function parseRepoRef(input: unknown): RepoRef | undefined {
     if (slash < 0) return undefined;
     const authorRaw = after.slice(0, slash);
     let identifier = after.slice(slash + 1);
-    // Opaque identifier; strip a single trailing slash so `.../foo/` == `.../foo`.
-    if (identifier.endsWith('/')) identifier = identifier.slice(0, -1);
     const authorHex = decodeNostrAuthor(authorRaw);
     if (!authorHex) return undefined;
     // ngit identifiers are opaque and slash-tolerant, but they are interpolated
@@ -199,6 +197,10 @@ export function parseRepoRef(input: unknown): RepoRef | undefined {
     const decoded = safeDecodeURIComponent(identifier);
     if (!decoded || new TextEncoder().encode(decoded).length > MAX_REPO_IDENTIFIER_BYTES) return undefined;
     identifier = decoded;
+    // Opaque identifier canonicalization: strip trailing slashes *after* decode
+    // (a percent-encoded `%2F` must not leave a distinct `.../` coordinate), so
+    // `.../foo`, `.../foo/` and `.../foo%2F` all map to the same `30617` d-tag.
+    while (identifier.endsWith('/') && identifier.length > 1) identifier = identifier.slice(0, -1);
     if (!isValidNip34DTag(identifier)) return undefined;
     return {
       host: 'ngit',
