@@ -13,6 +13,7 @@ dist-ssr
 .eslintcache
 .tsbuildinfo
 yarn.lock
+pnpm-lock.yaml
 deploy.sh
 
 # Editor directories and files
