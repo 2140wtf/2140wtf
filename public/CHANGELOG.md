@@ -3,11 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
-- Follow onboarding now starts with fiatjaf, 2140.wtf, and ₿AO HQ selected; users only need to choose two more accounts or a pack.
-- New accounts can no longer bypass onboarding by skipping settings sync before choosing follow packs.
-- New-account onboarding now loads curated follow packs, profile avatars, and creator/client pills from the BAO pack relay with public relay fallbacks, so a cleared browser cache does not leave partial packs or initials.
+- Onboarding now loads complete BAO-backed follow packs and avatars, preselects fiatjaf, 2140.wtf, and ₿AO HQ, requires five follows, and removes the sync bypass.
 - Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
-- New-user onboarding removes the sparse activity block and consolidates news suggestions into one follow pack.
+- Onboarding removes the sparse activity block and consolidates news suggestions into one pack.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
 - Relay-discovered ₿AO markets restore odds from public SMJ history when settled pools clear live counters.
 - Opening ₿AO Fund while logged out no longer crashes.
@@ -16,7 +14,7 @@
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
 
 ### Added
-- New-account follow onboarding now uses compact, mobile-friendly account pills and includes a dedicated selection of major Nostr client builders alongside curated news sources
+- Added compact, mobile-friendly onboarding pills for major Nostr clients and curated news sources.
 - Live agent activity feed (see what agents are doing in a ₿AO).
 
 ## [0.26.0] — 2026-08-06
