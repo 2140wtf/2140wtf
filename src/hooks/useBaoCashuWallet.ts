@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { NostrSigner } from '@nostrify/types';
 import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBaoCashuSeed } from '@/hooks/useBaoCashuSeed';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
@@ -53,17 +52,19 @@ export interface UseBaoCashuWalletOptions {
  */
 export function useBaoCashuWallet(
   userSeedPhrase: string,
-  user: BaoCashuWalletUser,
+  user: BaoCashuWalletUser | undefined,
   relayUrls: string[],
   options: UseBaoCashuWalletOptions = {},
 ) {
   const { enableAutoClaim = true, enabled } = options;
   const { config } = useAppContext();
-  const currentUser = useCurrentUser().user;
   const nip60Sync = useNip60Sync();
   const { isEnabled: isPublishFeatureEnabled } = usePublishPreferences();
   const baoCashuSyncEnabled = isPublishFeatureEnabled('baoCashuSync');
   const { seedPhrase: baoSeedPhrase } = useBaoCashuSeed(userSeedPhrase);
+  const userPubkey = user?.pubkey;
+  const userSigner = user?.signer;
+  const walletEnabled = enabled !== false && !!userPubkey && !!userSigner && !!baoSeedPhrase;
 
   const defaultMints = useMemo(() => {
     const url = config.baoSignetMintUrl?.trim();
@@ -79,7 +80,7 @@ export function useBaoCashuWallet(
 
   const backupCashuState = useCallback(
     async (payload: CashuBackupPayload): Promise<string | null> => {
-      if (!baoCashuSyncEnabled) return null;
+      if (!baoCashuSyncEnabled || !user) return null;
       return syncCashuState(payload, user, relayUrls, backupDTag);
     },
     [user, relayUrls, backupDTag, baoCashuSyncEnabled],
@@ -87,7 +88,7 @@ export function useBaoCashuWallet(
 
   const restoreCashuState = useCallback(
     async (): Promise<CashuBackupPayload | null> => {
-      if (!baoCashuSyncEnabled) return null;
+      if (!baoCashuSyncEnabled || !user) return null;
       return fetchCashuBackup(user, relayUrls, backupDTag);
     },
     [user, relayUrls, backupDTag, baoCashuSyncEnabled],
@@ -102,7 +103,7 @@ export function useBaoCashuWallet(
     walletLabel: '₿AO MARKETS',
     nip60SyncEnabled: baoCashuSyncEnabled,
     storageNamespace: 'freedomid_bao_',
-    enabled,
+    enabled: walletEnabled,
   });
 
   // Auto-claim a small daily BAO demo faucet grant. The faucet enforces its own
@@ -115,16 +116,17 @@ export function useBaoCashuWallet(
   // Subscribe only after the Cashu wallet is ready. Otherwise a matching
   // kind:9321 can arrive during seed/mint initialization, be rejected as
   // "wallet not ready", and never be replayed by a live-only relay stream.
-  useNutzapReceiver(wallet.wallet ? (baoSeedPhrase ?? '') : '', wallet.allMints, wallet.receiveNutzap, {
+  useNutzapReceiver(walletEnabled && wallet.wallet ? (baoSeedPhrase ?? '') : '', wallet.allMints, wallet.receiveNutzap, {
     relayUrls: BAO_NUTZAP_RELAYS,
   });
 
   const collectPendingApiCashu = useCallback(async (): Promise<number> => {
-    const tokens = await fetchPendingBaoCashuTokens(user.signer);
+    if (!userPubkey || !userSigner) throw new Error('Log in to collect BAO Cashu.');
+    const tokens = await fetchPendingBaoCashuTokens(userSigner);
     if (tokens.length === 0) return 0;
     let imported = 0;
     for (const token of tokens) {
-      const markerKey = `bao_cashu_collected_${user.pubkey}_${computeContentHash(token)}`;
+      const markerKey = `bao_cashu_collected_${userPubkey}_${computeContentHash(token)}`;
       let durable = false;
       try { durable = localStorage.getItem(markerKey) === '1'; } catch { durable = false; }
       if (!durable) {
@@ -136,15 +138,16 @@ export function useBaoCashuWallet(
         try { localStorage.setItem(markerKey, '1'); } catch { /* marker is only crash recovery */ }
       }
     }
-    await clearPendingBaoCashuTokens(user.signer);
+    await clearPendingBaoCashuTokens(userSigner);
     for (const token of tokens) {
-      try { localStorage.removeItem(`bao_cashu_collected_${user.pubkey}_${computeContentHash(token)}`); } catch { /* ignore */ }
+      try { localStorage.removeItem(`bao_cashu_collected_${userPubkey}_${computeContentHash(token)}`); } catch { /* ignore */ }
     }
     return imported;
-  }, [user.pubkey, user.signer]);
+  }, [userPubkey, userSigner]);
 
   const claimApiCashu = useCallback(async (amountSats: number): Promise<BaoCashuClaimResult & { imported_sats: number; already_imported?: boolean }> => {
-    const intentKey = `bao_cashu_claim_intent_${user.pubkey}`;
+    if (!userPubkey || !userSigner) throw new Error('Log in to claim BAO Cashu.');
+    const intentKey = `bao_cashu_claim_intent_${userPubkey}`;
     let idempotencyKey = '';
     let proofsAlreadyImported = false;
     try {
@@ -161,7 +164,7 @@ export function useBaoCashuWallet(
       idempotencyKey = crypto.randomUUID();
       try { localStorage.setItem(intentKey, JSON.stringify({ amount: amountSats, key: idempotencyKey })); } catch { /* request remains server-idempotent */ }
     }
-    let result = await claimBaoCashu(user.signer, amountSats, idempotencyKey);
+    let result = await claimBaoCashu(userSigner, amountSats, idempotencyKey);
     let imported = 0;
     // Match bao.markets' own client: async settlement can take up to three
     // minutes while the mint or treasury is busy. Cashu payout proofs may be
@@ -188,7 +191,7 @@ export function useBaoCashuWallet(
           };
         }
       }
-      result = await checkBaoCashuClaimStatus(user.signer, idempotencyKey);
+      result = await checkBaoCashuClaimStatus(userSigner, idempotencyKey);
     }
     if (result.status !== 'completed') {
       throw new Error('BAO Cashu is still being issued. Retry collection in a moment; the claim will not be duplicated.');
@@ -206,17 +209,17 @@ export function useBaoCashuWallet(
     }
     try { localStorage.removeItem(intentKey); } catch { /* ignore */ }
     return { ...result, imported_sats: imported };
-  }, [collectPendingApiCashu, user.pubkey, user.signer]);
+  }, [collectPendingApiCashu, userPubkey, userSigner]);
 
   useEffect(() => {
-    if (enabled === false || !wallet.wallet) return;
+    if (!walletEnabled || !wallet.wallet) return;
     void collectPendingApiCashu().catch((error) => {
       devLog.warn('Pending BAO Cashu collection deferred:', error);
     });
-  }, [collectPendingApiCashu, enabled, wallet.wallet]);
+  }, [collectPendingApiCashu, walletEnabled, wallet.wallet]);
   useEffect(() => {
-    if (enabled === false || !enableAutoClaim) return;
-    const pubkey = currentUser?.pubkey;
+    if (!walletEnabled || !enableAutoClaim) return;
+    const pubkey = userPubkey;
     const faucetUrl = config.baoSignetFaucetUrl?.trim();
     if (!pubkey || !faucetUrl || !baoSeedPhrase) return;
 
@@ -258,7 +261,7 @@ export function useBaoCashuWallet(
       .catch((e) => {
         devLog.error('BAO auto-faucet failed:', e);
       });
-  }, [enabled, enableAutoClaim, currentUser?.pubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
+  }, [walletEnabled, enableAutoClaim, userPubkey, config.baoSignetFaucetUrl, baoSeedPhrase]);
 
   return { ...wallet, claimApiCashu, collectPendingApiCashu };
 }

@@ -102,4 +102,19 @@ describe('useBaoCashuWallet API proof collection', () => {
     await expect(result.current.collectPendingApiCashu()).rejects.toThrow('server copy was kept for retry');
     expect(mocks.clear).not.toHaveBeenCalled();
   });
+
+  it('stays idle and exposes helpful errors while logged out', async () => {
+    const { result } = renderHook(() => useBaoCashuWallet('', undefined, []));
+
+    await expect(result.current.collectPendingApiCashu()).rejects.toThrow('Log in to collect BAO Cashu.');
+    await expect(result.current.claimApiCashu(21)).rejects.toThrow('Log in to claim BAO Cashu.');
+    expect(mocks.pending).not.toHaveBeenCalled();
+    expect(mocks.claim).not.toHaveBeenCalled();
+    expect(mocks.receiver).toHaveBeenCalledWith(
+      '',
+      expect.any(Array),
+      mocks.receiveNutzap,
+      { relayUrls: ['wss://relay.bao.network'] },
+    );
+  });
 });
