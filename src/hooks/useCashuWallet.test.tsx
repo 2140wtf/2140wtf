@@ -2152,6 +2152,10 @@ describe('useCashuWallet hunt regressions: foreign-mint receive after swap', () 
     expect(received).toBe(21);
     expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoDirectMint)).toBe(true);
     expect(vi.mocked(CashuMint).mock.calls.some(([url]) => url === baoProxyMint)).toBe(false);
+    // Receiving the first BAO token must select the funded canonical mint;
+    // otherwise the Send tab remains on the empty default mint and reports
+    // an insufficient balance despite the wallet total being nonzero.
+    expect(result.current.mintUrl).toBe(baoDirectMint);
     const stored = (await getProofsForMint(baoDirectMint, encKey)) as Array<{ secret: string }>;
     expect(stored.map((p) => p.secret)).toEqual(['bao-recv-1']);
     expect(await getProofsForMint(baoProxyMint, encKey)).toEqual([]);
