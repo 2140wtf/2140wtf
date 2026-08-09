@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getEffectiveRelays } from '@/lib/appRelays';
@@ -18,6 +19,12 @@ import {
 
 /** Maximum number of d-tags per query chunk to avoid relay issues */
 const CHUNK_SIZE = 20;
+const PETS_READ_TIMEOUT_MS = 1_000;
+
+type PetsCollectionData = {
+  companionsByD: Record<string, PetsCompanion>;
+  companions: PetsCompanion[];
+};
 
 /**
  * Event ids already re-broadcast this session (repatriation pass).
@@ -34,6 +41,26 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     chunks.push(array.slice(i, i + size));
   }
   return chunks;
+}
+
+/** Parse, validate, and deduplicate a set of authored pet-state events. */
+function buildPetsCollection(events: NostrEvent[]): PetsCollectionData {
+  const eventsByD = new Map<string, NostrEvent>();
+
+  for (const event of events.filter(isValidPetsEvent)) {
+    const dTag = event.tags.find(([name]) => name === 'd')?.[1];
+    if (!dTag) continue;
+    const existing = eventsByD.get(dTag);
+    if (!existing || event.created_at > existing.created_at) eventsByD.set(dTag, event);
+  }
+
+  const companionsByD: Record<string, PetsCompanion> = {};
+  for (const [dTag, event] of eventsByD) {
+    const parsed = parsePetsEvent(event);
+    if (parsed) companionsByD[dTag] = parsed;
+  }
+
+  return { companionsByD, companions: Object.values(companionsByD) };
 }
 
 /**
@@ -56,6 +83,7 @@ export function usePetssCollection(dList?: string[] | undefined) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
+  const { store } = useNostrStorage();
   
   // Determine the mode: 'all' fetches everything, 'dlist' fetches by specific d-tags
   const mode = dList === undefined ? 'all' : 'dlist';
@@ -68,6 +96,43 @@ export function usePetssCollection(dList?: string[] | undefined) {
   
   // Query key segment: 'all' for fetch-all mode, comma-joined d-tags for dlist mode
   const queryKeySegment = mode === 'all' ? 'all' : (sortedDList?.join(',') ?? '');
+  const queryKey = useMemo(
+    () => ['pets-collection', user?.pubkey, queryKeySegment] as const,
+    [user?.pubkey, queryKeySegment],
+  );
+
+  const collectionFilters = useMemo(() => {
+    if (!user?.pubkey) return [];
+    if (mode === 'all') {
+      return [{
+        kinds: [KIND_PETS_STATE],
+        authors: [user.pubkey],
+        '#b': [PETS_ECOSYSTEM_NAMESPACE],
+      }];
+    }
+    if (!sortedDList?.length) return [];
+    return chunkArray(sortedDList, CHUNK_SIZE).map((chunk) => ({
+      kinds: [KIND_PETS_STATE],
+      authors: [user.pubkey],
+      '#d': chunk,
+    }));
+  }, [mode, sortedDList, user?.pubkey]);
+
+  // Restore the complete authored collection from IndexedDB immediately. The
+  // relay refresh below remains authoritative, but route navigation no longer
+  // hides an existing pet behind a network skeleton.
+  useEffect(() => {
+    if (!user?.pubkey || collectionFilters.length === 0) return;
+    let cancelled = false;
+    void store.query(collectionFilters).then((events) => {
+      if (cancelled || events.length === 0) return;
+      queryClient.setQueryData<PetsCollectionData>(queryKey, (current) => {
+        const currentEvents = current?.companions.map((companion) => companion.event) ?? [];
+        return buildPetsCollection([...events, ...currentEvents]);
+      });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [collectionFilters, queryClient, queryKey, store, user?.pubkey]);
   
   // Main query to fetch companions from relays
   const query = useQuery({
@@ -90,7 +155,9 @@ export function usePetssCollection(dList?: string[] | undefined) {
         
         console.log('[Pets] 31124 query filter (all):', JSON.stringify(filter, null, 2));
         
-        allEvents = await queryPetsRelay(nostr, [filter], { signal });
+        allEvents = await queryPetsRelay(nostr, [filter], {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(PETS_READ_TIMEOUT_MS)]),
+        }).catch(() => []);
         
         console.log('[usePetssCollection] Fetch-all returned', allEvents.length, 'events');
       } else {
@@ -116,7 +183,9 @@ export function usePetssCollection(dList?: string[] | undefined) {
           
           console.log('[Pets] 31124 query filter:', JSON.stringify(filter, null, 2));
           
-          const events = await queryPetsRelay(nostr, [filter], { signal });
+          const events = await queryPetsRelay(nostr, [filter], {
+            signal: AbortSignal.any([signal, AbortSignal.timeout(PETS_READ_TIMEOUT_MS)]),
+          }).catch(() => []);
           allEvents.push(...events);
           
           console.log('[usePetssCollection] Chunk returned', events.length, 'events');
@@ -124,51 +193,27 @@ export function usePetssCollection(dList?: string[] | undefined) {
       }
       
       console.log('[usePetssCollection] Total events received:', allEvents.length);
-      
-      // Filter to valid events
-      const validEvents = allEvents.filter(isValidPetsEvent);
-      
-      console.log('[usePetssCollection] Valid events:', validEvents.length);
-      
-      // Group events by d-tag and keep only the newest per d
-      const eventsByD = new Map<string, NostrEvent>();
-      
-      for (const event of validEvents) {
-        const dTag = event.tags.find(([name]) => name === 'd')?.[1];
-        if (!dTag) continue;
-        
-        const existing = eventsByD.get(dTag);
-        if (!existing || event.created_at > existing.created_at) {
-          eventsByD.set(dTag, event);
-        }
-      }
-      
-      // Parse all events into PetsCompanion objects
-      const companionsByD: Record<string, PetsCompanion> = {};
-      const companions: PetsCompanion[] = [];
-      
-      for (const [dTag, event] of eventsByD) {
-        const parsed = parsePetsEvent(event);
-        if (parsed) {
-          companionsByD[dTag] = parsed;
-          companions.push(parsed);
-        }
-      }
+
+      // A relay miss must not erase the progressive IndexedDB seed. Merge both
+      // sources and let the newest event for each d-tag win.
+      const cachedEvents = collectionFilters.length > 0
+        ? await store.query(collectionFilters).catch(() => [] as NostrEvent[])
+        : [];
+      const collection = buildPetsCollection([...cachedEvents, ...allEvents]);
       
       console.log('[usePetssCollection] Parsed companions:', {
-        count: companions.length,
-        dTags: Object.keys(companionsByD),
+        count: collection.companions.length,
+        dTags: Object.keys(collection.companionsByD),
       });
       
-      return { companionsByD, companions };
+      return collection;
     },
     enabled: !!user?.pubkey && (mode === 'all' || (!!sortedDList && sortedDList.length > 0)),
     staleTime: 30_000, // 30 seconds
     gcTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retry: false,
   });
   
   // ─── Repatriation pass ─────────────────────────────────────────────────────
