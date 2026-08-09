@@ -200,6 +200,8 @@ export interface ComputeCreditReceipt {
   note: string;
   /** p tags = CLAIMED funders — only render when corroborated (see below). */
   claimedFunders: string[];
+  /** Tranche this receipt covers for a Multi-shot request. */
+  shot?: number;
   createdAt: number;
 }
 
@@ -212,6 +214,7 @@ export function buildComputeCreditReceipt(input: {
   note: string;
   provider?: string;
   funderPubkeys?: string[];
+  shot?: number;
 }) {
   const tags: string[][] = [
     ['e', input.requestId],
@@ -221,6 +224,7 @@ export function buildComputeCreditReceipt(input: {
   for (const f of input.funderPubkeys ?? []) {
     if (HEX64.test(f)) tags.push(['p', f]);
   }
+  if (input.shot !== undefined) tags.push(['shot', String(Math.floor(input.shot))]);
   return {
     kind: BAO_COMPUTE_CREDIT_RECEIPT_KIND,
     content: input.note.trim(),
@@ -242,6 +246,8 @@ export function parseComputeCreditReceipt(event: NostrEvent): ComputeCreditRecei
   const claimedFunders = event.tags
     .filter((t) => t[0] === 'p' && typeof t[1] === 'string' && HEX64.test(t[1]))
     .map((t) => t[1]);
+  const shotRaw = Number(event.tags.find((t) => t[0] === 'shot')?.[1]);
+  const shot = Number.isSafeInteger(shotRaw) && shotRaw > 0 ? shotRaw : undefined;
 
   return {
     id: event.id,
@@ -251,8 +257,42 @@ export function parseComputeCreditReceipt(event: NostrEvent): ComputeCreditRecei
     provider,
     note: event.content.trim(),
     claimedFunders: [...new Set(claimedFunders)],
+    ...(shot ? { shot } : {}),
     createdAt: event.created_at,
   };
+}
+
+export type ComputeCreditStage = 'requested' | 'token_sent' | 'agent_confirmed' | 'redeemed';
+
+export interface ComputeCreditProgress {
+  shot: ComputeCreditShot;
+  amountSats: number;
+  stage: ComputeCreditStage;
+}
+
+/** Derive retry-safe progress without treating a donor claim as payment proof. */
+export function computeCreditProgress(
+  request: ComputeCreditRequest,
+  fulfillments: ComputeCreditFulfillment[],
+  receipts: ComputeCreditReceipt[],
+): ComputeCreditProgress[] {
+  const shots: ComputeCreditShot[] = request.shots === 2 ? [1, 2] : [1];
+  const confirmed = confirmedComputeCreditShots(request, fulfillments);
+  const claims = new Set(
+    fulfillments
+      .filter((f) => f.requestId === request.id && f.requesterPubkey === request.pubkey && f.pubkey !== request.pubkey)
+      .map((f) => request.shots === 2 && f.shot === 2 ? 2 : 1),
+  );
+  const redeemed = new Set(
+    receipts
+      .filter((r) => r.requestId === request.id && r.pubkey === request.pubkey)
+      .map((r) => request.shots === 2 && r.shot === 2 ? 2 : 1),
+  );
+  return shots.map((shot) => ({
+    shot,
+    amountSats: shot === 2 ? request.amount2Sats ?? 0 : request.amountSats,
+    stage: redeemed.has(shot) ? 'redeemed' : confirmed.has(shot) ? 'agent_confirmed' : claims.has(shot) ? 'token_sent' : 'requested',
+  }));
 }
 
 // ── Corroborated reputation aggregation ──────────────────────────────────────
