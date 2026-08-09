@@ -45,6 +45,7 @@ import { writeOpened } from "@/concord-v2/lib/rumorStore";
 import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
+import { partitionDeletionCapableRelays } from "@/concord-v2/lib/relayDeletion";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
@@ -423,7 +424,7 @@ export function useCommunityActions2() {
   // link must still resolve against the relays every CORD client shares.
   const bootstrapRelays = config.appRelays.length > 0 ? config.appRelays : STOCK_RELAYS;
 
-  const create = useMutation<{ communityId: string; name: string }, Error, { name: string; relays?: string[]; agentOnly?: boolean }>({
+  const create = useMutation<{ communityId: string; name: string; excludedRelays: string[] }, Error, { name: string; relays?: string[]; agentOnly?: boolean }>({
     mutationFn: async ({ name, relays: chosen, agentOnly }) => {
       if (!user) throw new Error("Sign in to start an encrypted community.");
       if (!user.signer.nip44) throw new Error("This signer can't hold encrypted communities (NIP-44 unsupported).");
@@ -442,9 +443,18 @@ export function useCommunityActions2() {
       // every member on a secure origin, however reachable it is for the
       // creator (#47).
       const appRelays = config.appRelays.length > 0 ? config.appRelays : APP_RELAYS;
-      const relays = chosen && chosen.length > 0
+      const requestedRelays = chosen && chosen.length > 0
         ? preferPortableRelays(chosen)
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
+      const deletionSupport = await partitionDeletionCapableRelays(requestedRelays);
+      if (deletionSupport.supported.length === 0) {
+        const unavailable = deletionSupport.excluded.map((relay) => relay.url).join(", ");
+        throw new Error(
+          `None of the selected relays advertise NIP-09 deletion support${unavailable ? `: ${unavailable}` : ""}. ` +
+          "Choose a relay that can purge BAO data.",
+        );
+      }
+      const relays = deletionSupport.supported;
       const { community, generalChannelId } = mintCommunity(trimmed, user.pubkey, relays);
 
       // Sponsorship FIRST (CORD-08): relays with an operator-creation policy
@@ -525,7 +535,11 @@ export function useCommunityActions2() {
         );
       })().catch(() => undefined);
 
-      return { communityId: community.idHex, name: trimmed };
+      return {
+        communityId: community.idHex,
+        name: trimmed,
+        excludedRelays: deletionSupport.excluded.map((relay) => relay.url),
+      };
     },
   });
 
@@ -695,8 +709,9 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
         for (const event of listEvents) {
           try {
             const decrypted = await user.signer.nip44.decrypt(user.pubkey, event.content);
-            const parsed = JSON.parse(decrypted) as { entries?: Array<{ community_id?: string; signer_sk?: string; url?: string }> };
-            for (const entry of parsed.entries ?? []) {
+            type PurgeableInvite = { community_id?: string; signer_sk?: string; url?: string };
+            const parsed = JSON.parse(decrypted) as { entries?: PurgeableInvite[]; tombstones?: PurgeableInvite[] };
+            for (const entry of [...(parsed.entries ?? []), ...(parsed.tombstones ?? [])]) {
               if (entry.community_id !== community.idHex) continue;
               if (entry.url) {
                 try {
@@ -742,6 +757,13 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {
         throw new Error("The relay did not accept any NIP-09 deletion requests.");
+      }
+      const incomplete = report.relays.filter((relay) => !relay.verified || relay.remaining > 0);
+      if (incomplete.length > 0) {
+        throw new Error(
+          "The BAO purge could not be verified on: " +
+          incomplete.map((relay) => relay.verified ? `${relay.url} (${relay.remaining} remaining)` : `${relay.url} (query failed)`).join(", "),
+        );
       }
       return report;
     },
