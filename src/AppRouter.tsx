@@ -284,6 +284,7 @@ export function AppRouter() {
               <Route path="/settings/network" element={<NetworkSettingsPage />} />
               <Route path="/lists" element={<UserListsPage />} />
               <Route path="/events" element={<EventsFeedPage />} />
+              <Route path="/media" element={<Navigate to="/videos" replace />} />
               <Route path="/photos" element={<PhotosFeedPage />} />
               <Route path="/videos" element={<VideosFeedPage />} />
               {/* /streams redirects to /videos for backward compatibility */}
