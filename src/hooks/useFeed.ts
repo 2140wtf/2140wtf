@@ -119,7 +119,9 @@ function useCommunityPubkeys(appId: string): string[] {
  * Remove posts from accounts whose kind-0 NIP-05 identifies a blocked domain.
  * Domain ownership is profile metadata, not a property of the post event, so
  * this lookup is required in addition to the direct event marker check.
- * Metadata failures fail open so a slow relay never blanks the feed.
+ * Metadata failures preserve cached author metadata and otherwise fail open so
+ * a slow relay never blanks the feed. A successful query is deliberately
+ * over-fetched because relays may return multiple kind-0 versions per author.
  */
 async function filterBlockedDomainAuthors(
   events: NostrEvent[],
@@ -131,9 +133,16 @@ async function filterBlockedDomainAuthors(
   const authors = [...new Set(directFiltered.map((event) => event.pubkey))];
   if (authors.length === 0) return directFiltered;
 
+  const cachedBlockedAuthors = new Set<string>();
+  for (const author of authors) {
+    const cached = queryClient.getQueryData<ReturnType<typeof parseAuthorEvent>>(['author', author]);
+    const nip05 = cached?.metadata?.nip05;
+    if (typeof nip05 === 'string' && isBlockedFeedDomainIdentifier(nip05)) cachedBlockedAuthors.add(author);
+  }
+
   try {
-    const metadataEvents = await nostr.query([{ kinds: [0], authors, limit: authors.length }], { signal });
-    const blockedAuthors = new Set<string>();
+    const metadataEvents = await nostr.query([{ kinds: [0], authors, limit: Math.min(500, Math.max(100, authors.length * 4)) }], { signal });
+    const blockedAuthors = new Set(cachedBlockedAuthors);
     for (const metadata of metadataEvents) {
       try {
         const content: unknown = JSON.parse(metadata.content);
