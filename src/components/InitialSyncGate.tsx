@@ -251,12 +251,12 @@ const FEATURED_CREATORS = [
   { pubkey: "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416", label: "2140.wtf", role: "2140.wtf" },
   { pubkey: "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6", label: "₿AO HQ", role: "₿AO network" },
 ] as const;
-const NEWS_SOURCES = [
-  { pubkey: "11ef05a432dc240409bc6116b6fdc93f5e290ad757b6578302a2bb44a85e5649", label: "Hacker News" },
-  { pubkey: "7e7224cfe0af5aaf9131af8f3e9d34ff615ff91ce2694640f1f1fee5d8febb7d", label: "Bitcoin Herald" },
-  { pubkey: "59fbee7369df7713dbbfa9bbdb0892c62eba929232615c6ff2787da384cb770f", label: "Bitcoin Magazine" },
-  { pubkey: "347447120a7a81123f131acfd91708dd2b85aca0e6a18647c6caa95914e45736", label: "CoinDesk" },
-  { pubkey: "ecd4264b5dd03da823606f807370722bd66adc5943760428a09561fe58c5411d", label: "Cointelegraph" },
+const NEWS_SOURCE_PUBKEYS = [
+  "11ef05a432dc240409bc6116b6fdc93f5e290ad757b6578302a2bb44a85e5649", // Hacker News
+  "7e7224cfe0af5aaf9131af8f3e9d34ff615ff91ce2694640f1f1fee5d8febb7d", // Bitcoin Herald
+  "59fbee7369df7713dbbfa9bbdb0892c62eba929232615c6ff2787da384cb770f", // Bitcoin Magazine
+  "347447120a7a81123f131acfd91708dd2b85aca0e6a18647c6caa95914e45736", // CoinDesk
+  "ecd4264b5dd03da823606f807370722bd66adc5943760428a09561fe58c5411d", // Cointelegraph
 ] as const;
 const NOSTR_CLIENTS = [
   { pubkey: "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416", label: "2140.wtf" },
@@ -271,8 +271,7 @@ const NOSTR_CLIENTS = [
   { pubkey: "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245", label: "Damus" },
   { pubkey: "97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322", label: "Coracle" },
 ] as const;
-/** App-owned starter packs. Subject packs are additionally loaded from Primal. */
-const SUGGESTED_PACKS: NostrEvent[] = [{
+const ESSENTIALS_PACK: NostrEvent = {
   id: "2140-essentials",
   pubkey: "",
   kind: 39089,
@@ -288,7 +287,22 @@ const SUGGESTED_PACKS: NostrEvent[] = [{
     ["p", "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c"],
     ["p", "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2"],
   ],
-}];
+};
+const NEWS_PACK: NostrEvent = {
+  id: "2140-news",
+  pubkey: "",
+  kind: 39089,
+  created_at: 0,
+  content: "",
+  sig: "",
+  tags: [
+    ["title", "The News"],
+    ["description", "News sources publishing on Nostr."],
+    ...NEWS_SOURCE_PUBKEYS.map((pubkey) => ["p", pubkey]),
+  ],
+};
+/** App-owned starter packs. Subject packs are additionally loaded from Primal. */
+const SUGGESTED_PACKS: NostrEvent[] = [ESSENTIALS_PACK, NEWS_PACK];
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
@@ -942,7 +956,24 @@ function FollowsStep({
             );
           })
           .sort((a, b) => parsePackEvent(a).title.localeCompare(parsePackEvent(b).title));
-        if (!cancelled) setPacks([...SUGGESTED_PACKS, ...subjectPacks]);
+        const relayNewsPacks = subjectPacks.filter(
+          (event) => parsePackEvent(event).title.trim().toLowerCase() === "the news",
+        );
+        const mergedNewsPubkeys = new Set([
+          ...NEWS_SOURCE_PUBKEYS,
+          ...relayNewsPacks.flatMap((event) => parsePackEvent(event).pubkeys),
+        ]);
+        const mergedNewsPack: NostrEvent = {
+          ...NEWS_PACK,
+          tags: [
+            ...NEWS_PACK.tags.filter(([name]) => name !== "p"),
+            ...[...mergedNewsPubkeys].map((pubkey) => ["p", pubkey]),
+          ],
+        };
+        const otherSubjectPacks = subjectPacks.filter(
+          (event) => parsePackEvent(event).title.trim().toLowerCase() !== "the news",
+        );
+        if (!cancelled) setPacks([ESSENTIALS_PACK, mergedNewsPack, ...otherSubjectPacks]);
       } catch (error) {
         console.warn('Could not load optional onboarding packs:', error);
       }
@@ -1078,24 +1109,6 @@ function FollowsStep({
                 subtitle={person.role}
                 selected={selectedPubkeys.has(person.pubkey)}
                 onToggle={() => togglePubkey(person.pubkey)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-2">
-          <div>
-            <h3 className="text-base font-semibold">News sources</h3>
-            <p className="text-xs text-muted-foreground">Pick the sources you want in your feed.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
-            {NEWS_SOURCES.map((source) => (
-              <CompactPersonPill
-                key={source.pubkey}
-                pubkey={source.pubkey}
-                fallbackName={source.label}
-                selected={selectedPubkeys.has(source.pubkey)}
-                onToggle={() => togglePubkey(source.pubkey)}
               />
             ))}
           </div>
