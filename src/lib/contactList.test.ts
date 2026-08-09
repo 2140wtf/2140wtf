@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
-import { fetchContactList } from './contactList';
+import { fetchContactList, hasMinimumFollows } from './contactList';
 import type { NIndexedDB } from '@nostrify/indexeddb';
 
 function makeContactList(createdAt: number, pubkeys: string[]): NostrEvent {
@@ -76,5 +76,22 @@ describe('fetchContactList', () => {
 
     const result = await fetchContactList(nostr, store, 'author-pubkey');
     expect(result).toBeNull();
+  });
+});
+
+describe('hasMinimumFollows', () => {
+  it('requires five unique valid accounts for a useful starter feed', () => {
+    const event = makeContactList(100, [
+      '1'.repeat(64),
+      '2'.repeat(64),
+      '3'.repeat(64),
+      '4'.repeat(64),
+      '4'.repeat(64),
+      'not-a-pubkey',
+    ]);
+
+    expect(hasMinimumFollows(event)).toBe(false);
+    event.tags.push(['p', '5'.repeat(64)]);
+    expect(hasMinimumFollows(event)).toBe(true);
   });
 });
