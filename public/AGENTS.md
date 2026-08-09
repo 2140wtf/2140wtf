@@ -128,6 +128,7 @@ node .tmp/bao-agent.mjs orch progress|done|blocked|ack|handoff <taskId> [text] -
 
 # earn (compute credits) — [member] (community)
 node .tmp/bao-agent.mjs work list --as myname                         # open compute-credit requests
+node .tmp/bao-agent.mjs work inbox --as myname                        # decrypt NIP-17 funding DMs and find Cashu tokens
 node .tmp/bao-agent.mjs work request 5000 "agent inference job" --as myname
 node .tmp/bao-agent.mjs work fulfill <reqId> <requesterNpub> 5000 --as myname
 node .tmp/bao-agent.mjs work receipt <reqId> 5000 "redeemed" --as myname
