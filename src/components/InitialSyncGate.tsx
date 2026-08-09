@@ -251,12 +251,12 @@ const FEATURED_CREATORS = [
   { pubkey: "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416", label: "2140.wtf", role: "2140.wtf" },
   { pubkey: "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6", label: "₿AO HQ", role: "₿AO network" },
 ] as const;
-const NEWS_SOURCES = [
-  { pubkey: "11ef05a432dc240409bc6116b6fdc93f5e290ad757b6578302a2bb44a85e5649", label: "Hacker News" },
-  { pubkey: "7e7224cfe0af5aaf9131af8f3e9d34ff615ff91ce2694640f1f1fee5d8febb7d", label: "Bitcoin Herald" },
-  { pubkey: "59fbee7369df7713dbbfa9bbdb0892c62eba929232615c6ff2787da384cb770f", label: "Bitcoin Magazine" },
-  { pubkey: "347447120a7a81123f131acfd91708dd2b85aca0e6a18647c6caa95914e45736", label: "CoinDesk" },
-  { pubkey: "ecd4264b5dd03da823606f807370722bd66adc5943760428a09561fe58c5411d", label: "Cointelegraph" },
+const NEWS_SOURCE_PUBKEYS = [
+  "11ef05a432dc240409bc6116b6fdc93f5e290ad757b6578302a2bb44a85e5649", // Hacker News
+  "7e7224cfe0af5aaf9131af8f3e9d34ff615ff91ce2694640f1f1fee5d8febb7d", // Bitcoin Herald
+  "59fbee7369df7713dbbfa9bbdb0892c62eba929232615c6ff2787da384cb770f", // Bitcoin Magazine
+  "347447120a7a81123f131acfd91708dd2b85aca0e6a18647c6caa95914e45736", // CoinDesk
+  "ecd4264b5dd03da823606f807370722bd66adc5943760428a09561fe58c5411d", // Cointelegraph
 ] as const;
 const NOSTR_CLIENTS = [
   { pubkey: "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416", label: "2140.wtf" },
@@ -271,23 +271,7 @@ const NOSTR_CLIENTS = [
   { pubkey: "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245", label: "Damus" },
   { pubkey: "97c70a44366a6535c145b333f973ea86dfdc2d7a99da618c40c64705ad98e322", label: "Coracle" },
 ] as const;
-const ACTIVE_SUGGESTION_CANDIDATES = [
-  "19fefd7f39c96d2ff76f87f7627ae79145bc971d8ab23205005939a5a913bc2f",
-  "04c915daefee38317fa734444acee390a8269fe5810b2241e5e6dd343dfbecc9",
-  "84dee6e676e5bb67b4ad4e042cf70cbd8681155db535942fcc6a0533858a7240",
-  "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-  "58c741aa630c2da35a56a77c1d05381908bd10504fdd2d8b43f725efa6d23196",
-  "472f440f29ef996e92a186b8d320ff180c855903882e59d50de1b8bd5669301e",
-  "6e468422dfb74a5738702a8823b9b28168abab8655faacb6853cd0ee15deee93",
-  "32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",
-  "d61f3bc5b3eb4400efdae6169a5c17cabf3246b514361de939ce4a1a0da6ef4a",
-  "63fe6318dc58583cfe16810f86dd09e18bfd76aabc24a0081ce2856f330504ed",
-  "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c",
-  "7fa56f5d6962ab1e3cd424e758c3002b8665f7b0d8dcee9fe9e288d7751ac194",
-] as const;
-
-/** App-owned starter packs. Subject packs are additionally loaded from Primal. */
-const SUGGESTED_PACKS: NostrEvent[] = [{
+const ESSENTIALS_PACK: NostrEvent = {
   id: "2140-essentials",
   pubkey: "",
   kind: 39089,
@@ -303,7 +287,22 @@ const SUGGESTED_PACKS: NostrEvent[] = [{
     ["p", "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c"],
     ["p", "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2"],
   ],
-}];
+};
+const NEWS_PACK: NostrEvent = {
+  id: "2140-news",
+  pubkey: "",
+  kind: 39089,
+  created_at: 0,
+  content: "",
+  sig: "",
+  tags: [
+    ["title", "The News"],
+    ["description", "News sources publishing on Nostr."],
+    ...NEWS_SOURCE_PUBKEYS.map((pubkey) => ["p", pubkey]),
+  ],
+};
+/** App-owned starter packs. Subject packs are additionally loaded from Primal. */
+const SUGGESTED_PACKS: NostrEvent[] = [ESSENTIALS_PACK, NEWS_PACK];
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
@@ -927,41 +926,9 @@ function FollowsStep({
 
   const [packs, setPacks] = useState<NostrEvent[]>(SUGGESTED_PACKS);
   const [selectedPubkeys, setSelectedPubkeys] = useState<Set<string>>(() => new Set());
-  const [activePubkeys, setActivePubkeys] = useState<string[]>([]);
-  const [isCheckingActivity, setIsCheckingActivity] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
 
   const selectedPubkeyCount = selectedPubkeys.size;
-
-  useEffect(() => {
-    let cancelled = false;
-    const findActivePeople = async () => {
-      setIsCheckingActivity(true);
-      try {
-        const events = await nostr.query([{
-          kinds: [1],
-          authors: [...ACTIVE_SUGGESTION_CANDIDATES],
-          since: Math.floor(Date.now() / 1000) - 24 * 60 * 60,
-          limit: 200,
-        }], { signal: AbortSignal.timeout(8000) });
-        const latestByAuthor = new Map<string, number>();
-        for (const event of events) {
-          latestByAuthor.set(event.pubkey, Math.max(latestByAuthor.get(event.pubkey) ?? 0, event.created_at));
-        }
-        const active = [...latestByAuthor.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8)
-          .map(([pubkey]) => pubkey);
-        if (!cancelled) setActivePubkeys(active);
-      } catch (error) {
-        console.warn("Could not check active onboarding accounts:", error);
-      } finally {
-        if (!cancelled) setIsCheckingActivity(false);
-      }
-    };
-    void findActivePeople();
-    return () => { cancelled = true; };
-  }, [nostr]);
 
   useEffect(() => {
     let cancelled = false;
@@ -989,7 +956,24 @@ function FollowsStep({
             );
           })
           .sort((a, b) => parsePackEvent(a).title.localeCompare(parsePackEvent(b).title));
-        if (!cancelled) setPacks([...SUGGESTED_PACKS, ...subjectPacks]);
+        const relayNewsPacks = subjectPacks.filter(
+          (event) => parsePackEvent(event).title.trim().toLowerCase() === "the news",
+        );
+        const mergedNewsPubkeys = new Set([
+          ...NEWS_SOURCE_PUBKEYS,
+          ...relayNewsPacks.flatMap((event) => parsePackEvent(event).pubkeys),
+        ]);
+        const mergedNewsPack: NostrEvent = {
+          ...NEWS_PACK,
+          tags: [
+            ...NEWS_PACK.tags.filter(([name]) => name !== "p"),
+            ...[...mergedNewsPubkeys].map((pubkey) => ["p", pubkey]),
+          ],
+        };
+        const otherSubjectPacks = subjectPacks.filter(
+          (event) => parsePackEvent(event).title.trim().toLowerCase() !== "the news",
+        );
+        if (!cancelled) setPacks([ESSENTIALS_PACK, mergedNewsPack, ...otherSubjectPacks]);
       } catch (error) {
         console.warn('Could not load optional onboarding packs:', error);
       }
@@ -1005,10 +989,6 @@ function FollowsStep({
       else next.add(pubkey);
       return next;
     });
-  }, []);
-
-  const selectPubkeys = useCallback((pubkeys: readonly string[]) => {
-    setSelectedPubkeys((current) => new Set([...current, ...pubkeys]));
   }, []);
 
   const togglePack = useCallback((pack: NostrEvent) => {
@@ -1135,50 +1115,6 @@ function FollowsStep({
         </section>
 
         <section className="space-y-2">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-semibold">Active right now</h3>
-              <p className="text-xs text-muted-foreground">
-                {isCheckingActivity ? "Checking recent posts…" : `${activePubkeys.length} people posted in the last 24 hours`}
-              </p>
-            </div>
-            {activePubkeys.length > 0 && (
-              <Button type="button" size="sm" className="rounded-full" onClick={() => selectPubkeys(activePubkeys)}>
-                Follow all
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {activePubkeys.map((pubkey) => (
-              <ActivePersonButton
-                key={pubkey}
-                pubkey={pubkey}
-                selected={selectedPubkeys.has(pubkey)}
-                onToggle={() => togglePubkey(pubkey)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-2">
-          <div>
-            <h3 className="text-base font-semibold">News sources</h3>
-            <p className="text-xs text-muted-foreground">Pick the sources you want in your feed.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-3">
-            {NEWS_SOURCES.map((source) => (
-              <CompactPersonPill
-                key={source.pubkey}
-                pubkey={source.pubkey}
-                fallbackName={source.label}
-                selected={selectedPubkeys.has(source.pubkey)}
-                onToggle={() => togglePubkey(source.pubkey)}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-2">
           <div>
             <h3 className="text-base font-semibold">Nostr clients</h3>
             <p className="text-xs text-muted-foreground">Follow the people and teams building the apps you use.</p>
@@ -1286,42 +1222,6 @@ function CompactPersonPill({
       )} aria-hidden>
         {selected ? <Check className="size-4" /> : <span className="text-lg leading-none">+</span>}
       </span>
-    </button>
-  );
-}
-
-function ActivePersonButton({
-  pubkey,
-  selected,
-  onToggle,
-}: {
-  pubkey: string;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const author = useAuthor(pubkey);
-  const metadata = author.data?.metadata;
-  const name = metadata?.display_name || metadata?.name || genUserName(pubkey);
-  const picture = sanitizeUrl(metadata?.picture);
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={selected}
-      aria-label={`${selected ? "Unfollow" : "Follow"} ${name}`}
-      title={name}
-      className={cn(
-        "rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected ? "bg-primary ring-2 ring-primary" : "bg-muted hover:ring-2 hover:ring-primary/60",
-      )}
-    >
-      <Avatar className="size-11" shape={getAvatarShape(metadata)}>
-        <AvatarImage src={picture} alt="" />
-        <AvatarFallback className="bg-primary/15 text-xs text-primary">
-          {name[0]?.toUpperCase() ?? "?"}
-        </AvatarFallback>
-      </Avatar>
     </button>
   );
 }
