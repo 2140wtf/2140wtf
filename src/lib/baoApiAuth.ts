@@ -24,15 +24,6 @@ export interface BaoApiSigner {
   }>;
 }
 
-/**
- * Header cache: the API accepts NIP-98 events within a 5-minute freshness
- * window, so a header is reusable for 2 minutes. Without this, every poll
- * (balances every 30s, lists, retries) is a fresh sign_event — on a remote
- * signer that's a prompt per poll.
- */
-const HEADER_TTL_MS = 120_000;
-const headerCache = new WeakMap<object, Map<string, { header: string; expiresAt: number }>>();
-
 /** Build the `Authorization` header value for a NIP-98 authenticated call. */
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -41,18 +32,12 @@ async function sha256Hex(value: string): Promise<string> {
 
 export async function baoNip98Header(signer: BaoApiSigner, url: string, method: string, body?: string): Promise<string> {
   const payloadHash = body === undefined ? undefined : await sha256Hex(body);
-  // A body-bound authorization event may only be reused for the exact same
-  // payload. Keying only by URL/method can authorize a later contribution
-  // with a stale payload hash (or, on permissive servers, no body binding).
-  const cacheKey = `${method.toUpperCase()} ${url} ${payloadHash ?? ''}`;
-  let perSigner = headerCache.get(signer as object);
-  if (!perSigner) {
-    perSigner = new Map();
-    headerCache.set(signer as object, perSigner);
-  }
-  const cached = perSigner.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.header;
-  const tags = [['u', url], ['method', method.toUpperCase()]];
+  // A body-bound authorization event may only authorize this exact request.
+  // Always sign a fresh event: bao.markets consumes the event ID to prevent
+  // replay, so reusing a still-time-valid header fails on the next request.
+  // `created_at` has one-second precision. A nonce prevents two legitimate
+  // requests signed in the same second from producing the same consumed ID.
+  const tags = [['u', url], ['method', method.toUpperCase()], ['nonce', crypto.randomUUID()]];
   if (payloadHash) tags.push(['payload', payloadHash]);
   const event = await signer.signEvent({
     kind: 27235,
@@ -60,7 +45,5 @@ export async function baoNip98Header(signer: BaoApiSigner, url: string, method: 
     tags,
     content: '',
   });
-  const header = `Nostr ${btoa(JSON.stringify(event))}`;
-  perSigner.set(cacheKey, { header, expiresAt: Date.now() + HEADER_TTL_MS });
-  return header;
+  return `Nostr ${btoa(JSON.stringify(event))}`;
 }
