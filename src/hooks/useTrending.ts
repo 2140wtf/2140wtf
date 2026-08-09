@@ -5,7 +5,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useNip85EventStats, useNip85AddrStats } from '@/hooks/useNip85Stats';
 import { type ResolvedEmoji } from '@/lib/customEmoji';
 import { APP_SEARCH_RELAYS } from '@/lib/appRelays';
-import { isMastodonBridgeEvent } from '@/lib/feedUtils';
+import { isMastodonBridgeEvent, shouldHideFeedEvent } from '@/lib/feedUtils';
 import { useAppContext } from '@/hooks/useAppContext';
 
 export interface TrendingTag {
@@ -20,6 +20,35 @@ export interface TrendingTagsResult {
   tags: TrendingTag[];
   /** created_at of the label event, used to align sparkline day boundaries. */
   labelCreatedAt: number;
+}
+
+/** Promotional altcoin tags that are not useful trends for this Bitcoin client. */
+const BLOCKED_TREND_TAGS = new Set([
+  'ada', 'altcoin', 'altcoins', 'avax', 'avalanche', 'binance', 'bnb',
+  'cardano', 'chainlink', 'crypto', 'cryptocurrency', 'defi', 'doge',
+  'dogecoin', 'eth', 'ethereum', 'link', 'matic', 'memecoin', 'memecoins',
+  'nft', 'nfts', 'polygon', 'ripple', 'shitcoin', 'shitcoins', 'sol',
+  'solana', 'sui', 'tron', 'web3', 'xrp',
+]);
+
+export function filterRealTrendingTags(tags: TrendingTag[]): TrendingTag[] {
+  return tags.filter(({ tag }) => !BLOCKED_TREND_TAGS.has(tag.trim().replace(/^#/, '').toLowerCase()));
+}
+
+export function isBlockedTrendEvent(event: NostrEvent): boolean {
+  return event.tags.some(([name, value]) =>
+    name === 't' && typeof value === 'string' && BLOCKED_TREND_TAGS.has(value.trim().replace(/^#/, '').toLowerCase()),
+  );
+}
+
+/** Relays may return the same event more than once; React lists need stable unique IDs. */
+export function uniqueTrendEvents(events: NostrEvent[]): NostrEvent[] {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
 }
 
 /**
@@ -57,11 +86,11 @@ export function useTrendingTags(enabled = true) {
       // index 4 = total uses of the hashtag
       const tTags = events[0].tags.filter(([name]) => name === 't');
       return {
-        tags: tTags.map(([, tag, , rawAccounts, rawUses]) => ({
+        tags: filterRealTrendingTags(tTags.map(([, tag, , rawAccounts, rawUses]) => ({
           tag: tag.toLowerCase(),
           accounts: parseInt(rawAccounts || '0', 10),
           uses: parseInt(rawUses || '0', 10),
-        })),
+        }))),
         labelCreatedAt: events[0].created_at,
       };
     },
@@ -114,9 +143,9 @@ export function useTrendingPosts(enabled = true) {
 
       // Sort by the order they appeared in the label event (first = most trending)
       const idOrder = new Map(eventIds.map((id, i) => [id, i]));
-      return events
+      return uniqueTrendEvents(events)
         .sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999))
-        .filter((event) => !isMastodonBridgeEvent(event));
+        .filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
     },
     enabled: enabled && !!statsPubkey,
     staleTime: 5 * 60 * 1000,
@@ -140,7 +169,7 @@ export function useSortedPosts(sort: SortMode, limit = 5, enabled = true) {
         [{ kinds: [1], search: `sort:${sort} protocol:nostr`, limit }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events.filter((event) => !isMastodonBridgeEvent(event));
+      return uniqueTrendEvents(events).filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -174,7 +203,7 @@ export function useInfiniteSortedPosts(sort: SortMode, enabled = true) {
         [filter as { kinds: number[]; search: string; limit: number; until?: number }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events.filter((event) => !isMastodonBridgeEvent(event));
+      return events.filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event) && !isBlockedTrendEvent(event));
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length === 0) return undefined;
@@ -230,7 +259,7 @@ export function useInfiniteHotFeed(
         filters as { kinds: number[]; search: string; limit: number; until?: number }[],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
       );
-      return events.filter((event) => !isMastodonBridgeEvent(event));
+      return events.filter((event) => !isMastodonBridgeEvent(event) && !shouldHideFeedEvent(event));
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length === 0) return undefined;
@@ -432,5 +461,3 @@ export function useTagSparklines(tags: string[], labelCreatedAt: number, enabled
     staleTime: 5 * 60 * 1000,
   });
 }
-
-

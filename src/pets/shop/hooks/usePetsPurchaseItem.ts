@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { nip19 } from 'nostr-tools';
 
-import { sendDemoSats, isSendRouteMissing } from '@/lib/baoWalletApi';
+import { BaoSendError, sendDemoSats, isSendRouteMissing } from '@/lib/baoWalletApi';
+import { generateUUID } from '@/lib/uuid';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -42,6 +43,7 @@ function getSelectedMintBalance(wallet?: (CashuWalletState & CashuWalletActions)
  * purchase per item can exist, and it is cleared as soon as the item lands.
  */
 const PAID_PENDING_PREFIX = 'pets-shop-paid-pending';
+const PAYMENT_INTENT_PREFIX = 'pets-shop-payment-intent';
 
 interface PaidPendingPurchase {
   quantity: number;
@@ -50,8 +52,61 @@ interface PaidPendingPurchase {
   paidAt: number;
 }
 
+interface PaymentIntent {
+  quantity: number;
+  amountSats: number;
+  idempotencyKey: string;
+}
+
+export interface PetsPurchaseFunding {
+  /** Custodial Cashu demo sats currently held on bao.markets. */
+  baoApiCashuBalance?: number;
+  /** Refresh the custodial balance after a successful scoped debit. */
+  refreshBaoApiBalances?: () => Promise<void>;
+}
+
 function paidPendingKey(pubkey: string, itemId: string): string {
   return `${PAID_PENDING_PREFIX}:${pubkey}:${itemId}`;
+}
+
+function paymentIntentKey(pubkey: string, itemId: string): string {
+  return `${PAYMENT_INTENT_PREFIX}:${pubkey}:${itemId}`;
+}
+
+function readPaymentIntent(pubkey: string, itemId: string): PaymentIntent | null {
+  try {
+    const raw = localStorage.getItem(paymentIntentKey(pubkey, itemId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PaymentIntent>;
+    if (
+      typeof parsed.quantity !== 'number' ||
+      typeof parsed.amountSats !== 'number' ||
+      typeof parsed.idempotencyKey !== 'string'
+    ) return null;
+    return {
+      quantity: parsed.quantity,
+      amountSats: parsed.amountSats,
+      idempotencyKey: parsed.idempotencyKey,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePaymentIntent(pubkey: string, itemId: string, intent: PaymentIntent): void {
+  try {
+    localStorage.setItem(paymentIntentKey(pubkey, itemId), JSON.stringify(intent));
+  } catch {
+    // Best-effort crash/timeout recovery; the API still enforces idempotency.
+  }
+}
+
+function clearPaymentIntent(pubkey: string, itemId: string): void {
+  try {
+    localStorage.removeItem(paymentIntentKey(pubkey, itemId));
+  } catch {
+    // ignore
+  }
 }
 
 /** Decode the configured treasury npub to hex for the scoped spend destination. */
@@ -206,6 +261,7 @@ export function usePetsPurchaseItem(
   externalWallet?: (CashuWalletState & CashuWalletActions) | null,
   onCompanionUpdated?: (event: NostrEvent) => void,
   walletMode?: PetsWalletMode,
+  funding?: PetsPurchaseFunding,
 ) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -321,12 +377,6 @@ export function usePetsPurchaseItem(
         walletSatsCost = split.walletSatsCost;
 
         if (walletSatsCost > 0) {
-          // Both modes pay the 2140 treasury by nutzap. In mainnet mode the
-          // active wallet is the user's real Cashu wallet; in demo mode it is
-          // the BAO signet Cashu wallet (valueless sats on the BAO mint).
-          if (!externalWallet) {
-            throw new Error('External wallet is not available.');
-          }
           const treasuryNpub = config.petsTreasuryNpub;
           if (!treasuryNpub) {
             throw new Error('Pets treasury is not configured.');
@@ -348,38 +398,64 @@ export function usePetsPurchaseItem(
             );
             treasuryPaid = true;
           } else {
-            if (!externalWallet.mintUrl) {
-              throw new Error('Select a mint in your Cashu wallet before buying with sats.');
-            }
             const selectedMintBalance = getSelectedMintBalance(externalWallet);
-            const feeReserve = estimateCashuSendFee(walletSatsCost, externalWallet.wallet ?? null);
+            const feeReserve = estimateCashuSendFee(walletSatsCost, externalWallet?.wallet ?? null);
             const totalNeeded = walletSatsCost + feeReserve;
-            if (selectedMintBalance < totalNeeded) {
-              throw new Error(
-                `Insufficient balance on the selected mint. You need ${walletSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats on ${externalWallet.mintUrl ?? 'the selected mint'}.`
-              );
-            }
-            // Pay the 2140 treasury BEFORE updating the profile so a payment failure
-            // cannot grant a free item. Preferred path: the custodial
-            // balance-debit endpoint (scoped spend, destination user:<treasury>)
-            // — debits the custodial balance server-side on any supported rail.
-            // Falls back to a NIP-60 nutzap while the route isn't deployed.
-            // Nutzaps cannot be clawed back automatically; if the profile
-            // update fails after this point we surface a clear error so
-            // support can refund from the treasury side.
+            const canPayFromNip60 = !!externalWallet?.mintUrl && selectedMintBalance >= totalNeeded;
+
+            // Demo mode prefers the new scoped custodial endpoint. Mainnet
+            // mode must never touch bao.markets' demo ledger; it always pays
+            // with a real NIP-60 nutzap below.
             const treasuryHex = treasuryHexOf(treasuryNpub);
             let paidViaApi = false;
-            if (treasuryHex) {
+            const knownApiBalance = funding?.baoApiCashuBalance;
+            const shouldTryApi = !isCashuMode && !!treasuryHex && (
+              knownApiBalance === undefined ||
+              knownApiBalance >= walletSatsCost ||
+              !canPayFromNip60
+            );
+            if (shouldTryApi && treasuryHex) {
+              const existingIntent = readPaymentIntent(user.pubkey, itemId);
+              if (
+                existingIntent &&
+                (existingIntent.quantity !== quantity || existingIntent.amountSats !== walletSatsCost)
+              ) {
+                throw new Error(
+                  'A previous BAO payment for this item still needs confirmation. Retry the original purchase before changing its quantity.',
+                );
+              }
+              const intent = existingIntent ?? {
+                quantity,
+                amountSats: walletSatsCost,
+                idempotencyKey: generateUUID(),
+              };
+              writePaymentIntent(user.pubkey, itemId, intent);
               try {
                 await sendDemoSats(user!.signer, {
                   rail: 'cashu',
                   amountSats: walletSatsCost,
                   destination: `user:${treasuryHex}`,
-                  idempotencyKey: `pets-shop:${user.pubkey}:${itemId}:${quantity}`,
+                  idempotencyKey: intent.idempotencyKey,
                 });
                 paidViaApi = true;
               } catch (e) {
-                if (!isSendRouteMissing(e)) throw e;
+                const definitiveInsufficient = e instanceof BaoSendError && e.code === 'INSUFFICIENT_BALANCE';
+                if (isSendRouteMissing(e) || definitiveInsufficient) {
+                  clearPaymentIntent(user.pubkey, itemId);
+                } else {
+                  const definitiveClientError = e instanceof BaoSendError &&
+                    e.httpStatus >= 400 && e.httpStatus < 500 &&
+                    e.httpStatus !== 408 && e.httpStatus !== 429;
+                  if (definitiveClientError) {
+                    clearPaymentIntent(user.pubkey, itemId);
+                    throw e;
+                  }
+                  throw new Error(
+                    e instanceof Error
+                      ? `${e.message} Retry Buy to safely check the same BAO payment; the operation key will be reused.`
+                      : 'The BAO payment could not be confirmed. Retry Buy to safely check the same payment.',
+                  );
+                }
               }
             }
             if (paidViaApi) {
@@ -388,36 +464,42 @@ export function usePetsPurchaseItem(
               writePaidPending(user.pubkey, itemId, {
                 quantity,
                 amountSats: walletSatsCost,
+                mintUrl: null,
+                paidAt: Date.now(),
+              });
+              clearPaymentIntent(user.pubkey, itemId);
+              treasuryPaid = true;
+              void funding?.refreshBaoApiBalances?.().catch(() => undefined);
+            } else {
+              if (!externalWallet?.mintUrl) {
+                throw new Error(
+                  isCashuMode
+                    ? 'Select a mint in your Cashu wallet before buying with sats.'
+                    : 'Not enough custodial BAO Cashu or local NIP-60 BAO sats for this purchase.',
+                );
+              }
+              if (!canPayFromNip60) {
+                const railLabel = isCashuMode ? 'selected mint' : 'local NIP-60 BAO mint';
+                throw new Error(
+                  `Insufficient balance on the ${railLabel}. You need ${walletSatsCost.toLocaleString()} sats + ~${feeReserve.toLocaleString()} sats fee (${totalNeeded.toLocaleString()} total) but only have ${selectedMintBalance.toLocaleString()} sats.`,
+                );
+              }
+              const sendResult = await externalWallet.sendNutzap(walletSatsCost, treasuryNpub, externalWallet.mintUrl, {
+                memo: `Pets shop: ${item.name}`,
+              });
+              if (sendResult.status === 'failed') {
+                throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
+              }
+              if (sendResult.status === 'unknown') {
+                throw new Error('The payment outcome is unknown — the mint may still have processed it. Check your Cashu wallet balance first; if it decreased, do NOT pay again and contact support.');
+              }
+              writePaidPending(user.pubkey, itemId, {
+                quantity,
+                amountSats: walletSatsCost,
                 mintUrl: externalWallet.mintUrl,
                 paidAt: Date.now(),
               });
               treasuryPaid = true;
-            } else {
-            const sendResult = await externalWallet.sendNutzap(walletSatsCost, treasuryNpub, externalWallet.mintUrl, {
-              memo: `Pets shop: ${item.name}`,
-            });
-            if (sendResult.status === 'failed') {
-              throw new Error(externalWallet.error ?? 'Payment to the Pets treasury failed.');
-            }
-            if (sendResult.status === 'unknown') {
-              // The mint may have committed the payment. Do NOT grant the item
-              // (the payment may genuinely have failed) but do NOT invite a
-              // blind retry either (it may have gone through — a second
-              // payment cannot be clawed back automatically).
-              throw new Error('The payment outcome is unknown — the mint may still have processed it. Check your Cashu wallet balance first; if it decreased, do NOT pay again and contact support.');
-            }
-            // 'sent' or 'pending': the sats are gone either way — a pending
-            // nutzap is saved and auto-retried until it lands, so the purchase
-            // MUST proceed. Telling the user it failed would invite a retry and
-            // a second payment for the same item. Journal the payment FIRST so
-            // any later failure lets a retry complete delivery without paying again.
-            writePaidPending(user.pubkey, itemId, {
-              quantity,
-              amountSats: walletSatsCost,
-              mintUrl: externalWallet.mintUrl,
-              paidAt: Date.now(),
-            });
-            treasuryPaid = true;
             }
           }
         }
@@ -560,6 +642,7 @@ export function usePetsPurchaseItem(
       // The item landed — any paid-pending journal entry has served its
       // purpose (no-op for fiat purchases that never wrote one).
       clearPaidPending(user.pubkey, itemId);
+      clearPaymentIntent(user.pubkey, itemId);
 
       // Notify the caller about the updated companion so the UI can optimistically
       // refresh the pet's fiat balance.

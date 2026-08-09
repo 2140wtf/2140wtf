@@ -37,7 +37,7 @@ const FALLBACK_ARTIST_PUBKEYS: string[] = [
  *
  * Falls back to a hardcoded subset of artists if the list cannot be fetched.
  */
-export function useCuratedMusicArtists() {
+export function useCuratedMusicArtists(enabled = true) {
   const { nostr } = useNostr();
 
   return useQuery<string[]>({
@@ -59,6 +59,7 @@ export function useCuratedMusicArtists() {
     },
     staleTime: 10 * 60 * 1000, // 10 min
     gcTime: 60 * 60 * 1000, // 1 hr
+    enabled,
     placeholderData: FALLBACK_ARTIST_PUBKEYS,
   });
 }

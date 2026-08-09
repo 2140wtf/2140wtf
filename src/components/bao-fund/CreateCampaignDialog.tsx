@@ -275,7 +275,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
         <DialogHeader>
           <DialogTitle>New fundraising campaign</DialogTitle>
           <DialogDescription>
-            Every milestone becomes a YES/NO prediction market on bao.markets — the market's resolution gates the payout.
+            Choose one gradual payout or split the project into clear milestones that funders can review.
           </DialogDescription>
         </DialogHeader>
 
@@ -306,9 +306,14 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
               onValueChange={(v) => v && setFormat(v as BaoFundraiserFormat)}
               className="justify-start"
             >
-              <ToggleGroupItem value="milestones" className="text-xs">Milestone markets</ToggleGroupItem>
-              <ToggleGroupItem value="stream" className="text-xs">Single shot</ToggleGroupItem>
+              <ToggleGroupItem value="milestones" className="h-auto min-h-9 whitespace-normal text-xs">Milestone plan</ToggleGroupItem>
+              <ToggleGroupItem value="stream" className="h-auto min-h-9 whitespace-normal text-xs">One gradual payout</ToggleGroupItem>
             </ToggleGroup>
+            <p className="text-xs text-muted-foreground">
+              {format === 'stream'
+                ? 'Set one total and a time window. The demo funds unlock gradually over that period.'
+                : 'Split the work into reviewable steps. Each step has its own amount, deadline, and public YES/NO market.'}
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -408,7 +413,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           </div>
 
           {format === 'stream' ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="fr-goal">Goal (sats)</Label>
                 <Input
@@ -433,17 +438,17 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Milestones — each one is a prediction market</Label>
+                <Label>Milestones — each step is reviewed separately</Label>
                 <span className="text-xs text-muted-foreground tabular-nums">Goal: {formatSats(goal)} sats</span>
               </div>
               {milestones.map((m, i) => (
                 <div key={i} className="rounded-md border p-2.5 space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_6rem_auto] items-center gap-2">
                     <Input
                       value={m.title}
                       onChange={(e) => patchMilestone(i, { title: e.target.value })}
                       placeholder={`Milestone ${i + 1}`}
-                      className="flex-1"
+                      className="min-w-0"
                     />
                     <Input
                       value={m.amount}
@@ -483,7 +488,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                       {CRITERIA_MIN - m.criteria.trim().length} more characters needed — the criteria becomes the public market question.
                     </p>
                   )}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Input
                       value={m.deadlineDays}
                       onChange={(e) => patchMilestone(i, { deadlineDays: e.target.value.replace(/[^0-9]/g, '') })}
@@ -491,7 +496,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
                       className="w-20 text-right text-xs"
                     />
                     <span className="text-xs text-muted-foreground">days to deliver (7–50)</span>
-                    <div className="flex-1" />
+                    <div className="hidden flex-1 sm:block" />
                     {/* Runner fee in sats next to the selector — a bare % badge
                         hides what the fee actually costs on this milestone. */}
                     <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -553,8 +558,8 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
             The campaign publishes straight to the ₿AO relay, where bao.markets picks it up
             (usually under 30 seconds — if the bridge is offline it goes directly to the API instead).
             {format === 'stream'
-              ? ' A single-shot campaign has no markets; funds vest linearly over the window.'
-              : ' Every milestone spawns a YES/NO prediction market on bao.markets with demo liquidity seeded by the fund.'}
+              ? ' A one-payout campaign has no markets; its demo funds unlock gradually over the chosen window.'
+              : ' Each milestone creates a YES/NO market on bao.markets. Its result controls that milestone’s demo payout.'}
           </p>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Each AI verification costs ~500–2,000 sats depending on the judge model, deducted from the milestone payout

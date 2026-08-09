@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { getPaginationCursor } from './feedUtils';
+import { getPaginationCursor, selectFeedItemsWithSeed, shouldHideFeedEvent } from './feedUtils';
 
 function ev(created_at: number): NostrEvent {
   return {
@@ -58,5 +58,34 @@ describe('getPaginationCursor', () => {
     const cursor = getPaginationCursor([...recent, ...ancient]);
     // 30 events → index 27 → the first ancient event, not the oldest one.
     expect(cursor).toBeGreaterThan(base - 2 * DAY);
+  });
+});
+
+describe('feed event filtering', () => {
+  it('does not hide an ordinary text note', () => {
+    expect(shouldHideFeedEvent(ev(123))).toBe(false);
+  });
+
+  it('does not impose client-wide author or domain bans', () => {
+    expect(shouldHideFeedEvent({
+      ...ev(123),
+      content: 'Read the syndicated story at https://nostrmag.com/example',
+    })).toBe(false);
+    expect(shouldHideFeedEvent({
+      ...ev(123),
+      tags: [['r', 'https://www.nostrmag.com/story']],
+    })).toBe(false);
+  });
+});
+
+describe('selectFeedItemsWithSeed', () => {
+  it('does not show the core-feed cache while a curated topic loads', () => {
+    const cachedCoreFeed = ['old core post'];
+    expect(selectFeedItemsWithSeed([], cachedCoreFeed, false)).toEqual([]);
+    expect(selectFeedItemsWithSeed([], cachedCoreFeed, true)).toEqual(cachedCoreFeed);
+  });
+
+  it('always prefers results from the active query', () => {
+    expect(selectFeedItemsWithSeed(['topic post'], ['old core post'], false)).toEqual(['topic post']);
   });
 });

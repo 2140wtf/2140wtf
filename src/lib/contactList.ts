@@ -109,3 +109,11 @@ export function contactListPubkeys(event: NostrEvent | null | undefined): string
     .map(([, pk]) => pk)
     .filter(isNostrId);
 }
+
+/** Whether a contact list is large enough to produce a useful Follows feed. */
+export function hasMinimumFollows(
+  event: NostrEvent | null | undefined,
+  minimum = 5,
+): boolean {
+  return new Set(contactListPubkeys(event)).size >= minimum;
+}

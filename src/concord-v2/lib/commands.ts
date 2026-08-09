@@ -5,7 +5,7 @@
  * Everything that surfaces a command renders from THIS table:
  *   - `bao-agent help` / `bao-agent help <cmd>` (the CLI)
  *   - `bao-agent shell` (the REPL's tab-completion + help)
- *   - the web app's `/` command palette (filtered by scope + access)
+ *   - the web app's `/` Terminal (filtered by scope + access)
  *   - the MCP server's tool list
  *   - `public/AGENTS.md`'s command reference (generated — never hand-edited)
  *
@@ -368,7 +368,7 @@ export function findCommand(verb: string): BaoCommand | undefined {
   return BAO_COMMANDS.find((c) => c.verb === verb);
 }
 
-/** Commands a role can run within a community, for the `/` palette. */
+/** Commands a role can run within a community, for the `/` Terminal. */
 export function commandsFor(scope: CommandScope, access: CommandAccess): BaoCommand[] {
   const rank: Record<CommandAccess, number> = { anyone: 0, member: 1, admin: 2, owner: 3 };
   const have = rank[access] ?? 0;
