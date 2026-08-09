@@ -42,8 +42,10 @@ import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
 import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useWallet } from '@/hooks/useWallet';
 import { useNWC } from '@/hooks/useNWCContext';
+import { useSearchProfiles, type SearchProfile } from '@/hooks/useSearchProfiles';
 import { totalBaoApiBalance, BaoSendError, isSendRouteMissing, sendDemoSats, type BaoSendRail, type BaoWalletBalances } from '@/lib/baoWalletApi';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
+import { tryNpubEncode } from '@/lib/safeNip19';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
 import type { Transaction } from '@/lib/cashu/storage';
@@ -69,12 +71,24 @@ const SEND_RAILS: Array<{ id: BaoSendRail; label: string }> = [
 function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => void }) {
   const { toast } = useToast();
   const [destination, setDestination] = useState('');
+  const [selectedRecipient, setSelectedRecipient] = useState<SearchProfile | null>(null);
   const [amount, setAmount] = useState('2140');
   const [rail, setRail] = useState<BaoSendRail>('cashu');
   const [busy, setBusy] = useState(false);
   // One idempotency key per in-flight intent: a retry after an ambiguous
   // failure replays server-side instead of debiting twice.
   const idemRef = useRef<string | null>(null);
+  const directRecipient = /^(?:npub1[0-9a-z]+|[0-9a-f]{64})$/i.test(destination.trim());
+  const { data: recipientResults, isLoading: isSearchingRecipients } = useSearchProfiles(
+    selectedRecipient || directRecipient ? '' : destination,
+  );
+
+  const selectRecipient = (profile: SearchProfile) => {
+    const npub = tryNpubEncode(profile.pubkey);
+    if (!npub) return;
+    setSelectedRecipient(profile);
+    setDestination(npub);
+  };
 
   const submit = async () => {
     const amountSats = parseInt(amount, 10) || 0;
@@ -139,10 +153,46 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
           <Input
             id='bao-send-dest'
             value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder='npub1…'
+            onChange={(e) => {
+              setSelectedRecipient(null);
+              setDestination(e.target.value);
+            }}
+            placeholder='Search name, NIP-05, or paste npub1…'
             autoComplete='off'
           />
+          {!selectedRecipient && destination.trim().length > 0 && (
+            <div className='rounded-lg border bg-background shadow-sm' role='listbox' aria-label='Recipient search results'>
+              {isSearchingRecipients ? (
+                <p className='flex items-center gap-2 p-3 text-xs text-muted-foreground'>
+                  <Loader2 className='size-3.5 animate-spin' /> Searching public profiles…
+                </p>
+              ) : recipientResults && recipientResults.length > 0 ? (
+                <div className='max-h-52 overflow-y-auto py-1'>
+                  {recipientResults.map((profile) => {
+                    const name = profile.metadata.name || profile.metadata.display_name || 'Anonymous';
+                    const npub = tryNpubEncode(profile.pubkey);
+                    if (!npub) return null;
+                    return (
+                      <button
+                        key={profile.pubkey}
+                        type='button'
+                        role='option'
+                        className='flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted'
+                        onClick={() => selectRecipient(profile)}
+                      >
+                        <span className='text-sm font-medium'>{name}</span>
+                        <span className='text-xs text-muted-foreground'>
+                          {profile.metadata.nip05 || `${npub.slice(0, 14)}…`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className='p-3 text-xs text-muted-foreground'>No public profile match. You can still paste an npub or hex pubkey.</p>
+              )}
+            </div>
+          )}
         </div>
         <div className='flex gap-3'>
           <div className='space-y-1.5 flex-1'>
