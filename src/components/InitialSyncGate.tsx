@@ -117,7 +117,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   if (phase === "syncing" || phase === "found") {
     return (
       <OnboardingContext.Provider value={contextValue}>
-        <SyncScreen phase={phase} onSkip={phase === "syncing" ? markComplete : undefined} />
+        <SyncScreen phase={phase} />
       </OnboardingContext.Provider>
     );
   }
@@ -168,18 +168,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
 // Sync Screen
 // ---------------------------------------------------------------------------
 
-function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }) {
-  const [showSkip, setShowSkip] = useState(false);
-
-  useEffect(() => {
-    if (phase !== "syncing") {
-      setShowSkip(false);
-      return;
-    }
-    const id = setTimeout(() => setShowSkip(true), 6000);
-    return () => clearTimeout(id);
-  }, [phase]);
-
+function SyncScreen({ phase }: { phase: SyncPhase }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-8 px-6 text-center max-w-sm">
@@ -211,21 +200,14 @@ function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }
         </div>
 
         {phase === "syncing" && (
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"
-                  style={{ animationDelay: `${i * 200}ms` }}
-                />
-              ))}
-            </div>
-            {showSkip && onSkip && (
-              <Button variant="outline" size="sm" className="rounded-none" onClick={onSkip}>
-                Continue without syncing
-              </Button>
-            )}
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"
+                style={{ animationDelay: `${i * 200}ms` }}
+              />
+            ))}
           </div>
         )}
 
@@ -245,6 +227,11 @@ function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }
 // ---------------------------------------------------------------------------
 
 const PRIMAL_PACK_AUTHOR = "532d830dffe09c13e75e8b145c825718fc12b0003f61d61e9077721c7fff93cb";
+const ONBOARDING_PACK_RELAYS = [
+  "wss://relay.bao.network",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+] as const;
 const MINIMUM_FOLLOWS = 5;
 const FEATURED_CREATORS = [
   { pubkey: "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", label: "fiatjaf", role: "Creator of Nostr" },
@@ -925,7 +912,9 @@ function FollowsStep({
   const { isEnabled } = usePublishPreferences();
 
   const [packs, setPacks] = useState<NostrEvent[]>(SUGGESTED_PACKS);
-  const [selectedPubkeys, setSelectedPubkeys] = useState<Set<string>>(() => new Set());
+  const [selectedPubkeys, setSelectedPubkeys] = useState<Set<string>>(
+    () => new Set(FEATURED_CREATORS.map((person) => person.pubkey)),
+  );
   const [isFollowing, setIsFollowing] = useState(false);
 
   const selectedPubkeyCount = selectedPubkeys.size;
@@ -934,7 +923,8 @@ function FollowsStep({
     let cancelled = false;
     const loadSubjectPacks = async () => {
       try {
-        const events = await nostr.query([{
+        const packSource = nostr.group([...ONBOARDING_PACK_RELAYS]);
+        const events = await packSource.query([{
           kinds: [39089],
           authors: [PRIMAL_PACK_AUTHOR],
           limit: 100,
@@ -1192,7 +1182,7 @@ function CompactPersonPill({
   selected: boolean;
   onToggle: () => void;
 }) {
-  const author = useAuthor(pubkey);
+  const author = useAuthor(pubkey, ONBOARDING_PACK_RELAYS);
   const metadata = author.data?.metadata;
   const name = fallbackName || metadata?.display_name || metadata?.name || genUserName(pubkey);
   const picture = sanitizeUrl(metadata?.picture);
@@ -1243,7 +1233,7 @@ function PackCard({
 
   // Show first 6 member avatars
   const previewPubkeys = useMemo(() => pubkeys.slice(0, 6), [pubkeys]);
-  const { data: membersMap } = useAuthors(previewPubkeys);
+  const { data: membersMap } = useAuthors(previewPubkeys, ONBOARDING_PACK_RELAYS);
 
   return (
     <button

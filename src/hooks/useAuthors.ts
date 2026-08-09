@@ -21,7 +21,7 @@ export interface AuthorData {
  * @param pubkeys - Array of pubkeys to fetch profiles for
  * @returns Query result with map of pubkey -> AuthorData
  */
-export function useAuthors(pubkeys: string[]) {
+export function useAuthors(pubkeys: string[], relays?: readonly string[]) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { store } = useNostrStorage();
@@ -29,6 +29,7 @@ export function useAuthors(pubkeys: string[]) {
   // Deduplicate and sort for a stable query key
   const uniquePubkeys = [...new Set(pubkeys)].sort();
   const pubkeysKey = uniquePubkeys.join(',');
+  const relaysKey = relays?.join(',') ?? '';
 
   // Seed from the local event store so known profiles render immediately,
   // without waiting on the network. Runs in parallel with the query below;
@@ -55,7 +56,7 @@ export function useAuthors(pubkeys: string[]) {
       }
 
       // Seed/merge the batched Map result too.
-      queryClient.setQueryData<Map<string, AuthorData>>(['authors', pubkeysKey], (prev) => {
+      queryClient.setQueryData<Map<string, AuthorData>>(['authors', pubkeysKey, relaysKey], (prev) => {
         const next = new Map<string, AuthorData>(prev ?? uniquePubkeys.map((pubkey) => [pubkey, { pubkey }]));
         for (const event of cachedEvents) {
           const existing = next.get(event.pubkey);
@@ -71,10 +72,10 @@ export function useAuthors(pubkeys: string[]) {
     return () => {
       cancelled = true;
     };
-  }, [pubkeysKey, uniquePubkeys, store, queryClient]);
+  }, [pubkeysKey, uniquePubkeys, relaysKey, store, queryClient]);
 
   return useQuery<Map<string, AuthorData>>({
-    queryKey: ['authors', pubkeysKey],
+    queryKey: ['authors', pubkeysKey, relaysKey],
     queryFn: async ({ signal }) => {
       if (uniquePubkeys.length === 0) {
         return new Map();
@@ -89,7 +90,8 @@ export function useAuthors(pubkeys: string[]) {
 
       // Query all profiles. The AppPool will automatically
       // combine this with any other concurrent kind:0 queries.
-      const events = await nostr.query(
+      const source = relays?.length ? nostr.group([...relays]) : nostr;
+      const events = await source.query(
         [{ kinds: [0], authors: uniquePubkeys, limit: uniquePubkeys.length }],
         { signal },
       );

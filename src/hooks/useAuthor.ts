@@ -24,6 +24,7 @@ export function authorQueryOptions(
   queryClient: QueryClient,
   eventStore: EventStoreContextType,
   pubkey: string | undefined,
+  relays?: readonly string[],
 ) {
   return {
     queryKey: ['author', pubkey ?? ''] as [string, string],
@@ -34,7 +35,8 @@ export function authorQueryOptions(
 
       const store = await eventStore;
 
-      const [event] = await nostr.query(
+      const source = relays?.length ? nostr.group([...relays]) : nostr;
+      const [event] = await source.query(
         [{ kinds: [0], authors: [pubkey], limit: 1 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) },
       );
@@ -85,7 +87,7 @@ export function parseAuthorEvent(event: NostrEvent): { event: NostrEvent; metada
   }
 }
 
-export function useAuthor(pubkey: string | undefined) {
+export function useAuthor(pubkey: string | undefined, relays?: readonly string[]) {
   const { nostr } = useNostr();
   const queryClient = useQueryClient();
   const { store } = useNostrStorage();
@@ -105,5 +107,6 @@ export function useAuthor(pubkey: string | undefined) {
     queryClient,
     Promise.resolve(store),
     pubkey,
+    relays,
   ));
 }
