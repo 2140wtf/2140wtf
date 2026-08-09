@@ -126,4 +126,22 @@ describe('parseRepoRef — control-vs-data, fail-closed', () => {
   it('rejects raw percent-encoding leftovers in ngit identifiers', () => {
     expect(parseRepoRef(`nostr://${NPUB}/owner/repo%zz`)).toBeUndefined();
   });
+
+  it('canonicalizes trailing slashes after decode (percent-encoded %2F)', () => {
+    const plain = parseRepoRef(`nostr://${NPUB}/github/alice/repo`)!;
+    const slash = parseRepoRef(`nostr://${NPUB}/github/alice/repo/`)!;
+    const pct = parseRepoRef(`nostr://${NPUB}/github/alice/repo%2F`)!;
+    // All three spellings of the same repo must collapse to one coordinate.
+    expect(slash.coordinate).toBe(plain.coordinate);
+    expect(pct.coordinate).toBe(plain.coordinate);
+    expect(slash.identifier).toBe('github/alice/repo');
+    expect(pct.identifier).toBe('github/alice/repo');
+  });
+
+  it('does not strip the raw source / root slash (a bare `nostr://npub/` is a repo id, not empty)', () => {
+    // `nostr://<npub>/repo` where repo is the whole id — remains a single segment.
+    const ref = parseRepoRef(`nostr://${NPUB}/repo///`)!;
+    expect(ref.identifier).toBe('repo');
+    expect(ref.coordinate).toBe(`30617:${OWNER}:repo`);
+  });
 });
