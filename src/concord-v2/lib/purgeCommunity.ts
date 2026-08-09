@@ -22,6 +22,7 @@ import type { CommunityV2 } from "@/concord-v2/lib/types";
 import { deleteFoldedWhere } from "@/lib/foldedCache";
 import { mirrorGroups } from "@/concord-v2/lib/relayMirror";
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
+import { KIND_INVITE_BUNDLE, KIND_STREAM_SPONSORSHIP, KIND_WRAP } from "@/concord-v2/lib/kinds";
 
 interface RemotePurgeRelay {
   relay(url: string): {
@@ -35,11 +36,35 @@ export interface RemotePurgeReport {
   requested: number;
   accepted: number;
   failed: number;
+  remaining: number;
+  unverified: number;
+  relays: Array<{
+    url: string;
+    found: number;
+    requested: number;
+    accepted: number;
+    remaining: number;
+    verified: boolean;
+  }>;
 }
 
 const PURGE_QUERY_LIMIT = 5000;
 const PURGE_AUTHOR_CHUNK = 100;
 const PURGE_TAG_CHUNK = 100;
+
+function addressableCoordinate(event: NostrEvent): string | undefined {
+  if (event.kind < 30_000 || event.kind >= 40_000) return undefined;
+  const d = event.tags.find((tag) => tag[0] === "d")?.[1];
+  return d === undefined ? undefined : `${event.kind}:${event.pubkey}:${d}`;
+}
+
+/** NIP-09 uses `a` for addressable events so every stored revision is covered. */
+export function purgeDeletionTags(events: NostrEvent[]): string[][] {
+  return events.flatMap((event) => {
+    const coordinate = addressableCoordinate(event);
+    return [coordinate ? ["a", coordinate] : ["e", event.id], ["k", String(event.kind)]];
+  });
+}
 
 /** The minimal signer surface for a caller-signed purge (matches NUser's signer). */
 export interface PurgeCallerSigner {
@@ -77,20 +102,44 @@ export async function purgeCommunityRemote(
   for (const [pubkey, sk] of signerKeys) keys.set(pubkey, sk);
   const authors = [...keys.keys()];
   const relays = [...new Set([...community.relays, ...relayHints])];
-  const perRelay = await Promise.all(relays.map(async (url): Promise<RemotePurgeReport> => {
-    const events = new Map<string, NostrEvent>();
-    for (let i = 0; i < authors.length; i += PURGE_AUTHOR_CHUNK) {
-      const chunk = authors.slice(i, i + PURGE_AUTHOR_CHUNK);
-      try {
-        const found = await nostr.relay(url).query(
-          [{ kinds: [1059, 33301], authors: chunk, limit: PURGE_QUERY_LIMIT }],
-          { signal: AbortSignal.timeout(15_000) },
-        );
-        for (const event of found) events.set(event.id, event);
-      } catch {
-        // One unavailable relay must not prevent deletion requests elsewhere.
+  const linkSponsorTags = [...signerKeys.keys()].map((pubkey) => `link:${pubkey}`);
+  const perRelay = await Promise.all(relays.map(async (url) => {
+    const queryTargets = async (): Promise<{ events: Map<string, NostrEvent>; complete: boolean }> => {
+      const targets = new Map<string, NostrEvent>();
+      let complete = true;
+      for (let i = 0; i < authors.length; i += PURGE_AUTHOR_CHUNK) {
+        const chunk = authors.slice(i, i + PURGE_AUTHOR_CHUNK);
+        try {
+          const found = await nostr.relay(url).query(
+            [{ kinds: [KIND_WRAP, KIND_INVITE_BUNDLE], authors: chunk, limit: PURGE_QUERY_LIMIT }],
+            { signal: AbortSignal.timeout(15_000) },
+          );
+          for (const event of found) targets.set(event.id, event);
+        } catch {
+          complete = false;
+        }
       }
-    }
+      if (callerSigner) {
+        try {
+          const sponsorships = await nostr.relay(url).query(
+            [{
+              kinds: [KIND_STREAM_SPONSORSHIP],
+              authors: [community.owner],
+              "#d": [community.idHex, ...linkSponsorTags],
+              limit: PURGE_QUERY_LIMIT,
+            }],
+            { signal: AbortSignal.timeout(15_000) },
+          );
+          for (const event of sponsorships) targets.set(event.id, event);
+        } catch {
+          complete = false;
+        }
+      }
+      return { events: targets, complete };
+    };
+
+    const before = await queryTargets();
+    const events = before.events;
     const byAuthor = new Map<string, NostrEvent[]>();
     for (const event of events.values()) {
       const list = byAuthor.get(event.pubkey) ?? [];
@@ -118,7 +167,7 @@ export async function purgeCommunityRemote(
         await sendDeletion(finalizeEvent({
           kind: 5,
           content: "",
-          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          tags: purgeDeletionTags(batch),
           created_at: Math.floor(Date.now() / 1000),
         }, sk));
       }
@@ -133,22 +182,34 @@ export async function purgeCommunityRemote(
         await sendDeletion(await callerSigner.signEvent({
           kind: 5,
           content: "",
-          tags: batch.flatMap((event) => [["e", event.id], ["k", String(event.kind)]]),
+          tags: purgeDeletionTags(batch),
           created_at: Math.floor(Date.now() / 1000),
         }));
       }
     }
-    return { found: events.size, requested, accepted, failed: requested - accepted };
+    const after = accepted > 0 ? await queryTargets() : before;
+    const remaining = after.events.size;
+    return {
+      url,
+      found: events.size,
+      requested,
+      accepted,
+      remaining,
+      verified: before.complete && after.complete,
+    };
   }));
-  return perRelay.reduce(
+  const totals = perRelay.reduce(
     (report, current) => ({
       found: report.found + current.found,
       requested: report.requested + current.requested,
       accepted: report.accepted + current.accepted,
       failed: report.failed + current.requested - current.accepted,
+      remaining: report.remaining + current.remaining,
+      unverified: report.unverified + (current.verified ? 0 : 1),
     }),
-    { found: 0, requested: 0, accepted: 0, failed: 0 },
+    { found: 0, requested: 0, accepted: 0, failed: 0, remaining: 0, unverified: 0 },
   );
+  return { ...totals, relays: perRelay };
 }
 
 /**

@@ -856,8 +856,10 @@ export interface Transaction {
   /** Payment request needed to restore an open mint quote after reload. */
   paymentRequest?: string;
   /** NUT-20 per-quote signing key. Stored only inside the encrypted
-   * transaction envelope; never render, log, or publish it. */
+   * transaction envelope and encrypted NIP-60 quote events; never render or log it. */
   quotePrivateKey?: string;
+  /** Event id of the encrypted NIP-60 kind:7374 backing this pending quote. */
+  quoteEventId?: string;
   /** Shared id for every leg of one atomic NUT-15 multi-mint payment. */
   mppGroupId?: string;
   /** This mint's partial payment amount in millisats. */
@@ -1119,6 +1121,7 @@ export function isValidTransaction(t: unknown, _namespace?: string): t is Transa
     (tx.quoteId !== undefined && (typeof tx.quoteId !== 'string' || tx.quoteId.length > 1000)) ||
     (tx.paymentRequest !== undefined && (typeof tx.paymentRequest !== 'string' || tx.paymentRequest.length > 10000)) ||
     (tx.quotePrivateKey !== undefined && (typeof tx.quotePrivateKey !== 'string' || !/^[0-9a-f]{64}$/.test(tx.quotePrivateKey))) ||
+    (tx.quoteEventId !== undefined && (typeof tx.quoteEventId !== 'string' || !/^[0-9a-f]{64}$/.test(tx.quoteEventId))) ||
     typeof tx.createdAt !== 'number' ||
     !Number.isFinite(tx.createdAt) ||
     !Number.isInteger(tx.createdAt) ||
