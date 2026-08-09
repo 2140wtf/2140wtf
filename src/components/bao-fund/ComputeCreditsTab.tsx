@@ -704,7 +704,7 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
       try {
         await sendMessage({
           recipientPubkey: request.pubkey,
-          content: `₿AO compute credits for your request "${request.purpose.slice(0, 60)}" (${formatSats(fundAmount)} sats${isDoubleShot ? `, milestone ${fundShot}/2` : ''}).\n\n${redeemHint}\n\n${cashuToken}`,
+          content: `₿AO compute credits for request ${request.id} ("${request.purpose.slice(0, 60)}") — ${formatSats(fundAmount)} sats${isDoubleShot ? `, milestone ${fundShot}/2` : ''}.\n\n${redeemHint}\n\n${cashuToken}`,
         });
         setDmState('sent');
       } catch {
