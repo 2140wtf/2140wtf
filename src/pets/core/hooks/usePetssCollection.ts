@@ -31,6 +31,7 @@ type PetsCollectionData = {
  * Module-scoped so every collection consumer shares the dedupe.
  */
 const repatriatedEventIds = new Set<string>();
+const failedRepatriationEventIds = new Set<string>();
 
 /**
  * Split an array into chunks of a given size.
@@ -118,95 +119,27 @@ export function usePetssCollection(dList?: string[] | undefined) {
     }));
   }, [mode, sortedDList, user?.pubkey]);
 
-  // Restore the complete authored collection from IndexedDB immediately. The
-  // relay refresh below remains authoritative, but route navigation no longer
-  // hides an existing pet behind a network skeleton.
-  useEffect(() => {
-    if (!user?.pubkey || collectionFilters.length === 0) return;
-    let cancelled = false;
-    void store.query(collectionFilters).then((events) => {
-      if (cancelled || events.length === 0) return;
-      queryClient.setQueryData<PetsCollectionData>(queryKey, (current) => {
-        const currentEvents = current?.companions.map((companion) => companion.event) ?? [];
-        return buildPetsCollection([...events, ...currentEvents]);
-      });
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [collectionFilters, queryClient, queryKey, store, user?.pubkey]);
-  
   // Main query to fetch companions from relays
   const query = useQuery({
     queryKey: ['pets-collection', user?.pubkey, queryKeySegment],
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       if (!user?.pubkey) {
         console.log('[usePetssCollection] No pubkey, returning empty');
         return { companionsByD: {}, companions: [] };
       }
-      
-      let allEvents: NostrEvent[];
-      
-      if (mode === 'all') {
-        // Fetch ALL the user's pets events — author is the source of truth
-        const filter = {
-          kinds: [KIND_PETS_STATE],
-          authors: [user.pubkey],
-          '#b': [PETS_ECOSYSTEM_NAMESPACE],
-        };
-        
-        console.log('[Pets] 31124 query filter (all):', JSON.stringify(filter, null, 2));
-        
-        allEvents = await queryPetsRelay(nostr, [filter], {
-          signal: AbortSignal.any([signal, AbortSignal.timeout(PETS_READ_TIMEOUT_MS)]),
-        }).catch(() => []);
-        
-        console.log('[usePetssCollection] Fetch-all returned', allEvents.length, 'events');
-      } else {
-        // Fetch by specific d-tags (for companion layer etc.)
-        if (!sortedDList || sortedDList.length === 0) {
-          console.log('[usePetssCollection] Empty dList, returning empty');
-          return { companionsByD: {}, companions: [] };
-        }
-        
-        console.log('[Pets] dList:', sortedDList);
-        
-        const chunks = chunkArray(sortedDList, CHUNK_SIZE);
-        console.log('[usePetssCollection] Splitting into', chunks.length, 'chunk(s)');
-        
-        allEvents = [];
-        
-        for (const chunk of chunks) {
-          const filter = {
-            kinds: [KIND_PETS_STATE],
-            authors: [user.pubkey],
-            '#d': chunk,
-          };
-          
-          console.log('[Pets] 31124 query filter:', JSON.stringify(filter, null, 2));
-          
-          const events = await queryPetsRelay(nostr, [filter], {
-            signal: AbortSignal.any([signal, AbortSignal.timeout(PETS_READ_TIMEOUT_MS)]),
-          }).catch(() => []);
-          allEvents.push(...events);
-          
-          console.log('[usePetssCollection] Chunk returned', events.length, 'events');
-        }
+
+      // A genuine refetch is the retry boundary for failed re-broadcasts.
+      const existing = queryClient.getQueryData<PetsCollectionData>(queryKey);
+      for (const companion of existing?.companions ?? []) {
+        failedRepatriationEventIds.delete(companion.event.id);
       }
       
-      console.log('[usePetssCollection] Total events received:', allEvents.length);
-
-      // A relay miss must not erase the progressive IndexedDB seed. Merge both
-      // sources and let the newest event for each d-tag win.
       const cachedEvents = collectionFilters.length > 0
         ? await store.query(collectionFilters).catch(() => [] as NostrEvent[])
         : [];
-      const collection = buildPetsCollection([...cachedEvents, ...allEvents]);
-      
-      console.log('[usePetssCollection] Parsed companions:', {
-        count: collection.companions.length,
-        dTags: Object.keys(collection.companionsByD),
-      });
-      
-      return collection;
+      const current = queryClient.getQueryData<PetsCollectionData>(queryKey);
+      const currentEvents = current?.companions.map((companion) => companion.event) ?? [];
+      return buildPetsCollection([...currentEvents, ...cachedEvents]);
     },
     enabled: !!user?.pubkey && (mode === 'all' || (!!sortedDList && sortedDList.length > 0)),
     staleTime: 30_000, // 30 seconds
@@ -214,7 +147,33 @@ export function usePetssCollection(dList?: string[] | undefined) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     retry: false,
+    // Render the page shell immediately. The query replaces this with the
+    // IndexedDB collection and then the detached relay refresh.
+    initialData: { companionsByD: {}, companions: [] },
+    initialDataUpdatedAt: 0,
   });
+
+  // Refresh relays independently of the local-store query. Both can update
+  // the same progressive cache without either being on the render path.
+  useEffect(() => {
+    if (!user?.pubkey || collectionFilters.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const relayEvents: NostrEvent[] = [];
+      for (const filter of collectionFilters) {
+        const events = await queryPetsRelay(nostr, [filter], {
+          signal: AbortSignal.timeout(PETS_READ_TIMEOUT_MS),
+        }).catch(() => [] as NostrEvent[]);
+        relayEvents.push(...events);
+      }
+      if (cancelled || relayEvents.length === 0) return;
+      queryClient.setQueryData<PetsCollectionData>(queryKey, (current) => {
+        const currentEvents = current?.companions.map((companion) => companion.event) ?? [];
+        return buildPetsCollection([...currentEvents, ...relayEvents]);
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [collectionFilters, nostr, queryClient, queryKey, user?.pubkey]);
   
   // ─── Repatriation pass ─────────────────────────────────────────────────────
   // Pet events published while a relay was (temporarily) in the effective set
@@ -238,15 +197,17 @@ export function usePetssCollection(dList?: string[] | undefined) {
     if (relayUrls.length === 0) return;
     for (const companion of fetchedCompanions) {
       const event = companion.event;
-      if (!event || repatriatedEventIds.has(event.id)) continue;
+      if (!event || repatriatedEventIds.has(event.id) || failedRepatriationEventIds.has(event.id)) continue;
       repatriatedEventIds.add(event.id);
       nostr.group(relayUrls).event(event, { signal: AbortSignal.timeout(10_000) }).catch((err) => {
-        // Allow a later fetch to retry.
+        // Retry on the next genuine query refetch, not on incidental cache
+        // merges from the parallel IndexedDB/relay restoration paths.
         repatriatedEventIds.delete(event.id);
+        failedRepatriationEventIds.add(event.id);
         console.warn('[usePetssCollection] repatriation publish failed:', err);
       });
     }
-  }, [fetchedCompanions, petsPublishEnabled, user?.pubkey, nostr, config.relayMetadata, config.useAppRelays, config.useUserRelays]);
+  }, [fetchedCompanions, petsPublishEnabled, user?.pubkey, nostr, config.relayMetadata, config.useAppRelays, config.useUserRelays, query.isFetching]);
 
   // Helper to invalidate and refetch after publishing.
   // NOTE: In most mutation paths this is no longer needed — the read-modify-write
