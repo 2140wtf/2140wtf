@@ -56,9 +56,9 @@ export function useBaoPetStarterGrant(options: UseBaoPetStarterGrantOptions = {}
   // actual claim.
   const baoWallet = useBaoCashuWallet(
     seedPhrase ?? '',
-    baoWalletUser ?? ({ pubkey: '', signer: undefined } as unknown as NUser),
+    baoWalletUser ?? undefined,
     relayUrls,
-    { enableAutoClaim: enabled },
+    { enableAutoClaim: enabled, enabled: enabled && !!baoWalletUser && !!seedPhrase },
   );
 
   return useMutation({

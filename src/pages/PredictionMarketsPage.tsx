@@ -412,8 +412,8 @@ export function PredictionMarketsPage(): React.JSX.Element {
         title="₿AO MARKETS"
         icon={<BarChart3 className="size-5" />}
       >
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="size-3.5" /> Create market
+        <Button size="sm" variant="outline" className="gap-1.5 px-2 sm:px-3" onClick={() => setCreateOpen(true)} aria-label="Create market">
+          <Plus className="size-3.5" /> <span className="hidden sm:inline">Create market</span>
         </Button>
         {isFetching && (
           <Box
