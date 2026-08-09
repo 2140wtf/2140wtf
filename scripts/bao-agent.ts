@@ -66,7 +66,7 @@ import {
   statePath,
   waitForInterrupt,
 } from "./chat-core";
-import { fulfillCredits, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
+import { fulfillCredits, listCreditInbox, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey } from "./work-core";
 import {
   loadState as loadParadiseState,
   readFuel,
@@ -409,6 +409,15 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         printWorkListing(await listWork(loadState(as)), json);
         break;
       }
+      if (sub === "inbox") {
+        const messages = await listCreditInbox(loadState(as));
+        if (json) console.log(JSON.stringify(messages));
+        else if (messages.length === 0) console.log("No compute-credit DMs found.");
+        else for (const message of messages) {
+          console.log(`  ${message.eventId.slice(0, 12)}… ${message.requestId ? `request ${message.requestId.slice(0, 12)}…` : "unmatched request"} ${message.token ? "Cashu token received" : "no token found"}`);
+        }
+        break;
+      }
       if (sub === "request") {
         const amountSats = Number(pos[1]);
         const purpose = pos.slice(2).join(" ");
@@ -438,7 +447,7 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
         break;
       }
-      throw new Error("work needs: list | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+      throw new Error("work needs: list | inbox | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
     }
     case "wallet": {
       const state = loadState(as);
