@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
-- New-user onboarding no longer shows a sparse recent-activity block.
+- New-user onboarding removes the sparse activity block and consolidates news suggestions into one follow pack.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
 - Relay-discovered ₿AO markets restore odds from public SMJ history when settled pools clear live counters.
 - Opening ₿AO Fund while logged out no longer crashes.
