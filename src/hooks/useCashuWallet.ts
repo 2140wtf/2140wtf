@@ -55,19 +55,18 @@ import {
   buildNutzapInfoEvent,
   buildNutzapEvent,
   buildNutzapRedemptionHistoryEvent,
+  parseWalletConfigEvents,
   parseTokenEvent,
   parseNutzapInfoEvent,
   parseNutzapEvent,
   restoreNip60Wallet,
   restoreMintQuoteEvents,
   computeContentHash,
-  loadLastWalletConfigHash,
   saveLastWalletConfigHash,
   loadLastNutzapInfoHash,
   saveLastNutzapInfoHash,
   loadLastTokenEventId,
   saveLastTokenEventId,
-  loadLastTokenEventHash,
   saveLastTokenEventHash,
   restoreCrossAppNip60Wallet,
   resolveMintAlias,
@@ -104,6 +103,7 @@ export interface CashuWalletState {
   error: string;
   success: string;
   backupStatus: 'idle' | 'syncing' | 'synced' | 'failed';
+  nip60Status: 'idle' | 'verifying' | 'verified' | 'failed';
   lastBackupAt: number | null;
   nutzaps: NostrEvent[];
 }
@@ -195,6 +195,8 @@ export interface CashuWalletActions {
   clearError: () => void;
   clearSuccess: () => void;
   restoreFromBackup: (payload: CashuBackupPayload) => Promise<void>;
+  /** Recover deterministic proofs directly from configured mints (NUT-09). */
+  recoverFromMints: () => Promise<number>;
 }
 
 /* ── Module-scope helpers ─────────────────────────────────── */
@@ -343,6 +345,7 @@ export function useCashuWallet(
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [nutzaps, setNutzaps] = useState<NostrEvent[]>([]);
   const [backupStatus, setBackupStatus] = useState<'idle' | 'syncing' | 'synced' | 'failed'>('idle');
+  const [nip60Status, setNip60Status] = useState<'idle' | 'verifying' | 'verified' | 'failed'>('idle');
   const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
   const seedPhraseRef = useRef('');
   const bip39SeedRef = useRef<Uint8Array | null>(null);
@@ -971,6 +974,7 @@ export function useCashuWallet(
         // they skip kind:10019/17375 config sync here and instead mirror the
         // wallet bao.markets publishes on the BAO relay (cross-app restore).
         if (!cancelled && nip60SyncRef.current && nip60WalletKeyRef.current && !isBaoNamespaceRef.current) {
+          if (mountedRef.current) setNip60Status('verifying');
           try {
             const loadedCustomMints = await storageRef.current.loadCustomMints(key, legacyEncKeyRef.current ?? undefined);
             const priorAllMints = allMintsRef.current;
@@ -993,8 +997,8 @@ export function useCashuWallet(
               }
               nip60RestoredRef.current = true;
             }
-            await syncNip60WalletConfig();
-            await syncAllNip60Tokens();
+            const configVerified = await syncNip60WalletConfig();
+            const tokensVerified = await syncAllNip60Tokens();
             if (nutzapsAdEnabledRef.current) {
               await publishNip60NutzapInfo();
             } else {
@@ -1002,8 +1006,10 @@ export function useCashuWallet(
               await clearNip60NutzapInfo();
             }
             allMintsRef.current = priorAllMints;
+            if (mountedRef.current) setNip60Status(configVerified && tokensVerified ? 'verified' : 'failed');
           } catch (e) {
             devLog.error('NIP-60 init sync failed:', e);
+            if (mountedRef.current) setNip60Status('failed');
           }
         }
 
@@ -1461,8 +1467,10 @@ export function useCashuWallet(
       // Replace every remote token event for this mint, not just the last local
       // one. Otherwise stale events from other devices or restores stay on relays
       // and converge back into the wallet as duplicate/spent proofs.
+      let matchingRemoteEvent: NostrEvent | undefined;
       let remoteHasProofs = false;
       let remoteQueryFailed = false;
+      const localContentHash = computeContentHash({ mint: normalized, unit: 'sat' as const, proofs });
       try {
         const remoteEvents = await queryTokens({ kinds: [TOKEN_KIND], authors: [walletSigner.pubkey], limit: 500 });
         for (const ev of remoteEvents) {
@@ -1470,6 +1478,9 @@ export function useCashuWallet(
           if (content && content.mint === normalized) {
             if (ev.id !== lastEventId) delIds.add(ev.id);
             if (content.proofs.length > 0) remoteHasProofs = true;
+            if (computeContentHash({ mint: normalized, unit: 'sat' as const, proofs: content.proofs }) === localContentHash) {
+              matchingRemoteEvent = ev;
+            }
           }
         }
       } catch (e) {
@@ -1485,16 +1496,26 @@ export function useCashuWallet(
       // An empty publish has no backup value anyway, so also skip it when the
       // remote state is unknown. A stale proof-bearing event left behind is
       // harmless: restores verify spent-state with the mint before merging.
-      if (proofs.length === 0 && (remoteHasProofs || remoteQueryFailed)) {
-        devLog.warn('Skipping NIP-60 token publish: local store empty but remote backup state has proofs or is unknown for mint:', normalized);
+      if (proofs.length === 0) {
+        if (remoteHasProofs || remoteQueryFailed) {
+          devLog.warn('Skipping NIP-60 token publish: local store empty but remote backup state has proofs or is unknown for mint:', normalized);
+        }
         return undefined;
+      }
+
+      // A local cache is only a hint. Verify the encrypted proof set actually
+      // exists on a relay before suppressing publication. This repairs the
+      // case where a previous publish appeared successful locally but no
+      // configured relay retained the event.
+      if (matchingRemoteEvent) {
+        await saveLastTokenEventId(normalized, matchingRemoteEvent.id, encKey, namespace);
+        await saveLastTokenEventHash(normalized, localContentHash, encKey, namespace);
+        return matchingRemoteEvent;
       }
 
       const delArray = [...delIds].filter((id) => id.length === 64);
       const payload = { mint: normalized, unit: 'sat' as const, proofs, del: delArray.length > 0 ? delArray : undefined };
       const hash = computeContentHash(payload);
-      const lastHash = await loadLastTokenEventHash(normalized, encKey, namespace);
-      if (hash === lastHash) return;
 
       const tokenEvent = await buildTokenEvent(normalized, proofs, walletSigner, delArray.length > 0 ? delArray : undefined, [getClientTag()]);
       if (!tokenEvent) {
@@ -1529,22 +1550,32 @@ export function useCashuWallet(
     }
   }, [getClientTag, getNip60WalletSigner, nip60SyncEnabled]);
 
-  const syncAllNip60Tokens = useCallback(async (): Promise<void> => {
-    if (!nip60SyncEnabled) return;
+  const syncAllNip60Tokens = useCallback(async (): Promise<boolean> => {
+    if (!nip60SyncEnabled) return false;
     const sync = nip60SyncRef.current;
-    if (!sync || !getNip60WalletSigner()) return;
+    const encKey = encKeyRef.current;
+    if (!sync || !encKey || !getNip60WalletSigner()) return false;
+    let allProofSetsVerified = true;
     for (const m of allMintsRef.current) {
-      await syncNip60TokenForMint(m.url, 'in', 0);
+      const normalized = safeNormalizeMintUrl(m.url);
+      const localProofs = sanitizeProofs(await storageRef.current.getProofsForMint(
+        normalized,
+        encKey,
+        legacyEncKeyRef.current ?? undefined,
+      ));
+      const remoteEvent = await syncNip60TokenForMint(normalized, 'in', 0);
+      if (localProofs.length > 0 && !remoteEvent) allProofSetsVerified = false;
     }
+    return allProofSetsVerified;
   }, [getNip60WalletSigner, nip60SyncEnabled, syncNip60TokenForMint]);
 
-  const syncNip60WalletConfig = useCallback(async (): Promise<void> => {
-    if (!nip60SyncEnabled) return;
-    if (options?.publishWalletConfig === false) return;
+  const syncNip60WalletConfig = useCallback(async (): Promise<boolean> => {
+    if (!nip60SyncEnabled) return false;
+    if (options?.publishWalletConfig === false) return false;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const key = getNip60WalletKey();
-    if (!sync || !encKey || !key) return;
+    if (!sync || !encKey || !key) return false;
 
     try {
       const mints = allMintsRef.current.map((m) => m.url);
@@ -1564,17 +1595,45 @@ export function useCashuWallet(
       const configs = !isBaoNamespaceRef.current && baoConfig ? [payload, baoConfig] : payload;
       const hash = computeContentHash(configs);
       const namespace = storageNamespaceRef.current;
-      const lastHash = await loadLastWalletConfigHash(encKey, namespace);
-      if (hash === lastHash) return;
+      const queryConfig = isBaoNamespaceRef.current && sync.queryRelays
+        ? (filter: Parameters<NonNullable<Nip60SyncApi['queryRelays']>>[1]) => sync.queryRelays!([BAO_MARKETS_RELAY], filter)
+        : sync.query;
+
+      // Do not trust the local hash as proof of a remote backup. Confirm that
+      // at least one relay currently returns a decryptable config containing
+      // this deterministic wallet key and all configured mints.
+      try {
+        const remoteEvents = await queryConfig({ kinds: [WALLET_CONFIG_KIND], authors: [sync.signer.pubkey], limit: 50 });
+        for (const remoteEvent of remoteEvents) {
+          const remoteConfigs = await parseWalletConfigEvents(remoteEvent, sync.signer);
+          const expectedConfigs = Array.isArray(configs) ? configs : [configs];
+          const hasAllConfigs = expectedConfigs.every((expected) => remoteConfigs.some((remote) => {
+            const expectedMints = expected.mints.map(safeNormalizeMintUrl).sort();
+            const remoteMints = remote.mints.map(safeNormalizeMintUrl).sort();
+            return remote.privkey === expected.privkey
+              && (remote.id ?? 'default') === (expected.id ?? 'default')
+              && computeContentHash(remoteMints) === computeContentHash(expectedMints);
+          }));
+          if (hasAllConfigs) {
+            await saveLastWalletConfigHash(hash, encKey, namespace);
+            return true;
+          }
+        }
+      } catch (error) {
+        devLog.warn('Could not verify NIP-60 wallet config on relays; republishing:', error);
+      }
 
       const event = await buildWalletConfigEvent(configs, sync.signer, { extraTags: [getClientTag()] });
-      if (!event) return;
+      if (!event) return false;
       const id = isBaoNamespaceRef.current && sync.publishToRelays
         ? await sync.publishToRelays([BAO_MARKETS_RELAY], event)
         : await sync.publish(event);
-      if (id) await saveLastWalletConfigHash(hash, encKey, namespace);
+      if (!id) return false;
+      await saveLastWalletConfigHash(hash, encKey, namespace);
+      return true;
     } catch (e) {
       devLog.error('NIP-60 wallet config sync failed:', e);
+      return false;
     }
   }, [config.clientName, getClientTag, getNip60WalletKey, nip60SyncEnabled, options?.publishWalletConfig]);
 
@@ -5192,6 +5251,88 @@ export function useCashuWallet(
     };
   }, [wallet, mintUrl, transactions, reconcilePendingMelts]);
 
+  const recoverFromMints = useCallback(async (): Promise<number> => {
+    const encKey = encKeyRef.current;
+    const seed = bip39SeedRef.current;
+    if (!encKey || !seed) {
+      setError('Wallet seed is not available yet');
+      return 0;
+    }
+
+    setLoading(true);
+    setError('');
+    let recoveredAmount = 0;
+    try {
+      for (const mint of allMintsRef.current) {
+        const normalized = safeNormalizeMintUrl(mint.url);
+        let recoveredFromThisMint = 0;
+        try {
+          const mintWallet = await getOrCreateWallet(normalized, seed);
+          const keysets = await mintWallet.getKeySets();
+          const restored: unknown[] = [];
+          let highestCounter = storageRef.current.loadMintCounter(normalized);
+
+          for (const keyset of keysets.filter((candidate) => candidate.unit === 'sat')) {
+            const batch = await withTimeout(
+              mintWallet.batchRestore(300, 100, 0, keyset.id),
+              MINT_FETCH_TIMEOUT_MS,
+              `Recover ${new URL(normalized).hostname}`,
+            );
+            restored.push(...batch.proofs);
+            if (typeof batch.lastCounterWithSignature === 'number') {
+              highestCounter = Math.max(highestCounter, batch.lastCounterWithSignature + 1);
+            }
+          }
+
+          const candidates = sanitizeProofs(restored);
+          if (candidates.length === 0) continue;
+          // Never credit restored deterministic outputs until the mint itself
+          // confirms they remain spendable.
+          const unspent = await filterSpendableProofs(normalized, candidates, seed);
+          if (unspent.length === 0) continue;
+
+          const release = await acquireMutex(walletOpsMutexRef);
+          try {
+            await storageRef.current.withProofLock(async () => {
+              const existing = sanitizeProofs(await storageRef.current.getProofsForMint(
+                normalized,
+                encKey,
+                legacyEncKeyRef.current ?? undefined,
+              ));
+              const existingSecrets = new Set(existing.map((proof) => String(proof.secret)));
+              const newlyRecovered = unspent.filter((proof) => !existingSecrets.has(String(proof.secret)));
+              if (newlyRecovered.length === 0) return;
+              await storageRef.current.saveProofsForMint(normalized, dedupeProofs([...existing, ...newlyRecovered]), encKey);
+              storageRef.current.writeProofStoreTimestamp(normalized);
+              storageRef.current.saveMintCounter(normalized, highestCounter);
+              recoveredFromThisMint = newlyRecovered.reduce((sum, proof) => sum + Number(proof.amount), 0);
+              recoveredAmount += recoveredFromThisMint;
+            });
+          } finally {
+            release();
+          }
+
+          if (recoveredFromThisMint > 0) {
+            await syncNip60TokenForMint(normalized, 'in', recoveredFromThisMint);
+          }
+        } catch (mintError) {
+          devLog.warn('Deterministic Cashu recovery failed for mint:', normalized, mintError);
+        }
+      }
+
+      await calculateAllBalances();
+      if (recoveredAmount > 0) {
+        setSuccess(`Recovered ${recoveredAmount} sats from your Cashu mints`);
+        await triggerBackup();
+      } else {
+        setSuccess('No unspent Cashu proofs were found for this wallet seed');
+      }
+      return recoveredAmount;
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [calculateAllBalances, filterSpendableProofs, getOrCreateWallet, syncNip60TokenForMint, triggerBackup]);
+
   const wasLastSendAmbiguous = useCallback(() => lastSendAmbiguousRef.current, []);
 
   return {
@@ -5210,6 +5351,7 @@ export function useCashuWallet(
     error,
     success,
     backupStatus,
+    nip60Status,
     lastBackupAt,
     setMintUrl,
     addCustomMint,
@@ -5238,6 +5380,7 @@ export function useCashuWallet(
     checkMintQuote,
     checkMeltQuote,
     restoreFromBackup,
+    recoverFromMints,
     clearError: useCallback(() => setError(''), []),
     clearSuccess: useCallback(() => setSuccess(''), []),
   };
