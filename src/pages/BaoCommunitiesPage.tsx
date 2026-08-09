@@ -200,8 +200,13 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (!trimmed || picked.length === 0) return;
     setBusy(true);
     try {
-      const { communityId, name: createdName } = await create({ name: trimmed, relays: picked, agentOnly });
-      toast({ title: "Community created", description: createdName });
+      const { communityId, name: createdName, excludedRelays } = await create({ name: trimmed, relays: picked, agentOnly });
+      toast({
+        title: "Community created",
+        description: excludedRelays.length > 0
+          ? `${createdName}. Removed relays without verified NIP-09 deletion support: ${excludedRelays.join(", ")}`
+          : createdName,
+      });
       onOpenChange(false);
       setName("");
       setAgentOnly(false);
@@ -275,8 +280,9 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
                 Where this community lives. Members read and write here, so pick
-                relays that accept your writes. An auth-only or DM-only relay can
-                reject the genesis and strand the create. A community lives on up
+                relays that accept your writes and advertise NIP-09 deletion support.
+                Relays without verifiable deletion support are removed before creation.
+                An auth-only or DM-only relay can reject the genesis and strand the create. A community lives on up
                 to {MAX_COMMUNITY_RELAYS} relays — only the first {MAX_COMMUNITY_RELAYS} picks are used.
               </p>
               <p className="text-xs text-muted-foreground">
