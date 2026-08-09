@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Fixed
+- Follow onboarding now starts with fiatjaf, 2140.wtf, and ₿AO HQ selected; users only need to choose two more accounts or a pack.
+- New accounts can no longer bypass onboarding by skipping settings sync before choosing follow packs.
 - New-account onboarding now loads curated follow packs, profile avatars, and creator/client pills from the BAO pack relay with public relay fallbacks, so a cleared browser cache does not leave partial packs or initials.
 - Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
 - New-user onboarding removes the sparse activity block and consolidates news suggestions into one follow pack.
