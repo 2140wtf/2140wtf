@@ -93,6 +93,18 @@ describe('usePetssCollection repatriation', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it('renders immediately and accepts relay data while IndexedDB is still opening', async () => {
+    const relayPet = petsEvent('relay-id', '2140pets-aaaaaaaaaaaa-relay000001');
+    mocks.storeQuery.mockReturnValue(new Promise<NostrEvent[]>(() => undefined));
+    mocks.query.mockResolvedValue([relayPet]);
+
+    const { result } = renderHook(() => usePetssCollection(), { wrapper });
+
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.companions).toEqual([]);
+    await waitFor(() => expect(result.current.companions[0]?.event.id).toBe('relay-id'));
+  });
+
   it('does not erase cached companions when the relay returns no events', async () => {
     const cached = petsEvent('cached-id-2', '2140pets-aaaaaaaaaaaa-cached00002');
     mocks.storeQuery.mockResolvedValue([cached]);
@@ -110,8 +122,9 @@ describe('usePetssCollection repatriation', () => {
       petsEvent('repat-id-2', '2140pets-aaaaaaaaaaaa-2222222222'),
     ]);
 
-    const { rerender } = renderHook(() => usePetssCollection(), { wrapper });
+    const { result, rerender } = renderHook(() => usePetssCollection(), { wrapper });
 
+    await waitFor(() => expect(result.current.companions).toHaveLength(2));
     await waitFor(() => expect(mocks.groupEvent).toHaveBeenCalledTimes(2));
 
     // Both events went to the effective relay group (not the bare pool).
@@ -153,9 +166,10 @@ describe('usePetssCollection repatriation', () => {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
 
-    renderHook(() => usePetssCollection(), { wrapper: retryWrapper });
+    const { result } = renderHook(() => usePetssCollection(), { wrapper: retryWrapper });
 
     // First attempt fails — the id is released for retry.
+    await waitFor(() => expect(result.current.companions).toHaveLength(1));
     await waitFor(() => expect(mocks.groupEvent).toHaveBeenCalledTimes(1));
 
     // A refetch (same event data) triggers the retry, which now succeeds.
