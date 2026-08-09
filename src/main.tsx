@@ -30,8 +30,21 @@ import { getBackgroundThemeMode } from '@/lib/colorUtils';
 // localhost origin would hijack the dev server and serve old assets.
 if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   if (import.meta.env.PROD) {
+    let reloadingForServiceWorker = false;
+    const hadControllerAtStartup = !!navigator.serviceWorker.controller;
+    // A newly installed worker takes control immediately (sw.js uses
+    // skipWaiting/clients.claim). Reload only when an existing controller is
+    // replaced, so the first install does not cause a needless second load.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloadingForServiceWorker) return;
+      if (!hadControllerAtStartup || !navigator.serviceWorker.controller) return;
+      reloadingForServiceWorker = true;
+      window.location.reload();
+    });
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+        .then((registration) => registration.update())
+        .catch(() => {});
     });
   } else {
     navigator.serviceWorker.getRegistrations()

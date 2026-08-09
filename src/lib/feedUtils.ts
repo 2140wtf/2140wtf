@@ -278,7 +278,7 @@ function isBlockedFeedHost(host: string): boolean {
 export function isBlockedFeedDomainIdentifier(value: string): boolean {
   const lower = value.toLowerCase();
   const atIndex = lower.lastIndexOf('@');
-  if (atIndex > 0 && isBlockedFeedHost(lower.slice(atIndex + 1).split(/[/?#]/, 1)[0])) {
+  if (atIndex >= 0 && isBlockedFeedHost(lower.slice(atIndex + 1).split(/[/?#]/, 1)[0])) {
     return true;
   }
   if (lower.startsWith('http://') || lower.startsWith('https://')) {

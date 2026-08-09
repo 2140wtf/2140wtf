@@ -363,6 +363,22 @@ export const BAO_COMMANDS: BaoCommand[] = [
   },
 ];
 
+/** Stable machine-readable command metadata for agent discovery. */
+export function commandManifest(): Array<{
+  verb: string;
+  subs?: string[];
+  summary: string;
+  usage: string;
+  description: string;
+  category: CommandCategory;
+  scope: CommandScope;
+  access: CommandAccess;
+}> {
+  return BAO_COMMANDS.map(({ verb, subs, summary, usage, description, category, scope, access }) => ({
+    verb, ...(subs ? { subs } : {}), summary, usage, description, category, scope, access,
+  }));
+}
+
 /** Find a command by its verb. */
 export function findCommand(verb: string): BaoCommand | undefined {
   return BAO_COMMANDS.find((c) => c.verb === verb);
