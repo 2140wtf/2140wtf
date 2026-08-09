@@ -24,6 +24,13 @@ export type FeedTopicId =
   | 'politics'
   | 'world'
   | 'sports'
+  | 'artists'
+  | 'photography'
+  | 'music'
+  | 'news'
+  | 'writers'
+  | 'health'
+  | 'philosophy'
   | 'bao'
   | 'popular-follows'
   | 'follows-replies'
@@ -53,6 +60,8 @@ export interface FeedTopic {
   search?: string;
   /** Only return notes from the past N hours. */
   sinceHours?: number;
+  /** Trusted Primal starter-pack titles whose members seed this topic. */
+  packTitles?: string[];
 }
 
 export const FEED_TOPICS: FeedTopic[] = [
@@ -62,6 +71,7 @@ export const FEED_TOPICS: FeedTopic[] = [
     description: 'Bitcoin, Lightning, mining, and on-chain news',
     icon: '₿',
     authors: BITCOIN_TOPIC_AUTHORS,
+    packTitles: ['Bitcoin'],
     tags: ['bitcoin', 'btc', 'sats', 'satoshi', 'lightning', 'ln', 'mining', 'hashrate',
       'difficulty', 'halving', 'mempool', 'onchain', 'segwit', 'taproot', 'ordinals',
       'inscriptions', 'runes', 'layer2', 'l2', 'sidechain', 'coldcard', 'hardwarewallet',
@@ -75,6 +85,7 @@ export const FEED_TOPICS: FeedTopic[] = [
     description: 'Nostr protocol, clients, zaps, and development',
     icon: '🟣',
     authors: NOSTR_TOPIC_AUTHORS,
+    packTitles: ['Nostr'],
     tags: ['nostr', 'nostrprotocol', 'nostrdev', 'nip', 'relay', 'relays', 'zap', 'npub',
       'primal', 'damus', 'amethyst', 'coracle', 'snort', 'nostrudel', 'njump', 'ndk',
       'nwc', 'lnurl'],
@@ -130,6 +141,64 @@ export const FEED_TOPICS: FeedTopic[] = [
       'mma', 'ufc', 'baseball', 'mlb', 'nhl', 'hockey', 'boxing', 'esports', 'cricket',
       'rugby', 'golf', 'pga', 'nascar', 'racing', 'motorsport', 'worldcup',
       'premierleague', 'laliga', 'championsleague'],
+  },
+  {
+    id: 'artists',
+    label: 'Artists',
+    description: 'Visual artists, illustrators, and digital creators',
+    icon: '🎨',
+    packTitles: ['Artists'],
+    tags: ['art', 'artist', 'illustration', 'digitalart', 'painting', 'drawing', 'bitcoinart'],
+  },
+  {
+    id: 'photography',
+    label: 'Photography',
+    description: 'Photographers and picture-first posts',
+    icon: '📷',
+    packTitles: ['Photography'],
+    tags: ['photography', 'photo', 'photostr', 'streetphotography', 'naturephotography'],
+    kinds: [1, 20],
+  },
+  {
+    id: 'music',
+    label: 'Music',
+    description: 'Musicians, bands, releases, and live performances',
+    icon: '🎵',
+    packTitles: ['Music'],
+    tags: ['music', 'musician', 'band', 'song', 'album', 'livemusic', 'wavlake'],
+  },
+  {
+    id: 'news',
+    label: 'News',
+    description: 'Newsrooms, reporters, and current affairs',
+    icon: '🗞️',
+    packTitles: ['The News', 'Journalists'],
+    tags: ['news', 'breakingnews', 'journalism', 'reporter', 'currentevents'],
+  },
+  {
+    id: 'writers',
+    label: 'Writers',
+    description: 'Authors, essays, reporting, and long-form writing',
+    icon: '✍️',
+    packTitles: ['Writers'],
+    tags: ['writing', 'writer', 'books', 'essay', 'literature'],
+    kinds: [1, 30023],
+  },
+  {
+    id: 'health',
+    label: 'Health',
+    description: 'Health, fitness, nutrition, and wellbeing',
+    icon: '🏃',
+    packTitles: ['Health & Fitness'],
+    tags: ['health', 'fitness', 'nutrition', 'wellness', 'running', 'workout'],
+  },
+  {
+    id: 'philosophy',
+    label: 'Philosophy',
+    description: 'Ideas, ethics, history, and free thinkers',
+    icon: '🧠',
+    packTitles: ['Philosophy'],
+    tags: ['philosophy', 'ethics', 'history', 'ideas', 'freethought'],
   },
   {
     id: 'bao',

@@ -9,7 +9,6 @@ import {
   EyeOff,
   Heart,
   Loader2,
-  UserPlus,
   Users,
 } from "lucide-react";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
@@ -241,23 +240,40 @@ function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }
 // Setup Questionnaire
 // ---------------------------------------------------------------------------
 
-/** Suggested accounts shown to new users with empty follow lists. */
-const SUGGESTED_PACK: NostrEvent = {
-  id: "suggested-accounts",
+const PRIMAL_PACK_AUTHOR = "532d830dffe09c13e75e8b145c825718fc12b0003f61d61e9077721c7fff93cb";
+
+/** App-owned starter packs. Subject packs are additionally loaded from Primal. */
+const SUGGESTED_PACKS: NostrEvent[] = [{
+  id: "2140-essentials",
   pubkey: "",
   kind: 39089,
   created_at: 0,
   content: "",
   sig: "",
   tags: [
-    ["title", "Suggested for you"],
-    ["description", "Follow these accounts to start building your feed."],
-    // 2140.wtf canonical account first so new users always see the app icon first.
+    ["title", "2140 Essentials"],
+    ["description", "A small Bitcoin and Nostr starting point. Selected by default."],
     ["p", "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416"],
     ["p", "606f05b0696f8d561a5470ead20d74b08ecd6243a6907acdc450a4849c9c0bc6"],
-    ["p", "0232eb19d1b1168e91c1a8f765d45f6839e9a7861951cd63ae18a544af8a3902"],
+    ["p", "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"],
+    ["p", "460c25e682fda7832b52d1f22d3d22b3176d972f60dcdc3212ed8c92ef85065c"],
+    ["p", "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2"],
   ],
-};
+}, {
+  id: "wisp-media",
+  pubkey: "",
+  kind: 39089,
+  created_at: 0,
+  content: "",
+  sig: "",
+  tags: [
+    ["title", "Media"],
+    ["description", "Three opt-in news feeds inspired by Wisp's media onboarding."],
+    ["p", "9c5d0df5f599f957fa2b0d29ce7c36fb2dd0516cbeb5bc9bc4a41747418ffcb4"],
+    ["p", "9c5d0fe246b80bc313082aa3dbb4f82744751ca8d79901dc74f7eb69bba8ad4b"],
+    ["p", "9c5d08b2d0cc701d016d4b69c071d6f1b1a039104f08daae1170c6ca867f67c1"],
+  ],
+}];
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
@@ -867,11 +883,60 @@ function FollowsStep({
   const { store } = useNostrStorage();
   const { isEnabled } = usePublishPreferences();
 
+  const [packs, setPacks] = useState<NostrEvent[]>(SUGGESTED_PACKS);
+  const [selectedPacks, setSelectedPacks] = useState<Set<string>>(
+    () => new Set(["2140-essentials"]),
+  );
   const [isFollowing, setIsFollowing] = useState(false);
-  const [isFollowed, setIsFollowed] = useState(false);
 
-  const handleFollowAll = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
+    const loadSubjectPacks = async () => {
+      try {
+        const events = await nostr.query([{
+          kinds: [39089],
+          authors: [PRIMAL_PACK_AUTHOR],
+          limit: 100,
+        }], { signal: AbortSignal.timeout(8000) });
+
+        const latest = new Map<string, NostrEvent>();
+        for (const event of events) {
+          const d = event.tags.find(([name]) => name === 'd')?.[1] ?? '';
+          const key = `${event.pubkey}:${d}`;
+          const existing = latest.get(key);
+          if (!existing || event.created_at > existing.created_at) latest.set(key, event);
+        }
+        const subjectPacks = [...latest.values()]
+          .filter((event) => {
+            const { title, pubkeys } = parsePackEvent(event);
+            return pubkeys.length > 0 && !/(?:ditto|soapbox|primal)\s+team/i.test(title);
+          })
+          .sort((a, b) => parsePackEvent(a).title.localeCompare(parsePackEvent(b).title));
+        if (!cancelled) setPacks([...SUGGESTED_PACKS, ...subjectPacks]);
+      } catch (error) {
+        console.warn('Could not load optional onboarding packs:', error);
+      }
+    };
+    void loadSubjectPacks();
+    return () => { cancelled = true; };
+  }, [nostr]);
+
+  const togglePack = useCallback((id: string) => {
+    setSelectedPacks((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleContinue = useCallback(async () => {
     if (!user) return;
+
+    if (selectedPacks.size === 0) {
+      onNext(false);
+      return;
+    }
 
     if (!isEnabled('follows')) {
       toast({
@@ -900,9 +965,12 @@ function FollowsStep({
     setIsFollowing(true);
 
     try {
-      const packPubkeys = SUGGESTED_PACK.tags
-        .filter(([n]) => n === "p")
-        .map(([, pk]) => pk);
+      const packPubkeys = [...new Set(
+        packs
+          .filter((pack) => selectedPacks.has(pack.id))
+          .flatMap((pack) => parsePackEvent(pack).pubkeys)
+          .filter((pubkey) => /^[0-9a-f]{64}$/.test(pubkey)),
+      )];
 
       // 1. Fetch freshest kind 3 from relays, with the local event store as a
       // fallback floor so a relay miss cannot wipe the existing follow list.
@@ -930,13 +998,18 @@ function FollowsStep({
         prev: prev ?? undefined,
       });
 
-      setIsFollowed(true);
+      onNext(true);
     } catch (error) {
       console.error("Failed to follow suggested accounts:", error);
+      toast({
+        title: "Couldn't save your follows",
+        description: "Your choices are unchanged. Try again or skip for now.",
+        variant: "destructive",
+      });
     } finally {
       setIsFollowing(false);
     }
-  }, [user, nostr, publishEvent, expectedPubkey, store, isEnabled]);
+  }, [user, selectedPacks, isEnabled, expectedPubkey, packs, nostr, store, publishEvent, onNext]);
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-400">
@@ -945,34 +1018,41 @@ function FollowsStep({
           Find your people
         </h2>
         <p className="text-sm text-muted-foreground">
-          Your feed is empty! Follow some people to get started. Here are a few
-          suggested accounts to help you find interesting voices.
+          Follows is your default feed. Pick any packs you want; the five-account
+          2140 Essentials pack is selected so a new feed is useful immediately.
         </p>
       </div>
 
-      <div className="space-y-3">
-        <PackCard
-          event={SUGGESTED_PACK}
-          isFollowed={isFollowed}
-          isFollowing={isFollowing}
-          onFollowAll={handleFollowAll}
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[52dvh] overflow-y-auto p-0.5">
+        {packs.map((pack) => (
+          <PackCard
+            key={pack.id}
+            event={pack}
+            selected={selectedPacks.has(pack.id)}
+            onToggle={() => togglePack(pack.id)}
+          />
+        ))}
       </div>
 
       <div className="flex gap-3">
         <Button
           variant="ghost"
           onClick={onBack}
+          disabled={isFollowing}
           className="flex-1 rounded-full h-11"
         >
           Back
         </Button>
         <Button
-          onClick={() => onNext(isFollowed)}
+          onClick={handleContinue}
+          disabled={isFollowing}
           className="flex-1 rounded-full h-11 gap-1.5"
         >
-          {isFollowed ? "Continue" : "Skip for now"}
-          <ChevronRight className="w-4 h-4" />
+          {isFollowing ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Following…</>
+          ) : (
+            <>{selectedPacks.size > 0 ? `Follow ${selectedPacks.size} pack${selectedPacks.size === 1 ? '' : 's'}` : 'Skip for now'} <ChevronRight className="w-4 h-4" /></>
+          )}
         </Button>
       </div>
     </div>
@@ -982,14 +1062,12 @@ function FollowsStep({
 /** Compact follow pack card for the onboarding flow. */
 function PackCard({
   event,
-  isFollowed,
-  isFollowing,
-  onFollowAll,
+  selected,
+  onToggle,
 }: {
   event: NostrEvent;
-  isFollowed: boolean;
-  isFollowing: boolean;
-  onFollowAll: () => void;
+  selected: boolean;
+  onToggle: () => void;
 }) {
   const { title, description, pubkeys } = useMemo(
     () => parsePackEvent(event),
@@ -1001,22 +1079,33 @@ function PackCard({
   const { data: membersMap } = useAuthors(previewPubkeys);
 
   return (
-    <div className="rounded-xl ring-1 ring-border overflow-hidden">
-      <div className="p-4 space-y-3">
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={selected}
+      title={description || title}
+      className={cn(
+        'relative min-h-28 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/60 hover:bg-muted/30',
+      )}
+    >
+      <span className={cn(
+        'absolute right-3 top-3 flex size-7 items-center justify-center rounded-full border transition-colors',
+        selected ? 'border-primary bg-primary text-primary-foreground' : 'border-primary/50',
+      )} aria-hidden>
+        {selected && <Check className="size-4" />}
+      </span>
+      <div className="space-y-4 pr-8">
         {/* Title + member count */}
-        <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="min-w-0">
             <h3 className="font-semibold text-sm leading-snug">{title}</h3>
             {description && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
                 {description}
               </p>
             )}
           </div>
-          <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0 mt-0.5">
-            <Users className="w-3.5 h-3.5" />
-            {pubkeys.length}
-          </span>
         </div>
 
         {/* Member avatar stack */}
@@ -1039,56 +1128,14 @@ function PackCard({
               +{pubkeys.length - previewPubkeys.length} more
             </span>
           )}
-        </div>
-
-        {/* Follow All button */}
-        <Button
-          className="w-full gap-2"
-          size="sm"
-          variant={isFollowed ? "outline" : "default"}
-          onClick={onFollowAll}
-          disabled={isFollowed || isFollowing}
-        >
-          {isFollowing ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Following...
-            </>
-          ) : isFollowed ? (
-            <>
-              <Check className="w-3.5 h-3.5" />
-              Added to your follows
-            </>
-          ) : (
-            <>
-              <UserPlus className="w-3.5 h-3.5" />
-              Follow All ({pubkeys.length})
-            </>
+          {pubkeys.length <= previewPubkeys.length && (
+            <span className="text-xs text-muted-foreground ml-1 flex items-center gap-1">
+              <Users className="size-3" /> {pubkeys.length}
+            </span>
           )}
-        </Button>
+        </div>
       </div>
-
-      {/* Author attribution */}
-      <AuthorAttribution pubkey={event.pubkey} />
-    </div>
-  );
-}
-
-/** Small author attribution bar at the bottom of a pack card. */
-function AuthorAttribution({ pubkey }: { pubkey: string }) {
-  const { data: authorData } = useAuthors(pubkey ? [pubkey] : []);
-  if (!pubkey) return null;
-
-  const metadata: NostrMetadata | undefined = authorData?.get(pubkey)?.metadata;
-  const name = metadata?.name || metadata?.display_name || 'Anonymous';
-
-  return (
-    <div className="px-4 py-2 bg-muted/30 border-t border-border flex items-center gap-2">
-      <MiniAvatar src={metadata?.picture} name={name} metadata={metadata} />
-      <span className="text-xs text-muted-foreground truncate">
-        by <span className="font-medium text-foreground">{name}</span>
-      </span>
-    </div>
+    </button>
   );
 }
 
