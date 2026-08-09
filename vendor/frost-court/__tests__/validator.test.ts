@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 
 import { validateAttestationEvent, verifyRawSignature } from '../validator';
 import { BAO_COURT_ATTESTATION_KIND } from '../events';
@@ -28,6 +29,7 @@ function makeJuror(idx: number): SelectedJuror {
 }
 
 describe('validateAttestationEvent', () => {
+  const publisherSecret = generateSecretKey();
   const jurors = [makeJuror(1), makeJuror(2), makeJuror(3)];
   const { record, shares } = generateFrostKeys({
     marketId: 'demo-market',
@@ -46,17 +48,15 @@ describe('validateAttestationEvent', () => {
       shares,
     });
 
-    return {
+    return finalizeEvent({
       kind: BAO_COURT_ATTESTATION_KIND,
-      id: 'e'.repeat(64),
-      pubkey: 'p'.repeat(64),
       created_at: 1,
-      sig: 'x'.repeat(128),
       tags: [
         ['e', 'm'.repeat(64), '', 'root'],
         ['m', 'demo-market'],
         ['p', attestation.groupPubkey],
         ['outcome', attestation.outcome],
+        ['round', '1'],
         ['nonce', attestation.pubNonce],
         ['sig', attestation.signature],
         ['ver', 'FROST-BIP340-v1'],
@@ -65,10 +65,11 @@ describe('validateAttestationEvent', () => {
       content: JSON.stringify({
         marketId: 'demo-market',
         outcome: 'YES',
+        round: '1',
         message: attestation.message,
         disputeEventId: 'd'.repeat(64),
       }),
-    };
+    }, publisherSecret);
   }
 
   it('accepts a valid FROST attestation event', () => {
@@ -94,6 +95,29 @@ describe('validateAttestationEvent', () => {
     const sigTag = event.tags.find((t) => t[0] === 'sig');
     if (sigTag) sigTag[1] = '0'.repeat(128);
     expect(validateAttestationEvent(event).valid).toBe(false);
+  });
+
+  it('rejects a verdict whose outcome was changed without a new FROST signature', () => {
+    const original = buildValidEvent();
+    const tags = original.tags.map((tag) => tag[0] === 'outcome' ? ['outcome', 'NO'] : [...tag]);
+    const content = JSON.stringify({ ...JSON.parse(original.content), outcome: 'NO' });
+    const tampered = finalizeEvent({ kind: original.kind, created_at: original.created_at, tags, content }, publisherSecret);
+    expect(validateAttestationEvent(tampered).valid).toBe(false);
+  });
+
+  it('rejects duplicate authority tags and context mismatches', () => {
+    const original = buildValidEvent();
+    const duplicate = finalizeEvent({
+      kind: original.kind,
+      created_at: original.created_at,
+      tags: [...original.tags, ['outcome', 'YES']],
+      content: original.content,
+    }, publisherSecret);
+    expect(validateAttestationEvent(duplicate).valid).toBe(false);
+    expect(validateAttestationEvent(original, { expectedDisputeEventId: '0'.repeat(64) }).valid).toBe(false);
+    expect(validateAttestationEvent(original, { expectedMarketId: 'other' }).valid).toBe(false);
+    expect(validateAttestationEvent(original, { allowedOutcomes: ['NO'] }).valid).toBe(false);
+    expect(validateAttestationEvent(original, { trustedPublisherPubkeys: ['0'.repeat(64)] }).valid).toBe(false);
   });
 
   it('validates against an expected group pubkey', () => {

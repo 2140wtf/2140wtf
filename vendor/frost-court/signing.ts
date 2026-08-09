@@ -268,6 +268,7 @@ export function aggregateAttestation(
   return {
     marketId: params.marketId,
     outcome: params.outcome,
+    round: params.round,
     signature: signatureHex,
     pubNonce,
     groupPubkey: params.dkg.groupPubkeyXOnly,

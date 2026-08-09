@@ -124,6 +124,7 @@ describe('BAO Court event builders', () => {
       disputeId: 'd'.repeat(64),
       jurorIdx: 1,
       outcome: 'YES',
+      round: 1,
       salt: 's'.repeat(64),
     });
 
@@ -165,6 +166,7 @@ describe('BAO Court event builders', () => {
     const attestation: FrostAttestation = {
       marketId: 'demo-market',
       outcome: 'YES',
+      round: 1,
       signature: 's'.repeat(128),
       pubNonce: 'n'.repeat(64),
       groupPubkey: 'g'.repeat(64),
@@ -185,6 +187,7 @@ describe('BAO Court event builders', () => {
     const attestation: FrostAttestation = {
       marketId: 'demo-market',
       outcome: 'YES',
+      round: 1,
       signature: 'ab'.repeat(64),
       pubNonce: 'cd'.repeat(32),
       groupPubkey: 'ef'.repeat(32),

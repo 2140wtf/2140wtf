@@ -580,6 +580,7 @@ export function parseAttestationEvent(
   const sigTag = event.tags.find((t) => t[0] === 'sig');
   const nonceTag = event.tags.find((t) => t[0] === 'nonce');
   const outcomeTag = event.tags.find((t) => t[0] === 'outcome');
+  const roundTag = event.tags.find((t) => t[0] === 'round');
   const disputeTag = event.tags.find((t) => t[0] === 'dispute');
   const marketTag = event.tags.find((t) => t[0] === 'm');
 
@@ -589,6 +590,7 @@ export function parseAttestationEvent(
   const signature = sigTag[1];
   const pubNonce = nonceTag[1];
   const outcome = outcomeTag?.[1] ?? '';
+  const round = roundTag?.[1] ?? '';
 
   if (!groupPubkey || !isHex64(groupPubkey)) return null;
   if (!signature || signature.length !== 128) return null;
@@ -605,11 +607,12 @@ export function parseAttestationEvent(
   const message = String(content.message ?? '');
   const disputeEventId = disputeTag?.[1] ?? (typeof content.disputeEventId === 'string' ? content.disputeEventId : undefined);
 
-  if (!marketId || !message) return null;
+  if (!marketId || !message || !round) return null;
 
   return {
     marketId,
     outcome,
+    round,
     signature,
     pubNonce,
     groupPubkey,
@@ -632,6 +635,7 @@ export function buildDisputeAttestationEvent(
     ['m', attestation.marketId],
     ['p', attestation.groupPubkey],
     ['outcome', attestation.outcome],
+    ['round', String(attestation.round)],
     ['nonce', attestation.pubNonce],
     ['sig', attestation.signature],
     ['ver', 'FROST-BIP340-v1'],
@@ -647,6 +651,7 @@ export function buildDisputeAttestationEvent(
     content: JSON.stringify({
       marketId: attestation.marketId,
       outcome: attestation.outcome,
+      round: String(attestation.round),
       message: attestation.message,
       disputeEventId: attestation.disputeEventId,
     }),
