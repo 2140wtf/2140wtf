@@ -10,6 +10,7 @@ import {
   buildTokenEvent,
   buildDeletionEvent,
   buildHistoryEvent,
+  buildMintQuoteEvent,
   buildNutzapInfoEvent,
   buildNutzapEvent,
   buildNutzapRedemptionHistoryEvent,
@@ -17,10 +18,12 @@ import {
   parseWalletConfigEvents,
   parseTokenEvent,
   parseHistoryEvent,
+  parseMintQuoteEvent,
   parseNutzapInfoEvent,
   parseNutzapEvent,
   createNip60Signer,
   restoreNip60Wallet,
+  restoreMintQuoteEvents,
   restoreCrossAppNip60Wallet,
   resolveMintAlias,
   computeContentHash,
@@ -31,10 +34,52 @@ import {
   WALLET_CONFIG_KIND,
   TOKEN_KIND,
   HISTORY_KIND,
+  QUOTE_KIND,
   DELETE_KIND,
   NUTZAP_INFO_KIND,
   NUTZAP_KIND,
 } from './cashuNip60';
+
+describe('pending mint quote events', () => {
+  it('round-trips Amethyst-compatible NUT-20 recovery state', async () => {
+    const signer = createNip60Signer(generateSecretKey());
+    const quotePrivateKey = 'ab'.repeat(32);
+    const event = await buildMintQuoteEvent('quote-123', 'https://mint.example.com/', signer, {
+      quotePrivateKey,
+      createdAt: 100,
+      expiration: 200,
+    });
+
+    expect(event).not.toBeNull();
+    expect(event!.kind).toBe(QUOTE_KIND);
+    expect(event!.tags).toContainEqual(['mint', 'https://mint.example.com']);
+    const parsed = await parseMintQuoteEvent(event!, signer);
+    expect(parsed).toEqual({
+      eventId: event!.id,
+      quoteId: 'quote-123',
+      mint: 'https://mint.example.com',
+      quotePrivateKey,
+      createdAt: 100,
+      expiresAt: 200_000,
+    });
+  });
+
+  it('restores only live, undeleted quotes', async () => {
+    const signer = createNip60Signer(generateSecretKey());
+    const deleted = await buildMintQuoteEvent('deleted', 'https://mint.example.com', signer, { createdAt: 100, expiration: 500 });
+    const live = await buildMintQuoteEvent('live', 'https://mint.example.com', signer, { createdAt: 200, expiration: 500 });
+    const expired = await buildMintQuoteEvent('expired', 'https://mint.example.com', signer, { createdAt: 50, expiration: 99 });
+    const deletion = await buildDeletionEvent([deleted!.id], signer, 'mint quote completed', [['k', String(QUOTE_KIND)]]);
+    const queryFn = async (filter: { kinds: number[] }) => {
+      if (filter.kinds.includes(QUOTE_KIND)) return [deleted!, live!, expired!];
+      if (filter.kinds.includes(DELETE_KIND)) return [deletion!];
+      return [];
+    };
+
+    const restored = await restoreMintQuoteEvents(signer, queryFn as never, 100_000);
+    expect(restored.map((quote) => quote.quoteId)).toEqual(['live']);
+  });
+});
 
 describe('createNip60Signer', () => {
   it('derives the expected x-only pubkey and can sign an event', async () => {

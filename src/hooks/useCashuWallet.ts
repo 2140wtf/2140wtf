@@ -51,6 +51,7 @@ import {
   buildTokenEvent,
   buildDeletionEvent,
   buildHistoryEvent,
+  buildMintQuoteEvent,
   buildNutzapInfoEvent,
   buildNutzapEvent,
   buildNutzapRedemptionHistoryEvent,
@@ -58,6 +59,7 @@ import {
   parseNutzapInfoEvent,
   parseNutzapEvent,
   restoreNip60Wallet,
+  restoreMintQuoteEvents,
   computeContentHash,
   loadLastWalletConfigHash,
   saveLastWalletConfigHash,
@@ -74,6 +76,7 @@ import {
   NUTZAP_INFO_KIND,
   NUTZAP_KIND,
   DELETE_KIND,
+  QUOTE_KIND,
   type Nip60SyncApi,
   type Nip60WalletConfig,
 } from '@/lib/cashu/cashuNip60';
@@ -1665,7 +1668,73 @@ export function useCashuWallet(
 
     try {
       const restored = await restoreNip60Wallet(walletSigner, sync.signer, sync.query);
-      if (!restored.config) return false;
+      // Pending Lightning mint quotes are identity-authored kind:7374 events.
+      // Restore them before requiring a wallet-config event so an interrupted
+      // deposit remains recoverable even if one relay missed kind:17375.
+      let restoredQuote = false;
+      const remoteQuotes = await restoreMintQuoteEvents(sync.signer, sync.query);
+      if (remoteQuotes.length > 0) {
+        const existingTransactions = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        const knownQuoteIds = new Set(existingTransactions.map((transaction) => transaction.quoteId).filter(Boolean));
+        const seed = bip39SeedRef.current;
+        if (seed) {
+          // A stale relay can retain many expired quote events. Check only the
+          // newest live candidates and do the mint reads concurrently so wallet
+          // startup costs at most one network timeout, not N sequential ones.
+          const candidates = remoteQuotes
+            .filter((remoteQuote) => !knownQuoteIds.has(remoteQuote.quoteId))
+            .slice(0, 8);
+          const checkedQuotes = await Promise.all(candidates.map(async (remoteQuote) => {
+            try {
+              const quoteWallet = await getOrCreateWallet(remoteQuote.mint, seed, true);
+              const quote = await withTimeout(
+                quoteWallet.checkMintQuote(remoteQuote.quoteId),
+                15_000,
+                'Restore mint quote',
+              );
+              return { remoteQuote, quote };
+            } catch (error) {
+              // A temporarily unavailable mint must not prevent proof/config
+              // restoration. The relay quote remains for a later launch.
+              devLog.warn('Failed to restore pending NIP-60 mint quote:', remoteQuote.mint, error);
+              return null;
+            }
+          }));
+          for (const checked of checkedQuotes) {
+            if (!checked) continue;
+            const { remoteQuote, quote } = checked;
+            const amount = Number(quote.amount);
+            if (!Number.isSafeInteger(amount) || amount <= 0 || typeof quote.request !== 'string' || !quote.request) continue;
+            const expiresAt = typeof quote.expiry === 'number' && quote.expiry > 0
+              ? quote.expiry * 1000
+              : remoteQuote.expiresAt;
+            if (expiresAt !== undefined && expiresAt <= Date.now() && quote.state === 'UNPAID') continue;
+            try {
+              await storageRef.current.addTransaction({
+                type: 'mint',
+                amount,
+                memo: 'Lightning deposit',
+                mintUrl: remoteQuote.mint,
+                status: 'pending',
+                quoteId: remoteQuote.quoteId,
+                paymentRequest: quote.request,
+                quotePrivateKey: remoteQuote.quotePrivateKey,
+                quoteEventId: remoteQuote.eventId,
+                expiresAt,
+              }, encKey, legacyEncKeyRef.current ?? undefined);
+              knownQuoteIds.add(remoteQuote.quoteId);
+              restoredQuote = true;
+            } catch (error) {
+              devLog.warn('Failed to persist restored NIP-60 mint quote:', remoteQuote.mint, error);
+            }
+          }
+          if (restoredQuote && mountedRef.current) {
+            setTransactions(await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined));
+          }
+        }
+      }
+
+      if (!restored.config) return restoredQuote;
 
       // Merge remote proofs PER MINT, never gated on the global store state.
       // Local state stays authoritative: the merge is a union of local proofs
@@ -1717,7 +1786,7 @@ export function useCashuWallet(
       devLog.error('NIP-60 restore failed:', e);
       return false;
     }
-  }, [getNip60WalletSigner, calculateAllBalances, filterUnspentProofs]);
+  }, [getNip60WalletSigner, calculateAllBalances, filterUnspentProofs, getOrCreateWallet]);
 
   /**
    * BAO demo wallet only: recover the NIP-60 wallet bao.markets published for
@@ -2834,8 +2903,19 @@ export function useCashuWallet(
         }
       }
 
+      const quotePrivateKeyHex = supportsLockedQuotes ? bytesToHex(quotePrivateKey) : undefined;
+      const sync = nip60SyncRef.current;
+      const quoteEvent = sync && !isBaoNamespaceRef.current
+        ? await buildMintQuoteEvent(quote.quote, mintUrl, sync.signer, {
+            quotePrivateKey: quotePrivateKeyHex,
+            extraTags: [getClientTag()],
+          })
+        : null;
+
       // Record the pending invoice transaction under the tx lock. There is no
       // proof update here, so the tx lock alone is sufficient for atomicity.
+      // Save before publishing: local recovery remains available even when
+      // every relay is offline or the user rejects an external signer prompt.
       try {
         await storageRef.current.withTxLock(async () => {
           await storageRef.current.addTransaction({
@@ -2846,7 +2926,8 @@ export function useCashuWallet(
             status: 'pending',
             quoteId: quote.quote,
             paymentRequest: quote.request,
-            quotePrivateKey: supportsLockedQuotes ? bytesToHex(quotePrivateKey) : undefined,
+            quotePrivateKey: quotePrivateKeyHex,
+            quoteEventId: quoteEvent?.id,
             expiresAt: typeof quote.expiry === 'number' && quote.expiry > 0 ? quote.expiry * 1000 : undefined,
           }, encKey || undefined, legacyEncKeyRef.current ?? undefined);
         });
@@ -2854,6 +2935,15 @@ export function useCashuWallet(
       } catch (e) {
         devLog.error('Failed to record invoice transaction:', e);
         throw new Error('Invoice created but its recovery key could not be saved; do not pay it');
+      }
+
+      if (quoteEvent && sync) {
+        const publishedId = await sync.publish(quoteEvent);
+        if (!publishedId) {
+          // The encrypted local transaction is still sufficient on this
+          // device; a later invoice remains safe to pay, just not portable.
+          devLog.warn('NIP-60 pending mint quote backup could not be published');
+        }
       }
 
       if (mountedRef.current) setSuccessTimed('Invoice created. Pay it to receive sats.', 4000);
@@ -2865,7 +2955,7 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, refreshTransactions]);
+  }, [wallet, mintUrl, triggerBackup, refreshTransactions, getClientTag]);
 
   const watchMintQuote = useCallback(async (
     quoteId: string,
@@ -3018,6 +3108,7 @@ export function useCashuWallet(
     }
     const release = await acquireMutex(walletOpsMutexRef);
     let issuedAmount = 0;
+    let quoteEventId: string | undefined;
     try {
       setLoading(true);
       setError('');
@@ -3076,6 +3167,10 @@ export function useCashuWallet(
         if (method === 'bolt11' && mintedQuotes.includes(quoteId)) {
           throw new Error('This quote has already been minted');
         }
+        const pendingTransactions = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
+        const quoteTransaction = pendingTransactions.find((t) => t.type === 'mint' && t.quoteId === quoteId);
+        quoteEventId = quoteTransaction?.quoteEventId;
+        const lockedQuotePrivateKey = quoteTransaction?.quotePrivateKey;
 
         // Recover an interrupted deterministic mint BEFORE issuing any new
         // outputs. mintProofs below uses counter-derived deterministic secrets;
@@ -3153,9 +3248,6 @@ export function useCashuWallet(
             timestamp: Date.now(),
             method,
           }, encKey);
-          const pendingTransactions = await storageRef.current.loadTransactions(encKey, legacyEncKeyRef.current ?? undefined);
-          const quoteTransaction = pendingTransactions.find((t) => t.type === 'mint' && t.quoteId === quoteId);
-          const lockedQuotePrivateKey = quoteTransaction?.quotePrivateKey;
           newProofs = await withTimeout(
             checkedBolt12
               ? wallet.mintProofsBolt12(
@@ -3264,7 +3356,17 @@ export function useCashuWallet(
         await calculateAllBalances();
       });
 
-      await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'in', issuedAmount);
+      const tokenEvent = await syncNip60TokenForMint(safeNormalizeMintUrl(mintUrl), 'in', issuedAmount);
+      const sync = nip60SyncRef.current;
+      if (tokenEvent && quoteEventId && sync && !isBaoNamespaceRef.current) {
+        const deletion = await buildDeletionEvent(
+          [quoteEventId],
+          sync.signer,
+          'mint quote completed',
+          [getClientTag(), ['k', String(QUOTE_KIND)]],
+        );
+        if (deletion) await sync.publish(deletion);
+      }
 
       if (mountedRef.current) setSuccessTimed(`${issuedAmount} sats minted successfully!`);
       return true;
@@ -3276,7 +3378,7 @@ export function useCashuWallet(
       if (mountedRef.current) setLoading(false);
       await triggerBackup();
     }
-  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, filterUnspentProofs]);
+  }, [wallet, mintUrl, triggerBackup, calculateAllBalances, refreshTransactions, syncNip60TokenForMint, filterUnspentProofs, getClientTag]);
 
   const prepareMultiPathPayment = useCallback(async (invoice: string): Promise<Nut15PaymentPlan | null> => {
     const trimmedInvoice = invoice.trim();
