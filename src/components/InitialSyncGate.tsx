@@ -245,6 +245,11 @@ function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }
 // ---------------------------------------------------------------------------
 
 const PRIMAL_PACK_AUTHOR = "532d830dffe09c13e75e8b145c825718fc12b0003f61d61e9077721c7fff93cb";
+const ONBOARDING_PACK_RELAYS = [
+  "wss://relay.bao.network",
+  "wss://nos.lol",
+  "wss://relay.primal.net",
+] as const;
 const MINIMUM_FOLLOWS = 5;
 const FEATURED_CREATORS = [
   { pubkey: "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", label: "fiatjaf", role: "Creator of Nostr" },
@@ -934,7 +939,8 @@ function FollowsStep({
     let cancelled = false;
     const loadSubjectPacks = async () => {
       try {
-        const events = await nostr.query([{
+        const packSource = nostr.group([...ONBOARDING_PACK_RELAYS]);
+        const events = await packSource.query([{
           kinds: [39089],
           authors: [PRIMAL_PACK_AUTHOR],
           limit: 100,
@@ -1243,7 +1249,7 @@ function PackCard({
 
   // Show first 6 member avatars
   const previewPubkeys = useMemo(() => pubkeys.slice(0, 6), [pubkeys]);
-  const { data: membersMap } = useAuthors(previewPubkeys);
+  const { data: membersMap } = useAuthors(previewPubkeys, ONBOARDING_PACK_RELAYS);
 
   return (
     <button
