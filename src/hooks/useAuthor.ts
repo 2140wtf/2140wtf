@@ -36,7 +36,7 @@ export function authorQueryOptions(
 
       const [event] = await nostr.query(
         [{ kinds: [0], authors: [pubkey], limit: 1 }],
-        { signal },
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) },
       );
 
       if (!event) {
@@ -100,42 +100,10 @@ export function useAuthor(pubkey: string | undefined) {
     getEvent: (data) => data.event,
   });
 
-  return useQuery<AuthorResult>({
-    queryKey: ['author', pubkey ?? ''],
-    queryFn: async ({ signal }) => {
-      if (!pubkey) {
-        return {};
-      }
-
-      const [event] = await nostr.query(
-        [{ kinds: [0], authors: [pubkey], limit: 1 }],
-        { signal },
-      );
-
-      if (!event) {
-        // Relay returned nothing — a kind-0 miss is almost always transient
-        // (the relay didn't have it, or the query timed out). Never discard a
-        // profile we already have: fall back to the locally cached event so a
-        // name/avatar already on screen doesn't blank out.
-        const existing = queryClient.getQueryData<AuthorResult>(['author', pubkey]);
-        if (existing?.event) {
-          return existing;
-        }
-        const [cached] = await store.query([{ kinds: [0], authors: [pubkey] }]);
-        if (cached) {
-          return parseAuthorEvent(cached);
-        }
-        return {};
-      }
-
-      // Persist the fresh event to the local store (fire-and-forget).
-      void store.event(event);
-
-      return parseAuthorEvent(event);
-    },
-    enabled: !!pubkey,
-    staleTime: 5 * 60 * 1000,   // 5 minutes
-    gcTime: 10 * 60 * 1000,     // 10 minutes
-    retry: 1,
-  });
+  return useQuery<AuthorResult>(authorQueryOptions(
+    nostr,
+    queryClient,
+    Promise.resolve(store),
+    pubkey,
+  ));
 }
