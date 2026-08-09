@@ -11,7 +11,7 @@ import type { MeltQuoteResponse } from '@cashu/cashu-ts';
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
 import { saveProofsForMint, loadProofRecovery, loadMeltInputRecovery, getProofsForMint, writeSendRecovery, loadSendRecovery, addTransaction, loadTransactions, writeMeltInputRecovery, writeProofRecovery, writePendingReceive, loadPendingReceive, loadMintCounter, loadPendingMint, withProofLock } from '@/lib/cashu/storage';
-import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent } from '@/lib/cashu/cashuNip60';
+import { createNip60Signer, buildTokenEvent, buildNutzapInfoEvent, buildMintQuoteEvent, parseMintQuoteEvent } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -75,7 +75,7 @@ const mocks = vi.hoisted(() => ({
         : { supported: false }),
     }),
     onMintQuotePaid: vi.fn(),
-    checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', state: 'PAID' }),
+    checkMintQuote: vi.fn().mockResolvedValue({ quote: 'mint-quote-id', request: 'lnbc...', amount: 21, unit: 'sat', state: 'PAID' }),
     createMintQuoteBolt12: vi.fn().mockImplementation(async (pubkey: string, opts: { amount: number }) => ({
       quote: 'bolt12-mint-quote',
       request: 'lno1offer',
@@ -286,6 +286,33 @@ describe('useCashuWallet NIP-60 sync', () => {
 
     const deletion = deletionEvents[0]!;
     expect(deletion.tags.some((t) => t[0] === 'e' && t[1] === remoteToken!.id)).toBe(true);
+  });
+
+  it('restores an encrypted pending mint quote from NIP-60 after local state is lost', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const sync = makeSync();
+    const quotePrivateKey = 'cd'.repeat(32);
+    const quoteEvent = await buildMintQuoteEvent('mint-quote-id', mintUrl, sync.signer, { quotePrivateKey });
+    expect(quoteEvent).not.toBeNull();
+    mocks.query.mockImplementation(async (filter: { kinds: number[] }) =>
+      filter.kinds.includes(7374) ? [quoteEvent!] : [],
+    );
+    mocks.publish.mockImplementation(async (event: NostrEvent) => event.id);
+
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.transactions.some((transaction) => transaction.quoteId === 'mint-quote-id')).toBe(true));
+    const restored = result.current.transactions.find((transaction) => transaction.quoteId === 'mint-quote-id');
+    expect(restored).toMatchObject({
+      status: 'pending',
+      amount: 21,
+      paymentRequest: 'lnbc...',
+      quotePrivateKey,
+      quoteEventId: quoteEvent!.id,
+    });
   });
 
 });
@@ -613,6 +640,56 @@ describe('useCashuWallet mintFromQuote proof validation', () => {
     const firstPubkey = vi.mocked(wallet.createLockedMintQuote).mock.calls[0][1];
     const secondPubkey = vi.mocked(wallet.createLockedMintQuote).mock.calls[1][1];
     expect(secondPubkey).not.toBe(firstPubkey);
+  });
+
+  it('backs up a protected pending quote as encrypted NIP-60 state', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const identitySigner = createNip60Signer(generateSecretKey());
+    const sync: Nip60SyncApi = {
+      signer: identitySigner,
+      query: vi.fn().mockResolvedValue([]),
+      publish: vi.fn().mockImplementation(async (event: NostrEvent) => event.id),
+      relays: [],
+    };
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const wallet = result.current.wallet!;
+    vi.mocked(wallet.lazyGetMintInfo).mockResolvedValue({
+      isSupported: (nut: number) => nut === 20 ? { supported: true } : { supported: false },
+    } as Awaited<ReturnType<typeof wallet.lazyGetMintInfo>>);
+
+    await act(async () => result.current.requestInvoice(21));
+
+    const quoteEvent = vi.mocked(sync.publish).mock.calls
+      .map(([event]) => event)
+      .find((event) => event.kind === 7374);
+    expect(quoteEvent).toBeDefined();
+    const parsed = await parseMintQuoteEvent(quoteEvent!, identitySigner);
+    const transactions = await loadTransactions(await deriveEncryptionKey(seedPhrase));
+    const pending = transactions.find((transaction) => transaction.quoteId === 'locked-mint-quote-id');
+    expect(parsed).toMatchObject({
+      quoteId: 'locked-mint-quote-id',
+      mint: mintUrl,
+      quotePrivateKey: pending?.quotePrivateKey,
+    });
+    expect(pending?.quoteEventId).toBe(quoteEvent!.id);
+
+    const encoder = new TextEncoder();
+    vi.spyOn(wallet, 'checkProofsStates').mockImplementation(async (proofs: unknown[]) =>
+      (proofs as Array<{ secret: string }>).map((proof) => ({
+        Y: hashToCurve(encoder.encode(proof.secret)).toHex(true),
+        state: 'UNSPENT',
+      })) as never,
+    );
+    const minted = await act(async () => result.current.mintFromQuote('locked-mint-quote-id', 21));
+    expect(minted).toBe(true);
+    const deletion = vi.mocked(sync.publish).mock.calls
+      .map(([event]) => event)
+      .find((event) => event.kind === 5 && event.tags.some((tag) => tag[0] === 'k' && tag[1] === '7374'));
+    expect(deletion?.tags).toContainEqual(['e', quoteEvent!.id]);
   });
 
   it('keeps an unpaid quote pending when confirmation is checked early', async () => {
