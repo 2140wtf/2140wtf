@@ -26,6 +26,7 @@ import {
   parseComputeCreditReceipt,
   parseComputeCreditRequest,
   resolveCreditLockTarget,
+  isLikelyMainnetMint,
   aggregateAgentCreditStats,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
@@ -667,6 +668,10 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
         activeMint: mintUrl,
         allowBearer,
       });
+
+      if (!isLikelyMainnetMint(target.mintUrl)) {
+        throw new Error('Agent funding requires a reachable HTTPS mainnet Cashu mint. Select a mainnet mint; signet and demo mints are blocked.');
+      }
 
       // 2. Balance check at the chosen mint — a raw "Insufficient balance: 0"
       //    from deep in the wallet tells the funder nothing.
