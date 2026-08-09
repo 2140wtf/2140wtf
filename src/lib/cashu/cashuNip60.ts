@@ -97,6 +97,17 @@ export interface Nip60HistoryContent {
   events?: Array<{ id: string; marker: 'created' | 'destroyed' }>;
 }
 
+/** Decrypted state carried by an optional NIP-60 kind:7374 mint quote. */
+export interface Nip60MintQuoteContent {
+  eventId: string;
+  quoteId: string;
+  mint: string;
+  /** NUT-20 per-quote signing key. It is always NIP-44 encrypted on relays. */
+  quotePrivateKey?: string;
+  createdAt: number;
+  expiresAt?: number;
+}
+
 export interface Nip60RestoreResult {
   /** The default ('default') wallet config if present. */
   config: Nip60WalletConfig | null;
@@ -530,6 +541,122 @@ export async function parseHistoryEvent(
   } catch {
     return null;
   }
+}
+
+/** Build the optional NIP-60 kind:7374 used to resume a Lightning mint.
+ *
+ * The JSON field names match Amethyst/Quartz. Quotes without a NUT-20 key use
+ * the legacy plain-string payload required by NIP-60.
+ */
+export async function buildMintQuoteEvent(
+  quoteId: string,
+  mintUrl: string,
+  signer: Nip60Signer,
+  opts?: {
+    quotePrivateKey?: string;
+    expiration?: number;
+    extraTags?: string[][];
+    createdAt?: number;
+  },
+): Promise<NostrEvent | null> {
+  const normalized = normalizeMintUrl(mintUrl);
+  if (!normalized || !quoteId || quoteId.length > 1000) return null;
+  const quotePrivateKey = opts?.quotePrivateKey;
+  if (quotePrivateKey !== undefined && !/^[0-9a-f]{64}$/.test(quotePrivateKey)) return null;
+
+  const plaintext = quotePrivateKey
+    ? JSON.stringify({ quote_id: quoteId, p2pk_priv: quotePrivateKey })
+    : quoteId;
+  const content = await signer.nip44Encrypt(signer.pubkey, plaintext);
+  if (!content) return null;
+  const createdAt = opts?.createdAt ?? Math.floor(Date.now() / 1000);
+  const expiration = opts?.expiration ?? createdAt + 14 * 24 * 60 * 60;
+  return signer.signEvent({
+    kind: QUOTE_KIND,
+    content,
+    tags: mergeExtraTags([
+      ['expiration', String(expiration)],
+      ['mint', normalized],
+    ], opts?.extraTags),
+    created_at: createdAt,
+  });
+}
+
+/** Decrypt either the standard legacy quote-id string or the NUT-20 JSON
+ * extension used by Amethyst/Quartz. */
+export async function parseMintQuoteEvent(
+  event: NostrEvent,
+  signer: Nip60Signer,
+): Promise<Nip60MintQuoteContent | null> {
+  if (event.kind !== QUOTE_KIND || event.pubkey !== signer.pubkey || !verifyEvent(event)) return null;
+  const mintTag = event.tags.find((tag) => tag[0] === 'mint')?.[1];
+  if (typeof mintTag !== 'string') return null;
+  const mint = normalizeMintUrl(mintTag);
+  if (!mint) return null;
+  const plaintext = await signer.nip44Decrypt(event.pubkey, event.content);
+  if (!plaintext) return null;
+
+  let quoteId = plaintext;
+  let quotePrivateKey: string | undefined;
+  try {
+    const parsed = JSON.parse(plaintext) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const payload = parsed as Record<string, unknown>;
+    const candidate = payload.quote_id ?? payload.quoteId ?? payload.quote;
+    if (typeof candidate !== 'string') return null;
+    quoteId = candidate;
+    const key = payload.p2pk_priv ?? payload.quotePrivateKey ?? payload.signingPrivkey;
+    if (key !== undefined) {
+      if (typeof key !== 'string' || !/^[0-9a-f]{64}$/.test(key)) return null;
+      quotePrivateKey = key;
+    }
+  } catch {
+    // NIP-60's original payload is the decrypted quote id itself.
+  }
+  if (!quoteId || quoteId.length > 1000) return null;
+
+  const expirationRaw = event.tags.find((tag) => tag[0] === 'expiration')?.[1];
+  const expiration = expirationRaw === undefined ? undefined : Number(expirationRaw);
+  return {
+    eventId: event.id,
+    quoteId,
+    mint,
+    quotePrivateKey,
+    createdAt: event.created_at,
+    expiresAt: Number.isSafeInteger(expiration) && (expiration ?? 0) > 0 ? expiration! * 1000 : undefined,
+  };
+}
+
+/** Restore live pending mint quotes and ignore deleted/expired duplicates. */
+export async function restoreMintQuoteEvents(
+  signer: Nip60Signer,
+  queryFn: (filter: NostrFilter) => Promise<NostrEvent[]>,
+  now = Date.now(),
+): Promise<Nip60MintQuoteContent[]> {
+  const [quoteEvents, deletionEvents] = await Promise.all([
+    queryFn({ kinds: [QUOTE_KIND], authors: [signer.pubkey], limit: 200 }),
+    queryFn({ kinds: [DELETE_KIND], authors: [signer.pubkey], limit: 500 }),
+  ]);
+  const deletedIds = new Set<string>();
+  for (const event of deletionEvents) {
+    if (event.kind !== DELETE_KIND || event.pubkey !== signer.pubkey || !verifyEvent(event)) continue;
+    for (const tag of event.tags) {
+      if (tag[0] === 'e' && typeof tag[1] === 'string') deletedIds.add(tag[1]);
+    }
+  }
+
+  const parsed = await Promise.all(
+    quoteEvents
+      .filter((event) => !deletedIds.has(event.id))
+      .map((event) => parseMintQuoteEvent(event, signer)),
+  );
+  const newestByQuote = new Map<string, Nip60MintQuoteContent>();
+  for (const quote of parsed) {
+    if (!quote || (quote.expiresAt !== undefined && quote.expiresAt <= now)) continue;
+    const existing = newestByQuote.get(quote.quoteId);
+    if (!existing || quote.createdAt > existing.createdAt) newestByQuote.set(quote.quoteId, quote);
+  }
+  return [...newestByQuote.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** Build a kind:10019 Nutzap info event. Signed by the user's identity key. */
