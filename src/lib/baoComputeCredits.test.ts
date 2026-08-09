@@ -14,6 +14,7 @@ import {
   parseComputeCreditReceipt,
   parseComputeCreditRequest,
   resolveCreditLockTarget,
+  isLikelyMainnetMint,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
@@ -32,6 +33,20 @@ function ev(partial: Partial<NostrEvent>): NostrEvent {
     ...partial,
   };
 }
+
+describe('isLikelyMainnetMint', () => {
+  it('accepts HTTPS production mint URLs, including custom mints', () => {
+    expect(isLikelyMainnetMint('https://mint.example.com')).toBe(true);
+    expect(isLikelyMainnetMint('https://cashu.example.com/api/')).toBe(true);
+  });
+
+  it('rejects test, demo, insecure, and local mint URLs', () => {
+    expect(isLikelyMainnetMint('https://signet-mint.example.com')).toBe(false);
+    expect(isLikelyMainnetMint('https://mint.example.com/testnet')).toBe(false);
+    expect(isLikelyMainnetMint('http://mint.example.com')).toBe(false);
+    expect(isLikelyMainnetMint('http://localhost:3338')).toBe(false);
+  });
+});
 
 describe('buildComputeCreditRequest', () => {
   it('builds a kind-4971 template with tag and amount', () => {
