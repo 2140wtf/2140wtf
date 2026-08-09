@@ -50,6 +50,7 @@ const signer = {
   nip44: { encrypt: vi.fn(), decrypt: vi.fn() },
 } as unknown as NostrSigner;
 const user = { pubkey: '1'.repeat(64), signer };
+const pendingToken = { id: 'a'.repeat(64), token: 'cashuBtoken' };
 
 describe('useBaoCashuWallet API proof collection', () => {
   beforeEach(() => {
@@ -63,11 +64,12 @@ describe('useBaoCashuWallet API proof collection', () => {
   afterEach(() => vi.useRealTimers());
 
   it('auto-collects pending API proofs when enabled is omitted (the documented default)', async () => {
-    mocks.pending.mockResolvedValueOnce(['cashuBtoken']);
+    mocks.pending.mockResolvedValueOnce([pendingToken]);
     renderHook(() => useBaoCashuWallet('seed', user, []));
 
     await waitFor(() => expect(mocks.receiveToken).toHaveBeenCalledWith('cashuBtoken'));
     expect(mocks.clear).toHaveBeenCalledTimes(1);
+    expect(mocks.clear).toHaveBeenCalledWith(signer, [pendingToken.id]);
     expect(mocks.receiver).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Array),
@@ -79,7 +81,7 @@ describe('useBaoCashuWallet API proof collection', () => {
   it('imports pending proofs even while the generic claim status still lags', async () => {
     vi.useFakeTimers();
     mocks.claim.mockResolvedValue({ status: 'pending', idempotency_key: 'claim-key' });
-    mocks.pending.mockResolvedValueOnce(['cashuBtoken']);
+    mocks.pending.mockResolvedValueOnce([pendingToken]);
     const { result } = renderHook(() => useBaoCashuWallet('seed', user, [], { enabled: false }));
 
     const claimPromise = result.current.claimApiCashu(21);
@@ -92,10 +94,11 @@ describe('useBaoCashuWallet API proof collection', () => {
     });
     expect(mocks.status).not.toHaveBeenCalled();
     expect(mocks.clear).toHaveBeenCalledTimes(1);
+    expect(mocks.clear).toHaveBeenCalledWith(signer, [pendingToken.id]);
   });
 
   it('does not clear the server copy when local proof storage fails', async () => {
-    mocks.pending.mockResolvedValue(['cashuBtoken']);
+    mocks.pending.mockResolvedValue([pendingToken]);
     mocks.receiveToken.mockResolvedValue(0);
     const { result } = renderHook(() => useBaoCashuWallet('seed', user, [], { enabled: false }));
 

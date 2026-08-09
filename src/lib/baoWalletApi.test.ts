@@ -154,14 +154,27 @@ describe('BAO Cashu claim and collection API', () => {
   });
 
   it('fetches and clears only valid pending token strings', async () => {
-    const fetchSpy = mockFetchOnce(200, { data: { tokens: ['cashuA-token', '', 21, 'cashuB-token'] } });
-    await expect(fetchPendingBaoCashuTokens(fakeSigner)).resolves.toEqual(['cashuA-token', 'cashuB-token']);
+    const idA = 'a'.repeat(64);
+    const idB = 'b'.repeat(64);
+    const fetchSpy = mockFetchOnce(200, { data: { items: [
+      { id: idA, token: 'cashuA-token' },
+      { id: 'bad', token: 'cashu-invalid' },
+      { id: idB, token: 'cashuB-token' },
+    ] } });
+    await expect(fetchPendingBaoCashuTokens(fakeSigner)).resolves.toEqual([
+      { id: idA, token: 'cashuA-token' },
+      { id: idB, token: 'cashuB-token' },
+    ]);
     expect(fetchSpy.mock.calls[0]?.[0]).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-pending');
 
     const clearSpy = mockFetchOnce(200, { data: { collected: true } });
-    await expect(clearPendingBaoCashuTokens(fakeSigner)).resolves.toBeUndefined();
+    await expect(clearPendingBaoCashuTokens(fakeSigner, [idA, idB])).resolves.toBeUndefined();
     const [url, init] = clearSpy.mock.calls.at(-1) as [string, RequestInit];
     expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-collect');
     expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ token_ids: [idA, idB] }));
+    const auth = String((init.headers as Record<string, string>).Authorization);
+    const event = JSON.parse(atob(auth.slice(6))) as { tags: string[][] };
+    expect(event.tags.some(([name, value]) => name === 'payload' && value.length === 64)).toBe(true);
   });
 });
