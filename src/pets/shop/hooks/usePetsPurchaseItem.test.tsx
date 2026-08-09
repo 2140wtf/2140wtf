@@ -229,8 +229,71 @@ describe('usePetsPurchaseItem bao mode', () => {
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toContain('Insufficient balance on the selected mint');
+    expect(result.current.error?.message).toContain('Insufficient balance on the local NIP-60 BAO mint');
     expect(mocks.publishEvent).not.toHaveBeenCalled();
+  });
+
+  it('spends custodial BAO Cashu through the scoped API without requiring a local NIP-60 wallet', async () => {
+    mocks.sendDemoSats.mockResolvedValue({ status: 'completed', new_balance_sats: 475 });
+    const refreshBaoApiBalances = vi.fn().mockResolvedValue(undefined);
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, null, undefined, 'bao', {
+        baoApiCashuBalance: 500,
+        refreshBaoApiBalances,
+      }),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.sendDemoSats).toHaveBeenCalledTimes(1);
+    expect(mocks.sendDemoSats.mock.calls[0]?.[1]).toMatchObject({
+      rail: 'cashu',
+      amountSats: 25,
+    });
+    await waitFor(() => expect(refreshBaoApiBalances).toHaveBeenCalledTimes(1));
+  });
+
+  it('uses a fresh idempotency key for each completed purchase', async () => {
+    mocks.sendDemoSats.mockResolvedValue({ status: 'completed' });
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, null, undefined, 'bao', { baoApiCashuBalance: 500 }),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(mocks.sendDemoSats).toHaveBeenCalledTimes(2));
+
+    const firstKey = (mocks.sendDemoSats.mock.calls[0]?.[1] as { idempotencyKey: string }).idempotencyKey;
+    const secondKey = (mocks.sendDemoSats.mock.calls[1]?.[1] as { idempotencyKey: string }).idempotencyKey;
+    expect(firstKey).not.toBe(secondKey);
+  });
+
+  it('reuses the same idempotency key when an API payment outcome is uncertain', async () => {
+    mocks.sendDemoSats
+      .mockRejectedValueOnce(new Error('signal timed out'))
+      .mockResolvedValueOnce({ status: 'completed' });
+    const profile = parseNostrPetProfileEvent(createProfileEvent('bao', 20_000))!;
+    const { result } = renderHook(
+      () => usePetsPurchaseItem(profile, null, null, undefined, 'bao', { baoApiCashuBalance: 500 }),
+      { wrapper },
+    );
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toContain('operation key will be reused');
+
+    result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const firstKey = (mocks.sendDemoSats.mock.calls[0]?.[1] as { idempotencyKey: string }).idempotencyKey;
+    const retryKey = (mocks.sendDemoSats.mock.calls[1]?.[1] as { idempotencyKey: string }).idempotencyKey;
+    expect(retryKey).toBe(firstKey);
   });
 });
 
@@ -267,6 +330,7 @@ describe('usePetsPurchaseItem rail resolution (desync safety)', () => {
     result.current.mutate({ itemId: 'food_apple', price: 25, quantity: 1, currency: 'sats' });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.sendDemoSats).not.toHaveBeenCalled();
     // Full cost charged to the real wallet — no pet-fiat offset.
     expect(sendNutzap).toHaveBeenCalledWith(25, TREASURY_NPUB, 'https://mock.mint', {
       memo: 'Pets shop: Apple',
