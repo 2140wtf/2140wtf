@@ -52,6 +52,34 @@ export interface ComputeCreditFulfillment {
   shot?: number;
 }
 
+export type ComputeCreditShot = 1 | 2;
+
+/** Agent-confirmed tranches for a request. Third-party claims never count. */
+export function confirmedComputeCreditShots(
+  request: ComputeCreditRequest,
+  fulfillments: ComputeCreditFulfillment[],
+): Set<ComputeCreditShot> {
+  const confirmed = new Set<ComputeCreditShot>();
+  for (const fulfillment of fulfillments) {
+    if (
+      fulfillment.requestId !== request.id ||
+      fulfillment.requesterPubkey !== request.pubkey ||
+      fulfillment.pubkey !== request.pubkey
+    ) continue;
+    confirmed.add(request.shots === 2 && fulfillment.shot === 2 ? 2 : 1);
+  }
+  return confirmed;
+}
+
+/** A double-shot request closes only after the agent confirms both tranches. */
+export function isComputeCreditRequestConfirmed(
+  request: ComputeCreditRequest,
+  fulfillments: ComputeCreditFulfillment[],
+): boolean {
+  const confirmed = confirmedComputeCreditShots(request, fulfillments);
+  return confirmed.has(1) && (request.shots !== 2 || confirmed.has(2));
+}
+
 /** Unsigned event template for a compute-credit request (for useNostrPublish). */
 export function buildComputeCreditRequest(input: {
   amountSats: number;
@@ -238,17 +266,18 @@ export function aggregateAgentCreditStats(input: {
   const ownRequests = input.requests.filter((r) => r.pubkey === agentPubkey);
   const requestById = new Map(ownRequests.map((r) => [r.id, r]));
 
-  const claimsByRequest = new Map<string, Set<string>>();
-  const confirmedRequestIds = new Set<string>();
+  const claimsByRequest = new Map<string, Map<ComputeCreditShot, Set<string>>>();
   for (const f of input.fulfillments) {
-    if (!requestById.has(f.requestId)) continue;
+    const request = requestById.get(f.requestId);
+    if (!request) continue;
     if (f.requesterPubkey !== agentPubkey) continue; // p tag must match the real requester
-    if (f.pubkey === agentPubkey) {
-      confirmedRequestIds.add(f.requestId);
-    } else {
-      const set = claimsByRequest.get(f.requestId) ?? new Set<string>();
+    if (f.pubkey !== agentPubkey) {
+      const shot: ComputeCreditShot = request.shots === 2 && f.shot === 2 ? 2 : 1;
+      const byShot = claimsByRequest.get(f.requestId) ?? new Map<ComputeCreditShot, Set<string>>();
+      const set = byShot.get(shot) ?? new Set<string>();
       set.add(f.pubkey);
-      claimsByRequest.set(f.requestId, set);
+      byShot.set(shot, set);
+      claimsByRequest.set(f.requestId, byShot);
     }
   }
 
@@ -256,10 +285,17 @@ export function aggregateAgentCreditStats(input: {
   let fundedRequests = 0;
   let selfReportedSats = 0;
   for (const [requestId, requestClaims] of claimsByRequest) {
-    if (!confirmedRequestIds.has(requestId)) continue; // both sides required
+    const request = requestById.get(requestId);
+    if (!request || !isComputeCreditRequestConfirmed(request, input.fulfillments)) continue;
+    const expectedShots: ComputeCreditShot[] = request.shots === 2 ? [1, 2] : [1];
+    // A double-shot request needs an independent funder claim for each payout;
+    // one claim plus two self-confirmations must not inflate the full amount.
+    if (!expectedShots.every((shot) => (requestClaims.get(shot)?.size ?? 0) > 0)) continue;
     fundedRequests += 1;
-    selfReportedSats += requestById.get(requestId)?.amountSats ?? 0;
-    for (const c of requestClaims) claimants.add(c);
+    selfReportedSats += request.amountSats + (request.shots === 2 ? request.amount2Sats ?? 0 : 0);
+    for (const shotClaims of requestClaims.values()) {
+      for (const c of shotClaims) claimants.add(c);
+    }
   }
 
   const receiptRequestIds = new Set<string>();

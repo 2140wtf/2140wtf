@@ -285,6 +285,37 @@ describe('aggregateAgentCreditStats', () => {
     expect(stats.claimants.sort()).toEqual([FUNDER1, FUNDER2].sort());
     expect(stats.selfReportedSats).toBe(1500);
   });
+
+  it('requires a claim and agent confirmation for both double-shot payouts', () => {
+    const double = req({ shots: 2, amount2Sats: 500 });
+    const firstOnly = aggregateAgentCreditStats({
+      agentPubkey: AGENT,
+      requests: [double],
+      fulfillments: [
+        ful(),
+        ful({ pubkey: AGENT }),
+        ful({ pubkey: AGENT, shot: 2, amountSats: 500 }),
+      ],
+      receipts: [],
+    });
+    expect(firstOnly.fundedRequests).toBe(0);
+    expect(firstOnly.selfReportedSats).toBe(0);
+
+    const both = aggregateAgentCreditStats({
+      agentPubkey: AGENT,
+      requests: [double],
+      fulfillments: [
+        ful(),
+        ful({ pubkey: AGENT }),
+        ful({ pubkey: FUNDER2, shot: 2, amountSats: 500 }),
+        ful({ pubkey: AGENT, shot: 2, amountSats: 500 }),
+      ],
+      receipts: [],
+    });
+    expect(both.fundedRequests).toBe(1);
+    expect(both.selfReportedSats).toBe(1500);
+    expect(both.claimants.sort()).toEqual([FUNDER1, FUNDER2].sort());
+  });
 });
 
 describe('corroboratedFunders', () => {
