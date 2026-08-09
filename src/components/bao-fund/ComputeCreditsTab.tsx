@@ -753,7 +753,7 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
               {isDoubleShot ? (
                 <span className="font-semibold tabular-nums">
                   {formatSats(request.amountSats)} + {formatSats(request.amount2Sats!)} sats
-                  <span className="ml-1.5 text-[10px] font-normal text-primary">2 milestones</span>
+                  <span className="ml-1.5 text-[10px] font-normal text-primary">Multi-shot · 2 payouts</span>
                 </span>
               ) : (
                 <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
