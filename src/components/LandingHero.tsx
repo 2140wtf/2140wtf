@@ -284,11 +284,6 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
       {onTabChange && (
         <div className="landing-hero-fade" style={{ animationDelay: '320ms' }}>
           <SubHeaderBar noArc innerClassName="px-4">
-            <TabButton
-              label="All"
-              active={activeTab === 'all'}
-              onClick={() => onTabChange('all')}
-            />
             {showAppFeed && (
               <TabButton
                 label={appName}
@@ -296,6 +291,11 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
                 onClick={() => onTabChange('app')}
               />
             )}
+            <TabButton
+              label="ALL"
+              active={activeTab === 'all'}
+              onClick={() => onTabChange('all')}
+            />
             {showCommunityFeed && (
               <TabButton
                 label={communityLabel}
@@ -303,11 +303,6 @@ export function LandingHero({ onLoginClick, onSignupClick, activeTab, onTabChang
                 onClick={() => onTabChange('communities')}
               />
             )}
-            <TabButton
-              label="Global"
-              active={activeTab === 'global'}
-              onClick={() => onTabChange('global')}
-            />
             {FEED_TOPICS.map((topic) => (
               <TabButton
                 key={`guest-topic:${topic.id}`}

@@ -237,6 +237,46 @@ export function CashuWalletTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceQuote?.quoteId, invoiceQuote?.method]);
 
+  // NUT-17 is the fast path, but browser WebSockets can be blocked by a
+  // relay/mint proxy, a restrictive network, or a WebView. Keep checking the
+  // quote over the normal HTTPS API so a paid Lightning invoice is not left
+  // waiting for the user to press Mint manually. The mintFromQuote mutex and
+  // mintingQuoteRef make this safe if polling and NUT-17 notice payment at
+  // the same time.
+  useEffect(() => {
+    if (!invoiceQuote || invoiceQuote.method !== 'bolt11') return;
+    let active = true;
+    let checking = false;
+    const check = async () => {
+      if (!active || checking || mintingQuoteRef.current === invoiceQuote.quoteId) return;
+      checking = true;
+      try {
+        const updated = await wallet.checkMintQuote({
+          quote: invoiceQuote.quoteId,
+          request: invoiceQuote.request,
+          state: 'UNPAID',
+          amount: invoiceQuote.amount,
+          unit: 'sat',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+        });
+        if (active && (updated?.state === 'PAID' || updated?.state === 'ISSUED')) {
+          await handleMintInvoice();
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+    // The quote id is intentionally the only lifecycle dependency; changing
+    // wallet state while this quote is pending must not create duplicate polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceQuote?.quoteId, invoiceQuote?.method]);
+
   const handleSendToken = async () => {
     const amount = parseInt(sendAmount, 10);
     if (Number.isNaN(amount) || amount <= 0) {

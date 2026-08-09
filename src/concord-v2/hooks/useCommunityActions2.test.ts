@@ -3,7 +3,12 @@ import { finalizeEvent } from 'nostr-tools/pure';
 import type { NostrEvent } from 'nostr-tools/pure';
 import { encrypt as nip44Encrypt } from 'nostr-tools/nip44';
 
-import { createRelayCandidates, defaultCreateRelays, resolveBundle } from './useCommunityActions2';
+import {
+  createRelayCandidates,
+  defaultCreateRelays,
+  publishWithAuthenticatedFallback,
+  resolveBundle,
+} from './useCommunityActions2';
 import { mintCommunity } from '@/concord-v2/lib/community';
 import { bytesToHex, inviteBundleKey, random32 } from '@/concord-v2/lib/derive';
 import { mintLinkSigner, mintToken, type InviteBundle } from '@/concord-v2/lib/invite';
@@ -46,6 +51,61 @@ describe('createRelayCandidates', () => {
 });
 
 // ── resolveBundle: revocation tie-break at the bundle coordinate ─────────────
+
+describe('publishWithAuthenticatedFallback', () => {
+  const relays = ['wss://one.test', 'wss://two.test'];
+
+  it('retries through the signed-in connection when isolated publishing is rejected', async () => {
+    const isolated: string[] = [];
+    const authenticated: string[] = [];
+
+    await publishWithAuthenticatedFallback(
+      relays,
+      async (url) => {
+        isolated.push(url);
+        throw new Error('authentication required');
+      },
+      async (url) => {
+        authenticated.push(url);
+      },
+      'the dissolution',
+    );
+
+    expect(isolated).toEqual(relays);
+    expect(authenticated).toEqual(relays);
+  });
+
+  it('does not reveal the signed-in identity when an isolated relay accepts the event', async () => {
+    let authenticatedCalls = 0;
+
+    await publishWithAuthenticatedFallback(
+      relays,
+      async (url) => {
+        if (url === relays[0]) return;
+        throw new Error('offline');
+      },
+      async () => {
+        authenticatedCalls++;
+      },
+      'the dissolution',
+    );
+
+    expect(authenticatedCalls).toBe(0);
+  });
+
+  it('reports the relay rejection after both publishing paths fail', async () => {
+    await expect(
+      publishWithAuthenticatedFallback(
+        ['wss://relay.example'],
+        async () => { throw new Error('authentication required'); },
+        async () => { throw new Error('blocked by relay policy'); },
+        'the dissolution',
+      ),
+    ).rejects.toThrow(
+      "The BAO's home relays refused the dissolution, including the signed-in retry — relay.example: blocked by relay policy",
+    );
+  });
+});
 
 describe('resolveBundle revocation tie-break', () => {
   const RELAY = 'wss://relay.test';
