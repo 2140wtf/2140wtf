@@ -132,6 +132,12 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
         toast({ title: 'Insufficient balance', description: `Not enough sats on the ${rail} rail.`, variant: 'destructive' });
       } else if (e instanceof BaoSendError && e.code === 'SEND_DAILY_LIMIT') {
         toast({ title: 'Daily limit reached', description: '100,000 sats per day per user. Try again tomorrow.', variant: 'destructive' });
+      } else if (e instanceof BaoSendError && e.code === 'IDEMPOTENCY_CONFLICT') {
+        toast({
+          title: 'Send request already used',
+          description: 'This send could not be retried because its amount, rail, or recipient changed. Press Send again to start a new request.',
+          variant: 'destructive',
+        });
       } else {
         toast({ title: 'Send failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
       }
@@ -155,13 +161,16 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
             id='bao-send-dest'
             value={destination}
             onChange={(e) => {
+              // A key is bound to one exact send payload. Start a fresh
+              // intent whenever the user edits the destination.
+              idemRef.current = null;
               setSelectedRecipient(null);
               setDestination(e.target.value);
             }}
             placeholder='Search name, NIP-05, or paste npub1…'
             autoComplete='off'
           />
-          {!selectedRecipient && destination.trim().length > 0 && (
+          {!selectedRecipient && !directRecipient && destination.trim().length > 0 && (
             <div className='rounded-lg border bg-background shadow-sm' role='listbox' aria-label='Recipient search results'>
               {isSearchingRecipients ? (
                 <p className='flex items-center gap-2 p-3 text-xs text-muted-foreground'>
@@ -198,11 +207,11 @@ function BaoSendPanel({ signer, onSent }: { signer: NostrSigner; onSent: () => v
         <div className='flex gap-3'>
           <div className='space-y-1.5 flex-1'>
             <Label htmlFor='bao-send-amount'>Amount (sats)</Label>
-            <Input id='bao-send-amount' value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode='numeric' />
+            <Input id='bao-send-amount' value={amount} onChange={(e) => { idemRef.current = null; setAmount(e.target.value.replace(/[^0-9]/g, '')); }} inputMode='numeric' />
           </div>
           <div className='space-y-1.5 w-32'>
             <Label>Rail</Label>
-            <Select value={rail} onValueChange={(v) => setRail(v as BaoSendRail)}>
+            <Select value={rail} onValueChange={(v) => { idemRef.current = null; setRail(v as BaoSendRail); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SEND_RAILS.map((r) => (
