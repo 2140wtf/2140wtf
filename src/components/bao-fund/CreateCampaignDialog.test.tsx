@@ -73,7 +73,7 @@ describe('CreateCampaignDialog — stream goal', () => {
 
     // …then switch to the single shot: the Goal input shows only the
     // first draft's amount, so that is what the campaign must be created with.
-    fireEvent.click(screen.getByText('Single shot'));
+    fireEvent.click(screen.getByText('One gradual payout'));
     expect((screen.getByLabelText('Goal (sats)') as HTMLInputElement).value).toBe('1000');
     expect(screen.getByRole('button', { name: 'Create raise — 1,000 sats goal' })).toBeInTheDocument();
 
@@ -172,7 +172,7 @@ describe('CreateCampaignDialog — deadline validation', () => {
 
   it('rejects a vesting window below 1 day in single-shot mode', async () => {
     renderDialog();
-    fireEvent.click(screen.getByText('Single shot'));
+    fireEvent.click(screen.getByText('One gradual payout'));
     fireEvent.change(screen.getByLabelText('Project title'), { target: { value: 'Test campaign' } });
     fireEvent.change(screen.getByLabelText(/Repository/), { target: { value: 'https://github.com/x/y' } });
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'x'.repeat(130) } });
