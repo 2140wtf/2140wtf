@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { getPaginationCursor } from './feedUtils';
+import { DISCOVERY_BLOCKED_PUBKEYS, getPaginationCursor, shouldHideFeedEvent } from './feedUtils';
 
 function ev(created_at: number): NostrEvent {
   return {
@@ -58,5 +58,17 @@ describe('getPaginationCursor', () => {
     const cursor = getPaginationCursor([...recent, ...ancient]);
     // 30 events → index 27 → the first ancient event, not the oldest one.
     expect(cursor).toBeGreaterThan(base - 2 * DAY);
+  });
+});
+
+describe('discovery spam filtering', () => {
+  it('hides every app-blocked author before rendering a feed card', () => {
+    for (const pubkey of DISCOVERY_BLOCKED_PUBKEYS) {
+      expect(shouldHideFeedEvent({ ...ev(123), pubkey })).toBe(true);
+    }
+  });
+
+  it('does not hide an ordinary text note', () => {
+    expect(shouldHideFeedEvent(ev(123))).toBe(false);
   });
 });

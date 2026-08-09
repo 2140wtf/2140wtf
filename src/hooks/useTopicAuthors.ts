@@ -2,6 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeedTopic } from '@/lib/feedTopics';
 import type { NostrFilter } from '@nostrify/nostrify';
+import { DISCOVERY_BLOCKED_PUBKEYS } from '@/lib/feedUtils';
 
 /**
  * How far back to look when discovering active topic authors.
@@ -14,6 +15,8 @@ const DISCOVERY_LIMIT = 1500;
 
 /** Maximum authors to return per topic feed. */
 const MAX_AUTHORS = 100;
+const PRIMAL_FOLLOW_PACK_AUTHOR = '532d830dffe09c13e75e8b145c825718fc12b0003f61d61e9077721c7fff93cb';
+const HEX_PUBKEY = /^[0-9a-f]{64}$/;
 
 /**
  * Discover the most active authors for a feed topic.
@@ -50,12 +53,16 @@ export function useTopicAuthors(topic: FeedTopic | null) {
         limit: DISCOVERY_LIMIT,
       };
 
-      const events = await nostr.query([filter], {
+      const filters: NostrFilter[] = [filter];
+      if (topic.packTitles?.length) {
+        filters.push({ kinds: [39089], authors: [PRIMAL_FOLLOW_PACK_AUTHOR], limit: 100 });
+      }
+      const events = await nostr.query(filters, {
         signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
 
       const stats = new Map<string, { count: number; latest: number }>();
-      for (const event of events) {
+      for (const event of events.filter((candidate) => candidate.kind === 1)) {
         const entry = stats.get(event.pubkey) ?? { count: 0, latest: event.created_at };
         entry.count += 1;
         if (event.created_at > entry.latest) {
@@ -78,7 +85,21 @@ export function useTopicAuthors(topic: FeedTopic | null) {
       });
 
       scored.sort((a, b) => b.score - a.score);
-      return scored.slice(0, MAX_AUTHORS).map(({ pubkey }) => pubkey);
+      const curated = (topic.authors ?? []).filter((pubkey) => !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+      const packAuthors = events
+        .filter((event) => event.kind === 39089)
+        .filter((event) => {
+          const title = event.tags.find(([name]) => name === 'title')?.[1]
+            ?? event.tags.find(([name]) => name === 'name')?.[1]
+            ?? '';
+          return topic.packTitles?.includes(title);
+        })
+        .flatMap((event) => event.tags.filter(([name]) => name === 'p').map(([, pubkey]) => pubkey))
+        .filter((pubkey) => HEX_PUBKEY.test(pubkey) && !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+      const discovered = scored
+        .map(({ pubkey }) => pubkey)
+        .filter((pubkey) => !DISCOVERY_BLOCKED_PUBKEYS.has(pubkey));
+      return [...new Set([...curated, ...packAuthors, ...discovered])].slice(0, MAX_AUTHORS);
     },
     enabled: !!topic,
     staleTime: 10 * 60 * 1000,
