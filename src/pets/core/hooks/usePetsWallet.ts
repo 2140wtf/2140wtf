@@ -19,6 +19,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useCashuSeed } from '@/hooks/useCashuSeed';
 import { useCashuWallet, type CashuWalletActions, type CashuWalletState } from '@/hooks/useCashuWallet';
 import { useBaoCashuWallet } from '@/hooks/useBaoCashuWallet';
+import { useBaoWalletBalances } from '@/hooks/useBaoWalletBalances';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
 import {
   syncCashuState,
@@ -86,6 +87,12 @@ export interface UsePetsWalletResult {
   isCashu: boolean;
   /** True when the active wallet is the BAO signet/demo wallet. */
   isBao: boolean;
+  /** Custodial Cashu demo sats held by bao.markets for this account. */
+  baoApiCashuBalance: number;
+  /** Whether the custodial BAO balance is loading for the first time. */
+  baoApiBalanceLoading: boolean;
+  /** Refresh custodial BAO balances after a scoped Store debit. */
+  refreshBaoApiBalances: () => Promise<void>;
 }
 
 /**
@@ -103,6 +110,11 @@ export function usePetsWallet(): UsePetsWalletResult {
   const { user } = useCurrentUser();
   const { seedPhrase, available: seedAvailable } = useCashuSeed();
   const nip60Sync = useNip60Sync();
+  const {
+    data: baoApiBalances,
+    isLoading: baoApiBalanceLoading,
+    refetch: refetchBaoApiBalances,
+  } = useBaoWalletBalances();
   const [mode, setModeState] = useState<PetsWalletMode>(
     () => loadStoredPetsWalletMode(user?.pubkey) ?? 'cashu',
   );
@@ -180,6 +192,9 @@ export function usePetsWallet(): UsePetsWalletResult {
   const safeActiveWallet = seedAvailable && user ? activeWallet : null;
   const safeRealWallet = seedAvailable && user ? realWallet : null;
   const safeBaoWallet = seedAvailable && user ? baoWallet : null;
+  const refreshBaoApiBalances = useCallback(async () => {
+    await refetchBaoApiBalances();
+  }, [refetchBaoApiBalances]);
 
   return useMemo(
     () => ({
@@ -190,7 +205,19 @@ export function usePetsWallet(): UsePetsWalletResult {
       setMode,
       isCashu: mode === 'cashu',
       isBao: mode === 'bao',
+      baoApiCashuBalance: baoApiBalances?.cashu ?? 0,
+      baoApiBalanceLoading,
+      refreshBaoApiBalances,
     }),
-    [safeActiveWallet, safeRealWallet, safeBaoWallet, mode, setMode],
+    [
+      safeActiveWallet,
+      safeRealWallet,
+      safeBaoWallet,
+      mode,
+      setMode,
+      baoApiBalances?.cashu,
+      baoApiBalanceLoading,
+      refreshBaoApiBalances,
+    ],
   );
 }
