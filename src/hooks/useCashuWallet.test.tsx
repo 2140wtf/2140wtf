@@ -18,6 +18,10 @@ import {
   buildNutzapInfoEvent,
   buildMintQuoteEvent,
   parseMintQuoteEvent,
+  buildWalletConfigPayload,
+  computeContentHash,
+  saveLastTokenEventHash,
+  saveLastWalletConfigHash,
 } from '@/lib/cashu/cashuNip60';
 import type { Nip60SyncApi } from '@/lib/cashu/cashuNip60';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -138,6 +142,8 @@ const mocks = vi.hoisted(() => ({
     keysets: [{ active: true, id: 'ks' }],
     keys: new Map(),
     restore: vi.fn().mockResolvedValue({ proofs: [] }),
+    getKeySets: vi.fn().mockResolvedValue([{ active: true, id: 'ks', unit: 'sat' }]),
+    batchRestore: vi.fn().mockResolvedValue({ proofs: [] }),
   }),
 }));
 
@@ -227,6 +233,8 @@ describe('useCashuWallet NIP-60 sync', () => {
     localStorage.clear();
     mocks.query.mockReset();
     mocks.publish.mockReset();
+    mocks.query.mockResolvedValue([]);
+    mocks.publish.mockResolvedValue('published-id');
   });
 
   function makeSync(): Nip60SyncApi {
@@ -253,6 +261,44 @@ describe('useCashuWallet NIP-60 sync', () => {
     );
     return { encKey };
   }
+
+  it('republishes a missing wallet config even when its local hash is cached', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const encKey = await deriveEncryptionKey(seedPhrase);
+    const walletKey = deriveNip60WalletKey(seedPhrase);
+    const payload = buildWalletConfigPayload(walletKey.privkey, [mintUrl]);
+    await saveLastWalletConfigHash(computeContentHash(payload), encKey);
+
+    const sync = makeSync();
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.nip60Status).toBe('verified'));
+    expect(mocks.publish.mock.calls.some(([event]) => (event as NostrEvent).kind === 17375)).toBe(true);
+  });
+
+  it('republishes missing proof state even when its local token hash is cached', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { encKey } = await setupWallet(seedPhrase);
+    const proofs = await getProofsForMint(mintUrl, encKey);
+    await saveLastTokenEventHash(
+      mintUrl,
+      computeContentHash({ mint: mintUrl, unit: 'sat', proofs }),
+      encKey,
+    );
+
+    const sync = makeSync();
+    renderHook(
+      () => useCashuWallet(seedPhrase, { nip60Sync: sync, defaultMints: [{ name: 'Test', url: mintUrl }] }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mocks.publish.mock.calls.some(([event]) => (event as NostrEvent).kind === 7375)).toBe(true);
+    });
+  });
 
   it('deletes all remote token events for a mint during sync, not just the last local one', async () => {
     const seedPhrase = generateMnemonic(wordlist);
@@ -380,6 +426,44 @@ describe('useCashuWallet sendToken concurrency', () => {
     expect(sendResult2).not.toBeNull();
     expect(mocks.sendTracker.max).toBe(1);
     expect(mocks.sendTracker.active).toBe(0);
+  });
+});
+
+describe('useCashuWallet deterministic mint recovery', () => {
+  const mintUrl = 'https://mint.example.com';
+
+  beforeEach(() => {
+    localStorage.clear();
+    const restoredProof = { id: 'ks', amount: 64, secret: 'restored-secret', C: 'restored-C' };
+    vi.mocked(CashuWallet).mockImplementation(function () {
+      return {
+        ...mocks.createMockWallet(),
+        getKeySets: vi.fn().mockResolvedValue([{ active: true, id: 'ks', unit: 'sat' }]),
+        batchRestore: vi.fn().mockResolvedValue({ proofs: [restoredProof], lastCounterWithSignature: 7 }),
+        checkProofsStates: vi.fn().mockResolvedValue([{
+          Y: hashToCurve(new TextEncoder().encode(restoredProof.secret)).toHex(true),
+          state: 'UNSPENT',
+        }]),
+      };
+    });
+  });
+
+  it('credits only proofs the mint confirms are unspent', async () => {
+    const seedPhrase = generateMnemonic(wordlist);
+    const { result } = renderHook(
+      () => useCashuWallet(seedPhrase, {
+        defaultMints: [{ name: 'Test', url: mintUrl }],
+        nip60SyncEnabled: false,
+      }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.wallet).not.toBeNull());
+    const recovered = await act(async () => result.current.recoverFromMints());
+
+    expect(recovered).toBe(64);
+    await waitFor(() => expect(result.current.totalBalance).toBe(64));
+    expect(loadMintCounter(mintUrl)).toBe(8);
   });
 });
 

@@ -100,6 +100,7 @@ export function CashuWalletTab() {
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedInvoice, setCopiedInvoice] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [recoveringFromMint, setRecoveringFromMint] = useState(false);
   const [nutzapRecipient, setNutzapRecipient] = useState('');
   const [nutzapAmount, setNutzapAmount] = useState('');
   const [nutzapMemo, setNutzapMemo] = useState('');
@@ -369,16 +370,25 @@ export function CashuWalletTab() {
     }
   };
 
+  const handleMintRecovery = async () => {
+    setRecoveringFromMint(true);
+    try {
+      await wallet.recoverFromMints();
+    } finally {
+      setRecoveringFromMint(false);
+    }
+  };
+
   const backupBadge = () => {
-    switch (wallet.backupStatus) {
-      case 'synced':
-        return <Badge variant='secondary' className='bg-green-500/10 text-green-600 dark:text-green-400'>Backed up</Badge>;
-      case 'syncing':
-        return <Badge variant='secondary'><RefreshCw className='size-3 mr-1 animate-spin' /> Syncing</Badge>;
+    switch (wallet.nip60Status) {
+      case 'verified':
+        return <Badge variant='secondary' className='bg-green-500/10 text-green-600 dark:text-green-400'>Relay backup verified</Badge>;
+      case 'verifying':
+        return <Badge variant='secondary'><RefreshCw className='size-3 mr-1 animate-spin' /> Verifying relay backup</Badge>;
       case 'failed':
-        return <Badge variant='destructive'>Backup failed</Badge>;
+        return <Badge variant='destructive'>Relay backup failed</Badge>;
       default:
-        return <Badge variant='outline'>Backup idle</Badge>;
+        return <Badge variant='outline'>Local only</Badge>;
     }
   };
 
@@ -470,7 +480,14 @@ export function CashuWalletTab() {
               <CloudDownload className='size-3.5 mr-1.5' />
               {restoring ? 'Restoring…' : 'Restore backup'}
             </Button>
+            <Button variant='outline' size='sm' onClick={handleMintRecovery} disabled={recoveringFromMint}>
+              <RefreshCw className={`size-3.5 mr-1.5 ${recoveringFromMint ? 'animate-spin' : ''}`} />
+              {recoveringFromMint ? 'Checking mints…' : 'Recover from mints'}
+            </Button>
           </div>
+          <p className='text-xs text-muted-foreground'>
+            If a paid Lightning deposit is missing, recovery checks deterministic outputs at each configured mint and only restores proofs the mint confirms are unspent.
+          </p>
         </CardContent>
       </Card>
 
