@@ -196,6 +196,15 @@ export const DISCOVERY_BLOCKED_PUBKEYS = new Set([
   '3170406792bed0426d3ebbbd00822bd87d5614ccf21f613e13a3a45e5d17caad',
 ]);
 
+const DISCOVERY_BLOCKED_DOMAIN_RE = /(?:^|[\s/:.])(?:www\.)?nostrmag\.com(?:$|[\s/?#:.])/i;
+
+function referencesBlockedDiscoveryDomain(event: NostrEvent): boolean {
+  if (DISCOVERY_BLOCKED_DOMAIN_RE.test(event.content)) return true;
+  return event.tags.some(([, value]) =>
+    typeof value === 'string' && DISCOVERY_BLOCKED_DOMAIN_RE.test(value),
+  );
+}
+
 /** Returns true if a kind 30000 event is a deprecated/junk list that should be hidden. */
 function isDeprecatedFollowSet(event: NostrEvent): boolean {
   if (event.kind !== 30000) return false;
@@ -215,6 +224,7 @@ function isDeprecatedFollowSet(event: NostrEvent): boolean {
  */
 export function shouldHideFeedEvent(event: NostrEvent): boolean {
   if (DISCOVERY_BLOCKED_PUBKEYS.has(event.pubkey)) return true;
+  if (referencesBlockedDiscoveryDomain(event)) return true;
   // Deprecated kind 30000 follow sets
   if (isDeprecatedFollowSet(event)) return true;
   // Emoji packs (kind 30030) without at least one valid emoji tag
