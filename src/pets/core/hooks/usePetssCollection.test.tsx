@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   groupEvent: vi.fn(),
   group: vi.fn(),
   isEnabled: vi.fn(),
+  storeQuery: vi.fn(),
 }));
 
 vi.mock('@nostrify/react', () => ({
@@ -25,6 +26,10 @@ vi.mock('@nostrify/react', () => ({
 
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { pubkey: PUBKEY } }),
+}));
+
+vi.mock('@/hooks/useNostrStorage', () => ({
+  useNostrStorage: () => ({ store: { query: mocks.storeQuery } }),
 }));
 
 vi.mock('@/hooks/usePublishPreferences', () => ({
@@ -73,6 +78,30 @@ describe('usePetssCollection repatriation', () => {
     mocks.group.mockReturnValue({ event: mocks.groupEvent });
     mocks.groupEvent.mockResolvedValue(undefined);
     mocks.isEnabled.mockReturnValue(true);
+    mocks.storeQuery.mockResolvedValue([]);
+  });
+
+  it('restores cached companions while the relay refresh is still pending', async () => {
+    const cached = petsEvent('cached-id', '2140pets-aaaaaaaaaaaa-cached00001');
+    mocks.storeQuery.mockResolvedValue([cached]);
+    mocks.query.mockReturnValue(new Promise<NostrEvent[]>(() => undefined));
+
+    const { result } = renderHook(() => usePetssCollection(), { wrapper });
+
+    await waitFor(() => expect(result.current.companions).toHaveLength(1));
+    expect(result.current.companions[0].event.id).toBe('cached-id');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('does not erase cached companions when the relay returns no events', async () => {
+    const cached = petsEvent('cached-id-2', '2140pets-aaaaaaaaaaaa-cached00002');
+    mocks.storeQuery.mockResolvedValue([cached]);
+    mocks.query.mockResolvedValue([]);
+
+    const { result } = renderHook(() => usePetssCollection(), { wrapper });
+
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(result.current.companions.map((companion) => companion.event.id)).toEqual(['cached-id-2']);
   });
 
   it('re-broadcasts fetched pet events to the effective relay set, once per event id', async () => {

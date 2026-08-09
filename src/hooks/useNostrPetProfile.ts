@@ -6,6 +6,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useLocalStorage } from './useLocalStorage';
+import { useNostrStorage } from './useNostrStorage';
 import {
   KIND_NOSTR_PET_PROFILE,
   NOSTR_PET_PROFILE_KINDS,
@@ -33,6 +34,7 @@ export function useNostrPetProfile() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const queryClient = useQueryClient();
+  const { store } = useNostrStorage();
   
   // Boot cache in localStorage
   const [bootCache, setBootCache] = useLocalStorage<PetsBootCache | null>(
@@ -63,6 +65,31 @@ export function useNostrPetProfile() {
     
     return bootCache.profile;
   }, [bootCache, user?.pubkey]);
+
+  // localStorage is the fastest boot path, but older sessions may only have
+  // the authored profile in IndexedDB. Seed that copy before waiting on the
+  // relay refresh so the Pets route remains progressive after navigation.
+  useEffect(() => {
+    if (!user?.pubkey || cachedProfile) return;
+    let cancelled = false;
+    const dValues = getNostrPetProfileQueryDValues(user.pubkey);
+    void store.query([{
+      kinds: [...NOSTR_PET_PROFILE_KINDS],
+      authors: [user.pubkey],
+      '#d': dValues,
+    }]).then((events) => {
+      if (cancelled) return;
+      const validEvents = events.filter(isValidNostrPetProfileEvent);
+      const preferred = validEvents
+        .sort((a, b) => {
+          const kindPriority = Number(b.kind === KIND_NOSTR_PET_PROFILE) - Number(a.kind === KIND_NOSTR_PET_PROFILE);
+          return kindPriority || b.created_at - a.created_at;
+        })[0];
+      const parsed = preferred ? parseNostrPetProfileEvent(preferred) : null;
+      if (parsed) queryClient.setQueryData(['nostr-pet-profile', user.pubkey], parsed);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [cachedProfile, queryClient, store, user?.pubkey]);
   
   // Debug logging removed - was causing console flood on every render
   // If debugging is needed, uncomment this block temporarily:
@@ -92,7 +119,15 @@ export function useNostrPetProfile() {
         '#d': dValues,
       };
       
-      const events = await queryPetsRelay(nostr, [filter], { signal });
+      let events = await queryPetsRelay(nostr, [filter], {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(1_000)]),
+      }).catch(() => []);
+
+      // Keep a locally cached authored profile visible when every relay misses
+      // or times out; the background refresh must never downgrade it to null.
+      if (events.length === 0) {
+        events = await store.query([filter]).catch(() => []);
+      }
       
       // Filter to valid events
       const validEvents = events.filter(isValidNostrPetProfileEvent);
@@ -125,8 +160,7 @@ export function useNostrPetProfile() {
     refetchOnWindowFocus: false, // Prevent unnecessary refetches
     refetchOnReconnect: true, // Refetch when connection is restored
     refetchOnMount: 'always', // Always fetch on mount, even with initialData
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    retry: false,
     // Use cached profile as initial data for instant UI
     // initialDataUpdatedAt tells React Query when this data was fetched
     // so it knows whether to refetch based on staleTime
