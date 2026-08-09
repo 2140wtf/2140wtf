@@ -97,7 +97,7 @@ function MainLayoutInner() {
           sentryTags={{ errorBoundary: 'center-column', path: location.pathname }}
           resetKeys={[location.pathname]}
         >
-          <ChunkErrorBoundary>
+          <ChunkErrorBoundary resetKey={location.pathname}>
             <Suspense fallback={<PageSkeleton />}>
               {/* -mt-mobile-bar pulls content up behind the mobile top bar so the
                   transparent SVG header arc and page content overlap seamlessly.
