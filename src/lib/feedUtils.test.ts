@@ -71,4 +71,22 @@ describe('discovery spam filtering', () => {
   it('does not hide an ordinary text note', () => {
     expect(shouldHideFeedEvent(ev(123))).toBe(false);
   });
+
+  it('hides NostrMag syndication from unlisted relay accounts', () => {
+    expect(shouldHideFeedEvent({
+      ...ev(123),
+      content: 'Read the syndicated story at https://nostrmag.com/example',
+    })).toBe(true);
+    expect(shouldHideFeedEvent({
+      ...ev(123),
+      tags: [['r', 'https://www.nostrmag.com/story']],
+    })).toBe(true);
+  });
+
+  it('does not block unrelated domains containing similar text', () => {
+    expect(shouldHideFeedEvent({
+      ...ev(123),
+      content: 'https://notnostrmag.com/example',
+    })).toBe(false);
+  });
 });
