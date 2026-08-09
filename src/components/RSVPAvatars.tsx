@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuthor } from '@/hooks/useAuthor';
+import { isNostrId } from '@/lib/nostrId';
 import { cn } from '@/lib/utils';
 
 type AvatarSize = 'sm' | 'md';
@@ -52,8 +53,11 @@ interface RSVPAvatarsProps {
 }
 
 export function RSVPAvatars({ pubkeys, maxVisible = 5, size = 'sm', className }: RSVPAvatarsProps) {
-  const visible = pubkeys.slice(0, maxVisible);
-  const overflow = pubkeys.length - maxVisible;
+  // Public event tags are untrusted and may repeat or contain malformed keys.
+  // Normalize before they become React keys or Nostr author filters.
+  const uniquePubkeys = [...new Set(pubkeys.filter(isNostrId))];
+  const visible = uniquePubkeys.slice(0, maxVisible);
+  const overflow = Math.max(0, uniquePubkeys.length - maxVisible);
 
   return (
     <div className={cn('flex items-center', spacingClasses[size], className)}>
