@@ -734,7 +734,7 @@ export function VideosFeedPage() {
   const [feedTab, setFeedTab] = useFeedTab<FeedTab>("videos", [
     "follows",
     "global",
-  ], "global");
+  ], user ? "follows" : "global");
 
   useSeoMeta({
     title: `Videos | ${config.appName}`,
@@ -842,7 +842,7 @@ export function VideosFeedPage() {
           disabled={!user}
         />
         <TabButton
-          label="Global"
+          label="ALL"
           active={feedTab === "global"}
           onClick={() => setFeedTab("global")}
         />

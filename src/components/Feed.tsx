@@ -47,6 +47,8 @@ import { useWotRanks } from '@/hooks/useWotRanks';
 import { ARC_OVERHANG_PX } from '@/components/ArcBackground';
 import { TabButton } from '@/components/TabButton';
 import { CurateFeedDropdown } from '@/components/CurateFeedDropdown';
+import { FeedTabManager } from '@/components/FeedTabManager';
+import { useFeedTabLayout } from '@/hooks/useFeedTabLayout';
 import type { FeedItem } from '@/lib/feedUtils';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import type { SavedFeed } from '@/contexts/AppContext';
@@ -96,16 +98,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const { feedSettings } = useFeedSettings();
   const defaultKinds = useMemo(() => getEnabledFeedKinds(feedSettings), [feedSettings]);
 
-  // Tab settings from localStorage
-  const showGlobalFeed = (() => {
-    try {
-      const stored = localStorage.getItem(getStorageKey(config.appId, 'showGlobalFeed'));
-      return stored !== null ? stored === 'true' : false;
-    } catch {
-      return false;
-    }
-  })();
-
   const showAppFeed = (() => {
     try {
       const stored = localStorage.getItem(getStorageKey(config.appId, 'showAppFeed'));
@@ -137,7 +129,27 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     return 'Community';
   })();
 
-  const [rawActiveTab, handleSetActiveTab] = useFeedTab<FeedTab>(feedId, undefined, globalFirst ? 'global' : 'all');
+  const managedTabDefinitions = useMemo(
+    () => [
+      { id: 'follows', label: 'Follows' },
+      { id: 'app', label: config.appName },
+      { id: 'all', label: 'ALL' },
+      ...FEED_TOPICS.map(({ id, label }) => ({ id, label })),
+    ],
+    [config.appName],
+  );
+  const managedTabIds = useMemo(() => managedTabDefinitions.map(({ id }) => id), [managedTabDefinitions]);
+  const tabLayout = useFeedTabLayout(managedTabIds);
+  const visibleManagedTabIds = tabLayout.layout.order.filter(
+    (id) => !tabLayout.layout.hidden.includes(id),
+  );
+  const feedControlsAnchorId = visibleManagedTabIds.includes('app') ? 'app' : visibleManagedTabIds[0];
+
+  const [rawActiveTab, handleSetActiveTab] = useFeedTab<FeedTab>(
+    feedId,
+    undefined,
+    globalFirst ? 'global' : (user ? 'follows' : 'all'),
+  );
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { startSignup } = useOnboarding();
 
@@ -156,6 +168,11 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   const activeTab: FeedTab = (() => {
     // Legacy 'ditto' tab was renamed to 'app'; migrate any persisted selection.
     if (rawActiveTab === 'ditto') return 'app';
+    // The old home "Global" tab was replaced by the safer mixed "ALL" feed.
+    if (!kinds && rawActiveTab === 'global') return 'all';
+    if (!kinds && user && tabLayout.layout.hidden.includes(rawActiveTab)) {
+      return visibleManagedTabIds[0] ?? 'follows';
+    }
     // 'loved' is only valid on the home feed while the Love List is non-empty.
     if (rawActiveTab === 'loved' && (kinds || !hasLovedPeople)) {
       return user ? 'all' : 'global';
@@ -257,12 +274,16 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     if (activeTopic.id === 'popular-follows' || activeTopic.id === 'follows-replies') {
       if (!user || !followData?.pubkeys.length) return null;
       filter.authors = [...followData.pubkeys, user.pubkey];
-    } else if (activeTopic.authors) {
-      const authors = dynamicTopicAuthors ?? activeTopic.authors;
+    } else if (dynamicTopicAuthors?.length || activeTopic.authors?.length) {
+      const authors = dynamicTopicAuthors?.length ? dynamicTopicAuthors : (activeTopic.authors ?? []);
       if (authors.length > 0) filter.authors = authors;
     }
 
-    if (activeTopic.tags.length > 0) {
+    // Curated/discovered authors already define the subject feed. Combining
+    // `authors` and `#t` in one filter means AND, which hid perfectly relevant
+    // posts whose authors did not hashtag them. Use tags only as the discovery
+    // fallback while an author set is unavailable.
+    if (!filter.authors && activeTopic.tags.length > 0) {
       filter['#t'] = activeTopic.tags.map((t) => t.toLowerCase());
     }
     if (activeTopic.search) {
@@ -343,6 +364,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     isLoading,
     isFetching,
     isError,
+    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -420,6 +442,38 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     `${user?.pubkey ?? ''}:${useAppQuery ? 'app' : activeTab}`,
   );
 
+  // A relay pool can finish its first request before startup sync has connected
+  // the useful relays. TanStack treats that zero-event response as success, so
+  // its normal error retry never runs and the empty result can remain cached
+  // until a hard refresh. Retry only settled-empty first pages, with a short
+  // bounded backoff; populated feeds and intentionally empty follows lists are
+  // never polled in the background.
+  const emptyRetryKey = `${user?.pubkey ?? ''}:${useAppQuery ? 'app' : activeTab}`;
+  const [emptyRetry, setEmptyRetry] = useState({ key: emptyRetryKey, attempt: 0 });
+  const emptyRetryAttempt = emptyRetry.key === emptyRetryKey ? emptyRetry.attempt : 0;
+  const shouldRetryEmpty =
+    !(activeTab === 'follows' && followData?.pubkeys.length === 0) &&
+    isOnline &&
+    !!rawData &&
+    feedItems.length === 0 &&
+    !isFetching &&
+    emptyRetryAttempt < 3;
+
+  useEffect(() => {
+    if (!shouldRetryEmpty) return;
+    const delays = [750, 2_500, 6_000];
+    const timer = window.setTimeout(() => {
+      setEmptyRetry({ key: emptyRetryKey, attempt: emptyRetryAttempt + 1 });
+      void refetch();
+    }, delays[emptyRetryAttempt]);
+    return () => window.clearTimeout(timer);
+  }, [shouldRetryEmpty, emptyRetryKey, emptyRetryAttempt, refetch]);
+
+  const showSkeleton =
+    isPending ||
+    (isLoading && !rawData) ||
+    (feedItems.length === 0 && shouldRetryEmpty);
+
 
 
   // Apply optional client-side keyword search and poll-type filter.
@@ -474,8 +528,6 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   }, [wotActive, wotFilter.threshold, wotRanks, visibleItems]);
   const wotHiddenCount = visibleItems.length - wotFilteredItems.length;
 
-  const showSkeleton = (isPending || (isLoading && !rawData));
-
   // Distinguish the empty-state cases so the message + CTAs match the cause:
   //   - Follows tab with zero follows → "follow some people" (no retry).
   //   - Otherwise (follows-but-empty, global miss, or query error) → "couldn't
@@ -498,7 +550,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       return {
         message: 'Your feed is empty. Follow some people to see their posts here.',
         showDiscover: true,
-        onSwitchToGlobal: showGlobalFeed ? () => handleSetActiveTab('global') : undefined,
+        onSwitchToGlobal: () => handleSetActiveTab('all'),
       };
     }
 
@@ -529,7 +581,7 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
       onRetry: handleRefresh,
       isRetrying: isFetching,
       isOffline: !isOnline,
-      onSwitchToGlobal: isFollows && showGlobalFeed ? () => handleSetActiveTab('global') : undefined,
+      onSwitchToGlobal: isFollows ? () => handleSetActiveTab('all') : undefined,
     };
   })();
 
@@ -553,7 +605,52 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           rendered inside LandingHero. */}
       {user && !kinds && (
         <SubHeaderBar>
-          <TabButton label="All" active={activeTab === 'all'} onClick={() => handleSetActiveTab('all')} />
+          <FeedTabManager
+            tabs={managedTabDefinitions}
+            layout={tabLayout.layout}
+            onToggle={tabLayout.toggle}
+            onMove={tabLayout.move}
+            onReset={tabLayout.reset}
+          />
+          {visibleManagedTabIds.map((id) => {
+            const topic = getFeedTopic(id);
+            const tab = id === 'follows' ? (
+              <TabButton key={id} label="Follows" active={activeTab === id} onClick={() => handleSetActiveTab(id)} />
+            ) : id === 'app' ? (
+              <TabButton key={id} label={config.appName} active={activeTab === id} onClick={() => handleSetActiveTab(id)} />
+            ) : id === 'all' ? (
+              <TabButton key={id} label="ALL" active={activeTab === id} onClick={() => handleSetActiveTab(id)} />
+            ) : topic ? (
+              <TabButton key={id} label={topic.label} active={activeTab === id} onClick={() => handleSetActiveTab(id)}>
+                <span className="flex items-center justify-center gap-1">
+                  {topic.iconSrc ? <img src={topic.iconSrc} alt="" className="size-3.5 object-contain rounded-sm" /> : <span>{topic.icon}</span>}
+                  {topic.label}
+                </span>
+              </TabButton>
+            ) : null;
+
+            const insertControls = id === feedControlsAnchorId;
+            if (!insertControls) return tab;
+            return (
+              <div key={`${id}-and-controls`} className="contents">
+                {tab}
+                <button
+                  type="button"
+                  onClick={() => wotFilter.setEnabled(!wotFilter.enabled)}
+                  aria-pressed={wotFilter.enabled}
+                  title="Web of Trust filter"
+                  className={cn(
+                    'flex items-center justify-center gap-1 px-2 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap',
+                    wotFilter.enabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Shield className={cn('size-3.5', wotFilter.enabled && 'fill-primary/20')} />
+                  WoT
+                </button>
+                <CurateFeedDropdown activeTab={activeTab} onSelect={handleSetActiveTab} />
+              </div>
+            );
+          })}
           {!isKindSpecificPage && user && hasLovedPeople && (
             <TabButton label="Loved" active={activeTab === 'loved'} onClick={() => handleSetActiveTab('loved')}>
               <span className="flex items-center justify-center gap-1">
@@ -562,51 +659,9 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
               </span>
             </TabButton>
           )}
-          {user && (
-            <TabButton label="Follows" active={activeTab === 'follows'} onClick={() => handleSetActiveTab('follows')} />
-          )}
-          {!isKindSpecificPage && showAppFeed && (
-            <TabButton label={config.appName} active={activeTab === 'app'} onClick={() => handleSetActiveTab('app')} />
-          )}
           {!isKindSpecificPage && showCommunityFeed && (
             <TabButton label={communityLabel} active={activeTab === 'communities'} onClick={() => handleSetActiveTab('communities')} />
           )}
-          <TabButton label="Global" active={activeTab === 'global'} onClick={() => handleSetActiveTab('global')} />
-          {!isKindSpecificPage && !tagFilters && (
-            <CurateFeedDropdown activeTab={activeTab} onSelect={handleSetActiveTab} />
-          )}
-          {!isKindSpecificPage && !tagFilters && (
-            <button
-              type="button"
-              onClick={() => wotFilter.setEnabled(!wotFilter.enabled)}
-              aria-pressed={wotFilter.enabled}
-              title="Web of Trust filter"
-              className={cn(
-                'flex items-center justify-center gap-1 px-2 py-1.5 text-sm font-medium rounded-md transition-colors',
-                wotFilter.enabled ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Shield className={cn('size-3.5', wotFilter.enabled && 'fill-primary/20')} />
-              WoT
-            </button>
-          )}
-          {!isKindSpecificPage && !tagFilters && FEED_TOPICS.map((topic) => (
-            <TabButton
-              key={`topic:${topic.id}`}
-              label={topic.label}
-              active={activeTab === topic.id}
-              onClick={() => handleSetActiveTab(topic.id)}
-            >
-              <span className="flex items-center justify-center gap-1">
-                {topic.iconSrc ? (
-                  <img src={topic.iconSrc} alt="" className="size-3.5 object-contain rounded-sm" />
-                ) : (
-                  <span>{topic.icon}</span>
-                )}
-                {topic.label}
-              </span>
-            </TabButton>
-          ))}
           {showSavedFeedTabs && savedFeeds.map((feed) => (
             <TabButton
               key={feed.id}
