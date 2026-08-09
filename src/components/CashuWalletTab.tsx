@@ -257,6 +257,7 @@ export function CashuWalletTab() {
           state: 'UNPAID',
           amount: invoiceQuote.amount,
           unit: 'sat',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
         });
         if (active && (updated?.state === 'PAID' || updated?.state === 'ISSUED')) {
           await handleMintInvoice();

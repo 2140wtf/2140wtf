@@ -279,6 +279,8 @@ export interface UseCashuWalletOptions {
   baoWalletConfig?: Nip60WalletConfig;
   /** Whether to publish the kind:17375 wallet config. Set to false for secondary wallets (e.g. BAO) when a combined config is published elsewhere. */
   publishWalletConfig?: boolean;
+  /** Gate NIP-60 token/config reads and writes. Use an explicit consent preference for secondary wallets. */
+  nip60SyncEnabled?: boolean;
   /** When false the wallet stays idle. Defaults to true. */
   enabled?: boolean;
   /** localStorage key prefix. Defaults to "freedomid_". */
@@ -318,6 +320,7 @@ export function useCashuWallet(
   const deriveWalletKey = useMemo(() => options?.deriveWalletKey ?? deriveNip60WalletKey, [options?.deriveWalletKey]);
   const _walletLabel = options?.walletLabel ?? 'Cashu';
   const enabled = options?.enabled !== false;
+  const nip60SyncEnabled = options?.nip60SyncEnabled !== false;
   const [wallet, setWallet] = useState<CashuWallet | null>(null);
   const [mintUrl, setMintUrlState] = useState<string>(defaultMints[0]?.url || '');
   const [customMints, setCustomMints] = useState<Array<{ name: string; url: string }>>([]);
@@ -1004,7 +1007,7 @@ export function useCashuWallet(
         // BAO demo wallet: pull the balance the same npub holds on bao.markets
         // (faucet claims, trade winnings) from the BAO relay. Runs every init —
         // merge-only and idempotent, so repeated restores are safe.
-        if (!cancelled && isBaoNamespaceRef.current && nip60SyncRef.current) {
+        if (!cancelled && isBaoNamespaceRef.current && nip60SyncEnabled && nip60SyncRef.current) {
           try {
             await restoreFromBaoMarkets();
           } catch (e) {
@@ -1414,6 +1417,7 @@ export function useCashuWallet(
     amount: number,
     referencedEvents?: Array<{ id: string; marker: 'created' | 'destroyed' }>,
   ): Promise<NostrEvent | undefined> => {
+    if (!nip60SyncEnabled) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
     const walletSigner = getNip60WalletSigner();
@@ -1506,17 +1510,19 @@ export function useCashuWallet(
       devLog.error('NIP-60 token sync failed for mint:', normalized, e);
       return undefined;
     }
-  }, [getClientTag, getNip60WalletSigner]);
+  }, [getClientTag, getNip60WalletSigner, nip60SyncEnabled]);
 
   const syncAllNip60Tokens = useCallback(async (): Promise<void> => {
+    if (!nip60SyncEnabled) return;
     const sync = nip60SyncRef.current;
     if (!sync || !getNip60WalletSigner()) return;
     for (const m of allMintsRef.current) {
       await syncNip60TokenForMint(m.url, 'in', 0);
     }
-  }, [getNip60WalletSigner, syncNip60TokenForMint]);
+  }, [getNip60WalletSigner, nip60SyncEnabled, syncNip60TokenForMint]);
 
   const syncNip60WalletConfig = useCallback(async (): Promise<void> => {
+    if (!nip60SyncEnabled) return;
     if (options?.publishWalletConfig === false) return;
     const sync = nip60SyncRef.current;
     const encKey = encKeyRef.current;
@@ -1547,7 +1553,7 @@ export function useCashuWallet(
     } catch (e) {
       devLog.error('NIP-60 wallet config sync failed:', e);
     }
-  }, [config.clientName, getClientTag, options?.publishWalletConfig]);
+  }, [config.clientName, getClientTag, nip60SyncEnabled, options?.publishWalletConfig]);
 
   const publishNip60NutzapInfo = useCallback(async (): Promise<void> => {
     // Gated by the "Receive Nutzaps" publish preference (default OFF) — the
