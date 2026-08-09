@@ -14,6 +14,7 @@
  */
 import { hexToBytes } from "@noble/hashes/utils.js";
 import * as nip19 from "nostr-tools/nip19";
+import * as nip17 from "nostr-tools/nip17";
 
 import {
   BAO_COMPUTE_CREDIT_FULFILLMENT_KIND,
@@ -69,6 +70,48 @@ export interface WorkListing {
   fulfillments: ComputeCreditFulfillment[];
 }
 
+export interface WorkHistoryBundle {
+  version: 1;
+  exportedAt: string;
+  identityPubkey: string;
+  requests: ComputeCreditRequest[];
+  fulfillments: ComputeCreditFulfillment[];
+  receipts: ComputeCreditReceipt[];
+}
+
+export interface CreditInboxMessage {
+  eventId: string;
+  senderPubkey: string;
+  createdAt: number;
+  requestId?: string;
+  token?: string;
+  content: string;
+}
+
+const CASHU_TOKEN_RE = /cashu[0-9A-Za-z_-]+/g;
+
+/**
+ * Read NIP-17 gift-wrapped compute-credit messages addressed to this agent.
+ * Tokens are returned for local processing only; they are never republished.
+ */
+export async function listCreditInbox(state: State): Promise<CreditInboxMessage[]> {
+  const pubkey = getPublicKey(hexToBytes(state.sk));
+  const wraps = await queryAll(state.community.relays, { kinds: [1059], "#p": [pubkey], limit: 100 });
+  const messages: CreditInboxMessage[] = [];
+  for (const wrap of wraps) {
+    try {
+      const rumor = nip17.unwrapEvent(wrap, hexToBytes(state.sk));
+      const content = rumor.content.trim();
+      const token = content.match(CASHU_TOKEN_RE)?.[0];
+      const requestId = content.match(/request ([0-9a-f]{64})\\b/i)?.[1];
+      messages.push({ eventId: wrap.id, senderPubkey: rumor.pubkey, createdAt: rumor.created_at, ...(requestId ? { requestId } : {}), ...(token ? { token } : {}), content });
+    } catch {
+      // Ignore gift wraps that are not decryptable by this identity.
+    }
+  }
+  return messages.sort((a, b) => b.createdAt - a.createdAt);
+}
+
 /** Query the relays and resolve open compute-credit requests. */
 export async function listWork(state: State): Promise<WorkListing> {
   const relays = state.community.relays;
@@ -82,6 +125,36 @@ export async function listWork(state: State): Promise<WorkListing> {
   const fulfillments = fulEvents.map(parseComputeCreditFulfillment).filter((f): f is ComputeCreditFulfillment => f !== null);
   const open = openCreditRequests(requests, receipts);
   return { open, totalOpenSats: totalOpenSats(open), fulfillments };
+}
+
+/** Export only signed-event metadata needed to reconstruct work status. */
+export async function exportWorkHistory(state: State): Promise<WorkHistoryBundle> {
+  const pubkey = getPublicKey(hexToBytes(state.sk));
+  const [reqEvents, rcptEvents, fulEvents] = await Promise.all([
+    queryAll(state.community.relays, { kinds: [BAO_COMPUTE_CREDIT_REQUEST_KIND], authors: [pubkey] }),
+    queryAll(state.community.relays, { kinds: [BAO_COMPUTE_CREDIT_RECEIPT_KIND], authors: [pubkey] }),
+    queryAll(state.community.relays, { kinds: [BAO_COMPUTE_CREDIT_FULFILLMENT_KIND], '#p': [pubkey] }),
+  ]);
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    identityPubkey: pubkey,
+    requests: reqEvents.map(parseComputeCreditRequest).filter((r): r is ComputeCreditRequest => r !== null),
+    fulfillments: fulEvents.map(parseComputeCreditFulfillment).filter((f): f is ComputeCreditFulfillment => f !== null),
+    receipts: rcptEvents.map(parseComputeCreditReceipt).filter((r): r is ComputeCreditReceipt => r !== null),
+  };
+}
+
+/** Validate an imported metadata bundle and reject secret-bearing payloads. */
+export function validateWorkHistory(value: unknown): WorkHistoryBundle {
+  if (!value || typeof value !== 'object') throw new Error('Work history must be a JSON object.');
+  const raw = JSON.stringify(value);
+  if (/(nsec|private.?key|cashu[a-z]|proofs?)/i.test(raw)) throw new Error('Work history must not contain keys, Cashu tokens, or proofs.');
+  const bundle = value as Partial<WorkHistoryBundle>;
+  if (bundle.version !== 1 || typeof bundle.identityPubkey !== 'string' || !Array.isArray(bundle.requests) || !Array.isArray(bundle.fulfillments) || !Array.isArray(bundle.receipts)) {
+    throw new Error('Unsupported or malformed work history bundle.');
+  }
+  return bundle as WorkHistoryBundle;
 }
 
 export function printWorkListing(listing: WorkListing, json: boolean): void {

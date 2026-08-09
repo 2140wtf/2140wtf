@@ -290,6 +290,7 @@ const NEWS_PACK: NostrEvent = {
 };
 /** App-owned starter packs. Subject packs are additionally loaded from Primal. */
 const SUGGESTED_PACKS: NostrEvent[] = [ESSENTIALS_PACK, NEWS_PACK];
+const ONBOARDING_PACK_CACHE_KEY = "2140.onboarding-packs.v2";
 
 // Steps for signup (includes keygen + profile) vs. settings-only (existing login)
 type SignupStep = "keygen" | "download" | "profile";
@@ -911,7 +912,18 @@ function FollowsStep({
   const { store } = useNostrStorage();
   const { isEnabled } = usePublishPreferences();
 
-  const [packs, setPacks] = useState<NostrEvent[]>(SUGGESTED_PACKS);
+  const [packs, setPacks] = useState<NostrEvent[]>(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(ONBOARDING_PACK_CACHE_KEY) ?? "null") as unknown;
+      if (Array.isArray(cached)) {
+        const valid = cached.filter((event): event is NostrEvent =>
+          !!event && typeof event === "object" && (event as NostrEvent).kind === 39089 && Array.isArray((event as NostrEvent).tags),
+        );
+        if (valid.length > 0) return valid;
+      }
+    } catch { /* use built-in starter packs */ }
+    return SUGGESTED_PACKS;
+  });
   const [selectedPubkeys, setSelectedPubkeys] = useState<Set<string>>(
     () => new Set(FEATURED_CREATORS.map((person) => person.pubkey)),
   );
@@ -923,12 +935,14 @@ function FollowsStep({
     let cancelled = false;
     const loadSubjectPacks = async () => {
       try {
-        const packSource = nostr.group([...ONBOARDING_PACK_RELAYS]);
-        const events = await packSource.query([{
-          kinds: [39089],
-          authors: [PRIMAL_PACK_AUTHOR],
-          limit: 100,
-        }], { signal: AbortSignal.timeout(8000) });
+        const results = await Promise.allSettled(ONBOARDING_PACK_RELAYS.map((relay) =>
+          nostr.relay(relay).query([{
+            kinds: [39089],
+            authors: [PRIMAL_PACK_AUTHOR],
+            limit: 500,
+          }], { signal: AbortSignal.timeout(15000) }),
+        ));
+        const events = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 
         const latest = new Map<string, NostrEvent>();
         for (const event of events) {
@@ -963,7 +977,11 @@ function FollowsStep({
         const otherSubjectPacks = subjectPacks.filter(
           (event) => parsePackEvent(event).title.trim().toLowerCase() !== "the news",
         );
-        if (!cancelled) setPacks([ESSENTIALS_PACK, mergedNewsPack, ...otherSubjectPacks]);
+        if (!cancelled) {
+          const nextPacks = [ESSENTIALS_PACK, mergedNewsPack, ...otherSubjectPacks];
+          setPacks(nextPacks);
+          try { localStorage.setItem(ONBOARDING_PACK_CACHE_KEY, JSON.stringify(nextPacks)); } catch { /* storage unavailable */ }
+        }
       } catch (error) {
         console.warn('Could not load optional onboarding packs:', error);
       }
