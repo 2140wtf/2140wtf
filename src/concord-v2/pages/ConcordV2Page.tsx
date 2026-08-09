@@ -1275,8 +1275,8 @@ export function ConcordV2Page() {
     try {
       const report = await purgeRemote();
       toast({
-        title: "BAO purge requested",
-        description: `${report.accepted} deletion request${report.accepted === 1 ? "" : "s"} accepted; ${report.failed} rejected or timed out.`,
+        title: "BAO purge verified",
+        description: `${report.found} relay cop${report.found === 1 ? "y" : "ies"} found; ${report.remaining} still returned after deletion.`,
       });
       navigateTo("/bao/baocommunity");
     } catch (e) {
@@ -1301,7 +1301,7 @@ export function ConcordV2Page() {
     },
     purge: {
       title: "Purge this ₿AO from its relays?",
-      body: "Permanently dissolves the ₿AO and requests deletion of every founder-controlled wrap and invite bundle on its relays. Deletion is honored by the relays we've verified, but is best-effort by protocol — and anything members already synced to their devices can never be clawed back. This cannot be undone.",
+      body: "Permanently dissolves the ₿AO, requests deletion of its founder-controlled wraps, invite bundles, and relay sponsorships, then checks each relay again. A relay can still retain hidden copies, and anything members already synced to their devices can never be clawed back. This cannot be undone.",
       label: "Purge ₿AO from relays",
       run: handlePurgeRemote,
     },
