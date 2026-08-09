@@ -30,7 +30,6 @@ const SOCIAL_OPTIONS: CuratedOption[] = [
 const TRENDING_OPTIONS: CuratedOption[] = [
   { id: 'trending-24h', label: 'Trending 24h', description: 'Global trending notes in the past 24 hours' },
   { id: 'trending-7d', label: 'Trending 7d', description: 'Global trending notes in the past 7 days' },
-  { id: 'global', label: 'Nostr Firehose', description: 'Latest global notes; be careful!' },
 ];
 
 const READS_OPTIONS: CuratedOption[] = [
