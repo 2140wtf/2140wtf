@@ -410,6 +410,11 @@ export function PrivacySettingsPage() {
               description="Publish encrypted app settings and Cashu backups (kind 30078)."
             />
             <ToggleRow
+              feature="baoCashuSync"
+              title="BAO Cashu wallet sync"
+              description="With consent, publish encrypted BAO signet wallet backups to your configured relays so the demo wallet can be restored in another app or device. BAO signet coins are for testing only."
+            />
+            <ToggleRow
               feature="nutzaps"
               title="Receive Nutzaps"
               description="Publish a public Cashu receiver ad so others can send NIP-61 Nutzaps to you (kind 10019)."

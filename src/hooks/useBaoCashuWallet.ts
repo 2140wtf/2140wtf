@@ -7,6 +7,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useBaoCashuSeed } from '@/hooks/useBaoCashuSeed';
 import { useCashuWallet } from '@/hooks/useCashuWallet';
 import { useNip60Sync } from '@/hooks/useNip60Sync';
+import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { deriveBaoWalletKey } from '@/lib/cashu/cashu';
 import { claimBaoSignetFaucet, clampBaoFaucetAmount, isBaoFaucetDailyExhausted } from '@/lib/cashu/baoFaucet';
 import { devLog } from '@/lib/cashu/devLog';
@@ -46,6 +47,8 @@ export function useBaoCashuWallet(
   const { config } = useAppContext();
   const currentUser = useCurrentUser().user;
   const nip60Sync = useNip60Sync();
+  const { isEnabled: isPublishFeatureEnabled } = usePublishPreferences();
+  const baoCashuSyncEnabled = isPublishFeatureEnabled('baoCashuSync');
   const { seedPhrase: baoSeedPhrase } = useBaoCashuSeed(userSeedPhrase);
 
   const defaultMints = useMemo(() => {
@@ -62,16 +65,18 @@ export function useBaoCashuWallet(
 
   const backupCashuState = useCallback(
     async (payload: CashuBackupPayload): Promise<string | null> => {
+      if (!baoCashuSyncEnabled) return null;
       return syncCashuState(payload, user, relayUrls, backupDTag);
     },
-    [user, relayUrls, backupDTag],
+    [user, relayUrls, backupDTag, baoCashuSyncEnabled],
   );
 
   const restoreCashuState = useCallback(
     async (): Promise<CashuBackupPayload | null> => {
+      if (!baoCashuSyncEnabled) return null;
       return fetchCashuBackup(user, relayUrls, backupDTag);
     },
-    [user, relayUrls, backupDTag],
+    [user, relayUrls, backupDTag, baoCashuSyncEnabled],
   );
 
   const wallet = useCashuWallet(baoSeedPhrase, {
@@ -82,6 +87,7 @@ export function useBaoCashuWallet(
     deriveWalletKey: deriveBaoWalletKey,
     walletLabel: '₿AO MARKETS',
     publishWalletConfig: false,
+    nip60SyncEnabled: baoCashuSyncEnabled,
     storageNamespace: 'freedomid_bao_',
     enabled,
   });
