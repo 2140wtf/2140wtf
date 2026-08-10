@@ -20,6 +20,7 @@ import {
   isBlockedFeedDomainIdentifier,
   buildFeedItems,
   dedupeFeedItems,
+  filterCoordinatedDuplicateSpamEvents,
   type FeedItem,
 } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
@@ -248,7 +249,7 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
       );
       const seen = new Set<string>();
       const items: FeedItem[] = [];
-      const sorted = events
+      const sorted = filterCoordinatedDuplicateSpamEvents(events, now)
         .filter((ev) => ev.created_at <= now && !isMastodonBridgeEvent(ev))
         .sort((a, b) => b.created_at - a.created_at);
       for (const event of sorted) {
@@ -576,7 +577,7 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         // Drop Mastodon / ActivityPub bridged content from the global feed.
         const filteredEvents = domainFilteredEvents.filter((ev) => !isMastodonBridgeEvent(ev));
 
-        let items = filteredEvents
+        let items = filterCoordinatedDuplicateSpamEvents(filteredEvents, now)
           .sort((a, b) => b.created_at - a.created_at)
           .map((ev) => ({ event: ev, sortTimestamp: ev.created_at }));
 
