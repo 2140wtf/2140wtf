@@ -63,6 +63,8 @@ function formatSats(n: number): string {
   return Number(n).toLocaleString();
 }
 
+const CAMPAIGN_DONATION_AMOUNTS = [214, 421, 888, 1_111, 2_140, 21_400] as const;
+
 /** Short display name from a model id (`moonshotai/kimi-k3` → `kimi-k3`). */
 function shortModelName(modelId: string): string {
   return modelId.split('/').pop() ?? modelId;
@@ -976,11 +978,27 @@ export function ContributeDialog({ fundraiser, onOpenChange, onContributed }: {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="fr-amount">Amount (sats)</Label>
-            <Input id="fr-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
-          </div>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="fr-amount">Amount (sats)</Label>
+              <Input id="fr-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
+              <p className="text-[11px] text-muted-foreground">Choose a round donation amount or enter a custom amount.</p>
+              <div className="flex flex-wrap gap-1.5" aria-label="Donation amount presets">
+                {CAMPAIGN_DONATION_AMOUNTS.map((preset) => (
+                  <Button
+                    key={preset}
+                    type="button"
+                    size="sm"
+                    variant={Number(amount) === preset ? 'default' : 'outline'}
+                    className="h-8 px-2.5 text-xs"
+                    disabled={preset > remaining || mutation.isPending}
+                    onClick={() => setAmount(String(preset))}
+                  >
+                    {formatSats(preset)}
+                  </Button>
+                ))}
+              </div>
+            </div>
 
             <div className="space-y-1.5">
               <Label>Pay via</Label>
