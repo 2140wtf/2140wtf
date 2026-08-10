@@ -361,11 +361,13 @@ export function AppRouter() {
               <Route path="/bao/invite/:naddr" element={<InviteV2Page />} />
               {/* Armada-generated invite links use /invite/:naddr; keep parsing them. */}
               <Route path="/invite/:naddr" element={<InviteV2Page />} />
-              <Route path="/prediction-markets" element={<PredictionMarketsPage />} />
-              <Route path="/bao-fund" element={<BaoFundingPage />} />
+              <Route path="/bao/bao-markets" element={<PredictionMarketsPage />} />
+              <Route path="/prediction-markets" element={<Navigate to="/bao/bao-markets" replace />} />
+              <Route path="/bao/bao-fund" element={<BaoFundingPage />} />
+              <Route path="/bao-fund" element={<Navigate to="/bao/bao-fund" replace />} />
               <Route
                 path="/bao-funding"
-                element={<Navigate to="/bao-fund" replace />}
+                element={<Navigate to="/bao/bao-fund" replace />}
               />
           <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/mints/details" element={<MintDetailsPage />} />

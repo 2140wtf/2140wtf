@@ -14,8 +14,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   "notifications",
   "messages",
   "bao-chat",
-  "prediction-markets",
-  "bao-fund",
+  "market",
   "polls",
   "media",
   "pets",
@@ -32,10 +31,16 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'music': 'media',
   'videos': 'media',
   'bao-funding': 'bao-fund',
+  // The former MARKETS group occupied this position. BAO Markets now lives
+  // inside the BAOs group, while Merchants keeps the former group's position.
+  'prediction-markets': 'market',
   // The observatory used to be an external-URI sidebar item pointing at the
   // /i/ discussion page; it is now a first-class in-app page.
   'https://lightningobservatory.com/': 'lightning-observatory',
 };
+
+/** Destinations rendered inside a parent group rather than as standalone rows. */
+const GROUPED_SIDEBAR_CHILD_IDS = new Set(['bao-fund', 'prediction-markets', 'court']);
 
 /**
  * Compute the ordered list of visible sidebar items.
@@ -63,6 +68,8 @@ function computeOrderedItems(
 
     // Migrate legacy IDs
     item = SIDEBAR_ID_MIGRATIONS[item] ?? item;
+
+    if (GROUPED_SIDEBAR_CHILD_IDS.has(item)) continue;
 
     if (seen.has(item)) continue;
     seen.add(item);
@@ -94,6 +101,7 @@ function computeHiddenItems(
   const hidden: HiddenSidebarItem[] = [];
 
   for (const item of SIDEBAR_ITEMS) {
+    if (GROUPED_SIDEBAR_CHILD_IDS.has(item.id)) continue;
     if (!visibleSet.has(item.id)) {
       hidden.push({ id: item.id, label: item.label });
     }
@@ -122,35 +130,16 @@ export function useFeedSettings() {
     [orderedItems],
   );
 
-  // Migration: make sure Fund my ₿AO is visible right below ₿AO MARKETS.
-  useEffect(() => {
-    const order = config.sidebarOrder;
-    if (order.length === 0 || order.includes("bao-fund")) return;
-
-    const next = [...order];
-    const baoIdx = next.indexOf("prediction-markets");
-    if (baoIdx !== -1) {
-      next.splice(baoIdx + 1, 0, "bao-fund");
-    } else {
-      next.push("bao-fund");
-    }
-
-    updateConfig((current) => ({ ...current, sidebarOrder: next }));
-    if (user) {
-      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
-    }
-  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
-
-  // Migration: make sure Polls is visible in the sidebar right below ₿AO MARKETS.
+  // Migration: make sure Polls is visible in the sidebar right below Merchants.
   // This only runs once for users whose saved order predates the Polls item.
   useEffect(() => {
     const order = config.sidebarOrder;
     if (order.length === 0 || order.includes("polls")) return;
 
     const next = [...order];
-    const baoIdx = next.indexOf("prediction-markets");
-    if (baoIdx !== -1) {
-      next.splice(baoIdx + 1, 0, "polls");
+    const merchantsIdx = next.findIndex((id) => id === "market" || id === "prediction-markets");
+    if (merchantsIdx !== -1) {
+      next.splice(merchantsIdx + 1, 0, "polls");
     } else {
       next.push("polls");
     }

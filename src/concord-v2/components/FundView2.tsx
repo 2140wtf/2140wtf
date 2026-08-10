@@ -88,7 +88,7 @@ export function FundView2({ community, metadata, canManage }: FundView2Props) {
               <div className="flex flex-col gap-2">
                 <Button asChild className="gap-1.5">
                   <Link
-                    to={`/bao-fund?create=1&title=${encodeURIComponent(community.name)}${metadata?.repo ? `&repo=${encodeURIComponent(metadata.repo)}` : ''}`}
+                    to={`/bao/bao-fund?create=1&title=${encodeURIComponent(community.name)}${metadata?.repo ? `&repo=${encodeURIComponent(metadata.repo)}` : ''}`}
                   >
                     <Plus className="size-4" /> Start funding
                   </Link>
@@ -162,7 +162,7 @@ export function FundView2({ community, metadata, canManage }: FundView2Props) {
 
               <div className="flex flex-col gap-2 pt-1">
                 <Button asChild className="gap-1.5">
-                  <Link to={`/bao-fund?campaign=${encodeURIComponent(f.id)}`}>
+                  <Link to={`/bao/bao-fund?campaign=${encodeURIComponent(f.id)}`}>
                     <ExternalLink className="size-4" /> Open in ₿AO Fund
                   </Link>
                 </Button>

@@ -112,7 +112,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     minHeight: 250,
     maxHeight: 650,
     category: 'discovery',
-    href: '/prediction-markets',
+    href: '/bao/bao-markets',
   },
   {
     id: 'roadstr',
