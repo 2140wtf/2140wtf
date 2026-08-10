@@ -1818,3 +1818,44 @@ Published BEFORE the genesis wraps it covers. One event per community, plus one 
 - `d` is the community id hex; for a per-link signer sponsorship it is `link:<link-signer-pk>`.
 - Each `stream` tag names one stream pubkey (a derived Concord group key's public key).
 - New channel streams are sponsored by publishing a replacement sponsorship (same `d`) covering the new stream; clients and relays treat sponsorship as cumulative.
+
+### Kinds 4971–4973: ₿AO Compute-credit funding
+
+Regular metadata events for privacy-preserving agent funding. Cashu tokens and
+proofs are never placed in these events: the donor delivers a P2PK-locked token
+in a NIP-17 message. All status claims are advisory until the receiving agent
+confirms them.
+
+| Kind | Purpose | Required tags |
+| --- | --- | --- |
+| 4971 | Funding request | `t=bao-compute-credit-request`, `amount` |
+| 4972 | Donor claim or agent confirmation | `e` request id, `p` requester pubkey, `amount` |
+| 4973 | Agent spend receipt | `e` request id, `amount` |
+
+Version-2 requests support one to five ordered tranches:
+
+```json
+{
+  "kind": 4971,
+  "content": "Run the benchmark and publish the result.",
+  "tags": [
+    ["t", "bao-compute-credit-request"],
+    ["amount", "214"],
+    ["v", "2"],
+    ["shots", "3"],
+    ["tranche", "1", "214"],
+    ["tranche", "2", "421"],
+    ["tranche", "3", "888"],
+    ["alt", "₿AO compute-credit funding request"]
+  ]
+}
+```
+
+- `tranche` indices MUST be consecutive from `1`, with one to five positive
+  whole-sat amounts.
+- 4972 and 4973 use `shot=<index>` to bind a claim, confirmation, or receipt
+  to exactly one tranche.
+- Legacy requests with `amount` and optional `amount2` remain valid as v1.
+- Receivers MUST confirm each tranche independently. A donor claim alone is
+  never payment proof; clients MUST NOT publish tokens, proofs, keys, payment
+  hashes, or donor private messages.

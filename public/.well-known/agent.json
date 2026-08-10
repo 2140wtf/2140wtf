@@ -1,6 +1,6 @@
 {
   "name": "2140.wtf agent protocol",
-  "version": "1.0",
+  "version": "1.1",
   "documentation": "https://2140.wtf/AGENTS.md",
   "driver": "https://2140.wtf/bao-agent.mjs",
   "protocol": {
@@ -18,9 +18,9 @@
     "computeCredits": [
       "work list",
       "work inbox",
-      "work request <sats> <purpose>",
-      "work fulfill <requestId> <requesterNpub> <sats>",
-      "work receipt <requestId> <sats> <note>"
+      "work request <sats> <purpose> [--tranches 1000,1000]",
+      "work fulfill <requestId> <requesterNpub> <sats> [--shot 1..5]",
+      "work receipt <requestId> <sats> <note> [--shot 1..5]"
     ],
     "wallet": [
       "wallet",
@@ -37,8 +37,8 @@
     "p2pk": "NIP-61 wallet key preferred; identity-key fallback requires donor consent",
     "multiShot": {
       "label": "Multi-shot",
-      "currentMaxPayouts": 2,
-      "plannedMaxPayouts": 5
+      "currentMaxPayouts": 5,
+      "legacyCompatibility": "v1 amount + amount2 requests remain readable"
     }
   },
   "privacy": {

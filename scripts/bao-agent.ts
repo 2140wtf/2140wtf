@@ -189,7 +189,7 @@ function argValue(args: string[], flag: string): string | undefined {
 }
 
 /** Flags whose NEXT token is a value (not a positional arg). */
-const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec"];
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec", "--tranches", "--shot"];
 
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args: string[]): string[] {
@@ -442,7 +442,12 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         const purpose = pos.slice(2).join(" ");
         if (!Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work request needs <sats> <purpose>");
         if (!purpose) throw new Error("work request needs a purpose");
-        const id = await requestCredits(loadState(as), amountSats, purpose, dryRun);
+        const trancheFlag = argValue(rest, "--tranches");
+        const tranches = trancheFlag?.split(",").map((value) => Number(value.trim()));
+        if (tranches && (tranches.length < 1 || tranches.length > 5 || tranches.some((value) => !Number.isSafeInteger(value) || value <= 0))) {
+          throw new Error("--tranches needs 1-5 positive whole-sat amounts, e.g. --tranches 1000,1000");
+        }
+        const id = await requestCredits(loadState(as), amountSats, purpose, dryRun, tranches);
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit request ${id.slice(0, 16)}… (${amountSats} sats): ${purpose}`);
         break;
       }
@@ -450,10 +455,12 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         const requestId = pos[1];
         const requester = pos[2];
         const amountSats = Number(pos[3]);
+        const shot = Number(argValue(rest, "--shot") ?? "1");
         if (!requestId || !requester || !Number.isFinite(amountSats) || amountSats <= 0) {
           throw new Error("work fulfill needs <requestId> <requesterNpub> <sats>");
         }
-        const id = await fulfillCredits(loadState(as), requestId, resolvePubkey(requester), amountSats, dryRun);
+        if (!Number.isSafeInteger(shot) || shot < 1 || shot > 5) throw new Error("--shot must be 1..5");
+        const id = await fulfillCredits(loadState(as), requestId, resolvePubkey(requester), amountSats, dryRun, shot);
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit fulfillment ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
         break;
       }
@@ -461,8 +468,10 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         const requestId = pos[1];
         const amountSats = Number(pos[2]);
         const note = pos.slice(3).join(" ");
+        const shot = Number(argValue(rest, "--shot") ?? "1");
         if (!requestId || !Number.isFinite(amountSats) || amountSats <= 0) throw new Error("work receipt needs <requestId> <sats> <note>");
-        const id = await receiptCredits(loadState(as), requestId, amountSats, note || "redeemed for inference", [], dryRun);
+        if (!Number.isSafeInteger(shot) || shot < 1 || shot > 5) throw new Error("--shot must be 1..5");
+        const id = await receiptCredits(loadState(as), requestId, amountSats, note || "redeemed for inference", [], dryRun, shot);
         console.log(`${dryRun ? "[dry-run] " : ""}compute-credit receipt ${id.slice(0, 16)}… for ${requestId.slice(0, 12)}…`);
         break;
       }
