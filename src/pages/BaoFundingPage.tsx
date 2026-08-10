@@ -141,8 +141,8 @@ export function BaoFundingPage() {
   const projectsRef = useRef<HTMLDivElement | null>(null);
 
   // Deep links (e.g. from a pet's upkeep card):
-  //   /bao-fund?campaign=<id>      → preselect/expand that campaign
-  //   /bao-fund?create=1&title=…   → open the campaign form with URL defaults.
+  //   /bao/fund?campaign=<id>      → preselect/expand that campaign
+  //   /bao/fund?create=1&title=…   → open the campaign form with URL defaults.
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
@@ -236,7 +236,7 @@ export function BaoFundingPage() {
             {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </Button>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
           <Button
             size="lg"
             className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left"
@@ -303,7 +303,7 @@ export function BaoFundingPage() {
             <AccordionTrigger className="text-left">Where are code review and discussion?</AccordionTrigger>
             <AccordionContent className="space-y-3 text-muted-foreground">
               <p>The public repository is the reviewable source of code and evidence. The creator can bring the campaign team into a ₿AO community for encrypted planning, review discussion, and selected member access. Funding alone does not silently create or expose a private community.</p>
-              <Button asChild variant="outline" size="sm"><Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" />Open ₿AO communities</Link></Button>
+              <Button asChild variant="outline" size="sm"><Link to="/bao/community"><MessageCircle className="mr-2 size-4" />Open ₿AO communities</Link></Button>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -446,7 +446,7 @@ export function BaoFundingPage() {
             <DialogTitle>What do you want to create?</DialogTitle>
             <DialogDescription>Choose the funding flow that matches the work.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
             <Button
               type="button"
               variant="outline"
@@ -640,7 +640,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No public repository was attached.</div>
             )}
             <Button asChild variant="outline" className="justify-start">
-              <Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
+              <Link to="/bao/community"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
             </Button>
           </div>
 

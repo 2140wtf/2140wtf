@@ -63,7 +63,7 @@ export function PredictionMarketsWidget() {
       <div className="p-1 text-xs text-muted-foreground">
         No markets found right now.
         {' '}
-        <Link to="/prediction-markets" className="text-primary hover:underline">
+        <Link to="/bao/markets" className="text-primary hover:underline">
           View all markets
         </Link>
       </div>
@@ -96,7 +96,7 @@ export function PredictionMarketsWidget() {
 
       <div className="pt-1">
         <Link
-          to="/prediction-markets"
+          to="/bao/markets"
           className="text-xs text-muted-foreground hover:text-primary transition-colors"
         >
           View all markets →

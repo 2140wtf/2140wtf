@@ -402,7 +402,7 @@ function InfoBody({
         <div className="flex">
           <Button asChild variant="outline" size="sm" className="gap-1.5">
             <Link
-              to={`/bao-fund?create=1&title=${encodeURIComponent(name)}${metadata?.repo ? `&repo=${encodeURIComponent(metadata.repo)}` : ""}`}
+              to={`/bao/fund?create=1&title=${encodeURIComponent(name)}${metadata?.repo ? `&repo=${encodeURIComponent(metadata.repo)}` : ""}`}
             >
               Fund this ₿AO
             </Link>

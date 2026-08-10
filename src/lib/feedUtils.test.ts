@@ -3,6 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import {
   getPaginationCursor,
+  getBlockedFeedAuthorPubkeys,
   isBlockedFeedDomainEvent,
   selectFeedItemsWithSeed,
   shouldHideFeedEvent,
@@ -84,6 +85,31 @@ describe('feed event filtering', () => {
       ...ev(123),
       content: 'Read a syndicated story at https://nostrmag.com/example',
     })).toBe(false);
+  });
+
+  it('blocks every NIP-05 username ending in @nostrmag.com', () => {
+    const madrid = {
+      ...ev(123),
+      kind: 0,
+      pubkey: 'a'.repeat(64),
+      content: JSON.stringify({ nip05: 'madrid@nostrmag.com' }),
+    };
+    const futureAccount = {
+      ...ev(124),
+      kind: 0,
+      pubkey: 'b'.repeat(64),
+      content: JSON.stringify({ nip05: 'anything@news.nostrmag.com' }),
+    };
+    const ordinary = {
+      ...ev(125),
+      kind: 0,
+      pubkey: 'c'.repeat(64),
+      content: JSON.stringify({ nip05: 'writer@example.com' }),
+    };
+
+    expect(getBlockedFeedAuthorPubkeys([madrid, futureAccount, ordinary])).toEqual(
+      new Set([madrid.pubkey, futureAccount.pubkey]),
+    );
   });
 });
 

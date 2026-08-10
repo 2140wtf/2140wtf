@@ -29,6 +29,7 @@ import {
   resolveCreditLockTarget,
   isLikelyMainnetMint,
   aggregateAgentCreditStats,
+  getComputeCreditTranches,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
@@ -321,7 +322,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
             <p className="text-sm text-muted-foreground">Publish a funding request, receive its Cashu token, and optionally turn it into AI compute.</p>
           </div>
           <AgentGateCheck>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
               <RequestCreditCard myRequests={myRequests} confirmedAmountsByRequest={confirmedAmountsByRequest} confirmedShotsByRequest={confirmedShotsByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
               <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
             </div>
@@ -346,19 +347,17 @@ function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedSho
   const publish = useNostrPublish();
   const { isEnabled: isPublishFeatureEnabled, setEnabled: setPublishFeatureEnabled } = usePublishPreferences();
   const nutzapsAdEnabled = isPublishFeatureEnabled('nutzaps');
-  const [shots, setShots] = useState<1 | 2>(1);
-  const [amount, setAmount] = useState('1000');
-  const [amount2, setAmount2] = useState('');
+  const [trancheCount, setTrancheCount] = useState<ComputeCreditShot>(1);
+  const [amounts, setAmounts] = useState<string[]>(['1000']);
   const [purpose, setPurpose] = useState('');
 
   const requestMutation = useMutation({
     mutationFn: () =>
       publish.mutateAsync({
         ...buildComputeCreditRequest({
-          amountSats: parseInt(amount, 10) || 0,
+          amountSats: parseInt(amounts[0] ?? '', 10) || 0,
           purpose,
-          shots,
-          amount2Sats: shots === 2 ? parseInt(amount2, 10) || 0 : undefined,
+          tranches: amounts.map((value) => parseInt(value, 10) || 0),
         }),
       }),
     onSuccess: () => {
@@ -377,7 +376,7 @@ function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedSho
         requestId: request.id,
         requesterPubkey: request.pubkey,
         amountSats,
-        shot: shot === 2 ? 2 : undefined,
+        shot,
       })),
     onSuccess: () => {
       setConfirmTarget(null);
@@ -395,9 +394,18 @@ function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedSho
   const [confirmTarget, setConfirmTarget] = useState<{ requestId: string; shot: ComputeCreditShot; amountSats: number } | null>(null);
 
   const valid =
-    (parseInt(amount, 10) || 0) > 0 &&
-    purpose.trim().length > 0 &&
-    (shots === 1 || (parseInt(amount2, 10) || 0) > 0);
+    amounts.length === trancheCount &&
+    amounts.every((value) => (parseInt(value, 10) || 0) > 0) &&
+    purpose.trim().length > 0;
+
+  const updateTrancheCount = (count: ComputeCreditShot) => {
+    setTrancheCount(count);
+    setAmounts((current) => Array.from({ length: count }, (_, index) => current[index] ?? ''));
+  };
+
+  const updateAmount = (index: number, value: string) => {
+    setAmounts((current) => current.map((amount, amountIndex) => amountIndex === index ? value.replace(/[^0-9]/g, '') : amount));
+  };
 
   return (
     <Card>
@@ -436,37 +444,40 @@ function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedSho
           <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"
-              variant={shots === 1 ? 'default' : 'outline'}
+              variant={trancheCount === 1 ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setShots(1)}
+              onClick={() => updateTrancheCount(1)}
             >
               Single shot
             </Button>
             <Button
               type="button"
-              variant={shots === 2 ? 'default' : 'outline'}
+              variant={trancheCount > 1 ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setShots(2)}
+              onClick={() => updateTrancheCount(2)}
             >
-              Double shot
+              Multi-shot
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {shots === 1
+            {trancheCount === 1
               ? 'One Cashu payout after the donor accepts the work.'
-              : 'Two separate Cashu payouts. Confirm each one only after receiving it.'}
+              : `${trancheCount} separate Cashu payouts. Confirm each one only after receiving it.`}
           </p>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="cc-amount">{shots === 2 ? 'First payout (sats)' : 'Payout (sats)'}</Label>
-          <Input id="cc-amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" />
-        </div>
-        {shots === 2 && (
-          <div className="space-y-1.5">
-            <Label htmlFor="cc-amount2">Second payout (sats)</Label>
-            <Input id="cc-amount2" value={amount2} onChange={(e) => setAmount2(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="2140" />
+        {trancheCount > 1 && (
+          <div className="flex items-center gap-2">
+            <Label htmlFor="cc-tranches" className="text-xs">Payouts</Label>
+            <Input id="cc-tranches" className="h-8 w-20" type="number" min={2} max={5} value={trancheCount} onChange={(e) => updateTrancheCount(Math.min(5, Math.max(2, Number(e.target.value) || 2)) as ComputeCreditShot)} />
+            <span className="text-[11px] text-muted-foreground">Up to five milestones</span>
           </div>
         )}
+        {amounts.map((amount, index) => (
+          <div key={index} className="space-y-1.5">
+            <Label htmlFor={`cc-amount-${index}`}>{trancheCount === 1 ? 'Payout (sats)' : `Payout ${index + 1} (sats)`}</Label>
+            <Input id={`cc-amount-${index}`} value={amount} onChange={(e) => updateAmount(index, e.target.value)} inputMode="numeric" placeholder="2140" />
+          </div>
+        ))}
         <div className="space-y-1.5">
           <Label htmlFor="cc-purpose">What work will you deliver?</Label>
           <Textarea id="cc-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} rows={2} placeholder="e.g. Run inference and publish the oracle dashboard results" />
@@ -487,15 +498,16 @@ function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedSho
               const confirmed = confirmedShotsByRequest.get(r.id) ?? new Set<ComputeCreditShot>();
               const confirmedAmounts = confirmedAmountsByRequest.get(r.id) ?? new Map<ComputeCreditShot, number>();
               const claims = claimsByRequest.get(r.id) ?? [];
-              const expectedShots: ComputeCreditShot[] = r.shots === 2 ? [1, 2] : [1];
-              const targetForShot = (shot: ComputeCreditShot) => shot === 2 ? r.amount2Sats ?? 0 : r.amountSats;
+              const tranches = getComputeCreditTranches(r);
+              const expectedShots = tranches.map((_, index) => index + 1 as ComputeCreditShot);
+              const targetForShot = (shot: ComputeCreditShot) => tranches[shot - 1] ?? 0;
               const amountForShot = (shot: ComputeCreditShot) => confirmedAmounts.get(shot) ?? 0;
               const isComplete = expectedShots.every((shot) => amountForShot(shot) >= targetForShot(shot));
               const pendingClaimShots = expectedShots.filter((shot) =>
                 amountForShot(shot) < targetForShot(shot) && claims.some((claim) => (claim.shot ?? 1) === shot),
               );
               const armed = confirmTarget?.requestId === r.id ? confirmTarget : null;
-              const totalSats = r.amountSats + (r.shots === 2 ? r.amount2Sats ?? 0 : 0);
+              const totalSats = tranches.reduce((sum, amount) => sum + amount, 0);
               return (
                 <div key={r.id} className="flex flex-col gap-2 rounded-md border px-2.5 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
                   <span className="min-w-0 truncate">{r.purpose || `${formatSats(totalSats)} sats`}</span>
@@ -587,10 +599,10 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
   const isOwn = !!user && user.pubkey === request.pubkey;
   const hasWallet = allMints.length > 0;
 
-  // Double-shot requests fund tranche by tranche; single-shot ignores this.
-  const isDoubleShot = request.shots === 2 && !!request.amount2Sats;
-  const [fundShot, setFundShot] = useState<1 | 2>(1);
-  const targetAmount = fundShot === 2 ? request.amount2Sats ?? 0 : request.amountSats;
+  const tranches = getComputeCreditTranches(request);
+  const isMultiShot = tranches.length > 1;
+  const [fundShot, setFundShot] = useState<ComputeCreditShot>(1);
+  const targetAmount = tranches[fundShot - 1] ?? tranches[0];
   const confirmedAmount = confirmedAmounts.get(fundShot) ?? 0;
   const remainingAmount = Math.max(0, targetAmount - confirmedAmount);
   const [selectedDonateAmount, setSelectedDonateAmount] = useState(0);
@@ -662,7 +674,7 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
         requestId: request.id,
         requesterPubkey: request.pubkey,
         amountSats: fundAmount,
-        shot: fundShot === 2 ? 2 : undefined,
+        shot: fundShot,
       }));
     },
     onSuccess: () => {
@@ -740,7 +752,7 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
       try {
         await sendMessage({
           recipientPubkey: request.pubkey,
-          content: `₿AO compute credits for request ${request.id} ("${request.purpose.slice(0, 60)}") — ${formatSats(fundAmount)} sats${isDoubleShot ? `, milestone ${fundShot}/2` : ''}.\n\n${redeemHint}\n\n${cashuToken}`,
+          content: `₿AO compute credits for request ${request.id} ("${request.purpose.slice(0, 60)}") — ${formatSats(fundAmount)} sats${isMultiShot ? `, payout ${fundShot}/${tranches.length}` : ''}.\n\n${redeemHint}\n\n${cashuToken}`,
         });
         setDmState('sent');
       } catch {
@@ -782,10 +794,10 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
           <div className="min-w-0">
             <div className="text-sm">
               <RequestAuthor pubkey={request.pubkey} /> requests{' '}
-              {isDoubleShot ? (
+              {isMultiShot ? (
                 <span className="font-semibold tabular-nums">
-                  {formatSats(request.amountSats)} + {formatSats(request.amount2Sats!)} sats
-                  <span className="ml-1.5 text-[10px] font-normal text-primary">Multi-shot · 2 payouts</span>
+                  {formatSats(tranches.reduce((sum, amount) => sum + amount, 0))} sats
+                  <span className="ml-1.5 text-[10px] font-normal text-primary">Multi-shot · {tranches.length} payouts</span>
                 </span>
               ) : (
                 <span className="font-semibold tabular-nums">{formatSats(request.amountSats)} sats</span>
@@ -863,13 +875,13 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
               </p>
               {!isOwn && user && (
                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-72">
-                  {isDoubleShot && (
+                  {isMultiShot && (
                     <div className="grid grid-cols-2 gap-1.5">
-                      {[1, 2].map((shot) => {
-                        const amount = shot === 2 ? request.amount2Sats! : request.amountSats;
-                        const confirmed = confirmedAmounts.get(shot as 1 | 2) ?? 0;
+                      {tranches.map((amount, index) => {
+                        const shot = index + 1 as ComputeCreditShot;
+                        const confirmed = confirmedAmounts.get(shot) ?? 0;
                         const remaining = Math.max(0, amount - confirmed);
-                        const covered = shotCovered(shot as 1 | 2);
+                        const covered = shotCovered(shot);
                         return (
                           <Button
                             key={shot}
@@ -877,7 +889,7 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
                             variant={fundShot === shot ? 'default' : 'outline'}
                             className="h-auto min-h-9 gap-1 whitespace-normal"
                             disabled={!hasWallet || fulfillMutation.isPending || covered}
-                            onClick={() => { setFundShot(shot as 1 | 2); setSelectedDonateAmount(0); }}
+                            onClick={() => { setFundShot(shot); setSelectedDonateAmount(0); }}
                           >
                             {covered ? <CheckCircle2 className="size-3.5" /> : <Zap className="size-3.5" />}
                             {covered ? `Payout ${shot} complete` : `Payout ${shot} · ${formatSats(remaining)} left`}
@@ -958,7 +970,7 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
           </DialogHeader>
           <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
             <p><span className="text-muted-foreground">Request:</span> {request.purpose}</p>
-            <p><span className="text-muted-foreground">Donation:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · payout ${fundShot}/2` : ''}</p>
+            <p><span className="text-muted-foreground">Donation:</span> {formatSats(fundAmount)} sats{isMultiShot ? ` · payout ${fundShot}/${tranches.length}` : ''}</p>
             <p><span className="text-muted-foreground">Active mint:</span> <span className="break-all">{mintUrl}</span></p>
             <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : 'P2PK lock selected automatically'}</p>
           </div>
@@ -1497,10 +1509,10 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 </Button>
               </div>
             )}
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-2">
               <Button
                 variant="outline"
-                className="w-full gap-1.5 whitespace-normal"
+                className="h-auto min-h-10 w-full min-w-0 gap-1.5 whitespace-normal px-3 py-2"
                 disabled={!token.trim().startsWith('cashu') || busy}
                 onClick={() => receiveIntoWalletMutation.mutate()}
               >
@@ -1508,7 +1520,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 Keep as Cashu
               </Button>
               <Button
-                className="w-full gap-1.5 whitespace-normal"
+                className="h-auto min-h-10 w-full min-w-0 gap-1.5 whitespace-normal px-3 py-2"
                 disabled={!token.trim().startsWith('cashu') || busy}
                 onClick={() => redeemMutation.mutate()}
               >

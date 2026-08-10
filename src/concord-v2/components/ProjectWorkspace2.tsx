@@ -83,7 +83,7 @@ export function ProjectWorkspace2({ repoNaddr, fundId, communityName, repoUrl }:
         </header>
         <section className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3"><HandCoins className="mt-0.5 size-5 shrink-0 text-primary" /><div><h3 className="font-semibold">Project funding</h3><p className="text-sm text-muted-foreground">Funding milestones and public repository evidence remain separate signals; repository status never releases money automatically.</p></div></div>
-          <Button asChild className="min-h-11 shrink-0"><Link to={fundId ? `/bao-fund?campaign=${encodeURIComponent(fundId)}` : `/bao-fund?create=1&title=${encodeURIComponent(communityName)}${repoUrl ? `&repo=${encodeURIComponent(repoUrl)}` : ""}`}>{fundId ? "View milestones" : "Create fundraiser"}</Link></Button>
+          <Button asChild className="min-h-11 shrink-0"><Link to={fundId ? `/bao/fund?campaign=${encodeURIComponent(fundId)}` : `/bao/fund?create=1&title=${encodeURIComponent(communityName)}${repoUrl ? `&repo=${encodeURIComponent(repoUrl)}` : ""}`}>{fundId ? "View milestones" : "Create fundraiser"}</Link></Button>
         </section>
         <nav className="flex gap-1 overflow-x-auto rounded-xl bg-muted/60 p-1" aria-label="Project sections">
           {tabs.map((item) => <Button key={item.id} variant="ghost" size="sm" className={cn("shrink-0", tab === item.id && "bg-background shadow-sm")} aria-current={tab === item.id ? "page" : undefined} onClick={() => setTab(item.id)}>{item.label}</Button>)}
