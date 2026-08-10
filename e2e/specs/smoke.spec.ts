@@ -52,10 +52,11 @@ test.describe('smoke', () => {
     await expect(drawer).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     // Spot-check default sidebar items (scoped to the drawer to avoid duplicates
-    // from the desktop sidebar and mobile bottom nav). The Markets item is a
-    // collapsible group, so it is rendered as a button with an all-caps label.
+    // from the desktop sidebar and mobile bottom nav). BAO destinations are a
+    // collapsible group, while Merchants remains a standalone destination.
     await expect(drawer.getByRole('link', { name: 'Feed' })).toBeVisible();
-    await expect(drawer.getByRole('button', { name: 'MARKETS' })).toBeVisible();
+    await expect(drawer.getByRole('button', { name: '₿AOs' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Polls' })).toBeVisible();
 
     await page.keyboard.press('Escape');

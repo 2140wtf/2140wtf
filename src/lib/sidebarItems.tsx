@@ -132,12 +132,12 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   {
     id: "bao-chat",
     label: "₿AOs",
-    path: "/bao/baocommunity",
+    path: "/bao/community",
     icon: MessageSquareMore,
     requiresAuth: true,
   },
-  { id: "prediction-markets", label: "MARKETS", path: "/prediction-markets", icon: BarChart3 },
-  { id: "bao-fund", label: "Fund my ₿AO", path: "/bao-fund", icon: HandCoins },
+  { id: "prediction-markets", label: "₿AO MARKETS", path: "/bao/markets", icon: BarChart3 },
+  { id: "bao-fund", label: "Fund my ₿AO", path: "/bao/fund", icon: HandCoins },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
   { id: "pets", label: "NOSTR PETS", path: "/pets", icon: Cat },
   {
@@ -354,7 +354,9 @@ export function isItemActive(
   }
 
   if (id === "bao-chat") {
-    return pathname.startsWith("/bao/") || pathname.startsWith("/bao-fund");
+    return pathname.startsWith("/bao/")
+      || pathname.startsWith("/bao-fund")
+      || pathname.startsWith("/prediction-markets");
   }
 
   if (id === "media") {

@@ -18,8 +18,10 @@ import {
   isMastodonBridgeEvent,
   isBlockedFeedDomainEvent,
   isBlockedFeedDomainIdentifier,
+  getBlockedFeedAuthorPubkeys,
   buildFeedItems,
   dedupeFeedItems,
+  filterCoordinatedDuplicateSpamEvents,
   type FeedItem,
 } from '@/lib/feedUtils';
 import { isReplyEvent } from '@/lib/nostrEvents';
@@ -142,18 +144,11 @@ async function filterBlockedDomainAuthors(
 
   try {
     const metadataEvents = await nostr.query([{ kinds: [0], authors, limit: Math.min(500, Math.max(100, authors.length * 4)) }], { signal });
-    const blockedAuthors = new Set(cachedBlockedAuthors);
+    const blockedAuthors = new Set([
+      ...cachedBlockedAuthors,
+      ...getBlockedFeedAuthorPubkeys(metadataEvents),
+    ]);
     for (const metadata of metadataEvents) {
-      try {
-        const content: unknown = JSON.parse(metadata.content);
-        if (typeof content !== 'object' || content === null) continue;
-        const nip05 = (content as { nip05?: unknown }).nip05;
-        if (typeof nip05 === 'string' && isBlockedFeedDomainIdentifier(nip05)) {
-          blockedAuthors.add(metadata.pubkey);
-        }
-      } catch {
-        // Invalid kind-0 metadata is not a reason to hide a post.
-      }
       if (!queryClient.getQueryData(['author', metadata.pubkey])) {
         queryClient.setQueryData(['author', metadata.pubkey], parseAuthorEvent(metadata));
       }
@@ -246,10 +241,15 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         [{ kinds: postKinds, limit: PAGE_SIZE * OVER_FETCH_MULTIPLIER }],
         { signal },
       );
+      const authors = [...new Set(events.map((event) => event.pubkey))];
+      const metadataEvents = authors.length > 0
+        ? await store.query([{ kinds: [0], authors, limit: Math.max(100, authors.length * 4) }], { signal })
+        : [];
+      const blockedAuthors = getBlockedFeedAuthorPubkeys(metadataEvents);
       const seen = new Set<string>();
       const items: FeedItem[] = [];
-      const sorted = events
-        .filter((ev) => ev.created_at <= now && !isMastodonBridgeEvent(ev))
+      const sorted = filterCoordinatedDuplicateSpamEvents(events, now)
+        .filter((ev) => ev.created_at <= now && !blockedAuthors.has(ev.pubkey) && !isMastodonBridgeEvent(ev))
         .sort((a, b) => b.created_at - a.created_at);
       for (const event of sorted) {
         if (seen.has(event.id)) continue;
@@ -576,7 +576,7 @@ export function useFeed(tab: 'all' | 'follows' | 'loved' | 'global' | 'communiti
         // Drop Mastodon / ActivityPub bridged content from the global feed.
         const filteredEvents = domainFilteredEvents.filter((ev) => !isMastodonBridgeEvent(ev));
 
-        let items = filteredEvents
+        let items = filterCoordinatedDuplicateSpamEvents(filteredEvents, now)
           .sort((a, b) => b.created_at - a.created_at)
           .map((ev) => ({ event: ev, sortTimestamp: ev.created_at }));
 
