@@ -17,6 +17,7 @@ import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlan
 import { useConcord2Unread } from "@/concord-v2/hooks/useConcord2Unread";
 import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
 import type { CommunityListEntry } from "@/concord-v2/lib/communityList";
+import type { RelayDeletionCapability } from "@/concord-v2/lib/relayDeletion";
 import { MAX_COMMUNITY_RELAYS } from "@/concord-v2/lib/types";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useMutes } from "@/hooks/useMutes";
@@ -120,6 +121,25 @@ function CommunityRow({ entry }: { entry: CommunityListEntry }) {
   );
 }
 
+/**
+ * Word the create-time relay exclusions by their actual reason: only a relay
+ * whose NIP-11 document was READABLE and lacked NIP-09 is "without verified
+ * NIP-09 deletion support"; a relay whose document could not be fetched at
+ * all (offline, CORS-blocked) merely could not be verified.
+ */
+function describeExcludedRelays(excluded: RelayDeletionCapability[]): string {
+  const unadvertised = excluded.filter((relay) => relay.reason === "nip-09-not-advertised").map((relay) => relay.url);
+  const unverifiable = excluded.filter((relay) => relay.reason !== "nip-09-not-advertised").map((relay) => relay.url);
+  const parts: string[] = [];
+  if (unadvertised.length > 0) {
+    parts.push(`Removed relays without verified NIP-09 deletion support: ${unadvertised.join(", ")}`);
+  }
+  if (unverifiable.length > 0) {
+    parts.push(`Removed relays whose NIP-09 deletion support could not be verified: ${unverifiable.join(", ")}`);
+  }
+  return parts.join(". ");
+}
+
 /** Minimal create-community dialog: a name, then straight into the community. */
 function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [name, setName] = useState("");
@@ -204,7 +224,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       toast({
         title: "Community created",
         description: excludedRelays.length > 0
-          ? `${createdName}. Removed relays without verified NIP-09 deletion support: ${excludedRelays.join(", ")}`
+          ? `${createdName}. ${describeExcludedRelays(excludedRelays)}`
           : createdName,
       });
       onOpenChange(false);
@@ -326,6 +346,15 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 )}
               </div>
 
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+                </Button>
+              </div>
+
               {discoveryRelays.length > 0 && (
                 <div className="pt-1">
                   <Button
@@ -420,15 +449,6 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </Button>
                 )}
               </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-              </Button>
             </div>
           </form>
         </div>
