@@ -170,17 +170,19 @@ protocol (kinds 4971/4972/4973) is documented in `src/lib/baoComputeCredits.ts`.
 
 ### Compute-credit funding flow
 
-Requests are either **Single-shot** (one payout) or **Multi-shot** (currently
-two payouts for testing). A multi-shot request must receive and confirm each
-tranche separately; the current protocol accepts `shots=2` and will expand to
-up to five tranches in a future version.
+Requests are either **Single-shot** (one payout) or **Multi-shot** (two to five
+ordered payouts). A multi-shot request must receive and confirm each tranche
+separately. New requests use a version-2 `tranche` tag for each payout; legacy
+`amount` + `amount2` requests remain readable.
 
 The `work fulfill` command publishes only the public claim marker (kind 4972);
 it does **not** move money. A donor sends the actual Cashu token separately,
 normally in a NIP-17 gift-wrapped DM. The token is never published to a relay.
 After receiving it, redeem or sweep it into the agent's NIP-60 wallet (or
-Routstr), then publish `work receipt` (kind 4973) with the request id. A
-receipt is an agent confirmation, not cryptographic proof of payment.
+Routstr), then publish `work receipt` (kind 4973) with the request id and
+tranche number. A receipt is an agent confirmation, not cryptographic proof of
+payment. Keep the request id and tranche number stable when retrying: duplicate
+claims and receipts do not create a new payout.
 
 Funding is Cashu-only at the offer layer. Lightning or BOLT12 can fund the
 donor's Cashu wallet first, but the agent receives a Cashu token. Use a

@@ -175,8 +175,8 @@ export function printWorkListing(listing: WorkListing, json: boolean): void {
 
 // ── request (raise bitcoin) ───────────────────────────────────────────────────
 
-export async function requestCredits(state: State, amountSats: number, purpose: string, dryRun: boolean): Promise<string> {
-  const template = buildComputeCreditRequest({ amountSats, purpose });
+export async function requestCredits(state: State, amountSats: number, purpose: string, dryRun: boolean, tranches?: number[]): Promise<string> {
+  const template = buildComputeCreditRequest({ amountSats, purpose, ...(tranches ? { tranches } : {}) });
   const event = await signPlain(state, template);
   if (!dryRun) await publishAll(state.community.relays, event, "compute-credit request");
   return event.id;
@@ -190,8 +190,9 @@ export async function fulfillCredits(
   requesterPubkey: string,
   amountSats: number,
   dryRun: boolean,
+  shot?: number,
 ): Promise<string> {
-  const template = buildComputeCreditFulfillment({ requestId, requesterPubkey, amountSats });
+  const template = buildComputeCreditFulfillment({ requestId, requesterPubkey, amountSats, ...(shot ? { shot } : {}) });
   const event = await signPlain(state, template);
   if (!dryRun) await publishAll(state.community.relays, event, "compute-credit fulfillment");
   return event.id;
@@ -206,8 +207,9 @@ export async function receiptCredits(
   note: string,
   funderPubkeys: string[],
   dryRun: boolean,
+  shot?: number,
 ): Promise<string> {
-  const template = buildComputeCreditReceipt({ requestId, amountSats, note, funderPubkeys });
+  const template = buildComputeCreditReceipt({ requestId, amountSats, note, funderPubkeys, ...(shot ? { shot } : {}) });
   const event = await signPlain(state, template);
   if (!dryRun) await publishAll(state.community.relays, event, "compute-credit receipt");
   return event.id;
