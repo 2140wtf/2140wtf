@@ -75,19 +75,43 @@ export interface ComputeCreditFulfillment {
 
 export type ComputeCreditShot = 1 | 2;
 
+/**
+ * Sum agent-confirmed sats per tranche. Third-party claims never count.
+ * Event ids are deduplicated because relay pools can return the same event
+ * more than once.
+ */
+export function confirmedComputeCreditAmounts(
+  request: ComputeCreditRequest,
+  fulfillments: ComputeCreditFulfillment[],
+): Map<ComputeCreditShot, number> {
+  const amounts = new Map<ComputeCreditShot, number>();
+  const seen = new Set<string>();
+  for (const fulfillment of fulfillments) {
+    if (
+      fulfillment.requestId !== request.id ||
+      fulfillment.requesterPubkey !== request.pubkey ||
+      fulfillment.pubkey !== request.pubkey ||
+      fulfillment.amountSats <= 0 ||
+      seen.has(`${fulfillment.id}:${fulfillment.pubkey}:${fulfillment.shot ?? 1}:${fulfillment.amountSats}`)
+    ) continue;
+    seen.add(`${fulfillment.id}:${fulfillment.pubkey}:${fulfillment.shot ?? 1}:${fulfillment.amountSats}`);
+    const shot: ComputeCreditShot = request.shots === 2 && fulfillment.shot === 2 ? 2 : 1;
+    amounts.set(shot, (amounts.get(shot) ?? 0) + fulfillment.amountSats);
+  }
+  return amounts;
+}
+
 /** Agent-confirmed tranches for a request. Third-party claims never count. */
 export function confirmedComputeCreditShots(
   request: ComputeCreditRequest,
   fulfillments: ComputeCreditFulfillment[],
 ): Set<ComputeCreditShot> {
   const confirmed = new Set<ComputeCreditShot>();
-  for (const fulfillment of fulfillments) {
-    if (
-      fulfillment.requestId !== request.id ||
-      fulfillment.requesterPubkey !== request.pubkey ||
-      fulfillment.pubkey !== request.pubkey
-    ) continue;
-    confirmed.add(request.shots === 2 && fulfillment.shot === 2 ? 2 : 1);
+  const amounts = confirmedComputeCreditAmounts(request, fulfillments);
+  const targets: Array<[ComputeCreditShot, number]> = [[1, request.amountSats]];
+  if (request.shots === 2) targets.push([2, request.amount2Sats ?? 0]);
+  for (const [shot, target] of targets) {
+    if (target > 0 && (amounts.get(shot) ?? 0) >= target) confirmed.add(shot);
   }
   return confirmed;
 }
