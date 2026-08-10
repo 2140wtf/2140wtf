@@ -49,7 +49,7 @@ export function WalletPage() {
   });
 
   return (
-    <main>
+    <main className="w-full">
       <PageHeader title="Wallet" icon={<Wallet className="size-5" />} />
 
       {!user ? (
