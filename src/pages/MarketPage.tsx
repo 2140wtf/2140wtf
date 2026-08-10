@@ -81,7 +81,7 @@ export function MarketPage(): React.JSX.Element {
   const [category, setCategory] = useState<ListingCategoryValue | 'all'>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortValue>('newest');
-  const [columns, setColumns] = useState<1 | 2 | 3 | 4>(2);
+  const [columns, setColumns] = useState<1 | 2 | 3 | 4>(1);
   const [composeOpen, setComposeOpen] = useState(false);
 
   const { btcPrice } = useBtcPrice();
@@ -191,21 +191,21 @@ export function MarketPage(): React.JSX.Element {
       <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />} />
 
       <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="relative min-w-16 flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search listings…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="rounded-full pl-9"
             />
           </div>
 
           <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
             <SelectTrigger
-              className="w-full sm:w-10 px-0 justify-center [&>[data-radix-select-trigger-icon]]:hidden"
+              className="size-9 shrink-0 rounded-full px-0 justify-center [&>[data-radix-select-trigger-icon]]:hidden"
               aria-label={`Sort by ${SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Sort'}`}
             >
               <ArrowUpDown className="size-4 shrink-0 text-muted-foreground" />
@@ -223,7 +223,7 @@ export function MarketPage(): React.JSX.Element {
           </Select>
 
           <Select value={category} onValueChange={(value) => setCategory(value as ListingCategoryValue | 'all')}>
-            <SelectTrigger className="w-full sm:w-28 justify-between" aria-label="Filter by type">
+            <SelectTrigger className="h-9 w-16 shrink-0 rounded-full justify-center px-2 [&>[data-radix-select-trigger-icon]]:hidden" aria-label="Filter by type">
               <span>Type</span>
             </SelectTrigger>
             <SelectContent>
@@ -235,25 +235,34 @@ export function MarketPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setColumns((c) => ((c % 4) + 1) as 1 | 2 | 3 | 4)}
-            aria-label={`${columns} columns`}
+          <Select
+            value={String(columns)}
+            onValueChange={(value) => setColumns(Number(value) as 1 | 2 | 3 | 4)}
           >
-            <LayoutGrid className="size-4" />
-            {columns}
-          </Button>
+            <SelectTrigger
+              className="h-9 w-12 shrink-0 rounded-full justify-center gap-1 px-1.5 [&>[data-radix-select-trigger-icon]]:hidden"
+              aria-label={`${columns} ${columns === 1 ? 'column' : 'columns'}`}
+            >
+              <LayoutGrid className="size-4 shrink-0" />
+              <span className="text-xs">{columns}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3, 4].map((count) => (
+                <SelectItem key={count} value={String(count)}>
+                  {count} {count === 1 ? 'column' : 'columns'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading}>
+          <Button className="size-9 shrink-0 rounded-full" variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} aria-label="Refresh listings">
             <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
           {user && (
-            <Button onClick={() => setComposeOpen(true)}>
-              <Plus className="size-4 mr-1.5" />
-              List product
+            <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
+              <Plus className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">List product</span>
             </Button>
           )}
         </div>
