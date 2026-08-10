@@ -66,7 +66,7 @@ export function WalletPage() {
           <LoginArea className="max-w-60" />
         </div>
       ) : (
-        <div className="px-4 pt-6 pb-4 max-w-sm mx-auto space-y-4">
+        <div className="w-full max-w-none space-y-4 px-2 pb-4 pt-4 sm:px-3 sm:pt-6">
           <ResearchBetaAlert />
           <Tabs defaultValue="cashu" className="w-full">
             <TabsList className="grid w-full grid-cols-5 mb-6">
