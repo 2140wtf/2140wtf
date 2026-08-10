@@ -368,6 +368,74 @@ export function isMastodonBridgeEvent(event: NostrEvent): boolean {
 }
 
 /**
+ * Coordinated copy-paste campaigns are common on public relays. We only
+ * suppress a cluster when several distinct accounts publish the same
+ * promotional note in a short period. This deliberately does not publish a
+ * mute list or attempt to delete another author's event: it is a local feed
+ * quality decision that stays conservative around legitimate coordination.
+ */
+const COORDINATED_SPAM_WINDOW_SECONDS = 24 * 60 * 60;
+const COORDINATED_SPAM_MIN_AUTHORS = 4;
+const COORDINATED_SPAM_HIGH_VOLUME_AUTHORS = 8;
+const COORDINATED_SPAM_MIN_CONTENT_LENGTH = 40;
+const COORDINATED_SPAM_MAX_CONTENT_LENGTH = 8_000;
+const INVISIBLE_TEXT_CHARACTERS = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
+const HASHTAG_PATTERN = /(?:^|\s)#([\p{L}\p{N}_-]+)/gu;
+const URL_PATTERN = /https?:\/\/[^\s]+/giu;
+
+/** Normalize harmless formatting differences without merging different posts. */
+export function normalizeFeedSpamContent(content: string): string {
+  return content
+    .normalize('NFKC')
+    .replace(INVISIBLE_TEXT_CHARACTERS, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+}
+
+function hasPromotionalSpamSignal(content: string): boolean {
+  const hashtags = content.match(HASHTAG_PATTERN) ?? [];
+  const urls = content.match(URL_PATTERN) ?? [];
+  return hashtags.length >= 3 || /#solana\b/iu.test(content) || urls.length >= 2;
+}
+
+/**
+ * Remove coordinated exact-copy spam from a single relay response.
+ *
+ * A note is hidden only when its normalized body is shared by at least four
+ * distinct authors in 24 hours *and* carries a strong promotion signal (three
+ * hashtags, #solana, or two links). An unusually large eight-author campaign
+ * is also suppressed even without those markers. Short messages are ignored
+ * so ordinary phrases, quotes, and event announcements remain visible.
+ */
+export function filterCoordinatedDuplicateSpamEvents(
+  events: NostrEvent[],
+  now = Math.floor(Date.now() / 1000),
+): NostrEvent[] {
+  const groups = new Map<string, NostrEvent[]>();
+
+  for (const event of events) {
+    if (event.kind !== 1 || now - event.created_at > COORDINATED_SPAM_WINDOW_SECONDS) continue;
+    const normalized = normalizeFeedSpamContent(event.content);
+    if (normalized.length < COORDINATED_SPAM_MIN_CONTENT_LENGTH || normalized.length > COORDINATED_SPAM_MAX_CONTENT_LENGTH) continue;
+    const group = groups.get(normalized);
+    if (group) group.push(event);
+    else groups.set(normalized, [event]);
+  }
+
+  const hiddenIds = new Set<string>();
+  for (const [normalized, group] of groups) {
+    const authorCount = new Set(group.map((event) => event.pubkey)).size;
+    if (authorCount < COORDINATED_SPAM_MIN_AUTHORS) continue;
+    if (hasPromotionalSpamSignal(normalized) || authorCount >= COORDINATED_SPAM_HIGH_VOLUME_AUTHORS) {
+      for (const event of group) hiddenIds.add(event.id);
+    }
+  }
+
+  return hiddenIds.size === 0 ? events : events.filter((event) => !hiddenIds.has(event.id));
+}
+
+/**
  * Turn a list of raw events into FeedItems, unwrapping reposts /
  * reactions / zaps so that the target event becomes the FeedItem's
  * primary `event` and the wrapper is surfaced as an overlay
@@ -385,6 +453,7 @@ export async function buildFeedItems(
 ): Promise<FeedItem[]> {
   const now = Math.floor(Date.now() / 1000);
   const items: FeedItem[] = [];
+  const filteredEvents = filterCoordinatedDuplicateSpamEvents(events, now);
 
   // Map of target-event id → list of wrappers that need it. A single
   // target can have multiple wrappers (e.g. several reactions to one
@@ -407,9 +476,9 @@ export async function buildFeedItems(
   // Index events by id so we can resolve targets that arrived in the
   // same page without an extra query.
   const eventsById = new Map<string, NostrEvent>();
-  for (const ev of events) eventsById.set(ev.id, ev);
+  for (const ev of filteredEvents) eventsById.set(ev.id, ev);
 
-  for (const ev of events) {
+  for (const ev of filteredEvents) {
     if (isRepostKind(ev.kind)) {
       // Kind 6 / 16 — repost. Prefer the embedded JSON; fall back to
       // resolving the `e` tag.
