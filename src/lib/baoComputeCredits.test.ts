@@ -16,6 +16,8 @@ import {
   resolveCreditLockTarget,
   isLikelyMainnetMint,
   computeCreditProgress,
+  confirmedComputeCreditAmounts,
+  isComputeCreditRequestConfirmed,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
@@ -163,6 +165,25 @@ describe('computeCreditProgress', () => {
       { shot: 1, amountSats: 1000, stage: 'token_sent' },
       { shot: 2, amountSats: 1200, stage: 'redeemed' },
     ]);
+  });
+
+  it('supports many partial confirmations until the requested amount is reached', () => {
+    const request = req({ amountSats: 5000 });
+    const confirmations = [1000, 1000, 1000, 1000].map((amount, index) => ful({
+      id: `${String(index + 3).repeat(64)}`,
+      pubkey: AGENT,
+      amountSats: amount,
+    }));
+
+    expect(confirmedComputeCreditAmounts(request, confirmations).get(1)).toBe(4000);
+    expect(isComputeCreditRequestConfirmed(request, confirmations)).toBe(false);
+
+    confirmations.push(ful({
+      id: '7'.repeat(64),
+      pubkey: AGENT,
+      amountSats: 1000,
+    }));
+    expect(isComputeCreditRequestConfirmed(request, confirmations)).toBe(true);
   });
 });
 
