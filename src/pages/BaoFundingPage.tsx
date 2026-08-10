@@ -141,8 +141,8 @@ export function BaoFundingPage() {
   const projectsRef = useRef<HTMLDivElement | null>(null);
 
   // Deep links (e.g. from a pet's upkeep card):
-  //   /bao-fund?campaign=<id>      → preselect/expand that campaign
-  //   /bao-fund?create=1&title=…   → open the campaign form with URL defaults.
+  //   /bao/bao-fund?campaign=<id>      → preselect/expand that campaign
+  //   /bao/bao-fund?create=1&title=…   → open the campaign form with URL defaults.
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
