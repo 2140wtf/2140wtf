@@ -401,34 +401,36 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     ? "Pick at least one relay to enable Create."
                     : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked${picked.length > MAX_COMMUNITY_RELAYS ? ` — only the first ${MAX_COMMUNITY_RELAYS} are used` : ""}`}
                 </p>
-                {starterCandidates.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground -mr-2"
-                    disabled={busy}
-                    onClick={() => {
-                      if (allSuggestedRelaysPicked) {
-                        setPicked([]);
-                      } else {
-                        setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
-                      }
-                    }}
-                  >
-                    {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
-                  </Button>
-                )}
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-nowrap items-center justify-between gap-2 pt-2">
+              {starterCandidates.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-muted-foreground"
+                  disabled={busy}
+                  onClick={() => {
+                    if (allSuggestedRelaysPicked) {
+                      setPicked([]);
+                    } else {
+                      setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
+                    }
+                  }}
+                >
+                  {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
+                </Button>
+              ) : <span />}
+              <div className="flex flex-nowrap items-center gap-2">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
                 Cancel
               </Button>
               <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
                 {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
               </Button>
+              </div>
             </div>
           </form>
         </div>
