@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import { placeBaoTrade } from '@/lib/baoFundraising';
+import { ErrorCodes } from '@/lib/errorCodes';
 import { cn } from '@/lib/utils';
 import type { BaoMarket } from '@/lib/baoMarketParser';
 
@@ -79,11 +80,14 @@ export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoEx
     },
     onError: (e) => {
       const msg = e instanceof Error ? e.message : String(e);
+      const unavailable = /AMM orders and liquidity mutations are disabled|durable rail-specific collateral sagas/i.test(msg);
       toast({
         title: 'Trade failed',
-        description: /insufficient|balance/i.test(msg)
-          ? `${msg} — claim free demo sats on bao.markets first.`
-          : msg,
+        description: unavailable
+          ? `Trading is temporarily unavailable while payments and payouts are being made safe. No trade was placed and no sats were taken. Try again later. (${ErrorCodes.MARKET_TRADE_NOT_READY})`
+          : /insufficient|balance/i.test(msg)
+            ? `You do not have enough ₿AO demo sats on the selected rail for this trade. Claim or deposit sats, then try again. (${ErrorCodes.MARKET_INSUFFICIENT_BALANCE})`
+            : `This trade could not be completed right now. Check your balance and positions before trying again. (${ErrorCodes.MARKET_TRADE_FAILED})`,
         variant: 'destructive',
       });
     },
