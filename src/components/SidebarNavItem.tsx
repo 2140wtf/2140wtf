@@ -363,27 +363,6 @@ export function SidebarNavList({
               />
             );
           }
-          if (id === 'prediction-markets') {
-            return (
-              <SidebarGroup
-                key={id}
-                id={id}
-                active={isActive(id)}
-                editing={editing}
-                onRemove={(removeId) => onRemove(removeId, i)}
-                onClick={getOnClick?.(id)}
-                compact={compact}
-                minimal={minimal}
-                children={[
-                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/prediction-markets' },
-                  { id: 'market', label: 'Merchants', path: '/market' },
-                ]}
-              />
-            );
-          }
-          // 'market' is rendered as a child of the MARKETS group, skip flat rendering.
-          if (id === 'market') return null;
-
           if (id === 'bao-chat') {
             return (
               <SidebarGroup
@@ -397,13 +376,14 @@ export function SidebarNavList({
                 minimal={minimal}
                 children={[
                   { id: 'bao-chat', label: '₿AO Community', path: '/bao/baocommunity' },
-                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao-fund' },
+                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/bao-fund' },
+                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/bao-markets' },
                 ]}
               />
             );
           }
-          // 'bao-fund' is rendered as a child of the ₿AOs group, skip flat rendering.
-          if (id === 'bao-fund') return null;
+          // These destinations are rendered as children of the ₿AOs group.
+          if (id === 'bao-fund' || id === 'prediction-markets') return null;
 
           if (id === 'media') {
             return (
