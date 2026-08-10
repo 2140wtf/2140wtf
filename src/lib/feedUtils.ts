@@ -303,6 +303,25 @@ export function isBlockedFeedDomainEvent(event: NostrEvent): boolean {
   return event.content.split(/\s+/).some((value) => value.includes('@') && isBlockedFeedDomainIdentifier(value));
 }
 
+/** Resolve blocked feed authors from their kind-0 NIP-05 metadata. */
+export function getBlockedFeedAuthorPubkeys(metadataEvents: NostrEvent[]): Set<string> {
+  const blocked = new Set<string>();
+  for (const metadata of metadataEvents) {
+    if (metadata.kind !== 0) continue;
+    try {
+      const content: unknown = JSON.parse(metadata.content);
+      if (typeof content !== 'object' || content === null) continue;
+      const nip05 = (content as { nip05?: unknown }).nip05;
+      if (typeof nip05 === 'string' && isBlockedFeedDomainIdentifier(nip05)) {
+        blocked.add(metadata.pubkey);
+      }
+    } catch {
+      // Invalid profile metadata cannot identify a blocked author.
+    }
+  }
+  return blocked;
+}
+
 /** Returns true if a hostname belongs to a known Mastodon/ActivityPub bridge. */
 function isMastodonBridgeHost(host: string): boolean {
   const lower = host.toLowerCase();
@@ -379,6 +398,9 @@ const COORDINATED_SPAM_MIN_AUTHORS = 4;
 const COORDINATED_SPAM_HIGH_VOLUME_AUTHORS = 8;
 const COORDINATED_SPAM_MIN_CONTENT_LENGTH = 40;
 const COORDINATED_SPAM_MAX_CONTENT_LENGTH = 8_000;
+// Explicit Unicode code-point denylist: combining/invisible characters are
+// intentionally matched individually to prevent trivial spam-text evasion.
+// eslint-disable-next-line no-misleading-character-class
 const INVISIBLE_TEXT_CHARACTERS = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
 const HASHTAG_PATTERN = /(?:^|\s)#([\p{L}\p{N}_-]+)/gu;
 const URL_PATTERN = /https?:\/\/[^\s]+/giu;
