@@ -875,6 +875,7 @@ export function CashuWalletTab() {
 
 function TxRow({ tx }: { tx: Transaction }) {
   const isReceive = tx.type === 'receive' || tx.type === 'mint';
+  const status = transactionStatusLabel(tx);
   return (
     <div className='flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors'>
       <div className='flex items-center gap-3'>
@@ -889,7 +890,12 @@ function TxRow({ tx }: { tx: Transaction }) {
         </div>
         <div>
           <p className='text-sm font-medium capitalize'>{tx.type}</p>
-          <p className='text-xs text-muted-foreground'>{formatDate(tx.createdAt)}</p>
+          <div className='flex flex-wrap items-center gap-1.5'>
+            <p className='text-xs text-muted-foreground'>{formatDate(tx.createdAt)}</p>
+            <Badge variant={status.variant} className={status.className}>
+              {status.label}
+            </Badge>
+          </div>
         </div>
       </div>
       <div className='text-right'>
@@ -901,6 +907,37 @@ function TxRow({ tx }: { tx: Transaction }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Cashu has no chain confirmation. These labels describe the strongest state
+ * this wallet can actually verify: a mint quote settlement or valid/unspent
+ * proofs. A generated token cannot prove that its recipient redeemed it.
+ */
+function transactionStatusLabel(tx: Transaction): {
+  label: string;
+  variant: 'secondary' | 'outline' | 'destructive';
+  className?: string;
+} {
+  switch (tx.status) {
+    case 'pending':
+      return { label: 'Unconfirmed · checking mint', variant: 'outline', className: 'border-amber-500/40 text-amber-700 dark:text-amber-300' };
+    case 'failed':
+      return { label: 'Not completed', variant: 'destructive' };
+    case 'expired':
+      return { label: 'Expired', variant: 'outline', className: 'text-muted-foreground' };
+    case 'completed':
+      switch (tx.type) {
+        case 'receive':
+          return { label: 'Mint verified', variant: 'secondary', className: 'bg-green-500/10 text-green-700 dark:text-green-400' };
+        case 'mint':
+          return { label: 'Mint confirmed', variant: 'secondary', className: 'bg-green-500/10 text-green-700 dark:text-green-400' };
+        case 'melt':
+          return { label: 'Payment confirmed', variant: 'secondary', className: 'bg-green-500/10 text-green-700 dark:text-green-400' };
+        case 'send':
+          return { label: 'Token created', variant: 'secondary', className: 'bg-green-500/10 text-green-700 dark:text-green-400' };
+      }
+  }
 }
 
 function formatDate(ts: number): string {
