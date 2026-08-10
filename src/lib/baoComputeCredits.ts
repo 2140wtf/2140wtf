@@ -28,6 +28,7 @@ export const BAO_COMPUTE_CREDIT_FULFILLMENT_KIND = 4972;
  */
 export const BAO_COMPUTE_CREDIT_RECEIPT_KIND = 4973;
 export const BAO_COMPUTE_CREDIT_TAG = 'bao-compute-credit-request';
+export const MAX_COMPUTE_CREDIT_TRANCHES = 5;
 
 /**
  * Agent funding is a real-money flow. Cashu does not encode the Bitcoin
@@ -56,10 +57,12 @@ export interface ComputeCreditRequest {
   amountSats: number;
   purpose: string;
   createdAt: number;
-  /** 1 = Single-shot; 2 = Multi-shot (two tranches during testing). Absent = 1. */
-  shots?: 1 | 2;
-  /** Tranche-2 amount for current Multi-shot requests (amountSats is tranche 1). */
+  /** Number of tranches. Absent = a legacy single-shot request. */
+  shots?: ComputeCreditShot;
+  /** Legacy v1 second tranche. New requests use `tranches`. */
   amount2Sats?: number;
+  /** V2 ordered payout amounts, one to five positive integer sat values. */
+  tranches?: number[];
 }
 
 export interface ComputeCreditFulfillment {
@@ -73,7 +76,26 @@ export interface ComputeCreditFulfillment {
   shot?: number;
 }
 
-export type ComputeCreditShot = 1 | 2;
+export type ComputeCreditShot = 1 | 2 | 3 | 4 | 5;
+
+/** Read legacy single/double-shot and v2 tranche requests through one safe view. */
+export function getComputeCreditTranches(request: ComputeCreditRequest): number[] {
+  if (request.tranches && request.tranches.length >= 1 && request.tranches.length <= MAX_COMPUTE_CREDIT_TRANCHES) {
+    return request.tranches;
+  }
+  return request.shots === 2 && request.amount2Sats && request.amount2Sats > 0
+    ? [request.amountSats, request.amount2Sats]
+    : [request.amountSats];
+}
+
+function isComputeCreditShot(value: number): value is ComputeCreditShot {
+  return Number.isSafeInteger(value) && value >= 1 && value <= MAX_COMPUTE_CREDIT_TRANCHES;
+}
+
+function requestShot(request: ComputeCreditRequest, shot: number | undefined): ComputeCreditShot {
+  const index = shot ?? 1;
+  return isComputeCreditShot(index) && index <= getComputeCreditTranches(request).length ? index : 1;
+}
 
 /**
  * Sum agent-confirmed sats per tranche. Third-party claims never count.
@@ -95,7 +117,7 @@ export function confirmedComputeCreditAmounts(
       seen.has(`${fulfillment.id}:${fulfillment.pubkey}:${fulfillment.shot ?? 1}:${fulfillment.amountSats}`)
     ) continue;
     seen.add(`${fulfillment.id}:${fulfillment.pubkey}:${fulfillment.shot ?? 1}:${fulfillment.amountSats}`);
-    const shot: ComputeCreditShot = request.shots === 2 && fulfillment.shot === 2 ? 2 : 1;
+    const shot = requestShot(request, fulfillment.shot);
     amounts.set(shot, (amounts.get(shot) ?? 0) + fulfillment.amountSats);
   }
   return amounts;
@@ -108,35 +130,46 @@ export function confirmedComputeCreditShots(
 ): Set<ComputeCreditShot> {
   const confirmed = new Set<ComputeCreditShot>();
   const amounts = confirmedComputeCreditAmounts(request, fulfillments);
-  const targets: Array<[ComputeCreditShot, number]> = [[1, request.amountSats]];
-  if (request.shots === 2) targets.push([2, request.amount2Sats ?? 0]);
+  const targets = getComputeCreditTranches(request).map((amount, index) => [index + 1 as ComputeCreditShot, amount] as const);
   for (const [shot, target] of targets) {
     if (target > 0 && (amounts.get(shot) ?? 0) >= target) confirmed.add(shot);
   }
   return confirmed;
 }
 
-/** A Multi-shot request closes only after the agent confirms both test tranches. */
+/** A request closes only after every stated tranche is agent-confirmed. */
 export function isComputeCreditRequestConfirmed(
   request: ComputeCreditRequest,
   fulfillments: ComputeCreditFulfillment[],
 ): boolean {
   const confirmed = confirmedComputeCreditShots(request, fulfillments);
-  return confirmed.has(1) && (request.shots !== 2 || confirmed.has(2));
+  return getComputeCreditTranches(request).every((_, index) => confirmed.has(index + 1 as ComputeCreditShot));
 }
 
 /** Unsigned event template for a compute-credit request (for useNostrPublish). */
 export function buildComputeCreditRequest(input: {
   amountSats: number;
   purpose: string;
-  /** 2 = Multi-shot during testing: two donor-judged tranches (amountSats = tranche 1). */
+  /** Legacy v1 two-payout writer; new callers should use `tranches`. */
   shots?: 1 | 2;
   amount2Sats?: number;
+  /** Ordered v2 payout amounts. Exactly one to five positive integers. */
+  tranches?: number[];
 }) {
+  const tranches = input.tranches?.map((amount) => Math.floor(amount));
+  if (tranches && (tranches.length < 1 || tranches.length > MAX_COMPUTE_CREDIT_TRANCHES || tranches.some((amount) => !Number.isSafeInteger(amount) || amount <= 0))) {
+    throw new Error(`Compute-credit requests need 1-${MAX_COMPUTE_CREDIT_TRANCHES} positive whole-sat tranches.`);
+  }
+  const firstAmount = tranches?.[0] ?? Math.floor(input.amountSats);
   const tags = [
     ['t', BAO_COMPUTE_CREDIT_TAG],
-    ['amount', String(Math.floor(input.amountSats))],
+    ['amount', String(firstAmount)],
+    ['alt', '₿AO compute-credit funding request'],
   ];
+  if (tranches) {
+    tags.push(['v', '2'], ['shots', String(tranches.length)]);
+    tranches.forEach((amount, index) => tags.push(['tranche', String(index + 1), String(amount)]));
+  }
   if (input.shots === 2 && input.amount2Sats && input.amount2Sats > 0) {
     tags.push(['shots', '2'], ['amount2', String(Math.floor(input.amount2Sats))]);
   }
@@ -159,8 +192,9 @@ export function buildComputeCreditFulfillment(input: {
     ['e', input.requestId],
     ['p', input.requesterPubkey],
     ['amount', String(Math.floor(input.amountSats))],
+    ['alt', '₿AO compute-credit funding claim or agent confirmation'],
   ];
-  if (input.shot === 2) tags.push(['shot', '2']);
+  if (input.shot !== undefined && isComputeCreditShot(input.shot)) tags.push(['shot', String(input.shot)]);
   return {
     kind: BAO_COMPUTE_CREDIT_FULFILLMENT_KIND,
     content: '',
@@ -176,6 +210,16 @@ export function parseComputeCreditRequest(event: NostrEvent): ComputeCreditReque
   const amountSats = Number(amountTag?.[1]);
   if (!Number.isFinite(amountSats) || amountSats <= 0) return null;
 
+  const v2 = event.tags.find((t) => t[0] === 'v')?.[1] === '2';
+  const v2Tranches = event.tags
+    .filter((tag) => tag[0] === 'tranche')
+    .map((tag) => ({ index: Number(tag[1]), amount: Number(tag[2]) }))
+    .sort((a, b) => a.index - b.index);
+  if (v2) {
+    if (v2Tranches.length < 1 || v2Tranches.length > MAX_COMPUTE_CREDIT_TRANCHES || v2Tranches.some(({ index, amount }, offset) => index !== offset + 1 || !Number.isSafeInteger(amount) || amount <= 0)) return null;
+    const tranches = v2Tranches.map(({ amount }) => amount);
+    return { id: event.id, pubkey: event.pubkey, amountSats: tranches[0], purpose: event.content.trim(), createdAt: event.created_at, shots: tranches.length as ComputeCreditShot, tranches };
+  }
   const shots = event.tags.find((t) => t[0] === 'shots')?.[1] === '2' ? 2 as const : undefined;
   const amount2Raw = Number(event.tags.find((t) => t[0] === 'amount2')?.[1]);
   const amount2Sats = shots === 2 && Number.isFinite(amount2Raw) && amount2Raw > 0 ? Math.floor(amount2Raw) : undefined;
@@ -207,7 +251,7 @@ export function parseComputeCreditFulfillment(event: NostrEvent): ComputeCreditF
     requesterPubkey,
     amountSats: Number.isFinite(amountSats) ? Math.floor(amountSats) : 0,
     createdAt: event.created_at,
-    ...(event.tags.find((t) => t[0] === 'shot')?.[1] === '2' ? { shot: 2 } : {}),
+    ...(isComputeCreditShot(Number(event.tags.find((t) => t[0] === 'shot')?.[1])) ? { shot: Number(event.tags.find((t) => t[0] === 'shot')?.[1]) as ComputeCreditShot } : {}),
   };
 }
 
@@ -243,6 +287,7 @@ export function buildComputeCreditReceipt(input: {
   const tags: string[][] = [
     ['e', input.requestId],
     ['amount', String(Math.floor(input.amountSats))],
+    ['alt', '₿AO compute-credit spend receipt'],
   ];
   if (input.provider?.trim()) tags.push(['provider', input.provider.trim()]);
   for (const f of input.funderPubkeys ?? []) {
@@ -300,21 +345,21 @@ export function computeCreditProgress(
   fulfillments: ComputeCreditFulfillment[],
   receipts: ComputeCreditReceipt[],
 ): ComputeCreditProgress[] {
-  const shots: ComputeCreditShot[] = request.shots === 2 ? [1, 2] : [1];
+  const shots = getComputeCreditTranches(request).map((_, index) => index + 1 as ComputeCreditShot);
   const confirmed = confirmedComputeCreditShots(request, fulfillments);
   const claims = new Set(
     fulfillments
       .filter((f) => f.requestId === request.id && f.requesterPubkey === request.pubkey && f.pubkey !== request.pubkey)
-      .map((f) => request.shots === 2 && f.shot === 2 ? 2 : 1),
+      .map((f) => requestShot(request, f.shot)),
   );
   const redeemed = new Set(
     receipts
       .filter((r) => r.requestId === request.id && r.pubkey === request.pubkey)
-      .map((r) => request.shots === 2 && r.shot === 2 ? 2 : 1),
+      .map((r) => requestShot(request, r.shot)),
   );
   return shots.map((shot) => ({
     shot,
-    amountSats: shot === 2 ? request.amount2Sats ?? 0 : request.amountSats,
+    amountSats: getComputeCreditTranches(request)[shot - 1] ?? 0,
     stage: redeemed.has(shot) ? 'redeemed' : confirmed.has(shot) ? 'agent_confirmed' : claims.has(shot) ? 'token_sent' : 'requested',
   }));
 }
@@ -357,7 +402,7 @@ export function aggregateAgentCreditStats(input: {
     if (!request) continue;
     if (f.requesterPubkey !== agentPubkey) continue; // p tag must match the real requester
     if (f.pubkey !== agentPubkey) {
-      const shot: ComputeCreditShot = request.shots === 2 && f.shot === 2 ? 2 : 1;
+      const shot = requestShot(request, f.shot);
       const byShot = claimsByRequest.get(f.requestId) ?? new Map<ComputeCreditShot, Set<string>>();
       const set = byShot.get(shot) ?? new Set<string>();
       set.add(f.pubkey);
@@ -372,12 +417,12 @@ export function aggregateAgentCreditStats(input: {
   for (const [requestId, requestClaims] of claimsByRequest) {
     const request = requestById.get(requestId);
     if (!request || !isComputeCreditRequestConfirmed(request, input.fulfillments)) continue;
-    const expectedShots: ComputeCreditShot[] = request.shots === 2 ? [1, 2] : [1];
+    const expectedShots = getComputeCreditTranches(request).map((_, index) => index + 1 as ComputeCreditShot);
     // A double-shot request needs an independent funder claim for each payout;
     // one claim plus two self-confirmations must not inflate the full amount.
     if (!expectedShots.every((shot) => (requestClaims.get(shot)?.size ?? 0) > 0)) continue;
     fundedRequests += 1;
-    selfReportedSats += request.amountSats + (request.shots === 2 ? request.amount2Sats ?? 0 : 0);
+    selfReportedSats += getComputeCreditTranches(request).reduce((total, amount) => total + amount, 0);
     for (const shotClaims of requestClaims.values()) {
       for (const c of shotClaims) claimants.add(c);
     }

@@ -18,6 +18,7 @@ import {
   computeCreditProgress,
   confirmedComputeCreditAmounts,
   isComputeCreditRequestConfirmed,
+  getComputeCreditTranches,
   type ComputeCreditFulfillment,
   type ComputeCreditReceipt,
   type ComputeCreditRequest,
@@ -59,6 +60,20 @@ describe('buildComputeCreditRequest', () => {
     expect(t.tags).toContainEqual(['t', BAO_COMPUTE_CREDIT_TAG]);
     expect(t.tags).toContainEqual(['amount', '2100']);
     expect(t.content).toBe('run inference');
+  });
+
+  it('writes and parses one to five versioned tranches while preserving the total order', () => {
+    const template = buildComputeCreditRequest({ amountSats: 100, purpose: 'five steps', tranches: [100, 200, 300, 400, 500] });
+    expect(template.tags).toContainEqual(['v', '2']);
+    expect(template.tags).toContainEqual(['tranche', '5', '500']);
+    const parsed = parseComputeCreditRequest(ev({ kind: 4971, tags: template.tags, content: template.content }));
+    expect(parsed?.tranches).toEqual([100, 200, 300, 400, 500]);
+    expect(getComputeCreditTranches(parsed!)).toEqual([100, 200, 300, 400, 500]);
+  });
+
+  it('rejects invalid v2 tranche arrays', () => {
+    expect(() => buildComputeCreditRequest({ amountSats: 1, purpose: 'bad', tranches: [1, 2, 3, 4, 5, 6] })).toThrow('1-5');
+    expect(parseComputeCreditRequest(ev({ kind: 4971, tags: [['t', BAO_COMPUTE_CREDIT_TAG], ['amount', '1'], ['v', '2'], ['tranche', '2', '1']], content: 'bad' }))).toBeNull();
   });
 });
 
