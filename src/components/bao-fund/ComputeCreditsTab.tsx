@@ -1497,10 +1497,10 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 </Button>
               </div>
             )}
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-2">
               <Button
                 variant="outline"
-                className="w-full gap-1.5 whitespace-normal"
+                className="h-auto min-h-10 w-full min-w-0 gap-1.5 whitespace-normal px-3 py-2"
                 disabled={!token.trim().startsWith('cashu') || busy}
                 onClick={() => receiveIntoWalletMutation.mutate()}
               >
@@ -1508,7 +1508,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 Keep as Cashu
               </Button>
               <Button
-                className="w-full gap-1.5 whitespace-normal"
+                className="h-auto min-h-10 w-full min-w-0 gap-1.5 whitespace-normal px-3 py-2"
                 disabled={!token.trim().startsWith('cashu') || busy}
                 onClick={() => redeemMutation.mutate()}
               >
