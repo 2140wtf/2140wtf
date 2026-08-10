@@ -322,7 +322,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
             <p className="text-sm text-muted-foreground">Publish a funding request, receive its Cashu token, and optionally turn it into AI compute.</p>
           </div>
           <AgentGateCheck>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-6">
               <RequestCreditCard myRequests={myRequests} confirmedAmountsByRequest={confirmedAmountsByRequest} confirmedShotsByRequest={confirmedShotsByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
               <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
             </div>
