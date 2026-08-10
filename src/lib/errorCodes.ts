@@ -17,6 +17,10 @@ export const ErrorCodes = {
   UPLOAD_NO_SERVERS: "UPLOAD_002",
   UPLOAD_FAILED: "UPLOAD_003",
   UPLOAD_TIMEOUT: "UPLOAD_004",
+  // ₿AO Markets
+  MARKET_TRADE_NOT_READY: "MARKET_001",
+  MARKET_INSUFFICIENT_BALANCE: "MARKET_002",
+  MARKET_TRADE_FAILED: "MARKET_003",
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -38,6 +42,18 @@ const MESSAGES: Record<string, { message: string; hint?: string }> = {
   UPLOAD_004: {
     message: "The file server took too long to respond.",
     hint: "Check your connection and try again.",
+  },
+  MARKET_001: {
+    message: "Trading is temporarily unavailable while payments and payouts are being made safe.",
+    hint: "No trade was placed and no sats were taken. Try again later.",
+  },
+  MARKET_002: {
+    message: "You do not have enough sats on the selected rail for this trade.",
+    hint: "Claim or deposit sats, then try again.",
+  },
+  MARKET_003: {
+    message: "This trade could not be completed right now.",
+    hint: "Check your balance and positions before trying again.",
   },
 };
 
