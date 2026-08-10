@@ -20,6 +20,7 @@ import {
   buildComputeCreditFulfillment,
   buildComputeCreditReceipt,
   buildComputeCreditRequest,
+  confirmedComputeCreditAmounts,
   confirmedComputeCreditShots,
   isComputeCreditRequestConfirmed,
   parseComputeCreditFulfillment,
@@ -60,6 +61,12 @@ import { cn } from '@/lib/utils';
 
 function formatSats(n: number): string {
   return Number(n).toLocaleString();
+}
+
+function donationOptions(remaining: number): number[] {
+  const roundAmounts = [50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 25_000, 50_000, 100_000];
+  const options = roundAmounts.filter((amount) => amount <= remaining);
+  return options.length > 0 ? options : remaining > 0 ? [remaining] : [];
 }
 
 function timeAgo(ts: number): string {
@@ -211,7 +218,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
     refetchInterval: 30_000,
   });
 
-  const { confirmedShotsByRequest, claimsByRequest } = useMemo(() => {
+  const { confirmedAmountsByRequest, confirmedShotsByRequest, claimsByRequest } = useMemo(() => {
     // A kind-4972 event proves NOTHING about payment — anyone can publish one
     // for any request. So it is only trusted as follows:
     //   - authored by the REQUESTER → confirmation of receipt; closes the request
@@ -219,9 +226,12 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
     //     as a marker but never hides the request (a griefer could otherwise
     //     hide every open request without paying a single sat).
     const ownerById = new Map(requests.map((r) => [r.id, r.pubkey]));
+    const confirmedAmounts = new Map<string, Map<ComputeCreditShot, number>>();
     const confirmed = new Map<string, Set<ComputeCreditShot>>();
     const claims = new Map<string, ComputeCreditFulfillment[]>();
     for (const request of requests) {
+      const amounts = confirmedComputeCreditAmounts(request, fulfillmentsQuery.data ?? []);
+      if (amounts.size > 0) confirmedAmounts.set(request.id, amounts);
       const shots = confirmedComputeCreditShots(request, fulfillmentsQuery.data ?? []);
       if (shots.size > 0) confirmed.set(request.id, shots);
     }
@@ -235,7 +245,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
         claims.set(f.requestId, list);
       }
     }
-    return { confirmedShotsByRequest: confirmed, claimsByRequest: claims };
+    return { confirmedAmountsByRequest: confirmedAmounts, confirmedShotsByRequest: confirmed, claimsByRequest: claims };
   }, [fulfillmentsQuery.data, requests]);
 
   const requestIsConfirmed = (request: ComputeCreditRequest) =>
@@ -299,7 +309,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
           ) : (
             <div className="space-y-3">
               {openRequests.map((r) => (
-                <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} confirmedShots={confirmedShotsByRequest.get(r.id) ?? new Set()} onFulfilled={invalidate} />
+              <OpenRequestCard key={r.id} request={r} claims={claimsByRequest.get(r.id) ?? []} confirmedAmounts={confirmedAmountsByRequest.get(r.id) ?? new Map()} confirmedShots={confirmedShotsByRequest.get(r.id) ?? new Set()} onFulfilled={invalidate} />
               ))}
             </div>
           )}
@@ -312,7 +322,7 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
           </div>
           <AgentGateCheck>
             <div className="grid gap-6 md:grid-cols-2">
-              <RequestCreditCard myRequests={myRequests} confirmedShotsByRequest={confirmedShotsByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
+              <RequestCreditCard myRequests={myRequests} confirmedAmountsByRequest={confirmedAmountsByRequest} confirmedShotsByRequest={confirmedShotsByRequest} claimsByRequest={claimsByRequest} onPublished={invalidate} />
               <RedeemCard myFundedRequests={myFundedRequests} onReceiptPublished={invalidate} />
             </div>
           </AgentGateCheck>
@@ -324,8 +334,9 @@ export function ComputeCreditsTab({ defaultView = 'browse' }: { defaultView?: 'b
 
 // ── Agent: request credits ────────────────────────────────────────────────────
 
-function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByRequest, onPublished }: {
+function RequestCreditCard({ myRequests, confirmedAmountsByRequest, confirmedShotsByRequest, claimsByRequest, onPublished }: {
   myRequests: ComputeCreditRequest[];
+  confirmedAmountsByRequest: Map<string, Map<ComputeCreditShot, number>>;
   confirmedShotsByRequest: Map<string, Set<ComputeCreditShot>>;
   claimsByRequest: Map<string, ComputeCreditFulfillment[]>;
   onPublished: () => void;
@@ -361,11 +372,11 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
   // Agent-side confirmation. Only a kind-4972 authored by the requester
   // closes the request — a funder's receipt is a claim, not proof of payment.
   const confirmMutation = useMutation({
-    mutationFn: ({ request, shot }: { request: ComputeCreditRequest; shot: ComputeCreditShot }) =>
+    mutationFn: ({ request, shot, amountSats }: { request: ComputeCreditRequest; shot: ComputeCreditShot; amountSats: number }) =>
       publish.mutateAsync(buildComputeCreditFulfillment({
         requestId: request.id,
         requesterPubkey: request.pubkey,
-        amountSats: shot === 2 ? request.amount2Sats ?? 0 : request.amountSats,
+        amountSats,
         shot: shot === 2 ? 2 : undefined,
       })),
     onSuccess: () => {
@@ -381,7 +392,7 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
   // fake claims hoping for a reflex click), and a crafted token can carry a
   // refund locktime that lets the "funder" reclaim it after you confirm. The
   // agent must explicitly attest they actually redeemed the sats first.
-  const [confirmTarget, setConfirmTarget] = useState<{ requestId: string; shot: ComputeCreditShot } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ requestId: string; shot: ComputeCreditShot; amountSats: number } | null>(null);
 
   const valid =
     (parseInt(amount, 10) || 0) > 0 &&
@@ -474,13 +485,16 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
             <p className="text-xs font-medium text-muted-foreground">Your requests</p>
             {myRequests.slice(0, 5).map((r) => {
               const confirmed = confirmedShotsByRequest.get(r.id) ?? new Set<ComputeCreditShot>();
+              const confirmedAmounts = confirmedAmountsByRequest.get(r.id) ?? new Map<ComputeCreditShot, number>();
               const claims = claimsByRequest.get(r.id) ?? [];
               const expectedShots: ComputeCreditShot[] = r.shots === 2 ? [1, 2] : [1];
-              const isComplete = expectedShots.every((shot) => confirmed.has(shot));
+              const targetForShot = (shot: ComputeCreditShot) => shot === 2 ? r.amount2Sats ?? 0 : r.amountSats;
+              const amountForShot = (shot: ComputeCreditShot) => confirmedAmounts.get(shot) ?? 0;
+              const isComplete = expectedShots.every((shot) => amountForShot(shot) >= targetForShot(shot));
               const pendingClaimShots = expectedShots.filter((shot) =>
-                !confirmed.has(shot) && claims.some((claim) => (claim.shot ?? 1) === shot),
+                amountForShot(shot) < targetForShot(shot) && claims.some((claim) => (claim.shot ?? 1) === shot),
               );
-              const armed = confirmTarget?.requestId === r.id ? confirmTarget.shot : null;
+              const armed = confirmTarget?.requestId === r.id ? confirmTarget : null;
               const totalSats = r.amountSats + (r.shots === 2 ? r.amount2Sats ?? 0 : 0);
               return (
                 <div key={r.id} className="flex flex-col gap-2 rounded-md border px-2.5 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
@@ -492,17 +506,17 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
                   ) : armed ? (
                       <div className="flex flex-col gap-1 sm:max-w-[70%]">
                         <p className="text-[10px] text-amber-950 dark:text-amber-200 leading-tight">
-                          A claim only says someone paid. Confirm payout {armed} only after it appears in your Cashu wallet or Routstr balance. If it did not arrive, do not confirm.
+                          A claim only says someone paid. Confirm only the sats that actually appear in your Cashu wallet or Routstr balance. If they did not arrive, do not confirm.
                         </p>
                         <div className="flex flex-wrap gap-1">
                           <Button
                             size="sm" variant="outline"
                             className="gap-1 h-auto min-h-7 whitespace-normal text-[11px] text-green-600 dark:text-green-400 border-green-500/40"
                             disabled={confirmMutation.isPending}
-                            onClick={() => confirmMutation.mutate({ request: r, shot: armed })}
+                            onClick={() => confirmMutation.mutate({ request: r, shot: armed.shot, amountSats: armed.amountSats })}
                           >
                             {confirmMutation.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
-                            Confirm payout {armed} received
+                            Confirm {formatSats(armed.amountSats)} sats received
                           </Button>
                           <Button
                             size="sm" variant="ghost"
@@ -520,10 +534,21 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
                           key={shot}
                           size="sm" variant="outline"
                           className="gap-1 h-auto min-h-7 whitespace-normal text-[11px] text-amber-950 dark:text-amber-200 border-amber-500/40"
-                          onClick={() => setConfirmTarget({ requestId: r.id, shot })}
+                          onClick={() => {
+                            const target = targetForShot(shot);
+                            const confirmedSats = amountForShot(shot);
+                            const claimedSats = claims
+                              .filter((claim) => (claim.shot ?? 1) === shot)
+                              .reduce((sum, claim) => sum + Math.max(0, claim.amountSats), 0);
+                            setConfirmTarget({
+                              requestId: r.id,
+                              shot,
+                              amountSats: Math.min(Math.max(0, target - confirmedSats), claimedSats || Math.max(0, target - confirmedSats)),
+                            });
+                          }}
                         >
                           <CheckCircle2 className="size-3" />
-                          Confirm payout {shot}
+                          Confirm sats received · {formatSats(Math.max(0, targetForShot(shot) - amountForShot(shot)))} remaining
                         </Button>
                       ))}
                     </div>
@@ -544,7 +569,7 @@ function RequestCreditCard({ myRequests, confirmedShotsByRequest, claimsByReques
 
 // ── Funder: fulfill a request with a real Cashu token ─────────────────────────
 
-function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; confirmedShots: Set<ComputeCreditShot>; onFulfilled: () => void }) {
+function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, onFulfilled }: { request: ComputeCreditRequest; claims: ComputeCreditFulfillment[]; confirmedAmounts: Map<ComputeCreditShot, number>; confirmedShots: Set<ComputeCreditShot>; onFulfilled: () => void }) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { toast } = useToast();
@@ -565,7 +590,14 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
   // Double-shot requests fund tranche by tranche; single-shot ignores this.
   const isDoubleShot = request.shots === 2 && !!request.amount2Sats;
   const [fundShot, setFundShot] = useState<1 | 2>(1);
-  const fundAmount = fundShot === 2 ? (request.amount2Sats ?? 0) : request.amountSats;
+  const targetAmount = fundShot === 2 ? request.amount2Sats ?? 0 : request.amountSats;
+  const confirmedAmount = confirmedAmounts.get(fundShot) ?? 0;
+  const remainingAmount = Math.max(0, targetAmount - confirmedAmount);
+  const [selectedDonateAmount, setSelectedDonateAmount] = useState(0);
+  const donateOptions = donationOptions(remainingAmount);
+  const fundAmount = selectedDonateAmount > 0 && selectedDonateAmount <= remainingAmount
+    ? selectedDonateAmount
+    : donateOptions[donateOptions.length - 1] ?? 0;
   const shotCovered = (shot: ComputeCreditShot) => confirmedShots.has(shot);
 
   // The minted funding token is the ONLY copy of the send proofs (the wallet
@@ -830,36 +862,58 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
                 {isOwn ? 'This is your own request.' : hasWallet ? 'Real sats from your Cashu wallet, P2PK-locked to the agent.' : 'Add a Cashu mint in Wallet to fund requests.'}
               </p>
               {!isOwn && user && (
-                isDoubleShot ? (
-                  <div className="grid w-full grid-cols-1 gap-1.5 sm:w-auto sm:grid-cols-2">
-                    {[1, 2].map((shot) => {
-                      const amount = shot === 2 ? request.amount2Sats! : request.amountSats;
-                      const covered = shotCovered(shot as 1 | 2);
-                      return (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-72">
+                  {isDoubleShot && (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[1, 2].map((shot) => {
+                        const amount = shot === 2 ? request.amount2Sats! : request.amountSats;
+                        const confirmed = confirmedAmounts.get(shot as 1 | 2) ?? 0;
+                        const remaining = Math.max(0, amount - confirmed);
+                        const covered = shotCovered(shot as 1 | 2);
+                        return (
+                          <Button
+                            key={shot}
+                            size="sm"
+                            variant={fundShot === shot ? 'default' : 'outline'}
+                            className="h-auto min-h-9 gap-1 whitespace-normal"
+                            disabled={!hasWallet || fulfillMutation.isPending || covered}
+                            onClick={() => { setFundShot(shot as 1 | 2); setSelectedDonateAmount(0); }}
+                          >
+                            {covered ? <CheckCircle2 className="size-3.5" /> : <Zap className="size-3.5" />}
+                            {covered ? `Payout ${shot} complete` : `Payout ${shot} · ${formatSats(remaining)} left`}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground">Donate a round amount (fees are added by your wallet)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {donateOptions.map((amount) => (
                         <Button
-                          key={shot}
+                          key={amount}
+                          type="button"
                           size="sm"
-                          variant={fundShot === shot ? 'default' : 'outline'}
-                          className="h-auto min-h-9 gap-1 whitespace-normal"
-                          disabled={!hasWallet || fulfillMutation.isPending || covered}
-                          onClick={() => { setFundShot(shot as 1 | 2); setConfirmFunding(true); }}
+                          variant={fundAmount === amount ? 'default' : 'outline'}
+                          className="h-8 px-2.5 text-xs"
+                          disabled={!hasWallet || fulfillMutation.isPending}
+                          onClick={() => setSelectedDonateAmount(amount)}
                         >
-                          {covered ? <CheckCircle2 className="size-3.5" /> : fulfillMutation.isPending && fundShot === shot ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                          {covered ? `Payout ${shot} received` : `Payout ${shot} · ${formatSats(amount)}`}
+                          {formatSats(amount)}
                         </Button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                ) : (
                   <Button
                     size="sm" className="gap-1.5 shrink-0"
-                    disabled={!hasWallet || fulfillMutation.isPending}
+                    disabled={!hasWallet || fulfillMutation.isPending || fundAmount <= 0}
                     onClick={() => setConfirmFunding(true)}
                   >
                     {fulfillMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                    Send {formatSats(request.amountSats)} sats
+                    Donate {formatSats(fundAmount)} sats
                   </Button>
-                )
+                  <p className="text-[11px] text-muted-foreground">{formatSats(remainingAmount)} sats remain; multiple donors can contribute.</p>
+                </div>
               )}
             </div>
             {!isOwn && user && hasWallet && (
@@ -899,12 +953,12 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
           <DialogHeader>
             <DialogTitle>Send Cashu to this agent?</DialogTitle>
             <DialogDescription>
-              This will irreversibly debit {formatSats(fundAmount)} real mainnet sats from your Cashu balance and send a token to the agent.
+              This will irreversibly donate {formatSats(fundAmount)} real mainnet sats from your Cashu balance and send a token to the agent. Your wallet adds any mint or network fee.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
             <p><span className="text-muted-foreground">Request:</span> {request.purpose}</p>
-            <p><span className="text-muted-foreground">Amount:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · payout ${fundShot}/2` : ''}</p>
+            <p><span className="text-muted-foreground">Donation:</span> {formatSats(fundAmount)} sats{isDoubleShot ? ` · payout ${fundShot}/2` : ''}</p>
             <p><span className="text-muted-foreground">Active mint:</span> <span className="break-all">{mintUrl}</span></p>
             <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : 'P2PK lock selected automatically'}</p>
           </div>
@@ -917,7 +971,7 @@ function OpenRequestCard({ request, claims, confirmedShots, onFulfilled }: { req
                 fulfillMutation.mutate();
               }}
             >
-              {fulfillMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Send ${formatSats(fundAmount)} sats`}
+              {fulfillMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : `Donate ${formatSats(fundAmount)} sats`}
             </Button>
           </div>
         </DialogContent>
