@@ -370,6 +370,35 @@ const FAQ_TEMPLATE: FAQCategory[] = [
       },
     ],
   },
+  {
+    id: 'markets',
+    label: 'Markets & Trading',
+    items: [
+      {
+        id: 'market-trading-unavailable',
+        question: 'Why can’t I place a ₿AO market trade?',
+        answer: [
+          'If you see **MARKET_001**, trading is temporarily paused while bao.markets makes sure deposits, withdrawals, and winnings can all be handled safely. This is a safety pause, not a problem with your account.',
+          'No trade was placed and no sats were taken. You can try again later or choose another available market. If the message continues, share the error code with support.',
+        ],
+      },
+      {
+        id: 'market-trade-balance',
+        question: 'What does MARKET_002 mean?',
+        answer: [
+          'There are not enough sats on the rail you selected for that trade. Claim or deposit ₿AO demo sats on that rail, then try again.',
+          'A rail is simply the payment path you chose, such as Cashu or Lightning. Your sats on one rail may not be available on another.',
+        ],
+      },
+      {
+        id: 'market-trade-error',
+        question: 'What does MARKET_003 mean?',
+        answer: [
+          'The trade did not finish and the app could not safely determine a more specific reason. Check your balance and open positions before trying again so you do not accidentally place the same trade twice.',
+        ],
+      },
+    ],
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
