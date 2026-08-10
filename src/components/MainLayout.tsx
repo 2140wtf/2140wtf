@@ -48,12 +48,12 @@ function MainLayoutInner() {
   const location = useLocation();
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const autoCollapseLeft = ['/prediction-markets', '/videos', '/groups'].some((p) => location.pathname.startsWith(p));
+  const autoCollapseLeft = ['/bao/bao-markets', '/videos', '/groups'].some((p) => location.pathname.startsWith(p));
   useEffect(() => {
     setLeftCollapsed(autoCollapseLeft);
   }, [autoCollapseLeft]);
 
-  const autoCollapseRight = location.pathname.startsWith('/prediction-markets');
+  const autoCollapseRight = location.pathname.startsWith('/bao/bao-markets');
   const [rightCollapsed, setRightCollapsed] = useState(autoCollapseRight);
   useEffect(() => {
     setRightCollapsed(autoCollapseRight);
