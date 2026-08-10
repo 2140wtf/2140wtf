@@ -354,20 +354,23 @@ export function AppRouter() {
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/bao/baocommunity" element={<BaoCommunitiesPage />} />
-              <Route path="/bao/chat" element={<Navigate to="/bao/baocommunity" replace />} />
+              <Route path="/bao/community" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/baocommunity" element={<Navigate to="/bao/community" replace />} />
+              <Route path="/bao/chat" element={<Navigate to="/bao/community" replace />} />
               <Route path="/bao/c/:communityId" element={<ConcordV2Page />} />
               <Route path="/bao/c/:communityId/:channelId" element={<ConcordV2Page />} />
               <Route path="/bao/invite/:naddr" element={<InviteV2Page />} />
               {/* Armada-generated invite links use /invite/:naddr; keep parsing them. */}
               <Route path="/invite/:naddr" element={<InviteV2Page />} />
-              <Route path="/bao/bao-markets" element={<PredictionMarketsPage />} />
-              <Route path="/prediction-markets" element={<Navigate to="/bao/bao-markets" replace />} />
-              <Route path="/bao/bao-fund" element={<BaoFundingPage />} />
-              <Route path="/bao-fund" element={<Navigate to="/bao/bao-fund" replace />} />
+              <Route path="/bao/markets" element={<PredictionMarketsPage />} />
+              <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
+              <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
+              <Route path="/bao/fund" element={<BaoFundingPage />} />
+              <Route path="/bao/bao-fund" element={<Navigate to="/bao/fund" replace />} />
+              <Route path="/bao-fund" element={<Navigate to="/bao/fund" replace />} />
               <Route
                 path="/bao-funding"
-                element={<Navigate to="/bao/bao-fund" replace />}
+                element={<Navigate to="/bao/fund" replace />}
               />
           <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/mints/details" element={<MintDetailsPage />} />

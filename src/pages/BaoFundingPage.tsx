@@ -141,8 +141,8 @@ export function BaoFundingPage() {
   const projectsRef = useRef<HTMLDivElement | null>(null);
 
   // Deep links (e.g. from a pet's upkeep card):
-  //   /bao/bao-fund?campaign=<id>      → preselect/expand that campaign
-  //   /bao/bao-fund?create=1&title=…   → open the campaign form with URL defaults.
+  //   /bao/fund?campaign=<id>      → preselect/expand that campaign
+  //   /bao/fund?create=1&title=…   → open the campaign form with URL defaults.
   useEffect(() => {
     const campaign = searchParams.get('campaign');
     if (campaign) setSelectedId(campaign);
@@ -303,7 +303,7 @@ export function BaoFundingPage() {
             <AccordionTrigger className="text-left">Where are code review and discussion?</AccordionTrigger>
             <AccordionContent className="space-y-3 text-muted-foreground">
               <p>The public repository is the reviewable source of code and evidence. The creator can bring the campaign team into a ₿AO community for encrypted planning, review discussion, and selected member access. Funding alone does not silently create or expose a private community.</p>
-              <Button asChild variant="outline" size="sm"><Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" />Open ₿AO communities</Link></Button>
+              <Button asChild variant="outline" size="sm"><Link to="/bao/community"><MessageCircle className="mr-2 size-4" />Open ₿AO communities</Link></Button>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -640,7 +640,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No public repository was attached.</div>
             )}
             <Button asChild variant="outline" className="justify-start">
-              <Link to="/bao/baocommunity"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
+              <Link to="/bao/community"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
             </Button>
           </div>
 
