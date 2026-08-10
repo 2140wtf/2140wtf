@@ -438,7 +438,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 }
 
 /**
- * `/bao/baocommunity` — the ₿AO communities list: every Concord V2 community the user
+ * `/bao/community` — the ₿AO communities list: every Concord V2 community the user
  * holds keys for, with unread/mention rollups. This replaces Armada's
  * ServerRail: cross-community navigation starts here, and each community's
  * channel sidebar lives inside the community page.

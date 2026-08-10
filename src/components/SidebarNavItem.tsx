@@ -375,9 +375,9 @@ export function SidebarNavList({
                 compact={compact}
                 minimal={minimal}
                 children={[
-                  { id: 'bao-chat', label: '₿AO Community', path: '/bao/baocommunity' },
-                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/bao-fund' },
-                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/bao-markets' },
+                  { id: 'bao-chat', label: '₿AO Community', path: '/bao/community' },
+                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/fund' },
+                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/markets' },
                 ]}
               />
             );

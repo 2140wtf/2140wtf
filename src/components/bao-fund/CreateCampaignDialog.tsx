@@ -122,7 +122,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
 
   // Deep-link prefill: the dialog stays mounted, so initialTitle must be
   // re-applied whenever it changes (the useState initializer only runs at
-  // first mount — a /bao/bao-fund?create=1&title=X navigation while already on
+  // first mount — a /bao/fund?create=1&title=X navigation while already on
   // the page used to open the dialog with a blank/stale title).
   useEffect(() => {
     if (open && initialTitle) setTitle(initialTitle);
