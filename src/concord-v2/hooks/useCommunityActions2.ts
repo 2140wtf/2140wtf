@@ -678,6 +678,18 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       if (!user || !community) throw new Error("Not ready.");
       if (user.pubkey !== community.owner) throw new Error("Only the owner can dissolve the community.");
       const group = dissolvedGroupKey(community.id);
+      // Older communities may predate CORD-08 sponsorship records. Re-assert
+      // the terminal stream immediately before publishing the dissolution so
+      // creation-gated relays do not reject the owner's final tombstone.
+      // This is best-effort on ordinary relays and is accepted for an operator
+      // founder by relay.bao.network's sponsorship policy.
+      await publishSponsorship(
+        nostr,
+        user.signer,
+        community.relays,
+        community.idHex,
+        [group.pk],
+      );
       const wrap = await sealDissolved(community.id, user.pubkey, user.signer);
       const isolated = concordClient(community.idHex, [group]);
       await publishWithAuthenticatedFallback(
