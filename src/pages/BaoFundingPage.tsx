@@ -236,7 +236,7 @@ export function BaoFundingPage() {
             {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </Button>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
           <Button
             size="lg"
             className="h-auto min-h-14 w-full min-w-0 justify-start gap-3 whitespace-normal px-4 py-3 text-left"
@@ -446,7 +446,7 @@ export function BaoFundingPage() {
             <DialogTitle>What do you want to create?</DialogTitle>
             <DialogDescription>Choose the funding flow that matches the work.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
             <Button
               type="button"
               variant="outline"
