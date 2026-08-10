@@ -1566,6 +1566,8 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 
 Because real cross-juror DKG requires multiple online participants, 2140.wtf includes a **demo simulation mode** that completes the ceremony locally while still publishing the current user's real events.
 
+> **Experimental legacy protocol:** The kinds below describe the currently implemented `pedpop-v1-experimental` ceremony. It is not ChillDKG, has not demonstrated BIP-445 compatibility, and is not approved for mainnet verdicts. These legacy events do not carry the canonical session and suite bindings required by the upgraded Court protocol. Future production validators MUST reject them; they remain readable only for explicitly labelled demo and historical views.
+
 ### Event kinds
 
 | Kind  | Name                         | Description                                                            |
@@ -1574,10 +1576,16 @@ Because real cross-juror DKG requires multiple online participants, 2140.wtf inc
 | 39001 | ₿AO Court Juror Candidacy    | A juror registers for a dispute with category coverage and stake bond. |
 | 39002 | ₿AO Court Jury Selection     | The selected jury and backups are announced for a dispute.             |
 | 38031 | ₿AO Court DKG Commitment     | A juror publishes their Pedersen polynomial commitments.               |
-| 39004 | ₿AO Court Vote Commit/Reveal | Commit/reveal phase for the juror's outcome vote.                      |
+| 39003 | ₿AO Court Encrypted DKG Share| Private VSS share rumor, encrypted and wrapped with NIP-59.             |
+| 38032 | ₿AO Court DKG Complaint      | Legacy public complaint; unsafe share-reveal format, not for production.|
+| 38033 | ₿AO Court Refresh Commitment | Public proactive-share-refresh commitment.                             |
+| 39004 | ₿AO Court Vote Commit        | Commitment phase for the juror's outcome vote.                         |
 | 39005 | ₿AO Court FROST Commitment   | A juror publishes their FROST signing nonce commitment.                |
 | 39006 | ₿AO Court FROST Reveal       | A juror reveals their FROST partial signature.                         |
 | 39007 | ₿AO Court Attestation        | Final aggregated FROST dispute override attestation.                   |
+| 39013 | ₿AO Court Encrypted Refresh  | Private proactive refresh share, encrypted and wrapped with NIP-59.    |
+| 39014 | ₿AO Court Vote Reveal        | Reveal phase for the juror's committed outcome vote.                   |
+| 39100 | ₿AO Court Share Backup       | Private encrypted self-backup rumor wrapped with NIP-59.                |
 
 ### Kind 38025: ₿AO Court Dispute
 
@@ -1682,7 +1690,7 @@ Regular event publishing a juror's Pedersen polynomial commitments.
 }
 ```
 
-### Kind 39004: ₿AO Court Vote Commit / Reveal
+### Kinds 39004 and 39014: ₿AO Court Vote Commit / Reveal
 
 Regular events used for the commit/reveal vote phase.
 
@@ -1707,7 +1715,7 @@ Regular events used for the commit/reveal vote phase.
 
 ```json
 {
-  "kind": 39004,
+  "kind": 39014,
   "pubkey": "<juror-pubkey>",
   "content": "{\"disputeId\":\"<32-byte-hex>\",\"jurorIdx\":1,\"outcome\":\"NO\",\"salt\":\"<hex>\"}",
   "tags": [
@@ -1790,7 +1798,8 @@ Regular event containing the final aggregated FROST dispute override attestation
 - **Disputes** are public UGC; anyone can query `{ kinds: [38025] }`.
 - **Selection events** (kind 39002) are trust-sensitive. Clients SHOULD filter by a trusted coordinator pubkey or verify the selection deterministically from the published `seed` and `block` tags.
 - **DKG commitments, votes, and FROST messages** SHOULD be filtered by the selected jurors' pubkeys to prevent spam.
-- **Encrypted shares** between jurors are delivered as NIP-17 private messages (kind 14) wrapped in NIP-59 gift wraps (kind 1059).
+- **Encrypted DKG shares** use kind 39003 rumors, refresh shares use kind 39013 rumors, and self-backups use kind 39100 rumors. They are encrypted to their intended recipient and transported inside NIP-59 gift wraps (kind 1059).
+- **Legacy complaints** (kind 38032) reveal share material publicly and MUST NOT be used by a production ceremony. The upgraded blame protocol must provide attributable evidence without publishing a valid secret share.
 - **Demo mode** runs the full Pedersen DKG and FROST signing locally, publishes the current user's real events, and simulates peer juror events internally for GUI completeness.
 
 ### Kind 39998: Stream Sponsorship
