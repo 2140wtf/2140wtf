@@ -1055,11 +1055,16 @@ function FollowsStep({
 
       // 1. Fetch freshest kind 3 from relays, with the local event store as a
       // fallback floor so a relay miss cannot wipe the existing follow list.
-      const prev = await fetchFreshEvent(
-        nostr,
-        { kinds: [3], authors: [user.pubkey] },
-        { store },
-      );
+      // A just-generated signup key has no existing list to preserve, though;
+      // skipping this read lets the first publish succeed even when a relay is
+      // temporarily unavailable for queries.
+      const prev = expectedPubkey === user.pubkey
+        ? null
+        : await fetchFreshEvent(
+            nostr,
+            { kinds: [3], authors: [user.pubkey] },
+            { store },
+          );
 
       // 2. Separate p-tags from non-p-tags to preserve relay hints, petnames, etc.
       const existingPTags = prev?.tags.filter(([n]) => n === "p") ?? [];
