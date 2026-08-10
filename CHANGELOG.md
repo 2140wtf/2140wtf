@@ -6,6 +6,7 @@
 - Onboarding now loads complete BAO-backed follow packs and avatars, preselects fiatjaf, 2140.wtf, and ₿AO HQ, requires five follows, and removes the sync bypass.
 - Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
 - Onboarding removes the sparse activity block and consolidates news suggestions into one pack.
+- New-account onboarding loads curated follow packs, profile avatars, and creator/client pills from the BAO pack relay with public relay fallbacks and a local cache, so a cleared or slow browser does not leave partial packs or initials.
 - Cashu verifies NIP-60 relay backups, republishes missing encrypted state, avoids empty proof events, and can recover mint-confirmed NUT-09 proofs.
 - Relay-discovered ₿AO markets restore odds from public SMJ history when settled pools clear live counters.
 - Opening ₿AO Fund while logged out no longer crashes.
