@@ -907,7 +907,7 @@ export function ConcordV2Page() {
   const navigateTo = useNavigate();
   // Compliant self-removal: if the folded Banlist names ME, silently tear
   // down the local copy and route to the communities list (CORD-04 §4).
-  useBanSelfRemove2(baseCommunity, useCallback(() => navigateTo("/bao/baocommunity"), [navigateTo]));
+  useBanSelfRemove2(baseCommunity, useCallback(() => navigateTo("/bao/community"), [navigateTo]));
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
 
@@ -1205,7 +1205,7 @@ export function ConcordV2Page() {
   // can't reach into each member's self-encrypted list, so removal MUST be a
   // local, per-member action.
 
-  if (!communityId) return <Navigate to="/bao/baocommunity" replace />;
+  if (!communityId) return <Navigate to="/bao/community" replace />;
 
   const handleSend = async (content: string, tags: string[][]) => {
     // The composer's content-derived tags (emoji, imeta, mentions) are sealed
@@ -1255,7 +1255,7 @@ export function ConcordV2Page() {
   const handleLeave = async () => {
     try {
       await leave();
-      navigateTo("/bao/baocommunity");
+      navigateTo("/bao/community");
     } catch {
       // best-effort
     }
@@ -1265,7 +1265,7 @@ export function ConcordV2Page() {
     try {
       await dissolve();
       toast({ title: "Community dissolved" });
-      navigateTo("/bao/baocommunity");
+      navigateTo("/bao/community");
     } catch (e) {
       toast({ title: "Couldn't dissolve", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     }
@@ -1278,7 +1278,7 @@ export function ConcordV2Page() {
         title: "BAO purge verified",
         description: `${report.found} relay cop${report.found === 1 ? "y" : "ies"} found; ${report.remaining} still returned after deletion.`,
       });
-      navigateTo("/bao/baocommunity");
+      navigateTo("/bao/community");
     } catch (e) {
       toast({ title: "Couldn't purge BAO", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
     }
@@ -1711,7 +1711,7 @@ export function ConcordV2Page() {
         onClose={() => setChannelsOpen(false)}
         underlay={
           // (Armada rendered its ServerRail beside the channel list here; in
-          // ₿AO cross-community navigation lives on the /bao/baocommunity list page.)
+          // ₿AO cross-community navigation lives on the /bao/community list page.)
           channelList(() => setChannelsOpen(false), focusMode ? "hidden" : "flex-1 sidebar:flex-none")
         }
       >
