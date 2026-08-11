@@ -27,7 +27,7 @@ PLUS:
 ```
 if kind == 5 and pubkey == OPERATOR_NPUB:
     accept and honor for referenced "k"-tag kinds
-    {1059, 21059, 13302, 13303, 33301}, regardless of event author
+    {1059, 21059, 13302, 13303, 33301, 39998}, regardless of event author
 ```
 
 Client behavior (already shipped): a founder purge sends per-author kind-5s

@@ -76,7 +76,7 @@ if event.kind == 5
    and event.pubkey == fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416
 then:
     accept, and honor the deletion for referenced events whose "k" tag kind is in
-    {1059, 21059, 13302, 13303, 33301} — REGARDLESS of the referenced event's author.
+    {1059, 21059, 13302, 13303, 33301, 39998} — REGARDLESS of the referenced event's author.
 ```
 
 That hex is the 2140wtf admin npub
@@ -99,7 +99,7 @@ That hex is the 2140wtf admin npub
 
 ```lua
 local ADMIN_HEX = "fba1bbd8ab57f258673157defd5afc9ceda004c6845f99db3169fe4b61ba7416"
-local ADMIN_DELETABLE = { [1059]=true, [21059]=true, [13302]=true, [13303]=true, [33301]=true }
+local ADMIN_DELETABLE = { [1059]=true, [21059]=true, [13302]=true, [13303]=true, [33301]=true, [39998]=true }
 
 if event.kind == 5 and event.pubkey == ADMIN_HEX then
   for _, tag in ipairs(event.tags) do
