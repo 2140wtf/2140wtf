@@ -38,8 +38,18 @@ describe("relay deletion capability", () => {
     });
   });
 
-  it("uses the first-party BAO policy attestation when NIP-11 omits NIP-09", async () => {
+  it("keeps a readable first-party NIP-11 response authoritative", async () => {
     await expect(relayDeletionCapability("wss://relay.bao.network", async () => relayInfo([1, 11]))).resolves.toEqual({
+      url: "wss://relay.bao.network",
+      supported: false,
+      reason: "nip-09-not-advertised",
+    });
+  });
+
+  it("uses the first-party BAO policy attestation for a browser transport failure", async () => {
+    await expect(relayDeletionCapability("wss://relay.bao.network", async () => {
+      throw new TypeError("Failed to fetch");
+    })).resolves.toEqual({
       url: "wss://relay.bao.network",
       supported: true,
       attestation: "first-party-attested",
