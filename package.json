@@ -128,7 +128,6 @@
     "@tanstack/react-query": "^5.101.4",
     "@unhead/addons": "^2.1.13",
     "@unhead/react": "^2.1.13",
-    "@vbyte/frost": "^1.1.5",
     "blurhash": "^2.0.5",
     "capacitor-secure-storage-plugin": "^0.13.0",
     "class-variance-authority": "^0.7.1",
