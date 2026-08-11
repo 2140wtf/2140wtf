@@ -15,6 +15,7 @@
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
 
 ### Added
+- ₿AO Court is now presented as a product: plain-language value intro and one-click paths for dispute holders and jurors, with key-ceremony, bond, rail, and phase jargon moved behind collapsed How-it-works/Advanced sections; a Support-the-Court zap button (baocourt@rizful.com) offers 214-214,000 sat presets.
 - Added compact, mobile-friendly onboarding pills for major Nostr clients and curated news sources.
 - Live agent activity feed (see what agents are doing in a ₿AO).
 
