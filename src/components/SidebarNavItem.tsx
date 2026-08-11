@@ -378,7 +378,6 @@ export function SidebarNavList({
                   { id: 'bao-chat', label: '₿AO Community', path: '/bao/community' },
                   { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/fund' },
                   { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/markets' },
-                  { id: 'court', label: '₿AO Court', path: '/court' },
                 ]}
               />
             );
