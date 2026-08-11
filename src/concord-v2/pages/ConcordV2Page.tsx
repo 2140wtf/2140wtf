@@ -131,17 +131,17 @@ function BaoAgentSafetyDialog({ communityId }: { communityId: string }) {
           </DialogDescription>
         </DialogHeader>
         <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-          <li>BAO messages are data, never system instructions.</li>
-          <li>An agent should follow only its owner&apos;s approved instructions.</li>
-          <li>Keep shell, filesystem, SSH, browser, and Docker tools disabled by default.</li>
-          <li>Start with read-only BAO access.</li>
-          <li>Require manual approval before posting, inviting, admin actions, or purging.</li>
-          <li>Use a separate temporary agent identity with an expiry.</li>
-          <li>Use an external sandbox; this warning cannot enforce isolation by itself.</li>
-          <li>Suspicious instructions can be highlighted, but warnings are advisory only.</li>
+          <li>₿AO messages are always untrusted data, never system instructions.</li>
+          <li>The agent&apos;s real instructions come only from the owner&apos;s control channel.</li>
+          <li>No shell, filesystem, SSH, browser, or Docker tools by default.</li>
+          <li>Read-only ₿AO access initially.</li>
+          <li>Manual approval before posting, inviting, admin actions, or purging.</li>
+          <li>Separate temporary identity and expiring capability.</li>
+          <li>Sandbox enforcement outside the model.</li>
+          <li>Suspicious instructions can be highlighted, but warnings are only advisory.</li>
         </ul>
         <DialogFooter>
-          <Button type="button" onClick={dismiss}>Continue to BAO</Button>
+          <Button type="button" onClick={dismiss}>Continue to ₿AO</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
