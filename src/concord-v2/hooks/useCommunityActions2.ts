@@ -46,6 +46,7 @@ import { writeOpened } from "@/concord-v2/lib/rumorStore";
 import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
+import { mirrorGroups } from "@/concord-v2/lib/relayMirror";
 import { partitionDeletionCapableRelays } from "@/concord-v2/lib/relayDeletion";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
@@ -762,6 +763,13 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // it cannot publish the owner's terminal control marker for a foreign
       // community, so do not attempt the owner-only dissolve first.
       if (!isOperator) await dissolve.mutateAsync();
+      const purgeChannelGroups = channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group));
+      // BAO relays may return an empty result to unauthenticated queries. Use
+      // the same scoped Concord session that reads the community everywhere
+      // else, while purgeCommunityRemote keeps public invite lookups on the
+      // normal relay client.
+      const purgeStreamGroups = [...mirrorGroups(community), ...purgeChannelGroups];
+      const authenticatedPurgeReader = concordClient(community.idHex, purgeStreamGroups);
       const report = await purgeCommunityRemote(
         nostr,
         community,
@@ -769,7 +777,8 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
         [...hintRelays],
         isOperator ? user.signer : undefined,
         // Channel streams too — chat messages must die with the community.
-        channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group)),
+        purgeChannelGroups,
+        authenticatedPurgeReader,
       );
       await purgeCommunityLocalData(community, { userPubkey: user.pubkey, queryClient });
       if (report.accepted === 0 && report.found > 0) {
