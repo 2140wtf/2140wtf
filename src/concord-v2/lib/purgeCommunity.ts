@@ -95,23 +95,47 @@ export async function purgeCommunityRemote(
   // covers control/guestbook/rekey planes but NOT chat channels, so without
   // these every chat message survives the purge on the relay.
   channelGroups: GroupKey[] = [],
+  // Authenticated Concord reader for stream wraps. Some community relays
+  // return an empty result to unauthenticated queries instead of rejecting
+  // them, which would make purge verification falsely report zero copies.
+  authenticatedNostr?: RemotePurgeRelay,
 ): Promise<RemotePurgeReport> {
   const keys = new Map<string, Uint8Array>();
   for (const group of mirrorGroups(community)) keys.set(group.pk, group.sk);
   for (const group of channelGroups) keys.set(group.pk, group.sk);
   for (const [pubkey, sk] of signerKeys) keys.set(pubkey, sk);
-  const authors = [...keys.keys()];
+  const streamAuthors = [...new Set([
+    ...mirrorGroups(community).map((group) => group.pk),
+    ...channelGroups.map((group) => group.pk),
+  ])];
+  const inviteAuthors = [...signerKeys.keys()];
   const relays = [...new Set([...community.relays, ...relayHints])];
   const linkSponsorTags = [...signerKeys.keys()].map((pubkey) => `link:${pubkey}`);
   const perRelay = await Promise.all(relays.map(async (url) => {
     const queryTargets = async (): Promise<{ events: Map<string, NostrEvent>; complete: boolean }> => {
       const targets = new Map<string, NostrEvent>();
       let complete = true;
-      for (let i = 0; i < authors.length; i += PURGE_AUTHOR_CHUNK) {
-        const chunk = authors.slice(i, i + PURGE_AUTHOR_CHUNK);
+      const streamReader = authenticatedNostr ?? nostr;
+      for (let i = 0; i < streamAuthors.length; i += PURGE_AUTHOR_CHUNK) {
+        const chunk = streamAuthors.slice(i, i + PURGE_AUTHOR_CHUNK);
+        try {
+          const found = await streamReader.relay(url).query(
+            [{ kinds: [KIND_WRAP], authors: chunk, limit: PURGE_QUERY_LIMIT }],
+            { signal: AbortSignal.timeout(15_000) },
+          );
+          for (const event of found) targets.set(event.id, event);
+        } catch {
+          complete = false;
+        }
+      }
+      // Invite bundles are public addressable events signed by per-link keys,
+      // not Concord stream events. Query them through the normal relay client
+      // so the stream session's least-authority check does not reject them.
+      for (let i = 0; i < inviteAuthors.length; i += PURGE_AUTHOR_CHUNK) {
+        const chunk = inviteAuthors.slice(i, i + PURGE_AUTHOR_CHUNK);
         try {
           const found = await nostr.relay(url).query(
-            [{ kinds: [KIND_WRAP, KIND_INVITE_BUNDLE], authors: chunk, limit: PURGE_QUERY_LIMIT }],
+            [{ kinds: [KIND_INVITE_BUNDLE], authors: chunk, limit: PURGE_QUERY_LIMIT }],
             { signal: AbortSignal.timeout(15_000) },
           );
           for (const event of found) targets.set(event.id, event);
