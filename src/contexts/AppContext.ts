@@ -353,11 +353,6 @@ export interface AppConfig {
   /** URL of the BAO signet faucet used to fund demo wallets. Empty/disabled if not set. */
   baoSignetFaucetUrl?: string;
   /**
-   * Base URL of the BAO Markets custom signet Mempool API used to verify
-   * juror bonds. Example: "https://mempool.bao.markets/api".
-   */
-  baoCustomSignetMempoolUrl?: string;
-  /**
    * Base URL of the BAO Markets REST API. Used to resolve cube designs and
    * other BAO metadata. When unset, production endpoints are used.
    * Example for local dev: "http://localhost:3460".

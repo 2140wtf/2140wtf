@@ -190,9 +190,6 @@ const hardcodedConfig: AppConfig = {
   corsProxy: "",
   baoSignetMintUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_MINT_URL) ?? 'https://relay.bao.network/cashu',
   baoSignetFaucetUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_FAUCET_URL) ?? 'https://relay.bao.network/faucet/',
-  baoCustomSignetMempoolUrl:
-    safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_CUSTOM_SIGNET_MEMPOOL_URL) ??
-    'https://mempool.bao.markets/api',
   baoApiUrl: safeOptionalUrl((import.meta.env as Record<string, unknown>).VITE_BAO_API_URL) ?? 'https://relay.bao.network/bao-api',
   petsBattleEscrowPubkey:
     ((import.meta.env as Record<string, unknown>).VITE_PETS_BATTLE_ESCROW_PUBKEY as string | undefined) || undefined,
