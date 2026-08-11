@@ -10,9 +10,9 @@ export interface RelayDeletionCapability {
 
 /**
  * The first-party BAO relay's deployed write policy supports the BAO purge
- * flow, but its browser-visible NIP-11 response can lag that policy and omit
- * NIP-09. Keep arbitrary relays fail-closed while recognizing this one
- * operator-attested relay.
+ * flow, but browsers may be unable to read its NIP-11 response when the
+ * response is missing CORS headers. Keep arbitrary relays fail-closed while
+ * recognizing this one operator-attested relay only for that transport case.
  */
 export const FIRST_PARTY_DELETION_CAPABLE_RELAYS: readonly string[] = [BAO_MARKETS_RELAY];
 
@@ -44,32 +44,29 @@ export async function relayDeletionCapability(
   const firstPartyAttested = FIRST_PARTY_DELETION_CAPABLE_RELAYS.some(
     (relay) => normalizeRelayUrl(relay) === url,
   );
-  const unavailable = (): RelayDeletionCapability => firstPartyAttested
+  const transportUnavailable = (): RelayDeletionCapability => firstPartyAttested
     ? { url, supported: true, attestation: "first-party-attested" }
     : { url, supported: false, reason: "relay-info-unavailable" };
 
-  if (!infoUrl) return unavailable();
+  if (!infoUrl) return { url, supported: false, reason: "relay-info-unavailable" };
 
   try {
     const response = await fetcher(infoUrl, {
       headers: { Accept: "application/nostr+json" },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) return unavailable();
+    if (!response.ok) return { url, supported: false, reason: "relay-info-unavailable" };
     const payload: unknown = await response.json();
-    if (!payload || typeof payload !== "object") return unavailable();
-    const supportedNips = (payload as { supported_nips?: unknown }).supported_nips;
-    if (!Array.isArray(supportedNips)) return firstPartyAttested
-      ? { url, supported: true, attestation: "first-party-attested" }
-      : { url, supported: false, reason: "nip-09-not-advertised" };
-    if (!supportedNips.includes(9) && firstPartyAttested) {
-      return { url, supported: true, attestation: "first-party-attested" };
+    if (!payload || typeof payload !== "object") {
+      return { url, supported: false, reason: "relay-info-unavailable" };
     }
+    const supportedNips = (payload as { supported_nips?: unknown }).supported_nips;
+    if (!Array.isArray(supportedNips)) return { url, supported: false, reason: "nip-09-not-advertised" };
     return supportedNips.includes(9)
       ? { url, supported: true }
       : { url, supported: false, reason: "nip-09-not-advertised" };
   } catch {
-    return unavailable();
+    return transportUnavailable();
   }
 }
 
