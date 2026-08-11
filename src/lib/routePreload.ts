@@ -35,7 +35,6 @@ const exactRoutes: Record<string, RouteLoader> = {
   '/bao/fund': () => import('@/pages/BaoFundingPage'),
   '/mints': () => import('@/pages/MintDiscoveryPage'),
   '/mints/details': () => import('@/pages/MintDetailsPage'),
-  '/court': () => import('@/pages/CourtPage'),
   '/bookmarks': () => import('@/pages/BookmarksPage'),
   '/groups': () => import('@/pages/GroupChatPage'),
   '/pets': () => import('@/pages/PetsPage'),

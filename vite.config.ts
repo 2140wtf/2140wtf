@@ -168,7 +168,6 @@ export default defineConfig(({ mode }) => {
         'leaflet',
         'leaflet.markercluster',
         '@radix-ui/react-accordion',
-        '@bao/frost-court',
       ],
     },
     server: {

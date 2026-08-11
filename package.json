@@ -15,8 +15,7 @@
     "test:e2e": "npm run build && PLAYWRIGHT_START_SERVER=1 playwright test -c e2e/playwright.config.ts",
     "test:e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
     "test:e2e:staging": "npm run test:e2e",
-    "test": "tsc --noEmit --incremental false && eslint --cache && npm run test:court && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
-    "test:court": "vitest run --config vendor/frost-court/vitest.config.ts --reporter=dot",
+    "test": "tsc --noEmit --incremental false && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'",
     "ci": "npm ci && npm run test",
     "cap:sync": "npx cap sync && node scripts/patch-cap-config.mjs",
     "keygen": "keytool -genkey -v -keystore android/app/my-upload-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload",
@@ -28,7 +27,6 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@bao/frost-court": "file:./vendor/frost-court",
     "@capacitor/app": "^8.0.0",
     "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.1.0",

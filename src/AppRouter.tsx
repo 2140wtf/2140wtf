@@ -103,7 +103,6 @@ const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage")
 const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
 const LightningObservatoryFullPage = lazy(() => import("./pages/LightningObservatoryFullPage").then(m => ({ default: m.LightningObservatoryFullPage })));
-const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
 const GroupChatPage = lazy(() => import("./pages/GroupChatPage").then(m => ({ default: m.GroupChatPage })));
@@ -374,7 +373,6 @@ export function AppRouter() {
               />
           <Route path="/mints" element={<MintDiscoveryPage />} />
               <Route path="/mints/details" element={<MintDetailsPage />} />
-              <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
               <Route path="/groups" element={<GroupChatPage />} />
 
