@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Fixed
+- ₿AO community creation no longer rejects the first-party BAO relay: its NIP-11 document advertises NIP-09 but is unreadable from browsers (missing CORS header), so first-party relays now fall back to an operator attestation on transport failure while arbitrary relays stay fail-closed; exclusion messages now distinguish "does not advertise" from "could not be verified".
+- The Create/Cancel buttons in the new-community dialog now sit directly under the relay list, above relay discovery and the custom relay input, so the primary action needs no scrolling.
 - Onboarding now loads complete BAO-backed follow packs and avatars, preselects fiatjaf, 2140.wtf, and ₿AO HQ, requires five follows, and removes the sync bypass.
 - Default feeds now exclude accounts identified by the blocked `nostrmag.com` NIP-05 domain while keeping ordinary links to that site visible.
 - Onboarding removes the sparse activity block and consolidates news suggestions into one pack.
@@ -15,6 +17,7 @@
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
 
 ### Added
+- ₿AO Court library (frost-court) gained its full session machinery: canonical session binding, DKG/vote/signing phase machines with typed fail-closed errors, NIP-46/NIP-59 signer-backed transport (no raw nsec anywhere), a durable outbox with semantic dedupe and signed acks, a recipient inbox with relay-group policy, keeper designation with reveal verification, an 80-test relay-adversary suite, the encrypted Court host-key lifecycle with attestation and rotation, and certified cross-device recovery envelopes whose restore recomputes every claim from curve math — hardened by an adversarial review (negated-share parity bind, infinity-point typed failures, signer-error sanitization, runtime-private secrets).
 - ₿AO Court is now presented as a product: plain-language value intro and one-click paths for dispute holders and jurors, with key-ceremony, bond, rail, and phase jargon moved behind collapsed How-it-works/Advanced sections; a Support-the-Court zap button (baocourt@rizful.com) offers 214-214,000 sat presets.
 - Added compact, mobile-friendly onboarding pills for major Nostr clients and curated news sources.
 - Live agent activity feed (see what agents are doing in a ₿AO).
