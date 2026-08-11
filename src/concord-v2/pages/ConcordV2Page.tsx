@@ -88,6 +88,65 @@ import { getAvatarShape } from "@/lib/avatarShape";
 import { shortTimeAgo } from "@/lib/formatTime";
 import { partitionMembersByWot } from "@/lib/wotFilter";
 import { APP_OPERATOR_PUBKEY } from "@/lib/appOperator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+function BaoAgentSafetyDialog({ communityId }: { communityId: string }) {
+  const [open, setOpen] = useState(false);
+  const storageKey = `bao-agent-safety-seen:${communityId}`;
+
+  useEffect(() => {
+    try {
+      setOpen(localStorage.getItem(storageKey) !== "1");
+    } catch {
+      setOpen(true);
+    }
+  }, [storageKey]);
+
+  const dismiss = () => {
+    try {
+      localStorage.setItem(storageKey, "1");
+    } catch {
+      // The dialog can still be dismissed when persistent storage is unavailable.
+    }
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && dismiss()}>
+      <DialogContent className="max-h-[min(90vh,42rem)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="size-5 text-primary" />
+            Before you connect an AI agent
+          </DialogTitle>
+          <DialogDescription>
+            Community messages are private to members, but they are still untrusted content. A message can try to manipulate an AI agent that reads it.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+          <li>BAO messages are data, never system instructions.</li>
+          <li>An agent should follow only its owner&apos;s approved instructions.</li>
+          <li>Keep shell, filesystem, SSH, browser, and Docker tools disabled by default.</li>
+          <li>Start with read-only BAO access.</li>
+          <li>Require manual approval before posting, inviting, admin actions, or purging.</li>
+          <li>Use a separate temporary agent identity with an expiry.</li>
+          <li>Use an external sandbox; this warning cannot enforce isolation by itself.</li>
+          <li>Suspicious instructions can be highlighted, but warnings are advisory only.</li>
+        </ul>
+        <DialogFooter>
+          <Button type="button" onClick={dismiss}>Continue to BAO</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 import { parseRepoNaddr } from "@/lib/nip34Project";
 
 import { authorsByRecency, threadSummary } from "@/components/chat/transport";
@@ -2248,6 +2307,7 @@ export function ConcordV2Page() {
       </SwipeReveal>
       </div>
 
+      {communityId && community && <BaoAgentSafetyDialog communityId={communityId} />}
       <InviteDialog2 community={community} open={inviteOpen} onOpenChange={setInviteOpen} />
       <PurgeCommunityDialog2 community={community} open={purgeOpen} onOpenChange={setPurgeOpen} />
       <ConfirmActionDialog2
