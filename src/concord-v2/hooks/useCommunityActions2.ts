@@ -47,7 +47,7 @@ import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/conco
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
 import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
 import { mirrorGroups } from "@/concord-v2/lib/relayMirror";
-import { partitionDeletionCapableRelays } from "@/concord-v2/lib/relayDeletion";
+import { partitionDeletionCapableRelays, type RelayDeletionCapability } from "@/concord-v2/lib/relayDeletion";
 
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 
@@ -426,7 +426,7 @@ export function useCommunityActions2() {
   // link must still resolve against the relays every CORD client shares.
   const bootstrapRelays = config.appRelays.length > 0 ? config.appRelays : STOCK_RELAYS;
 
-  const create = useMutation<{ communityId: string; name: string; excludedRelays: string[] }, Error, { name: string; relays?: string[]; agentOnly?: boolean }>({
+  const create = useMutation<{ communityId: string; name: string; excludedRelays: RelayDeletionCapability[] }, Error, { name: string; relays?: string[]; agentOnly?: boolean }>({
     mutationFn: async ({ name, relays: chosen, agentOnly }) => {
       if (!user) throw new Error("Sign in to start an encrypted community.");
       if (!user.signer.nip44) throw new Error("This signer can't hold encrypted communities (NIP-44 unsupported).");
@@ -450,9 +450,21 @@ export function useCommunityActions2() {
         : defaultCreateRelays(appRelays, await fetchCreatorDmRelays(nostr, user.pubkey));
       const deletionSupport = await partitionDeletionCapableRelays(requestedRelays);
       if (deletionSupport.supported.length === 0) {
-        const unavailable = deletionSupport.excluded.map((relay) => relay.url).join(", ");
+        // Word each exclusion by its actual reason: a relay that answered its
+        // NIP-11 document without NIP-09 "does not advertise" deletion support;
+        // one whose document could not be read merely "could not be verified".
+        const unadvertised = deletionSupport.excluded
+          .filter((relay) => relay.reason === "nip-09-not-advertised")
+          .map((relay) => relay.url);
+        const unverifiable = deletionSupport.excluded
+          .filter((relay) => relay.reason !== "nip-09-not-advertised")
+          .map((relay) => relay.url);
+        const details = [
+          unadvertised.length > 0 ? `do not advertise NIP-09 deletion support: ${unadvertised.join(", ")}` : "",
+          unverifiable.length > 0 ? `could not be verified for NIP-09 deletion support: ${unverifiable.join(", ")}` : "",
+        ].filter(Boolean).join("; ");
         throw new Error(
-          `None of the selected relays advertise NIP-09 deletion support${unavailable ? `: ${unavailable}` : ""}. ` +
+          `None of the selected relays qualify${details ? ` — they ${details}` : ""}. ` +
           "Choose a relay that can purge BAO data.",
         );
       }
@@ -540,7 +552,7 @@ export function useCommunityActions2() {
       return {
         communityId: community.idHex,
         name: trimmed,
-        excludedRelays: deletionSupport.excluded.map((relay) => relay.url),
+        excludedRelays: deletionSupport.excluded,
       };
     },
   });
