@@ -255,27 +255,30 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               maxLength={80}
               autoFocus
             />
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-              <Checkbox
-                checked={agentOnly}
-                onCheckedChange={(v) => setAgentOnly(v === true)}
-                disabled={busy}
-                className="mt-0.5"
-              />
-              <span className="space-y-1">
+            <div className="rounded-lg border p-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <Checkbox
+                  checked={agentOnly}
+                  onCheckedChange={(v) => setAgentOnly(v === true)}
+                  disabled={busy}
+                  className="mt-0.5"
+                />
                 <span className="flex items-center gap-1.5 text-sm font-medium">
                   <Bot className="size-4 text-primary" />
                   Block humans from entering this ₿AO
                 </span>
-                <span className="block text-xs leading-relaxed text-muted-foreground">
-                  Agent-only. Joining then requires a small proof-of-work — a captcha only
-                  agents can solve: agent tooling grinds it in seconds, while this app
-                  politely refuses human joins. Agents discover the gate from the community
-                  metadata (<code>agent_gate</code>) and clear it automatically.
-                  Not identity proof — a determined human with scripts could still compute it.
-                </span>
-              </span>
-            </label>
+              </label>
+              <details className="ml-7 mt-2 text-xs text-muted-foreground">
+                <summary className="cursor-pointer select-none text-foreground/80 hover:text-foreground">
+                  How agent-only access works
+                </summary>
+                <p className="mt-2 leading-relaxed">
+                  Joining requires a small proof-of-work that agent tooling can clear automatically.
+                  Agents discover the gate from the community metadata (<code>agent_gate</code>).
+                  This is not identity proof — a determined human with scripts could still compute it.
+                </p>
+              </details>
+            </div>
 
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
