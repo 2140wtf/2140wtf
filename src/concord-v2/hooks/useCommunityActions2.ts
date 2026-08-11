@@ -16,6 +16,7 @@ import {
 } from "@/concord-v2/lib/agentGate";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { APP_OPERATOR_PUBKEY } from "@/lib/appOperator";
 import { fetchCreatorDmRelays } from "@/lib/creatorRelays";
 import { APP_RELAYS, normalizeRelayUrl } from "@/lib/platform";
 import { BAO_MARKETS_RELAY } from "@/lib/baoRelayMarkets";
@@ -705,7 +706,8 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
   const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
     mutationFn: async () => {
       if (!user || !community) throw new Error("Not ready.");
-      if (user.pubkey !== community.owner) throw new Error("Only the founder can purge this community.");
+      const isOperator = user.pubkey === APP_OPERATOR_PUBKEY;
+      if (user.pubkey !== community.owner && !isOperator) throw new Error("Only the founder or 2140 operator can purge this community.");
       if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
 
       // Capture link-signer secrets before removing the community from the
@@ -756,13 +758,16 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // apply that to the caller's own events only, while a relay with an
       // operator-deletion policy (operator list lives in the RELAY's policy,
       // secret, never in this repo) may honor it for the whole community.
-      await dissolve.mutateAsync();
+      // The operator's relay policy authorizes an admin-signed purge directly;
+      // it cannot publish the owner's terminal control marker for a foreign
+      // community, so do not attempt the owner-only dissolve first.
+      if (!isOperator) await dissolve.mutateAsync();
       const report = await purgeCommunityRemote(
         nostr,
         community,
         inviteKeys,
         [...hintRelays],
-        user.signer,
+        isOperator ? user.signer : undefined,
         // Channel streams too — chat messages must die with the community.
         channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group)),
       );

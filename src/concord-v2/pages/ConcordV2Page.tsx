@@ -87,6 +87,7 @@ import { cn, pickDefaultChannel } from "@/lib/utils";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { shortTimeAgo } from "@/lib/formatTime";
 import { partitionMembersByWot } from "@/lib/wotFilter";
+import { APP_OPERATOR_PUBKEY } from "@/lib/appOperator";
 import { parseRepoNaddr } from "@/lib/nip34Project";
 
 import { authorsByRecency, threadSummary } from "@/components/chat/transport";
@@ -818,6 +819,7 @@ export function ConcordV2Page() {
   const { setTier } = useRoles2(community);
   const ownerHex = folded?.ownerHex ?? community?.owner;
   const iAmOwner = Boolean(user && ownerHex && user.pubkey === ownerHex);
+  const iAmBaoOperator = user?.pubkey === APP_OPERATOR_PUBKEY;
   const roster = folded?.roster;
   const canManageRoles = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_ROLES));
   const canManageMetadata = Boolean(user && folded && isAuthorized(folded.roster, user.pubkey, ownerHex, Permissions.MANAGE_METADATA));
@@ -1511,7 +1513,7 @@ export function ConcordV2Page() {
                         Dissolve community
                       </button>
                     )}
-                    {iAmOwner && (
+                    {(iAmOwner || iAmBaoOperator) && (
                       <button
                         type="button"
                         disabled={isPurging || isDissolving}

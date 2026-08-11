@@ -37,4 +37,12 @@ describe("relay deletion capability", () => {
       reason: "relay-info-unavailable",
     });
   });
+
+  it("uses the first-party BAO policy attestation when NIP-11 omits NIP-09", async () => {
+    await expect(relayDeletionCapability("wss://relay.bao.network", async () => relayInfo([1, 11]))).resolves.toEqual({
+      url: "wss://relay.bao.network",
+      supported: true,
+      attestation: "first-party-attested",
+    });
+  });
 });
