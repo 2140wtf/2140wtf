@@ -298,7 +298,7 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 pre-selected — your choice is yours.
               </p>
 
-              <div className="max-h-40 space-y-1.5 overflow-y-auto overscroll-contain pr-1 pt-1">
+              <div className="max-h-64 space-y-1.5 overflow-y-auto overscroll-contain pr-1 pt-1">
                 {relayRows.map(({ url, source }, index) => {
                   const checkboxId = `community-relay-${index}`;
                   return (
