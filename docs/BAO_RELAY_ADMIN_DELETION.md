@@ -1,10 +1,13 @@
 # BAO relay — write-policy specs (VPS, relay.bao.network)
 
-**Status:** specs for the VPS relay. Client support for admin deletion landed
-in `purgeCommunityRemote` (`adminSigner`) + `src/lib/admins.ts`. Deploy the
-relay-side rules below for admin-signed deletions to be honored and for
-native invite links; until then the per-author founder purge and the
-consented interop fallback are the working paths.
+**Status:** DEPLOYED 2026-08-11 (`/opt/bao-relay` on the relay VPS, git
+`master` @ `840273b`). Client support for admin deletion landed in
+`purgeCommunityRemote` (`adminSigner`) + `src/lib/admins.ts`. The relay-side
+rule below is live: the write-policy plugin validates operator kind-5 `k`
+tags against the Concord set and finishes the cross-author deletion with
+`strfry delete` (strfry's native NIP-09 is same-author only). Verified
+end-to-end — one operator kind-5 physically removed a wrap and the
+sponsorship record (kind 39998).
 
 ## Rule 1 — invite bundles open to anyone (kind 33301)
 

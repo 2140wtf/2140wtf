@@ -55,9 +55,14 @@ npub — operators pass rule 3, everyone else is refused (intended). Channel
 streams are seeded with a founder message at creation so all later member
 writes are "known author" writes.
 
-## This week
+## Deployment status (2026-08-11)
 
-- [ ] Deploy rules 1–3 to the relay write policy
-- [ ] Verify: operator creates ₿AO + link natively on relay.bao.network;
-      non-operator creation refused; member join/chat unaffected;
-      operator kind-5 deletes a whole ₿AO
+- [x] Rules 1–3 deployed to the relay write policy (`/opt/bao-relay` on the
+      relay VPS, git `master` @ `840273b`). The operator kind-5 rule is
+      enforced by the plugin itself: it validates the `k` tags against
+      {1059, 21059, 13302, 13303, 33301, 39998} and finishes the cross-author
+      deletion with `strfry delete`, because strfry's native NIP-09 removes
+      same-author events only.
+- [x] Verified live end-to-end (throwaway operator key, removed after):
+      sponsored wrap (kind 1059) and the sponsorship record (kind 39998)
+      were both physically deleted by one operator-signed kind-5.

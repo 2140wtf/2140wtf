@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Operator purge of a ₿AO now works end-to-end on relay.bao.network: the relay's write policy honors operator-signed kind-5 deletions across authors for the Concord kinds (wraps, invite bundles, and the kind-39998 sponsorship record that used to be left behind).
 - ₿AO community creation no longer rejects the first-party BAO relay: its NIP-11 document advertises NIP-09 but is unreadable from browsers (missing CORS header), so first-party relays now fall back to an operator attestation on transport failure while arbitrary relays stay fail-closed; exclusion messages now distinguish "does not advertise" from "could not be verified".
 - The Create/Cancel buttons in the new-community dialog now sit directly under the relay list, above relay discovery and the custom relay input, so the primary action needs no scrolling.
 - Onboarding now loads complete BAO-backed follow packs and avatars, preselects fiatjaf, 2140.wtf, and ₿AO HQ, requires five follows, and removes the sync bypass.
