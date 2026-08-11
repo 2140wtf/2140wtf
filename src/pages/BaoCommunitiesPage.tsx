@@ -292,10 +292,10 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <span className="font-medium text-foreground">Privacy tip:</span>{" "}
                 Messages, members, and community details are encrypted — relays only
                 store ciphertext. What a relay can still see is how active your
-                community is, and who gets a direct invite (invite links don&apos;t tag
-                anyone). The default relays are fine for most groups. Want maximum
-                privacy? Pick a single relay you control, and share links instead of
-                direct invites. Nothing is pre-selected — your choice is yours.
+                community is and the public event metadata needed to route it. The
+                default relays are fine for most groups. Want maximum privacy? Pick a
+                single relay you control and share invitation links. Nothing is
+                pre-selected — your choice is yours.
               </p>
 
               <div className="max-h-40 space-y-1.5 overflow-y-auto overscroll-contain pr-1 pt-1">
@@ -398,41 +398,38 @@ function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-xs text-muted-foreground">
+              <div className="flex min-w-0 flex-nowrap items-center justify-between gap-2 pt-1">
+                <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                   {picked.length === 0
-                    ? "Pick at least one relay to enable Create."
-                    : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked${picked.length > MAX_COMMUNITY_RELAYS ? ` — only the first ${MAX_COMMUNITY_RELAYS} are used` : ""}`}
+                    ? "Pick a relay"
+                    : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked`}
                 </p>
-              </div>
-            </div>
-
-            <div className="flex flex-nowrap items-center justify-between gap-2 pt-2">
-              {starterCandidates.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-muted-foreground"
-                  disabled={busy}
-                  onClick={() => {
-                    if (allSuggestedRelaysPicked) {
-                      setPicked([]);
-                    } else {
-                      setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
-                    }
-                  }}
-                >
-                  {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
-                </Button>
-              ) : <span />}
-              <div className="flex flex-nowrap items-center gap-2">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
-                {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-              </Button>
+                <div className="flex shrink-0 flex-nowrap items-center gap-1">
+                  {starterCandidates.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="px-2 text-xs text-muted-foreground"
+                      disabled={busy}
+                      onClick={() => {
+                        if (allSuggestedRelaysPicked) {
+                          setPicked([]);
+                        } else {
+                          setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
+                        }
+                      }}
+                    >
+                      {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
+                    </Button>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" className="px-2 text-xs" onClick={() => onOpenChange(false)} disabled={busy}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" className="px-3" disabled={busy || !name.trim() || picked.length === 0}>
+                    {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
+                  </Button>
+                </div>
               </div>
             </div>
           </form>
