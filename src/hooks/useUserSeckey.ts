@@ -5,8 +5,7 @@ import { nip19 } from 'nostr-tools';
 /**
  * Return the raw Nostr secret key bytes for the current login, if the user is
  * logged in with a local nsec. Extension and bunker logins cannot expose their
- * private key, so real juror ceremonies that require NIP-44 share encryption
- * currently require an nsec login.
+ * private key.
  */
 export function useUserSeckey(): Uint8Array | undefined {
   const { logins } = useNostrLogin();
