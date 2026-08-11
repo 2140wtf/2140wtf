@@ -383,7 +383,7 @@ export function SidebarNavList({
             );
           }
           // These destinations are rendered as children of the ₿AOs group.
-          if (id === 'bao-fund' || id === 'prediction-markets' || id === 'court') return null;
+          if (id === 'bao-fund' || id === 'prediction-markets') return null;
 
           if (id === 'media') {
             return (
