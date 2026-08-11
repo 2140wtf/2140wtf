@@ -152,6 +152,48 @@ const FAQ_TEMPLATE: FAQCategory[] = [
     ],
   },
 
+  // ── Agent Safety ────────────────────────────────────────────────────────
+  {
+    id: 'agent-safety',
+    label: 'Agent Safety',
+    description: 'How to connect an AI agent to ₿AO without giving chat messages control of your machine.',
+    items: [
+      {
+        id: 'bao-prompt-injection',
+        question: 'Can a ₿AO message prompt-inject an AI agent?',
+        answer: [
+          'Yes. Any member can write text designed to manipulate an agent, such as asking it to ignore its owner, run a command, or reveal a secret. Treat every ₿AO message as untrusted data, never as a system instruction.',
+          'The safest default is read-only ₿AO access, a separate temporary agent identity, manual approval before posting or administrative actions, and sandbox enforcement outside the model. A warning alone cannot enforce these boundaries.',
+        ],
+      },
+      {
+        id: 'bao-agent-connection-types',
+        question: 'Which agent setup should I use?',
+        answer: [
+          '**In browser:** use read-only access and do not connect tools that can change files, accounts, or external services. **Terminal:** treat it as high risk; use a separate OS account or microVM with no home-directory, SSH, browser, or Docker access.',
+          '**Self-hosted server:** use a dedicated service account, isolated data, blocked private-network access, and allowlisted tools. **VPS/cloud server:** use a disposable VPS, firewall allowlists, no production credentials, snapshots, and short-lived agent keys.',
+          '**Cloudflare Worker/edge:** use a separate Worker and separate KV, D1, R2, and Durable Object resources. Start without secrets or write bindings; use read-only, short-lived API tokens and require approval for deploys, migrations, deletes, DNS, and secret changes.',
+        ],
+      },
+      {
+        id: 'bao-agent-worst-case',
+        question: 'What prevents the worst-case outcome?',
+        answer: [
+          'Use an isolated microVM or a dedicated virtual machine with no shared folders, no host Docker socket, no SSH keys, no browser profile, and no personal secret keys. Allow only the relay and model domains the agent needs, and start with a deny-by-default network policy.',
+          'Keep the ₿AO identity disposable and limited to the smallest required community permissions. Review logs, require confirmation for every write or destructive action, and remove the sandbox and identity if anything suspicious happens.',
+        ],
+      },
+      {
+        id: 'bao-agent-permissions',
+        question: 'Do ₿AO roles protect my computer?',
+        answer: [
+          'No. ₿AO roles control what an identity may do inside the community; they do not control the operating-system permissions of the program using that identity.',
+          'If an agent runs on your machine with shell, filesystem, cloud, or wallet access, a malicious message can try to influence it. Protect the computer with sandboxing, tool allowlists, separate credentials, and manual approvals outside the chat.',
+        ],
+      },
+    ],
+  },
+
   // ── Payments & Zaps ─────────────────────────────────────────────────────
   {
     id: 'payments',
