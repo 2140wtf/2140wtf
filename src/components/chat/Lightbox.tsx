@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { BlurhashCanvas } from "@/components/BlurhashCanvas";
 import { useAndroidBack } from "@/hooks/useAndroidBack";
 import { useResolvedMediaSrc } from "@/hooks/useResolvedMediaSrc";
+import { openUrl } from "@/lib/downloadFile";
 import { cn } from "@/lib/utils";
 
 import type { EncryptedRef } from "@/hooks/useResolvedMediaSrc";
@@ -380,7 +381,7 @@ function LightboxDownloadButton({ image }: { image: EncryptedRef }) {
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        window.open(resolved.src, "_blank", "noopener,noreferrer");
+        void openUrl(resolved.src).catch(() => {});
       }}
     >
       <Download className="size-5" />
