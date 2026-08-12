@@ -338,8 +338,16 @@ function inlineCssVariables(svg: string): string {
     },
   );
 
-  // The definitions are inlined now — drop the style blocks entirely.
-  return substituted.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '');
+  // The definitions are inlined now — drop the style blocks entirely. Loop
+  // until no more matches remain so nested or overlapping style blocks can't
+  // leave dangerous content behind.
+  let withoutStyles = substituted;
+  const styleBlockRe = /<style\b[^>]*>[\s\S]*?<\/style>/gi;
+  while (styleBlockRe.test(withoutStyles)) {
+    withoutStyles = withoutStyles.replace(styleBlockRe, '');
+    styleBlockRe.lastIndex = 0;
+  }
+  return withoutStyles;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

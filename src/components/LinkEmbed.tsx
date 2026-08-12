@@ -19,6 +19,7 @@ import {
   extractRedditPost,
   extractArchiveOrgId,
 } from '@/lib/linkEmbed';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 interface LinkEmbedProps {
@@ -82,6 +83,7 @@ export function LinkEmbed({ url, className, navigateToComments, showActions = tr
 function DiscussBar({ url, showActions = true }: { url: string; showActions?: boolean }) {
   const navigate = useNavigate();
   const { data: linkPreview } = useLinkPreview(url);
+  const safeUrl = sanitizeUrl(url);
 
   const domain = useMemo(() => {
     try {
@@ -101,7 +103,7 @@ function DiscussBar({ url, showActions = true }: { url: string; showActions?: bo
         <span className="truncate">{providerName}</span>
 
         <a
-          href={url}
+          href={safeUrl ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           className={cn(

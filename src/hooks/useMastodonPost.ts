@@ -31,19 +31,10 @@ interface RawMastodonStatus {
   replies_count: number;
 }
 
-/** Strip HTML tags and decode common HTML entities to get plaintext. */
+/** Strip HTML tags and decode HTML entities to get plaintext using DOMParser. */
 function htmlToPlaintext(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>\s*<p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .trim();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return (doc.body.textContent ?? '').trim();
 }
 
 /**

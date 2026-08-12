@@ -171,10 +171,6 @@ async function fetchFileSong(
  */
 function htmlToText(html: string | undefined): string | null {
   if (!html) return null;
-  if (typeof DOMParser === 'undefined') {
-    const stripped = html.replace(/<[^>]*>/g, '').trim();
-    return stripped || null;
-  }
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const text = (doc.body.textContent ?? '').trim();
   return text || null;

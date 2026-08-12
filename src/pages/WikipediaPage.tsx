@@ -25,6 +25,7 @@ import {
   type OnThisDayEvent,
   type NewsItem,
 } from '@/hooks/useWikipediaFeatured';
+import DOMPurify from 'dompurify';
 import { useWikipediaSearch, type WikipediaSearchResult } from '@/hooks/useWikipediaSearch';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 import { cn } from '@/lib/utils';
@@ -311,12 +312,10 @@ function OnThisDayCard({ event }: { event: OnThisDayEvent }) {
 // ---------------------------------------------------------------------------
 
 function NewsCard({ item }: { item: NewsItem }) {
-  // Extract clean text from HTML story
+  // Extract clean text from HTML story. Use DOMPurify to strip all tags and
+  // comments instead of regex, which CodeQL flags as incomplete HTML filtering.
   const storyText = useMemo(() => {
-    return item.story
-      .replace(/<!--.*?-->/g, '') // remove comments
-      .replace(/<\/?[^>]+(>|$)/g, '') // strip HTML tags
-      .trim();
+    return DOMPurify.sanitize(item.story, { ALLOWED_TAGS: [] }).trim();
   }, [item.story]);
 
   const mainLink = item.links[0];

@@ -162,7 +162,8 @@ export function embedLabel(url: string): string | null {
   if (extractRedditPost(url)) return 'Reddit';
   if (extractArchiveOrgId(url)) return 'Internet Archive';
   try {
-    if (new URL(url).hostname.replace(/^www\./, '').endsWith('lightningobservatory.com')) {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'lightningobservatory.com' || host === 'www.lightningobservatory.com') {
       return 'Lightning Observatory';
     }
   } catch {

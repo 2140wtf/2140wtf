@@ -176,7 +176,7 @@ export function useFeedSettings() {
     if (order.length === 0) return;
 
     const observatoryId = "lightning-observatory";
-    const legacyObservatoryUrl = "https://lightningobservatory.com/";
+    const legacyObservatoryEntry = "https://lightningobservatory.com/";
     const next = [...order];
     let changed = false;
 
@@ -188,7 +188,8 @@ export function useFeedSettings() {
       changed = true;
     }
 
-    if (!next.includes(observatoryId) && !next.includes(legacyObservatoryUrl)) {
+    const hasObservatory = next.includes(observatoryId) || next.includes(legacyObservatoryEntry);
+    if (!hasObservatory) {
       const petsIdx = next.indexOf("pets");
       if (petsIdx !== -1) {
         next.splice(petsIdx + 1, 0, observatoryId);

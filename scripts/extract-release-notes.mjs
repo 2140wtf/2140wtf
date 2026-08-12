@@ -64,20 +64,18 @@ function parseArgs(args) {
  */
 function extractSection(markdown, version) {
   const lines = markdown.split('\n');
-  const headingPattern = new RegExp(
-    `^## \\[${version.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\]`,
-  );
-  const nextHeadingPattern = /^## \[/;
+  const expectedHeading = `## [${version}]`;
+  const nextHeadingPrefix = '## [';
   let inSection = false;
   const out = [];
   for (const line of lines) {
     if (!inSection) {
-      if (headingPattern.test(line)) {
+      if (line.startsWith(expectedHeading)) {
         inSection = true;
         continue;
       }
     } else {
-      if (nextHeadingPattern.test(line)) break;
+      if (line.startsWith(nextHeadingPrefix)) break;
       out.push(line);
     }
   }
