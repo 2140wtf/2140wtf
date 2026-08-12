@@ -15,6 +15,7 @@ import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { usePublishPreferences } from './usePublishPreferences';
+import { useNostrStorage } from './useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
 import {
@@ -44,6 +45,7 @@ export function useNostrPetProfileNormalization({
   const { nostr } = useNostr();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   // Track whether we've already normalized this profile (by event id)
   const normalizedEventIds = useRef<Set<string>>(new Set());
@@ -83,11 +85,12 @@ export function useNostrPetProfileNormalization({
     // Perform async normalization
     const normalize = async () => {
       try {
-        // Fetch fresh profile from relays to avoid stale-read overwrites
+        // Fetch fresh profile from relays to avoid stale-read overwrites,
+        // falling back to the local event store if the relay round-trip fails.
         const fresh = await fetchFreshEvent(nostr, {
           kinds: [KIND_NOSTR_PET_PROFILE],
           authors: [user.pubkey],
-        });
+        }, { store });
         // If no fresh profile found on relays, use the cached one (first publish)
         const base = fresh ?? profile.event;
 
@@ -118,5 +121,5 @@ export function useNostrPetProfileNormalization({
     };
     
     normalize();
-  }, [profile, user?.pubkey, nostr, publishEvent, updateProfileEvent, invalidateProfile, isEnabled]);
+  }, [profile, user?.pubkey, nostr, publishEvent, updateProfileEvent, invalidateProfile, isEnabled, store]);
 }

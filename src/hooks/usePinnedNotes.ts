@@ -2,6 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { useNostrStorage } from './useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
@@ -16,6 +17,7 @@ export function usePinnedNotes(pubkey?: string) {
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   // Query the pinned notes list (kind 10001 — replaceable event).
   // On the profile page, useProfileData seeds this cache key, so the staleTime
@@ -51,11 +53,13 @@ export function usePinnedNotes(pubkey?: string) {
       if (!user) throw new Error('User is not logged in');
       if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
-      // Fetch the freshest kind 10001 from relays before mutating
+      // Fetch the freshest kind 10001 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss/timeout cannot
+      // wipe the existing pinned-notes list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [10001],
         authors: [user.pubkey],
-      });
+      }, { store });
 
       const currentTags = prev?.tags ?? [];
       const currentlyPinned = currentTags.some(

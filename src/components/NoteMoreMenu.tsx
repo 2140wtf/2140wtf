@@ -472,11 +472,13 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
             label="View Event JSON"
             onClick={onViewEventJson}
           />
-          <MenuItem
-            icon={<Bookmark className={cn("size-5", bookmarked && "fill-current")} />}
-            label={bookmarked ? 'Remove Bookmark' : 'Bookmark'}
-            onClick={handleBookmark}
-          />
+          {user && (
+            <MenuItem
+              icon={<Bookmark className={cn("size-5", bookmarked && "fill-current")} />}
+              label={bookmarked ? 'Remove Bookmark' : 'Bookmark'}
+              onClick={handleBookmark}
+            />
+          )}
           {user && (
             <MenuItem
               icon={<ListPlus className="size-5" />}
@@ -484,11 +486,13 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
               onClick={() => { onAddToList(); }}
             />
           )}
-          <MenuItem
-            icon={isInSidebar ? <Trash2 className="size-5" /> : <PanelLeft className="size-5" />}
-            label={isInSidebar ? 'Remove from sidebar' : 'Add to sidebar'}
-            onClick={handleToggleSidebar}
-          />
+          {user && (
+            <MenuItem
+              icon={isInSidebar ? <Trash2 className="size-5" /> : <PanelLeft className="size-5" />}
+              label={isInSidebar ? 'Remove from sidebar' : 'Add to sidebar'}
+              onClick={handleToggleSidebar}
+            />
+          )}
         </div>
 
         <Separator />

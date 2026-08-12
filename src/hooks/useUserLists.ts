@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateUUID } from '@/lib/uuid';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { useNostrStorage } from './useNostrStorage';
 import { useFollowPacks } from './useFollowPacks';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
@@ -141,6 +142,10 @@ async function parseListEventWithDecryption(
 /**
  * Re-encrypt private pubkeys back into the content field.
  * Returns empty string if there are no private items.
+ *
+ * Prefer NIP-44, but fall back to legacy NIP-04 so the list still works with
+ * older or minimal signers. The decrypt path auto-detects the format by looking
+ * for '?iv=' in the ciphertext.
  */
 async function encryptPrivateTags(
   privatePubkeys: string[],
@@ -148,13 +153,16 @@ async function encryptPrivateTags(
   pubkey: string,
 ): Promise<string> {
   if (privatePubkeys.length === 0) return '';
-  if (!signer.nip44) {
-    console.warn('Cannot re-encrypt private list items: signer does not support NIP-44');
-    return '';
-  }
   const tags = privatePubkeys.map((pk) => ['p', pk]);
   const plaintext = JSON.stringify(tags);
-  return signer.nip44.encrypt(pubkey, plaintext);
+  if (signer.nip44) {
+    return signer.nip44.encrypt(pubkey, plaintext);
+  }
+  if (signer.nip04) {
+    return signer.nip04.encrypt(pubkey, plaintext);
+  }
+  console.warn('Cannot re-encrypt private list items: signer does not support NIP-44 or NIP-04');
+  return '';
 }
 
 export function useUserLists() {
@@ -163,6 +171,7 @@ export function useUserLists() {
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   /** Fetch all Follow Sets for the current user, excluding deleted ones */
   const listsQuery = useQuery({
@@ -233,12 +242,14 @@ export function useUserLists() {
       if (!user) throw new Error('Must be logged in');
       if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
-      // Fetch the freshest version of this specific list from relays
+      // Fetch the freshest version of this specific list from relays, with
+      // the local event store as a fallback floor so a relay miss/timeout
+      // cannot wipe the list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [30000],
         authors: [user.pubkey],
         '#d': [listId],
-      });
+      }, { store });
 
       if (!prev) throw new Error('List not found');
 
@@ -267,12 +278,14 @@ export function useUserLists() {
       if (!user) throw new Error('Must be logged in');
       if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
-      // Fetch the freshest version of this specific list from relays
+      // Fetch the freshest version of this specific list from relays, with
+      // the local event store as a fallback floor so a relay miss/timeout
+      // cannot wipe the list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [30000],
         authors: [user.pubkey],
         '#d': [listId],
-      });
+      }, { store });
 
       if (!prev) throw new Error('List not found');
 
@@ -303,12 +316,14 @@ export function useUserLists() {
       if (!user) throw new Error('Must be logged in');
       if (!isEnabled('lists')) throw new Error('Lists publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
-      // Fetch the freshest version of this specific list from relays
+      // Fetch the freshest version of this specific list from relays, with
+      // the local event store as a fallback floor so a relay miss/timeout
+      // cannot wipe the list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [30000],
         authors: [user.pubkey],
         '#d': [listId],
-      });
+      }, { store });
 
       if (!prev) throw new Error('List not found');
 

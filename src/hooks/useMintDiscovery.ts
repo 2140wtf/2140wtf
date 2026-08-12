@@ -7,6 +7,7 @@ import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useFollows } from '@/hooks/useFollows';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import {
   CASHU_MINT_ANNOUNCEMENT_KIND,
   CASHU_MINT_RECOMMENDATION_KIND,
@@ -244,6 +245,7 @@ function averageRating(recommendations: CashuMintRecommendation[]): number | und
 export function usePublishMintRecommendation() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { store } = useNostrStorage();
   const { mutateAsync, isPending, error } = useNostrPublish();
 
   const publishReview = useCallback(
@@ -255,14 +257,14 @@ export function usePublishMintRecommendation() {
         kinds: [CASHU_MINT_RECOMMENDATION_KIND],
         authors: [user.pubkey],
         '#d': [input.mintId.trim()],
-      });
+      }, { store });
 
       return mutateAsync({
         ...template,
         prev: prev ?? undefined,
       });
     },
-    [nostr, user, mutateAsync],
+    [nostr, user, mutateAsync, store],
   );
 
   return {
