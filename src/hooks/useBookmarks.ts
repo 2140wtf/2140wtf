@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
 import { usePublishPreferences } from './usePublishPreferences';
+import { useNostrStorage } from './useNostrStorage';
 import { toast } from './useToast';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 
@@ -13,6 +14,7 @@ export function useBookmarks() {
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
   const bookmarksEnabled = isEnabled('bookmarks');
 
   // Query the user's bookmark list (kind 10003 — replaceable event)
@@ -65,11 +67,13 @@ export function useBookmarks() {
     mutationFn: async (eventId: string) => {
       if (!user) throw new Error('User is not logged in');
 
-      // Fetch the freshest kind 10003 from relays before mutating
+      // Fetch the freshest kind 10003 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss/timeout cannot
+      // wipe the existing bookmark list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [10003],
         authors: [user.pubkey],
-      });
+      }, { store });
 
       const currentTags = prev?.tags ?? [];
       const currentlyBookmarked = currentTags.some(

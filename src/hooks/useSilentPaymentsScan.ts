@@ -7,6 +7,7 @@ import { nip19 } from 'nostr-tools';
 
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { deriveSilentPaymentKeysFromNsec } from '@/lib/hdWallet';
 import { fetchBlockEntries, fetchIndexerTipHeight } from '@/lib/sp/indexer';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
@@ -126,6 +127,7 @@ export function useSilentPaymentsScan(): UseSilentPaymentsScanResult {
   const { logins } = useNostrLogin();
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { store } = useNostrStorage();
   const queryClient = useQueryClient();
 
   const indexerUrl = (config.bip352IndexerUrl ?? '').trim();
@@ -262,13 +264,15 @@ export function useSilentPaymentsScan(): UseSilentPaymentsScanResult {
 
       let prev: Awaited<ReturnType<typeof fetchFreshEvent>> = null;
       try {
+        // Use the local event store as a floor so a relay failure doesn't
+        // overwrite the remote storage document with the local one.
         prev = await fetchFreshEvent(nostr, {
           kinds: [30078],
           authors: [user.pubkey],
           '#d': [dTag],
-        });
+        }, { store });
       } catch {
-        // Relay read failed — publish the local doc as-is rather than blocking.
+        // Relay read failed and no local floor — publish the local doc as-is.
       }
 
       let merged = next;

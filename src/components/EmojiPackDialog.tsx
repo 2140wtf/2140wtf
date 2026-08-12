@@ -20,6 +20,7 @@ import { CustomEmojiImg } from '@/components/CustomEmoji';
 import { SortableList, SortableItem } from '@/components/SortableList';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
@@ -77,6 +78,7 @@ interface EmojiPackDialogProps {
 export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDialogProps) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+  const { store } = useNostrStorage();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { mutateAsync: uploadFile } = useUploadFile();
   const queryClient = useQueryClient();
@@ -346,7 +348,7 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
           kinds: [30030],
           authors: [user.pubkey],
           '#d': [resolvedId],
-        });
+        }, { store });
         if (prev) {
           preservedTags = prev.tags.filter(
             ([n]) => n !== 'd' && n !== 'name' && n !== 'about' && n !== 'emoji',
@@ -393,7 +395,7 @@ export function EmojiPackDialog({ open, onOpenChange, editEvent }: EmojiPackDial
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, effectiveIdentifier, name, about, emojis, isEditMode, nostr, publishEvent, uploadFile, queryClient, toast, handleOpenChange, isEnabled]);
+  }, [user, effectiveIdentifier, name, about, emojis, isEditMode, nostr, publishEvent, uploadFile, queryClient, toast, handleOpenChange, isEnabled, store]);
 
   // Validation
   const pendingCount = emojis.filter((e) => e.file).length;

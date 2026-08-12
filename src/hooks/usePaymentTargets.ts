@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import {
@@ -59,6 +60,7 @@ export function useUpdatePaymentTargets() {
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   return useMutation({
     mutationFn: async (targets: PaymentTarget[]) => {
@@ -68,7 +70,7 @@ export function useUpdatePaymentTargets() {
       const prev = await fetchFreshEvent(nostr, {
         kinds: [PAYMENT_TARGETS_KIND],
         authors: [user.pubkey],
-      });
+      }, { store });
 
       const tags: string[][] = [
         ...paymentTargetsToTags(targets),

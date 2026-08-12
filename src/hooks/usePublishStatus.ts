@@ -3,6 +3,7 @@ import { useNostr } from '@nostrify/react';
 
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
@@ -25,18 +26,20 @@ export function usePublishStatus() {
   const { mutateAsync: createEvent } = useNostrPublish();
   const { user } = useCurrentUser();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   return useMutation({
     mutationFn: async ({ status, url }: PublishStatusParams) => {
       if (!user?.pubkey) return;
       if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
 
-      // Fetch the previous event to preserve published_at (addressable event convention)
+      // Fetch the previous event to preserve published_at (addressable event
+      // convention), falling back to the local event store on relay failure.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [30315],
         authors: [user.pubkey],
         '#d': ['general'],
-      });
+      }, { store });
 
       const tags: string[][] = [['d', 'general']];
       if (url) tags.push(['r', url]);

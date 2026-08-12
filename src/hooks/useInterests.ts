@@ -8,6 +8,7 @@ import { useNostr } from '@nostrify/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from './useCurrentUser';
 import { useNostrPublish } from './useNostrPublish';
+import { useNostrStorage } from './useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 
@@ -17,6 +18,7 @@ export function useInterests(tagName: 't' | 'g' = 't') {
   const queryClient = useQueryClient();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
+  const { store } = useNostrStorage();
 
   const interestsQuery = useQuery({
     queryKey: ['interests', user?.pubkey],
@@ -58,11 +60,13 @@ export function useInterests(tagName: 't' | 'g' = 't') {
       const normalized = tag.toLowerCase().replace(/^#/, '');
       if (!normalized) throw new Error('Empty tag');
 
-      // Fetch the freshest kind 10015 from relays before mutating
+      // Fetch the freshest kind 10015 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss/timeout cannot
+      // wipe the existing interests list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [10015],
         authors: [user.pubkey],
-      });
+      }, { store });
 
       const currentTags = prev?.tags ?? [];
 
@@ -87,11 +91,13 @@ export function useInterests(tagName: 't' | 'g' = 't') {
       if (!isEnabled('profile')) throw new Error('Profile publishing is disabled. Turn it on in Settings → Privacy & Publishing.');
       const normalized = tag.toLowerCase().replace(/^#/, '');
 
-      // Fetch the freshest kind 10015 from relays before mutating
+      // Fetch the freshest kind 10015 from relays before mutating, with the
+      // local event store as a fallback floor so a relay miss/timeout cannot
+      // wipe the existing interests list.
       const prev = await fetchFreshEvent(nostr, {
         kinds: [10015],
         authors: [user.pubkey],
-      });
+      }, { store });
 
       if (!prev) return;
 
