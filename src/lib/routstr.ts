@@ -11,7 +11,7 @@
  */
 
 export const ROUTSTR_BASE_URL: string =
-  (import.meta.env.VITE_ROUTSTR_API_URL as string | undefined)?.replace(/\/+$/, '')
+  (import.meta.env.VITE_ROUTSTR_API_URL as string | undefined)?.trim().replace(/\/+$/, '')
   || 'https://api.routstr.com';
 
 export class RoutstrError extends Error {
@@ -100,29 +100,44 @@ export async function routstrTopupWithCashu(
   apiKey: string,
   cashuToken: string,
 ): Promise<{ balance: number; amountAdded?: number; currency?: string }> {
-  const res = await routstrFetch<{ balance: number; amount_added?: number; currency?: string }>(
+  const res = await routstrFetch<{ balance?: unknown; amount_added?: unknown; currency?: unknown }>(
     'POST',
     '/v1/balance/topup',
     { cashu_token: cashuToken },
     apiKey,
   );
-  return { balance: res.balance, amountAdded: res.amount_added, currency: res.currency };
+  if (typeof res.balance !== 'number' || !Number.isFinite(res.balance)) {
+    throw new RoutstrError('Routstr returned a malformed top-up response — the token may have been redeemed but the balance was not delivered.');
+  }
+  return {
+    balance: res.balance,
+    amountAdded: typeof res.amount_added === 'number' && Number.isFinite(res.amount_added) ? res.amount_added : undefined,
+    currency: typeof res.currency === 'string' ? res.currency : undefined,
+  };
 }
 
 /** Read the balance of an existing Routstr key. */
 export async function routstrGetBalance(apiKey: string): Promise<RoutstrBalance> {
   const res = await routstrFetch<{
-    api_key: string;
-    balance: number;
-    reserved?: number;
-    total_spent?: number;
-    total_requests?: number;
+    api_key?: unknown;
+    balance?: unknown;
+    reserved?: unknown;
+    total_spent?: unknown;
+    total_requests?: unknown;
   }>('GET', '/v1/balance/info', undefined, apiKey);
+  if (
+    typeof res.api_key !== 'string' ||
+    res.api_key.length === 0 ||
+    typeof res.balance !== 'number' ||
+    !Number.isFinite(res.balance)
+  ) {
+    throw new RoutstrError('Routstr returned a malformed balance response.');
+  }
   return {
     apiKey: res.api_key,
     balance: res.balance,
-    reserved: res.reserved,
-    totalSpent: res.total_spent,
-    totalRequests: res.total_requests,
+    reserved: typeof res.reserved === 'number' && Number.isFinite(res.reserved) ? res.reserved : undefined,
+    totalSpent: typeof res.total_spent === 'number' && Number.isFinite(res.total_spent) ? res.total_spent : undefined,
+    totalRequests: typeof res.total_requests === 'number' && Number.isFinite(res.total_requests) ? res.total_requests : undefined,
   };
 }
