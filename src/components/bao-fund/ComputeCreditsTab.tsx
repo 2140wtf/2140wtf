@@ -1431,9 +1431,14 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 placeholder="cashuA… / cashuB… unlocked token"
                 className="font-mono text-xs"
               />
+              {topupToken.trim().startsWith('cashu') && (extractTokenLockPubkeys(topupToken.trim()).length > 0 || hasUnsupportedLockSecrets(topupToken.trim())) && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  This token is locked — top-up will fail. Redeem it to your wallet first, then send yourself an unlocked token and top up with that.
+                </p>
+              )}
               <Button
                 size="sm" variant="outline" className="w-full gap-1.5"
-                disabled={!topupToken.trim().startsWith('cashu') || topupMutation.isPending}
+                disabled={!topupToken.trim().startsWith('cashu') || topupMutation.isPending || extractTokenLockPubkeys(topupToken.trim()).length > 0 || hasUnsupportedLockSecrets(topupToken.trim())}
                 onClick={() => topupMutation.mutate()}
               >
                 {topupMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
