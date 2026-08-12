@@ -104,7 +104,7 @@ server.registerTool(
   "get_project",
   {
     description:
-      "Read the public NIP-34 repository attached to this sealed community, including verified issues, pull requests, patches, and authoritative status signals. This explicitly contacts the repository relays and may reveal interest in that public project.",
+      "Read the public repository attached to this sealed community, including issues, pull requests, patches, and status signals. Any public git URL can be attached; maintainer review/approval is the trust boundary. This explicitly contacts the repository relays and may reveal interest in that public project.",
     inputSchema: {},
   },
   async () => {
