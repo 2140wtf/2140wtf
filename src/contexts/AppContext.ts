@@ -358,6 +358,11 @@ export interface AppConfig {
    * Example for local dev: "http://localhost:3460".
    */
   baoApiUrl?: string;
+  /**
+   * URL of the ₿AO MARKETS custom signet Mempool-compatible API used for
+   * ₿AO Court bond verification. When unset, bond verification is disabled.
+   */
+  baoCustomSignetMempoolUrl?: string;
   /** Optional Cashu P2PK pubkey for a trusted battle escrow operator. */
   petsBattleEscrowPubkey?: string;
   /** Optional URL to request release of battle escrow funds to the winner. */
