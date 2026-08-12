@@ -88,6 +88,9 @@ services/escrow-operator/dist/
 # Grant proposal experiment (local only, not for public repo)
 grant-proposal-experiment/
 
+# pi harness session artifacts
+.pi-subagents/
+
 # Encrypted signing-key backups — never commit, keep outside the repo
 *.gpg
 .gstack/
