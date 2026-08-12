@@ -352,7 +352,7 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 1. Commit locally as you work.
 2. Push to a feature branch.
-3. Open a pull request against `main`.
+3. Open a pull request against `main` with a description that explains what changed, why, how to verify it, and any follow-ups.
 4. Wait for the **test** GitHub Actions workflow to pass on the PR.
 5. Merge the PR (squash only if the commits are noisy; otherwise preserve the commits).
 6. Split unrelated work into separate PRs rather than skipping the commit/PR entirely.
