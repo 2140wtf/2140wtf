@@ -92,9 +92,9 @@ function isComputeCreditShot(value: number): value is ComputeCreditShot {
   return Number.isSafeInteger(value) && value >= 1 && value <= MAX_COMPUTE_CREDIT_TRANCHES;
 }
 
-function requestShot(request: ComputeCreditRequest, shot: number | undefined): ComputeCreditShot {
+function requestShot(request: ComputeCreditRequest, shot: number | undefined): ComputeCreditShot | undefined {
   const index = shot ?? 1;
-  return isComputeCreditShot(index) && index <= getComputeCreditTranches(request).length ? index : 1;
+  return isComputeCreditShot(index) && index <= getComputeCreditTranches(request).length ? index : undefined;
 }
 
 /**
@@ -118,6 +118,7 @@ export function confirmedComputeCreditAmounts(
     ) continue;
     seen.add(`${fulfillment.id}:${fulfillment.pubkey}:${fulfillment.shot ?? 1}:${fulfillment.amountSats}`);
     const shot = requestShot(request, fulfillment.shot);
+    if (shot === undefined) continue;
     amounts.set(shot, (amounts.get(shot) ?? 0) + fulfillment.amountSats);
   }
   return amounts;
@@ -350,12 +351,14 @@ export function computeCreditProgress(
   const claims = new Set(
     fulfillments
       .filter((f) => f.requestId === request.id && f.requesterPubkey === request.pubkey && f.pubkey !== request.pubkey)
-      .map((f) => requestShot(request, f.shot)),
+      .map((f) => requestShot(request, f.shot))
+      .filter((shot): shot is ComputeCreditShot => shot !== undefined),
   );
   const redeemed = new Set(
     receipts
       .filter((r) => r.requestId === request.id && r.pubkey === request.pubkey)
-      .map((r) => requestShot(request, r.shot)),
+      .map((r) => requestShot(request, r.shot))
+      .filter((shot): shot is ComputeCreditShot => shot !== undefined),
   );
   return shots.map((shot) => ({
     shot,
@@ -403,6 +406,7 @@ export function aggregateAgentCreditStats(input: {
     if (f.requesterPubkey !== agentPubkey) continue; // p tag must match the real requester
     if (f.pubkey !== agentPubkey) {
       const shot = requestShot(request, f.shot);
+      if (shot === undefined) continue;
       const byShot = claimsByRequest.get(f.requestId) ?? new Map<ComputeCreditShot, Set<string>>();
       const set = byShot.get(shot) ?? new Set<string>();
       set.add(f.pubkey);
