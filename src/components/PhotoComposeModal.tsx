@@ -18,6 +18,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { resizeImage } from '@/lib/resizeImage';
 import { extractHashtags } from '@/lib/hashtag';
+import { describeError } from '@/lib/errorCodes';
 import { cn } from '@/lib/utils';
 
 const MAX_CAPTION_CHARS = 2000;
@@ -127,9 +128,16 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
       let resizedDim: string | undefined;
 
       if (imageQuality === 'compressed') {
-        const resized = await resizeImage(file);
-        uploadableFile = resized.file;
-        resizedDim = resized.dimensions;
+        try {
+          const resized = await resizeImage(file);
+          uploadableFile = resized.file;
+          resizedDim = resized.dimensions;
+        } catch (resizeError) {
+          // Resizing can fail for uncommon formats or very large images.
+          // Fall back to the original file so the user can still publish.
+          console.warn('Image resize failed, falling back to original:', resizeError);
+          uploadableFile = file;
+        }
       } else {
         uploadableFile = file;
       }
@@ -157,8 +165,14 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
         blurhash,
         alt: '',
       }]);
-    } catch {
-      toast({ title: 'Upload failed', description: 'Could not upload image.', variant: 'destructive' });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      const { message, code } = describeError(error);
+      toast({
+        title: 'Upload failed',
+        description: code ? `${message} (${code})` : message,
+        variant: 'destructive',
+      });
     }
   }, [uploadFile, toast, imageQuality]);
 
