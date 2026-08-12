@@ -100,4 +100,36 @@ describe('fetchFreshEvent', () => {
     const result = await fetchFreshEvent(nostr, { kinds: [10000], authors: [PK] }, { store });
     expect(result).toEqual(cached);
   });
+
+  it('falls back to the cached event when the relay query throws', async () => {
+    const cached = makeEvent(1500, 'existing-mutes');
+    const store = mockStore(cached);
+    const nostr = {
+      query: vi.fn().mockRejectedValue(new Error('relay timeout')),
+    } as unknown as NPool;
+
+    const result = await fetchFreshEvent(nostr, { kinds: [10000], authors: [PK] }, { store });
+    expect(result).toEqual(cached);
+    expect(nostr.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when the relay query throws and no store is provided', async () => {
+    const nostr = {
+      query: vi.fn().mockRejectedValue(new Error('relay timeout')),
+    } as unknown as NPool;
+
+    await expect(
+      fetchFreshEvent(nostr, { kinds: [10000], authors: [PK] }),
+    ).rejects.toThrow('relay timeout');
+  });
+
+  it('returns null when the relay query throws and the store is empty', async () => {
+    const store = mockStore(null);
+    const nostr = {
+      query: vi.fn().mockRejectedValue(new Error('relay timeout')),
+    } as unknown as NPool;
+
+    const result = await fetchFreshEvent(nostr, { kinds: [10000], authors: [PK] }, { store });
+    expect(result).toBeNull();
+  });
 });
