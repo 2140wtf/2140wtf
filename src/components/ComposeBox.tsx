@@ -52,6 +52,7 @@ import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { resizeImage } from '@/lib/resizeImage';
 import { extractHashtags } from '@/lib/hashtag';
 import { parseAddr } from '@/lib/parseAddr';
+import { describeError } from '@/lib/errorCodes';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 const MAX_CHARS = 5000;
@@ -572,10 +573,17 @@ export function ComposeBox({
       let resizedDim: string | undefined;
 
       if (isImage && imageQuality === 'compressed') {
-        // Resize & optimize images before uploading for better performance.
-        const resized = await resizeImage(file);
-        uploadableFile = resized.file;
-        resizedDim = resized.dimensions;
+        try {
+          // Resize & optimize images before uploading for better performance.
+          const resized = await resizeImage(file);
+          uploadableFile = resized.file;
+          resizedDim = resized.dimensions;
+        } catch (resizeError) {
+          // Resizing can fail for uncommon formats or very large images.
+          // Fall back to the original file so the user can still publish.
+          console.warn('Image resize failed, falling back to original:', resizeError);
+          uploadableFile = file;
+        }
       } else {
         uploadableFile = file;
       }
@@ -587,7 +595,7 @@ export function ComposeBox({
       // Skip any the server already provided (Nostrify passes "dim" through).
       if (isImage) {
         const hasTag = (name: string) => tags.some((t) => t[0] === name);
-        // Use dimensions from resizeImage; compute blurhash from the resized file
+        // Use dimensions from resizeImage; compute blurhash from the uploaded file
         if (resizedDim && !hasTag('dim')) tags.push(['dim', resizedDim]);
         if (!hasTag('blurhash')) {
           const { blurhash } = await getImageMeta(uploadableFile);
@@ -600,8 +608,14 @@ export function ComposeBox({
       setContent((prev) => (prev ? prev + '\n' + url : url));
 
       expand();
-    } catch {
-      toast({ title: 'Upload failed', description: 'Could not upload file.', variant: 'destructive' });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      const { message, code } = describeError(error);
+      toast({
+        title: 'Upload failed',
+        description: code ? `${message} (${code})` : message,
+        variant: 'destructive',
+      });
     }
   }, [uploadFile, expand, toast, imageQuality]);
 
