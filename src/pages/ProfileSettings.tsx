@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useSeoMeta } from '@unhead/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -462,7 +463,7 @@ function SimpleXContactField({ value, onChange, disabled }: SimpleXContactFieldP
   const handleCopy = useCallback(async () => {
     if (!trimmed) return;
     try {
-      await navigator.clipboard.writeText(trimmed);
+      await writeClipboardText(trimmed);
       setCopied(true);
       toast({ title: 'Copied', description: 'SimpleX contact copied to clipboard' });
       setTimeout(() => setCopied(false), 2000);
@@ -1214,7 +1215,7 @@ function BackupKeySection() {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(nsec);
+      await writeClipboardText(nsec);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

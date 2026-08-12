@@ -1,4 +1,5 @@
 import { Download, FileIcon } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { getAvatarShape } from '@/lib/avatarShape';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { openUrl } from '@/lib/downloadFile';
 import { cn } from '@/lib/utils';
 
 /** Extract the first value of a tag by name. */
@@ -144,7 +146,19 @@ export function FileMetadataContent({ event, compact }: FileMetadataContentProps
             </p>
           </div>
           <Button variant="outline" size="sm" className="shrink-0 rounded-full gap-1.5" asChild>
-            <a href={url} download>
+            <a
+              href={url}
+              download
+              onClick={(e) => {
+                // <a download> silently no-ops in Capacitor's WKWebView.
+                // Fall back to the native share sheet so the user can open or
+                // save the file.
+                if (Capacitor.isNativePlatform()) {
+                  e.preventDefault();
+                  void openUrl(url).catch(() => {});
+                }
+              }}
+            >
               <Download className="size-3.5" />
               Download
             </a>

@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -35,7 +36,7 @@ function CopyButton({ text }: { text: string }) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

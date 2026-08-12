@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AlertTriangle, Loader2, Bitcoin, Copy, Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -554,7 +555,7 @@ function UnsupportedSignerQR({
   const copy = useCallback(
     async (value: string, which: 'address' | 'uri', label: string) => {
       try {
-        await navigator.clipboard.writeText(value);
+        await writeClipboardText(value);
         setCopied(which);
         toast({ title: 'Copied', description: `${label} copied to clipboard` });
         setTimeout(() => setCopied(null), 2000);

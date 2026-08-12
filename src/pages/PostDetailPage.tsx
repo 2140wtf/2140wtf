@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import type { NostrEvent } from "@nostrify/nostrify";
 import { useNostr } from "@nostrify/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -606,7 +607,7 @@ function CopyableHex({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(value).then(() => {
+    writeClipboardText(value).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }).catch(() => {

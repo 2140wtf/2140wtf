@@ -6,6 +6,9 @@
  *          `'copied'` if the URL was copied to clipboard,
  *          `'cancelled'` if the user dismissed the share sheet.
  */
+
+import { writeClipboardText } from '@/lib/clipboard';
+
 export async function shareOrCopy(url: string, title?: string): Promise<'shared' | 'copied' | 'cancelled'> {
   if (navigator.share) {
     try {
@@ -20,6 +23,6 @@ export async function shareOrCopy(url: string, title?: string): Promise<'shared'
     }
   }
 
-  await navigator.clipboard.writeText(url);
+  await writeClipboardText(url);
   return 'copied';
 }

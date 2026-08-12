@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useEffect, useState } from 'react';
 import { nip19 } from 'nostr-tools';
 import QRCode from 'qrcode';
@@ -46,7 +47,7 @@ export function FollowQRDialog({ open, onOpenChange }: FollowQRDialogProps) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(followUrl);
+      await writeClipboardText(followUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {

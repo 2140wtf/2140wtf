@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useMemo, useState } from 'react';
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react';
 
@@ -64,7 +65,7 @@ export function GenericPaymentContent({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(target.authority);
+      await writeClipboardText(target.authority);
       setCopied(true);
       toast({ title: 'Copied', description: `${method.label} address copied to clipboard` });
       setTimeout(() => setCopied(false), 2000);

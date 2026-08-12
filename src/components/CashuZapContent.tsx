@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { AlertTriangle, Check, Copy, Loader2, MessageCircle } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -237,7 +238,7 @@ export function CashuZapContent({
   const copyPendingToken = async () => {
     if (!pendingDmToken) return;
     try {
-      await navigator.clipboard.writeText(pendingDmToken.token);
+      await writeClipboardText(pendingDmToken.token);
       setCopiedPendingToken(true);
       setTimeout(() => setCopiedPendingToken(false), 2000);
     } catch {

@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Wallet as WalletIcon,
 } from 'lucide-react';
+import { writeClipboardText } from '@/lib/clipboard';
 
 import { Button } from '@/components/ui/button';
 import { CashuTokenQr } from '@/components/CashuTokenQr';
@@ -91,7 +92,7 @@ export function CashuWalletDrawer({
   const copyGeneratedToken = async () => {
     if (!generatedToken) return;
     try {
-      await navigator.clipboard.writeText(generatedToken);
+      await writeClipboardText(generatedToken);
       setCopiedToken(true);
       setTimeout(() => setCopiedToken(false), 2000);
     } catch {

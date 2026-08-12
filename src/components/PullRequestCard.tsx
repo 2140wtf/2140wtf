@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import type { NostrEvent } from "@nostrify/nostrify";
 import {
 	Copy,
@@ -42,7 +43,7 @@ export function PullRequestCard({
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = (url: string) => {
-		navigator.clipboard.writeText(url);
+		writeClipboardText(url);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};

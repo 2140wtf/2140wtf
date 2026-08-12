@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Check, Copy, Loader2, Palette } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -275,7 +276,7 @@ function AndroidCertBlock() {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(ANDROID_CERT_SHA256);
+    writeClipboardText(ANDROID_CERT_SHA256);
     setCopied(true);
     toast({ title: 'Certificate fingerprint copied' });
     setTimeout(() => setCopied(false), 2000);

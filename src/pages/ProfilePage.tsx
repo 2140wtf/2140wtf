@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
@@ -188,20 +189,20 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
   const handleFollowQR = () => openAfterClose(setFollowQROpen);
 
   const handleCopyPubkey = () => {
-    navigator.clipboard.writeText(npubEncoded);
+    writeClipboardText(npubEncoded);
     toast({ title: 'Public key copied to clipboard' });
     close();
   };
 
   const handleCopyShortLink = () => {
-    navigator.clipboard.writeText(shortLink);
+    writeClipboardText(shortLink);
     toast({ title: 'Short profile link copied to clipboard' });
     close();
   };
 
   const handleCopyLongLink = () => {
     const url = `${shareOrigin}/${npubEncoded}`;
-    navigator.clipboard.writeText(url);
+    writeClipboardText(url);
     toast({ title: 'Long profile link copied to clipboard' });
     close();
   };
@@ -550,7 +551,7 @@ function BitcoinQRModal({ address }: { address: string }) {
   }, [address]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(address);
+    await writeClipboardText(address);
     setCopied(true);
     toast({ title: 'Copied', description: 'Bitcoin address copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
@@ -639,7 +640,7 @@ function ProfileFieldInline({ field }: { field: { label: string; value: string }
   const isUrl = !!safeUrl;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(field.value);
+    await writeClipboardText(field.value);
     setCopied(true);
     toast({ title: 'Copied', description: 'Bitcoin address copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);

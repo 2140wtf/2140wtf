@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
@@ -864,7 +865,7 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
                 <code className="flex-1 text-[10px] break-all rounded bg-background/60 px-2 py-1.5 max-h-16 overflow-y-auto">{token}</code>
                 <Button
                   size="icon" variant="outline" className="shrink-0"
-                  onClick={() => { navigator.clipboard.writeText(token); toast({ title: 'Token copied' }); }}
+                  onClick={() => { writeClipboardText(token); toast({ title: 'Token copied' }); }}
                 >
                   <Copy className="size-3.5" />
                 </Button>
@@ -1398,7 +1399,7 @@ function RedeemCard({ myFundedRequests, onReceiptPublished }: {
                 <code className="flex-1 text-xs break-all rounded bg-background/60 px-2 py-1.5">{apiKey}</code>
                 <Button
                   size="icon" variant="outline" className="shrink-0"
-                  onClick={() => { navigator.clipboard.writeText(apiKey); toast({ title: 'Key copied' }); }}
+                  onClick={() => { writeClipboardText(apiKey); toast({ title: 'Key copied' }); }}
                 >
                   <Copy className="size-3.5" />
                 </Button>

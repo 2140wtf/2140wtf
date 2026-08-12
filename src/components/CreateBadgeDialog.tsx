@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { Award, Upload, Loader2, Check, Copy, Users } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
@@ -177,7 +178,7 @@ export function CreateBadgeDialog({ open, onOpenChange }: CreateBadgeDialogProps
       pubkey: createdBadge.pubkey,
       identifier: dTag,
     });
-    navigator.clipboard.writeText(`${shareOrigin}/${naddr}`);
+    writeClipboardText(`${shareOrigin}/${naddr}`);
     setCopied(true);
     toast({ title: 'Link copied to clipboard!' });
     setTimeout(() => setCopied(false), 2000);
