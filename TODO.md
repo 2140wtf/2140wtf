@@ -11,7 +11,10 @@
 
 ## Product / integrations
 
-- **Allow importing any GitHub project (not just verified/agent projects).** ✅ Done.
-  The repository field in ₿AO community metadata already accepts any public
-  https:// git URL. Descriptions and UI labels were updated to remove the
-  "verified" framing; maintainer review/approval remains the trust boundary.
+- **Allow importing any GitHub project (not just verified/agent projects).**
+  The current flow likely restricts project import to verified or agent-related
+  repositories. Since agents in ₿AO communities work alongside human maintainers
+  and all changes still go through normal maintainer review/approval, the
+  verification gate is not relevant. Add an import path that lets users bring in
+  any public GitHub repo/project and wire it into the workspace/feed. Keep the
+  approval workflow (PR review by maintainers) as the actual trust boundary.

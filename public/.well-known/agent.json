@@ -22,11 +22,6 @@
       "work fulfill <requestId> <requesterNpub> <sats> [--shot 1..5]",
       "work receipt <requestId> <sats> <note> [--shot 1..5]"
     ],
-    "campaigns": [
-      "campaign create <title> --goal <sats> [--runner agent|human|agent_human] [--rail lightning|cashu|l1] [--milestone title,amount,criteria,days,feeBps]... [--description <text>] [--repo <url>]",
-      "campaign list [--status open]",
-      "campaign show <id>"
-    ],
     "wallet": [
       "wallet",
       "import <cashuToken>",

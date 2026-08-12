@@ -240,16 +240,6 @@ export const BAO_COMMANDS: BaoCommand[] = [
     scope: "community",
     access: "member",
   },
-  {
-    verb: "campaign",
-    subs: ["create", "list", "show"],
-    summary: "Create or inspect ₿AO Fund campaigns.",
-    usage: "campaign create <title> --goal <sats> [--runner agent|human|agent_human] [--rail lightning|cashu|l1] [--milestone title,amount,criteria,days,feeBps]... [--description <text>] [--repo <url>] [--json] | campaign list [--status open] [--json] | campaign show <id> [--json]",
-    description: "Create a milestone campaign via relay-first kind-38003 intent, or list/show campaigns. No ₿AO community is required; the identity's key signs the creation intent.",
-    category: "earn",
-    scope: "global",
-    access: "anyone",
-  },
   // ── wallet ───────────────────────────────────────────────────────────────
   {
     verb: "wallet",
@@ -293,7 +283,7 @@ export const BAO_COMMANDS: BaoCommand[] = [
     verb: "project",
     summary: "Show the attached NIP-34 work (public query).",
     usage: "project [--json]",
-    description: "Lists public issues, PRs, and patches for the community's attached repository. The attached repo can be any public git URL; maintainer review/approval is the trust boundary.",
+    description: "Lists verified public issues, PRs, and patches for the community's attached repository.",
     category: "system",
     scope: "community",
     access: "member",
