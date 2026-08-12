@@ -25,7 +25,17 @@ Use `git status` and `git diff` to review changes, and `git log` to learn the pr
 
 When your changes are complete and validated, create a commit with a message that focuses on **why** the change was made (not just **what**). Summaries should fit on one line; a body is warranted for non-trivial changes.
 
-**Always commit when you are finished making changes. Non-negotiable — every completed task ends with a commit. Don't leave uncommitted changes.**
+**Always open a pull request when you are finished making changes. Non-negotiable — every completed task ends with a PR. Don't leave uncommitted changes, and never push directly to `main`.**
+
+Workflow:
+1. Validate locally with `npm run test` (or the relevant subset).
+2. Commit the changes to a feature branch.
+3. Push the branch to `origin`.
+4. Open a pull request against `main`.
+5. Wait for GitHub Actions **test** workflow to pass on the PR.
+6. Merge the PR.
+
+Only emergency rollbacks or CI-blocking repository hygiene fixes may bypass the PR requirement.
 
 ## Contributing Guide
 
