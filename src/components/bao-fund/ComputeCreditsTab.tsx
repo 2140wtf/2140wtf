@@ -668,6 +668,34 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
   // Shared cache with RedeemCard — which mints Routstr accepts for redeem.
   const routstrInfoQuery = useQuery({ queryKey: ['routstr-info'], queryFn: routstrGetInfo, staleTime: 5 * 60_000, retry: 1 });
 
+  // Pre-resolve the lock target for the confirmation dialog so the funder
+  // knows which mint's balance will actually be debited. The mutation still
+  // re-fetches the latest kind-10019 at send time; this is display-only.
+  const nutzapInfoQuery = useQuery({
+    queryKey: ['nutzap-info', request.pubkey],
+    queryFn: async ({ signal }) => {
+      const events = await nostr.query(
+        [{ kinds: [NUTZAP_INFO_KIND], authors: [request.pubkey], limit: 5 }],
+        { signal },
+      );
+      const valid = events
+        .filter((ev) => parseNutzapInfoEvent(ev, request.pubkey) !== null)
+        .sort((a, b) => b.created_at - a.created_at);
+      return valid.length > 0 ? parseNutzapInfoEvent(valid[0], request.pubkey) : null;
+    },
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const lockTarget = useMemo(() => resolveCreditLockTarget({
+    nutzapInfo: nutzapInfoQuery.data ?? null,
+    agentIdentityPubkey: request.pubkey,
+    funderMints: allMints.map((m) => m.url),
+    routstrMints: routstrInfoQuery.data?.mints ?? [],
+    activeMint: mintUrl,
+    allowBearer,
+  }), [nutzapInfoQuery.data, request.pubkey, allMints, routstrInfoQuery.data?.mints, mintUrl, allowBearer]);
+
   const publishReceipt = useMutation({
     mutationFn: async () => {
       await publish.mutateAsync(buildComputeCreditFulfillment({
@@ -971,8 +999,8 @@ function OpenRequestCard({ request, claims, confirmedAmounts, confirmedShots, on
           <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
             <p><span className="text-muted-foreground">Request:</span> {request.purpose}</p>
             <p><span className="text-muted-foreground">Donation:</span> {formatSats(fundAmount)} sats{isMultiShot ? ` · payout ${fundShot}/${tranches.length}` : ''}</p>
-            <p><span className="text-muted-foreground">Active mint:</span> <span className="break-all">{mintUrl}</span></p>
-            <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : 'P2PK lock selected automatically'}</p>
+            <p><span className="text-muted-foreground">Mint to debit:</span> <span className="break-all">{lockTarget.mintUrl}</span></p>
+            <p><span className="text-muted-foreground">Protection:</span> {allowBearer ? 'Unlocked bearer token (higher risk)' : lockTarget.mode === 'wallet-key' ? 'P2PK-locked to the agent\'s wallet key' : lockTarget.mode === 'identity-key' ? 'P2PK-locked to the agent\'s Nostr pubkey' : 'P2PK lock selected automatically'}</p>
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" disabled={fulfillMutation.isPending} onClick={() => setConfirmFunding(false)}>Cancel</Button>
