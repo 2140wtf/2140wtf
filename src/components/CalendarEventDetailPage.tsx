@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
@@ -218,7 +219,7 @@ export function CalendarEventDetailPage({ event }: { event: NostrEvent }) {
     });
     const url = `${shareOrigin}/${naddr}`;
     try {
-      await navigator.clipboard.writeText(url);
+      await writeClipboardText(url);
       toast({ title: 'Link copied to clipboard' });
     } catch {
       toast({ title: 'Failed to copy link', variant: 'destructive' });

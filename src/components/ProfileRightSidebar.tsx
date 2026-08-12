@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Copy, QrCode, ExternalLink, Bitcoin, ShieldAlert, Mail, MessageCircle } from 'lucide-react';
@@ -262,7 +263,7 @@ function BitcoinQRModal({ address }: { address: string }) {
   }, [address]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(address);
+    await writeClipboardText(address);
     setCopied(true);
     toast({ title: 'Copied', description: 'Bitcoin address copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
@@ -315,7 +316,7 @@ function SimpleXFieldRow({ value }: { value: string }) {
   const canOpen = trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('simplex:');
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(trimmed);
+    await writeClipboardText(trimmed);
     setCopied(true);
     toast({ title: 'Copied', description: 'SimpleX contact copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
@@ -410,7 +411,7 @@ function ProfileFieldRow({ field }: { field: ProfileField }) {
   const isSimpleX = field.label.toLowerCase() === 'simplex';
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(field.value);
+    await writeClipboardText(field.value);
     setCopied(true);
     toast({ title: 'Copied', description: 'Bitcoin address copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);

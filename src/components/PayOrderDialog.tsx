@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useEffect, useState } from 'react';
 import { Check, Copy, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -148,7 +149,7 @@ export function PayOrderDialog({
   };
 
   const copyValue = () => {
-    navigator.clipboard.writeText(selected?.value ?? '');
+    writeClipboardText(selected?.value ?? '');
     toast({ title: 'Copied to clipboard' });
   };
 

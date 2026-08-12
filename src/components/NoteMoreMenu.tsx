@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState } from 'react';
 import { nip19 } from 'nostr-tools';
 import { useNavigate } from 'react-router-dom';
@@ -123,7 +124,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(text);
+    writeClipboardText(text);
     setCopied(true);
     toast({ title: `${label} copied to clipboard` });
     setTimeout(() => setCopied(false), 2000);
@@ -372,7 +373,7 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
     // hint-free (it's persisted in settings), but a copied link must resolve
     // for someone whose relays never saw the event.
     const url = `${shareOrigin}/${encodeEventNip19(event, relayHints)}`;
-    navigator.clipboard.writeText(url);
+    writeClipboardText(url);
     toast({ title: 'Link copied to clipboard' });
     close();
   };

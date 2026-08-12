@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import type { NostrEvent } from "@nostrify/nostrify";
 import { BookMarked, Copy, Check, Globe } from "lucide-react";
 import { useState } from "react";
@@ -43,7 +44,7 @@ export function GitRepoCard({ event }: GitRepoCardProps) {
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = (url: string) => {
-		navigator.clipboard.writeText(url);
+		writeClipboardText(url);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
 	};

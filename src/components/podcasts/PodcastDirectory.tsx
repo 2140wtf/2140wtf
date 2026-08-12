@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { Check, Copy, ExternalLink, Rss, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -27,7 +28,7 @@ function PodcastCard({ podcast }: { podcast: PodcastEntry }) {
     e.preventDefault();
     e.stopPropagation();
     if (!podcast.feedUrl) return;
-    navigator.clipboard.writeText(podcast.feedUrl).then(() => {
+    writeClipboardText(podcast.feedUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }).catch(() => {});

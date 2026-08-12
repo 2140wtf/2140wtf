@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Share2, Globe } from 'lucide-react';
@@ -112,7 +113,7 @@ export function CommunityContent({ event }: { event: NostrEvent }) {
     });
     const url = `${shareOrigin}/${naddr}`;
     try {
-      await navigator.clipboard.writeText(url);
+      await writeClipboardText(url);
       toast({ title: 'Link copied to clipboard' });
     } catch {
       toast({ title: 'Failed to copy link', variant: 'destructive' });

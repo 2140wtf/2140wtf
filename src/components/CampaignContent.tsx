@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { CalendarClock, Check, Copy, ExternalLink, HandHeart, MapPin, ShieldCheck, Target, Zap } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -279,7 +280,7 @@ function DonateButton({ event, wallets, title }: DonateButtonProps) {
 
   const copy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(bip21);
+      await writeClipboardText(bip21);
       setCopied(true);
       toast({ title: 'Copied', description: 'Payment address copied to clipboard' });
       setTimeout(() => setCopied(false), 2000);

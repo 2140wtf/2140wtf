@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useCallback, useEffect } from 'react';
 import { Zap, Copy, Check, ExternalLink } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -52,7 +53,7 @@ export function LightningInvoiceCard({ invoice, className }: LightningInvoiceCar
   const handleCopy = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(invoice);
+      await writeClipboardText(invoice);
       setCopied(true);
       toast({ title: 'Copied', description: 'Lightning invoice copied to clipboard' });
     } catch {

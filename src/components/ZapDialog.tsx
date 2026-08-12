@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useState, useEffect, useRef, useMemo, useCallback, forwardRef } from 'react';
 import { Copy, Check, ExternalLink, X, Loader2, ChevronDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -610,7 +611,7 @@ export function ZapDialog({
 
   const handleCopy = async () => {
     if (invoice) {
-      await navigator.clipboard.writeText(invoice);
+      await writeClipboardText(invoice);
       setCopied(true);
       toast({
         title: 'Invoice copied',

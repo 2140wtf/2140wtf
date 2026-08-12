@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useInView } from 'react-intersection-observer';
@@ -197,7 +198,7 @@ function FollowView({ pubkey }: { pubkey: string }) {
 
   const handleCopyNpub = async () => {
     try {
-      await navigator.clipboard.writeText(npub);
+      await writeClipboardText(npub);
       setNpubCopied(true);
       setTimeout(() => setNpubCopied(false), 2000);
     } catch {

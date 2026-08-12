@@ -13,6 +13,7 @@ import type { BtcShop } from '@/lib/btcmap/btcmap';
 import { safeUrl } from '@/lib/btcmap/discover';
 import { sanitizeTel, sanitizeEmail, isValidCoordinate, getTypeIcon } from '@/lib/btcmap/discover';
 import { openUrl } from '@/lib/downloadFile';
+import { writeClipboardText } from '@/lib/clipboard';
 
 export interface PopupShop extends BtcShop {
   distance?: string;
@@ -75,7 +76,7 @@ export default function ShopMapPopup({
     if (navigator.share) {
       try { await navigator.share(shareData); } catch { /* user cancelled */ }
     } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareData.url).catch(() => {});
+      writeClipboardText(shareData.url).catch(() => {});
     }
   };
 

@@ -23,6 +23,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { usePetsNostrPublish } from '@/pets/core/hooks/usePetsNostrPublish';
 import { toast } from '@/hooks/useToast';
+import { writeClipboardText } from '@/lib/clipboard';
 import { fetchBlockHeight } from '@/lib/bitcoin';
 import { impactLight, impactMedium, impactHeavy, notificationSuccess } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
@@ -1069,7 +1070,7 @@ export function PetsHatchingCeremony({
                   variant="outline"
                   className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                   onClick={async () => {
-                    await navigator.clipboard.writeText(changeInvoice);
+                    await writeClipboardText(changeInvoice);
                     setInvoiceCopied(true);
                     scheduleTimeout(() => setInvoiceCopied(false), 2_000);
                   }}

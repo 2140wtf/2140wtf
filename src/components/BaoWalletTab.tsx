@@ -1,3 +1,4 @@
+import { writeClipboardText } from '@/lib/clipboard';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowDownLeft,
@@ -637,7 +638,7 @@ function LightningPanel({
   const copyInvoice = async () => {
     if (!invoiceQuote?.request) return;
     try {
-      await navigator.clipboard.writeText(invoiceQuote.request);
+      await writeClipboardText(invoiceQuote.request);
       setCopiedInvoice(true);
       setTimeout(() => setCopiedInvoice(false), 2000);
     } catch {
@@ -942,7 +943,7 @@ function CashuPanel({ wallet, signer, onApiChanged, apiCashuBalance }: { wallet:
 
   const copyToClipboard = async (text: string, setCopied: (v: boolean) => void) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeClipboardText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
