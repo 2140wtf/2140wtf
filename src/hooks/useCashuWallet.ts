@@ -2868,11 +2868,21 @@ export function useCashuWallet(
         // clearing proof recovery. React state/effects run too late to cover a
         // process kill immediately after this function resolves.
         if (deliveryOutbox) {
-          localStorage.setItem(deliveryOutbox.key, JSON.stringify({
-            token: tokenStr,
-            ...(deliveryOutbox.metadata ?? {}),
-            dmState: 'failed',
-          }));
+          try {
+            localStorage.setItem(deliveryOutbox.key, JSON.stringify({
+              token: tokenStr,
+              ...(deliveryOutbox.metadata ?? {}),
+              dmState: 'failed',
+            }));
+          } catch (e) {
+            // Outbox persistence is a durability convenience, not a
+            // correctness requirement. The encoded token is already returned
+            // to the caller; aborting here would lose/misrepresent it while
+            // the mint has already spent the inputs. Log and continue so the
+            // caller can display the token and the send-recovery journal is
+            // cleared normally.
+            devLog.warn('Failed to persist delivery outbox:', e);
+          }
         }
         // Encoding and any requested durable handoff succeeded.
         storageRef.current.clearSendRecovery(normalizedMint);
