@@ -8,6 +8,7 @@ import { isVerifiedOwnEvent } from '@/lib/nostrEvents';
 import { getStorageKey } from '@/lib/storageKey';
 import { useCurrentUser } from './useCurrentUser';
 import { useUploadFile } from './useUploadFile';
+import { useNostrStorage } from './useNostrStorage';
 import { fetchFreshEvent } from '@/lib/fetchFreshEvent';
 import { buildBlossomBackupTag, createBackupFile, fetchEncryptedBackup, parseBlossomBackupTag } from '@/lib/encryptedBackup';
 import type { Theme, FeedSettings, ContentWarningPolicy, SavedFeed, WidgetConfig } from '@/contexts/AppContext';
@@ -196,6 +197,7 @@ export function useEncryptedSettings() {
   const { config } = useAppContext();
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { store } = useNostrStorage();
   const { mutateAsync: uploadFile } = useUploadFile();
   const queryClient = useQueryClient();
 
@@ -309,7 +311,7 @@ export function useEncryptedSettings() {
           kinds: [30078],
           authors: [user.pubkey],
           '#d': [`${config.appId}/metadata`],
-        });
+        }, { store });
         // fetchFreshEvent verifies the signature and author, but double-check
         // before we decrypt and merge so a malicious relay response can't roll
         // settings back.

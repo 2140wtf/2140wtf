@@ -4,6 +4,74 @@ import { sha256 } from "@noble/hashes/sha2.js";
 const HEX_32 = /^[0-9a-f]{64}$/;
 const COORD_30617 = /^30617:([0-9a-f]{64}):(.+)$/;
 
+/** Validate a 64-character lowercase hex string (32 bytes). */
+export function isHex64(value: string): boolean {
+  return HEX_32.test(value);
+}
+
+/** Validate a well-formed HTTPS URL. */
+export function isValidHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** Field-level validation for {@link MilestoneEvidenceV1} inputs.
+ *  Does NOT require the full {@link WorkContractV1}; use this in UIs that build
+ *  evidence before a contract is bound. Empty optional fields are skipped.
+ */
+export interface MilestoneEvidenceFieldErrors {
+  delivered_commit?: string;
+  delivered_tree?: string;
+  artifact_event_ids?: string;
+  archive_url?: string;
+  archive_sha256?: string;
+  test_command?: string;
+  workflow_hash?: string;
+  toolchain_hash?: string;
+  issue_event_id?: string;
+}
+
+export function validateMilestoneEvidenceFields(
+  evidence: Partial<MilestoneEvidenceV1>,
+): { valid: boolean; errors: MilestoneEvidenceFieldErrors } {
+  const errors: MilestoneEvidenceFieldErrors = {};
+
+  if (evidence.delivered_commit !== undefined && evidence.delivered_commit !== '' && !isHex64(evidence.delivered_commit)) {
+    errors.delivered_commit = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.delivered_tree !== undefined && evidence.delivered_tree !== '' && !isHex64(evidence.delivered_tree)) {
+    errors.delivered_tree = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.workflow_hash !== undefined && evidence.workflow_hash !== '' && !isHex64(evidence.workflow_hash)) {
+    errors.workflow_hash = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.toolchain_hash !== undefined && evidence.toolchain_hash !== '' && !isHex64(evidence.toolchain_hash)) {
+    errors.toolchain_hash = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.issue_event_id !== undefined && evidence.issue_event_id !== '' && !isHex64(evidence.issue_event_id)) {
+    errors.issue_event_id = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.archive?.url !== undefined && evidence.archive.url !== '' && !isValidHttpsUrl(evidence.archive.url)) {
+    errors.archive_url = 'Must be a valid https:// URL.';
+  }
+  if (evidence.archive?.sha256 !== undefined && evidence.archive.sha256 !== '' && !isHex64(evidence.archive.sha256)) {
+    errors.archive_sha256 = 'Must be 64 lowercase hex characters.';
+  }
+  if (evidence.test_command !== undefined && evidence.test_command.trim() === '') {
+    errors.test_command = 'Test command is required.';
+  }
+  if (evidence.artifact_event_ids !== undefined) {
+    const bad = evidence.artifact_event_ids.filter((id) => id !== '' && !isHex64(id));
+    if (bad.length > 0) errors.artifact_event_ids = 'Each event id must be 64 lowercase hex characters.';
+  }
+
+  return { valid: Object.keys(errors).length === 0, errors };
+}
+
 export interface WorkMilestoneV1 {
   id: string;
   title: string;
