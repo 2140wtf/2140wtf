@@ -143,9 +143,9 @@ async function parseListEventWithDecryption(
  * Re-encrypt private pubkeys back into the content field.
  * Returns empty string if there are no private items.
  *
- * Prefer NIP-44, but fall back to legacy NIP-04 so the list still works with
- * older or minimal signers. The decrypt path auto-detects the format by looking
- * for '?iv=' in the ciphertext.
+ * Requires NIP-44. We intentionally do NOT fall back to NIP-04 for encryption:
+ * NIP-04 is weak and we require a modern signer. The decrypt path still
+ * supports NIP-04 so legacy lists can be read.
  */
 async function encryptPrivateTags(
   privatePubkeys: string[],
@@ -153,16 +153,12 @@ async function encryptPrivateTags(
   pubkey: string,
 ): Promise<string> {
   if (privatePubkeys.length === 0) return '';
+  if (!signer.nip44) {
+    throw new Error('NIP-44 encryption not supported by signer');
+  }
   const tags = privatePubkeys.map((pk) => ['p', pk]);
   const plaintext = JSON.stringify(tags);
-  if (signer.nip44) {
-    return signer.nip44.encrypt(pubkey, plaintext);
-  }
-  if (signer.nip04) {
-    return signer.nip04.encrypt(pubkey, plaintext);
-  }
-  console.warn('Cannot re-encrypt private list items: signer does not support NIP-44 or NIP-04');
-  return '';
+  return signer.nip44.encrypt(pubkey, plaintext);
 }
 
 export function useUserLists() {
