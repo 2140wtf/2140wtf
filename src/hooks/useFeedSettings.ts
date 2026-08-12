@@ -40,7 +40,7 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
 };
 
 /** Destinations rendered inside a parent group rather than as standalone rows. */
-const GROUPED_SIDEBAR_CHILD_IDS = new Set(['bao-fund', 'prediction-markets']);
+const GROUPED_SIDEBAR_CHILD_IDS = new Set(['bao-fund', 'prediction-markets', 'court']);
 
 /**
  * Compute the ordered list of visible sidebar items.

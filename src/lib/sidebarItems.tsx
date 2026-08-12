@@ -18,6 +18,7 @@ import {
   Clapperboard,
   Code,
   Film,
+  Gavel,
   HandCoins,
   HelpCircle,
   Info,
@@ -162,6 +163,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
+  { id: "court", label: "₿AO Court", path: "/court", icon: Gavel, requiresAuth: true },
   { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   {
     id: "btcmap",
