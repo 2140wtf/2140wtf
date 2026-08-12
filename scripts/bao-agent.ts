@@ -67,6 +67,8 @@ import {
   waitForInterrupt,
 } from "./chat-core";
 import { exportWorkHistory, fulfillCredits, listCreditInbox, listWork, printWorkListing, receiptCredits, requestCredits, resolvePubkey, validateWorkHistory } from "./work-core";
+import { createCampaign, isValidRail, listCampaigns, showCampaign } from "./campaign-core";
+import { BAO_LIVE_RAILS } from "@/lib/baoFundraising";
 import {
   loadState as loadParadiseState,
   readFuel,
@@ -189,7 +191,16 @@ function argValue(args: string[], flag: string): string | undefined {
 }
 
 /** Flags whose NEXT token is a value (not a positional arg). */
-const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec", "--tranches", "--shot"];
+const VALUE_FLAGS = ["--as", "--key", "--orch", "--timeout", "--name", "--label", "--channel", "--nsec", "--tranches", "--shot", "--goal", "--runner", "--rail", "--description", "--repo", "--status"];
+
+/** All occurrences of a value flag (for repeatable flags like --milestone). */
+function argValues(args: string[], flag: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length - 1; i++) {
+    if (args[i] === flag) out.push(args[i + 1]);
+  }
+  return out;
+}
 
 /** Positional args: everything that isn't a --flag or a value flag's value. */
 function positionalArgs(args: string[]): string[] {
@@ -476,6 +487,47 @@ async function mainDispatch(mode: string, rest: string[], _line: string): Promis
         break;
       }
       throw new Error("work needs: list | inbox | export <path> | import <path> | request <sats> <purpose> | fulfill <reqId> <requesterNpub> <sats> | receipt <reqId> <sats> <note>  [--dry-run]");
+    }
+    case "campaign": {
+      const pos = positionalArgs(rest);
+      const sub = pos[0];
+      const dryRun = rest.includes("--dry-run");
+      if (sub === "list") {
+        await listCampaigns(argValue(rest, "--status"), json);
+        break;
+      }
+      if (sub === "show") {
+        const id = pos[1];
+        if (!id) throw new Error("campaign show needs <id>");
+        await showCampaign(id, json);
+        break;
+      }
+      if (sub === "create") {
+        const title = pos.slice(1).join(" ");
+        const goal = Number(argValue(rest, "--goal"));
+        const runner = (argValue(rest, "--runner") ?? "agent") as "agent" | "human" | "agent_human";
+        const rail = argValue(rest, "--rail") ?? "lightning";
+        const description = argValue(rest, "--description");
+        const repoUrl = argValue(rest, "--repo");
+        const milestones = argValues(rest, "--milestone");
+        if (!title) throw new Error("campaign create needs <title>");
+        if (!Number.isSafeInteger(goal) || goal < 1000) throw new Error("--goal must be an integer >= 1000 sats");
+        if (!["agent", "human", "agent_human"].includes(runner)) throw new Error("--runner must be agent, human, or agent_human");
+        if (!isValidRail(rail)) throw new Error(`--rail must be one of ${BAO_LIVE_RAILS.join(", ")}`);
+        const result = await createCampaign(
+          loadState(as),
+          { title, goalSats: goal, runner, rail, description, repoUrl, milestones },
+          dryRun,
+        );
+        if (json) {
+          console.log(JSON.stringify(result));
+        } else {
+          console.log(`${dryRun ? "[dry-run] " : ""}campaign created via ${result.via}: ${result.id}`);
+          console.log(`  ${result.url}`);
+        }
+        break;
+      }
+      throw new Error("campaign needs: create <title> --goal <sats> [--runner agent|human|agent_human] [--rail lightning|cashu|l1] [--milestone title,amount,criteria,days,feeBps]... [--description <text>] [--repo <url>] [--json] | list [--status open] [--json] | show <id> [--json]");
     }
     case "wallet": {
       const state = loadState(as);
