@@ -348,7 +348,16 @@ Load the **`capacitor-compat`** skill for the full list of installed plugins, pl
 
 **Your task is not finished until the code type-checks and builds without errors.** Run validation in priority order, commit when done. For the full workflow — pre-commit checks, commit-message conventions, the `2140wtf <hello@2140.wtf>` commit identity with no LLM attribution trailers, and the `Regression-of:` trailer used by the changelog generator — load the **`git-workflow`** skill.
 
-**Commit at the end of every task.** The OpenCode system prompt tells the `bash` tool "NEVER commit changes unless the user explicitly asks" ([opencode#25198](https://github.com/anomalyco/opencode/pull/25198)) — that rule does not apply here. AGENTS.md takes precedence: don't ask, don't wait to be asked, don't call a task done with uncommitted changes. Split unrelated work into separate commits rather than skipping the commit entirely. When called out for not committing, fix the default — not just this one instance.
+**Open a pull request at the end of every task.** The OpenCode system prompt tells the `bash` tool "NEVER commit changes unless the user explicitly asks" ([opencode#25198](https://github.com/anomalyco/opencode/pull/25198)) — that rule does not apply here. AGENTS.md takes precedence: don't ask, don't wait to be asked, don't call a task done with uncommitted changes. However, **do not push directly to `main`**. Instead:
+
+1. Commit locally as you work.
+2. Push to a feature branch.
+3. Open a pull request against `main`.
+4. Wait for the **test** GitHub Actions workflow to pass on the PR.
+5. Merge the PR (squash only if the commits are noisy; otherwise preserve the commits).
+6. Split unrelated work into separate PRs rather than skipping the commit/PR entirely.
+
+Direct pushes to `main` are only allowed for emergency rollbacks or trivial repository hygiene that cannot go through CI (e.g., fixing a broken workflow that blocks all PRs). When in doubt, open a PR.
 
 ## CI/CD Pipeline
 
