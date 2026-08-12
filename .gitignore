@@ -94,16 +94,3 @@ grant-proposal-experiment/
 # Encrypted signing-key backups — never commit, keep outside the repo
 *.gpg
 .gstack/
-
-# ₿AO Court — proprietary BAO Markets source, kept local only
-src/components/bao-court/
-src/hooks/useBaoCourt*.ts
-src/hooks/useBondEscrow.ts
-src/hooks/useDemoCourtRoom.ts
-src/hooks/useJuror*.ts
-src/lib/baoCourt*.ts
-src/pages/CourtPage.tsx
-vendor/frost-court/
-e2e/fixtures/court.ts
-e2e/specs/frost-demo.spec.ts
-docs/BAO_COURT_*.md
