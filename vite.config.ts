@@ -156,10 +156,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     optimizeDeps: {
-      // @vbyte/frost is native ESM and Vite's dev pre-bundler repeatedly
-      // invalidates its optimized artifact, making /court return a 504 until
-      // the server is restarted. Serve the package directly instead.
-      exclude: ['@vbyte/frost', '@capacitor/filesystem', '@capacitor/share'],
+      exclude: ['@capacitor/filesystem', '@capacitor/share'],
       // These dependencies are reached primarily through lazy routes. Without
       // startup discovery, Vite can invalidate its dependency graph on the
       // first navigation and answer with 504 Outdated Optimize Dep, forcing a
@@ -168,7 +165,6 @@ export default defineConfig(({ mode }) => {
         'leaflet',
         'leaflet.markercluster',
         '@radix-ui/react-accordion',
-        '@bao/frost-court',
       ],
     },
     server: {

@@ -378,13 +378,12 @@ export function SidebarNavList({
                   { id: 'bao-chat', label: '₿AO Community', path: '/bao/community' },
                   { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/fund' },
                   { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/markets' },
-                  { id: 'court', label: '₿AO Court', path: '/court' },
                 ]}
               />
             );
           }
           // These destinations are rendered as children of the ₿AOs group.
-          if (id === 'bao-fund' || id === 'prediction-markets' || id === 'court') return null;
+          if (id === 'bao-fund' || id === 'prediction-markets') return null;
 
           if (id === 'media') {
             return (
