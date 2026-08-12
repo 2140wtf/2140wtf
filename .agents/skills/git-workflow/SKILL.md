@@ -31,7 +31,11 @@ Workflow:
 1. Validate locally with `npm run test` (or the relevant subset).
 2. Commit the changes to a feature branch.
 3. Push the branch to `origin`.
-4. Open a pull request against `main`.
+4. Open a pull request against `main` with a clear description that includes:
+   - **What** changed (bullet list of user-visible or architectural changes).
+   - **Why** the change was needed.
+   - **How** to verify it (tests run, manual steps, affected files).
+   - Any follow-up work or known limitations.
 5. Wait for GitHub Actions **test** workflow to pass on the PR.
 6. Merge the PR.
 
