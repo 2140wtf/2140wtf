@@ -50,6 +50,14 @@ describe('isLikelyMainnetMint', () => {
     expect(isLikelyMainnetMint('http://mint.example.com')).toBe(false);
     expect(isLikelyMainnetMint('http://localhost:3338')).toBe(false);
   });
+
+  it('does not reject legitimate mainnet hosts that happen to contain marker substrings', () => {
+    // These are real-word substrings, not boundary-delimited test/demo markers.
+    expect(isLikelyMainnetMint('https://developerdao.cashu.example.com')).toBe(true);
+    expect(isLikelyMainnetMint('https://device-mint.example.com')).toBe(true);
+    expect(isLikelyMainnetMint('https://mintdevice.example.com')).toBe(true);
+    expect(isLikelyMainnetMint('https://stagemint.example.com')).toBe(true);
+  });
 });
 
 describe('buildComputeCreditRequest', () => {
