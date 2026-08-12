@@ -1,5 +1,6 @@
-import { Capacitor } from '@capacitor/core';
 import { useNavigate } from 'react-router-dom';
+
+import { openUrl } from '@/lib/downloadFile';
 
 /**
  * Returns onClick and onAuxClick handlers for navigating to a post URL.
@@ -14,10 +15,9 @@ export function useOpenPost(path: string) {
   const onAuxClick = (e: React.MouseEvent) => {
     if (e.button !== 1) return;
     e.preventDefault();
-    // No tabs exist inside a Capacitor WebView; window.open on native either
-    // no-ops or resolves to a broken capacitor://localhost/… URL.
-    if (Capacitor.isNativePlatform()) return;
-    window.open(path, '_blank', 'noopener,noreferrer');
+    // openUrl bridges web (new tab) and native (share sheet) so middle-click
+    // works everywhere instead of no-oping inside the Capacitor WebView.
+    void openUrl(path).catch(() => {});
   };
 
   return { onClick, onAuxClick };
