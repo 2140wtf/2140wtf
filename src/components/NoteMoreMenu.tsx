@@ -494,7 +494,7 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
         <Separator />
 
         <div className="py-1">
-          {!isOwnPost && (
+          {user && !isOwnPost && (
             <MenuItem
               icon={<BellOff className="size-5" />}
               label="Mute Conversation"
@@ -523,7 +523,7 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
               destructive
             />
           )}
-          {!isOwnPost && (
+          {user && !isOwnPost && (
             <MenuItem
               icon={<AtSign className="size-5" />}
               label={`Mention @${displayName}`}
@@ -532,7 +532,7 @@ function NoteMoreMenuContent({ event, open, onOpenChange, onReport, onMention, o
           )}
         </div>
 
-        {!isOwnPost && (
+        {user && !isOwnPost && (
           <>
             <Separator />
 

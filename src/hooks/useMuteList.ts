@@ -350,7 +350,6 @@ export function useMuteList() {
       });
       return;
     }
-    if (!user.signer.nip44) throw new Error('NIP-44 encryption not supported');
 
     const tags: string[][] = [];
 
@@ -365,9 +364,19 @@ export function useMuteList() {
       tags.push(tag);
     }
 
-    // Encrypt all mutes
+    // Encrypt all mutes. Prefer NIP-44, but fall back to legacy NIP-04 when the
+    // signer does not expose nip44 — NIP-51 allows either, and some older or
+    // minimal signers only support nip04. The decrypt path auto-detects the
+    // format by looking for '?iv=' in the ciphertext.
     const plaintext = JSON.stringify(tags);
-    const content = await user.signer.nip44.encrypt(user.pubkey, plaintext);
+    let content: string;
+    if (user.signer.nip44) {
+      content = await user.signer.nip44.encrypt(user.pubkey, plaintext);
+    } else if (user.signer.nip04) {
+      content = await user.signer.nip04.encrypt(user.pubkey, plaintext);
+    } else {
+      throw new Error('NIP-44 or NIP-04 encryption not supported by signer');
+    }
 
     await publishEvent({
       kind: 10000,
