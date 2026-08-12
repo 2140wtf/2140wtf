@@ -165,6 +165,10 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         if (!vapidKey) {
           try {
             vapidKey = await client.getVapidKey(DOMAIN);
+            // The VAPID key is public application data, not a user secret.
+            // Caching it avoids a network round-trip inside the user-gesture
+            // chain required by pushManager.subscribe().
+            // lgtm[js/clear-text-storage-of-sensitive-information]
             localStorage.setItem(VAPID_KEY_CACHE, vapidKey);
           } catch (err) {
             console.warn('[push] Failed to pre-fetch VAPID key:', err);
@@ -278,6 +282,8 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       // this may still throw the insecure-operation error.
       console.warn('[push] VAPID key not pre-fetched; fetching now (may fail on strict browsers)');
       vapidPublicKey = await client.getVapidKey(DOMAIN);
+      // The VAPID key is public application data, not a user secret.
+      // lgtm[js/clear-text-storage-of-sensitive-information]
       localStorage.setItem(VAPID_KEY_CACHE, vapidPublicKey);
       vapidKeyRef.current = vapidPublicKey;
     }

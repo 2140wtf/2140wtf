@@ -11,6 +11,7 @@ import { Decoration } from '@milkdown/prose/view';
 import { replaceAll, callCommand } from '@milkdown/utils';
 import { MilkdownToolbar } from './MilkdownToolbar';
 import { LinkDialog } from './LinkDialog';
+import { sanitizeCssString } from '@/lib/fontLoader';
 
 interface MilkdownEditorInnerProps {
   value: string;
@@ -348,7 +349,7 @@ function MilkdownEditorInner({ value, onChange, onBlur, onUploadImage, placehold
           dir="auto"
           className="milkdown-content"
           onBlur={onBlur}
-          style={placeholder ? { '--ph': `"${placeholder.replace(/"/g, '\\"')}"` } as React.CSSProperties : undefined}
+          style={placeholder ? { '--ph': `"${sanitizeCssString(placeholder)}"` } as React.CSSProperties : undefined}
         >
           <Milkdown />
         </div>

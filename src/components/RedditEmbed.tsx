@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
 interface RedditEmbedProps {
@@ -18,17 +19,25 @@ interface RedditEmbedProps {
 export function RedditEmbed({ url, className }: RedditEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Convert the post URL to the embed URL
+  // Convert the post URL to the embed URL. Only accept https Reddit URLs so a
+  // malformed or javascript: URL can't become an iframe src.
   const embedUrl = (() => {
+    const safe = sanitizeUrl(url);
+    if (!safe) return 'about:blank';
     try {
-      const u = new URL(url);
+      const u = new URL(safe);
+      if (u.protocol !== 'https:') return 'about:blank';
+      const host = u.hostname.toLowerCase();
+      if (host !== 'www.reddit.com' && host !== 'old.reddit.com' && host !== 'reddit.com') {
+        return 'about:blank';
+      }
       u.hostname = 'embed.reddit.com';
       // Clean trailing query/hash
       u.search = '';
       u.hash = '';
       return u.toString();
     } catch {
-      return url;
+      return 'about:blank';
     }
   })();
 

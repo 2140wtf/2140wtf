@@ -16,12 +16,6 @@ interface EventsMapProps {
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
-  );
-}
-
 /**
  * Leaflet map of NIP-52 events pinned with a `g` geohash tag (what plektos
  * writes). One marker per located event; the popup links to the event's
@@ -80,11 +74,24 @@ export function EventsMap({ events, className }: EventsMapProps) {
       const marker = L.marker(latlng);
       const popupEl = document.createElement('div');
       popupEl.className = 'space-y-1';
-      popupEl.innerHTML = `
-        <div style="font-weight:600;line-height:1.3">${escapeHtml(event.title)}</div>
-        <div style="font-size:12px;opacity:0.75">${escapeHtml(formatCalendarEventWhen(event))}</div>
-        ${event.location ? `<div style="font-size:12px;opacity:0.75">📍 ${escapeHtml(event.location)}</div>` : ''}
-      `;
+
+      const titleEl = document.createElement('div');
+      titleEl.style.cssText = 'font-weight:600;line-height:1.3';
+      titleEl.textContent = event.title;
+      popupEl.appendChild(titleEl);
+
+      const whenEl = document.createElement('div');
+      whenEl.style.cssText = 'font-size:12px;opacity:0.75';
+      whenEl.textContent = formatCalendarEventWhen(event);
+      popupEl.appendChild(whenEl);
+
+      if (event.location) {
+        const locEl = document.createElement('div');
+        locEl.style.cssText = 'font-size:12px;opacity:0.75';
+        locEl.textContent = `📍 ${event.location}`;
+        popupEl.appendChild(locEl);
+      }
+
       const link = document.createElement('button');
       link.type = 'button';
       link.textContent = 'View event →';

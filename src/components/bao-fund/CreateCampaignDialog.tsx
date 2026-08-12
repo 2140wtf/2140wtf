@@ -134,6 +134,7 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
     setDescription('');
     setRepoUrl('');
     setWorkType('software');
+    setRunnerType('agent_human');
     setMilestones([emptyMilestone()]);
     // Also reset the options — leaving rail/subcategory/format behind silently
     // creates the next campaign with the previous one's stream format or rail.

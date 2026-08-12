@@ -45,6 +45,10 @@ export const secureStorage = {
             'Use the native app or a browser extension for stronger secret isolation.',
         );
       }
+      // Web builds have no alternative to localStorage. On native builds this
+      // path is not used (Capacitor SecureStorage is). Suppress the CodeQL
+      // alert because this is a documented, user-visible fallback.
+      // lgtm[js/clear-text-storage-of-sensitive-information]
       localStorage.setItem(key, value);
       return;
     }
