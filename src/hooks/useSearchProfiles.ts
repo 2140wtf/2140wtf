@@ -12,6 +12,24 @@ export interface SearchProfile {
   event: NostrEvent;
 }
 
+/** Score how well a profile matches a lowercase query. Higher is better. */
+function matchScore(profile: SearchProfile, query: string): number {
+  const name = profile.metadata.name?.toLowerCase() ?? '';
+  const displayName = profile.metadata.display_name?.toLowerCase() ?? '';
+  const nip05 = profile.metadata.nip05?.toLowerCase() ?? '';
+
+  // Exact match is best
+  if (name === query || displayName === query || nip05 === query) return 100;
+  // Prefix match is next
+  if (name.startsWith(query) || displayName.startsWith(query) || nip05.startsWith(query)) return 80;
+  // Word-boundary prefix match
+  const hasWordBoundary = (s: string) => s.split(/\s+/).some((word) => word.startsWith(query));
+  if (hasWordBoundary(name) || hasWordBoundary(displayName) || hasWordBoundary(nip05)) return 60;
+  // Contains match
+  if (name.includes(query) || displayName.includes(query) || nip05.includes(query)) return 40;
+  return 0;
+}
+
 /**
  * Search cached author profiles in the TanStack Query cache.
  * Scans all ['author', pubkey] entries for name/display_name/nip05 matches.
@@ -20,7 +38,7 @@ function searchCachedProfiles(
   queryClient: ReturnType<typeof useQueryClient>,
   query: string,
   followedPubkeys: Set<string>,
-  limit: number = 10,
+  limit: number = 50,
 ): SearchProfile[] {
   const lowerQuery = query.toLowerCase();
   const results: SearchProfile[] = [];
@@ -78,7 +96,7 @@ export function useSearchProfiles(query: string) {
       // content — exactly what a typeahead dropdown wants. Relays that don't
       // support the extension simply ignore the token.
       const events = await nostr.query(
-        [{ kinds: [0], search: `${debouncedQuery.trim()} autocomplete:true sort:top`, limit: 10 }],
+        [{ kinds: [0], search: `${debouncedQuery.trim()} autocomplete:true sort:top`, limit: 20 }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) },
       );
 
@@ -109,25 +127,42 @@ export function useSearchProfiles(query: string) {
     placeholderData: (prev) => prev,
   });
 
-  // Sort followed profiles ahead of non-followed, then fall back to
-  // cached author profiles when the relay search returns nothing.
+  // Merge relay results with cached author profiles. Relays may miss an
+  // account or rank it below the top N, so scanning the local cache ensures
+  // accounts the app has already loaded still surface. Results are deduped
+  // by pubkey and ranked by follow status + match quality.
   const data = useMemo(() => {
-    const relayData = relayResults.data;
+    const relayData = relayResults.data ?? [];
+    const query = debouncedQuery.trim().toLowerCase();
 
-    if (relayData && relayData.length > 0) {
-      return [...relayData].sort((a, b) => {
+    const cachedData = query.length >= 1
+      ? searchCachedProfiles(queryClient, debouncedQuery.trim(), followedPubkeys)
+      : [];
+
+    // Deduplicate by pubkey, keeping the latest kind-0 event.
+    const merged = new Map<string, SearchProfile>();
+    for (const profile of [...relayData, ...cachedData]) {
+      const existing = merged.get(profile.pubkey);
+      if (!existing || profile.event.created_at > existing.event.created_at) {
+        merged.set(profile.pubkey, profile);
+      }
+    }
+
+    return Array.from(merged.values())
+      .sort((a, b) => {
         const aFollowed = followedPubkeys.has(a.pubkey) ? 0 : 1;
         const bFollowed = followedPubkeys.has(b.pubkey) ? 0 : 1;
-        return aFollowed - bFollowed;
-      });
-    }
+        if (aFollowed !== bFollowed) return aFollowed - bFollowed;
 
-    // Relay returned nothing — search the local cache instead
-    if (debouncedQuery.trim().length >= 1) {
-      return searchCachedProfiles(queryClient, debouncedQuery.trim(), followedPubkeys);
-    }
+        const aScore = matchScore(a, query);
+        const bScore = matchScore(b, query);
+        if (bScore !== aScore) return bScore - aScore;
 
-    return relayData;
+        const aName = (a.metadata.name || a.metadata.display_name || '').toLowerCase();
+        const bName = (b.metadata.name || b.metadata.display_name || '').toLowerCase();
+        return aName.localeCompare(bName);
+      })
+      .slice(0, 10);
   }, [relayResults.data, followedPubkeys, debouncedQuery, queryClient]);
 
   return {
