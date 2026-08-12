@@ -316,17 +316,21 @@ function ProfileMoreMenu({ pubkey, displayName, open, onOpenChange, isOwnProfile
                   onClick={handleGiveBadge}
                 />
               )}
-              <MenuRow
-                icon={<VolumeX className="size-5" />}
-                label={userMuted ? `Unmute @${displayName}` : `Mute @${displayName}`}
-                onClick={handleMuteUser}
-              />
-              <MenuRow
-                icon={<Flag className="size-5" />}
-                label={`Report @${displayName}`}
-                onClick={handleReport}
-                destructive
-              />
+              {user && (
+                <MenuRow
+                  icon={<VolumeX className="size-5" />}
+                  label={userMuted ? `Unmute @${displayName}` : `Mute @${displayName}`}
+                  onClick={handleMuteUser}
+                />
+              )}
+              {user && (
+                <MenuRow
+                  icon={<Flag className="size-5" />}
+                  label={`Report @${displayName}`}
+                  onClick={handleReport}
+                  destructive
+                />
+              )}
             </div>
           </>
         )}

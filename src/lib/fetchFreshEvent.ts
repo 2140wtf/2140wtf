@@ -57,17 +57,25 @@ export async function fetchFreshEvent(
   const timeout = AbortSignal.timeout(10_000);
   const querySignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
 
-  const events = await nostr.query(
-    [{ ...filter, limit: 1 }],
-    { signal: querySignal },
-  );
+  let relayEvent: NostrEvent | null = null;
+  let relayError: unknown = null;
 
-  // Pick the most recent event in case multiple relays return different versions.
-  const relayEvent = events.length
-    ? events.reduce((latest, current) =>
-        current.created_at > latest.created_at ? current : latest,
-      )
-    : null;
+  try {
+    const events = await nostr.query(
+      [{ ...filter, limit: 1 }],
+      { signal: querySignal },
+    );
+
+    // Pick the most recent event in case multiple relays return different versions.
+    relayEvent = events.length
+      ? events.reduce((latest, current) =>
+          current.created_at > latest.created_at ? current : latest,
+        )
+      : null;
+  } catch (error) {
+    relayError = error;
+    console.warn('fetchFreshEvent relay query failed:', error);
+  }
 
   function isTrusted(event: NostrEvent): boolean {
     if (!verifyEvent(event)) return false;
@@ -76,6 +84,9 @@ export async function fetchFreshEvent(
   }
 
   if (!store) {
+    if (relayError) {
+      throw relayError;
+    }
     if (relayEvent && !isTrusted(relayEvent)) {
       throw new Error('Fetched event has an invalid signature or unexpected author.');
     }
@@ -84,7 +95,19 @@ export async function fetchFreshEvent(
 
   // Fall back to / compare against the locally cached copy so we never publish
   // a list older than the one we already have.
-  const [cached] = await store.query([filter]);
+  let cached: NostrEvent | undefined;
+  try {
+    [cached] = await store.query([filter]);
+  } catch (error) {
+    console.warn('fetchFreshEvent store query failed:', error);
+  }
+
+  if (relayError) {
+    // A relay timeout or connection error should not fail the mutation when we
+    // have a local floor. Use the cached copy if it verifies; otherwise return
+    // null and let the caller rebuild from an empty baseline.
+    return cached && isTrusted(cached) ? cached : null;
+  }
 
   if (!relayEvent) return cached && isTrusted(cached) ? cached : null;
   if (!isTrusted(relayEvent)) {
