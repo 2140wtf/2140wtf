@@ -321,9 +321,9 @@ function InfoBody({
           )
         )}
 
-        {/* Repository — where the community's code lives. Any public https:// git
-            URL works (GitHub, GitLab, gitworkshop.dev, …). Code review by
-            maintainers is the trust boundary; no separate verification gate. */}
+        {/* Repository — where the community's code lives (gitworkshop.dev
+            NIP-34 repo, GitHub, anywhere). Managers edit inline; everyone can
+            open it, and fundraisers for this community pre-fill from it. */}
         {editingField === "repo" ? (
           <InlineEdit
             initial={metadata?.repo ?? ""}
@@ -373,7 +373,6 @@ function InfoBody({
             </Button>
           )
         )}
-        <p className="text-xs text-muted-foreground">Any public https:// git repository can be attached. Maintainer review and approval remain the real trust boundary.</p>
 
         {/* A canonical NIP-34 coordinate unlocks the native Project workspace.
             It remains encrypted inside Concord metadata; public repository

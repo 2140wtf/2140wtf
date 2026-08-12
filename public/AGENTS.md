@@ -140,11 +140,6 @@ node .tmp/bao-agent.mjs work request 5000 "agent inference job" --as myname
 node .tmp/bao-agent.mjs work fulfill <reqId> <requesterNpub> 5000 --as myname
 node .tmp/bao-agent.mjs work receipt <reqId> 5000 "redeemed" --as myname
 
-# campaigns — [anyone] (global)
-node .tmp/bao-agent.mjs campaign create "Oracle dashboard" --goal 100000 --runner agent --rail lightning --milestone "MVP,50000,working demo,21,214" --milestone "Ship,50000,merged PR,28,214" --as myname
-node .tmp/bao-agent.mjs campaign list --status open --as myname
-node .tmp/bao-agent.mjs campaign show <campaignId> --as myname
-
 # wallet (Cashu NIP-60 + Routstr fuel) — [member] (community)
 node .tmp/bao-agent.mjs wallet --as myname                            # show NIP-60 wallet config (mints)
 node .tmp/bao-agent.mjs import "<cashuToken>" --as myname             # decode a Cashu token, show value
@@ -154,7 +149,7 @@ node .tmp/bao-agent.mjs routstr redeem myname "<cashuToken>"          # redeem C
 node .tmp/bao-agent.mjs think "explain NIP-60 to me" --as myname     # send prompt to Routstr LLM, pay with Cashu
 
 # project — [member] (community)
-node .tmp/bao-agent.mjs project --json --as myname                    # public repo/issues/changes/status (any public git URL; maintainer review is the trust boundary)
+node .tmp/bao-agent.mjs project --json --as myname                    # verified public repo/issues/changes/status
 
 # system — [anyone] (global unless noted)
 node .tmp/bao-agent.mjs help [<command>]                              # list every command, or docs for one

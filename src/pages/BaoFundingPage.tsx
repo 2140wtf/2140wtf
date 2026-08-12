@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, Bot, ChevronDown, ChevronUp, CircleDollarSign, Code2, FileText, HandCoins, ListOrdered, Loader2, LockKeyhole, Maximize2, MessageCircle, Minimize2, Plus, ShieldCheck, Sparkles, Trash2, User, Users, Waves } from 'lucide-react';
+import { ArrowRight, Bot, ChevronDown, ChevronUp, CircleDollarSign, Code2, HandCoins, Loader2, LockKeyhole, Maximize2, MessageCircle, Minimize2, Plus, ShieldCheck, Sparkles, User, Users, Waves } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AttestationPanel } from '@/components/bao-fund/AttestationPanel';
@@ -22,7 +22,6 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -52,9 +51,7 @@ import {
   type BaoRail,
   type ContributeResult,
   type ReleaseMilestoneResult,
-  type ScoreMilestoneInput,
 } from '@/lib/baoFundraising';
-import { validateMilestoneEvidenceFields, type MilestoneEvidenceV1 } from '@/lib/baoWorkContract';
 import { BAO_CATEGORIES } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
@@ -757,121 +754,28 @@ export function ReleaseBreakdown({ info, milestoneAmountSats }: {
 
 // ── Score milestone dialog ──────────────────────────────────────────────────
 
-type EvidenceMode = 'structured' | 'free-text';
-
-interface StructuredEvidenceForm {
-  delivered_commit: string;
-  delivered_tree: string;
-  artifact_event_ids: string[];
-  archive_url: string;
-  archive_sha256: string;
-  test_command: string;
-  workflow_hash: string;
-  toolchain_hash: string;
-  issue_event_id: string;
-  toolBudgetMsats: string;
-  maxToolCalls: string;
-}
-
-const emptyStructuredEvidence = (): StructuredEvidenceForm => ({
-  delivered_commit: '',
-  delivered_tree: '',
-  artifact_event_ids: [''],
-  archive_url: '',
-  archive_sha256: '',
-  test_command: '',
-  workflow_hash: '',
-  toolchain_hash: '',
-  issue_event_id: '',
-  toolBudgetMsats: '',
-  maxToolCalls: '',
-});
-
-function buildMilestoneEvidenceV1(target: NonNullable<ScoreMilestoneDialogTarget>, form: StructuredEvidenceForm): MilestoneEvidenceV1 {
-  return {
-    version: 1,
-    contract_hash: '',
-    campaign_id: target.fundraiser.id,
-    milestone_id: target.milestone.id,
-    repository_coordinate: '',
-    ...(form.issue_event_id.trim() ? { issue_event_id: form.issue_event_id.trim() } : {}),
-    base_commit: '',
-    delivered_commit: form.delivered_commit.trim(),
-    delivered_tree: form.delivered_tree.trim(),
-    artifact_event_ids: form.artifact_event_ids.map((id) => id.trim()).filter(Boolean),
-    criteria_hash: '',
-    archive: {
-      url: form.archive_url.trim(),
-      sha256: form.archive_sha256.trim(),
-    },
-    test_command: form.test_command.trim(),
-    workflow_hash: form.workflow_hash.trim(),
-    toolchain_hash: form.toolchain_hash.trim(),
-  };
-}
-
-type ScoreMilestoneDialogTarget = { fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string };
-
 /**
  * Owner confirmation for submitting milestone evidence to the AI verifier.
- * Supports both structured MilestoneEvidenceV1 (default) and a free-text fallback.
  * The API enqueues a scoring job (202) and the worker publishes a public,
  * signed score event; the fee is deducted from the milestone payout.
  */
 function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
-  target: ScoreMilestoneDialogTarget | null;
+  target: { fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null;
   onOpenChange: (open: boolean) => void;
   onScored: () => void;
 }) {
   const { user } = useCurrentUser();
   const { toast } = useToast();
-  const [mode, setMode] = useState<EvidenceMode>('structured');
-  const [freeText, setFreeText] = useState('');
-  const [structured, setStructured] = useState<StructuredEvidenceForm>(emptyStructuredEvidence);
+  const [evidence, setEvidence] = useState('');
 
   // Reset the evidence draft whenever a different milestone is targeted.
   const targetId = target?.milestone.id ?? null;
   useEffect(() => {
-    setMode('structured');
-    setFreeText('');
-    setStructured(emptyStructuredEvidence());
+    setEvidence('');
   }, [targetId]);
 
-  const structuredErrors = useMemo(() => {
-    if (!target) return { valid: false, errors: {} as ReturnType<typeof validateMilestoneEvidenceFields>['errors'] };
-    return validateMilestoneEvidenceFields(buildMilestoneEvidenceV1(target, structured));
-  }, [target, structured]);
-
-  const structuredReady = useMemo(() => {
-    if (!target) return false;
-    const form = structured;
-    const evidence = buildMilestoneEvidenceV1(target, form);
-    return (
-      evidence.delivered_commit.length > 0 &&
-      evidence.delivered_tree.length > 0 &&
-      evidence.archive.url.length > 0 &&
-      evidence.archive.sha256.length > 0 &&
-      evidence.test_command.length > 0 &&
-      evidence.workflow_hash.length > 0 &&
-      evidence.toolchain_hash.length > 0 &&
-      structuredErrors.valid
-    );
-  }, [target, structured, structuredErrors.valid]);
-
   const mutation = useMutation({
-    mutationFn: () => {
-      if (!target || !user) throw new Error('Missing target or signer');
-      if (mode === 'free-text') {
-        return scoreMilestone(user.signer, target.fundraiser.id, target.milestone.id, freeText.trim());
-      }
-      const evidence = buildMilestoneEvidenceV1(target, structured);
-      const input: ScoreMilestoneInput = { evidence };
-      const budget = parseInt(structured.toolBudgetMsats, 10);
-      if (Number.isFinite(budget) && budget > 0) input.toolBudgetMsats = budget;
-      const calls = parseInt(structured.maxToolCalls, 10);
-      if (Number.isFinite(calls) && calls > 0) input.maxToolCalls = calls;
-      return scoreMilestone(user.signer, target.fundraiser.id, target.milestone.id, input);
-    },
+    mutationFn: () => scoreMilestone(user!.signer, target!.fundraiser.id, target!.milestone.id, evidence.trim()),
     onSuccess: (data) => {
       toast({
         title: 'AI scoring queued (DEMO)',
@@ -884,33 +788,13 @@ function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
   });
 
   const close = (open: boolean) => {
-    if (!open) {
-      setMode('structured');
-      setFreeText('');
-      setStructured(emptyStructuredEvidence());
-    }
+    if (!open) setEvidence('');
     onOpenChange(open);
-  };
-
-  const updateArtifact = (index: number, value: string) => {
-    setStructured((prev) => ({
-      ...prev,
-      artifact_event_ids: prev.artifact_event_ids.map((id, i) => (i === index ? value : id)),
-    }));
-  };
-
-  const addArtifact = () => setStructured((prev) => ({ ...prev, artifact_event_ids: [...prev.artifact_event_ids, ''] }));
-
-  const removeArtifact = (index: number) => {
-    setStructured((prev) => ({
-      ...prev,
-      artifact_event_ids: prev.artifact_event_ids.length > 1 ? prev.artifact_event_ids.filter((_, i) => i !== index) : [''],
-    }));
   };
 
   return (
     <Dialog open={!!target} onOpenChange={close}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Score milestone{target ? `: ${target.milestone.title}` : ''}</DialogTitle>
           <DialogDescription>
@@ -922,200 +806,19 @@ function ScoreMilestoneDialog({ target, onOpenChange, onScored }: {
           <p className="text-xs text-muted-foreground">
             This publishes a public, signed score event. Fee is deducted from the payout.
           </p>
-
-          <Tabs value={mode} onValueChange={(v) => setMode(v as EvidenceMode)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="structured" className="gap-1.5 text-xs">
-                <ListOrdered className="size-3.5" /> Structured evidence
-              </TabsTrigger>
-              <TabsTrigger value="free-text" className="gap-1.5 text-xs">
-                <FileText className="size-3.5" /> Free-text evidence
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="structured" className="mt-4 space-y-4">
-              <div className="rounded-md border border-amber-500/50 bg-card px-3 py-2 text-xs text-foreground">
-                <p className="flex items-center gap-1.5 font-medium">
-                  <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-400" />
-                  Structured evidence binds to this milestone
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  campaign_id: {target?.fundraiser.id.slice(0, 8)}… · milestone_id: {target?.milestone.id.slice(0, 8)}…
-                </p>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="delivered_commit">Delivered commit <span className="text-muted-foreground">(hex)</span></Label>
-                  <Input
-                    id="delivered_commit"
-                    value={structured.delivered_commit}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, delivered_commit: e.target.value.trim() }))}
-                    placeholder="64-char lowercase hex"
-                    className="font-mono text-xs"
-                  />
-                  {structuredErrors.errors.delivered_commit && <p className="text-[11px] text-destructive">{structuredErrors.errors.delivered_commit}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="delivered_tree">Delivered tree <span className="text-muted-foreground">(hex)</span></Label>
-                  <Input
-                    id="delivered_tree"
-                    value={structured.delivered_tree}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, delivered_tree: e.target.value.trim() }))}
-                    placeholder="64-char lowercase hex"
-                    className="font-mono text-xs"
-                  />
-                  {structuredErrors.errors.delivered_tree && <p className="text-[11px] text-destructive">{structuredErrors.errors.delivered_tree}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="issue_event_id">Issue event id <span className="text-muted-foreground">(optional hex)</span></Label>
-                <Input
-                  id="issue_event_id"
-                  value={structured.issue_event_id}
-                  onChange={(e) => setStructured((prev) => ({ ...prev, issue_event_id: e.target.value.trim() }))}
-                  placeholder="64-char lowercase hex"
-                  className="font-mono text-xs"
-                />
-                {structuredErrors.errors.issue_event_id && <p className="text-[11px] text-destructive">{structuredErrors.errors.issue_event_id}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Artifact event ids</Label>
-                <div className="space-y-2">
-                  {structured.artifact_event_ids.map((id, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Input
-                        value={id}
-                        onChange={(e) => updateArtifact(index, e.target.value)}
-                        placeholder="64-char hex event id"
-                        className="font-mono text-xs"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        disabled={structured.artifact_event_ids.length <= 1 && id === ''}
-                        onClick={() => removeArtifact(index)}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                  {structuredErrors.errors.artifact_event_ids && <p className="text-[11px] text-destructive">{structuredErrors.errors.artifact_event_ids}</p>}
-                  <Button type="button" variant="outline" size="sm" className="gap-1" onClick={addArtifact}>
-                    <Plus className="size-3.5" /> Add artifact event id
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="archive_url">Archive URL</Label>
-                  <Input
-                    id="archive_url"
-                    value={structured.archive_url}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, archive_url: e.target.value.trim() }))}
-                    placeholder="https://…"
-                    className="text-xs"
-                  />
-                  {structuredErrors.errors.archive_url && <p className="text-[11px] text-destructive">{structuredErrors.errors.archive_url}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="archive_sha256">Archive SHA-256 <span className="text-muted-foreground">(hex)</span></Label>
-                  <Input
-                    id="archive_sha256"
-                    value={structured.archive_sha256}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, archive_sha256: e.target.value.trim() }))}
-                    placeholder="64-char lowercase hex"
-                    className="font-mono text-xs"
-                  />
-                  {structuredErrors.errors.archive_sha256 && <p className="text-[11px] text-destructive">{structuredErrors.errors.archive_sha256}</p>}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="test_command">Test command</Label>
-                <Input
-                  id="test_command"
-                  value={structured.test_command}
-                  onChange={(e) => setStructured((prev) => ({ ...prev, test_command: e.target.value }))}
-                  placeholder="e.g. npm test"
-                  className="text-xs"
-                />
-                {structuredErrors.errors.test_command && <p className="text-[11px] text-destructive">{structuredErrors.errors.test_command}</p>}
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="workflow_hash">Workflow hash <span className="text-muted-foreground">(hex)</span></Label>
-                  <Input
-                    id="workflow_hash"
-                    value={structured.workflow_hash}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, workflow_hash: e.target.value.trim() }))}
-                    placeholder="64-char lowercase hex"
-                    className="font-mono text-xs"
-                  />
-                  {structuredErrors.errors.workflow_hash && <p className="text-[11px] text-destructive">{structuredErrors.errors.workflow_hash}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="toolchain_hash">Toolchain hash <span className="text-muted-foreground">(hex)</span></Label>
-                  <Input
-                    id="toolchain_hash"
-                    value={structured.toolchain_hash}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, toolchain_hash: e.target.value.trim() }))}
-                    placeholder="64-char lowercase hex"
-                    className="font-mono text-xs"
-                  />
-                  {structuredErrors.errors.toolchain_hash && <p className="text-[11px] text-destructive">{structuredErrors.errors.toolchain_hash}</p>}
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="tool_budget">Tool budget <span className="text-muted-foreground">(msats, optional)</span></Label>
-                  <Input
-                    id="tool_budget"
-                    value={structured.toolBudgetMsats}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, toolBudgetMsats: e.target.value.replace(/[^0-9]/g, '') }))}
-                    inputMode="numeric"
-                    placeholder="e.g. 500000"
-                    className="text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="max_calls">Max tool calls <span className="text-muted-foreground">(optional)</span></Label>
-                  <Input
-                    id="max_calls"
-                    value={structured.maxToolCalls}
-                    onChange={(e) => setStructured((prev) => ({ ...prev, maxToolCalls: e.target.value.replace(/[^0-9]/g, '') }))}
-                    inputMode="numeric"
-                    placeholder="e.g. 10"
-                    className="text-xs"
-                  />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="free-text" className="mt-4 space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="score-evidence">Evidence</Label>
-                <Textarea
-                  id="score-evidence"
-                  value={freeText}
-                  onChange={(e) => setFreeText(e.target.value)}
-                  rows={6}
-                  placeholder="Links, commit hashes, screenshots descriptions — what proves the deliverable matches the criteria?"
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
-
+          <div className="space-y-1.5">
+            <Label htmlFor="score-evidence">Evidence</Label>
+            <Textarea
+              id="score-evidence"
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              rows={6}
+              placeholder="Links, commit hashes, screenshots descriptions — what proves the deliverable matches the criteria?"
+            />
+          </div>
           <Button
             className="w-full"
-            disabled={mode === 'free-text' ? !freeText.trim() || mutation.isPending : !structuredReady || mutation.isPending}
+            disabled={!evidence.trim() || mutation.isPending}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Submit for AI scoring (demo)'}
