@@ -200,6 +200,23 @@ describe('computeCreditProgress', () => {
     }));
     expect(isComputeCreditRequestConfirmed(request, confirmations)).toBe(true);
   });
+
+  it('ignores confirmations or claims with an invalid shot number for the request', () => {
+    const request = req({ amountSats: 1000 });
+    const confirmations = [
+      ful({ id: '3'.repeat(64), pubkey: AGENT, amountSats: 1000, shot: 2 }),
+      ful({ id: '4'.repeat(64), pubkey: AGENT, amountSats: 1000, shot: 99 }),
+    ];
+
+    expect(confirmedComputeCreditAmounts(request, confirmations).get(1)).toBeUndefined();
+    expect(isComputeCreditRequestConfirmed(request, confirmations)).toBe(false);
+
+    const progress = computeCreditProgress(request, [
+      ful({ id: '5'.repeat(64), shot: 2 }),
+      ful({ id: '6'.repeat(64), shot: 99 }),
+    ], []);
+    expect(progress[0]?.stage).toBe('requested');
+  });
 });
 
 describe('parseComputeCreditReceipt', () => {
