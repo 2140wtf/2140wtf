@@ -52,10 +52,56 @@ const PURGE_QUERY_LIMIT = 5000;
 const PURGE_AUTHOR_CHUNK = 100;
 const PURGE_TAG_CHUNK = 100;
 
+/** Hard cap for the whole remote purge so a wedged signer or relay can never
+ *  strand the dialog on "Purging…" without acknowledgment. */
+export const PURGE_DEADLINE_MS = 120_000;
+
+/** How long the caller-signed NIP-09 batch may wait on the signer per batch. */
+const CALLER_SIGN_TIMEOUT_MS = 15_000;
+
 function addressableCoordinate(event: NostrEvent): string | undefined {
   if (event.kind < 30_000 || event.kind >= 40_000) return undefined;
   const d = event.tags.find((tag) => tag[0] === "d")?.[1];
   return d === undefined ? undefined : `${event.kind}:${event.pubkey}:${d}`;
+}
+
+/**
+ * Reject `promise` after `ms` with `message`. The underlying work keeps
+ * running (there is no way to abort another process's promise), but the purge
+ * caller gets a definitive answer instead of hanging forever.
+ */
+export async function withPurgeDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Pre-flight the purge signer: race one NIP-44 encrypt against a short
+ * deadline. The purge's first signer op (decrypting the kind-13303 invite
+ * lists) would otherwise strand a wedged browser-extension or NIP-46 signer in
+ * a long signer-timeout loop before anything is published — "Purging…" with
+ * no acknowledgment and no kind-5s on any relay. This fails fast with
+ * instructions instead. NIP-44 encrypt has no network side effects (nothing
+ * is published), so the pre-flight is safe for every signer type.
+ */
+export async function assertPurgeSignerResponsive(
+  signer: { nip44?: { encrypt(pubkey: string, plaintext: string): Promise<string> } },
+  pubkey: string,
+  ms = 10_000,
+): Promise<void> {
+  if (!signer.nip44) return; // Caller checks nip44 presence separately.
+  await withPurgeDeadline(
+    signer.nip44.encrypt(pubkey, "purge preflight"),
+    ms,
+    "Your signer did not respond. Approve the signing request in your signer app — or log in with your secret key to purge without signer prompts.",
+  );
 }
 
 /** NIP-09 uses `a` for addressable events so every stored revision is covered. */
@@ -203,12 +249,19 @@ export async function purgeCommunityRemote(
       const targets = [...events.values()];
       for (let i = 0; i < targets.length; i += PURGE_TAG_CHUNK) {
         const batch = targets.slice(i, i + PURGE_TAG_CHUNK);
-        await sendDeletion(await callerSigner.signEvent({
-          kind: 5,
-          content: "",
-          tags: purgeDeletionTags(batch),
-          created_at: Math.floor(Date.now() / 1000),
-        }));
+        // Deadline the sign call itself: sendDeletion's catch only covers the
+        // relay publish, so an unresponsive extension/remote signer would
+        // otherwise leave the relay branch pending forever.
+        await sendDeletion(await withPurgeDeadline(
+          callerSigner.signEvent({
+            kind: 5,
+            content: "",
+            tags: purgeDeletionTags(batch),
+            created_at: Math.floor(Date.now() / 1000),
+          }),
+          CALLER_SIGN_TIMEOUT_MS,
+          "Purge signer timed out. Approve the signing request in your signer app — or log in with your secret key to purge without signer prompts.",
+        ));
       }
     }
     const after = accepted > 0 ? await queryTargets() : before;
