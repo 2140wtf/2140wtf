@@ -1,13 +1,16 @@
 # BAO relay — write-policy specs (VPS, relay.bao.network)
 
-**Status:** DEPLOYED 2026-08-11 (`/opt/bao-relay` on the relay VPS, git
-`master` @ `840273b`). Client support for admin deletion landed in
-`purgeCommunityRemote` (`adminSigner`) + `src/lib/admins.ts`. The relay-side
-rule below is live: the write-policy plugin validates operator kind-5 `k`
-tags against the Concord set and finishes the cross-author deletion with
-`strfry delete` (strfry's native NIP-09 is same-author only). Verified
-end-to-end — one operator kind-5 physically removed a wrap and the
-sponsorship record (kind 39998).
+**Status:** DEPLOYED (see `BAO_RELAY_OPERATOR_POLICY.md` — operator list is
+`BAO_RELAY_OPERATOR_PUBKEYS` in the relay's `roster.env`, currently three
+keys: BAO Markets Feed, an unlabeled key, and the 2140wtf key). Client
+support for operator deletion lives in `purgeCommunityRemote`
+(`callerSigner`) and the purge path in `useCommunityManagement2`; the
+operator list deliberately stays out of the client (`src/lib/admins.ts` was
+removed — the client is operator-neutral). The relay-side rule is live: the
+write-policy plugin validates operator kind-5 `k` tags against the Concord
+set and finishes the cross-author deletion with `strfry delete` (strfry's
+native NIP-09 is same-author only). Verified end-to-end — one operator
+kind-5 physically removed a wrap and the sponsorship record (kind 39998).
 
 ## Rule 1 — invite bundles open to anyone (kind 33301)
 
@@ -117,9 +120,13 @@ end
 
 ## Client side (already implemented)
 
-- `purgeCommunityRemote(nostr, community, keys, hints, adminSigner?)` — with
-  `adminSigner` it batches ALL found events (any author) into admin-signed
-  kind-5s, one signature per 100 events. No per-link secrets needed.
-- The purge mutation permits the founder (per-author path, works on every
-  relay) or the admin (admin path, honored once the policy ships).
-- The "Purge BAO from relays…" menu item shows for the founder or the admin.
+- `purgeCommunityRemote(nostr, community, keys, hints, callerSigner?, ...)` —
+  with `callerSigner` it batches ALL found events (any author) into
+  caller-signed kind-5s, one signature per 100 events. No per-link secrets
+  needed.
+- The purge mutation passes the caller signer for the community owner as
+  well as the 2140 operator, so the owner's own kind-39998 sponsorship
+  records are deleted on every relay (standard NIP-09 same-author for the
+  owner's events; community-wide where the owner is also a relay operator).
+- The "Purge BAO from relays…" menu item shows for the founder/owner or the
+  operator.
