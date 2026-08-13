@@ -45,7 +45,7 @@ import { buildRumor, channelBindingTags, openWrap, sealRumor, wrapSeal, type Rum
 import { writeOpened } from "@/concord-v2/lib/rumorStore";
 import { concordClient, ephemeralRelayClient, PUBLISH_TIMEOUT_MS } from "@/concord-v2/lib/concordTransport";
 import { KIND_MESSAGE, KIND_SEAL_ENCRYPTED, KIND_WRAP } from "@/concord-v2/lib/kinds";
-import { purgeCommunityLocalData, purgeCommunityRemote, type RemotePurgeReport } from "@/concord-v2/lib/purgeCommunity";
+import { assertPurgeSignerResponsive, purgeCommunityLocalData, purgeCommunityRemote, PURGE_DEADLINE_MS, type RemotePurgeReport, withPurgeDeadline } from "@/concord-v2/lib/purgeCommunity";
 import { mirrorGroups } from "@/concord-v2/lib/relayMirror";
 import { partitionDeletionCapableRelays, type RelayDeletionCapability } from "@/concord-v2/lib/relayDeletion";
 
@@ -717,11 +717,16 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
   });
 
   const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
-    mutationFn: async () => {
-      if (!user || !community) throw new Error("Not ready.");
-      const isOperator = user.pubkey === APP_OPERATOR_PUBKEY;
-      if (user.pubkey !== community.owner && !isOperator) throw new Error("Only the founder or 2140 operator can purge this community.");
-      if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
+    mutationFn: () => {
+      const run = async (): Promise<RemotePurgeReport> => {
+        if (!user || !community) throw new Error("Not ready.");
+        const isOperator = user.pubkey === APP_OPERATOR_PUBKEY;
+        if (user.pubkey !== community.owner && !isOperator) throw new Error("Only the founder or 2140 operator can purge this community.");
+        if (!user.signer.nip44) throw new Error("This signer cannot read the invite list needed for purge.");
+        // Fast signer pre-flight (see assertPurgeSignerResponsive): a wedged
+        // browser-extension or NIP-46 signer would otherwise hang the purge
+        // on its first decrypt with no kind-5s ever reaching any relay.
+        await assertPurgeSignerResponsive(user.signer, user.pubkey);
 
       // Capture link-signer secrets before removing the community from the
       // local list. Without these keys, kind-33301 invite bundles cannot be
@@ -732,7 +737,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // Without them a consented link would survive the purge on those relays.
       const hintRelays = new Set<string>();
       try {
-        const listEvents = await nostr.query([{ kinds: [13303], authors: [user.pubkey], limit: 20 }]);
+        const listEvents = await nostr.query([{ kinds: [13303], authors: [user.pubkey], limit: 20 }], { signal: AbortSignal.timeout(15_000) });
         for (const event of listEvents) {
           try {
             const decrypted = await user.signer.nip44.decrypt(user.pubkey, event.content);
@@ -812,7 +817,16 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
           incomplete.map((relay) => relay.verified ? `${relay.url} (${relay.remaining} remaining)` : `${relay.url} (query failed)`).join(", "),
         );
       }
-      return report;
+        return report;
+      };
+      // Global cap: every inner relay op is individually deadlined, but a
+      // chain of signer timeouts (45s each) across relays could still take
+      // minutes. Bound the whole purge so the dialog always acknowledges.
+      return withPurgeDeadline(
+        run(),
+        PURGE_DEADLINE_MS,
+        "The BAO purge hit its deadline without completing. Retry, and approve the signing/decryption requests in your signer app — or log in with your secret key to purge without signer prompts.",
+      );
     },
   });
 
