@@ -78,4 +78,28 @@ describe('apiMarketToBaoMarket', () => {
     expect(m.type).toBe('binary');
     expect(m.outcomes[0].probability).toBe(0.5);
   });
+
+  it('does not mark ₿AO Fund milestone markets as SMJ even when the API says so', () => {
+    // Live check 2026-08-13: 18/18 `bao-fund` markets 404 the /smj/:id
+    // endpoint while every other SMJ-flagged market returns 200 — the SMJ
+    // service keeps no pool for milestone markets, so the API's smj flag
+    // must not route them into parimutuel-odds lookups.
+    const m = apiMarketToBaoMarket({
+      ...baseApiMarket,
+      smj: true,
+      pool_model: 'smj',
+    });
+    expect(m.category).toBe('bao-fund');
+    expect(m.poolModel).toBeUndefined();
+  });
+
+  it('maps other categories with an smj flag to poolModel smj', () => {
+    const m = apiMarketToBaoMarket({
+      ...baseApiMarket,
+      category: 'sports',
+      smj: true,
+      pool_model: 'smj',
+    });
+    expect(m.poolModel).toBe('smj');
+  });
 });
