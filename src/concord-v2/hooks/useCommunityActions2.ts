@@ -774,6 +774,15 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // The operator's relay policy authorizes an admin-signed purge directly;
       // it cannot publish the owner's terminal control marker for a foreign
       // community, so do not attempt the owner-only dissolve first.
+      //
+      // The caller's own key must be passed for the owner too, not just the
+      // app operator: kind-39998 sponsorship records are signed by the
+      // community owner, and per-author deletions only ever cover stream and
+      // invite-link keys. Without a caller-signed batch the owner's own
+      // sponsorship record survives every purge (the a-coordinate is a
+      // same-author deletion on standard relays, and honored community-wide
+      // when the owner is also a relay operator) — leaving residue that
+      // failed deletion verification.
       if (!isOperator) await dissolve.mutateAsync();
       const purgeChannelGroups = channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group));
       // BAO relays may return an empty result to unauthenticated queries. Use
@@ -787,7 +796,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
         community,
         inviteKeys,
         [...hintRelays],
-        isOperator ? user.signer : undefined,
+        isOperator || user.pubkey === community.owner ? user.signer : undefined,
         // Channel streams too — chat messages must die with the community.
         purgeChannelGroups,
         authenticatedPurgeReader,

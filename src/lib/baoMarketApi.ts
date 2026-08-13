@@ -89,7 +89,17 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
         : 'binary',
     endTime: typeof api.end_date === 'number' && Number.isFinite(api.end_date) ? api.end_date : 0,
     createdAt: api.created_at,
-    poolModel: api.smj || api.pool_model === 'smj' ? 'smj' : api.pool_model === 'amm' ? 'amm' : undefined,
+    // ₿AO Fund milestone markets settle through the fund API — the SMJ
+    // service keeps no pool for them (every /smj/:id probe returns 404), so
+    // the API's `smj` flag must not route them into parimutuel-odds lookups.
+    // Verified live: 18/18 `bao-fund` markets 404 the SMJ endpoint while
+    // every other SMJ-flagged market returns 200.
+    poolModel:
+      api.category.toLowerCase() !== 'bao-fund' && (api.smj || api.pool_model === 'smj')
+        ? 'smj'
+        : api.pool_model === 'amm'
+          ? 'amm'
+          : undefined,
     paymentRails: Array.isArray(api.payment_rails) ? api.payment_rails : undefined,
     totalVolumeSats: finiteNonNegative(api.total_volume),
     tradeCount: finiteNonNegative(api.trade_count),
