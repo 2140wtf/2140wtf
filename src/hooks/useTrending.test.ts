@@ -12,6 +12,16 @@ describe('filterRealTrendingTags', () => {
 
     expect(result.map(({ tag }) => tag)).toEqual(['bitcoin', 'gardening']);
   });
+
+  it('blocks #bitcoincash from trending', () => {
+    const result = filterRealTrendingTags([
+      { tag: 'BitcoinCash', accounts: 99, uses: 200 },
+      { tag: '#BITCOINCASH', accounts: 50, uses: 100 },
+      { tag: 'gardening', accounts: 5, uses: 7 },
+    ]);
+
+    expect(result.map(({ tag }) => tag)).toEqual(['gardening']);
+  });
 });
 
 describe('isBlockedTrendEvent', () => {
