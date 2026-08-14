@@ -12,7 +12,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { DEMO_BOND_AMOUNT_SATS } from '@/lib/baoCourtSimulator';
 import type { BaoCourtDispute } from '@/hooks/useBaoCourtDisputes';
 import type { JurorSettingsState } from './JurorSettings';
-import type { SelectedJuror } from '@bao/frost-court';
+import type { SelectedJuror } from '@bao/court';
 
 const DEFAULT_CATEGORIES = ['sports', 'politics', 'crypto', 'science', 'entertainment'];
 const THRESHOLD_OPTIONS = [3, 4, 5];

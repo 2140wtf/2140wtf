@@ -7,7 +7,7 @@ import {
   createBaoMempoolVerifier,
   verifyBond,
   type StakeCommitment,
-} from '@bao/frost-court';
+} from '@bao/court';
 
 export interface BondEscrowInput {
   readonly disputeId: string;
