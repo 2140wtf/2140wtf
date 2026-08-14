@@ -8,7 +8,7 @@ import {
   parseSelectionEvent,
   validateSelectionEvent,
   type SelectedJuror,
-} from '@bao/frost-court';
+} from '@bao/court';
 
 const RELAY = 'wss://relay.bao.network';
 const QUERY_TIMEOUT_MS = 15_000;

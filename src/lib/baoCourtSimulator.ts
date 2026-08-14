@@ -25,7 +25,7 @@ import {
   buildSelectionEvent,
   type JurorProfile,
   type SelectedJuror,
-} from '@bao/frost-court';
+} from '@bao/court';
 
 export interface SimulatedJuror extends JurorProfile {
   /** Deterministic index for FROST polynomials (1-based). */

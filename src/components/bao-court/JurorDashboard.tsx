@@ -14,7 +14,7 @@ import { JurorRegistrationCard } from "./JurorRegistrationCard";
 import { JurorSessionModal } from "./JurorSessionModal";
 import { JurorSettings, type JurorSettingsState } from "./JurorSettings";
 import { DemoCourtLobby } from "./DemoCourtLobby";
-import type { SelectedJuror } from "@bao/frost-court";
+import type { SelectedJuror } from "@bao/court";
 
 interface JurorDashboardProps {
   readonly settings: JurorSettingsState;

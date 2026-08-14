@@ -48,7 +48,7 @@ import {
   type JurorVote,
   type DkgRecord,
   type FrostAttestation,
-} from "@bao/frost-court";
+} from "@bao/court";
 
 export interface UseJurorSessionOptions {
   readonly dispute: DisputeCase;
