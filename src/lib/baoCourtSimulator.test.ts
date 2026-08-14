@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { BAO_COURT_JUROR_CANDIDACY_KIND, BAO_COURT_SELECTION_KIND } from '@bao/frost-court';
+import { BAO_COURT_JUROR_CANDIDACY_KIND, BAO_COURT_SELECTION_KIND } from '@bao/court';
 
 import {
   BAO_COURT_DEMO_MEMBERSHIP_KIND,
