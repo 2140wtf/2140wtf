@@ -21,7 +21,31 @@ export type SyncPhase =
   | "not-found" // No settings found, show questionnaire
   | "complete"; // Sync + setup complete, show the app
 
-const SYNC_TIMEOUT_MS = 8000;
+const SYNC_TIMEOUT_MS = 5000;
+const DECRYPT_TIMEOUT_MS = 3000;
+
+/**
+ * Race a signer operation against a deadline. Browser-extension and NIP-46
+ * signers can hang indefinitely if their prompt is suppressed or ignored,
+ * which would otherwise strand the initial sync on "Syncing your settings...".
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, context: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${context} timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 /**
  * Hook to manage the initial sync flow when a user logs in on a new device.
@@ -214,9 +238,10 @@ export function useInitialSync() {
           const settingsEvent = settingsEvents[0];
 
           try {
-            const decrypted = await user.signer.nip44.decrypt(
-              user.pubkey,
-              settingsEvent.content,
+            const decrypted = await withTimeout(
+              user.signer.nip44.decrypt(user.pubkey, settingsEvent.content),
+              DECRYPT_TIMEOUT_MS,
+              "Encrypted settings decrypt",
             );
             const json = JSON.parse(decrypted);
             const result = EncryptedSettingsSchema.safeParse(json);
@@ -340,14 +365,16 @@ export function useInitialSync() {
               let decrypted: string | null = null;
 
               if (isNip04 && user.signer.nip04) {
-                decrypted = await user.signer.nip04.decrypt(
-                  user.pubkey,
-                  muteEvent.content,
+                decrypted = await withTimeout(
+                  user.signer.nip04.decrypt(user.pubkey, muteEvent.content),
+                  DECRYPT_TIMEOUT_MS,
+                  "Mute list NIP-04 decrypt",
                 );
               } else if (!isNip04 && user.signer.nip44) {
-                decrypted = await user.signer.nip44.decrypt(
-                  user.pubkey,
-                  muteEvent.content,
+                decrypted = await withTimeout(
+                  user.signer.nip44.decrypt(user.pubkey, muteEvent.content),
+                  DECRYPT_TIMEOUT_MS,
+                  "Mute list NIP-44 decrypt",
                 );
               }
 
