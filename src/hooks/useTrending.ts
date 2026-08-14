@@ -24,7 +24,7 @@ export interface TrendingTagsResult {
 
 /** Promotional altcoin tags that are not useful trends for this Bitcoin client. */
 const BLOCKED_TREND_TAGS = new Set([
-  'ada', 'altcoin', 'altcoins', 'avax', 'avalanche', 'binance', 'bnb',
+  'ada', 'altcoin', 'altcoins', 'avax', 'avalanche', 'binance', 'bitcoincash', 'bnb',
   'cardano', 'chainlink', 'crypto', 'cryptocurrency', 'defi', 'doge',
   'dogecoin', 'eth', 'ethereum', 'link', 'matic', 'memecoin', 'memecoins',
   'nft', 'nfts', 'polygon', 'ripple', 'shitcoin', 'shitcoins', 'sol',
