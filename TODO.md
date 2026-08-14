@@ -1,20 +1,17 @@
 # TODO
 
-## Security / repository hygiene
+## Licensing / attribution
 
-- **Purge BAO Court source from Git history.**
-  The proprietary BAO Court code has been removed from the current working tree,
-  but it is still present in the public GitHub repository's commit history and can
-  be checked out from earlier commits. Rewrite history (e.g. with
-  `git filter-repo` or BFG Repo-Cleaner) so the code is no longer reachable, then
-  force-push. Coordinate with the team before rewriting shared history.
+- **Secure the `baocommunity.dev` domain and verify it on GitHub.**
+  The unsigned `baocommunity` commits in `2140wtf/2140wtf` use the author email
+  `dev@baocommunity.dev`. Once the domain is owned, add and verify
+  `dev@baocommunity.dev` on the `baocommunity` GitHub account. GitHub will
+  then show the existing commits as Verified; no history rewrite or public
+  comments are needed. Do not reveal the intent publicly until the domain is
+  secured, to prevent squatting.
 
 ## Product / integrations
 
-- **Allow importing any GitHub project (not just verified/agent projects).**
-  The current flow likely restricts project import to verified or agent-related
-  repositories. Since agents in ₿AO communities work alongside human maintainers
-  and all changes still go through normal maintainer review/approval, the
-  verification gate is not relevant. Add an import path that lets users bring in
-  any public GitHub repo/project and wire it into the workspace/feed. Keep the
-  approval workflow (PR review by maintainers) as the actual trust boundary.
+- **Allow importing any GitHub project (not just verified/agent projects).** ✅ Done.
+  The project command, MCP tool, and UI labels were updated to accept any public
+  `https://` git URL; maintainer review remains the trust boundary.

@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
+    "prepare": "[ -d .git/hooks ] && cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit || true",
     "dev": "vite",
     "dev:safe": "rm -rf node_modules/.vite && NODE_OPTIONS='--max-old-space-size=4096' vite",
     "agent": "rolldown -c scripts/rolldown.bao-agent.config.mjs && node .tmp/bao-agent.mjs",
