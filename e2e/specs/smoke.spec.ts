@@ -6,7 +6,13 @@ import { installReadOnlyNetworkGuard, NetworkMonitor } from '../fixtures/network
 const DEFAULT_TIMEOUT = 20_000;
 
 function attachMonitor(page: import('@playwright/test').Page): NetworkMonitor {
-  const monitor = new NetworkMonitor({ tolerateRelayErrors: true });
+  const monitor = new NetworkMonitor({
+    tolerateRelayErrors: true,
+    // Prediction-market detail/history endpoints 404 once a market has
+    // expired upstream; the app renders the empty state gracefully, so
+    // don't fail the build on third-party data rot.
+    tolerateNotFound: [/\/bao-api\/v1\/smj\//],
+  });
   monitor.attach(page);
   return monitor;
 }
