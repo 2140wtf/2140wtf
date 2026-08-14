@@ -70,7 +70,7 @@ interface InitialSyncGateProps {
  */
 export function InitialSyncGate({ children }: InitialSyncGateProps) {
   const { user } = useCurrentUser();
-  const { phase, markComplete } = useInitialSync();
+  const { phase, markComplete, skipSync } = useInitialSync();
   const { isLoading: settingsLoading } = useEncryptedSettings();
   const { config } = useAppContext();
   const [preloadApp, setPreloadApp] = useState(false);
@@ -117,7 +117,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   if (phase === "syncing" || phase === "found") {
     return (
       <OnboardingContext.Provider value={contextValue}>
-        <SyncScreen phase={phase} />
+        <SyncScreen phase={phase} onSkip={skipSync} />
       </OnboardingContext.Provider>
     );
   }
@@ -148,7 +148,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
     if (!hasLocalSync) {
       return (
         <OnboardingContext.Provider value={contextValue}>
-          <SyncScreen phase="syncing" />
+          <SyncScreen phase="syncing" onSkip={skipSync} />
         </OnboardingContext.Provider>
       );
     }
@@ -168,7 +168,17 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
 // Sync Screen
 // ---------------------------------------------------------------------------
 
-function SyncScreen({ phase }: { phase: SyncPhase }) {
+function SyncScreen({ phase, onSkip }: { phase: SyncPhase; onSkip?: () => void }) {
+  const [showSkip, setShowSkip] = useState(false);
+
+  useEffect(() => {
+    if (phase !== "syncing") {
+      setShowSkip(false);
+      return;
+    }
+    const id = setTimeout(() => setShowSkip(true), 4000);
+    return () => clearTimeout(id);
+  }, [phase]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-8 px-6 text-center max-w-sm">
@@ -200,15 +210,27 @@ function SyncScreen({ phase }: { phase: SyncPhase }) {
         </div>
 
         {phase === "syncing" && (
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"
-                style={{ animationDelay: `${i * 200}ms` }}
-              />
-            ))}
-          </div>
+          <>
+            <div className="flex gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-pulse"
+                  style={{ animationDelay: `${i * 200}ms` }}
+                />
+              ))}
+            </div>
+            {showSkip && onSkip && (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  If your signer extension is asking for approval, approve it now. If nothing happens, you can continue with default settings.
+                </p>
+                <Button variant="outline" size="sm" onClick={onSkip}>
+                  Continue with defaults
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {phase === "found" && (
