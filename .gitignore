@@ -42,6 +42,11 @@ app.json
 # Agent memory / local-only workspace
 .claude/
 .kimi/
+/AGENTS.md
+/TODO.md
+
+# Manual probe scripts — machine-specific, never publish
+tests-manual/
 
 # Android build outputs and sensitive files
 *.aab
