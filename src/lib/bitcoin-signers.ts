@@ -6,6 +6,7 @@ import * as btc from '@scure/btc-signer';
 import { pubSchnorr, taprootTweakPrivKey } from '@scure/btc-signer/utils.js';
 
 import {
+  assertPsbtFeeWithinCap,
   signPsbtLocal,
   signPsbtLocalHd,
   validateAndDecodeSilentPaymentAddress,
@@ -99,12 +100,11 @@ export class NSecSignerBtc extends NSecSigner implements BtcSigner {
     // BIP-375 silent payment path first — it resolves SP outputs to concrete
     // P2TR scripts before signing.
     if (hasBip375SpOutputs(psbtHex)) {
-      const paymentIntent = options?.paymentIntents?.[0];
       return signBip375PsbtV2Locally(
         psbtHex,
         hex.encode(this.#secretKeyBytes),
         this.#secretKeyBytes,
-        paymentIntent,
+        options?.paymentIntents,
       );
     }
 
@@ -159,7 +159,7 @@ function signBip375PsbtV2Locally(
   psbtHex: string,
   privateKeyHex: string,
   secretKeyBytes: Uint8Array,
-  paymentIntent?: PsbtRecipient,
+  paymentIntents?: PsbtRecipient[],
 ): string {
   const psbt = parsePsbtV2(psbtHex);
   if (psbt.inputs.length === 0) throw new Error('NSecSignerBtc: PSBT has no inputs.');
@@ -208,6 +208,9 @@ function signBip375PsbtV2Locally(
   if (outputSum > inputSum) {
     throw new Error('NSecSignerBtc: PSBT outputs exceed inputs.');
   }
+  // Same signing-time fee cap as the PSBT v0 paths: a crafted BIP-375 PSBT
+  // must not be able to burn arbitrary value as miner fee.
+  assertPsbtFeeWithinCap(inputSum, outputSum, psbt.inputs.length, psbt.outputs.length);
 
   // SP outputs are identified by an `unknown` row with keytype 0x09 (the
   // BIP-375 PSBT_OUT_SP_V0_INFO field number).
@@ -352,8 +355,17 @@ function signBip375PsbtV2Locally(
   }
   tx.finalize();
 
-  if (paymentIntent) {
-    verifyBip375OutputMatchesIntent(tx, paymentIntent, eligibleInputs, allOutpoints, senderScript);
+  if (paymentIntents) {
+    // Every silent payment output must correspond to a user-approved intent
+    // — no more, no fewer. Verifying only the first intent would let a
+    // crafted multi-output PSBT smuggle in payments the user never approved.
+    if (paymentIntents.length !== spRecipients.length) {
+      throw new Error(
+        `NSecSignerBtc: ${paymentIntents.length} approved payment intent(s) but the PSBT ` +
+          `contains ${spRecipients.length} silent payment output(s); refusing to sign.`,
+      );
+    }
+    verifyBip375OutputsMatchIntents(tx, paymentIntents, eligibleInputs, allOutpoints, senderScript);
   }
 
   // Round-trip back to a finalized PSBT v2 with the resolved scripts plus
@@ -370,49 +382,70 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /**
- * Verify a finalized BIP-375 transaction against the user-approved silent
- * payment intent. Derives the expected P2TR output from the approved SP address
- * and the input set, then confirms the transaction contains that exact output
- * (amount + scriptPubKey) and that every other output is change to the sender.
+ * Verify a finalized BIP-375 transaction against the full set of
+ * user-approved silent payment intents. Derives the expected P2TR output
+ * for every approved SP address from the input set, then confirms the
+ * transaction contains each expected output (amount + scriptPubKey) exactly
+ * once and that every other output is change to the sender.
+ *
+ * All intents are derived in a single `deriveSilentPaymentOutputs` call so
+ * recipients that share a scan key get the same per-group `k` indices the
+ * sender derivation used.
  */
-function verifyBip375OutputMatchesIntent(
+function verifyBip375OutputsMatchIntents(
   tx: btc.Transaction,
-  paymentIntent: PsbtRecipient,
+  paymentIntents: PsbtRecipient[],
   eligibleInputs: SilentPaymentInput[],
   allOutpoints: { txid: string; vout: number }[],
   senderScript: Uint8Array,
 ): void {
-  const spAddress = validateAndDecodeSilentPaymentAddress(paymentIntent.address);
-  if (!spAddress) {
-    throw new Error('NSecSignerBtc: payment intent is not a valid silent payment address.');
-  }
-  const expectedAmount = BigInt(paymentIntent.amountSats);
+  const intentRecipients: SilentPaymentRecipient[] = paymentIntents.map((intent) => {
+    const spAddress = validateAndDecodeSilentPaymentAddress(intent.address);
+    if (!spAddress) {
+      throw new Error('NSecSignerBtc: payment intent is not a valid silent payment address.');
+    }
+    return { address: spAddress };
+  });
 
-  const derived = deriveSilentPaymentOutputs(eligibleInputs, [{ address: spAddress }], {
+  const derived = deriveSilentPaymentOutputs(eligibleInputs, intentRecipients, {
     allOutpoints,
     network: 'mainnet',
   });
-  if (derived.length !== 1) {
-    throw new Error('NSecSignerBtc: expected exactly one derived silent payment output.');
+  if (derived.length !== paymentIntents.length) {
+    throw new Error('NSecSignerBtc: derived silent payment outputs do not match the intent count.');
   }
-  const expectedScript = p2trScriptPubKey(derived[0].xOnlyPubKey);
 
-  let foundSp = false;
+  // Pair each derived script with its intent's amount. Recipients are
+  // matched by reference — each intent produced its own recipient object.
+  const remaining = derived.map((out) => {
+    const i = intentRecipients.indexOf(out.recipient);
+    if (i < 0) {
+      throw new Error('NSecSignerBtc: derived SP output has no matching intent.');
+    }
+    return {
+      amount: BigInt(paymentIntents[i].amountSats),
+      script: p2trScriptPubKey(out.xOnlyPubKey),
+    };
+  });
+
   for (let i = 0; i < tx.outputsLength; i++) {
     const out = tx.getOutput(i);
-    if (!out.script || out.script.length === 0) {
+    const script = out.script;
+    if (!script || script.length === 0) {
       throw new Error('NSecSignerBtc: BIP-375 transaction output has no script.');
     }
-    if (out.amount === expectedAmount && bytesEqual(out.script, expectedScript)) {
-      foundSp = true;
-      continue;
-    }
-    if (!bytesEqual(out.script, senderScript)) {
+    if (bytesEqual(script, senderScript)) continue; // change back to the sender
+
+    const idx = remaining.findIndex(
+      (expected) => expected.amount === out.amount && bytesEqual(expected.script, script),
+    );
+    if (idx < 0) {
       throw new Error('NSecSignerBtc: unexpected output in BIP-375 transaction.');
     }
+    remaining.splice(idx, 1);
   }
 
-  if (!foundSp) {
+  if (remaining.length > 0) {
     throw new Error('NSecSignerBtc: approved silent payment output is missing.');
   }
 }
