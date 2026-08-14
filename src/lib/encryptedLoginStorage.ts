@@ -198,25 +198,51 @@ export function createEncryptedLoginStorage(
     },
 
     async setItem(key: string, value: string): Promise<void> {
+      let logins: NLoginType[] | undefined;
       try {
-        const logins: NLoginType[] = JSON.parse(value);
-        let signer = await getSigner?.();
-        if (!signer) {
-          signer = await signerForLogins(logins);
-        }
-        if (signer) {
-          const encrypted = await encryptLogins(logins, signer);
-          await Promise.resolve(backend.setItem(key, encrypted));
-          writeSessionCache(key, value);
-          return;
-        }
-      } catch (error) {
-        console.warn('Failed to encrypt login storage:', error);
+        const parsed: unknown = JSON.parse(value);
+        if (Array.isArray(parsed)) logins = parsed as NLoginType[];
+      } catch {
+        // Not a JSON login array — fall through to the plaintext write below.
       }
 
-      // Fallback for extension-only logins or encryption failures: write
-      // plaintext so the app remains usable. This is no worse than the legacy
-      // behavior on web.
+      // The one blob component that must never rest in plaintext: an nsec
+      // login's master secret.
+      const containsNsec = logins?.some((login) => login.type === 'nsec') ?? false;
+
+      if (logins) {
+        try {
+          let signer = await getSigner?.();
+          if (!signer) {
+            signer = await signerForLogins(logins);
+          }
+          if (signer) {
+            const encrypted = await encryptLogins(logins, signer);
+            await Promise.resolve(backend.setItem(key, encrypted));
+            writeSessionCache(key, value);
+            return;
+          }
+        } catch (error) {
+          console.warn('Failed to encrypt login storage:', error);
+        }
+      }
+
+      // Fail closed: if the blob carries an nsec master secret and encryption
+      // was unavailable or failed, refuse the plaintext write. Drop any
+      // previously stored blob so the next cold start forces a re-login
+      // instead of silently downgrading the secret to plaintext at rest —
+      // the entire point of this module.
+      if (containsNsec) {
+        console.error(
+          'Refusing to persist an nsec login without encryption; removing the stored login blob.',
+        );
+        await Promise.resolve(backend.removeItem?.(key));
+        return;
+      }
+
+      // Plaintext fallback for extension/bunker logins only: extension logins
+      // carry no secret and bunker client keys are ephemeral session tokens.
+      // This is no worse than the legacy behavior on web.
       await Promise.resolve(backend.setItem(key, value));
       writeSessionCache(key, value);
     },

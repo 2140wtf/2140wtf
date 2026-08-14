@@ -10,20 +10,29 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
  * uploaded to Blossom and referenced with a `['blossom', url, sha256]` tag.
  */
 
-/** Compute the hex sha256 of a plaintext string. */
-export function computeBackupHash(plaintext: string): string {
-  return bytesToHex(sha256(new TextEncoder().encode(plaintext)));
+/**
+ * Compute the hex sha256 of a string.
+ *
+ * Despite the generic helper, every caller passes the NIP-44 *ciphertext* of
+ * the settings payload — never the plaintext. Passing plaintext would break
+ * backup verification and publish a sha256 oracle of the settings content.
+ */
+export function computeBackupHash(ciphertext: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(ciphertext)));
 }
 
 /** Build a File from an encrypted ciphertext string. */
-export function createBackupFile(plaintext: string): File {
-  const blob = new Blob([plaintext], { type: 'text/plain' });
+export function createBackupFile(ciphertext: string): File {
+  const blob = new Blob([ciphertext], { type: 'text/plain' });
   return new File([blob], '2140-settings-backup.txt', { type: 'text/plain' });
 }
-
-/** Build a `['blossom', url, sha256]` tag from an uploaded backup URL and plaintext. */
-export function buildBlossomBackupTag(url: string, plaintext: string): string[] {
-  return ['blossom', url, computeBackupHash(plaintext)];
+/**
+ * Build a `['blossom', url, sha256]` tag from an uploaded backup URL and its
+ * uploaded ciphertext (the hash must commit to the uploaded bytes, i.e. the
+ * ciphertext, not the settings plaintext).
+ */
+export function buildBlossomBackupTag(url: string, ciphertext: string): string[] {
+  return ['blossom', url, computeBackupHash(ciphertext)];
 }
 
 /** Parse the Blossom backup tag from an event, if present and valid. */
