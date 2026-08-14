@@ -10,7 +10,7 @@ import {
   parseSelectionEvent,
   validateSelectionEvent,
   type DisputeCase,
-} from "@bao/frost-court";
+} from "@bao/court";
 
 const RELAY = "wss://relay.bao.network";
 const QUERY_LIMIT = 500;
