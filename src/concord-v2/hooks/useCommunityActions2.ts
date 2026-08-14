@@ -691,6 +691,11 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
     mutationFn: async () => {
       if (!user || !community) throw new Error("Not ready.");
       if (user.pubkey !== community.owner) throw new Error("Only the owner can dissolve the community.");
+      // Dissolve must physically purge the community from relays first.
+      // Otherwise the local entry is removed and the user has no UI path to
+      // delete the relay residue, leaving orphaned wraps/invites/sponsorships
+      // on every home relay forever.
+      await purgeRemote.mutateAsync({ skipDissolve: true });
       const group = dissolvedGroupKey(community.id);
       // Older communities may predate CORD-08 sponsorship records. Re-assert
       // the terminal stream immediately before publishing the dissolution so
@@ -716,8 +721,8 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
     },
   });
 
-  const purgeRemote = useMutation<RemotePurgeReport, Error, void>({
-    mutationFn: () => {
+  const purgeRemote = useMutation<RemotePurgeReport, Error, { skipDissolve?: boolean } | void>({
+    mutationFn: (opts?: { skipDissolve?: boolean }) => {
       const run = async (): Promise<RemotePurgeReport> => {
         if (!user || !community) throw new Error("Not ready.");
         const isOperator = user.pubkey === APP_OPERATOR_PUBKEY;
@@ -788,7 +793,7 @@ export function useCommunityManagement2(community: CommunityV2 | undefined) {
       // same-author deletion on standard relays, and honored community-wide
       // when the owner is also a relay operator) — leaving residue that
       // failed deletion verification.
-      if (!isOperator) await dissolve.mutateAsync();
+      if (!isOperator && !opts?.skipDissolve) await dissolve.mutateAsync();
       const purgeChannelGroups = channelsView(community, folded).flatMap((ch) => ch.streams.map((s) => s.group));
       // BAO relays may return an empty result to unauthenticated queries. Use
       // the same scoped Concord session that reads the community everywhere
