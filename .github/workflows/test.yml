@@ -25,8 +25,13 @@ jobs:
           node-version: "22"
           cache: npm
 
+      # The lockfile pins a private git dependency (@bao/court) that runners
+      # can only satisfy from the warm npm cache; when npm chooses to
+      # re-resolve it over the network the install fails (observed on
+      # fork-PR runs). --offline forces the cache path, with an online
+      # fallback for genuine cache misses.
       - name: Clean install dependencies
-        run: npm ci
+        run: npm ci --offline || npm ci
           
       - name: Run tests
         run: npm run test
