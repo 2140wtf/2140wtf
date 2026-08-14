@@ -7,7 +7,7 @@ import {
   buildJurorCandidacyEvent,
   type JurorProfile,
   type StakeCommitment,
-} from "@bao/frost-court";
+} from "@bao/court";
 
 export interface JurorRegistrationInput extends BondEscrowInput {
   readonly marketId: string;

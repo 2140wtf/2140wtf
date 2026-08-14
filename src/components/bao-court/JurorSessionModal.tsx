@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 import type { BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
 import { useJurorSession } from "@/hooks/useJurorSession";
-import type { SelectedJuror, AppealPhase } from "@bao/frost-court";
+import type { SelectedJuror, AppealPhase } from "@bao/court";
 import { useToast } from "@/hooks/useToast";
 
 interface JurorSessionModalProps {

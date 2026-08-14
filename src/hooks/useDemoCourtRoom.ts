@@ -22,8 +22,8 @@ import {
 import type { DemoRoomState } from '@/lib/baoCourtSimulator';
 import {
   buildSelectionEvent,
-} from '@bao/frost-court';
-import type { SelectedJuror } from '@bao/frost-court';
+} from '@bao/court';
+import type { SelectedJuror } from '@bao/court';
 
 const RELAY = 'wss://relay.bao.network';
 const QUERY_TIMEOUT_MS = 15_000;
