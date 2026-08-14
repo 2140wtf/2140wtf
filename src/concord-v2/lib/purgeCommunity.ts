@@ -164,14 +164,20 @@ export async function purgeCommunityRemote(
       const streamReader = authenticatedNostr ?? nostr;
       for (let i = 0; i < streamAuthors.length; i += PURGE_AUTHOR_CHUNK) {
         const chunk = streamAuthors.slice(i, i + PURGE_AUTHOR_CHUNK);
+        const filter = [{ kinds: [KIND_WRAP], authors: chunk, limit: PURGE_QUERY_LIMIT }];
         try {
-          const found = await streamReader.relay(url).query(
-            [{ kinds: [KIND_WRAP], authors: chunk, limit: PURGE_QUERY_LIMIT }],
-            { signal: AbortSignal.timeout(15_000) },
-          );
+          const found = await streamReader.relay(url).query(filter, { signal: AbortSignal.timeout(15_000) });
           for (const event of found) targets.set(event.id, event);
         } catch {
-          complete = false;
+          // The isolated Concord reader can time out during its NIP-42 handshake.
+          // Fall back to the normal app pool (already NIP-42 authed with the
+          // caller's identity) so the purge can still find and delete wraps.
+          try {
+            const found = await nostr.relay(url).query(filter, { signal: AbortSignal.timeout(15_000) });
+            for (const event of found) targets.set(event.id, event);
+          } catch {
+            complete = false;
+          }
         }
       }
       // Invite bundles are public addressable events signed by per-link keys,
