@@ -855,7 +855,7 @@ Kind 16158 (replaceable) describes a weather station's configuration: name, geoh
 **Author:** Danifra
 **Spec:** https://github.com/Danidfra/nostr-pet/blob/production/NIP.md
 **App:** https://nostr-pet.vercel.app
-**See also:** [Pets tag schema](docs/pets/pets-tag-schema.md) (2140.wtf-specific integration details)
+**See also:** the Pets tag schema (2140.wtf-specific integration details, maintained in the app's private docs)
 
 NIP-BB defines a virtual pet lifecycle on Nostr. Kind 31124 (addressable) holds the current pet state across three stages (egg, baby, adult) with stats, appearance, and personality traits. Kind 14919 logs individual interactions, kind 14920 records breeding events, kind 14921 stores immutable lifecycle records, and kind 11125 (replaceable) holds the owner's profile with coins, achievements, and inventory.
 
@@ -1370,7 +1370,7 @@ CI status, Nostr artifact fetch), and publishes one signed event per scoring
 attempt.
 
 **Advisory only — never payout authority.** It feeds the layered resolution
-spec (`docs/BAO_FUND_RESOLUTION.md` §2) as an **L0.5 signal**: it can
+spec (BAO_FUND_RESOLUTION §2, maintained in the app's private docs) as an **L0.5 signal**: it can
 surface an automated early-objection *recommendation* and gives donor ring
 members decision-support before their L2 attestation ballot. Payouts are
 decided by L1 optimistic / L2 donor attestation / L3 court — not by this
@@ -1419,7 +1419,7 @@ event. The `p` author MUST be in the campaign's declared `verifier_pubkeys`.
 ### Authority / verification rules
 
 - Consumers MUST only trust scores whose `p` is in the campaign's declared
-  `verifier_pubkeys` (see `docs/BAO_FUND_RESOLUTION.md` §8 declared
+  `verifier_pubkeys` (see BAO_FUND_RESOLUTION §8 declared
   authorities). Any other author is ignored, however well-formed.
 - This event is **advisory**. It does not by itself open a window, release a
   milestone, or refund a donor; those are L1–L3 decisions.
