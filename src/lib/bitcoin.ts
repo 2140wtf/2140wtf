@@ -44,6 +44,41 @@ export { estimateFee, estimateFeeWithDustChange, DUST_LIMIT } from './feeEstimat
 export const MAX_FEE_RATE_SATS_PER_VB = 10_000;
 
 /**
+ * Signing-time fee cap.
+ *
+ * The fee-rate sanity cap is enforced when a PSBT is *constructed* by this
+ * module, but a local signer can also be handed a PSBT built elsewhere (a
+ * counterparty, a sandboxed frame, a future integration). That PSBT may pay
+ * an arbitrary miner fee — e.g. by shrinking or omitting the change output,
+ * which intent verification deliberately treats as freely sized — burning the
+ * difference. To close that hole, every local signing path recomputes
+ * `fee = inputSum − outputSum` from the PSBT's own witness UTXOs and rejects
+ * fees above the maximum a transaction of this shape could ever need under
+ * {@link MAX_FEE_RATE_SATS_PER_VB}.
+ *
+ * @param inputSum   Total value of the PSBT's inputs in satoshis.
+ * @param outputSum  Total value of the PSBT's outputs in satoshis.
+ * @param numInputs  Number of transaction inputs.
+ * @param numOutputs Number of transaction outputs.
+ */
+export function assertPsbtFeeWithinCap(
+  inputSum: bigint,
+  outputSum: bigint,
+  numInputs: number,
+  numOutputs: number,
+): void {
+  const fee = inputSum - outputSum;
+  if (fee < 0n) return; // negative fees are rejected separately as invalid
+  const cap = BigInt(estimateFee(numInputs, numOutputs, MAX_FEE_RATE_SATS_PER_VB));
+  if (fee > cap) {
+    throw new Error(
+      `PSBT fee of ${fee} sats exceeds the signing cap of ${cap} sats for a ` +
+        `${numInputs}-input/${numOutputs}-output transaction; refusing to sign.`,
+    );
+  }
+}
+
+/**
  * Strict 32-byte hex validator. Rejects anything that isn't exactly 64
  * lowercase-or-uppercase hex characters.
  */
@@ -1244,11 +1279,13 @@ const ALLOWED_SIGHASH_TYPES = new Set<number>([
  *   - inputs that are not P2TR key-path spends owned by the expected pubkey,
  *   - inputs that request a non-standard sighash (anything other than
  *     SIGHASH_DEFAULT or SIGHASH_ALL),
- *   - transactions whose outputs exceed their inputs (negative fee).
+ *   - transactions whose outputs exceed their inputs (negative fee),
+ *   - transactions whose fee exceeds the signing-time cap derived from
+ *     {@link MAX_FEE_RATE_SATS_PER_VB} (see {@link assertPsbtFeeWithinCap}).
  *
  * This keeps the local signer from being tricked into signing a PSBT that
- * spends someone else's UTXO, uses a weaker sighash, or is structurally
- * invalid.
+ * spends someone else's UTXO, uses a weaker sighash, is structurally
+ * invalid, or burns the wallet's value as an excessive miner fee.
  */
 function inspectPsbtForLocalSigning(
   tx: btc.Transaction,
@@ -1298,6 +1335,11 @@ function inspectPsbtForLocalSigning(
   if (outputSum > inputSum) {
     throw new Error('PSBT outputs exceed inputs; transaction is invalid.');
   }
+
+  // A crafted PSBT can pass every structural check above while burning
+  // arbitrary value as miner fee (e.g. by omitting the change output).
+  // Reject fees beyond what this transaction shape could ever need.
+  assertPsbtFeeWithinCap(inputSum, outputSum, tx.inputsLength, tx.outputsLength);
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -1562,6 +1604,7 @@ export function signPsbtLocalHd(
   if (outputSum > inputSum) {
     throw new Error('PSBT outputs exceed inputs; transaction is invalid.');
   }
+  assertPsbtFeeWithinCap(inputSum, outputSum, tx.inputsLength, tx.outputsLength);
 
   // Sign each input with its derived private key. Because every HD input has a
   // distinct tapInternalKey, each `tx.sign` call affects exactly the matching
