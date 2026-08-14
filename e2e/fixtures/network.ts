@@ -9,6 +9,13 @@ export interface NetworkFailure {
 export interface AttachOptions {
   /** If true, WebSocket errors/closes to Nostr relays are not treated as failures. */
   tolerateRelayErrors?: boolean;
+  /**
+   * URL patterns whose HTTP 404 responses are tolerated, along with the
+   * matching console "Failed to load resource" errors. Use for read-only
+   * calls to third-party APIs where a 404 means upstream data rot (e.g. an
+   * expired prediction market), not an app bug.
+   */
+  tolerateNotFound?: RegExp[];
 }
 
 /**
@@ -88,6 +95,7 @@ export class NetworkMonitor {
       if (status >= 400) {
         const url = response.url();
         if (this.options.tolerateRelayErrors && this.isRelayUrl(url)) return;
+        if (status === 404 && this.matchesNotFound(url)) return;
         this.failures.push({
           kind: 'response-error',
           url,
@@ -100,6 +108,10 @@ export class NetworkMonitor {
       if (msg.type() === 'error') {
         const text = msg.text();
         if (shouldIgnoreConsole(text)) return;
+        // "Failed to load resource: the server responded with a status of N"
+        // duplicates the page 'response' event for the same request, which
+        // the response handler above already records (or tolerates).
+        if (/Failed to load resource: the server responded with a status of \d{3}/.test(text)) return;
         this.failures.push({
           kind: 'console-error',
           url: page.url(),
@@ -151,6 +163,10 @@ export class NetworkMonitor {
 
   private isRelayUrl(url: string): boolean {
     return url.startsWith('wss://') || url.startsWith('ws://');
+  }
+
+  private matchesNotFound(url: string): boolean {
+    return this.options.tolerateNotFound?.some((pattern) => pattern.test(url)) ?? false;
   }
 }
 
