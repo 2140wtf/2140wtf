@@ -170,8 +170,12 @@ async function unwrapMasterKey(wrappedB64: string, wrappingKey: CryptoKey): Prom
   );
 }
 
+/**
+ * Display name shown in the passkey prompt. Deliberately a fixed string —
+ * using `document.title` made the app name vary with the current page.
+ * (`rpId` remains `location.hostname`, so credentials stay origin-bound.)
+ */
 function getRpName(): string {
-  if (typeof document !== "undefined" && document.title) return document.title;
   return "2140.wtf";
 }
 
