@@ -82,6 +82,7 @@ export function useInitialSync() {
     return "idle";
   });
   const syncedUserRef = useRef<string | null>(null);
+  const abortSyncRef = useRef<(() => void) | null>(null);
 
   // Capture the config timestamps in refs so the main sync effect can compare
   // against the values at the moment it starts without depending on them.
@@ -139,6 +140,12 @@ export function useInitialSync() {
         resolve();
       }, SYNC_TIMEOUT_MS);
     });
+
+    abortSyncRef.current = () => {
+      cancelled = true;
+      controller.abort();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
 
     const doSync = async () => {
       let foundSettings = false;
@@ -436,6 +443,7 @@ export function useInitialSync() {
       cancelled = true;
       if (timeoutId) clearTimeout(timeoutId);
       controller.abort();
+      abortSyncRef.current = null;
     };
   }, [
     user,
@@ -459,10 +467,16 @@ export function useInitialSync() {
     return () => clearTimeout(id);
   }, [phase, markSyncComplete]);
 
+  const skipSync = useCallback(() => {
+    abortSyncRef.current?.();
+    markSyncComplete();
+    setPhase("complete");
+  }, [markSyncComplete]);
+
   const markComplete = useCallback(() => {
     markSyncComplete();
     setPhase("complete");
   }, [markSyncComplete]);
 
-  return { phase, markComplete };
+  return { phase, markComplete, skipSync };
 }
