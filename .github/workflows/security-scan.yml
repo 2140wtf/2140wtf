@@ -59,8 +59,8 @@ jobs:
           node-version: '22'
           cache: npm
 
-      # Offline-first: the private git dependency (@bao/court) is only
-      # resolvable from the warm npm cache; see test.yml.
+      # Offline-first: @bao/court (public, pinned to v0.2.0; installs from
+      # warm cache or anonymous HTTPS tarball) — see test.yml.
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --offline || npm ci --no-audit --no-fund
 
