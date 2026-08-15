@@ -76,10 +76,22 @@ test.describe('smoke', () => {
     await injectTestLogin(page);
     await page.goto('/prediction-markets', { waitUntil: 'load' });
 
+    // The public demo catalog is short-lived by design: poll markets expire
+    // within minutes, so the default active view can legitimately be empty.
+    // Only assert the chart when a market exists; always require the page to
+    // render a graceful state (market cards or the empty state).
     const marketCard = page.locator('[data-market-id]').filter({
       has: page.getByRole('button', { name: 'Buy Yes', exact: true }),
     }).first();
-    await expect(marketCard).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    const emptyState = page.getByText(/No markets found/);
+    await expect(marketCard.or(emptyState).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+
+    if (!(await marketCard.isVisible())) {
+      await expect(emptyState).toBeVisible();
+      monitor.assertNoFailures();
+      return;
+    }
+
     await marketCard.getByRole('button', { name: 'Details' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: DEFAULT_TIMEOUT });
