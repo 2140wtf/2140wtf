@@ -27,7 +27,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@bao/court": "github:baocommunity/bao-court#main",
+    "@bao/court": "github:baocommunity/bao-court#v0.2.0",
     "@capacitor/app": "^8.0.0",
     "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.1.0",
