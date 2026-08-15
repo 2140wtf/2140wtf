@@ -771,8 +771,9 @@ export function ComposeBox({
       notificationSuccess();
       toast({ title: 'Voice message sent!', description: 'Your voice message has been published.' });
       onSuccess?.();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to send voice message.', variant: 'destructive' });
+    } catch (error) {
+      const { message } = describeError(error);
+      toast({ title: 'Failed to send voice message', description: message, variant: 'destructive' });
     } finally {
       setIsPublishingVoice(false);
     }
@@ -1034,8 +1035,9 @@ export function ComposeBox({
         ) : undefined,
       });
       onSuccess?.();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to publish note.', variant: 'destructive' });
+    } catch (error) {
+      const { message } = describeError(error);
+      toast({ title: 'Failed to publish note', description: message, variant: 'destructive' });
     }
   };
 
@@ -1131,8 +1133,9 @@ export function ComposeBox({
       notificationSuccess();
       toast({ title: pollFlavor === 'zap' ? 'Zap poll published!' : 'Poll published!' });
       onSuccess?.();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to publish poll.', variant: 'destructive' });
+    } catch (error) {
+      const { message } = describeError(error);
+      toast({ title: 'Failed to publish poll', description: message, variant: 'destructive' });
     }
   };
 
