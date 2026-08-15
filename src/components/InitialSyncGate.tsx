@@ -327,7 +327,17 @@ const SIGNUP_STEPS: Step[] = [
   "privacy",
   "outro",
 ];
-const SETTINGS_STEPS: Step[] = ["follows", "privacy", "outro"];
+/**
+ * Settings-only flow for RETURNING accounts (new device, no synced settings).
+ *
+ * Deliberately excludes the `follows` onboarding step: the follow-packs page
+ * is served ONLY to brand-new accounts created through the quick-start signup,
+ * never to users who already exist on Nostr — a returning account with
+ * followers was often landed on the page anyway (contact-list fetch timeout,
+ * or a follow count under the threshold) and had no way past it without
+ * following five accounts. Existing users find people to follow in-app.
+ */
+const SETTINGS_STEPS: Step[] = ["privacy", "outro"];
 
 function SetupQuestionnaire({
   onComplete,
@@ -457,8 +467,13 @@ function SetupQuestionnaire({
     // A useful default feed needs at least five follows. A relay timeout is
     // not evidence that the user already follows anyone, so use the shared
     // relay + IndexedDB fallback and keep uncertain/new users in this step.
+    //
+    // Quick-start signup always uses a brand-new key, which by definition has
+    // no existing follow list — skip the contact-list fetch (and its up-to-5s
+    // relay wait) and route straight to the follows step.
+    const isFreshKey = !!expectedPubkey;
     let userHasFollows = false;
-    if (user) {
+    if (user && !isFreshKey) {
       try {
         const event = await fetchContactList(nostr, store, user.pubkey, { timeout: 5000 });
         userHasFollows = hasMinimumFollows(event, MINIMUM_FOLLOWS);
@@ -475,15 +490,7 @@ function SetupQuestionnaire({
     } else {
       goTo("follows");
     }
-  }, [user, nostr, store, goTo]);
-
-  // Settings-only flow: the theme step is skipped, so run the follow-list check
-  // immediately and route to follows/outro accordingly.
-  useEffect(() => {
-    if (!isSignup && step === "follows" && hasFollows === null) {
-      handleSaveAndContinue();
-    }
-  }, [isSignup, step, hasFollows, handleSaveAndContinue]);
+  }, [user, nostr, store, goTo, expectedPubkey]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -1209,6 +1216,16 @@ function FollowsStep({
             <>Continue ({selectedPubkeyCount}/{MINIMUM_FOLLOWS}) <ChevronRight className="w-4 h-4" /></>
           )}
         </Button>
+      </div>
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={() => onNext(false)}
+          disabled={isFollowing}
+          className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          Skip for now — follow people later
+        </button>
       </div>
     </div>
   );
