@@ -711,6 +711,9 @@ export interface PlaceTradeInput {
   /** Max average price the buyer accepts, in cents of a sats-share (default 99%). */
   maxAvgPriceCents?: number;
   rail?: string;
+  /** Anonymous per-market trading identity (optional). */
+  traderPubkey?: string;
+  traderPubkeyProof?: string;
 }
 
 export interface PlaceTradeResult {
@@ -752,6 +755,7 @@ export async function placeBaoTrade(signer: BaoApiSigner, input: PlaceTradeInput
       outcome: input.outcomeLabel,
       amount: input.amountSats,
       ...(input.rail ? { rail: input.rail } : {}),
+      ...(input.traderPubkey ? { trader_pubkey: input.traderPubkey, trader_pubkey_proof: input.traderPubkeyProof } : {}),
     },
   });
   return { via: 'smj', response: res };
