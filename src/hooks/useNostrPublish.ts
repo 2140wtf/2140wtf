@@ -37,6 +37,56 @@ export type EventTemplate = Omit<NostrEvent, 'id' | 'pubkey' | 'sig' | 'created_
   onSigned?: (event: NostrEvent) => void;
 };
 
+/**
+ * How long to wait for the first relay OK before declaring a publish failed.
+ *
+ * The pool publishes with `Promise.any` across all write relays, so this
+ * timeout only starts to matter when EVERY write relay is slow or dead —
+ * e.g. right after the app returns from background on mobile, when every
+ * socket is in websocket-ts reconnect backoff (1s → 2s → 4s → …). The old
+ * 5s budget regularly expired before any socket reconnected, which is why
+ * short plain-text posts intermittently "failed to publish" even though the
+ * relays were fine. A successful publish still resolves on the first OK, so
+ * a generous ceiling costs nothing in the common case.
+ */
+const PUBLISH_TIMEOUT_MS = 30_000;
+
+/**
+ * Turn a failed publish into an error the UI can actually show.
+ *
+ * `Promise.any` across the relay set rejects with an `AggregateError` whose
+ * `errors` hold the per-relay outcomes: relay rejection reasons
+ * ("rate-limited: …", "blocked: …", "pow: …") or abort/timeout
+ * DOMExceptions when no OK arrived in time. Surfacing the real reason beats
+ * the previous static "Failed to publish note." toast, which left users
+ * (and us) blind to whether relays rejected the event or never saw it.
+ */
+function normalizePublishError(error: unknown): Error {
+  const errors =
+    error instanceof AggregateError
+      ? error.errors
+      : [error];
+
+  const reasons = new Set<string>();
+  for (const e of errors) {
+    const isTimeout =
+      (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) ||
+      (e instanceof Error && e.name === 'AbortError');
+    if (isTimeout) continue;
+    const msg = e instanceof Error ? e.message : String(e ?? '');
+    if (msg && msg !== 'undefined') reasons.add(msg);
+  }
+
+  if (reasons.size > 0) {
+    return new Error(
+      `The relays rejected this post: ${[...reasons].slice(0, 3).join(' · ')}`,
+    );
+  }
+  return new Error(
+    'No relay confirmed the post in time. Your connection may be slow — please try again.',
+  );
+}
+
 /** Returns true if the kind falls in a replaceable or addressable range. */
 function isReplaceableKind(kind: number): boolean {
   // Legacy replaceable kinds
@@ -144,12 +194,17 @@ export function useNostrPublish(): UseMutationResult<NostrEvent, Error, EventTem
         // Let callers optimistically render the event before the network call.
         onSigned?.(event);
 
-        if (relay) {
-          await nostr.relay(relay).event(event, { signal: AbortSignal.timeout(5000) });
-        } else if (relays && relays.length > 0) {
-          await nostr.group(relays).event(event, { signal: AbortSignal.timeout(5000) });
-        } else {
-          await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+        const publishSignal = AbortSignal.timeout(PUBLISH_TIMEOUT_MS);
+        try {
+          if (relay) {
+            await nostr.relay(relay).event(event, { signal: publishSignal });
+          } else if (relays && relays.length > 0) {
+            await nostr.group(relays).event(event, { signal: publishSignal });
+          } else {
+            await nostr.event(event, { signal: publishSignal });
+          }
+        } catch (error) {
+          throw normalizePublishError(error);
         }
 
         // NIP-65: For reply events (kind 1 and 1111), pet-battle sync messages

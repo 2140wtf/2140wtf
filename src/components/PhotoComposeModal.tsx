@@ -280,8 +280,9 @@ export function PhotoComposeModal({ open, onOpenChange, onSuccess }: PhotoCompos
       resetForm();
       onOpenChange(false);
       onSuccess?.();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to publish photo.', variant: 'destructive' });
+    } catch (error) {
+      const { message } = describeError(error);
+      toast({ title: 'Failed to publish photo', description: message, variant: 'destructive' });
     }
   };
 
