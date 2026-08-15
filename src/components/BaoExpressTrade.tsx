@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
+import { useBaoMarketIdentity } from '@/hooks/useBaoMarketIdentity';
 import { placeBaoTrade } from '@/lib/baoFundraising';
 import { ErrorCodes } from '@/lib/errorCodes';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,8 @@ export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoEx
   const outcome = market.outcomes[outcomeIdx];
   const amountSats = useMemo(() => parseInt(amount, 10) || 0, [amount]);
 
+  const marketIdentity = useBaoMarketIdentity(market.marketId);
+
   const trade = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Log in to trade.');
@@ -69,6 +72,9 @@ export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoEx
         outcomeLabel: outcome.label,
         amountSats,
         rail,
+        ...(marketIdentity.available
+          ? { traderPubkey: marketIdentity.pubkey, traderPubkeyProof: marketIdentity.proof }
+          : {}),
       });
     },
     onSuccess: (result) => {
