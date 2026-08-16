@@ -38,6 +38,9 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
 });
 
+// jsdom-only mocks: node-environment tests (e.g. real local-relay publish)
+// have no `window`; skip these so they can run with the same setup file.
+if (typeof window !== 'undefined') {
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -96,4 +99,5 @@ global.ResizeObserver = class ResizeObserverMock implements ResizeObserver {
     }
   }
   globalThis.TextEncoder = SameRealmTextEncoder as typeof TextEncoder;
+}
 }
