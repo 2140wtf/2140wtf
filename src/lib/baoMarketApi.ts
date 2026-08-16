@@ -121,29 +121,112 @@ function finiteNonNegative(value: unknown): number | undefined {
 }
 
 /**
+ * Circuit breaker for the BAO markets API.
+ *
+ * relay.bao.network/bao-api is a third-party host that periodically goes down
+ * or stops sending CORS headers. The markets surface fans out one request per
+ * market (positions, sparklines, history), so a single outage used to turn
+ * into dozens of simultaneous failing fetches — a console-error storm for
+ * users and red smoke tests in CI, every single time.
+ *
+ * After FAILURE_THRESHOLD failures within WINDOW_MS the circuit opens and
+ * every BAO market API call fails fast (no network) for COOLDOWN_MS. When
+ * the cooldown expires the circuit half-opens and lets exactly one probe
+ * through: success closes it, failure re-trips it for another cooldown.
+ * Outages are therefore cheap and silent while they last, and the app
+ * recovers automatically the moment the API does.
+ */
+
+const FAILURE_THRESHOLD = 3;
+const WINDOW_MS = 10_000;
+const COOLDOWN_MS = 60_000;
+
+let failures = 0;
+let lastFailureAt = 0;
+let openUntil: number | null = null;
+/** True after the cooldown expires and one probe has been released. */
+let probeAllowed = false;
+
+function isCircuitOpen(): boolean {
+  if (openUntil === null) return false;
+  if (Date.now() >= openUntil) {
+    // Cooldown expired — half-open: let exactly one probe through.
+    openUntil = null;
+    failures = 0;
+    probeAllowed = true;
+    return false;
+  }
+  return true;
+}
+
+function recordFailure(): void {
+  const now = Date.now();
+  if (probeAllowed) {
+    // The half-open probe failed: re-open immediately for a full cooldown.
+    probeAllowed = false;
+    failures = 0;
+    lastFailureAt = now;
+    openUntil = now + COOLDOWN_MS;
+    return;
+  }
+  if (now - lastFailureAt > WINDOW_MS) failures = 0;
+  failures += 1;
+  lastFailureAt = now;
+  if (failures >= FAILURE_THRESHOLD) {
+    openUntil = now + COOLDOWN_MS;
+  }
+}
+
+function recordSuccess(): void {
+  failures = 0;
+  lastFailureAt = 0;
+  openUntil = null;
+  probeAllowed = false;
+}
+
+/** Reset the breaker state (unit tests; can also be called on logout). */
+export function resetBaoApiCircuit(): void {
+  failures = 0;
+  lastFailureAt = 0;
+  openUntil = null;
+  probeAllowed = false;
+}
+
+/**
  * Fetch a URL from the proxied API first, falling back to the public host
  * when the proxy is missing or returns a non-JSON response (dev server
  * without the proxy configured, etc).
  */
 export async function baoApiFetch(path: string, signal?: AbortSignal): Promise<Response> {
+  if (isCircuitOpen()) {
+    throw new Error('BAO markets API is temporarily unavailable');
+  }
+
   const proxiedPath = `${baoPrimaryApiBase()}${path}`;
   const publicPath = `${BAO_PUBLIC_API_BASE}${path}`;
 
   let res: Response;
   try {
-    res = await fetch(proxiedPath, { signal });
-    const contentType = res.headers.get('content-type') ?? '';
-    if (!res.ok || !contentType.includes('application/json')) {
+    try {
+      res = await fetch(proxiedPath, { signal });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        res = await fetch(publicPath, { signal });
+      }
+    } catch {
       res = await fetch(publicPath, { signal });
     }
   } catch {
-    res = await fetch(publicPath, { signal });
+    recordFailure();
+    throw new Error('BAO markets API unreachable');
   }
 
   if (!res.ok) {
+    recordFailure();
     throw new Error(`BAO markets API returned ${res.status}`);
   }
 
+  recordSuccess();
   return res;
 }
 
@@ -154,6 +237,8 @@ export async function baoApiFetch(path: string, signal?: AbortSignal): Promise<R
  * dev DB only has e2e test markets; production has the full catalog).
  */
 export async function baoApiFetchAll(path: string, signal?: AbortSignal): Promise<Response[]> {
+  if (isCircuitOpen()) return [];
+
   const primary = `${baoPrimaryApiBase()}${path}`;
   const publicUrl = `${BAO_PUBLIC_API_BASE}${path}`;
 
@@ -169,7 +254,17 @@ export async function baoApiFetchAll(path: string, signal?: AbortSignal): Promis
 
   const urls = primary === publicUrl ? [primary] : [primary, publicUrl];
   const results = await Promise.all(urls.map(tryFetch));
-  return results.filter((r): r is Response => r !== null);
+  const okResults = results.filter((r): r is Response => r !== null);
+
+  // Collection fetches are tolerant-by-design (empty array), but the breaker
+  // still needs to see failures so it can halt the flood on an outage.
+  if (okResults.length === 0) {
+    recordFailure();
+  } else {
+    recordSuccess();
+  }
+
+  return okResults;
 }
 
 /** One entry of the API's GET /categories catalog. */
