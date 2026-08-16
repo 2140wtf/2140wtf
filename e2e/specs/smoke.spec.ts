@@ -12,6 +12,11 @@ function attachMonitor(page: import('@playwright/test').Page): NetworkMonitor {
     // expired upstream; the app renders the empty state gracefully, so
     // don't fail the build on third-party data rot.
     tolerateNotFound: [/\/bao-api\/v1\/smj\//],
+    // The BAO markets API (relay.bao.network/bao-api) is frequently down or
+    // unreachable from CI and returns CORS/502 failures for every endpoint
+    // while it is. The markets page degrades gracefully (PR #65), so an
+    // upstream outage is infra flake, not an app regression — tolerate it.
+    tolerateExternal: [/relay\.bao\.network\/bao-api\//],
   });
   monitor.attach(page);
   return monitor;

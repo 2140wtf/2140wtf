@@ -16,6 +16,15 @@ export interface AttachOptions {
    * expired prediction market), not an app bug.
    */
   tolerateNotFound?: RegExp[];
+  /**
+   * URL patterns tolerated for ANY outcome (failed requests, HTTP error
+   * statuses, and the matching console errors). Use for third-party APIs
+   * that are frequently down or unreachable from CI and whose absence the
+   * app degrades gracefully around — e.g. the BAO markets API
+   * (relay.bao.network/bao-api), which returns CORS/502 errors whenever it
+   * is down. An upstream outage is infra flake, not an app regression.
+   */
+  tolerateExternal?: RegExp[];
 }
 
 /**
@@ -71,6 +80,9 @@ function shouldIgnoreConsole(text: string): boolean {
 export class NetworkMonitor {
   private failures: NetworkFailure[] = [];
   private options: AttachOptions;
+  /** URLs of external requests tolerated via `tolerateExternal` whose browser
+   *  console message (URL-less "Failed to load resource") is still pending. */
+  private toleratedFailureUrls: string[] = [];
 
   constructor(options: AttachOptions = {}) {
     this.options = options;
@@ -83,6 +95,13 @@ export class NetworkMonitor {
       // Requests aborted by navigation are not app failures.
       if (errorText === 'net::ERR_ABORTED') return;
       if (this.options.tolerateRelayErrors && this.isRelayUrl(url)) return;
+      if (this.matchesExternal(url)) {
+        // Remember it so the matching browser console message
+        // ("Failed to load resource: net::ERR_FAILED", which carries no URL)
+        // can be correlated to the tolerated request below.
+        this.toleratedFailureUrls.push(url);
+        return;
+      }
       this.failures.push({
         kind: 'requestfailed',
         url,
@@ -95,6 +114,7 @@ export class NetworkMonitor {
       if (status >= 400) {
         const url = response.url();
         if (this.options.tolerateRelayErrors && this.isRelayUrl(url)) return;
+        if (this.matchesExternal(url)) return;
         if (status === 404 && this.matchesNotFound(url)) return;
         this.failures.push({
           kind: 'response-error',
@@ -112,6 +132,17 @@ export class NetworkMonitor {
         // duplicates the page 'response' event for the same request, which
         // the response handler above already records (or tolerates).
         if (/Failed to load resource: the server responded with a status of \d{3}/.test(text)) return;
+        // CORS-blocked / failed fetches surface the target URL in the console
+        // text ("Access to fetch at 'URL' … blocked by CORS policy").
+        if (this.matchesExternal(text)) return;
+        // Some consoles emit a bare "Failed to load resource: net::ERR_FAILED"
+        // (no URL). Correlate it with a request we just tolerated.
+        if (/Failed to load resource: net::ERR_FAILED/.test(text)) {
+          if (this.toleratedFailureUrls.length > 0) {
+            this.toleratedFailureUrls.shift();
+            return;
+          }
+        }
         this.failures.push({
           kind: 'console-error',
           url: page.url(),
@@ -167,6 +198,10 @@ export class NetworkMonitor {
 
   private matchesNotFound(url: string): boolean {
     return this.options.tolerateNotFound?.some((pattern) => pattern.test(url)) ?? false;
+  }
+
+  private matchesExternal(text: string): boolean {
+    return this.options.tolerateExternal?.some((pattern) => pattern.test(text)) ?? false;
   }
 }
 
