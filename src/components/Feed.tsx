@@ -10,7 +10,8 @@ import { PullToRefresh } from '@/components/PullToRefresh';
 import { FeedEmptyState } from '@/components/FeedEmptyState';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Heart, Loader2, MapPin, Shield } from 'lucide-react';
+import { Heart, Loader2, MapPin, Play, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import LoginDialog from '@/components/auth/LoginDialog';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -32,8 +33,12 @@ import { useTopicAuthors } from '@/hooks/useTopicAuthors';
 import { useSavedFeeds } from '@/hooks/useSavedFeeds';
 import { useResolveTabFilter } from '@/hooks/useResolveTabFilter';
 import { useCuratedAppFeed } from '@/hooks/useCuratedAppFeed';
+import { useInfiniteHotFeed } from '@/hooks/useTrending';
 import { useStickyFeedItems } from '@/hooks/useStickyFeedItems';
 import { getEnabledFeedKinds } from '@/lib/extraKinds';
+import { eventToMediaItem } from '@/lib/mediaUtils';
+import { tryNeventEncode } from '@/lib/safeNip19';
+import { SafeImage } from '@/components/SafeImage';
 
 import { feedItemKey, isRepostKind, selectFeedItemsWithSeed, shouldHideFeedEvent } from '@/lib/feedUtils';
 import { FEED_TOPICS, getFeedTopic, isFeedTopicId } from '@/lib/feedTopics';
@@ -724,6 +729,8 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
           {/* New posts pill — live auto-refresh. Never re-sorts the feed:
               tapping it refreshes and scrolls to top. */}
           <NewPostsPill count={newPostCount} onClick={handleShowNewPosts} />
+          {/* Visual rail for logged-out visitors — Instagram-style first impression. */}
+          {!user && !kinds && <GuestMediaRail />}
           {wotFilteredItems.length > 0 ? (
             grid ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
@@ -1069,6 +1076,91 @@ function GeotagFeedContent({ tag }: { tag: string }) {
         ))}
       </div>
     </PullToRefresh>
+  );
+}
+
+/**
+ * Horizontal rail of recent photos/videos shown to logged-out visitors.
+ * Gives guests an instant visual, Instagram-style first impression instead
+ * of a wall of text notes. Tapping a tile opens the full post.
+ */
+function GuestMediaRail() {
+  const { user } = useCurrentUser();
+  const { data, isLoading } = useInfiniteHotFeed([20, 21, 22], !user, 12);
+
+  const items = useMemo(() => {
+    if (!data?.pages) return [];
+    const seen = new Set<string>();
+    const out: { event: NostrEvent; url: string; isVideo: boolean }[] = [];
+    for (const page of data.pages) {
+      for (const event of page) {
+        if (seen.has(event.id)) continue;
+        seen.add(event.id);
+        const media = eventToMediaItem(event);
+        if (!media || (media.type !== 'image' && media.type !== 'video')) continue;
+        out.push({ event, url: media.url, isVideo: media.type === 'video' });
+        if (out.length >= 12) break;
+      }
+      if (out.length >= 12) break;
+    }
+    return out;
+  }, [data?.pages]);
+
+  if (isLoading && items.length === 0) {
+    return (
+      <div className="flex gap-2 overflow-hidden px-4 py-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-32 w-32 shrink-0 rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="px-4 pt-3 pb-3">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+        Fresh from the feed
+      </p>
+      <div className="flex gap-2 overflow-x-auto scrollbar-none">
+        {items.map(({ event, url, isVideo }) => {
+          const nevent = tryNeventEncode({ id: event.id, author: event.pubkey, kind: event.kind });
+          return (
+            <Link
+              key={event.id}
+              to={nevent ? `/${nevent}` : '#'}
+              className="group shrink-0"
+              aria-label="Open post"
+            >
+              <div className="relative size-32 sm:size-36 rounded-xl overflow-hidden border border-border bg-muted/60">
+                {isVideo ? (
+                  <video
+                    src={url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <SafeImage
+                    src={url}
+                    alt=""
+                    loading="lazy"
+                    className="size-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                )}
+                {isVideo && (
+                  <span className="absolute bottom-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-background/80">
+                    <Play className="size-3.5" />
+                  </span>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
