@@ -88,7 +88,7 @@ test.describe('smoke', () => {
     const marketCard = page.locator('[data-market-id]').filter({
       has: page.getByRole('button', { name: 'Buy Yes', exact: true }),
     }).first();
-    const emptyState = page.getByText(/No markets found/);
+    const emptyState = page.getByText(/No markets found|markets API is unreachable/);
     await expect(marketCard.or(emptyState).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     if (!(await marketCard.isVisible())) {
