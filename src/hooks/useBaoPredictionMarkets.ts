@@ -13,8 +13,9 @@ const LIVE_BATCH_MS = 1_000;
 const API_PAGE_LIMIT = 200;
 const API_MAX_PAGES = 5;
 
-async function fetchApiMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
+async function fetchApiMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<{ markets: BaoMarket[]; apiUnavailable: boolean }> {
   const byId = new Map<string, BaoMarket>();
+  let sawFailure = false;
 
   for (let page = 0; page < API_MAX_PAGES; page++) {
     const params = new URLSearchParams({
@@ -30,26 +31,46 @@ async function fetchApiMarkets(category: string, status: 'active' | 'all', signa
 
     // Primary (local dev API) and public API hold different rows — merge both.
     // Primary wins on id conflicts (it's the DB a developer is actively testing).
-    const responses = await baoApiFetchAll(`/markets?${params.toString()}`, signal);
+    let responses: Response[] = [];
+    try {
+      responses = await baoApiFetchAll(`/markets?${params.toString()}`, signal);
+    } catch {
+      sawFailure = true;
+      break;
+    }
     if (responses.length === 0) {
-      throw new Error("BAO markets API unreachable");
+      sawFailure = true;
+      break;
     }
 
     let hasMore = false;
     for (const res of responses) {
-      const json = (await res.json()) as {
-        data?: ApiMarket[];
-        pagination?: { has_more?: boolean };
-      };
-      for (const m of json.data ?? []) {
-        if (!byId.has(m.id)) byId.set(m.id, apiMarketToBaoMarket(m));
+      if (!res.ok) {
+        // A 5xx page (e.g. the public API's DB pool saturation) must not
+        // blank out markets we already collected from earlier pages.
+        sawFailure = true;
+        continue;
       }
-      hasMore = hasMore || json.pagination?.has_more === true;
+      try {
+        const json = (await res.json()) as {
+          data?: ApiMarket[];
+          pagination?: { has_more?: boolean };
+        };
+        for (const m of json.data ?? []) {
+          if (!byId.has(m.id)) byId.set(m.id, apiMarketToBaoMarket(m));
+        }
+        hasMore = hasMore || json.pagination?.has_more === true;
+      } catch {
+        sawFailure = true;
+      }
     }
     if (!hasMore) break;
   }
 
-  return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
+  const markets = Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
+  // Entire API unreachable (network error or every page 5xx): surface it so
+  // callers can degrade honestly instead of pretending the catalog is empty.
+  return { markets, apiUnavailable: sawFailure && markets.length === 0 };
 }
 
 function isMarketActive(market: BaoMarket, now: number): boolean {
@@ -109,7 +130,7 @@ function getQueryKey(category: string, status: 'active' | 'all') {
 export function useBaoPredictionMarkets(category: string = "all", status: 'active' | 'all' = "active") {
   const queryClient = useQueryClient();
 
-  const query = useQuery<BaoMarket[]>({
+  const query = useQuery<{ markets: BaoMarket[]; apiUnavailable: boolean }>({
     queryKey: getQueryKey(category, status),
     queryFn: async ({ signal }) => {
       const controller = new AbortController();
@@ -121,15 +142,20 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
 
       try {
         try {
-          const apiMarkets = await fetchApiMarkets(category, status, controller.signal);
+          const { markets: apiMarkets, apiUnavailable } = await fetchApiMarkets(category, status, controller.signal);
           if (apiMarkets.length > 0) {
-            return apiMarkets;
+            return { markets: apiMarkets, apiUnavailable };
+          }
+          if (!apiUnavailable) {
+            // API reachable but genuinely has no markets in this view.
+            return { markets: [], apiUnavailable: false };
           }
         } catch (error) {
           console.warn("[useBaoPredictionMarkets] API fetch failed, falling back to relay:", error);
         }
 
-        return fetchRelayMarkets(category, status, controller.signal);
+        const relayMarkets = await fetchRelayMarkets(category, status, controller.signal);
+        return { markets: relayMarkets, apiUnavailable: true };
       } finally {
         clearTimeout(timeoutId);
       }
@@ -137,6 +163,10 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: "always",
+    // While the markets API is unreachable we keep polling so odds and
+    // volume reappear as soon as it recovers, without hammering it once
+    // it is healthy (the interval switches off when data comes back).
+    refetchInterval: (query) => (query.state.data?.apiUnavailable ? 30_000 : false),
   });
 
   // Live subscription: keep a persistent REQ open so new/updated markets flow in.
@@ -225,7 +255,12 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
     };
   }, [category, status, queryClient]);
 
-  return query;
+  const { data, ...rest } = query;
+  return {
+    ...rest,
+    markets: data?.markets ?? [],
+    apiUnavailable: data?.apiUnavailable ?? false,
+  };
 }
 
 /**

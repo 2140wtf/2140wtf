@@ -256,7 +256,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   });
 
   const statusFilter = showResolved ? 'all' : 'active';
-  const { data: markets = [], isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', statusFilter);
+  const { markets = [], apiUnavailable, isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', statusFilter);
   // Relay-first discovery: kind-38000 definitions straight from the relay, so
   // cards render even when the bao.markets API is down. API markets win on
   // conflicts (live odds); relay-only markets are badged "via relay".
@@ -380,7 +380,18 @@ export function PredictionMarketsPage(): React.JSX.Element {
     if (filteredAndSorted.length === 0) {
       return (
         <div className="col-span-full py-20 text-center text-sm text-muted-foreground">
-          {error ? (
+          {apiUnavailable ? (
+            <div className="space-y-3">
+              <p>
+                The markets API is unreachable right now, so odds and volume can't load.
+                Markets discovered on the relay are still shown above when available.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                <RefreshCw className="size-3.5 mr-1.5" />
+                Retry
+              </Button>
+            </div>
+          ) : error ? (
             <div className="space-y-3">
               <p className="text-destructive">
                 {error instanceof Error ? error.message : "Failed to load markets"}
@@ -404,7 +415,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
         onSelect={(m, outcomeLabel) => { setSelectedMarket(m); setInitialOutcome(outcomeLabel ?? null); }}
       />
     ));
-  }, [isLoading, filteredAndSorted, error, refetch]);
+  }, [isLoading, filteredAndSorted, error, refetch, apiUnavailable]);
 
   return (
     <main>
@@ -432,6 +443,16 @@ export function PredictionMarketsPage(): React.JSX.Element {
             Feedback is welcome while we prepare it.
           </AlertDescription>
         </Alert>
+
+        {apiUnavailable && !isLoading && markets.length > 0 && (
+          <Alert variant="destructive" className="border-amber-600/40 bg-amber-500/10">
+            <Info className="size-4" />
+            <AlertDescription>
+              The markets API is unreachable right now — showing relay definitions only. Odds and
+              volume will appear automatically once it recovers.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <MyTradesSection
           onOpenMarket={(market, position) => {
