@@ -139,7 +139,7 @@ export function AdvancedSettings() {
                   Link Preview URL
                 </Label>
                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                  URI template for fetching link previews (returns OEmbed JSON). Supports RFC 6570 variables: <code className="bg-muted px-1 rounded">{'{url}'}</code>, <code className="bg-muted px-1 rounded">{'{hostname}'}</code>, <code className="bg-muted px-1 rounded">{'{origin}'}</code>, etc.
+                  Optional URI template for fetching link previews (returns OEmbed JSON) via your own proxy. When empty, generic links use the built-in Microlink preview (title, description, thumbnail) — no setup needed. Supports RFC 6570 variables: <code className="bg-muted px-1 rounded">{'{url}'}</code>, <code className="bg-muted px-1 rounded">{'{hostname}'}</code>, <code className="bg-muted px-1 rounded">{'{origin}'}</code>, etc.
                 </p>
                 <Input
                   id="link-preview-url"

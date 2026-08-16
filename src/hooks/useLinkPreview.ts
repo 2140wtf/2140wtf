@@ -9,6 +9,7 @@ const OEmbedSchema = z.object({
   type: z.enum(['link', 'photo', 'video', 'rich']),
   version: z.string().optional(),
   title: z.string().optional(),
+  description: z.string().optional(),
   author_name: z.string().optional(),
   author_url: z.url().optional(),
   provider_name: z.string().optional(),
@@ -119,9 +120,65 @@ async function tryFetchOEmbed(endpoint: string, signal?: AbortSignal): Promise<O
 }
 
 /**
+ * Fetch a generic link preview from the Microlink API (client-side, CORS-enabled),
+ * normalized into OEmbed shape.
+ *
+ * Works for any URL without an API key — returns title, description, publisher,
+ * and an OG thumbnail when the page has one. This is the built-in fallback that
+ * powers link cards for sites without a native oEmbed endpoint (GitHub, blogs,
+ * news sites, …). Returns null on failure so cards degrade to a bare domain row.
+ */
+async function fetchMicrolinkPreview(url: string, signal?: AbortSignal): Promise<OEmbedData | null> {
+  try {
+    const endpoint = new URL('https://api.microlink.io/');
+    endpoint.searchParams.set('url', url);
+    endpoint.searchParams.set('video', 'false');
+    endpoint.searchParams.set('audio', 'false');
+    endpoint.searchParams.set('pdf', 'false');
+
+    const response = await fetch(endpoint.toString(), {
+      signal,
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!response.ok) return null;
+
+    const json = (await response.json()) as {
+      status?: string;
+      data?: Record<string, unknown>;
+    };
+    if (json.status !== 'success' || !json.data || typeof json.data !== 'object') return null;
+
+    const { data } = json;
+    const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : undefined;
+    const description =
+      typeof data.description === 'string' && data.description.trim() ? data.description.trim() : undefined;
+    const publisher =
+      typeof data.publisher === 'string' && data.publisher.trim() ? data.publisher.trim() : undefined;
+
+    const image = data.image as { url?: unknown } | undefined;
+    const logo = data.logo as { url?: unknown } | undefined;
+    const imageUrl =
+      typeof image?.url === 'string' ? image.url : typeof logo?.url === 'string' ? logo.url : undefined;
+
+    return {
+      type: 'link',
+      // Fall back to a clipped description when the page has no og:title.
+      title: title ?? description?.slice(0, 120),
+      description,
+      provider_name: publisher,
+      thumbnail_url: imageUrl ? (sanitizeUrl(imageUrl) ?? undefined) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch OEmbed data for a URL.
  * For known providers (YouTube, Spotify, Reddit, Archive.org), queries their
- * native endpoints directly. For all other URLs, uses the configured link preview proxy.
+ * native endpoints directly. For all other URLs, uses the configured link preview
+ * proxy if one is set, then falls back to the built-in Microlink lookup so every
+ * link card gets a title/description/thumbnail.
  */
 async function fetchLinkPreview(
   url: string,
@@ -132,12 +189,15 @@ async function fetchLinkPreview(
   const native = await tryNativeOEmbed(url, signal);
   if (native) return native;
 
-  // Fall back to the generic link preview proxy. No template configured means
-  // no proxy — without this guard templateUrl('') yields '' and fetch('') hits
-  // the page URL itself (a spurious same-origin request per feed link).
-  if (!linkPreviewTemplate) return null;
-  const endpoint = templateUrl({ template: linkPreviewTemplate, url });
-  return tryFetchOEmbed(endpoint, signal);
+  // Fall back to the configured link preview proxy, if any.
+  if (linkPreviewTemplate) {
+    const endpoint = templateUrl({ template: linkPreviewTemplate, url });
+    const proxied = await tryFetchOEmbed(endpoint, signal);
+    if (proxied) return proxied;
+  }
+
+  // Last resort: built-in generic preview (no config required).
+  return fetchMicrolinkPreview(url, signal);
 }
 
 /** Hook to fetch OEmbed link preview data for a URL. */
