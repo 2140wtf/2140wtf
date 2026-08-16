@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
-import { apiMarketToBaoMarket, type ApiMarket } from './baoMarketApi';
+import {
+  apiMarketToBaoMarket,
+  baoApiFetch,
+  baoApiFetchAll,
+  resetBaoApiCircuit,
+  type ApiMarket,
+} from './baoMarketApi';
 
 const baseApiMarket: ApiMarket = {
   id: 'baofund-fr_abc-0',
@@ -101,5 +107,119 @@ describe('apiMarketToBaoMarket', () => {
       pool_model: 'smj',
     });
     expect(m.poolModel).toBe('smj');
+  });
+});
+
+describe('BAO markets API circuit breaker', () => {
+  afterEach(() => {
+    resetBaoApiCircuit();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  /** Mock fetch so every call returns a JSON response with `status`. */
+  function mockFetchStatus(status: number): void {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [] }), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+
+  it('fails fast without touching the network while the circuit is open', async () => {
+    mockFetchStatus(502);
+
+    // Three failures within the window trip the breaker.
+    await expect(baoApiFetch('/markets/1')).rejects.toThrow();
+    await expect(baoApiFetch('/markets/2')).rejects.toThrow();
+    await expect(baoApiFetch('/markets/3')).rejects.toThrow();
+
+    // Circuit is open — the next call must not issue a fetch at all.
+    const fetchSpy = vi.mocked(globalThis.fetch);
+    fetchSpy.mockClear();
+    await expect(baoApiFetch('/markets/4')).rejects.toThrow(/temporarily unavailable/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Collection fetches degrade to an empty list while open.
+    const responses = await baoApiFetchAll('/categories');
+    expect(responses).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('recovers automatically after the cooldown via a half-open probe', async () => {
+    vi.useFakeTimers();
+    mockFetchStatus(502);
+
+    await expect(baoApiFetch('/a')).rejects.toThrow();
+    await expect(baoApiFetch('/b')).rejects.toThrow();
+    await expect(baoApiFetch('/c')).rejects.toThrow();
+
+    const fetchSpy = vi.mocked(globalThis.fetch);
+    fetchSpy.mockClear();
+    await expect(baoApiFetch('/d')).rejects.toThrow(/temporarily unavailable/);
+
+    // Cooldown expires → one probe is allowed through; success closes the circuit.
+    vi.advanceTimersByTime(61_000);
+    mockFetchStatus(200);
+    await expect(baoApiFetch('/ok')).resolves.toBeDefined();
+
+    // Circuit is closed again — the very next call fetches immediately.
+    fetchSpy.mockClear();
+    await expect(baoApiFetch('/ok-again')).resolves.toBeDefined();
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('re-trips the circuit when the half-open probe fails', async () => {
+    vi.useFakeTimers();
+    mockFetchStatus(502);
+
+    await expect(baoApiFetch('/a')).rejects.toThrow();
+    await expect(baoApiFetch('/b')).rejects.toThrow();
+    await expect(baoApiFetch('/c')).rejects.toThrow();
+
+    vi.advanceTimersByTime(61_000);
+    // Half-open probe fails → breaker re-opens for another cooldown.
+    await expect(baoApiFetch('/probe')).rejects.toThrow();
+
+    const fetchSpy = vi.mocked(globalThis.fetch);
+    fetchSpy.mockClear();
+    await expect(baoApiFetch('/blocked')).rejects.toThrow(/temporarily unavailable/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('a success resets the failure streak before it trips', async () => {
+    let fail = true;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      if (fail) {
+        return new Response(JSON.stringify({}), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    await expect(baoApiFetch('/a')).rejects.toThrow();
+    await expect(baoApiFetch('/b')).rejects.toThrow();
+
+    // One success between failures resets the counter — the next failure must
+    // not trip the circuit on its own.
+    fail = false;
+    await expect(baoApiFetch('/recover')).resolves.toBeDefined();
+
+    // One more failure after the reset is just a failed call, not a trip —
+    // the following request still hits the network normally.
+    fail = true;
+    await expect(baoApiFetch('/c')).rejects.toThrow();
+    fail = false;
+
+    const fetchSpy = vi.mocked(globalThis.fetch);
+    fetchSpy.mockClear();
+    await expect(baoApiFetch('/still-going')).resolves.toBeDefined();
+    expect(fetchSpy).toHaveBeenCalled();
   });
 });
