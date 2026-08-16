@@ -77,12 +77,12 @@ function isMarketActive(market: BaoMarket, now: number): boolean {
   return market.state === 'active' && (market.endTime <= 0 || market.endTime >= now);
 }
 
-async function fetchRelayMarkets(category: string, status: 'active' | 'all', signal: AbortSignal): Promise<BaoMarket[]> {
+async function fetchRelayMarkets(category: string, status: 'active' | 'all', signal?: AbortSignal): Promise<BaoMarket[]> {
   const relay = new NRelay1(RELAY);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 
-  signal.addEventListener("abort", () => controller.abort(), { once: true });
+  signal?.addEventListener("abort", () => controller.abort(), { once: true });
 
   const filter: NostrFilter = {
     kinds: [BAO_MARKET_KIND],
@@ -123,27 +123,35 @@ async function fetchRelayMarkets(category: string, status: 'active' | 'all', sig
   }
 }
 
-function getQueryKey(category: string, status: 'active' | 'all') {
-  return ["bao-prediction-markets", category, status];
+export type BaoMarketSource = "api" | "relay" | "both";
+
+function getQueryKey(category: string, status: 'active' | 'all', source: BaoMarketSource) {
+  return ["bao-prediction-markets", category, status, source];
 }
 
-export function useBaoPredictionMarkets(category: string = "all", status: 'active' | 'all' = "active") {
+export function useBaoPredictionMarkets(category: string = "all", status: 'active' | 'all' = "active", source: BaoMarketSource = "api") {
   const queryClient = useQueryClient();
 
   const query = useQuery<{ markets: BaoMarket[]; apiUnavailable: boolean }>({
-    queryKey: getQueryKey(category, status),
+    queryKey: getQueryKey(category, status, source),
     queryFn: async ({ signal }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 
       if (signal) {
-        signal.addEventListener("abort", () => controller.abort(), { once: true });
+        signal?.addEventListener("abort", () => controller.abort(), { once: true });
       }
 
       try {
+        if (source === "relay") {
+          // Relay-only source: definitions only, no API involvement.
+          const relayMarkets = await fetchRelayMarkets(category, status, undefined);
+          return { markets: relayMarkets, apiUnavailable: false };
+        }
+
         try {
           const { markets: apiMarkets, apiUnavailable } = await fetchApiMarkets(category, status, controller.signal);
-          if (apiMarkets.length > 0) {
+          if (apiMarkets.length > 0 || source === "api") {
             return { markets: apiMarkets, apiUnavailable };
           }
           if (!apiUnavailable) {
@@ -152,9 +160,13 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
           }
         } catch (error) {
           console.warn("[useBaoPredictionMarkets] API fetch failed, falling back to relay:", error);
+          if (source === "api") return { markets: [], apiUnavailable: true };
         }
 
-        const relayMarkets = await fetchRelayMarkets(category, status, controller.signal);
+        // both: API empty/unreachable -> relay definitions as fallback.
+        // fetchRelayMarkets owns its timeout; don't pass the API-phase
+        // controller, which may already be aborted.
+        const relayMarkets = await fetchRelayMarkets(category, status, undefined);
         return { markets: relayMarkets, apiUnavailable: true };
       } finally {
         clearTimeout(timeoutId);
@@ -172,6 +184,7 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
   // Live subscription: keep a persistent REQ open so new/updated markets flow in.
   // Batch incoming events to avoid re-rendering the grid on every single event.
   useEffect(() => {
+    if (source === "api") return;
     const relay = new NRelay1(RELAY);
     const controller = new AbortController();
 
@@ -194,7 +207,7 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
       if (pending.length === 0 || controller.signal.aborted) return;
 
       const events = pending.splice(0, pending.length);
-      const queryKey = getQueryKey(category, status);
+      const queryKey = getQueryKey(category, status, source);
 
       queryClient.setQueryData<BaoMarket[]>(queryKey, (old = []) => {
         const seenEventIds = new Set<string>();
@@ -253,7 +266,7 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
       if (flushTimer) clearTimeout(flushTimer);
       relay.close().catch(() => {});
     };
-  }, [category, status, queryClient]);
+  }, [category, status, source, queryClient]);
 
   const { data, ...rest } = query;
   return {

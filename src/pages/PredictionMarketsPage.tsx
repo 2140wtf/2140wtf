@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/toggle-group";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppContext } from "@/hooks/useAppContext";
-import { useBaoPredictionMarkets, useBaoMarketCategories } from "@/hooks/useBaoPredictionMarkets";
+import { useBaoPredictionMarkets, useBaoMarketCategories, type BaoMarketSource } from "@/hooks/useBaoPredictionMarkets";
 import { useBaoRelayMarkets } from "@/hooks/useBaoRelayMarkets";
 import { useBaoSmjOdds, withSmjOdds } from "@/hooks/useBaoSmjOdds";
 import { useUrlSelectedBaoMarket } from "@/hooks/useUrlSelectedBaoMarket";
@@ -244,6 +244,14 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
   const [showResolved, setShowResolved] = useState(false);
+  // Where the catalog loads from: API, relay, or both. Defaults to the API —
+  // the relay carries definitions only (no odds/volume), so it is the
+  // comparison/test mode, not the default.
+  const SOURCE_STORAGE_KEY = "bao-market-source";
+  const [source, setSource] = useState<BaoMarketSource>(() => {
+    const stored = typeof localStorage !== "undefined" ? localStorage.getItem(SOURCE_STORAGE_KEY) : null;
+    return stored === "api" || stored === "relay" || stored === "both" ? stored : "api";
+  });
   // Progressive render: mount only the first cards immediately, then append
   // more as the user scrolls. This keeps first paint fast (images, sparklines
   // and odds load only for the visible batch) instead of mounting the whole
@@ -262,15 +270,14 @@ export function PredictionMarketsPage(): React.JSX.Element {
   });
 
   const statusFilter = showResolved ? 'all' : 'active';
-  const { markets = [], apiUnavailable, isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', statusFilter);
-  // Relay-first discovery: kind-38000 definitions straight from the relay, so
-  // cards render even when the bao.markets API is down. API markets win on
-  // conflicts (live odds); relay-only markets are badged "via relay".
-  const { data: relayMarkets = [] } = useBaoRelayMarkets('all', statusFilter);
-  const mergedMarkets = useMemo(
-    () => mergeApiAndRelayMarkets(markets, relayMarkets),
-    [markets, relayMarkets],
-  );
+  const { markets = [], apiUnavailable, isLoading, isFetching, error, refetch } = useBaoPredictionMarkets('all', statusFilter, source);
+  // Relay query is disabled entirely in api-only mode.
+  const { data: relayMarkets = [] } = useBaoRelayMarkets('all', statusFilter, source !== 'api');
+  const mergedMarkets = useMemo(() => {
+    if (source === 'api') return mergeApiAndRelayMarkets(markets, []);
+    if (source === 'relay') return mergeApiAndRelayMarkets([], relayMarkets);
+    return mergeApiAndRelayMarkets(markets, relayMarkets);
+  }, [markets, relayMarkets, source]);
   const { data: apiCategories = [] } = useBaoMarketCategories();
 
   // Live SMJ (parimutuel) odds from the API: the relay defs are anonymous
@@ -547,6 +554,25 @@ export function PredictionMarketsPage(): React.JSX.Element {
               ))}
             </SelectContent>
           </Select>
+
+          <ToggleGroup
+            type="single"
+            value={source}
+            onValueChange={(v) => {
+              if (v === 'api' || v === 'relay' || v === 'both') {
+                setSource(v);
+                try { localStorage.setItem(SOURCE_STORAGE_KEY, v); } catch { /* best-effort */ }
+              }
+            }}
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            aria-label="Market data source"
+          >
+            <ToggleGroupItem value="api" aria-label="Load markets from the API">API</ToggleGroupItem>
+            <ToggleGroupItem value="relay" aria-label="Load markets from the relay">Relay</ToggleGroupItem>
+            <ToggleGroupItem value="both" aria-label="Load markets from both the API and the relay">Both</ToggleGroupItem>
+          </ToggleGroup>
 
           <ToggleGroup
             type="single"
