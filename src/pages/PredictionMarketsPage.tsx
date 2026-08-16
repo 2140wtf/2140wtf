@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Box, Info, Plus, RefreshCw, Search } from "lucide-react";
 import { useSeoMeta } from "@unhead/react";
 import { useSearchParams } from "react-router-dom";
@@ -244,6 +244,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
   const [showResolved, setShowResolved] = useState(false);
+  // Progressive render: mount only the first cards immediately, then append
+  // more as the user scrolls. This keeps first paint fast (images, sparklines
+  // and odds load only for the visible batch) instead of mounting the whole
+  // grid — and firing hundreds of sub-requests — at once.
+  const [visibleCount, setVisibleCount] = useState(8);
+  const gridSentinelRef = useRef<HTMLDivElement | null>(null);
   const [selectedMarket, setSelectedMarket] = useState<BaoMarket | null>(null);
   const [initialOutcome, setInitialOutcome] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -270,13 +276,25 @@ export function PredictionMarketsPage(): React.JSX.Element {
   // Live SMJ (parimutuel) odds from the API: the relay defs are anonymous
   // and the markets API's outcome.price is a stale default for SMJ pools —
   // the /smj/:id endpoint carries the real pool distribution.
+  //
+  // Odds are fetched ONLY for the markets currently mounted (the progressive
+  // visible batch), so the initial load does not fire hundreds of parallel
+  // /smj/:id requests; more odds load as the user scrolls.
+  const visibleMarkets = useMemo(() => mergedMarkets.slice(0, visibleCount), [mergedMarkets, visibleCount]);
   const smjIds = useMemo(
-    () => mergedMarkets.filter((m) => m.poolModel === 'smj').map((m) => m.marketId),
-    [mergedMarkets],
+    () => visibleMarkets.filter((m) => m.poolModel === 'smj').map((m) => m.marketId),
+    [visibleMarkets],
   );
   const smjOdds = useBaoSmjOdds(smjIds);
   const marketsWithOdds = useMemo(
-    () => mergedMarkets.map((m) => withSmjOdds(m, smjOdds)),
+    () => mergedMarkets.map((m) => {
+      // SMJ markets without a funded parimutuel pool must not show the API's
+      // stale 0.5 default price as if it were real odds — a fabricated 50/50.
+      if (m.poolModel === 'smj' && !smjOdds[m.marketId]) {
+        return { ...m, oddsAvailable: false };
+      }
+      return withSmjOdds(m, smjOdds);
+    }),
     [mergedMarkets, smjOdds],
   );
 
@@ -361,6 +379,27 @@ export function PredictionMarketsPage(): React.JSX.Element {
     setSelectedMarket,
   );
 
+  // Grow the rendered batch as the sentinel approaches the viewport. Reset
+  // whenever the list/shape changes (new search, category, sort, status).
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [search, category, sort, showResolved]);
+
+  useEffect(() => {
+    const el = gridSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((c) => Math.min(c + 8, filteredAndSorted.length));
+        }
+      },
+      { rootMargin: "800px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filteredAndSorted.length]);
+
   const gridItems = useMemo(() => {
     if (isLoading) {
       return Array.from({ length: 8 }).map((_, i) => (
@@ -408,14 +447,14 @@ export function PredictionMarketsPage(): React.JSX.Element {
       );
     }
 
-    return filteredAndSorted.map((market) => (
+    return filteredAndSorted.slice(0, visibleCount).map((market) => (
       <MarketCard
         key={market.marketId}
         market={market}
         onSelect={(m, outcomeLabel) => { setSelectedMarket(m); setInitialOutcome(outcomeLabel ?? null); }}
       />
     ));
-  }, [isLoading, filteredAndSorted, error, refetch, apiUnavailable]);
+  }, [isLoading, filteredAndSorted, visibleCount, error, refetch, apiUnavailable]);
 
   return (
     <main>
@@ -567,6 +606,16 @@ export function PredictionMarketsPage(): React.JSX.Element {
           )}
         >
           {gridItems}
+
+          {filteredAndSorted.length > visibleCount && (
+            <div
+              ref={gridSentinelRef}
+              className="col-span-full flex justify-center py-6 text-xs text-muted-foreground"
+              aria-hidden
+            >
+              Loading more markets…
+            </div>
+          )}
         </div>
       </div>
 

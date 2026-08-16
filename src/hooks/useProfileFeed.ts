@@ -99,7 +99,7 @@ export function useProfileFeed(pubkey: string | undefined, activeTab: ProfileTab
     queryFn: async ({ pageParam, signal }) => {
       if (!pubkey) return { items: [], oldestQueryTimestamp: Math.floor(Date.now() / 1000), rawCount: 0 };
 
-      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
       const now = Math.floor(Date.now() / 1000);
 
       /** Seed the `['event', id]` query cache with events we already have in hand. */
@@ -185,7 +185,7 @@ export function useProfileLikes(pubkey: string | undefined, active: boolean) {
     queryFn: async ({ pageParam, signal }) => {
       if (!pubkey) return { events: [], oldestReactionTimestamp: undefined };
 
-      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
 
       const filter: Record<string, unknown> = {
         kinds: [7],
@@ -285,7 +285,7 @@ export function useTabFeed(
     queryFn: async ({ pageParam, signal }) => {
       if (!filter) return { items: [], oldestQueryTimestamp: Math.floor(Date.now() / 1000), rawCount: 0, fetchLimit: PAGE_SIZE };
 
-      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
       const now = Math.floor(Date.now() / 1000);
 
       const kinds = (filter.kinds && filter.kinds.length > 0) ? filter.kinds : defaultKinds;

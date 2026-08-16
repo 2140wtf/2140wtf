@@ -111,16 +111,17 @@ export function LinkPreview({ url, className, hideImage, navigateToComments, sho
             ))}
           </div>
 
-          {/* Title */}
+          {/* Title — up to 3 lines so longer titles aren't lost. */}
           {data?.title && (
-            <p className="text-sm font-semibold leading-snug line-clamp-2">
+            <p className="text-sm font-semibold leading-snug line-clamp-3">
               {data.title}
             </p>
           )}
 
-          {/* Description (or author) — the second content line */}
+          {/* Description (or author) — more embedded text than a bare URL:
+              keep it readable up to 4 lines. */}
           {(data?.description ?? data?.author_name) && (
-            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">
               {data.description ?? data.author_name}
             </p>
           )}

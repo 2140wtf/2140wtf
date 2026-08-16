@@ -81,8 +81,20 @@ export function useResolveTabFilter(
       }
     });
 
-    return resolveFilter(tabFilter, resolvedVars, runtimeVars);
-  }, [isLoading, vars, varQueries, tabFilter, runtimeVars]);
+    const resolved = resolveFilter(tabFilter, resolvedVars, runtimeVars);
+
+    // Profile tabs must stay scoped to the profile owner by default. A saved
+    // filter without `authors` (e.g. a custom "All" tab) would otherwise query
+    // the whole network with no author bound — most relays return nothing for
+    // such unbounded queries, rendering the tab empty. Tabs that explicitly
+    // saved authors, or use NIP-50 `search` (which is global by nature),
+    // keep their filter as-is.
+    if (resolved && !resolved.authors && !resolved.search) {
+      return { ...resolved, authors: [ownerPubkey] };
+    }
+
+    return resolved;
+  }, [isLoading, vars, varQueries, tabFilter, runtimeVars, ownerPubkey]);
 
   return { filter: resolvedFilter, isLoading };
 }
