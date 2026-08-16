@@ -327,6 +327,13 @@ const SIGNUP_STEPS: Step[] = [
   "privacy",
   "outro",
 ];
+/**
+ * Settings-only flow for accounts that didn't come through quick-start
+ * signup (passkey registration, imported nsec, new device). The `follows`
+ * step is included but gated: it renders ONLY when the account has no
+ * follow list yet (brand-new accounts), and every follow choice can be
+ * skipped. Accounts with an existing follow list skip straight to privacy.
+ */
 const SETTINGS_STEPS: Step[] = ["follows", "privacy", "outro"];
 
 function SetupQuestionnaire({
@@ -457,8 +464,13 @@ function SetupQuestionnaire({
     // A useful default feed needs at least five follows. A relay timeout is
     // not evidence that the user already follows anyone, so use the shared
     // relay + IndexedDB fallback and keep uncertain/new users in this step.
+    //
+    // Quick-start signup always uses a brand-new key, which by definition has
+    // no existing follow list — skip the contact-list fetch (and its up-to-5s
+    // relay wait) and route straight to the follows step.
+    const isFreshKey = !!expectedPubkey;
     let userHasFollows = false;
-    if (user) {
+    if (user && !isFreshKey) {
       try {
         const event = await fetchContactList(nostr, store, user.pubkey, { timeout: 5000 });
         userHasFollows = hasMinimumFollows(event, MINIMUM_FOLLOWS);
@@ -475,10 +487,11 @@ function SetupQuestionnaire({
     } else {
       goTo("follows");
     }
-  }, [user, nostr, store, goTo]);
+  }, [user, nostr, store, goTo, expectedPubkey]);
 
-  // Settings-only flow: the theme step is skipped, so run the follow-list check
-  // immediately and route to follows/outro accordingly.
+  // Settings-only flow (passkey registration, fresh nsec, new device): run the
+  // follow-list check immediately and route to follows (new accounts with no
+  // follow list) or straight to privacy (accounts that already follow people).
   useEffect(() => {
     if (!isSignup && step === "follows" && hasFollows === null) {
       handleSaveAndContinue();
@@ -517,6 +530,15 @@ function SetupQuestionnaire({
           )}
 
           {/* Settings steps */}
+          {step === "follows" && hasFollows === null && (
+            <div className="flex flex-col items-center gap-4 py-16 animate-in fade-in">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Checking your follow list…
+              </p>
+            </div>
+          )}
+
           {step === "follows" && hasFollows === false && (
             <FollowsStep
               onNext={(didFollow) => {
@@ -1209,6 +1231,16 @@ function FollowsStep({
             <>Continue ({selectedPubkeyCount}/{MINIMUM_FOLLOWS}) <ChevronRight className="w-4 h-4" /></>
           )}
         </Button>
+      </div>
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={() => onNext(false)}
+          disabled={isFollowing}
+          className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          Skip for now — follow people later
+        </button>
       </div>
     </div>
   );
