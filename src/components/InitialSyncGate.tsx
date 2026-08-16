@@ -328,16 +328,13 @@ const SIGNUP_STEPS: Step[] = [
   "outro",
 ];
 /**
- * Settings-only flow for RETURNING accounts (new device, no synced settings).
- *
- * Deliberately excludes the `follows` onboarding step: the follow-packs page
- * is served ONLY to brand-new accounts created through the quick-start signup,
- * never to users who already exist on Nostr — a returning account with
- * followers was often landed on the page anyway (contact-list fetch timeout,
- * or a follow count under the threshold) and had no way past it without
- * following five accounts. Existing users find people to follow in-app.
+ * Settings-only flow for accounts that didn't come through quick-start
+ * signup (passkey registration, imported nsec, new device). The `follows`
+ * step is included but gated: it renders ONLY when the account has no
+ * follow list yet (brand-new accounts), and every follow choice can be
+ * skipped. Accounts with an existing follow list skip straight to privacy.
  */
-const SETTINGS_STEPS: Step[] = ["privacy", "outro"];
+const SETTINGS_STEPS: Step[] = ["follows", "privacy", "outro"];
 
 function SetupQuestionnaire({
   onComplete,
@@ -492,6 +489,15 @@ function SetupQuestionnaire({
     }
   }, [user, nostr, store, goTo, expectedPubkey]);
 
+  // Settings-only flow (passkey registration, fresh nsec, new device): run the
+  // follow-list check immediately and route to follows (new accounts with no
+  // follow list) or straight to privacy (accounts that already follow people).
+  useEffect(() => {
+    if (!isSignup && step === "follows" && hasFollows === null) {
+      handleSaveAndContinue();
+    }
+  }, [isSignup, step, hasFollows, handleSaveAndContinue]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {/* Progress bar */}
@@ -524,6 +530,15 @@ function SetupQuestionnaire({
           )}
 
           {/* Settings steps */}
+          {step === "follows" && hasFollows === null && (
+            <div className="flex flex-col items-center gap-4 py-16 animate-in fade-in">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Checking your follow list…
+              </p>
+            </div>
+          )}
+
           {step === "follows" && hasFollows === false && (
             <FollowsStep
               onNext={(didFollow) => {
