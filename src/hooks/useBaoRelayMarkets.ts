@@ -26,11 +26,12 @@ function isMarketActive(market: BaoMarket, now: number): boolean {
  * Relay failures resolve to an empty list: when the relay is unreachable the
  * UI must behave exactly as if this hook did not exist.
  */
-export function useBaoRelayMarkets(category: string = "all", status: "active" | "all" = "active") {
+export function useBaoRelayMarkets(category: string = "all", status: "active" | "all" = "active", enabled = true) {
   const { nostr } = useNostr();
 
   return useQuery<BaoMarket[]>({
     queryKey: ["bao-relay-markets", category, status, BAO_MARKET_NETWORK],
+    enabled,
     queryFn: async ({ signal }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
