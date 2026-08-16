@@ -13,6 +13,7 @@ import {
   KeyRound,
   Fingerprint,
   Zap,
+  Orbit,
   ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import { DialogTitle } from '@radix-ui/react-dialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
+import { openUrl } from '@/lib/downloadFile';
 import {
   registerNativePasskeyAccount,
   loginNativePasskeyAccount,
@@ -382,10 +384,14 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
       }}
       className="w-full"
     >
-      <TabsList className="grid w-full grid-cols-4 bg-muted border rounded-none mb-4 h-auto">
+      <TabsList className="grid w-full grid-cols-5 bg-muted border rounded-none mb-4 h-auto">
         <TabsTrigger value="secret" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
           <KeyRound className="size-3.5 sm:size-4" />
           <span>Key</span>
+        </TabsTrigger>
+        <TabsTrigger value="nostr" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
+          <Orbit className="size-3.5 sm:size-4" />
+          <span>Nostr</span>
         </TabsTrigger>
         <TabsTrigger value="remote" className="flex flex-col sm:flex-row items-center gap-1 rounded-none py-2 px-1 text-[10px] sm:text-xs">
           <ExternalLink className="size-3.5 sm:size-4" />
@@ -459,6 +465,58 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
             <p className="text-sm text-red-500 text-center">{errors.file}</p>
           )}
         </form>
+      </TabsContent>
+
+      <TabsContent value='nostr' className='space-y-4'>
+        <div className='text-center space-y-4'>
+          <div className="flex size-16 text-3xl bg-primary/10 rounded-full items-center justify-center justify-self-center">
+            <Orbit className="size-7 text-primary" />
+          </div>
+
+          {hasExtension ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Log in with your existing Nostr identity using a NIP-07 browser extension.
+              </p>
+              {errors.extension && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{errors.extension}</AlertDescription>
+                </Alert>
+              )}
+              <Button
+                className="w-full h-12 rounded-none"
+                onClick={handleExtensionLogin}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Logging in...' : 'Log in with Extension'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                No Nostr extension detected in this browser. Install a NIP-07 extension to log in
+                with your existing Nostr key without entering it here.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full h-12 rounded-none"
+                  onClick={() => openUrl('https://getalby.com')}
+                >
+                  Install Alby
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full h-12 rounded-none"
+                  onClick={() => openUrl('https://nos2x.fly.dev')}
+                >
+                  Install nos2x
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </TabsContent>
 
       <TabsContent value='remote' className='space-y-4'>
@@ -667,24 +725,6 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
               <ArrowRight className="w-4 h-4 mr-2" />
               Create account
             </Button>
-          )}
-
-          {hasExtension && (
-            <div className="space-y-3">
-              {errors.extension && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>{errors.extension}</AlertDescription>
-                </Alert>
-              )}
-              <Button
-                className="w-full h-12 px-9 rounded-none"
-                onClick={handleExtensionLogin}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Logging in...' : 'Log in with Extension'}
-              </Button>
-            </div>
           )}
 
           <div className="relative">
