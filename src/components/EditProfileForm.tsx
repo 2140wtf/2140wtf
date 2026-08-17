@@ -251,11 +251,14 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ onValuesChange
         }
       }
 
-      // Publish the metadata event (kind 0)
+      // Pass the current kind-0 event as `prev` so useNostrPublish preserves
+      // the original NIP-24 `published_at` instead of stamping "now" on every
+      // save. useNostrPublish verifies the prev signature, pubkey, and kind.
       await publishEvent({
         kind: 0,
         content: JSON.stringify(data),
         tags: [],
+        prev: event ?? undefined,
       });
 
       // Invalidate queries to refresh the data

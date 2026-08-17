@@ -35,6 +35,7 @@ import { useUploadFile } from '@/hooks/useUploadFile';
 
 import { useToast } from '@/hooks/useToast';
 import { usePublishPreferences } from '@/hooks/usePublishPreferences';
+import { describeError } from '@/lib/errorCodes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -875,7 +876,12 @@ export function ProfileSettings() {
       } else {
         delete data.fields;
       }
-      await publishEvent({ kind: 0, content: JSON.stringify(data), tags: [] });
+      // Pass the current kind-0 event as `prev` so useNostrPublish preserves
+      // the original NIP-24 `published_at` instead of stamping "now" on every
+      // save (a fresh published_at makes the profile appear re-created to
+      // clients sorting by it). useNostrPublish verifies the prev signature,
+      // pubkey, and kind before trusting it.
+      await publishEvent({ kind: 0, content: JSON.stringify(data), tags: [], prev: event ?? undefined });
       queryClient.invalidateQueries({ queryKey: ['logins'] });
       queryClient.invalidateQueries({ queryKey: ['author', user.pubkey] });
 
@@ -886,8 +892,18 @@ export function ProfileSettings() {
       if (!targetsSaved) return;
 
       toast({ title: 'Profile saved' });
-    } catch {
-      toast({ title: 'Error', description: 'Failed to save profile.', variant: 'destructive' });
+    } catch (error) {
+      // Never swallow the real reason: a relay rejection, signer timeout, or
+      // write-relay failure currently shows only "Failed to save profile." —
+      // invisible in console and useless for retrying. Mirror ComposeBox and
+      // surface the actual error via describeError.
+      console.error('Failed to save profile:', error);
+      const { message, code } = describeError(error);
+      toast({
+        title: 'Failed to save profile',
+        description: code ? `${message} (${code})` : message,
+        variant: 'destructive',
+      });
     }
   };
 
