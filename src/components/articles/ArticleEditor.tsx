@@ -69,7 +69,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
   const { user } = useCurrentUser();
   const { mutate: publishEvent, isPending: isPublishing } = useNostrPublish();
   const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
-  const { drafts: relayDrafts, isLoading: isDraftsLoading, saveDraft: saveRelayDraft, isSaving: isSyncingToRelay, deleteDraft: deleteRelayDraft, isDeleting } = useDrafts();
+  const { drafts: relayDrafts, isLoading: isDraftsLoading, saveDraft: saveRelayDraft, isSaving: isSyncingToRelay, deleteDraft: deleteRelayDraft, isDeleting, canSync: canSyncDrafts } = useDrafts();
   const { articles: publishedArticles } = usePublishedArticles();
   const { isEnabled } = usePublishPreferences();
 
@@ -124,7 +124,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
     setLastSaved(new Date());
     setHasUnsavedChanges(false);
 
-    if (user) {
+    if (user && canSyncDrafts) {
       try {
         await saveRelayDraft(data);
         if (!mountedRef.current) return;
@@ -135,13 +135,23 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
         console.error('Failed to save draft to relay:', error);
         if (!mountedRef.current) return;
         if (!silent) {
-          toast({ title: 'Draft saved locally', description: 'Could not sync to relays. Saved to your browser.', variant: 'destructive' });
+          // Surface the real failure reason — "drafts disabled in settings" or
+          // an actual relay rejection both land here, and a generic message
+          // hides the fix.
+          const reason = error instanceof Error && error.message ? error.message : 'Could not sync to relays.';
+          toast({ title: 'Draft saved locally', description: `${reason} Saved to your browser.`, variant: 'destructive' });
         }
       }
     } else if (!silent) {
-      toast({ title: 'Draft saved', description: 'Your article has been saved locally.' });
+      if (user && !canSyncDrafts) {
+        // Expected mode for signers without NIP-44 — not an error. Publishing
+        // articles works fine without it; only encrypted draft sync does not.
+        toast({ title: 'Draft saved locally', description: 'Your login method does not support encrypted draft sync, so drafts stay in this browser. Publishing works normally.' });
+      } else {
+        toast({ title: 'Draft saved', description: 'Your article has been saved locally.' });
+      }
     }
-  }, [user, saveRelayDraft]);
+  }, [user, canSyncDrafts, saveRelayDraft]);
 
   // Auto-save 30s after the first unsaved change. The timer starts once and
   // is only reset when `hasUnsavedChanges` transitions, not on every keystroke.
@@ -385,9 +395,10 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
           if (isEditMode && originalSlug && originalSlug !== newSlug) {
             try {
               // Query the old event to get its ID for a thorough deletion
-              const oldEvents = await nostr.query([
-                { kinds: [30023], authors: [user.pubkey], '#d': [originalSlug], limit: 1 },
-              ]);
+              const oldEvents = await nostr.query(
+                [{ kinds: [30023], authors: [user.pubkey], '#d': [originalSlug], limit: 1 }],
+                { signal: AbortSignal.timeout(8000) },
+              );
 
               const deletionTags: string[][] = [
                 ['a', `30023:${user.pubkey}:${originalSlug}`],
@@ -407,10 +418,12 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
           // Remove draft after publishing
           if (article.slug) {
             deleteDraftBySlug(article.slug);
-            try {
-              await deleteRelayDraft(article.slug);
-            } catch (error) {
-              console.error('Failed to delete draft from relay:', error);
+            if (canSyncDrafts) {
+              try {
+                await deleteRelayDraft(article.slug);
+              } catch (error) {
+                console.error('Failed to delete draft from relay:', error);
+              }
             }
           }
 
@@ -440,6 +453,7 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
     nostr,
     publishEvent,
     deleteRelayDraft,
+    canSyncDrafts,
     isEditMode,
     originalSlug,
     originalPublishedAt,
@@ -481,9 +495,14 @@ export function ArticleEditor({ initialData, editMode = false }: ArticleEditorPr
     const slug = article.slug || slugify(article.title, { lower: true, strict: true });
     if (slug !== originalSlug) {
       try {
-        const existing = await nostr.query([
-          { kinds: [30023], authors: [user.pubkey], '#d': [slug], limit: 1 },
-        ]);
+        // Bound the check with a timeout: without a signal, `nostr.query` waits
+        // for relay EOSE indefinitely, so on unreachable relays the publish
+        // click would hang forever with no feedback. On timeout we proceed
+        // anyway and let `useNostrPublish` surface the real relay error.
+        const existing = await nostr.query(
+          [{ kinds: [30023], authors: [user.pubkey], '#d': [slug], limit: 1 }],
+          { signal: AbortSignal.timeout(8000) },
+        );
 
         if (existing.length > 0) {
           toast({

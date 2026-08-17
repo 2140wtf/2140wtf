@@ -64,6 +64,14 @@ export function useDrafts() {
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { isEnabled } = usePublishPreferences();
 
+  /**
+   * Whether drafts can be synced to relays at all. Relay drafts are NIP-37
+   * wraps encrypted to yourself with NIP-44, so signers without NIP-44
+   * support (some NIP-07 extensions and remote signers) can only keep drafts
+   * locally. Publishing articles does NOT require this — only draft sync does.
+   */
+  const canSync = !!user?.signer.nip44;
+
   // Query and decrypt drafts from relay
   const query = useQuery<Draft[]>({
     queryKey: ['drafts', user?.pubkey ?? ''],
@@ -158,6 +166,7 @@ export function useDrafts() {
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
+    canSync,
     saveDraft: saveMutation.mutateAsync,
     isSaving: saveMutation.isPending,
     deleteDraft: deleteMutation.mutateAsync,
