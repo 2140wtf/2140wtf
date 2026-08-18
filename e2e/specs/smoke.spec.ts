@@ -85,8 +85,10 @@ test.describe('smoke', () => {
     // within minutes, so the default active view can legitimately be empty.
     // Only assert the chart when a market exists; always require the page to
     // render a graceful state (market cards or the empty state).
+    // Outcome labels come from live market data and their casing varies
+    // between catalogs (Yes/YES/...), so match the buy button loosely.
     const marketCard = page.locator('[data-market-id]').filter({
-      has: page.getByRole('button', { name: 'Buy Yes', exact: true }),
+      has: page.getByRole('button', { name: /^buy yes$/i }),
     }).first();
     const emptyState = page.getByText(/No markets found|markets API is unreachable/);
     await expect(marketCard.or(emptyState).first()).toBeVisible({ timeout: DEFAULT_TIMEOUT });
@@ -101,11 +103,10 @@ test.describe('smoke', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
-    // The outcome pills render inside the chart card; wait for them to appear
-    // after the lightweight-charts canvas has computed the sparklines.
-    const chartCard = dialog.locator('.rounded-xl, [class*="rounded-xl"]').filter({ hasText: /Yes|No/ }).first();
-    await expect(chartCard.getByRole('button', { name: 'Yes', exact: true })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
-    await expect(chartCard.getByRole('button', { name: 'No', exact: true })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    // The outcome pills render in the dialog's trade module; labels come from
+    // live market data and their casing varies (Yes/YES/...), so match loosely.
+    await expect(dialog.getByRole('button', { name: /^yes$/i })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
+    await expect(dialog.getByRole('button', { name: /^no$/i })).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     monitor.assertNoFailures();
   });
