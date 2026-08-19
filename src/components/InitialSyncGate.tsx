@@ -15,6 +15,7 @@ import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 import { saveNsec } from "@/lib/credentialManager";
 import { openUrl } from "@/lib/downloadFile";
 import { fetchFreshEvent } from "@/lib/fetchFreshEvent";
+import { getEffectiveRelays } from "@/lib/appRelays";
 import {
   type ReactNode,
   useCallback,
@@ -952,6 +953,7 @@ function FollowsStep({
 }) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { store } = useNostrStorage();
   const { isEnabled } = usePublishPreferences();
@@ -1092,6 +1094,24 @@ function FollowsStep({
       return;
     }
 
+    // Preflight: with zero write relays NPool.event() resolves WITHOUT
+    // publishing (its empty-route early return), so the kind 3 would vanish
+    // silently while the UI advances as if it succeeded. Fail loudly instead.
+    const writeRelayCount = getEffectiveRelays(
+      config.relayMetadata,
+      config.useAppRelays,
+      config.useUserRelays,
+    ).relays.filter((r) => r.write).length;
+    if (writeRelayCount === 0) {
+      toast({
+        title: "No write relays configured",
+        description:
+          "Your relay settings have no relay that accepts posts. Enable app relays or add one in Settings → Relays, then try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsFollowing(true);
 
     try {
@@ -1124,26 +1144,43 @@ function FollowsStep({
         throw new Error("At least five follows are required");
       }
 
-      // 4. Publish with prev for published_at preservation
-      await publishEvent({
-        kind: 3,
-        content: prev?.content ?? "",
-        tags: [...nonPTags, ...existingPTags, ...newPTags],
-        prev: prev ?? undefined,
-      });
+      // 4. Publish with prev for published_at preservation. Retry once after
+      // a short pause: during onboarding the write-relay sockets are often
+      // cold (the pack/profile queries above use dedicated pack relays), and a
+      // reconnecting or just-opened socket can miss the first publish window.
+      const publishFollows = () =>
+        publishEvent({
+          kind: 3,
+          content: prev?.content ?? "",
+          tags: [...nonPTags, ...existingPTags, ...newPTags],
+          prev: prev ?? undefined,
+        });
+      try {
+        await publishFollows();
+      } catch (firstError) {
+        console.warn("Follows publish failed, retrying once:", firstError);
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        await publishFollows();
+      }
 
       onNext(true);
     } catch (error) {
       console.error("Failed to follow suggested accounts:", error);
+      // Surface the real reason (relay rejection messages, timeouts) — a
+      // generic "check your connection" hides actionable errors like
+      // "auth-required" or "event too large" and made this undebuggable.
+      const reason = error instanceof Error ? error.message : "";
       toast({
         title: "Couldn't save your follows",
-        description: "Your choices are unchanged. Check your relay connection and try again.",
+        description: reason
+          ? `${reason} Your choices are unchanged — try again.`
+          : "Your choices are unchanged. Check your relay connection and try again.",
         variant: "destructive",
       });
     } finally {
       setIsFollowing(false);
     }
-  }, [user, selectedPubkeys, selectedPubkeyCount, isEnabled, expectedPubkey, nostr, store, publishEvent, onNext]);
+  }, [user, config, selectedPubkeys, selectedPubkeyCount, isEnabled, expectedPubkey, nostr, store, publishEvent, onNext]);
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-400">
