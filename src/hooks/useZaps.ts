@@ -15,6 +15,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { notificationSuccess } from '@/lib/haptics';
 
 /**
+ * Well-known public relays that LNURL servers commonly publish kind 9735
+ * zap receipts to. These are merged into the zap request's relay hints
+ * so that even servers that ignore relay hints publish receipts to relays
+ * the app will also listen on.
+ */
+const RECEIPT_FALLBACK_RELAYS = [
+  'wss://relay.damus.io',
+  'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://relay.primal.net',
+];
+
+/**
  * Hook for sending zaps to an event author.
  * Stats (zap count, total sats) come from NIP-85 via useEventStats — this hook
  * only handles the payment flow.
@@ -185,7 +198,14 @@ export function useZaps(
       const baseZapParams = {
         pubkey: target.pubkey,
         amount: zapAmount,
-        relays: config.relayMetadata.relays.map(r => r.url),
+        // Merge the user's configured relays with well-known fallback relays
+        // so LNURL servers that honor relay hints publish receipts to relays
+        // the app also monitors (and servers that ignore hints still often
+        // publish to damus / primal / nos.lol).
+        relays: [
+          ...config.relayMetadata.relays.map(r => r.url),
+          ...RECEIPT_FALLBACK_RELAYS,
+        ],
         comment,
       };
 
