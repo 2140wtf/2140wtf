@@ -59,13 +59,20 @@ export function useZapPaymentListener(
       if (!bolt11 || bolt11.toLowerCase() !== invoice.toLowerCase()) return false;
       if (event.kind !== 9735 || !verifyEvent(event)) return false;
       if (expectedProviderPubkey && event.pubkey !== expectedProviderPubkey) return false;
-      if (!event.tags.some(([name, value]) => name === 'p' && value === target.pubkey)) return false;
+      // The `p` tag on the kind-9735 receipt identifies the recipient. Some
+      // LNURL servers omit it entirely — they rely on the embedded kind-9734
+      // request instead. We accept both: if present, verify it matches; if
+      // absent, skip this check (the embedded request's `p` tag is validated
+      // below).
+      const receiptP = event.tags.find(([name]) => name === 'p')?.[1];
+      if (receiptP && receiptP !== target.pubkey) return false;
 
       // A receipt is not proof merely because it repeats a visible invoice.
       // Require the provider to commit the payer's signed kind-9734 request,
       // and require that request to name this exact recipient/target.
       const request = receiptZapRequest(event);
-      if (!request?.tags.some(([name, value]) => name === 'p' && value === target.pubkey)) return false;
+      if (!request) return false;
+      if (!request.tags.some(([name, value]) => name === 'p' && value === target.pubkey)) return false;
       if (target.kind !== 0 && !request.tags.some(([name, value]) => name === 'e' && value === target.id)) return false;
       return true;
     };
