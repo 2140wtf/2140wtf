@@ -10,7 +10,9 @@ beforeEach(() => {
 
 vi.mock("@/hooks/useCurrentUser", () => ({
   useCurrentUser: () => ({
-    user: { pubkey: "02" + "a".repeat(64) },
+    // Canonical x-only pubkey (64-char lowercase hex) — compressed 33-byte
+    // keys are rejected by @bao/court v0.5.3 DKG validation.
+    user: { pubkey: "a".repeat(64) },
   }),
 }));
 
@@ -59,9 +61,9 @@ function makeOptions(demoMode = true): UseJurorSessionOptions {
       proposedOutcome: "NO",
     },
     selectedJurors: [
-      makeJuror(1, "02" + "a".repeat(64)),
-      makeJuror(2, "02" + "d".repeat(64)),
-      makeJuror(3, "02" + "e".repeat(64)),
+      makeJuror(1, "a".repeat(64)),
+      makeJuror(2, "b".repeat(64)),
+      makeJuror(3, "c".repeat(64)),
     ],
     myJurorIdx: 1,
     demoMode,
