@@ -54,6 +54,21 @@ export function LinkEmbed({ url, className, navigateToComments, showActions = tr
   const redditUrl = useMemo(() => extractRedditPost(url), [url]);
   const archiveOrgId = useMemo(() => extractArchiveOrgId(url), [url]);
 
+  // Inline (mid-sentence) positions get the compact generic card even for
+  // special providers — full-size players and iframes don't fit mid-sentence.
+  if (compact && (youtubeId || tweetId || mastodonUrl || spotifyEmbed || redditUrl || archiveOrgId)) {
+    return (
+      <LinkPreview
+        url={url}
+        className={className}
+        hideImage={hideImage}
+        navigateToComments={navigateToComments}
+        showActions={showActions}
+        compact
+      />
+    );
+  }
+
   let embed: React.ReactNode;
 
   if (youtubeId) {
