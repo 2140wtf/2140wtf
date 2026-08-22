@@ -99,3 +99,6 @@ grant-proposal-experiment/
 # Encrypted signing-key backups — never commit, keep outside the repo
 *.gpg
 .gstack/
+
+# local capture credentials — never commit
+.capture-nsec
