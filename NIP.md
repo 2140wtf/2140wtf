@@ -1465,6 +1465,7 @@ A reader validates STRUCTURE before rendering — the relay is open, so malforme
 | `n` / `network` | Yes | Network the market settles on. The public deployment is the signet demo (`demo`); readers MUST only show events matching their own network. |
 | `end` | Yes | Unix seconds when trading closes. |
 | `outcome` | Yes* | One tag per outcome label, at least two. May also be an `outcomes` array in `data`/content JSON. |
+| `pool_model` | No | Pool model for parimutuel settlement: `smj` (SMJ parimutuel) or `amm`. |
 | `data` | Optional | JSON object mirroring title/outcomes for compact readers. |
 
 \* Required in at least one of the accepted locations.
@@ -1474,6 +1475,21 @@ A reader validates STRUCTURE before rendering — the relay is open, so malforme
 1. Query `{ kinds: [38000], '#n': [<your-network>] }` from `wss://relay.bao.network` (and optionally the user's own relays).
 2. Validate structure: `d`, category, network match, numeric `end`, a title, and ≥2 outcomes — drop anything malformed silently.
 3. Render definitions (title, outcomes, end date, category). Do NOT infer odds or settlement from the event — none is encoded.
+
+### API Enrichment (optional for live odds)
+
+Definitions from the relay carry no odds, volume, or trade data. Clients that also have access to the bao.markets REST API can enrich relay-only markets:
+
+- **Market catalog:** `GET /bao-api/v1/markets?status=active&sort_by=total_volume&sort_dir=desc&limit=20` returns `ApiMarket[]` with `outcomes: [{id, label, price, volume}]`, `total_volume`, `trade_count`, `liquidity_sats`, `pool_model`, `payment_rails`.
+- **Single market:** `GET /bao-api/v1/markets/{marketId}`
+- **Category catalog:** `GET /bao-api/v1/categories`
+- **SMJ parimutuel odds:** `GET /bao-api/v1/smj/{marketId}` — live pool share curve for SMJ markets (odds = pool share at each bet). The API's static `outcome.price` is a stale default for SMJ pools; this endpoint carries the real odds.
+
+Odds enrichment is progressive: only the currently visible card batch (e.g. 8–16 markets) fires SMJ sub-requests, preventing hundreds of parallel calls. Markets without a funded parimutuel pool (`smj: false` or no SMJ response) display no fabricated odds.
+
+### Circuit Breaker
+
+The relay.bao.network/bao-api host periodically goes down or stops sending CORS headers. Because the markets surface fans out one sub-request per market (positions, sparklines, history), a single outage previously triggered dozens of simultaneous failing fetches. A circuit breaker with 3-failure-in-10s threshold and 60s cooldown halts the flood: after 3 failures all market API calls fail silently; the cooldown expires, one probe is released; success closes the breaker, failure re-trips for another cooldown.
 
 ### Out of scope (by design)
 
