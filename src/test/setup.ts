@@ -68,15 +68,20 @@ Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   value: vi.fn(),
 });
 
-// Mock IntersectionObserver
-global.IntersectionObserver = vi.fn().mockImplementation((_callback) => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-  root: null,
-  rootMargin: '',
-  thresholds: [],
-}));
+// Mock IntersectionObserver as a constructable class (components like
+// LinkPreview call `new IntersectionObserver(...)`; a vi.fn arrow
+// implementation is not constructable — same reason as ResizeObserver below).
+// Callbacks never fire, so visibility-gated code stays in its "not visible" state.
+global.IntersectionObserver = class IntersectionObserverMock implements IntersectionObserver {
+  root: Element | Document | null = null;
+  rootMargin = '';
+  thresholds: ReadonlyArray<number> = [];
+  constructor(_callback: IntersectionObserverCallback) {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords(): IntersectionObserverEntry[] { return []; }
+} as typeof IntersectionObserver;
 
 // Mock ResizeObserver as a constructable class (cmdk calls `new
 // ResizeObserver(...)`; a vi.fn arrow implementation is not constructable).

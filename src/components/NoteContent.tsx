@@ -725,33 +725,15 @@ export function NoteContent({
           }
           case 'link-embed':
             if (disableEmbeds) {
-              return (
-                <a
-                  key={i}
-                  href={token.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline break-all"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {token.url}
-                </a>
-              );
+              return <PlainLinkFallback key={i} url={token.url} />;
             }
             return <LinkEmbed key={i} url={token.url} className="my-2.5" hideImage={hideEmbedImages} />;
           case 'inline-link':
-            return (
-              <a
-                key={i}
-                href={token.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline break-all"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {token.url}
-              </a>
-            );
+            // Always render a rich preview card — compact mode for inline (mid-sentence) URLs.
+            if (disableEmbeds) {
+              return <PlainLinkFallback key={i} url={token.url} />;
+            }
+            return <LinkEmbed key={i} url={token.url} compact hideImage={hideEmbedImages} className="my-1" />;
           case 'media-embed': {
             if (disableEmbeds || disableMediaEmbeds) {
               return null;
@@ -877,6 +859,21 @@ export function NoteContent({
         />
       )}
     </Wrapper>
+  );
+}
+
+/** Plain styled anchor used when embeds are disabled — renders the raw URL. */
+function PlainLinkFallback({ url }: { url: string }) {
+  return (
+    <a
+      href={sanitizeUrl(url) ?? '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-primary hover:underline break-all"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {url}
+    </a>
   );
 }
 

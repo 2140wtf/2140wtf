@@ -22,9 +22,11 @@ describe('NoteContent', () => {
       </TestApp>
     );
 
-    const link = await screen.findByRole('link', { name: 'https://example.com' });
+    // Inline URLs render as compact LinkPreview cards (<a> named by its domain)
+    const link = await screen.findByRole('link', { name: /example\.com/ });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', 'https://example.com');
+    expect(link).toHaveAttribute('href');
+    expect(link.getAttribute('href')?.includes('example.com')).toBe(true);
     expect(link).toHaveAttribute('target', '_blank');
   });
 
@@ -49,9 +51,11 @@ describe('NoteContent', () => {
       </TestApp>
     );
 
-    const link = await screen.findByRole('link', { name: 'https://nostrbook.dev/kinds/1111' });
+    // Inline URLs render as compact LinkPreview cards (<a> named by its domain)
+    const link = await screen.findByRole('link', { name: /nostrbook\.dev/ });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute('href', 'https://nostrbook.dev/kinds/1111');
+    expect(link).toHaveAttribute('href');
+    expect(link.getAttribute('href')?.includes('nostrbook.dev')).toBe(true);
     expect(link).toHaveAttribute('target', '_blank');
   });
 
