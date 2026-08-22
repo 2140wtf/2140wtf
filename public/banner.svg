@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="2140.wtf — Your content. Your vibe. Your rules.">
+  <!-- background -->
+  <rect width="1200" height="300" rx="16" fill="#09090b"/>
+  <!-- subtle corner glow -->
+  <circle cx="1180" cy="20" r="180" fill="#f7931a" opacity="0.06"/>
+  <circle cx="30" cy="290" r="160" fill="#f7931a" opacity="0.05"/>
+
+  <!-- sparkle accents (line-art style, matching app iconography) -->
+  <g stroke="#f7931a" stroke-width="2.5" stroke-linecap="round" opacity="0.85">
+    <path d="M985 78 l0 -18 M976 69 l18 0"/>
+    <path d="M1042 132 l0 -12 M1036 126 l12 0"/>
+    <path d="M1108 62 l0 -14 M1101 55 l14 0"/>
+  </g>
+  <g stroke="#a1a1aa" stroke-width="2.5" stroke-linecap="round" opacity="0.6">
+    <path d="M150 210 l0 -14 M143 203 l14 0"/>
+    <path d="M212 258 l0 -10 M207 253 l10 0"/>
+  </g>
+  <g fill="#f7931a">
+    <circle cx="950" cy="150" r="3.5"/>
+    <circle cx="1078" cy="100" r="3"/>
+    <circle cx="1130" cy="170" r="2.5"/>
+  </g>
+  <g fill="#ffffff" opacity="0.75">
+    <circle cx="185" cy="120" r="2.5"/>
+    <circle cx="240" cy="80" r="2"/>
+  </g>
+
+  <!-- bitcoin mark -->
+  <g transform="translate(88,92)">
+    <circle cx="42" cy="42" r="42" fill="none" stroke="#f7931a" stroke-width="5"/>
+    <text x="42" y="58" text-anchor="middle" font-family="'DejaVu Sans','Segoe UI Symbol',sans-serif" font-size="52" font-weight="700" fill="#f7931a">&#8383;</text>
+  </g>
+
+  <!-- wordmark -->
+  <text x="196" y="152" font-family="'Inter','Segoe UI',system-ui,sans-serif" font-size="86" font-weight="800" fill="#fafafa" letter-spacing="-2">2140<tspan fill="#f7931a">.wtf</tspan></text>
+
+  <!-- tagline -->
+  <text x="198" y="204" font-family="'Inter','Segoe UI',system-ui,sans-serif" font-size="27" font-weight="500" fill="#a1a1aa">Your content. Your vibe. Your rules.</text>
+
+  <!-- sub-line -->
+  <text x="198" y="244" font-family="'Inter','Segoe UI',system-ui,sans-serif" font-size="19" font-weight="400" fill="#71717a">Bitcoin-native Nostr superapp &#183; encrypted communities &#183; prediction markets &#183; wallets &#183; AI agents</text>
+</svg>
