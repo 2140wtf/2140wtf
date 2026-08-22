@@ -45,6 +45,13 @@ jobs:
           # block http:// API calls as mixed content.
           VITE_PETS_BATTLE_ESCROW_PUBKEY: ${{ vars.VITE_PETS_BATTLE_ESCROW_PUBKEY }}
           VITE_PETS_BATTLE_ESCROW_URL: ${{ vars.VITE_PETS_BATTLE_ESCROW_URL }}
+          # GitHub git deps serialize as ssh:// in package-lock.json; rewrite
+          # to anonymous HTTPS so keyless CI can clone them.
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: ssh://git@github.com/
+          GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
         run: |
           npm install
           npm run build

@@ -63,6 +63,14 @@ jobs:
       # warm cache or anonymous HTTPS tarball) — see test.yml.
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --offline || npm ci --no-audit --no-fund
+        env:
+          # GitHub git deps serialize as ssh:// in package-lock.json; rewrite
+          # to anonymous HTTPS so keyless CI can clone them.
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: ssh://git@github.com/
+          GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
 
       - name: Audit production dependencies
         shell: bash

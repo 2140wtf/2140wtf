@@ -33,6 +33,12 @@ jobs:
       # install failures predate the dependency going public.)
       - name: Clean install dependencies
         run: npm ci --offline || npm ci
+        env:
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: ssh://git@github.com/
+          GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
+          GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
           
       - name: Run tests
         run: npm run test
