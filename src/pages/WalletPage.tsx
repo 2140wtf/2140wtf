@@ -1,4 +1,4 @@
-import { Wallet, RefreshCw, AlertTriangle, Landmark } from 'lucide-react';
+import { Wallet, RefreshCw, AlertTriangle, Landmark, Sparkles, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { useMemo, useState } from 'react';
@@ -34,6 +34,7 @@ export function WalletPage() {
   const { user } = useCurrentUser();
   const cashuWallet = useCashuWalletContext();
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [walletTab, setWalletTab] = useState('cashu');
   const relayUrls = useMemo(
     () =>
       (config.relayMetadata?.relays ?? [])
@@ -68,7 +69,7 @@ export function WalletPage() {
       ) : (
         <div className="w-full max-w-none space-y-4 px-2 pb-4 pt-4 sm:px-3 sm:pt-6">
           <ResearchBetaAlert />
-          <Tabs defaultValue="cashu" className="w-full">
+          <Tabs defaultValue="cashu" value={walletTab} onValueChange={setWalletTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5 mb-6">
               <TabsTrigger value="cashu">Cashu</TabsTrigger>
               <TabsTrigger value="lightning">Lightning</TabsTrigger>
@@ -78,6 +79,23 @@ export function WalletPage() {
             </TabsList>
 
             <TabsContent value="cashu">
+              {/* Faucet-first onboarding: the one-tap claim lives on the BAO tab;
+                  surface it here so a fresh wallet isn't a dead end. */}
+              {walletTab === 'cashu' && (
+                <button
+                  type="button"
+                  onClick={() => setWalletTab('bao')}
+                  className={
+                    'mb-3 w-full flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors'
+                  }
+                >
+                  <Sparkles className="size-4 shrink-0" />
+                  <span>
+                    <span className='font-semibold'>New here?</span> Claim free demo sats — one tap, no signup.
+                  </span>
+                  <ChevronRight className="size-4 ml-auto shrink-0" />
+                </button>
+              )}
               {cashuWallet.seedLoading ? (
                 <div className="py-12 flex flex-col items-center gap-4 text-center">
                   <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">

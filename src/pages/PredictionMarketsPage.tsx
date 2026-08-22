@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Box, Info, Plus, RefreshCw, Search } from "lucide-react";
 import { useSeoMeta } from "@unhead/react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -238,6 +238,7 @@ const MarketCard = memo(function MarketCard({
 });
 
 export function PredictionMarketsPage(): React.JSX.Element {
+  const navigate = useNavigate();
   const { config } = useAppContext();
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
@@ -609,15 +610,23 @@ export function PredictionMarketsPage(): React.JSX.Element {
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            Practice with dummy bitcoin in demo mode; claim testnet bitcoin by visiting{' '}
+            Practice with dummy bitcoin in demo mode — claim free signet sats in-app from your{' '}
+            <button
+              type="button"
+              onClick={() => navigate('/wallet')}
+              className="text-primary hover:underline bg-transparent border-none p-0"
+            >
+              Wallet → BAO tab
+            </button>{' '}
+            (or at the{' '}
             <button
               type="button"
               onClick={() => openUrl("https://bao.markets")}
               className="text-primary hover:underline bg-transparent border-none p-0"
             >
-              https://bao.markets
+              ₿AO faucet
             </button>
-            . Learn how to use all bitcoin networks: lightning, ecash, liquid, ark, spark and all
+            ). Learn how to use all bitcoin networks: lightning, ecash, liquid, ark, spark and all
             other layers of BTC tech that make it stronger faster and private without risk.
           </AlertDescription>
         </Alert>
