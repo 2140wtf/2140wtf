@@ -728,7 +728,7 @@ export function NoteContent({
               return (
                 <a
                   key={i}
-                  href={token.url}
+                  href={sanitizeUrl(token.url) ?? '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline break-all"
@@ -745,7 +745,7 @@ export function NoteContent({
               return (
                 <a
                   key={i}
-                  href={token.url}
+                  href={sanitizeUrl(token.url) ?? '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline break-all"

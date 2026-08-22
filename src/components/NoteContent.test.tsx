@@ -23,7 +23,7 @@ describe('NoteContent', () => {
     );
 
     // Inline URLs render as compact LinkPreview cards (<a> with href + preview text)
-    const link = await screen.findByRole('link', { href: 'https://example.com' });
+    const link = await screen.findByRole('link');
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href');
     expect(link.getAttribute('href')?.includes('example.com')).toBe(true);
@@ -52,7 +52,7 @@ describe('NoteContent', () => {
     );
 
     // Inline URLs render as compact LinkPreview cards (<a> with href + preview text)
-    const link = await screen.findByRole('link', { href: 'https://nostrbook.dev/kinds/1111' });
+    const link = await screen.findByRole('link');
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href');
     expect(link.getAttribute('href')?.includes('nostrbook.dev')).toBe(true);
