@@ -31,6 +31,8 @@ interface LinkEmbedProps {
   showActions?: boolean;
   /** When true, hides the thumbnail image in generic link preview cards. */
   hideImage?: boolean;
+  /** When true, renders a compact card for inline display (smaller, tighter). */
+  compact?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +46,7 @@ interface LinkEmbedProps {
  * - Mastodon post URLs → `MastodonEmbed` (native card via Mastodon API)
  * - Everything else → `LinkPreview` (OEmbed link preview card)
  */
-export function LinkEmbed({ url, className, navigateToComments, showActions = true, hideImage }: LinkEmbedProps) {
+export function LinkEmbed({ url, className, navigateToComments, showActions = true, hideImage, compact }: LinkEmbedProps) {
   const youtubeId = useMemo(() => extractYouTubeId(url), [url]);
   const tweetId = useMemo(() => extractTweetId(url), [url]);
   const mastodonUrl = useMemo(() => extractMastodonPost(url), [url]);
@@ -68,7 +70,7 @@ export function LinkEmbed({ url, className, navigateToComments, showActions = tr
   } else if (archiveOrgId) {
     embed = <ArchiveOrgEmbed identifier={archiveOrgId} />;
   } else {
-    return <LinkPreview url={url} className={className} hideImage={hideImage} navigateToComments={navigateToComments} showActions={showActions} />;
+    return <LinkPreview url={url} className={className} hideImage={hideImage} navigateToComments={navigateToComments} showActions={showActions} compact={compact} />;
   }
 
   return (
