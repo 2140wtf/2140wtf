@@ -41,18 +41,19 @@ It grew from [Soapbox](https://soapbox.pub)'s open-source Ditto client into some
 | ⚡ **Infinite content** | Notes, articles, shorts, live streams, polls, podcasts, music, events, books, geocaching — comment on *anything* (NIP-22). |
 | 🎨 **Yours, visually** | 9 theme presets, 19 CSS tokens, themes shareable as Nostr events. PWA + native iOS/Android. |
 
+| Landing + live feed | Prediction markets |
+|---|---|
+| ![Landing with theme picker, live feed, and widgets](public/shots/home.png) | ![Market grid with odds bars and sparklines](public/shots/markets.png) |
+
+| Market detail — express trade |
+|---|
+| ![Express trade dialog with Lightning, Cashu, on-chain, and Liquid rails](public/shots/market-detail.png) |
+
 <!--
-SCREENSHOTS — capture these from https://2140.wtf and drop into public/shots/, then uncomment:
-
-1. Feed (light+dark)      — 1200×750, logged-in home feed with mixed content
-2. Zap flow               — zap dialog mid-send on a note with sats amount visible
-3. Prediction market card — market grid showing YES/NO bars and odds
-4. Market detail          — chart view with outcome pills
-5. Wallet                 — Cashu wallet balance + token history
-6. Community              — encrypted channel view with members panel
-
-Suggested naming: public/shots/feed-light.png etc., then wire a 2×3 table here:
-| ![Feed](public/shots/feed-dark.png) | ![Market](public/shots/market.png) |
+MORE SHOTS — re-capture anytime with `node scripts/capture-screenshots.mjs`
+(or against a dev build: `node scripts/capture-screenshots.mjs http://localhost:3500`).
+Still wanted: zap flow (login required), wallet view (login required),
+encrypted ₿AO channel (login required). Add rows to the table above.
 -->
 
 **👀 See it running:** every push to `main` auto-deploys to **[2140.wtf](https://2140.wtf)** — the live site *is* the demo. Sign up takes a Nostr key (or create one in-browser); claim free signet sats from the faucet to try markets, zaps, and pets risk-free.
