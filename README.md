@@ -45,9 +45,9 @@ It grew from [Soapbox](https://soapbox.pub)'s open-source Ditto client into some
 |---|---|
 | ![Landing with theme picker, live feed, and widgets](public/shots/home.png) | ![Market grid with odds bars and sparklines](public/shots/markets.png) |
 
-| Market detail — express trade |
-|---|
-| ![Express trade dialog with Lightning, Cashu, on-chain, and Liquid rails](public/shots/market-detail.png) |
+| Market detail — express trade | Wallet | Zap any note |
+|---|---|---|
+| ![Express trade dialog with Lightning, Cashu, on-chain, and Liquid rails](public/shots/market-detail.png) | ![Cashu & Lightning wallet](public/shots/wallet.png) | ![Zap dialog ready to send 1000 sats](public/shots/zap-dialog.png) |
 
 <!--
 MORE SHOTS — re-capture anytime with `node scripts/capture-screenshots.mjs`

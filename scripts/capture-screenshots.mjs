@@ -22,7 +22,20 @@ const baseUrl = process.argv[2] ?? 'https://2140.wtf';
 
 mkdirSync(shotsDir, { recursive: true });
 
-const browser = await chromium.launch();
+/** Force the brand-dark look via the app's own quick-switch. evaluate()-click
+ *  because locator().click() gets intercepted by overlays; must re-apply after
+ *  every full navigation since anonymous theme persistence is unreliable. */
+async function forceDark(page) {
+  for (let i = 0; i < 3; i++) {
+    const isDark = await page.evaluate(() => document.documentElement.className.includes('dark'));
+    if (isDark) return true;
+    await page.evaluate(() => document.querySelector('button[aria-label^="Color mode:"]')?.click());
+    await page.waitForTimeout(700);
+  }
+  return page.evaluate(() => document.documentElement.className.includes('dark'));
+}
+
+const browser = await chromium.launch({ channel: 'chrome' });
 try {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -38,16 +51,7 @@ try {
   await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => {});
   await page.waitForTimeout(4_000); // relay content settle
 
-  // Force the brand-dark look via the app's own theme quick-switch so React
-  // state + CSS vars stay consistent (colorScheme emulation alone isn't picked
-  // up once a theme is persisted).
-  const modeToggle = page.locator('[aria-label^="Color mode:"]').first();
-  for (let i = 0; i < 3; i++) {
-    if ((await page.locator('html.dark').count()) > 0) break;
-    await modeToggle.click().catch(() => {});
-    await page.waitForTimeout(600);
-  }
-  if ((await page.locator('html.dark').count()) === 0) {
+  if (!(await forceDark(page))) {
     console.warn('could not switch to dark mode — capturing in default theme');
   }
 
@@ -64,6 +68,8 @@ try {
   await firstCard.waitFor({ state: 'visible', timeout: 60_000 }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(3_000); // sparklines/odds settle
+  await forceDark(page);
+  await page.waitForTimeout(500);
   await page.screenshot({ path: join(shotsDir, 'markets.png') });
 
   // --- Market detail dialog -------------------------------------------------
