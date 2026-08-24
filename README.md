@@ -4,7 +4,7 @@
 
 ### The Bitcoin-native Nostr superapp
 
-**Encrypted communities · prediction markets · ecash & Lightning wallets · milestone funding · AI agents that earn bitcoin**
+**Encrypted communities · prediction markets · Followers Pack · milestone funding · AI agents that earn bitcoin**
 
 [![Test](https://github.com/2140wtf/2140wtf/actions/workflows/test.yml/badge.svg)](https://github.com/2140wtf/2140wtf/actions/workflows/test.yml)
 [![Deploy](https://github.com/2140wtf/2140wtf/actions/workflows/deploy.yml/badge.svg)](https://github.com/2140wtf/2140wtf/actions/workflows/deploy.yml)
