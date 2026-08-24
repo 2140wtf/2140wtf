@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { GripVertical, X, ChevronDown, ArrowUpRight } from 'lucide-react';
+import { GripVertical, X, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -105,26 +105,6 @@ function SidebarGroup({ id, active, editing, onRemove, onClick, compact, minimal
         <div className={cn('ml-4 border-l border-border', minimal ? 'my-1' : 'my-1')}>
           {children.map((child) => {
             const childActive = location.pathname === child.path || location.pathname.startsWith(`${child.path}/`);
-            // External destinations (2140 Social etc.) open in a new tab —
-            // same chat, served by its own deployment.
-            if (/^https?:\/\//.test(child.path)) {
-              return (
-                <a
-                  key={child.id}
-                  href={child.path}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={onClick}
-                  className={cn(
-                    'flex items-center gap-3 py-2.5 px-3 text-sm transition-colors rounded-md',
-                    'text-muted-foreground hover:text-foreground hover:bg-secondary/30',
-                  )}
-                >
-                  <span className="truncate" style={{ fontFamily: 'var(--title-font-family, inherit)' }}>{child.label}</span>
-                  <ArrowUpRight className="size-3.5 shrink-0 opacity-60" />
-                </a>
-              );
-            }
             return (
               <Link
                 key={child.id}
@@ -395,7 +375,7 @@ export function SidebarNavList({
                 compact={compact}
                 minimal={minimal}
                 children={[
-                  { id: 'bao-chat', label: '2140 Social', path: 'https://2140.social' },
+                  { id: 'bao-chat', label: '2140 Social', path: '/bao/community' },
                   { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/fund' },
                   { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/markets' },
                   { id: 'court', label: '₿AO Court', path: '/court' },
