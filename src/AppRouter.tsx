@@ -8,6 +8,7 @@ import { AudioNavigationGuard } from "@/components/AudioNavigationGuard";
 import { BackButtonHandler } from "@/components/BackButtonHandler";
 import { InitialSyncGate } from "@/components/InitialSyncGate";
 import { DeepLinkHandler } from "@/components/DeepLinkHandler";
+import { BaoCommunitiesPage } from "@/pages/BaoCommunitiesPage";
 import { HighlightSelectionButton } from "@/components/HighlightSelectionButton";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { sidebarItemIcon } from "@/lib/sidebarItems";
@@ -95,18 +96,6 @@ const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ defa
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
 const MintDetailsPage = lazy(() => import("./pages/MintDetailsPage").then(m => ({ default: m.MintDetailsPage })));
-// ₿AO chat (Concord V2 E2EE communities) — legacy stack, no longer routed;
-// /bao/community now lands on 2140 Social (the same chat, dedicated relay).
-// The dormant modules stay on disk until the full ConcordV2 excision.
-// const BaoCommunitiesPage = lazy(() => import("./pages/BaoCommunitiesPage").then(m => ({ default: m.BaoCommunitiesPage })));
-const ConcordV2Page = lazy(() => import("./concord-v2/pages/ConcordV2Page").then(m => ({ default: m.ConcordV2Page })));
-const InviteV2Page = lazy(() => import("./concord-v2/pages/InviteV2Page").then(m => ({ default: m.InviteV2Page })));
-
-/** Hard redirect to an off-app URL (2140 Social). */
-function ExternalRedirect({ to }: { to: string }) {
-  useMemo(() => { window.location.replace(to); }, [to]);
-  return null;
-}
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
@@ -362,14 +351,9 @@ export function AppRouter() {
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/bao/community" element={<ExternalRedirect to="https://2140.social" />} />
+              <Route path="/bao/community" element={<BaoCommunitiesPage />} />
               <Route path="/bao/baocommunity" element={<Navigate to="/bao/community" replace />} />
               <Route path="/bao/chat" element={<Navigate to="/bao/community" replace />} />
-              <Route path="/bao/c/:communityId" element={<ConcordV2Page />} />
-              <Route path="/bao/c/:communityId/:channelId" element={<ConcordV2Page />} />
-              <Route path="/bao/invite/:naddr" element={<InviteV2Page />} />
-              {/* Armada-generated invite links use /invite/:naddr; keep parsing them. */}
-              <Route path="/invite/:naddr" element={<InviteV2Page />} />
               <Route path="/bao/markets" element={<PredictionMarketsPage />} />
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />

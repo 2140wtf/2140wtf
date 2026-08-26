@@ -1,8 +1,6 @@
 import type { NostrEvent } from "@nostrify/nostrify";
 import { nip19 } from "nostr-tools";
 import { verifyEvent } from "nostr-tools/pure";
-
-import { capRelays, utf8Len } from "@/concord-v2/lib/types";
 import { isNostrId } from "@/lib/nostrId";
 
 export const NIP34_REPOSITORY_KIND = 30617;
@@ -16,6 +14,37 @@ export const NIP34_STATUS_KINDS = [1630, 1631, 1632, 1633] as const;
 const MAX_REPO_IDENTIFIER_BYTES = 256;
 export const MAX_REPO_NADDR_BYTES = 2048;
 export const MAX_REPOSITORY_MAINTAINERS = 100;
+
+function utf8Len(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/** Canonicalize a relay hint: wss-only, trailing slash stripped. */
+function canonicalRelayHint(raw: string): string | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "wss:") return undefined;
+  return `wss://${url.host}${url.pathname.replace(/\/$/, "")}`;
+}
+
+/** Dedupe, canonicalize, and cap relay hints. */
+function capRelays(relays: string[], cap = 3): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of relays) {
+    if (out.length >= cap) break;
+    const canonical = canonicalRelayHint(r);
+    if (!canonical || seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+  }
+  return out;
+}
 
 export interface Nip34RepoPointer {
   owner: string;

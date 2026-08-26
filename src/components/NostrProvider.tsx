@@ -13,10 +13,6 @@ import { EventStoreContext, type EventStoreContextType } from '@/contexts/EventS
 import { emitRelayReopened } from '@/lib/relayReopen';
 import { normalizeRelayUrl } from '@/lib/platform';
 import { logSync } from '@/lib/syncLog';
-import { _resetStreamAuthRegistry } from '@/concord-v2/lib/streamAuth';
-import { warmRumorStore } from '@/concord-v2/lib/rumorStore';
-import { warmInviteInbox } from '@/concord-v2/lib/inviteInbox';
-import { concordTransport } from '@/concord-v2/lib/concordTransport';
 
 /**
  * IndexedDB database name for the events cache.
@@ -106,11 +102,6 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       // memory-only pool so the rest of the app can still render.
       eventStore.current = null;
     }
-    // Warm the Concord V2 rumor cache's IndexedDB connection too, so the first
-    // ₿AO channel open reads a hot store instead of paying the cold-open
-    // penalty. Same for the V2 direct-invite inbox cache.
-    warmRumorStore();
-    warmInviteInbox();
   }
 
   // The ₿AO chat (Concord V2) event-store contract: the SAME NIndexedDB the
@@ -288,8 +279,6 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       // permanently correlate both identities (and their stream keys).
       // Closing forces the next operation onto a fresh authorization set.
       pool.current?.close();
-      concordTransport.resetAccount(currentLogin?.pubkey);
-      _resetStreamAuthRegistry();
       // The signed user-AUTH cache is identity-bound: without this, a relay
       // re-issuing the identical challenge string after an account switch
       // would be answered with the PREVIOUS account's kind-22242 (the

@@ -12,8 +12,6 @@ import { CenterColumnContext, DrawerContext, LayoutStore, LayoutStoreContext, Na
 import { NsitePlayerContext, type NsitePlayerState } from '@/contexts/NsitePlayerContext';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
-import { DirectInvitesPrompt2 } from '@/concord-v2/components/DirectInvitesPrompt2';
-import { useForegroundNotifications } from '@/hooks/useForegroundNotifications';
 import { cn } from '@/lib/utils';
 import { RoutePreloader } from '@/components/RoutePreloader';
 
@@ -65,7 +63,6 @@ function MainLayoutInner() {
 
   // ₿AO chat: toast incoming Concord V2 messages while the app is open,
   // gated on the per-channel/community notification levels.
-  useForegroundNotifications();
 
   return (
     <CenterColumnContext.Provider value={centerColumnEl}>
@@ -151,10 +148,6 @@ function MainLayoutInner() {
 
       {/* Mobile bottom nav - only on small screens, slides out on scroll */}
       {!hideBottomNav && <MobileBottomNav />}
-
-      {/* ₿AO chat: gift-wrapped direct invites arrive anywhere; the prompt is
-          global like Armada's MainLayout mount. */}
-      <DirectInvitesPrompt2 />
 
       {/* Mobile FAB — fixed to viewport, hidden on desktop where the
           in-column sticky FAB (above) takes over. Mirrors bottom nav

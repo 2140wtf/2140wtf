@@ -130,8 +130,8 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   {
-    id: "bao-chat",
-    label: "₿AOs",
+    id: "2140-social",
+    label: "2140 Social",
     path: "/bao/community",
     icon: MessageSquareMore,
     requiresAuth: true,
@@ -353,10 +353,14 @@ export function isItemActive(
     return pathname.startsWith("/messages") || pathname.startsWith("/groups");
   }
 
-  if (id === "bao-chat") {
-    return pathname.startsWith("/bao/")
-      || pathname.startsWith("/bao-fund")
-      || pathname.startsWith("/prediction-markets");
+  if (id === "2140-social") {
+    return pathname.startsWith("/bao/");
+  }
+  if (id === "bao-fund") {
+    return pathname.startsWith("/bao-fund");
+  }
+  if (id === "prediction-markets") {
+    return pathname.startsWith("/bao/markets");
   }
 
   if (id === "media") {

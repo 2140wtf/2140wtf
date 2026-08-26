@@ -13,7 +13,10 @@ const DEFAULT_SIDEBAR_ORDER = [
   "wallet",
   "notifications",
   "messages",
-  "bao-chat",
+  "2140-social",
+  "bao-fund",
+  "prediction-markets",
+  "court",
   "market",
   "polls",
   "media",
@@ -31,16 +34,13 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'music': 'media',
   'videos': 'media',
   'bao-funding': 'bao-fund',
-  // The former MARKETS group occupied this position. BAO Markets now lives
-  // inside the BAOs group, while Merchants keeps the former group's position.
-  'prediction-markets': 'market',
+  // The legacy ₿AO Chat (Concord V2) group entry is now the 2140 Social
+  // top-level item; the three ₿AO links below it render as standalone rows.
+  'bao-chat': '2140-social',
   // The observatory used to be an external-URI sidebar item pointing at the
   // /i/ discussion page; it is now a first-class in-app page.
   'https://lightningobservatory.com/': 'lightning-observatory',
 };
-
-/** Destinations rendered inside a parent group rather than as standalone rows. */
-const GROUPED_SIDEBAR_CHILD_IDS = new Set(['bao-fund', 'prediction-markets', 'court']);
 
 /**
  * Compute the ordered list of visible sidebar items.
@@ -68,8 +68,6 @@ function computeOrderedItems(
 
     // Migrate legacy IDs
     item = SIDEBAR_ID_MIGRATIONS[item] ?? item;
-
-    if (GROUPED_SIDEBAR_CHILD_IDS.has(item)) continue;
 
     if (seen.has(item)) continue;
     seen.add(item);
@@ -101,7 +99,6 @@ function computeHiddenItems(
   const hidden: HiddenSidebarItem[] = [];
 
   for (const item of SIDEBAR_ITEMS) {
-    if (GROUPED_SIDEBAR_CHILD_IDS.has(item.id)) continue;
     if (!visibleSet.has(item.id)) {
       hidden.push({ id: item.id, label: item.label });
     }
@@ -207,18 +204,24 @@ export function useFeedSettings() {
     }
   }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
-  // Migration: insert ₿AO Chat (Concord V2 communities) below Chat.
+  // Migration: insert 2140 Social + the three ₿AO links below Chat. Replaces
+  // the legacy ₿AO Chat group entry; existing "bao-chat" rows display as
+  // 2140 Social via SIDEBAR_ID_MIGRATIONS and dedupe against this insert.
   useEffect(() => {
     const order = config.sidebarOrder;
     if (order.length === 0) return;
-    if (order.includes("bao-chat")) return;
+
+    const required = ["2140-social", "bao-fund", "prediction-markets", "court"];
+    if (required.every((id) => order.includes(id))) return;
 
     const next = [...order];
-    const messagesIdx = next.indexOf("messages");
-    if (messagesIdx !== -1) {
-      next.splice(messagesIdx + 1, 0, "bao-chat");
-    } else {
-      next.push("bao-chat");
+    let insertAt = next.indexOf("messages");
+    insertAt = insertAt === -1 ? next.length : insertAt + 1;
+    for (const id of required) {
+      if (!next.includes(id)) {
+        next.splice(insertAt, 0, id);
+        insertAt += 1;
+      }
     }
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
