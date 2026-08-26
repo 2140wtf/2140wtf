@@ -97,6 +97,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
         <SetupQuestionnaire
           onComplete={handleSignupComplete}
           onPreload={() => setPreloadApp(true)}
+          onSkip={skipSync}
           isSignup
         />
       </OnboardingContext.Provider>
@@ -130,6 +131,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
         <SetupQuestionnaire
           onComplete={markComplete}
           onPreload={() => setPreloadApp(true)}
+          onSkip={markComplete}
         />
       </OnboardingContext.Provider>
     );
@@ -340,10 +342,12 @@ const SETTINGS_STEPS: Step[] = ["follows", "privacy", "outro"];
 function SetupQuestionnaire({
   onComplete,
   onPreload,
+  onSkip,
   isSignup = false,
 }: {
   onComplete: () => void;
   onPreload: () => void;
+  onSkip?: () => void;
   isSignup?: boolean;
 }) {
   const { nostr } = useNostr();
@@ -508,6 +512,17 @@ function SetupQuestionnaire({
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {/* Skip button — always visible so logged-in users can bypass onboarding
+          and get straight to the app (chat, feed, etc.) when settings sync fails.
+          Signup flow blocks this so new accounts must complete key generation. */}
+      {!isSignup && onSkip && (
+        <div className="flex justify-end px-4 py-2">
+          <Button variant="ghost" size="sm" onClick={onSkip}>
+            Skip and continue to app
+          </Button>
+        </div>
+      )}
 
       {/* Content area */}
       <div className="flex-1 flex flex-col overflow-y-auto">
