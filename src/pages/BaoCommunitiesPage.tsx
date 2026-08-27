@@ -418,15 +418,24 @@ export function BaoCommunitiesPage() {
     if (exposed) payload.identity = { npub: exposed };
     const to = resolveMentions(text, r.roster);
     if (to.length > 0) payload.to = to;
-    const env = await r.session.post(payload);
-    const key = dedupKey(env);
-    // Register BEFORE the live echo can arrive — no duplicates, ever.
-    r.rows.push({ key, env, mine: true, receipt: "pending" });
-    r.known.set(key, env);
-    r.outbox.set(key, { env, lastSentMs: Date.now(), attempts: 0 });
-    rerender();
-    void refreshScroll(roomId);
-  }, [draft, replyDraft, npubInput, refreshScroll]);
+    try {
+      const env = await r.session.post(payload);
+      const key = dedupKey(env);
+      // Register BEFORE the live echo can arrive — no duplicates, ever.
+      r.rows.push({ key, env, mine: true, receipt: "pending" });
+      r.known.set(key, env);
+      r.outbox.set(key, { env, lastSentMs: Date.now(), attempts: 0 });
+      rerender();
+      void refreshScroll(roomId);
+    } catch (err) {
+      // Publish failed (relay unreachable / OK timeout / rejection): the outbox
+      // was never armed, so without this the message is silently lost. Give
+      // the text (and reply target) back so the member can simply retry.
+      setDraft(text);
+      if (replyDraft) setReplyDraft(replyDraft);
+      log(`#${r.info.name}: post failed — draft restored: ${(err as Error).message}`);
+    }
+  }, [draft, replyDraft, npubInput, refreshScroll, log]);
 
   // ── Join by invite link ──────────────────────────────────────────────────
 
