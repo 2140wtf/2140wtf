@@ -84,7 +84,18 @@ export declare class RoomSession {
     republish(envelope: Envelope): Promise<void>;
     /** Live subscription to the room's ephemeral stream. P2: envelopes from
      *  the PREVIOUS epoch still decrypt during the roll-over grace window
-     *  (P2_EPOCH_WINDOW) when the session has ratcheted. */
+     *  (P2_EPOCH_WINDOW) when the session has ratcheted.
+     *
+     *  REF-COUNTED (prod incident 2026-08-26): repeated subscribeLive calls
+     *  used to open a NEW relay REQ per call with the unsubscribe discarded —
+     *  a long-lived client (browser SPA re-entering rooms, daemons) stacked
+     *  dozens of live REQs on one connection until the relay started
+     *  rejecting ALL further reads ('too many concurrent REQs'), which
+     *  starved every client's post-ack loop. Now one underlying REQ serves
+     *  N callbacks; the relay subscription closes only when the LAST
+     *  callback unsubscribes. */
+    private liveHandlers;
+    private liveUnsub;
     subscribeLive(onEnvelope: (env: Envelope, event: NostrEvent) => void): () => void;
     /**
      * Follow an in-room epoch-advance notice (§8 fresh-join ratchet): the

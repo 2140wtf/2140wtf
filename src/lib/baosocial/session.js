@@ -113,6 +113,20 @@ export class RoomSession {
         this.joined = joined;
         this.clock = clock;
         this.rng = rng;
+        /** Live subscription to the room's ephemeral stream. P2: envelopes from
+         *  the PREVIOUS epoch still decrypt during the roll-over grace window
+         *  (P2_EPOCH_WINDOW) when the session has ratcheted.
+         *
+         *  REF-COUNTED (prod incident 2026-08-26): repeated subscribeLive calls
+         *  used to open a NEW relay REQ per call with the unsubscribe discarded —
+         *  a long-lived client (browser SPA re-entering rooms, daemons) stacked
+         *  dozens of live REQs on one connection until the relay started
+         *  rejecting ALL further reads ('too many concurrent REQs'), which
+         *  starved every client's post-ack loop. Now one underlying REQ serves
+         *  N callbacks; the relay subscription closes only when the LAST
+         *  callback unsubscribes. */
+        this.liveHandlers = null;
+        this.liveUnsub = null;
     }
     ctx() {
         return {
@@ -158,29 +172,50 @@ export class RoomSession {
         const restamped = { ...envelope, epoch: this.joined.epoch };
         await this.publishEventInternal(encodeEnvelopeEvent(this.joined.authorSecretKey, restamped, this.ctx(), this.clock, this.rng, this.joined.privacy));
     }
-    /** Live subscription to the room's ephemeral stream. P2: envelopes from
-     *  the PREVIOUS epoch still decrypt during the roll-over grace window
-     *  (P2_EPOCH_WINDOW) when the session has ratcheted. */
     subscribeLive(onEnvelope) {
-        return this.conn.subscribe({ kinds: [EPHEMERAL_MESSAGE], '#r': [this.joined.routingId] }, (event) => {
-            try {
-                const env = decodeEphemeralEvent(event, this.ctx(), P2_EPOCH_WINDOW);
-                this.maybeFollowEpochAdvance(env);
-                onEnvelope(env, event);
-            }
-            catch {
-                // Current-epoch key didn't fit — try the previous epoch's key
-                // (in-flight envelopes from just before the roll, §3.1 grace).
-                if (this.joined.previousEncKey && this.joined.previousEpoch !== undefined) {
-                    try {
-                        onEnvelope(decodeEphemeralEvent(event, { roomId: this.joined.roomId, epoch: this.joined.previousEpoch, encKey: this.joined.previousEncKey, routingId: this.joined.routingId }, 0), event);
+        if (!this.liveHandlers) {
+            this.liveHandlers = new Set();
+            this.liveUnsub = this.conn.subscribe({ kinds: [EPHEMERAL_MESSAGE], '#r': [this.joined.routingId] }, (event) => {
+                const deliver = (env) => {
+                    // Per-handler isolation: one throwing consumer must not starve the
+                    // others (nor trip the previous-epoch fallback below).
+                    for (const handler of [...(this.liveHandlers ?? [])]) {
+                        try {
+                            handler(env, event);
+                        }
+                        catch {
+                            // consumer bug — never fatal to the stream
+                        }
                     }
-                    catch {
-                        // Not ours to decrypt / malformed — ignore.
+                };
+                try {
+                    const env = decodeEphemeralEvent(event, this.ctx(), P2_EPOCH_WINDOW);
+                    this.maybeFollowEpochAdvance(env);
+                    deliver(env);
+                }
+                catch {
+                    // Current-epoch key didn't fit — try the previous epoch's key
+                    // (in-flight envelopes from just before the roll, §3.1 grace).
+                    if (this.joined.previousEncKey && this.joined.previousEpoch !== undefined) {
+                        try {
+                            deliver(decodeEphemeralEvent(event, { roomId: this.joined.roomId, epoch: this.joined.previousEpoch, encKey: this.joined.previousEncKey, routingId: this.joined.routingId }, 0));
+                        }
+                        catch {
+                            // Not ours to decrypt / malformed — ignore.
+                        }
                     }
                 }
+            });
+        }
+        this.liveHandlers.add(onEnvelope);
+        return () => {
+            this.liveHandlers?.delete(onEnvelope);
+            if (this.liveHandlers && this.liveHandlers.size === 0) {
+                this.liveUnsub?.();
+                this.liveHandlers = null;
+                this.liveUnsub = null;
             }
-        });
+        };
     }
     /**
      * Follow an in-room epoch-advance notice (§8 fresh-join ratchet): the
