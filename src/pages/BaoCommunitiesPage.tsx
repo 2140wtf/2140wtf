@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { Copy, Hash, Loader2, Plus, Radio, Reply, X } from "lucide-react";
+import { Copy, Hash, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, X } from "lucide-react";
 
 import {
   WebRelayConn,
@@ -209,6 +209,7 @@ export function BaoCommunitiesPage() {
   const [npubInput, setNpubInput] = useState(() => localStorage.getItem(NPUB_KEY) ?? "");
   const [joinLinkInput, setJoinLinkInput] = useState("");
   const [showIdentity, setShowIdentity] = useState(false);
+const [roomsCollapsed, setRoomsCollapsed] = useState(false);
 
   const log = useCallback((msg: string) => {
     setLogLines((lines) => [...lines.slice(-80), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -495,11 +496,42 @@ export function BaoCommunitiesPage() {
   const roomKey = useMemo(() => current?.info.roomId ?? "none", [current]);
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden" data-room={roomKey}>
-      {/* Rooms sidebar */}
-      <aside className="flex w-52 shrink-0 flex-col border-r bg-muted/30 max-sm:w-40">
+    <div
+      className={cn(
+        "flex h-full min-h-0 overflow-hidden",
+        // On mobile the chat pane needs a real viewport height (the parent
+        // chain has none), otherwise the column collapses and content hides
+        // behind the fixed top bar and bottom nav. Same tool class
+        // LiveStreamPage uses successfully.
+        "max-lg:livestream-height",
+        // When the rooms sidebar is collapsed on mobile, the chat column
+        // should take the full width instead of leaving a blank gap.
+        roomsCollapsed && "max-lg:pl-0",
+      )}
+      data-room={roomKey}
+    >
+      {/* Rooms sidebar — collapsible on mobile so chat can go full-width */}
+      <aside
+        className={cn(
+          "flex shrink-0 flex-col border-r bg-muted/30 transition-all",
+          roomsCollapsed ? "max-lg:w-0 max-lg:border-r-0" : "max-lg:w-40",
+        )}
+      >
         <div className="flex items-center justify-between px-3 py-2.5">
           <span className="text-[11px] font-semibold tracking-widest text-muted-foreground">ROOMS</span>
+          <button
+            type="button"
+            onClick={() => setRoomsCollapsed((v) => !v)}
+            aria-label={roomsCollapsed ? "Expand rooms" : "Collapse rooms"}
+            title={roomsCollapsed ? "Expand rooms" : "Collapse rooms"}
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+          >
+            {roomsCollapsed ? (
+              <PanelRightOpen className="size-3.5" />
+            ) : (
+              <PanelRightClose className="size-3.5" />
+            )}
+          </button>
         </div>
         <div className="flex-1 space-y-0.5 overflow-y-auto px-2">
           {roomInfos.map((info) => {
