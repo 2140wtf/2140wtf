@@ -242,7 +242,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
-  const [columns, setColumns] = useState<4 | 3 | 2 | 1>(2);
+  const [columns, setColumns] = useState<4 | 3 | 2 | 1>(() => {
+    if (typeof window === "undefined") return 2;
+    return window.innerWidth < 768 ? 1 : 2;
+  });
   const [showResolved, setShowResolved] = useState(false);
   // Where the catalog loads from: API, relay, or both. Defaults to the API —
   // the relay carries definitions only (no odds/volume), so it is the
