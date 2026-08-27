@@ -44,6 +44,7 @@ These event kinds were created by community contributors and are supported by 21
 | 36787 | Music Track            | Addressable event for a music audio file with metadata           | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
 | 34139 | Music Playlist         | Ordered list of music track references (also used for albums)    | See [Music Tracks & Playlists](#music-tracks--playlists) below                            |
 | 30621 | Custom Constellation   | User-drawn star figure with Hipparcos-numbered edges             | [NIP](https://gitlab.com/alexgleason/birdstar/-/blob/main/NIP.md)                         |
+| 21045, 21046, 31145, 31146, 30078, 39000 | BAO Chat Protocol v1 (2140 Social) | Encrypted community scroll inlined at `/bao/community` — burner joins, hash-chained ciphertext segments, presence, receipts | See [BAO Chat Protocol v1](#bao-chat-protocol-v1-2140-social) below                     |
 
 ---
 
@@ -1884,3 +1885,43 @@ Version-2 requests support one to five ordered tranches:
 - Receivers MUST confirm each tranche independently. A donor claim alone is
   never payment proof; clients MUST NOT publish tokens, proofs, keys, payment
   hashes, or donor private messages.
+
+## BAO Chat Protocol v1 (2140 Social)
+
+The 2140 Social in-app chat (`/bao/community`) speaks **BAO Chat Protocol v1**
+over a plain Nostr relay websocket (`wss://2140.social/ws`). The client is
+vendored at `src/lib/baosocial/` (AGPL-3.0, see its `LICENSE`/`NOTICE`) and
+pins these wire kinds — changing a kind number is a wire-format break and
+requires a new protocol version:
+
+| Kind   | Name                  | Storage semantics | Notes |
+|--------|-----------------------|-------------------|-------|
+| 21045  | Ephemeral message     | Ephemeral (NIP-40, never stored) | NIP-44-encrypted payload; author is a per-room stream key, not the user's identity |
+| 21046  | Join request          | Ephemeral | Published by a one-time burner key during the §6 join; discarded after the wrap arrives |
+| 31145  | Scroll segment        | Parameterized-replaceable, `d = bao-scroll:<scope>:<seg>` | Fixed-size ciphertext segments maintained by room scribes; the scope is HMAC-derived — the roomId never appears on the wire |
+| 31146  | Redaction list        | Addressable, `d = bao-redact:<room>` | Governance state carrier (tombstones, moderation) |
+| 30078  | Key wrap              | Addressable, `d = HMAC(welcomer_epoch_key, recipient)` | NIP-40 expiration; delivers the room content key to one joiner. Distinct from the NIP-60 DPCS fallback use of 30078, whose d-tag is the user's hex pubkey — the two d-tag namespaces never overlap |
+| 39000  | Room metadata         | Addressable | Signed by the room's governance key (name, topic, scribe roster) |
+| 1059   | Gift wrap             | Standard NIP-59 | Shield transport (config-B rooms): the outer wrap is standard so any relay handles it; the inner event is a kind-21045 |
+| 39998  | Agent attestation     | Addressable | Existing infra reused for the agent admission lane. Distinct from the [Kind 39998: Stream Sponsorship](#kind-39998-stream-sponsorship) lane documented earlier in this file, which reuses the same kind number for a different purpose |
+
+Protocol properties, by design:
+
+- **Anonymous by default.** Identity (name, optional npub) rides INSIDE the
+  NIP-44-encrypted payload; the relay sees only the per-room stream pubkey and
+  HMAC-derived d-tags. The user's Nostr identity key never touches the chat
+  wire.
+- **Join-forward history.** A fresh joiner reads nothing written before their
+  join epoch (`fresh` links); `full` links opt agents into the current epoch's
+  scroll. Past epochs are cryptographically unreachable.
+- **Epoch ratchets** (`k_{n+1} = HKDF(k_n, "bao/epoch")`) rotate room content
+  keys; rekeys rotate stream keys and use kind-5 deletions for retired-key
+  ownership.
+- **Retry-until-scrolled receipts** (§3): clients republish the same `msg_id`
+  until it appears in a scribe segment (bounded budget); scribe dedup makes
+  republishing safe.
+
+2140.wtf consumes the protocol read/write in `src/pages/BaoCommunitiesPage.tsx`
+against the production relay `wss://2140.social/ws` with the bundled room
+directory in `src/lib/baosocial/rooms.ts`. Rooms and conversations are shared
+with www.2140.social — a post from either client lands in the same scroll.
